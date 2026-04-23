@@ -6,11 +6,12 @@ using either WebSocket (agent mode) or QGA guest-exec (host mode).
 Saves the data to system-info.yml in the run directory.
 """
 
+import logging
 import time
 from pathlib import Path
+
 import yaml
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -52,10 +53,9 @@ async def collect_system_info(websocket_client, guest_platform: str, output_file
 
             return True
 
-        else:
-            error_msg = result.get('message', 'Unknown error')
-            log.warning(f"System info collection failed: {error_msg}")
-            return False
+        error_msg = result.get('message', 'Unknown error')
+        log.warning(f"System info collection failed: {error_msg}")
+        return False
 
     except Exception as e:
         log.warning(f"System info collection failed with exception: {e}", exc_info=True)

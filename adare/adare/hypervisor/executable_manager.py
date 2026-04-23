@@ -4,7 +4,6 @@ Centralized executable path resolution for hypervisors.
 import os
 import platform
 import shutil
-from typing import Dict
 
 from adare.hypervisor.exceptions import HypervisorException
 
@@ -21,7 +20,7 @@ class ExecutableManager:
     All paths are validated at initialization time.
     """
 
-    def __init__(self, hypervisor_type: str, config: Dict):
+    def __init__(self, hypervisor_type: str, config: dict):
         """
         Args:
             hypervisor_type: 'qemu' or 'virtualbox'

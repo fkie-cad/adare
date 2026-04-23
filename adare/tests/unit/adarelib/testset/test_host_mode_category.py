@@ -1,9 +1,10 @@
 """Tests for HostModeCategory enum and BasicTest ClassVar integration."""
 
-import attrs
-from typing import ClassVar, Optional
+from typing import ClassVar
 
-from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
+import attrs
+
+from adarelib.testset.basictest import BasicTest, HostModeCategory, Parameter
 
 
 class TestHostModeCategoryEnum:
@@ -37,7 +38,7 @@ class TestHostModeCategoryEnum:
     def test_string_comparison(self):
         """String comparisons work because it's a str enum."""
         assert HostModeCategory.FILE_BASED == "file_based"
-        assert "file_based" == HostModeCategory.FILE_BASED
+        assert HostModeCategory.FILE_BASED == "file_based"
 
     def test_json_serializable(self):
         """Values can be serialized to JSON strings."""
@@ -65,8 +66,8 @@ class TestBasicTestHostModeCategory:
         class DummyTest(BasicTest):
             name: str
             parameter: DummyParam
-            description: Optional[str] = ''
-            variable_metadata: Optional[dict] = None
+            description: str | None = ''
+            variable_metadata: dict | None = None
 
         instance = DummyTest(
             name='test1',
@@ -94,8 +95,8 @@ class TestBasicTestHostModeCategory:
             host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_BASED
             name: str
             parameter: DummyParam
-            description: Optional[str] = ''
-            variable_metadata: Optional[dict] = None
+            description: str | None = ''
+            variable_metadata: dict | None = None
 
         assert FileBased.host_mode_category == HostModeCategory.FILE_BASED
 
@@ -112,8 +113,8 @@ class TestBasicTestHostModeCategory:
         class InheritedTest(BasicTest):
             name: str
             parameter: DummyParam
-            description: Optional[str] = ''
-            variable_metadata: Optional[dict] = None
+            description: str | None = ''
+            variable_metadata: dict | None = None
 
         assert InheritedTest.host_mode_category == HostModeCategory.AGENT_ONLY
 
@@ -128,16 +129,16 @@ class TestBasicTestHostModeCategory:
             host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_BASED
             name: str
             parameter: DummyParam
-            description: Optional[str] = ''
-            variable_metadata: Optional[dict] = None
+            description: str | None = ''
+            variable_metadata: dict | None = None
 
         @attrs.define
         class ProbeTest(BasicTest):
             host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.QGA_PROBE
             name: str
             parameter: DummyParam
-            description: Optional[str] = ''
-            variable_metadata: Optional[dict] = None
+            description: str | None = ''
+            variable_metadata: dict | None = None
 
         assert FileTest.host_mode_category == HostModeCategory.FILE_BASED
         assert ProbeTest.host_mode_category == HostModeCategory.QGA_PROBE
@@ -154,8 +155,8 @@ class TestBasicTestHostModeCategory:
             host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
             name: str
             parameter: DummyParam
-            description: Optional[str] = ''
-            variable_metadata: Optional[dict] = None
+            description: str | None = ''
+            variable_metadata: dict | None = None
 
         instance = FileTest(
             name='test1',

@@ -1,14 +1,14 @@
 # external imports
+# configure logging
+import logging
+import shutil
 from pathlib import Path
 from typing import Literal
-import shutil
 
 # internal imports
 from adare.backend.project.directory import ProjectDirectory
 from adare.exceptions import LoggedException
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -82,9 +82,8 @@ def resolve_path_to_name(input_path: str, project_dir: Path, resource_type: Reso
     # If input contains path separators, treat as relative path
     if '/' in input_path or '\\' in input_path:
         return _resolve_relative_path(input_path, project_dir, resource_type)
-    else:
-        # Simple name - return as-is for backward compatibility
-        return input_path
+    # Simple name - return as-is for backward compatibility
+    return input_path
 
 
 def _resolve_relative_path(relative_path: str, project_dir: Path, resource_type: ResourceType) -> str:
@@ -163,11 +162,10 @@ def _resolve_relative_path(relative_path: str, project_dir: Path, resource_type:
                                 log,
                                 f'External experiment path "{relative_path}" does not exist. Please check the path and try again.'
                             )
-                        else:
-                            raise InvalidPathError(
-                                log,
-                                f'External experiment path "{relative_path}" exists but is not a directory.'
-                            )
+                        raise InvalidPathError(
+                            log,
+                            f'External experiment path "{relative_path}" exists but is not a directory.'
+                        )
                 else:
                     # For non-experiments, keep original behavior
                     raise InvalidPathError(

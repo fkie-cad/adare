@@ -1,6 +1,5 @@
 """Database and system management endpoints."""
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Query
 
@@ -65,7 +64,7 @@ async def reset_all_vms(force: bool = Query(False)):
 
 
 @router.post("/refresh-vm-runtime")
-async def refresh_vm_runtime(project_path: Optional[str] = Query(None)):
+async def refresh_vm_runtime(project_path: str | None = Query(None)):
     """Refresh VM runtime."""
     from pathlib import Path
 
@@ -75,7 +74,7 @@ async def refresh_vm_runtime(project_path: Optional[str] = Query(None)):
 
 
 @router.post("/build-vm-runtime-wheels")
-async def build_vm_runtime_wheels(project_path: Optional[str] = Query(None)):
+async def build_vm_runtime_wheels(project_path: str | None = Query(None)):
     """Build VM runtime wheels."""
     from pathlib import Path
 

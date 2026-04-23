@@ -13,25 +13,19 @@ Uses:
 import asyncio
 import logging
 import threading
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from adare.database.models.global_models import VmInstance
-from adare.backend.vm.port_manager import reserve_port_atomically
 from adare.backend.vm.exceptions import VMError
+from adare.backend.vm.port_manager import reserve_port_atomically
+from adare.database.models.global_models import VmInstance
+from adare.hypervisor.base.identifier_strategy import (
+    get_identifier_strategy,
+)
 from adare.hypervisor.exceptions import (
-    PortAllocationException,
     InstanceNotFoundException,
     InstanceStateException,
 )
-from adare.hypervisor.base.identifier_strategy import (
-    get_identifier_strategy,
-    get_vm_state as strategy_get_vm_state,
-    verify_vm_exists,
-)
-from adarelib.constants import VMStatus
-import ulid
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +45,7 @@ class VmInstanceManager:
     def __init__(self):
         self._lock = threading.Lock()
 
-    def find_available_instance(self, vm_id: str) -> Optional[VmInstance]:
+    def find_available_instance(self, vm_id: str) -> VmInstance | None:
         """
         Find an available VM instance for reuse.
 
@@ -175,8 +169,8 @@ class VmInstanceManager:
             VMError: If instance creation fails
         """
         log.debug(f"create_new_instance called - vm_id={vm_id}, experiment_run_id={experiment_run_id}")
-        from adare.database.api.vm import VmApi
         import adare.backend.vm.database as vm_database
+        from adare.database.api.vm import VmApi
 
         # Note: We're already inside the lock from allocate_instance_for_experiment
 
@@ -187,20 +181,20 @@ class VmInstanceManager:
 
             if current_count >= self.MAX_INSTANCES_PER_VM:
                 log.info(f"VM {vm_id} has {current_count} instances, attempting cleanup")
-                
+
                 # First try to cleanup oldest available instance
                 cleanup_success = await self.cleanup_oldest_available_instance(vm_id)
-                
+
                 if not cleanup_success:
                     # If no available instances, try to cleanup error instances
-                    log.info(f"No available instances to cleanup, checking for error instances")
+                    log.info("No available instances to cleanup, checking for error instances")
                     cleanup_success = await self.cleanup_oldest_error_instance(vm_id)
 
                 if not cleanup_success:
                     # If still no room, we're at capacity
                     raise VMError(log, f"VM {vm_id} at maximum instance capacity ({self.MAX_INSTANCES_PER_VM}) with all instances active")
-                
-                log.debug(f"Cleanup completed, proceeding with new instance creation")
+
+                log.debug("Cleanup completed, proceeding with new instance creation")
 
             # Get source VM
             log.debug(f"Fetching source VM record for vm_id={vm_id}")
@@ -215,7 +209,7 @@ class VmInstanceManager:
             log.debug(f"Generated instance name: {instance_name}")
 
             # Atomically allocate port and create instance record in single transaction
-            log.debug(f"Atomically reserving port and creating VM instance record")
+            log.debug("Atomically reserving port and creating VM instance record")
             instance = None
             instance_id = None
             websocket_port = None
@@ -248,14 +242,13 @@ class VmInstanceManager:
                 if verification:
                     log.debug(f"Instance verification successful - port {verification.websocket_port} atomically reserved")
                     return verification  # Return the fresh instance from verification
-                else:
-                    log.error(f"Instance {instance_id} not retrievable after creation and commit")
-                    # Debug: Check what instances exist
-                    all_instances = api.get_all_vm_instances()
-                    log.error(f"Total instances in DB: {len(all_instances)}")
-                    for inst in all_instances[-3:]:  # Show last 3 instances
-                        log.error(f"  Recent instance: {inst.id} - {inst.instance_name}")
-                    raise VMError(log, f"Database consistency error: created instance {instance_id} but cannot retrieve it")
+                log.error(f"Instance {instance_id} not retrievable after creation and commit")
+                # Debug: Check what instances exist
+                all_instances = api.get_all_vm_instances()
+                log.error(f"Total instances in DB: {len(all_instances)}")
+                for inst in all_instances[-3:]:  # Show last 3 instances
+                    log.error(f"  Recent instance: {inst.id} - {inst.instance_name}")
+                raise VMError(log, f"Database consistency error: created instance {instance_id} but cannot retrieve it")
 
         except VMError:
             # Re-raise VMErrors as-is to preserve specific error handling
@@ -277,8 +270,8 @@ class VmInstanceManager:
         Returns:
             Updated VmInstance
         """
-        from adare.database.api.vm import VmApi
         from adare.backend.vm.snapshot_manager import verify_instance_base_snapshot_exists
+        from adare.database.api.vm import VmApi
 
         log.info(f"Reusing VM instance: {instance.instance_name} for experiment {experiment_run_id}")
 
@@ -300,10 +293,10 @@ class VmInstanceManager:
                             base_snapshot_name=None
                         )
             else:
-                log.debug(f"Skipping snapshot validation for non-VirtualBox instance")
+                log.debug("Skipping snapshot validation for non-VirtualBox instance")
 
         # Allocate fresh websocket port for reused instance atomically
-        from adare.backend.vm.port_manager import PORT_RANGE_START, PORT_RANGE_END
+        from adare.backend.vm.port_manager import PORT_RANGE_END, PORT_RANGE_START
 
         with VmApi() as api:
             # Find available port within the same transaction to avoid race conditions
@@ -335,7 +328,7 @@ class VmInstanceManager:
                 status='active',
                 current_experiment_run_id=experiment_run_id,
                 websocket_port=websocket_port,
-                last_used_at=datetime.now(timezone.utc)
+                last_used_at=datetime.now(UTC)
             )
 
         # Refresh instance data
@@ -358,14 +351,13 @@ class VmInstanceManager:
         log.debug(f"allocate_instance_for_experiment called - vm_id={vm_id}, experiment_run_id={experiment_run_id}")
 
         # Add timeout to lock acquisition
-        import threading
         import time
         lock_acquired = False
         start_time = time.time()
 
         try:
             # Try to acquire lock with timeout
-            log.debug(f"Attempting to acquire instance manager lock")
+            log.debug("Attempting to acquire instance manager lock")
             lock_acquired = self._lock.acquire(timeout=30)  # 30 second timeout
             if not lock_acquired:
                 raise VMError(log, "Timeout acquiring instance manager lock after 30 seconds")
@@ -374,8 +366,8 @@ class VmInstanceManager:
 
             # Synchronize database instance states with hypervisor (with stage visibility)
             from adare.backend.experiment.stagectxmanager import StageCtxManager
-            from adare.types.stages import VMInstanceSyncStage
             from adare.database.api.vm import VmApi
+            from adare.types.stages import VMInstanceSyncStage
 
             log.debug(f"Synchronizing instance states before allocation for vm_id={vm_id}")
             with VmApi() as api:
@@ -406,9 +398,8 @@ class VmInstanceManager:
             if available_instance:
                 log.info(f"Found available instance for reuse: {available_instance.instance_name}")
                 return await self.reuse_instance(available_instance, experiment_run_id)
-            else:
-                log.info(f"No available instances found, creating new instance")
-                return await self.create_new_instance(vm_id, experiment_run_id)
+            log.info("No available instances found, creating new instance")
+            return await self.create_new_instance(vm_id, experiment_run_id)
 
         except Exception as e:
             log.error(f"Error in allocate_instance_for_experiment: {e}")
@@ -441,7 +432,7 @@ class VmInstanceManager:
                 status='available',
                 current_experiment_run_id=None,
                 websocket_port=None,  # Clear port so it can be reallocated
-                last_used_at=datetime.now(timezone.utc)
+                last_used_at=datetime.now(UTC)
             )
 
     async def cleanup_instance(self, instance_id: str):
@@ -495,13 +486,13 @@ class VmInstanceManager:
         if age_days is None:
             age_days = self.CLEANUP_AGE_DAYS
 
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=age_days)
+        cutoff_date = datetime.now(UTC) - timedelta(days=age_days)
 
         with VmApi() as api:
             old_instances = api.get_old_vm_instances(cutoff_date, status='available')
 
             for instance in old_instances:
-                log.info(f"Cleaning up old instance: {instance.instance_name} (age: {(datetime.now(timezone.utc) - instance.last_used_at).days} days)")
+                log.info(f"Cleaning up old instance: {instance.instance_name} (age: {(datetime.now(UTC) - instance.last_used_at).days} days)")
                 await self.cleanup_instance(instance.id)
 
     async def remove_all_instances(self):
@@ -549,8 +540,9 @@ class VmInstanceManager:
             return 0.0
 
         try:
-            from adare.hypervisor.virtualbox.vm import VirtualBoxVM
             import subprocess
+
+            from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 
             # Get VM name from UUID
             vm_name = VirtualBoxVM.get_vm_name_by_uuid(instance.vbox_uuid)
@@ -788,7 +780,7 @@ class VmInstanceManager:
                 api.update_vm_instance(
                     instance_id,
                     status=new_status,
-                    last_used_at=datetime.now(timezone.utc)
+                    last_used_at=datetime.now(UTC)
                 )
                 updated_count += 1
                 log.info(f"Updated instance {instance_id} status to {new_status}")
@@ -843,8 +835,8 @@ class VmInstanceManager:
             return
 
         try:
-            from adare.hypervisor.virtualbox.vm import VirtualBoxVM
             from adare.hypervisor.virtualbox.manager import VirtualBoxManager
+            from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 
             # Get VM name from UUID
             vm_name = VirtualBoxVM.get_vm_name_by_uuid(instance.vbox_uuid)

@@ -1,5 +1,5 @@
 # internal imports
-from adare.exceptions import LoggedException, LoggedErrorException
+from adare.exceptions import LoggedErrorException, LoggedException
 
 
 class ProjectMissingInDatabaseError(LoggedErrorException):

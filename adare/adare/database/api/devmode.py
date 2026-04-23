@@ -9,15 +9,14 @@ This module provides CRUD operations for persistent dev mode sessions:
 """
 
 import logging
-from typing import Optional, List
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from adare.database.api.base import EnhancedDatabaseApi
-from adare.database.models.devsession import DevSession
-from adare.database.models.devcheckpoint import DevCheckpoint
-from adare.database.models.global_models import GlobalBase
 from adare.database.exceptions import EntityNotFoundError, ValidationError
+from adare.database.models.devcheckpoint import DevCheckpoint
+from adare.database.models.devsession import DevSession
+from adare.database.models.global_models import GlobalBase
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ class DevModeApi(EnhancedDatabaseApi):
     - Cleaning up stale sessions
     """
 
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Path | None = None):
         """
         Initialize DevMode API with database connection.
 
@@ -95,7 +94,7 @@ class DevModeApi(EnhancedDatabaseApi):
         log.info(f"Saved dev session {session_id} to database")
         return session
 
-    def get_session(self, session_id: str) -> Optional[DevSession]:
+    def get_session(self, session_id: str) -> DevSession | None:
         """
         Retrieve a dev session by ID.
 
@@ -129,9 +128,9 @@ class DevModeApi(EnhancedDatabaseApi):
 
     def list_sessions(
         self,
-        project_path: Optional[Path] = None,
-        status: Optional[str] = None
-    ) -> List[DevSession]:
+        project_path: Path | None = None,
+        status: str | None = None
+    ) -> list[DevSession]:
         """
         List dev sessions with optional filtering.
 
@@ -155,7 +154,7 @@ class DevModeApi(EnhancedDatabaseApi):
 
         return query.all()
 
-    def list_running_sessions(self, project_path: Optional[Path] = None) -> List[DevSession]:
+    def list_running_sessions(self, project_path: Path | None = None) -> list[DevSession]:
         """
         List all running dev sessions.
 
@@ -295,7 +294,7 @@ class DevModeApi(EnhancedDatabaseApi):
         log.info(f"Deleted dev session {session_id} from database")
         return True
 
-    def cleanup_stale_sessions(self, check_vm_exists: Optional[callable] = None) -> int:
+    def cleanup_stale_sessions(self, check_vm_exists: callable | None = None) -> int:
         """
         Cleanup stale sessions (e.g., VMs that no longer exist).
 
@@ -335,7 +334,7 @@ class DevModeApi(EnhancedDatabaseApi):
 
         return cleaned
 
-    def get_session_count(self, project_path: Optional[Path] = None) -> int:
+    def get_session_count(self, project_path: Path | None = None) -> int:
         """
         Get count of dev sessions.
 
@@ -393,7 +392,7 @@ class DevModeApi(EnhancedDatabaseApi):
         log.info(f"Saved checkpoint {checkpoint.name} for session {checkpoint.session_id}")
         return checkpoint
 
-    def get_checkpoint(self, session_id: str, name: str) -> Optional[DevCheckpoint]:
+    def get_checkpoint(self, session_id: str, name: str) -> DevCheckpoint | None:
         """
         Retrieve a checkpoint by session ID and name.
 
@@ -409,7 +408,7 @@ class DevModeApi(EnhancedDatabaseApi):
             DevCheckpoint.name == name
         ).first()
 
-    def get_checkpoint_by_id(self, checkpoint_id: str) -> Optional[DevCheckpoint]:
+    def get_checkpoint_by_id(self, checkpoint_id: str) -> DevCheckpoint | None:
         """
         Retrieve a checkpoint by ID.
 
@@ -445,7 +444,7 @@ class DevModeApi(EnhancedDatabaseApi):
             )
         return checkpoint
 
-    def list_checkpoints(self, session_id: str) -> List[DevCheckpoint]:
+    def list_checkpoints(self, session_id: str) -> list[DevCheckpoint]:
         """
         List all checkpoints for a session.
 
@@ -523,7 +522,7 @@ class DevModeApi(EnhancedDatabaseApi):
         project_path: Path,
         experiment_name: str,
         environment_name: str
-    ) -> Optional[DevSession]:
+    ) -> DevSession | None:
         """
         Get most recent stopped session matching experiment and environment.
 

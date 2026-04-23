@@ -1,25 +1,30 @@
 # external imports
-import sqlalchemy
+# configure logging
+import logging
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
+
+from adare.backend.experiment.directory import ExperimentDirectory
 
 # internal imports
 from adare.config.configdirectory import PROG_PARSEANDTEST_DIR
-import adare.config.database as config_database
-from adare.database.models.project_models import ExperimentRunFiles, TestParameterEntry, Experiment, \
-    ExperimentRun, AbstractTest, Tool, LogFile
-from adare.database.models.global_models import TestFunctionFile, TestFunction, TestParameter, Tag
 from adare.database.api.base import ProjectDatabaseApi
 from adare.database.api.project import ProjectDbApi
-from adarelib.testset.type import TestsetFile as FTestsetFile, Test as FTest
-from adare.backend.experiment.directory import ExperimentDirectory
-from adare.exceptions import TestSetFormatError, EnvironmentNotFoundError
 from adare.database.exceptions import EnvironmentMissingError
 from adare.database.fixtures import fixture_stages, fixture_status
+from adare.database.models.global_models import Tag, TestFunction, TestFunctionFile
+from adare.database.models.project_models import (
+    AbstractTest,
+    Experiment,
+    ExperimentRun,
+    ExperimentRunFiles,
+    LogFile,
+    TestParameterEntry,
+)
+from adare.exceptions import TestSetFormatError
 from adarelib.constants import StatusEnum
-
-# configure logging
-import logging
+from adarelib.testset.type import Test as FTest
+from adarelib.testset.type import TestsetFile as FTestsetFile
 
 log = logging.getLogger(__name__)
 
@@ -85,9 +90,10 @@ class ExperimentApi(ProjectDatabaseApi):
         Get environment IDs for the given environment names from the global database.
         Returns environment IDs that can be stored in experiment.environment_ids
         """
+        from sqlalchemy.exc import SQLAlchemyError
+
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
-        from sqlalchemy.exc import SQLAlchemyError
 
         environment_ids = []
         try:
@@ -110,9 +116,10 @@ class ExperimentApi(ProjectDatabaseApi):
         Get environment by name from the global database.
         project_name is ignored since environments are now global.
         """
+        from sqlalchemy.exc import SQLAlchemyError
+
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
-        from sqlalchemy.exc import SQLAlchemyError
 
         try:
             with GlobalDatabaseApi() as global_api:
@@ -173,7 +180,7 @@ class ExperimentApi(ProjectDatabaseApi):
             try:
                 playbook_api.populate_playbook_from_file(experiment, experiment_directory.playbookfile, parsed_playbook=experiment_directory._cached_playbook)
                 log.debug(f'populated playbook models for experiment {experiment.id}')
-            except (SQLAlchemyError, OSError, IOError) as e:
+            except (SQLAlchemyError, OSError) as e:
                 log.error(f'failed to populate playbook models for experiment {experiment.id}: {e}')
                 raise
 
@@ -195,9 +202,10 @@ class ExperimentApi(ProjectDatabaseApi):
 
     def get_experiment_environment_names(self, experiment_ulid: str) -> list[str]:
         """Get current environment names from experiment's environment_ids."""
+        from sqlalchemy.exc import SQLAlchemyError
+
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
-        from sqlalchemy.exc import SQLAlchemyError
 
         experiment = self.get_experiment_by_ulid(experiment_ulid)
         if not experiment or not experiment.environment_ids:
@@ -394,7 +402,7 @@ class ExperimentApi(ProjectDatabaseApi):
                     log,
                     message=f'Test parameters {missing_params} used in test [b]{test.name}[/b] do not exist in the global database.',
                     possible_solutions=[
-                        f'Ensure parameter names are correct',
+                        'Ensure parameter names are correct',
                         f'Check available parameters with: adare testfunction info {test.function}',
                     ]
                 )
@@ -440,7 +448,7 @@ class ExperimentApi(ProjectDatabaseApi):
         if experiment_run:
             experiment_run.status = status
             if status == StatusEnum.FINISHED or status == StatusEnum.INTERRUPTED:
-                experiment_run.end_time = datetime.now(timezone.utc)
+                experiment_run.end_time = datetime.now(UTC)
             self._session.commit()
 
     def update_experiment_run_vm_instance(self, experiment_run_ulid: str, vm_instance_id: str):

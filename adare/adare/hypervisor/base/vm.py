@@ -4,12 +4,12 @@ Abstract VM class for hypervisor implementations.
 All hypervisor implementations must provide a VM class that implements
 these operations for consistent VM management across different hypervisors.
 """
+import logging
 import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -53,8 +53,8 @@ class AbstractVM(ABC):
     async def create(
         self,
         ctx_manager=None,
-        stop_event: Optional[threading.Event] = None,
-        log_file: Optional[Path] = None,
+        stop_event: threading.Event | None = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """
@@ -76,8 +76,8 @@ class AbstractVM(ABC):
         self,
         ctx_manager=None,
         raise_if_running: bool = False,
-        stop_event: Optional[threading.Event] = None,
-        log_file: Optional[Path] = None,
+        stop_event: threading.Event | None = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """
@@ -102,7 +102,7 @@ class AbstractVM(ABC):
     async def stop(
         self,
         ctx_manager=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False,
         force: bool = False
     ):
@@ -123,8 +123,8 @@ class AbstractVM(ABC):
     async def destroy(
         self,
         ctx_manager=None,
-        stop_event: Optional[threading.Event] = None,
-        log_file: Optional[Path] = None,
+        stop_event: threading.Event | None = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """
@@ -174,8 +174,8 @@ class AbstractVM(ABC):
         command: str,
         background: bool = False,
         silent: bool = False,
-        stop_event: Optional[threading.Event] = None,
-        cwd: Optional[str] = None,
+        stop_event: threading.Event | None = None,
+        cwd: str | None = None,
         **kwargs
     ):
         """
@@ -222,8 +222,8 @@ class AbstractVM(ABC):
         file_path: Path,
         try_extract: bool = True,
         ctx_manager=None,
-        stop_event: Optional[threading.Event] = None,
-        log_file: Optional[Path] = None,
+        stop_event: threading.Event | None = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """
@@ -250,8 +250,8 @@ class AbstractVM(ABC):
         height: int = 1080,
         depth: int = 32,
         ctx_manager=None,
-        stop_event: Optional[threading.Event] = None,
-        log_file: Optional[Path] = None,
+        stop_event: threading.Event | None = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """
@@ -285,7 +285,7 @@ class AbstractVM(ABC):
         self,
         timeout: int = 300,
         ctx_manager=None,
-        stop_event: Optional[threading.Event] = None
+        stop_event: threading.Event | None = None
     ):
         """
         Wait until VM is fully booted and accessible.
@@ -315,8 +315,8 @@ class AbstractVM(ABC):
     async def execute_queued_commands(
         self,
         ctx_manager=None,
-        stop_event: Optional[threading.Event] = None,
-        log_file: Optional[Path] = None,
+        stop_event: threading.Event | None = None,
+        log_file: Path | None = None,
         silent: bool = False,
         **kwargs
     ):
@@ -363,7 +363,7 @@ class AbstractVM(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_vm_uuid_by_name(vm_name: str) -> Optional[str]:
+    def get_vm_uuid_by_name(vm_name: str) -> str | None:
         """
         Get VM UUID/identifier by name.
 
@@ -391,7 +391,7 @@ class AbstractVM(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_vm_info_by_uuid(uuid: str) -> Optional[Dict[str, Any]]:
+    def get_vm_info_by_uuid(uuid: str) -> dict[str, Any] | None:
         """
         Get VM information by UUID/identifier.
 
@@ -405,7 +405,7 @@ class AbstractVM(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_vm_name_by_uuid(uuid: str) -> Optional[str]:
+    def get_vm_name_by_uuid(uuid: str) -> str | None:
         """
         Get VM name by UUID/identifier.
 

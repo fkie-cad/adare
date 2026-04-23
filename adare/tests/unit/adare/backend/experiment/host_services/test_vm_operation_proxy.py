@@ -1,12 +1,13 @@
 """Tests for VMOperationProxy base class and subclass inheritance."""
 
-import pytest
-from unittest.mock import MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock
 
-from adare.backend.experiment.host_services.vm_operation_proxy import VMOperationProxy
+import pytest
+
 from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
 from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
+from adare.backend.experiment.host_services.vm_operation_proxy import VMOperationProxy
 
 
 class TestVMOperationProxy:

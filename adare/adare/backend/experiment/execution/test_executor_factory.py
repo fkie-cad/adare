@@ -5,15 +5,13 @@ Mirrors the pattern of gui_executor_factory.py for test execution mode resolutio
 """
 
 import logging
-from typing import Optional
-from pathlib import Path
 
 from .base import TestExecutionMode
 
 log = logging.getLogger(__name__)
 
 
-def resolve_test_execution_mode(vm, playbook_settings, cli_override: Optional[str] = None) -> TestExecutionMode:
+def resolve_test_execution_mode(vm, playbook_settings, cli_override: str | None = None) -> TestExecutionMode:
     """
     Resolve test execution mode based on hypervisor and settings.
 
@@ -47,7 +45,7 @@ def resolve_test_execution_mode(vm, playbook_settings, cli_override: Optional[st
     # Priority 3: Default to auto
     else:
         mode_str = 'auto'
-        log.debug(f"Using default test mode: auto")
+        log.debug("Using default test mode: auto")
 
     log.debug(f"Resolving test execution mode: mode={mode_str}, vm_type={type(vm).__name__}")
 
@@ -75,9 +73,8 @@ def resolve_test_execution_mode(vm, playbook_settings, cli_override: Optional[st
     if isinstance(vm, QEMUVM):
         log.info("Using agent-based test execution for QEMU (auto mode)")
         return TestExecutionMode.AGENT
-    elif isinstance(vm, VirtualBoxVM):
+    if isinstance(vm, VirtualBoxVM):
         log.info("Using agent-based test execution for VirtualBox (auto mode)")
         return TestExecutionMode.AGENT
-    else:
-        log.warning(f"Unknown VM type {type(vm).__name__}, defaulting to agent test mode")
-        return TestExecutionMode.AGENT
+    log.warning(f"Unknown VM type {type(vm).__name__}, defaulting to agent test mode")
+    return TestExecutionMode.AGENT

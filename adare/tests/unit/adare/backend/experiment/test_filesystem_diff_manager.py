@@ -1,11 +1,10 @@
 """Tests for FilesystemDiffManager."""
 
-import pytest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from adare.backend.experiment.filesystem_diff_manager import FilesystemDiffManager
+import pytest
 
+from adare.backend.experiment.filesystem_diff_manager import FilesystemDiffManager
 
 # ---------------------------------------------------------------------------
 # Helpers

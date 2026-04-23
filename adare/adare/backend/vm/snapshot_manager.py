@@ -5,22 +5,16 @@ High-level snapshot management for fast experiment setup using VirtualBox snapsh
 Provides base snapshot creation, experiment snapshots, and cleanup utilities.
 """
 
-from pathlib import Path
-from typing import Optional, List
 import logging
-from datetime import datetime, timedelta
+from typing import Optional
 
-from adare.hypervisor.virtualbox.vm import VirtualBoxVM
-from adare.hypervisor.virtualbox.manager import VirtualBoxManager
-from adare.hypervisor.qemu.vm import QEMUVM
+from adare.backend.vm.exceptions import VMError
+from adare.database.api.vm import VmApi
+from adare.hypervisor.exceptions import VMNotFoundException
 from adare.hypervisor.qemu.manager import QEMUManager
 from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
-from adare.hypervisor.exceptions import VMNotFoundException
-from adare.backend.vm import database as vm_database
-from adare.backend.vm.exceptions import VMError
-from adarelib.constants import VMStatus
-from adare.database.api.vm import VmApi
-from adare.database.models.global_models import VmSnapshot
+from adare.hypervisor.virtualbox.manager import VirtualBoxManager
+from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 
 log = logging.getLogger(__name__)
 
@@ -29,10 +23,10 @@ class SnapshotManager:
     """
     High-level manager for VM snapshots enabling fast experiment setup.
     """
-    
+
     def __init__(self, vbox_manager: VirtualBoxManager = None):
         self.vbox_manager = vbox_manager or VirtualBoxManager()
-    
+
     def create_base_snapshot(self, vm_record, snapshot_name: str = None,
                            description: str = None, silent: bool = False) -> bool:
         """
@@ -78,19 +72,19 @@ class SnapshotManager:
             except Exception as e:
                 log.error(f"Failed to recover UUID for VM '{vm_record.name}': {e}")
                 raise VMError(log, f"VM '{vm_record.name}' has no VirtualBox UUID and recovery failed: {e}")
-        
+
         # Generate snapshot name if not provided
         if not snapshot_name:
             snapshot_name = f"adare_base_{vm_record.hash[:8]}"
-        
+
         if not description:
             description = f"Adare base snapshot for {vm_record.name}"
-        
+
         # Get VirtualBox VM instance
         vm_name = self._get_vm_name_by_uuid(vm_record.vbox_uuid)
         if not vm_name:
             raise VMError(log, f"VM with UUID {vm_record.vbox_uuid} not found in VirtualBox")
-        
+
         # Get OS platform for credentials
         from adare.config import get_vm_credentials
         platform = getattr(vm_record.osinfo, 'platform', 'linux') if hasattr(vm_record, 'osinfo') and vm_record.osinfo else 'linux'
@@ -112,7 +106,7 @@ class SnapshotManager:
                 description=description,
                 silent=silent
             )
-            
+
             if result == 0:  # Success
                 # Update database record with snapshot info
                 with VmApi() as api:
@@ -126,17 +120,16 @@ class SnapshotManager:
                 # DEPRECATED: This tracks snapshot on VM template which is wrong
                 # Snapshots should only be tracked on VM instances
                 log.warning("Snapshot tracking on VM templates is deprecated - use instance-based snapshots")
-                
+
                 log.info(f"Created base snapshot '{snapshot_name}' for VM '{vm_record.name}'")
                 return True
-            else:
-                log.error(f"Failed to create base snapshot '{snapshot_name}' for VM '{vm_record.name}'")
-                return False
-                
+            log.error(f"Failed to create base snapshot '{snapshot_name}' for VM '{vm_record.name}'")
+            return False
+
         except Exception as e:
             log.error(f"Error creating base snapshot for VM '{vm_record.name}': {e}")
             return False
-    
+
     def restore_base_snapshot(self, vm_record, silent: bool = False,
                              interrupt_event: Optional['threading.Event'] = None,
                              timeout: int = 120) -> bool:
@@ -157,7 +150,6 @@ class SnapshotManager:
         log.error("Use restore_base_snapshot_for_instance() for VmInstance records instead")
         return False
 
-        import threading
 
         if False and not vm_record.base_snapshot_name:
             raise VMError(log, f"VM '{vm_record.name}' has no base snapshot configured")
@@ -205,9 +197,8 @@ class SnapshotManager:
             if result:
                 log.info(f"Successfully restored VM '{vm_record.name}' to base snapshot '{vm_record.base_snapshot_name}'")
                 return True
-            else:
-                log.error(f"Failed to restore VM '{vm_record.name}' to base snapshot - VBoxManage returned failure")
-                return False
+            log.error(f"Failed to restore VM '{vm_record.name}' to base snapshot - VBoxManage returned failure")
+            return False
 
         except InterruptedError:
             log.info(f"Snapshot restore operation interrupted for VM '{vm_record.name}'")
@@ -219,9 +210,9 @@ class SnapshotManager:
             else:
                 log.error(f"Error restoring base snapshot for VM '{vm_record.name}': {e}")
             return False
-    
+
     def create_experiment_snapshot_for_instance(self, vm_instance, experiment_id: str,
-                                              description: str = None, silent: bool = False) -> Optional[str]:
+                                              description: str = None, silent: bool = False) -> str | None:
         """
         Create a snapshot for a specific experiment on a VM instance.
 
@@ -271,9 +262,8 @@ class SnapshotManager:
 
                 log.info(f"Created experiment snapshot '{snapshot_name}' for VM instance '{vm_instance.instance_name}'")
                 return snapshot_name
-            else:
-                log.error(f"Failed to create experiment snapshot '{snapshot_name}' for VM instance '{vm_instance.instance_name}'")
-                return None
+            log.error(f"Failed to create experiment snapshot '{snapshot_name}' for VM instance '{vm_instance.instance_name}'")
+            return None
 
         except VMNotFoundException as e:
             log.error(f"VM not found: {e}")
@@ -281,7 +271,7 @@ class SnapshotManager:
         except OSError as e:
             log.error(f"File system error during snapshot creation: {e}")
             return None
-    
+
     def check_base_snapshot_exists(self, vm_record) -> bool:
         """
         DEPRECATED: Vm records no longer track VirtualBox UUIDs.
@@ -298,12 +288,12 @@ class SnapshotManager:
 
         if False and (not vm_record.base_snapshot_name or not vm_record.vbox_uuid):
             return False
-        
+
         # Get VirtualBox VM instance
         vm_name = self._get_vm_name_by_uuid(vm_record.vbox_uuid)
         if not vm_name:
             return False
-        
+
         # Get OS platform for credentials
         from adare.config import get_vm_credentials
         platform = getattr(vm_record.osinfo, 'platform', 'linux') if hasattr(vm_record, 'osinfo') and vm_record.osinfo else 'linux'
@@ -323,7 +313,7 @@ class SnapshotManager:
         except Exception as e:
             log.debug(f"Error checking base snapshot for VM '{vm_record.name}': {e}")
             return False
-    
+
     def get_snapshot_info(self, vm_record) -> dict:
         """
         DEPRECATED: Vm records no longer track VirtualBox UUIDs.
@@ -346,10 +336,10 @@ class SnapshotManager:
             "experiment_snapshots": [],
             "total_snapshots": 0
         }
-        
+
         if vm_record.base_snapshot_name:
             info["base_snapshot"]["exists"] = self.check_base_snapshot_exists(vm_record)
-        
+
         # Get experiment snapshots from database
         experiment_snapshots = self._get_experiment_snapshots_for_vm(vm_record.id)
         info["experiment_snapshots"] = [
@@ -362,37 +352,37 @@ class SnapshotManager:
             for s in experiment_snapshots
         ]
         info["total_snapshots"] = len(experiment_snapshots) + (1 if info["base_snapshot"]["exists"] else 0)
-        
+
         return info
-    
+
     # Private helper methods
-    
-    def _get_vm_name_by_uuid(self, vbox_uuid: str) -> Optional[str]:
+
+    def _get_vm_name_by_uuid(self, vbox_uuid: str) -> str | None:
         """Get VM name from VirtualBox using UUID."""
         return VirtualBoxVM.get_vm_name_by_uuid(vbox_uuid)
-    
+
     def _track_snapshot_in_db(self, vm_id: str, snapshot_name: str, snapshot_type: str,
-                             experiment_id: Optional[str], description: str):
+                             experiment_id: str | None, description: str):
         """
         DEPRECATED: Track snapshot creation in database for VM templates.
         Use _track_instance_snapshot_in_db instead.
         """
         log.error("_track_snapshot_in_db is deprecated - VM templates don't have snapshots. Use _track_instance_snapshot_in_db instead.")
 
-    def _get_experiment_snapshots_for_vm(self, vm_id: str) -> List:
+    def _get_experiment_snapshots_for_vm(self, vm_id: str) -> list:
         """
         DEPRECATED: Get experiment snapshots from database for a VM template.
         Use get_snapshots_for_instance instead.
         """
         log.warning("_get_experiment_snapshots_for_vm is deprecated - VM templates don't have snapshots.")
         return []
-    
+
     def _delete_snapshot(self, vm_record, snapshot_name: str) -> tuple[bool, str]:
         """
         DEPRECATED: Delete a snapshot from VirtualBox and database for VM templates.
         Use instance-based snapshot deletion instead.
         """
-        log.error(f"_delete_snapshot is deprecated - VM templates don't have snapshots. Use instance-based snapshot deletion.")
+        log.error("_delete_snapshot is deprecated - VM templates don't have snapshots. Use instance-based snapshot deletion.")
         return False, "VM templates don't have snapshots - use instance-based snapshots"
 
     # Instance-specific snapshot methods
@@ -437,7 +427,7 @@ class SnapshotManager:
                 executables=self.vbox_manager.executables
             )
 
-        elif hypervisor == 'qemu':
+        if hypervisor == 'qemu':
             # QEMU: use instance_name to load VM config
             try:
                 qemu_vm = QEMUVMRegistry.get_vm_by_name(
@@ -543,9 +533,8 @@ class SnapshotManager:
 
                 log.info(f"Created base snapshot '{snapshot_name}' for VM instance '{vm_instance.instance_name}'")
                 return True
-            else:
-                log.error(f"Failed to create base snapshot '{snapshot_name}' for VM instance '{vm_instance.instance_name}'")
-                return False
+            log.error(f"Failed to create base snapshot '{snapshot_name}' for VM instance '{vm_instance.instance_name}'")
+            return False
 
         except VMNotFoundException as e:
             log.error(f"VM not found: {e}")
@@ -569,7 +558,6 @@ class SnapshotManager:
         Returns:
             True if restored successfully
         """
-        import threading
 
         if not vm_instance.base_snapshot_name:
             log.error(f"VM instance '{vm_instance.instance_name}' has no base snapshot configured")
@@ -610,9 +598,8 @@ class SnapshotManager:
             if result:
                 log.info(f"Successfully restored VM instance '{vm_instance.instance_name}' to base snapshot '{vm_instance.base_snapshot_name}'")
                 return True
-            else:
-                log.error(f"Failed to restore VM instance '{vm_instance.instance_name}' to base snapshot - VBoxManage returned failure")
-                return False
+            log.error(f"Failed to restore VM instance '{vm_instance.instance_name}' to base snapshot - VBoxManage returned failure")
+            return False
 
         except InterruptedError:
             log.info(f"Snapshot restore operation interrupted for VM instance '{vm_instance.instance_name}'")
@@ -645,7 +632,7 @@ class SnapshotManager:
             return False
 
     def _track_instance_snapshot_in_db(self, vm_instance_id: str, snapshot_name: str, snapshot_type: str,
-                                     experiment_id: Optional[str], description: str):
+                                     experiment_id: str | None, description: str):
         """Track instance snapshot creation in database."""
         from adare.database.api.vm import VmApi
         with VmApi() as api:
@@ -705,9 +692,8 @@ class SnapshotManager:
 
                 log.info(f"Deleted snapshot '{snapshot_name}' from VM instance '{vm_instance.instance_name}'")
                 return True
-            else:
-                log.error(f"Failed to delete snapshot '{snapshot_name}' from VM instance '{vm_instance.instance_name}'")
-                return False
+            log.error(f"Failed to delete snapshot '{snapshot_name}' from VM instance '{vm_instance.instance_name}'")
+            return False
 
         except VMError:
             raise
@@ -724,11 +710,11 @@ class SnapshotManager:
 def create_base_snapshot_for_vm(vm_record, silent: bool = False) -> bool:
     """
     Convenience function to create base snapshot for a VM.
-    
+
     Args:
         vm_record: VM database record
         silent: Suppress logging
-        
+
     Returns:
         True if snapshot created successfully
     """
@@ -751,7 +737,6 @@ def restore_vm_to_base_snapshot(vm_record, silent: bool = False,
     Returns:
         True if restored successfully
     """
-    import threading
     manager = SnapshotManager()
     return manager.restore_base_snapshot(vm_record, silent=silent,
                                        interrupt_event=interrupt_event,
@@ -761,10 +746,10 @@ def restore_vm_to_base_snapshot(vm_record, silent: bool = False,
 def verify_base_snapshot_exists(vm_record) -> bool:
     """
     Convenience function to check if base snapshot exists.
-    
+
     Args:
         vm_record: VM database record
-        
+
     Returns:
         True if base snapshot exists
     """
@@ -775,11 +760,11 @@ def verify_base_snapshot_exists(vm_record) -> bool:
 def check_snapshot_exists_by_uuid(vbox_uuid: str, snapshot_name: str) -> bool:
     """
     Direct function to check if snapshot exists using UUID and name.
-    
+
     Args:
         vbox_uuid: VirtualBox VM UUID
         snapshot_name: Snapshot name to check
-        
+
     Returns:
         True if snapshot exists
     """
@@ -787,7 +772,7 @@ def check_snapshot_exists_by_uuid(vbox_uuid: str, snapshot_name: str) -> bool:
     vm_name = VirtualBoxVM.get_vm_name_by_uuid(vbox_uuid)
     if not vm_name:
         return False
-    
+
     # Create VirtualBox VM instance and check snapshot (no credentials needed for snapshot check)
     manager = VirtualBoxManager()
     vbox_vm = VirtualBoxVM(
@@ -838,7 +823,6 @@ def restore_instance_to_base_snapshot(vm_instance, silent: bool = False,
     Returns:
         True if restored successfully
     """
-    import threading
     manager = SnapshotManager()
     return manager.restore_instance_to_base_snapshot(vm_instance, silent=silent,
                                                    interrupt_event=interrupt_event,

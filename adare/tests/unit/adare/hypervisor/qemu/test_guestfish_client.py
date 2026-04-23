@@ -1,12 +1,11 @@
 """Tests for GuestfishClient - guestfish CLI abstraction."""
 
-import subprocess
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from adare.hypervisor.qemu.guestfish_client import GuestfishClient
 from adare.hypervisor.exceptions import HypervisorException
+from adare.hypervisor.qemu.guestfish_client import GuestfishClient
 
 
 class TestRunCommand:
@@ -288,7 +287,7 @@ class TestRemoveNtfsHibernation:
 
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
-        assert 'guestfish' == cmd[0]
+        assert cmd[0] == 'guestfish'
         assert '--rw' in cmd
         assert 'ntfsfix -d /dev/sda4' in cmd
 
@@ -395,7 +394,7 @@ class TestRunScript:
         def capture_run(cmd, **kwargs):
             nonlocal written_content
             script_idx = cmd.index('-f') + 1
-            with open(cmd[script_idx], 'r') as f:
+            with open(cmd[script_idx]) as f:
                 written_content = f.read()
             return MagicMock(returncode=0, stdout='', stderr='')
 

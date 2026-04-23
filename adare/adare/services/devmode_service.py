@@ -9,42 +9,42 @@ import asyncio
 import logging
 import sys
 import time
-import yaml
 from pathlib import Path
-from typing import List, Optional
+
+import yaml
 
 from adare.backend.devmode.manager import DevModeSessionManager
 from adare.backend.environment import database as environment_database
 from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
-from adare.database.api.devmode import DevModeApi
-from adare.types.playbook import parse_playbook, _structure_action
-from adare.core.result import Result
 from adare.core.dto.devmode import (
-    DevSessionStartRequest,
-    DevSessionStopRequest,
     DevActionExecuteRequest,
-    DevPlaybookExecuteRequest,
-    DevResetRequest,
+    DevActionResult,
     DevCheckpointCreateRequest,
     DevCheckpointDeleteRequest,
-    DevCheckpointRestoreRequest,
-    DevCheckpointListRequest,
-    DevSessionListRequest,
-    DevSessionStateRequest,
-    DevSessionCleanupRequest,
-    DevSessionInfo,
-    DevActionResult,
-    DevPlaybookResult,
-    DevSessionListItem,
     DevCheckpointInfo,
-    DevResetResult,
+    DevCheckpointListRequest,
+    DevCheckpointRestoreRequest,
     DevCleanupResult,
-    DevSessionRecordRequest,
-    DevUpdateTestfunctionsRequest,
-    DevUpdateTestfunctionsResult,
     DevCVRestartRequest,
     DevCVStopRequest,
+    DevPlaybookExecuteRequest,
+    DevPlaybookResult,
+    DevResetRequest,
+    DevResetResult,
+    DevSessionCleanupRequest,
+    DevSessionInfo,
+    DevSessionListItem,
+    DevSessionListRequest,
+    DevSessionRecordRequest,
+    DevSessionStartRequest,
+    DevSessionStateRequest,
+    DevSessionStopRequest,
+    DevUpdateTestfunctionsRequest,
+    DevUpdateTestfunctionsResult,
 )
+from adare.core.result import Result
+from adare.database.api.devmode import DevModeApi
+from adare.types.playbook import _structure_action, parse_playbook
 
 log = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ class DevModeService:
                     f"Environment '{request.environment_name}' not found",
                     [
                         "Check available environments with: adare environment list",
-                        f"Load environment with: adare environment load <environment.yml>"
+                        "Load environment with: adare environment load <environment.yml>"
                     ]
                 )
 
@@ -195,7 +195,7 @@ class DevModeService:
                 ["Check logs for details"]
             )
 
-    def resume_session(self, session_id: str, console_ulid: Optional[str] = None) -> Result[DevSessionInfo]:
+    def resume_session(self, session_id: str, console_ulid: str | None = None) -> Result[DevSessionInfo]:
         """
         Resume a stopped dev mode session.
 
@@ -304,7 +304,7 @@ class DevModeService:
                 ["Check logs for details"]
             )
 
-    def resume_most_recent(self, project_path: Path, console_ulid: Optional[str] = None) -> Result[DevSessionInfo]:
+    def resume_most_recent(self, project_path: Path, console_ulid: str | None = None) -> Result[DevSessionInfo]:
         """
         Resume the most recently stopped session for the project.
 
@@ -361,35 +361,32 @@ class DevModeService:
                 # Session is running in memory - do graceful shutdown
                 await self._manager.stop_and_remove_session(request.session_id)
                 return 'removed'
-            else:
-                # Session not in memory - load minimal infrastructure for cleanup
-                # This works regardless of whether the VM is running or stopped
-                log.info(f"Loading session {request.session_id} infrastructure for cleanup")
-                session = await self._manager.load_session_for_cleanup(request.session_id)
-                
-                if session:
-                    # Loaded successfully - do full cleanup
-                    # stop_and_remove() handles VM stop/destroy and file deletion
-                    # regardless of the actual VM state (safe to call on stopped VM)
-                    await session.stop_and_remove()
-                    return 'removed'
-                else:
-                    # Could not load infrastructure - DB state might be corrupted
-                    # or environment invalid. Fallback to DB-only cleanup.
-                    log.warning(
-                        f"Could not load infrastructure for session {request.session_id}. "
-                        f"Performing database-only cleanup."
-                    )
-                    return 'removed_from_db_only'
-        else:
-            # For stop without removal: we need the session object for graceful shutdown
-            session = await self._manager.get_or_restore_session(request.session_id)
+            # Session not in memory - load minimal infrastructure for cleanup
+            # This works regardless of whether the VM is running or stopped
+            log.info(f"Loading session {request.session_id} infrastructure for cleanup")
+            session = await self._manager.load_session_for_cleanup(request.session_id)
 
-            if not session:
-                return None  # Already stopped
+            if session:
+                # Loaded successfully - do full cleanup
+                # stop_and_remove() handles VM stop/destroy and file deletion
+                # regardless of the actual VM state (safe to call on stopped VM)
+                await session.stop_and_remove()
+                return 'removed'
+            # Could not load infrastructure - DB state might be corrupted
+            # or environment invalid. Fallback to DB-only cleanup.
+            log.warning(
+                f"Could not load infrastructure for session {request.session_id}. "
+                f"Performing database-only cleanup."
+            )
+            return 'removed_from_db_only'
+        # For stop without removal: we need the session object for graceful shutdown
+        session = await self._manager.get_or_restore_session(request.session_id)
 
-            await self._manager.shutdown_session(request.session_id)
-            return 'stopped'
+        if not session:
+            return None  # Already stopped
+
+        await self._manager.shutdown_session(request.session_id)
+        return 'stopped'
 
     def stop_session(self, request: DevSessionStopRequest) -> Result[bool]:
         """
@@ -442,10 +439,10 @@ class DevModeService:
     def record_session(self, request: DevSessionRecordRequest) -> Result[bool]:
         """
         Start recording a dev session.
-        
+
         Args:
             request: DevSessionRecordRequest
-            
+
         Returns:
             Result[bool]
         """
@@ -453,15 +450,15 @@ class DevModeService:
             # Check session exists
             if not self._db_api.session_exists(request.session_id):
                 return Result.fail("SESSION_NOT_FOUND", f"Session '{request.session_id}' not found")
-                
+
             # Get or restore session
             session = asyncio.run(self._manager.get_or_restore_session(request.session_id))
             if not session:
                 return Result.fail("SESSION_RESTORE_FAILED", "Failed to restore session")
-                
+
             if not session.is_running:
                 return Result.fail("SESSION_NOT_RUNNING", "Session must be running to record")
-                
+
             # Start recording
             result = asyncio.run(session.start_recording(request.output_file))
             if not result.success:
@@ -471,7 +468,7 @@ class DevModeService:
                )
 
             return Result.ok(True)
-            
+
         except Exception as e:
             log.error(f"Error starting recording: {e}", exc_info=True)
             return Result.fail("INTERNAL_ERROR", str(e))
@@ -479,10 +476,10 @@ class DevModeService:
     def stop_recording_session(self, session_id: str) -> Result[bool]:
         """
         Stop recording a dev session.
-        
+
         Args:
             session_id: Session ID
-            
+
         Returns:
             Result[bool]
         """
@@ -491,21 +488,21 @@ class DevModeService:
             session = asyncio.run(self._manager.get_or_restore_session(session_id))
             if not session:
                 return Result.fail("SESSION_NOT_FOUND", "Session not found")
-                
+
             result = asyncio.run(session.stop_recording())
             if not result.success:
                 return Result.fail(
                     result.error.code if result.error else "RECORD_STOP_FAILED",
                     result.error.message if result.error else "Failed to stop recording"
                 )
-                
+
             return Result.ok(True)
         except Exception as e:
             log.error(f"Error stopping recording: {e}", exc_info=True)
             return Result.fail("INTERNAL_ERROR", str(e))
 
 
-    def list_sessions(self, request: DevSessionListRequest) -> Result[List[DevSessionListItem]]:
+    def list_sessions(self, request: DevSessionListRequest) -> Result[list[DevSessionListItem]]:
         """
         List all dev mode sessions (running, stopped, crashed).
 
@@ -616,34 +613,33 @@ class DevModeService:
     def update_testfunctions(self, request: DevUpdateTestfunctionsRequest) -> Result[DevUpdateTestfunctionsResult]:
         """
         Update testfunctions in the VM.
-        
+
         Args:
             request: DevUpdateTestfunctionsRequest
-            
+
         Returns:
             Result[DevUpdateTestfunctionsResult]
         """
         try:
             start_time = time.time()
-            
+
             # Use manager to process update
             success = asyncio.run(self._manager.update_testfunctions(request.session_id))
-            
+
             execution_time = time.time() - start_time
-            
+
             if success:
                 return Result.ok(DevUpdateTestfunctionsResult(
                     success=True,
                     message="Testfunctions updated successfully",
                     execution_time=execution_time
                 ))
-            else:
-                return Result.fail(
-                    "UPDATE_FAILED",
-                    "Failed to update testfunctions",
-                    ["Check if session is active and running", "Check logs for details"]
-                )
-                
+            return Result.fail(
+                "UPDATE_FAILED",
+                "Failed to update testfunctions",
+                ["Check if session is active and running", "Check logs for details"]
+            )
+
         except Exception as e:
             log.error(f"Error updating testfunctions: {e}", exc_info=True)
             return Result.fail(
@@ -664,23 +660,22 @@ class DevModeService:
         """
         try:
             start_time = time.time()
-            
+
             # Use manager to process update
             success = asyncio.run(self._manager.restart_mcp_server(
                 request.session_id,
                 debug=request.debug,
                 debug_output_dir=request.debug_output_dir
             ))
-            
+
             if success:
                 return Result.ok(True)
-            else:
-                return Result.fail(
-                    "RESTART_FAILED",
-                    "Failed to restart CV server",
-                    ["Check if session is active and running", "Check logs for details"]
-                )
-                
+            return Result.fail(
+                "RESTART_FAILED",
+                "Failed to restart CV server",
+                ["Check if session is active and running", "Check logs for details"]
+            )
+
         except Exception as e:
             log.error(f"Error restarting CV server: {e}", exc_info=True)
             return Result.fail(
@@ -703,16 +698,15 @@ class DevModeService:
             success = asyncio.run(self._manager.stop_mcp_server(
                 request.session_id
             ))
-            
+
             if success:
                 return Result.ok(True)
-            else:
-                return Result.fail(
-                    "STOP_FAILED",
-                    "Failed to stop CV server",
-                    ["Check if session is active and running", "Check logs for details"]
-                )
-                
+            return Result.fail(
+                "STOP_FAILED",
+                "Failed to stop CV server",
+                ["Check if session is active and running", "Check logs for details"]
+            )
+
         except Exception as e:
             log.error(f"Error stopping CV server: {e}", exc_info=True)
             return Result.fail(
@@ -948,7 +942,7 @@ class DevModeService:
             playbook_path = Path(request.playbook_content)
             experiment_dir = playbook_path.parent.resolve()
             log.info(f" inferred experiment directory from playbook file: {experiment_dir}")
-            
+
             playbook = self._parse_playbook_from_file(request.playbook_content)
         elif request.playbook_source == 'url':
             playbook = self._fetch_playbook_from_url(request.playbook_content)
@@ -1127,12 +1121,11 @@ class DevModeService:
                     execution_time=execution_time,
                     message="Variables reset to initial state"
                 ))
-            else:
-                return Result.fail(
-                    result.error.code if result.error else "RESET_FAILED",
-                    result.error.message if result.error else "Soft reset failed",
-                    ["Try hard reset instead: adare dev reset-hard"]
-                )
+            return Result.fail(
+                result.error.code if result.error else "RESET_FAILED",
+                result.error.message if result.error else "Soft reset failed",
+                ["Try hard reset instead: adare dev reset-hard"]
+            )
 
         except RuntimeError as e:
             # Raised by _reset_soft_async when session not found
@@ -1203,12 +1196,11 @@ class DevModeService:
                     execution_time=execution_time,
                     message="VM restored to initial snapshot"
                 ))
-            else:
-                return Result.fail(
-                    result.error.code if result.error else "RESET_FAILED",
-                    result.error.message if result.error else "Hard reset failed",
-                    ["Check session state: adare dev state"]
-                )
+            return Result.fail(
+                result.error.code if result.error else "RESET_FAILED",
+                result.error.message if result.error else "Hard reset failed",
+                ["Check session state: adare dev state"]
+            )
 
         except RuntimeError as e:
             # Raised by _reset_hard_async when session not found
@@ -1247,7 +1239,7 @@ class DevModeService:
         """
         # Get or restore session (stays in same event loop)
         session = await self._manager.get_or_restore_session(
-            request.session_id, 
+            request.session_id,
             connect_websocket=False
         )
         if not session:
@@ -1278,12 +1270,11 @@ class DevModeService:
 
             if result.success:
                 return Result.ok(True)
-            else:
-                return Result.fail(
-                    result.error.code if result.error else "CHECKPOINT_CREATE_FAILED",
-                    result.error.message if result.error else f"Failed to create checkpoint '{request.name}'",
-                    ["Check hypervisor is running", "Check VM has sufficient disk space"]
-                )
+            return Result.fail(
+                result.error.code if result.error else "CHECKPOINT_CREATE_FAILED",
+                result.error.message if result.error else f"Failed to create checkpoint '{request.name}'",
+                ["Check hypervisor is running", "Check VM has sufficient disk space"]
+            )
 
         except RuntimeError as e:
             # Raised by _create_checkpoint_async when session not found
@@ -1346,14 +1337,13 @@ class DevModeService:
 
             if result.success:
                 return Result.ok(True)
-            else:
-                return Result.fail(
-                    result.error.code if result.error else "CHECKPOINT_NOT_FOUND",
-                    result.error.message if result.error else f"Checkpoint '{request.name}' not found",
-                    [
-                        f"List available checkpoints with: adare dev checkpoint-list {request.session_id}"
-                    ]
-                )
+            return Result.fail(
+                result.error.code if result.error else "CHECKPOINT_NOT_FOUND",
+                result.error.message if result.error else f"Checkpoint '{request.name}' not found",
+                [
+                    f"List available checkpoints with: adare dev checkpoint-list {request.session_id}"
+                ]
+            )
 
         except RuntimeError as e:
             # Raised by _restore_checkpoint_async when session not found
@@ -1373,7 +1363,7 @@ class DevModeService:
                 ["Check logs for details"]
             )
 
-    def list_checkpoints(self, request: DevCheckpointListRequest) -> Result[List[DevCheckpointInfo]]:
+    def list_checkpoints(self, request: DevCheckpointListRequest) -> Result[list[DevCheckpointInfo]]:
         """
         List available checkpoints (read-only operation).
 
@@ -1461,8 +1451,8 @@ class DevModeService:
                         [f"List available checkpoints with: adare dev checkpoint list --session-id {request.session_id}"]
                     )
 
-            # Get infrastructure-only session context 
-            # We use load_session_for_cleanup because we only need infrastructure access 
+            # Get infrastructure-only session context
+            # We use load_session_for_cleanup because we only need infrastructure access
             # (hypervisor) to delete files, not full application context.
             session = asyncio.run(self._manager.load_session_for_cleanup(request.session_id))
             if session and session.experiment_ctx.hypervisor_type == 'qemu':
@@ -1542,9 +1532,7 @@ class DevModeService:
             missing_checkpoints = []
 
             for checkpoint in checkpoints:
-                if checkpoint.memory_file_path and not Path(checkpoint.memory_file_path).exists():
-                    missing_checkpoints.append(checkpoint.name)
-                elif checkpoint.disk_file_path and not Path(checkpoint.disk_file_path).exists():
+                if checkpoint.memory_file_path and not Path(checkpoint.memory_file_path).exists() or checkpoint.disk_file_path and not Path(checkpoint.disk_file_path).exists():
                     missing_checkpoints.append(checkpoint.name)
 
             if missing_checkpoints:
@@ -1565,7 +1553,7 @@ class DevModeService:
 
     def _parse_action_from_file(self, file_path: str):
         """Parse single action from YAML file."""
-        with open(file_path, 'r') as f:
+        with open(file_path) as f:
             yaml_content = f.read()
         return self._parse_action_from_yaml(yaml_content)
 

@@ -1,17 +1,16 @@
 # external imports
-import attrs
-import sqlalchemy
-from pathlib import Path
-
-# internal imports
-import adare.config.database as config_database
-from adare.database.models.global_models import Environment, OsInfo, Project, PostSetupInstallation, Tag
-from adare.types.environment import EnvironmentMetadata, OsInfo as OsInfoAttrs, PostsetupInstallations as PostsetupInstallationsAttrs
-from adare.database.api.base import GlobalDatabaseApi
-from adare.database.exceptions import DatabaseProjectNotFoundError
-
 # configure logging
 import logging
+from pathlib import Path
+
+import attrs
+import sqlalchemy
+
+# internal imports
+from adare.database.api.base import GlobalDatabaseApi
+from adare.database.models.global_models import Environment, OsInfo, PostSetupInstallation, Tag
+from adare.types.environment import OsInfo as OsInfoAttrs
+from adare.types.environment import PostsetupInstallations as PostsetupInstallationsAttrs
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +55,7 @@ class EnvironmentDbApi(GlobalDatabaseApi):
 
     def get_environment_by_ulid(self, ulid: str) -> Environment:
         return self._session.query(Environment).filter(Environment.id == ulid).first()
-    
+
     def get_environment_by_hash(self, sha256hash: str) -> Environment:
         return self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
 
@@ -177,8 +176,7 @@ class EnvironmentDbApi(GlobalDatabaseApi):
                     description=installation.description
                 ) for installation in env.installations
             ]
-        else:
-            raise ValueError(f'environment {environment_ulid} not found in database')
+        raise ValueError(f'environment {environment_ulid} not found in database')
 
     def get_environment_platform(self, environment_ulid: str):
         if (
@@ -187,8 +185,7 @@ class EnvironmentDbApi(GlobalDatabaseApi):
             .first()
         ):
             return env.vm.osinfo.platform
-        else:
-            raise ValueError(f'environment {environment_ulid} not found in database')
+        raise ValueError(f'environment {environment_ulid} not found in database')
 
     def get_environment(self, name: str, project_name: str) -> Environment | None:
         # Since environments are now global, we just search by name (project_name is ignored)
@@ -205,8 +202,7 @@ class EnvironmentDbApi(GlobalDatabaseApi):
             .first()
         ):
             return env.vm.name if env.vm else None
-        else:
-            raise ValueError(f'environment {environment_ulid} not found in database')
+        raise ValueError(f'environment {environment_ulid} not found in database')
 
     def get_environment_by_project_and_name(self, project_path: Path, environment_name: str) -> Environment:
         # Since environments are now global, we just search by name

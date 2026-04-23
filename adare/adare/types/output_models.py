@@ -3,8 +3,9 @@ Output models for structured JSON/YAML data.
 
 These models provide standardized data structures for CLI output formatting.
 """
-from typing import List, Dict, Any, Optional
 from datetime import datetime
+from typing import Any
+
 import attrs
 
 
@@ -14,11 +15,11 @@ class ProjectInfo:
     name: str
     description: str = ""
     path: str = ""
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
     experiment_count: int = 0
     environment_count: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'name': self.name,
@@ -39,7 +40,7 @@ class EnvironmentInfo:
     description: str = ""
     os_info: str = ""
     vm_box: str = ""
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
     experiment_count: int = 0
     dotnotation: str = ""
     display_name: str = ""
@@ -52,7 +53,7 @@ class EnvironmentInfo:
     in_request: bool = False
     file: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'ulid': self.ulid,
@@ -92,17 +93,17 @@ class ExperimentInfo:
     project: str
     environment: str
     description: str = ""
-    tags: List[str] = attrs.Factory(list)
-    created_at: Optional[datetime] = None
+    tags: list[str] = attrs.Factory(list)
+    created_at: datetime | None = None
     run_count: int = 0
-    last_run: Optional[datetime] = None
+    last_run: datetime | None = None
     dotnotation: str = ""
     display_name: str = ""
-    environments: List[str] = attrs.Factory(list)
+    environments: list[str] = attrs.Factory(list)
     published: bool = False
     in_request: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'ulid': self.ulid,
@@ -132,10 +133,10 @@ class TestFunctionInfo:
     name: str
     dotnotation: str
     description: str = ""
-    parameters: List[Dict[str, Any]] = attrs.Factory(list)
+    parameters: list[dict[str, Any]] = attrs.Factory(list)
     file_path: str = ""
-    id: Optional[str] = None
-    file_id: Optional[str] = None
+    id: str | None = None
+    file_id: str | None = None
     display_name: str = ""
     parameter_count: int = 0
     file_name: str = ""
@@ -143,7 +144,7 @@ class TestFunctionInfo:
     file_description: str = ""
     full_file_path: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'id': self.id,
@@ -173,18 +174,18 @@ class RunInfo:
     environment_name: str
     environment_ulid: str
     project_name: str
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
     duration_seconds: float = 0.0
     status: str = ""
     published: bool = False
     fake: bool = False
     os_info: str = ""
     vm_box: str = ""
-    test_results: List[Dict[str, Any]] = attrs.Factory(list)
+    test_results: list[dict[str, Any]] = attrs.Factory(list)
     overall_result: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'ulid': self.ulid,
@@ -225,9 +226,9 @@ class VMInfo:
     project: str = ""
     memory: str = ""
     cpus: int = 0
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'name': self.name,

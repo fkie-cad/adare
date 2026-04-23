@@ -4,6 +4,7 @@ Each concrete creator (Linux, Windows, Manual) implements the OS-specific steps
 while inheriting the shared orchestration, disk setup, cleanup, and UI logic.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
@@ -16,7 +17,6 @@ from adare.hypervisor.qemu.vm_creator.disk_helpers import create_qcow2_disk
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel, default_host_cpus
 from adare.hypervisor.qemu.vm_creator.prerequisites import check_prerequisites
 
-import logging
 log = logging.getLogger(__name__)
 
 

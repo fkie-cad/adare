@@ -16,7 +16,6 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Tuple
 
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.libvirt_stderr_redirect import (
@@ -38,7 +37,7 @@ class GuestfishClient:
     def run_command(
         self,
         disk_path: str,
-        commands: List[str],
+        commands: list[str],
         readonly: bool = False,
         auto_mount: bool = True,
     ) -> tuple[int, str, str]:
@@ -237,7 +236,7 @@ class GuestfishClient:
         )
         return largest_device, largest_fs_type
 
-    def _parse_filesystems_output(self, stdout: str) -> List[Tuple[str, str]]:
+    def _parse_filesystems_output(self, stdout: str) -> list[tuple[str, str]]:
         """Parse guestfish list-filesystems output.
 
         Args:
@@ -416,21 +415,20 @@ class GuestfishClient:
                     f"     - Shutdown cleanly\n"
                     f"     - Re-run experiment"
                 )
-            else:
-                raise HypervisorException(
-                    f"Failed to remove NTFS hibernation metadata.\n"
-                    f"Error: {result.stderr}\n"
-                    f"Device: {device}\n"
-                    f"Disk: {disk_path}\n\n"
-                    f"Troubleshooting:\n"
-                    f"  1. Ensure VM was shut down cleanly "
-                    f"(not forced off)\n"
-                    f"  2. Disable Windows Fast Startup in the VM\n"
-                    f"  3. Check disk integrity: "
-                    f"qemu-img check {disk_path}\n"
-                    f"  4. Try manual ntfsfix: guestfish --rw "
-                    f"-a {disk_path} : run : ntfsfix {device}"
-                )
+            raise HypervisorException(
+                f"Failed to remove NTFS hibernation metadata.\n"
+                f"Error: {result.stderr}\n"
+                f"Device: {device}\n"
+                f"Disk: {disk_path}\n\n"
+                f"Troubleshooting:\n"
+                f"  1. Ensure VM was shut down cleanly "
+                f"(not forced off)\n"
+                f"  2. Disable Windows Fast Startup in the VM\n"
+                f"  3. Check disk integrity: "
+                f"qemu-img check {disk_path}\n"
+                f"  4. Try manual ntfsfix: guestfish --rw "
+                f"-a {disk_path} : run : ntfsfix {device}"
+            )
 
         log.info(
             f"Successfully removed NTFS hibernation metadata from {device}"
@@ -438,7 +436,7 @@ class GuestfishClient:
         log.debug(f"ntfsfix output: {result.stdout}")
 
     def run_script(
-        self, disk_path: str, commands: List[str]
+        self, disk_path: str, commands: list[str]
     ) -> bool:
         """Run a guestfish script from a temp file.
 

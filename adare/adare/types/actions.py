@@ -1,13 +1,14 @@
 """Action event types for playbook execution tracking."""
 
+from datetime import UTC, datetime
+from typing import Any
+
 import attrs
-from datetime import datetime, timezone
-from typing import Optional, Dict, Any, Tuple
 import cattrs
 
-from adarelib.constants import StatusEnum
-from adare.types.event_types import EventType, ActionType
+from adare.types.event_types import EventType
 from adare.types.playbook import Target
+from adarelib.constants import StatusEnum
 
 # -------------------------------
 # cattrs Converter Setup
@@ -26,7 +27,7 @@ converter.register_structure_hook(StatusEnum, lambda i, _: StatusEnum(i))
 # Handle Target → dict and back
 converter.register_unstructure_hook(Target, lambda t: {
     'image': t.image,
-    'text': t.text, 
+    'text': t.text,
     'position': t.position,
     'strategy': converter.unstructure(t.strategy) if t.strategy else None
 })
@@ -44,20 +45,20 @@ converter.register_structure_hook(Target, lambda d, _: Target(
 @attrs.define
 class ActionEvent:
     """Base class for all action execution events."""
-    
+
     # Action identification
     action_id: str
     action_description: str = ""
     sequence_order: int = 0
-    
+
     # Execution timing
-    timestamp: datetime = attrs.field(factory=lambda: datetime.now(timezone.utc))
-    
+    timestamp: datetime = attrs.field(factory=lambda: datetime.now(UTC))
+
     # Execution context
-    playbook_item_id: Optional[str] = None
-    experiment_run_id: Optional[str] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
+    playbook_item_id: str | None = None
+    experiment_run_id: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for event publishing."""
         data = converter.unstructure(self)
         # Add explicit event_type for proper deserialization
@@ -65,17 +66,17 @@ class ActionEvent:
         # Keep __class__ for backward compatibility during transition
         data['__class__'] = self.__class__.__name__
         return data
-    
+
     def get_event_type(self) -> EventType:
         """Get the explicit event type for this action event."""
         # This should be overridden by subclasses
         return EventType.ACTION_START
-    
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ActionEvent":
+    def from_dict(cls, data: dict[str, Any]) -> "ActionEvent":
         """Create from dictionary."""
         return converter.structure(data, cls)
-    
+
     @property
     def action_type(self) -> str:
         """Get action type from class name."""
@@ -89,8 +90,8 @@ class ActionEvent:
 @attrs.define
 class ActionStartEvent(ActionEvent):
     """Base class for action start events."""
-    parent_event_id: Optional[str] = None
-    
+    parent_event_id: str | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.ACTION_START
 
@@ -99,9 +100,9 @@ class ActionStartEvent(ActionEvent):
 class ActionCompleteEvent(ActionEvent):
     """Base class for action completion events."""
     success: bool = False
-    execution_time: Optional[float] = None
-    parent_event_id: Optional[str] = None
-    
+    execution_time: float | None = None
+    parent_event_id: str | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.ACTION_COMPLETE
 
@@ -109,8 +110,8 @@ class ActionCompleteEvent(ActionEvent):
 @attrs.define
 class ClickActionStartEvent(ActionStartEvent):
     """Event for click action start."""
-    target_info: Optional[Dict[str, Any]] = None
-    
+    target_info: dict[str, Any] | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.CLICK_START
 
@@ -118,9 +119,9 @@ class ClickActionStartEvent(ActionStartEvent):
 @attrs.define
 class ClickActionCompleteEvent(ActionCompleteEvent):
     """Event for click action completion."""
-    coordinates: Optional[Tuple[int, int]] = None
-    target_info: Optional[Dict[str, Any]] = None
-    
+    coordinates: tuple[int, int] | None = None
+    target_info: dict[str, Any] | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.CLICK_COMPLETE
 
@@ -134,10 +135,10 @@ class ClickActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class KeyboardActionStartEvent(ActionStartEvent):
     """Event for keyboard action start."""
-    key: Optional[str] = None           # Single key press (e.g., "enter")
-    text: Optional[str] = None          # Text input (e.g., "hello world")
-    combination: Optional[list] = None  # Key combo (e.g., ["ctrl", "c"])
-    keys: Optional[str] = None          # Legacy field for backward compatibility
+    key: str | None = None           # Single key press (e.g., "enter")
+    text: str | None = None          # Text input (e.g., "hello world")
+    combination: list | None = None  # Key combo (e.g., ["ctrl", "c"])
+    keys: str | None = None          # Legacy field for backward compatibility
 
     def get_event_type(self) -> EventType:
         return EventType.KEYBOARD_START
@@ -146,10 +147,10 @@ class KeyboardActionStartEvent(ActionStartEvent):
 @attrs.define
 class KeyboardActionCompleteEvent(ActionCompleteEvent):
     """Event for keyboard action completion."""
-    key: Optional[str] = None           # Single key press
-    text: Optional[str] = None          # Text input
-    combination: Optional[list] = None  # Key combo
-    keys_sent: Optional[str] = None     # Legacy field for backward compatibility
+    key: str | None = None           # Single key press
+    text: str | None = None          # Text input
+    combination: list | None = None  # Key combo
+    keys_sent: str | None = None     # Legacy field for backward compatibility
 
     def get_event_type(self) -> EventType:
         return EventType.KEYBOARD_COMPLETE
@@ -162,8 +163,8 @@ class KeyboardActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class CommandActionStartEvent(ActionStartEvent):
     """Event for command action start."""
-    command: Optional[str] = None
-    
+    command: str | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.COMMAND_START
 
@@ -171,10 +172,10 @@ class CommandActionStartEvent(ActionStartEvent):
 @attrs.define
 class CommandActionCompleteEvent(ActionCompleteEvent):
     """Event for command action completion."""
-    command_executed: Optional[str] = None
-    output: Optional[str] = None
-    return_code: Optional[int] = None
-    
+    command_executed: str | None = None
+    output: str | None = None
+    return_code: int | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.COMMAND_COMPLETE
 
@@ -187,7 +188,7 @@ class CommandActionCompleteEvent(ActionCompleteEvent):
 class TestActionStartEvent(ActionStartEvent):
     """Event for test action start."""
     test_name: str = ""
-    
+
     def get_event_type(self) -> EventType:
         return EventType.TEST_START
 
@@ -196,20 +197,19 @@ class TestActionStartEvent(ActionStartEvent):
 class TestActionCompleteEvent(ActionCompleteEvent):
     """Event for test action completion."""
     test_name: str = ""
-    test_output: Optional[str] = None
-    result_category: Optional[str] = None
+    test_output: str | None = None
+    result_category: str | None = None
     expect_to_fail: bool = False
-    
+
     def get_event_type(self) -> EventType:
         return EventType.TEST_COMPLETE
-    
+
     @property
     def status(self) -> StatusEnum:
         """Get appropriate status for test results."""
         if self.success:
             return StatusEnum.SUCCESS
-        else:
-            return StatusEnum.TEST_FAILED
+        return StatusEnum.TEST_FAILED
 
 
 # -------------------------------
@@ -219,9 +219,9 @@ class TestActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class BlockActionStartEvent(ActionStartEvent):
     """Event for block action start."""
-    conditions: Optional[Dict[str, Any]] = None
+    conditions: dict[str, Any] | None = None
     action_count: int = 0
-    
+
     def get_event_type(self) -> EventType:
         return EventType.BLOCK_START
 
@@ -230,7 +230,7 @@ class BlockActionStartEvent(ActionStartEvent):
 class BlockActionCompleteEvent(ActionCompleteEvent):
     """Event for block action completion."""
     actions_executed: int = 0
-    
+
     def get_event_type(self) -> EventType:
         return EventType.BLOCK_COMPLETE
 
@@ -243,7 +243,7 @@ class BlockActionCompleteEvent(ActionCompleteEvent):
 class ScreenshotActionStartEvent(ActionStartEvent):
     """Event for screenshot action start."""
     pass
-    
+
     def get_event_type(self) -> EventType:
         return EventType.SCREENSHOT_START
 
@@ -251,8 +251,8 @@ class ScreenshotActionStartEvent(ActionStartEvent):
 @attrs.define
 class ScreenshotActionCompleteEvent(ActionCompleteEvent):
     """Event for screenshot action completion."""
-    screenshot_path: Optional[str] = None
-    
+    screenshot_path: str | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.SCREENSHOT_COMPLETE
 
@@ -260,9 +260,9 @@ class ScreenshotActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class ScrollActionStartEvent(ActionStartEvent):
     """Event for scroll action start."""
-    direction: Optional[str] = None
-    amount: Optional[int] = None
-    
+    direction: str | None = None
+    amount: int | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.SCROLL_START
 
@@ -271,7 +271,7 @@ class ScrollActionStartEvent(ActionStartEvent):
 class ScrollActionCompleteEvent(ActionCompleteEvent):
     """Event for scroll action completion."""
     pass
-    
+
     def get_event_type(self) -> EventType:
         return EventType.SCROLL_COMPLETE
 
@@ -279,8 +279,8 @@ class ScrollActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class IdleActionStartEvent(ActionStartEvent):
     """Event for idle action start."""
-    duration: Optional[float] = None
-    
+    duration: float | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.IDLE_START
 
@@ -288,8 +288,8 @@ class IdleActionStartEvent(ActionStartEvent):
 @attrs.define
 class IdleActionCompleteEvent(ActionCompleteEvent):
     """Event for idle action completion."""
-    actual_duration: Optional[float] = None
-    
+    actual_duration: float | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.IDLE_COMPLETE
 
@@ -297,9 +297,9 @@ class IdleActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class DragActionStartEvent(ActionStartEvent):
     """Event for drag action start."""
-    source_target: Optional[Dict[str, Any]] = None
-    dest_target: Optional[Dict[str, Any]] = None
-    
+    source_target: dict[str, Any] | None = None
+    dest_target: dict[str, Any] | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.DRAG_START
 
@@ -307,9 +307,9 @@ class DragActionStartEvent(ActionStartEvent):
 @attrs.define
 class DragActionCompleteEvent(ActionCompleteEvent):
     """Event for drag action completion."""
-    source_coordinates: Optional[Tuple[int, int]] = None
-    dest_coordinates: Optional[Tuple[int, int]] = None
-    
+    source_coordinates: tuple[int, int] | None = None
+    dest_coordinates: tuple[int, int] | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.DRAG_COMPLETE
 
@@ -317,8 +317,8 @@ class DragActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class GotoActionStartEvent(ActionStartEvent):
     """Event for goto action start."""
-    url: Optional[str] = None
-    
+    url: str | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.GOTO_START
 
@@ -326,8 +326,8 @@ class GotoActionStartEvent(ActionStartEvent):
 @attrs.define
 class GotoActionCompleteEvent(ActionCompleteEvent):
     """Event for goto action completion."""
-    final_url: Optional[str] = None
-    
+    final_url: str | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.GOTO_COMPLETE
 
@@ -335,8 +335,8 @@ class GotoActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class SaveTimestampActionStartEvent(ActionStartEvent):
     """Event for save timestamp action start."""
-    variable: Optional[str] = None
-    
+    variable: str | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.SAVETIMESTAMP_START
 
@@ -344,9 +344,9 @@ class SaveTimestampActionStartEvent(ActionStartEvent):
 @attrs.define
 class SaveTimestampActionCompleteEvent(ActionCompleteEvent):
     """Event for save timestamp action completion."""
-    variable: Optional[str] = None
-    timestamp_value: Optional[float] = None
-    
+    variable: str | None = None
+    timestamp_value: float | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.SAVETIMESTAMP_COMPLETE
 
@@ -358,8 +358,8 @@ class SaveTimestampActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class PullActionStartEvent(ActionStartEvent):
     """Event for pull action start."""
-    source: Optional[str] = None
-    destination: Optional[str] = None
+    source: str | None = None
+    destination: str | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.PULL_START
@@ -368,10 +368,10 @@ class PullActionStartEvent(ActionStartEvent):
 @attrs.define
 class PullActionCompleteEvent(ActionCompleteEvent):
     """Event for pull action completion."""
-    source: Optional[str] = None
-    destination: Optional[str] = None
-    files_copied: Optional[int] = None
-    total_size: Optional[int] = None
+    source: str | None = None
+    destination: str | None = None
+    files_copied: int | None = None
+    total_size: int | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.PULL_COMPLETE
@@ -384,7 +384,7 @@ class PullActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class PauseActionStartEvent(ActionStartEvent):
     """Event for pause action start."""
-    message: Optional[str] = None
+    message: str | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.PAUSE_START
@@ -393,7 +393,7 @@ class PauseActionStartEvent(ActionStartEvent):
 @attrs.define
 class PauseActionCompleteEvent(ActionCompleteEvent):
     """Event for pause action completion."""
-    user_input: Optional[str] = None
+    user_input: str | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.PAUSE_COMPLETE
@@ -406,10 +406,10 @@ class PauseActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class WaitUntilActionStartEvent(ActionStartEvent):
     """Event for wait until action start."""
-    target_info: Optional[Dict[str, Any]] = None
-    timeout: Optional[float] = None
-    check_interval: Optional[float] = None
-    initial_delay: Optional[float] = None
+    target_info: dict[str, Any] | None = None
+    timeout: float | None = None
+    check_interval: float | None = None
+    initial_delay: float | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.WAIT_UNTIL_START
@@ -418,8 +418,8 @@ class WaitUntilActionStartEvent(ActionStartEvent):
 @attrs.define
 class WaitUntilActionCompleteEvent(ActionCompleteEvent):
     """Event for wait until action completion."""
-    target_info: Optional[Dict[str, Any]] = None
-    coordinates: Optional[Tuple[int, int]] = None
+    target_info: dict[str, Any] | None = None
+    coordinates: tuple[int, int] | None = None
     found: bool = False
 
     def get_event_type(self) -> EventType:
@@ -433,8 +433,8 @@ class WaitUntilActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class LoopActionStartEvent(ActionStartEvent):
     """Event for loop action start."""
-    iteration_count: Optional[int] = None
-    items: Optional[list] = None
+    iteration_count: int | None = None
+    items: list | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.LOOP_START
@@ -443,8 +443,8 @@ class LoopActionStartEvent(ActionStartEvent):
 @attrs.define
 class LoopActionCompleteEvent(ActionCompleteEvent):
     """Event for loop action completion."""
-    iterations_completed: Optional[int] = None
-    actions_executed: Optional[int] = None
+    iterations_completed: int | None = None
+    actions_executed: int | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.LOOP_COMPLETE
@@ -457,7 +457,7 @@ class LoopActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class StopActionStartEvent(ActionStartEvent):
     """Event for stop action start."""
-    condition_info: Optional[Dict[str, Any]] = None
+    condition_info: dict[str, Any] | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.STOP_START
@@ -466,7 +466,7 @@ class StopActionStartEvent(ActionStartEvent):
 @attrs.define
 class StopActionCompleteEvent(ActionCompleteEvent):
     """Event for stop action completion."""
-    condition_met: Optional[bool] = None
+    condition_met: bool | None = None
     stopped_execution: bool = False
 
     def get_event_type(self) -> EventType:
@@ -480,7 +480,7 @@ class StopActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class ContinueActionStartEvent(ActionStartEvent):
     """Event for continue action start."""
-    condition_info: Optional[Dict[str, Any]] = None
+    condition_info: dict[str, Any] | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.CONTINUE_START
@@ -489,7 +489,7 @@ class ContinueActionStartEvent(ActionStartEvent):
 @attrs.define
 class ContinueActionCompleteEvent(ActionCompleteEvent):
     """Event for continue action completion."""
-    condition_met: Optional[bool] = None
+    condition_met: bool | None = None
     skipped_remaining: bool = False
 
     def get_event_type(self) -> EventType:
@@ -503,8 +503,8 @@ class ContinueActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class FindActionStartEvent(ActionStartEvent):
     """Event for find substage start."""
-    target_info: Optional[Dict[str, Any]] = None
-    
+    target_info: dict[str, Any] | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.ACTION_START
 
@@ -512,9 +512,9 @@ class FindActionStartEvent(ActionStartEvent):
 @attrs.define
 class FindActionCompleteEvent(ActionCompleteEvent):
     """Event for find substage completion."""
-    target_info: Optional[Dict[str, Any]] = None
-    coordinates: Optional[Tuple[int, int]] = None
-    matched_text: Optional[str] = None  # What OCR actually detected (for fuzzy/regex matching)
+    target_info: dict[str, Any] | None = None
+    coordinates: tuple[int, int] | None = None
+    matched_text: str | None = None  # What OCR actually detected (for fuzzy/regex matching)
 
     def get_event_type(self) -> EventType:
         return EventType.ACTION_COMPLETE
@@ -523,8 +523,8 @@ class FindActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class ExecuteActionStartEvent(ActionStartEvent):
     """Event for execute substage start."""
-    coordinates: Optional[Tuple[int, int]] = None
-    
+    coordinates: tuple[int, int] | None = None
+
     def get_event_type(self) -> EventType:
         return EventType.ACTION_START
 
@@ -532,7 +532,7 @@ class ExecuteActionStartEvent(ActionStartEvent):
 @attrs.define
 class ExecuteActionCompleteEvent(ActionCompleteEvent):
     """Event for execute substage completion."""
-    coordinates: Optional[Tuple[int, int]] = None
+    coordinates: tuple[int, int] | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.ACTION_COMPLETE
@@ -545,7 +545,7 @@ class ExecuteActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class SnapshotFilesystemActionStartEvent(ActionStartEvent):
     """Event for snapshot filesystem action start."""
-    snapshot_type: Optional[str] = None  # 'initial' or 'final'
+    snapshot_type: str | None = None  # 'initial' or 'final'
 
     def get_event_type(self) -> EventType:
         return EventType.SNAPSHOT_FILESYSTEM_START
@@ -554,8 +554,8 @@ class SnapshotFilesystemActionStartEvent(ActionStartEvent):
 @attrs.define
 class SnapshotFilesystemActionCompleteEvent(ActionCompleteEvent):
     """Event for snapshot filesystem action completion."""
-    snapshot_type: Optional[str] = None
-    files_count: Optional[int] = None
+    snapshot_type: str | None = None
+    files_count: int | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.SNAPSHOT_FILESYSTEM_COMPLETE
@@ -568,7 +568,7 @@ class SnapshotFilesystemActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class PullChangedFilesActionStartEvent(ActionStartEvent):
     """Event for pull changed files action start."""
-    destination: Optional[str] = None
+    destination: str | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.PULL_CHANGED_FILES_START
@@ -577,9 +577,9 @@ class PullChangedFilesActionStartEvent(ActionStartEvent):
 @attrs.define
 class PullChangedFilesActionCompleteEvent(ActionCompleteEvent):
     """Event for pull changed files action completion."""
-    destination: Optional[str] = None
-    files_pulled: Optional[int] = None
-    total_size: Optional[int] = None
+    destination: str | None = None
+    files_pulled: int | None = None
+    total_size: int | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.PULL_CHANGED_FILES_COMPLETE

@@ -1,5 +1,6 @@
 """OS definitions with ISO download URLs and SHA256 hashes."""
 
+import logging
 import os
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -9,7 +10,6 @@ import yaml
 
 from adare.config.configdirectory import OS_PROFILES_DIR
 
-import logging
 log = logging.getLogger(__name__)
 
 

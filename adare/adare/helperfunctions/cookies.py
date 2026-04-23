@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+
 import requests
 import requests.utils
 
@@ -12,6 +13,6 @@ def save_cookies(file: Path, cookie_jar):
 
 
 def load_cookies(file: Path, session: requests.Session):
-    with open(file.as_posix(), 'r') as f:
+    with open(file.as_posix()) as f:
         cookies = requests.utils.cookiejar_from_dict(json.load(f))
         session.cookies.update(cookies)

@@ -4,19 +4,24 @@ Mixin for GUI-related playbook actions.
 Includes: click, drag, keyboard, idle, scroll, goto, screenshot actions.
 """
 
-import logging
-import time
 import asyncio
 import base64
+import logging
+import time
 from pathlib import Path
-from typing import Optional
 
+from adare.backend.events.emitters import emit_action
 from adare.types.playbook import (
-    ClickAction, DragAction, KeyboardAction, IdleAction, ScrollAction,
-    GotoAction, ScreenshotAction,
+    ClickAction,
+    DragAction,
+    GotoAction,
+    IdleAction,
+    KeyboardAction,
+    ScreenshotAction,
+    ScrollAction,
 )
 from adare.types.step_actions import ExecuteAction
-from adare.backend.events.emitters import emit_action
+
 from .base import ActionResult
 
 log = logging.getLogger(__name__)
@@ -217,7 +222,7 @@ class GUIActionsMixin:
         except Exception as e:
             return ActionResult(success=False, message=str(e))
 
-    async def _save_explicit_screenshot(self, screenshot_base64: str, custom_name: Optional[str] = None) -> Optional[str]:
+    async def _save_explicit_screenshot(self, screenshot_base64: str, custom_name: str | None = None) -> str | None:
         """
         Save explicit screenshot to disk with custom naming.
 

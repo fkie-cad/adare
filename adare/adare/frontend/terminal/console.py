@@ -1,13 +1,14 @@
 # external imports
-from rich.layout import Layout
-from rich.console import Console
-from rich.table import Table
-from rich.rule import Rule, ConsoleOptions, RenderResult, cell_len, set_cell_size, Measurement
-from rich.text import Text
-import pandas as pd
-
 # logging
 import logging
+
+import pandas as pd
+from rich.console import Console
+from rich.layout import Layout
+from rich.rule import ConsoleOptions, Measurement, RenderResult, Rule, cell_len, set_cell_size
+from rich.table import Table
+from rich.text import Text
+
 log = logging.getLogger(__name__)
 
 

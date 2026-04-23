@@ -1,12 +1,11 @@
 """
 Export experiment files for submission to the shared Gitea repository.
 """
+import logging
 from pathlib import Path
 
 from adare.backend.project.directory import ProjectDirectory
 from adare.config.configdirectory import ENVIRONMENTS_DIR
-
-import logging
 
 log = logging.getLogger(__name__)
 

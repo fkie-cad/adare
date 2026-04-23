@@ -2,9 +2,9 @@
 Gitea REST API v1 client for creating branches, uploading files, and creating pull requests.
 """
 import base64
-import requests
-
 import logging
+
+import requests
 
 log = logging.getLogger(__name__)
 

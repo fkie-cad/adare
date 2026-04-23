@@ -1,12 +1,12 @@
 # external imports
-from subprocess import Popen, PIPE
+# configure logging
+import logging
 import os
+from subprocess import PIPE, Popen
 
 # internal imports
 from adare.helperFunctions.strings.replace import replace_multiple_strings
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 

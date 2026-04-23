@@ -1,8 +1,9 @@
-import threading
-from typing import Dict, Optional, Any
-from datetime import datetime, timezone
-from adarelib.constants import StatusEnum
 import logging
+import threading
+from datetime import UTC, datetime
+from typing import Any
+
+from adarelib.constants import StatusEnum
 
 log = logging.getLogger(__name__)
 
@@ -15,21 +16,21 @@ class ConsoleState:
 
     def __init__(self):
         self._lock = threading.Lock()
-        self.messages: Dict[str, Dict[str, Any]] = {}
-        self.experiment_start_time: Optional[datetime] = None
+        self.messages: dict[str, dict[str, Any]] = {}
+        self.experiment_start_time: datetime | None = None
 
     def _get_default_message_structure(
         self,
         message: str,
         level: int = 0,
         status: int = StatusEnum.NONE,
-        spinner: Optional[str] = None,
-        spinner_style: Optional[str] = None,
-        duration: Optional[float] = None,
-        start_time: Optional[datetime] = None,
-        result_status: Optional[int] = None,
+        spinner: str | None = None,
+        spinner_style: str | None = None,
+        duration: float | None = None,
+        start_time: datetime | None = None,
+        result_status: int | None = None,
         is_experiment_timer: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return {
             "message": message,
             "level": level,
@@ -42,7 +43,7 @@ class ConsoleState:
             "is_experiment_timer": is_experiment_timer
         }
 
-    def log_message(self, identifier: str, message: str, level: int = 0, status: int = StatusEnum.NONE, duration: Optional[float] = None) -> None:
+    def log_message(self, identifier: str, message: str, level: int = 0, status: int = StatusEnum.NONE, duration: float | None = None) -> None:
         """Generic log method."""
         with self._lock:
             self.messages[identifier] = self._get_default_message_structure(
@@ -92,7 +93,7 @@ class ConsoleState:
             if identifier not in self.messages:
                 log.warning(f"Attempted to update non-existent spinner message: {identifier}")
                 return
-            
+
             updated_msg = self.messages[identifier]
             updated_msg['spinner'] = None
             updated_msg['spinner_style'] = None
@@ -103,7 +104,7 @@ class ConsoleState:
                 updated_msg['message'] = message
             if duration is not None:
                 updated_msg['duration'] = duration
-            
+
             self.messages[identifier] = updated_msg
 
     def change_log_message(self, identifier: str, message: str) -> None:
@@ -117,7 +118,7 @@ class ConsoleState:
 
     def start_experiment_timer(self):
         with self._lock:
-            self.experiment_start_time = datetime.now(timezone.utc)
+            self.experiment_start_time = datetime.now(UTC)
             self.messages['EXPERIMENT_TIMER'] = self._get_default_message_structure(
                 message="",
                 level=0,
@@ -131,7 +132,7 @@ class ConsoleState:
             if 'EXPERIMENT_TIMER' in self.messages:
                 timer_msg = self.messages['EXPERIMENT_TIMER']
                 if timer_msg.get('start_time'):
-                    end_time = datetime.now(timezone.utc)
+                    end_time = datetime.now(UTC)
                     timer_msg['duration'] = (end_time - timer_msg['start_time']).total_seconds()
                 timer_msg['status'] = StatusEnum.SUCCESS if success else StatusEnum.FAILED
                 timer_msg['start_time'] = None
@@ -144,17 +145,17 @@ class ConsoleState:
                 status=StatusEnum.NONE
             )
 
-    def get_snapshot(self) -> Dict[str, Dict[str, Any]]:
+    def get_snapshot(self) -> dict[str, dict[str, Any]]:
         """
         Returns a thread-safe snapshot of the current messages.
         Use this for rendering to avoid holding the lock during render.
         """
         with self._lock:
-            # Deep copy might be too expensive if messages are large, 
+            # Deep copy might be too expensive if messages are large,
             # but usually they are just strings and small dicts.
             # Shallow copy of the dict of dicts should be safe enough if we don't mutate inner dicts in place elsewhere without lock.
             # Since we replace inner dicts or mutate them under lock, a shallow copy of the outer dict
-            # protects against iteration size changes. 
+            # protects against iteration size changes.
             # However, if render thread reads an inner dict while writer thread mutates it, that's a race.
             # So we should probably return a deep copy or copy the inner dicts too.
             return {k: v.copy() for k, v in self.messages.items()}

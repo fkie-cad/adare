@@ -1,16 +1,16 @@
 # external imports
+import logging
+
 from rich.layout import Layout
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
 # internal imports
-from adare.backend.vm.commands import clear_all_vms, clear_vms_by_environment, list_all_vms
+from adare.backend.vm.commands import list_all_vms
 from adare.backend.vm.database import get_vms_by_environment
 from adare.frontend.terminal.console import DefaultConsole
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -22,10 +22,10 @@ class VMConfirmationPanel:
 
     def __rich__(self) -> Panel:
         if not self.vms:
-            return Panel("[yellow]No VMs found to delete[/yellow]", 
-                        title=f"[b gold3]{self.title}[/b gold3]", 
+            return Panel("[yellow]No VMs found to delete[/yellow]",
+                        title=f"[b gold3]{self.title}[/b gold3]",
                         border_style="yellow")
-        
+
         table = Table(expand=True)
         table.add_column("Name", style="red", no_wrap=True)
         table.add_column("ID", style="dim", no_wrap=True)
@@ -40,15 +40,15 @@ class VMConfirmationPanel:
                 name = vm['name']
                 vm_id = vm['id']
                 vbox_status = "📄 Template"  # Vm is abstract template
-            
+
             table.add_row(name, vm_id, vbox_status)
-        
+
         if len(self.vms) > 15:
             table.add_row(f"... and {len(self.vms) - 15} more", "", "")
-        
+
         content = f"[red bold]{self.warning_text}[/red bold]\n\n{table}\n\n[yellow]Use --force to confirm this action[/yellow]"
-        
-        return Panel(content, title=f"[b red]⚠️  {self.title}[/b red]", 
+
+        return Panel(content, title=f"[b red]⚠️  {self.title}[/b red]",
                     border_style="red", title_align="left")
 
 
@@ -111,9 +111,9 @@ def print_vm_clear_all_confirmation():
     """Print confirmation for clearing all VMs."""
     try:
         vms = list_all_vms()
-        
+
         print(f"⚠️  This will delete ALL {len(vms)} VMs from the system!")
-        
+
         if vms:
             print("\nVMs to be deleted:")
             for vm in vms[:10]:  # Show max 10 VMs
@@ -124,14 +124,14 @@ def print_vm_clear_all_confirmation():
                     name = vm['name']
                     vm_id = vm['id']
                 print(f"  - {name} ({vm_id})")
-            
+
             if len(vms) > 10:
                 print(f"  ... and {len(vms) - 10} more")
         else:
             print("No VMs found to delete")
-            
+
         print("\nUse --force to confirm this action")
-        
+
     except Exception as e:
         log.error(f"Failed to show VM confirmation: {e}")
         print(f"Error showing confirmation: {e}")
@@ -142,16 +142,16 @@ def print_vm_clear_environment_confirmation(environment_ulid: str):
     try:
         vms = get_vms_by_environment(environment_ulid)
         console = DefaultConsole()
-        
+
         layout = Layout(name="root")
         panel = VMConfirmationPanel(
             vms,
-            f"Clear Environment VMs",
+            "Clear Environment VMs",
             f"This will delete {len(vms)} VMs for environment {environment_ulid}!"
         )
         layout.update(panel)
         console.print(layout)
-        
+
     except Exception as e:
         log.error(f"Failed to show environment VM confirmation: {e}")
         console = DefaultConsole()
@@ -162,12 +162,12 @@ def print_vm_clear_all_results(results: dict):
     """Print results of clearing all VMs."""
     try:
         console = DefaultConsole()
-        
+
         layout = Layout(name="root")
         panel = VMCleanupResultsPanel(results, "Clear All VMs")
         layout.update(panel)
         console.print(layout)
-        
+
     except Exception as e:
         log.error(f"Failed to show VM cleanup results: {e}")
         console = DefaultConsole()
@@ -178,12 +178,12 @@ def print_vm_clear_environment_results(results: dict, environment_ulid: str):
     """Print results of clearing environment VMs."""
     try:
         console = DefaultConsole()
-        
+
         layout = Layout(name="root")
         panel = VMCleanupResultsPanel(results, f"Clear Environment VMs ({environment_ulid})")
         layout.update(panel)
         console.print(layout)
-        
+
     except Exception as e:
         log.error(f"Failed to show environment VM cleanup results: {e}")
         console = DefaultConsole()

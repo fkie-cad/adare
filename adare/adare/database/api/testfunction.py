@@ -1,22 +1,22 @@
 # external imports
-import sqlalchemy
-from pathlib import Path
 import ast
-
-# internal imports
-import adare.config.database as config_database
-from adare.config.configdirectory import STATE_DIR
-from adare.database.models.global_models import TestFunction, TestFunctionFile, TestParameter, Project
-from adare.database.models.project_models import AbstractTest, TestEvent
-from adare.database.api.base import GlobalDatabaseApi
-from adare.database.exceptions import DatabaseTestfunctionCreationError, DatabaseTestfunctionRemovalError, \
-    DatabaseTestfunctionUpdateError, DatabaseTestValidationError
-from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
-from adare.helperfunctions.hash import hash_file_sha256, hash_string_sha256, combine_hashes
-from adare.exceptions import TestfunctionParameterClassMissingError
 
 # configure logging
 import logging
+from pathlib import Path
+
+import sqlalchemy
+
+# internal imports
+from adare.database.api.base import GlobalDatabaseApi
+from adare.database.exceptions import (
+    DatabaseTestfunctionCreationError,
+    DatabaseTestfunctionRemovalError,
+)
+from adare.database.models.global_models import Project, TestFunction, TestFunctionFile, TestParameter
+from adare.exceptions import TestfunctionParameterClassMissingError
+from adare.helperfunctions.hash import combine_hashes, hash_file_sha256, hash_string_sha256
+from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
 
 log = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         if matching_parameter_class := module_analyzer.get_class(parameter_attr_type):
             attribute_dict = matching_parameter_class.get_attributes_as_dict()
             db_parameter_objects = {}
-            
+
             # Create or get parameters sequentially to avoid race conditions
             for attr in attribute_dict.values():
                 param_obj, created = self.get_or_create(TestParameter, defaults={'dtype': attr['type']}, name=attr['name'])
@@ -137,7 +137,7 @@ class TestfunctionDbApi(GlobalDatabaseApi):
                     # Flush immediately to make the parameter visible to subsequent get_or_create calls
                     self._session.flush()
                 db_parameter_objects[attr['name']] = param_obj
-            
+
             sha256_testfunction = self.__get_testfunction_hash(testfunction_class)
             testfunction_obj = self.create_testfunction(testfunction_file, testfunction_class, db_parameter_objects,
                                                         sha256_testfunction)

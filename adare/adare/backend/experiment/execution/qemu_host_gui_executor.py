@@ -7,12 +7,13 @@ the need for X11 configuration in the guest VM.
 
 import asyncio
 import base64
+import io
 import logging
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
+
 from PIL import Image
-import io
 
 from .gui_executor_interface import AbstractGUIExecutor
 
@@ -93,7 +94,7 @@ SHIFT_MAP = {
     # Symbols on number keys
     '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
     '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
-    
+
     # Symbols on punctuation keys
     '_': '-', '+': '=', '{': '[', '}': ']', '|': '\\',
     ':': ';', '"': "'", '<': ',', '>': '.', '?': '/',
@@ -136,7 +137,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
 
         log.debug("Initialized QEMUHostGUIExecutor (QMP-based)")
 
-    async def screenshot(self, region: Optional[dict] = None) -> Dict[str, Any]:
+    async def screenshot(self, region: dict | None = None) -> dict[str, Any]:
         """
         Capture screenshot via QMP screendump.
 
@@ -204,7 +205,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             log.error(f"QMP screenshot failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
-    async def click(self, x: int, y: int, button_type: str = 'left') -> Dict[str, Any]:
+    async def click(self, x: int, y: int, button_type: str = 'left') -> dict[str, Any]:
         """
         Execute mouse click via QMP input-send-event.
 
@@ -241,7 +242,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             log.error(f"QMP click failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
-    async def drag(self, x1: int, y1: int, x2: int, y2: int) -> Dict[str, Any]:
+    async def drag(self, x1: int, y1: int, x2: int, y2: int) -> dict[str, Any]:
         """
         Execute drag operation via QMP input-send-event.
 
@@ -269,7 +270,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             log.error(f"QMP drag failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
-    async def keyboard(self, action_type: str, value: str) -> Dict[str, Any]:
+    async def keyboard(self, action_type: str, value: str) -> dict[str, Any]:
         """
         Execute keyboard action via QMP input-send-event.
 
@@ -310,7 +311,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             log.error(f"QMP keyboard failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
-    async def scroll(self, direction: str, amount: int) -> Dict[str, Any]:
+    async def scroll(self, direction: str, amount: int) -> dict[str, Any]:
         """
         Execute scroll action via QMP input-send-event.
 
@@ -330,7 +331,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
                 wheel_value = -amount
             else:
                 # QMP wheel only supports vertical scrolling
-                return {'status': 'error', 'message': f'Horizontal scrolling not supported via QMP'}
+                return {'status': 'error', 'message': 'Horizontal scrolling not supported via QMP'}
 
             success = await self.vm.send_qmp_scroll(wheel_value)
 
@@ -348,7 +349,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
 
     # Helper methods
 
-    async def _convert_ppm_to_png_base64(self, ppm_path: Path, region: Optional[dict] = None) -> str:
+    async def _convert_ppm_to_png_base64(self, ppm_path: Path, region: dict | None = None) -> str:
         """
         Convert PPM screenshot to PNG and encode as base64.
 
@@ -395,7 +396,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, _convert)
 
-    def _pyautogui_key_to_qcode(self, key: str) -> Optional[str]:
+    def _pyautogui_key_to_qcode(self, key: str) -> str | None:
         """
         Convert pyautogui key name to QMP qcode.
 

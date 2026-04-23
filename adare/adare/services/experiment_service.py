@@ -8,48 +8,62 @@ Note: Some complex operations (like experiment_run with async and interactive fl
 are kept in the CLI/backend for now due to their complexity. This service focuses
 on simpler CRUD operations that benefit from the API pattern.
 """
-from pathlib import Path
-from typing import List, Optional
-
 import logging
+from pathlib import Path
 
 from adare.backend.experiment import database as experiment_database
 from adare.backend.experiment.commands import (
-    experiment_create as backend_experiment_create,
-    experiment_clone as backend_experiment_clone,
-    experiment_load as backend_experiment_load,
-    experiment_clean as backend_experiment_clean,
-    experiment_remove as backend_experiment_remove,
     experiment_add_environments as backend_experiment_add_environments,
-    experiment_remove_environments as backend_experiment_remove_environments,
+)
+from adare.backend.experiment.commands import (
+    experiment_clean as backend_experiment_clean,
+)
+from adare.backend.experiment.commands import (
+    experiment_clone as backend_experiment_clone,
+)
+from adare.backend.experiment.commands import (
+    experiment_create as backend_experiment_create,
+)
+from adare.backend.experiment.commands import (
     experiment_example as backend_experiment_example,
+)
+from adare.backend.experiment.commands import (
+    experiment_load as backend_experiment_load,
+)
+from adare.backend.experiment.commands import (
+    experiment_remove as backend_experiment_remove,
+)
+from adare.backend.experiment.commands import (
+    experiment_remove_environments as backend_experiment_remove_environments,
+)
+from adare.backend.experiment.commands import (
     experiment_validate as backend_experiment_validate,
 )
-from adare.backend.experiment.run import experiment_test as backend_experiment_test
 from adare.backend.experiment.directory import ExperimentDirectory
 from adare.backend.experiment.exceptions import (
+    ExperimentAlreadyExistsError,
     ExperimentDirectoryAlreadyExistsError,
     ExperimentDirectoryDoesNotExistError,
     ExperimentIntegrityError,
-    ExperimentAlreadyExistsError,
     ExperimentNotChanged,
 )
-from adare.database.api.experiment import ExperimentApi
-from adare.core.result import Result
+from adare.backend.experiment.run import experiment_test as backend_experiment_test
 from adare.core.dto.experiment import (
-    ExperimentCreateRequest,
-    ExperimentLoadRequest,
+    ExperimentCleanResult,
     ExperimentCloneRequest,
-    ExperimentRemoveRequest,
+    ExperimentCreateRequest,
     ExperimentEnvModifyRequest,
-    ExperimentValidateRequest,
+    ExperimentEnvModifyResult,
     ExperimentInfo,
     ExperimentListItem,
-    ExperimentCleanResult,
+    ExperimentLoadRequest,
+    ExperimentRemoveRequest,
     ExperimentRemoveResult,
-    ExperimentEnvModifyResult,
+    ExperimentValidateRequest,
     ExperimentValidateResult,
 )
+from adare.core.result import Result
+from adare.database.api.experiment import ExperimentApi
 
 log = logging.getLogger(__name__)
 
@@ -139,7 +153,7 @@ class ExperimentService:
             return Result.from_exception(e)
         except ExperimentAlreadyExistsError as e:
             return Result.from_exception(e)
-        except ExperimentNotChanged as e:
+        except ExperimentNotChanged:
             # Not really an error - experiment unchanged
             return self.get_by_name(request.project_path, request.name)
 
@@ -166,7 +180,7 @@ class ExperimentService:
             experiment_dir = ExperimentDirectory(request.project_path, request.target_experiment)
 
             next_steps = [
-                f'Edit the cloned playbook to create your variation',
+                'Edit the cloned playbook to create your variation',
                 f'Load the experiment with: adare experiment load {request.target_experiment}',
                 f'Run the experiment with: adare experiment run {request.target_experiment} -e <environment>'
             ]
@@ -387,7 +401,7 @@ class ExperimentService:
     # Queries
     # =========================================================================
 
-    def list_all(self, project_path: Path) -> Result[List[ExperimentListItem]]:
+    def list_all(self, project_path: Path) -> Result[list[ExperimentListItem]]:
         """
         List all experiments in a project.
 

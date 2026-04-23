@@ -5,24 +5,40 @@ This module orchestrates playbook action execution by delegating to specialized 
 """
 
 import logging
-from typing import Dict, Optional, Any
 from pathlib import Path
+from typing import Any, Optional
 
-from adare.types.playbook import (
-    ActionType, ClickAction, DragAction, KeyboardAction, IdleAction,
-    ScrollAction, GotoAction, CommandAction, ScreenshotAction, BlockAction,
-    ActionTestAction, SaveTimestampAction, SaveVariableAction, PullAction, PauseAction,
-    WaitUntilAction, LoopAction, StopAction, ContinueAction, SnapshotFilesystemAction,
-    PullChangedFilesAction
-)
+from adare.backend.experiment.target_resolver import MCPConditionChecker, MCPTargetResolver
 from adare.backend.experiment.websocket_client import AdareVMClient
-from adare.backend.experiment.target_resolver import MCPTargetResolver, MCPConditionChecker
+from adare.types.playbook import (
+    ActionTestAction,
+    ActionType,
+    BlockAction,
+    ClickAction,
+    CommandAction,
+    ContinueAction,
+    DragAction,
+    GotoAction,
+    IdleAction,
+    KeyboardAction,
+    LoopAction,
+    PauseAction,
+    PullAction,
+    PullChangedFilesAction,
+    SaveTimestampAction,
+    SaveVariableAction,
+    ScreenshotAction,
+    ScrollAction,
+    SnapshotFilesystemAction,
+    StopAction,
+    WaitUntilAction,
+)
 
 # Import modular executors
 from .execution.base import ActionResult
-from .execution.target_resolution import TargetResolutionExecutor
-from .execution.simple_actions import SimpleActionsExecutor
 from .execution.flow_control import FlowControlExecutor
+from .execution.simple_actions import SimpleActionsExecutor
+from .execution.target_resolution import TargetResolutionExecutor
 from .execution.test_actions import TestActionsExecutor
 
 log = logging.getLogger(__name__)
@@ -40,10 +56,10 @@ class ActionExecutor:
     """
 
     def __init__(self, websocket_client: AdareVMClient, target_resolver: MCPTargetResolver,
-                 condition_checker: MCPConditionChecker, experiment_run_id: Optional[str] = None,
-                 playbook = None, execution_context: Dict[str, Any] = None,
-                 debug_screenshots: bool = False, screenshots_dir: Optional[Path] = None,
-                 vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Optional[Path] = None,
+                 condition_checker: MCPConditionChecker, experiment_run_id: str | None = None,
+                 playbook = None, execution_context: dict[str, Any] = None,
+                 debug_screenshots: bool = False, screenshots_dir: Path | None = None,
+                 vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Path | None = None,
                  flow_console = None):
         """
         Initialize the action executor.

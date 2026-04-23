@@ -1,17 +1,18 @@
 import asyncio
 import logging
-from typing import Callable, Awaitable, Any
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 log = logging.getLogger(__name__)
 
 
 class ExperimentStepRunner:
     """Handles execution of experiment steps with proper error handling and cancellation."""
-    
+
     def __init__(self, stop_event: asyncio.Event, user_interrupt_event):
         self.stop_event = stop_event
         self.user_interrupt_event = user_interrupt_event
-    
+
     async def run_blocking_step(self, step_func: Callable, context: Any):
         """Run a blocking step in a separate thread if not cancelled."""
         if not self.stop_event.is_set():
@@ -26,18 +27,18 @@ class ExperimentStepRunner:
         """
         if not self.stop_event.is_set():
             log.info(f"Running async step: {step_func.__name__}")
-            
+
             # Create proper tasks so exceptions bubble up to main try/except
             step_task = asyncio.create_task(step_func(context))
             stop_task = asyncio.create_task(self.stop_event.wait())
-            
+
             try:
                 # Use gather to let exceptions bubble up naturally
                 done, pending = await asyncio.wait(
                     [step_task, stop_task],
                     return_when=asyncio.FIRST_COMPLETED
                 )
-                
+
                 # Cancel pending tasks
                 for task in pending:
                     task.cancel()
@@ -45,7 +46,7 @@ class ExperimentStepRunner:
                         await task
                     except asyncio.CancelledError:
                         pass
-                
+
                 # Check if step_task completed with exception
                 for task in done:
                     if task.exception():
@@ -56,9 +57,9 @@ class ExperimentStepRunner:
                         )
                         # Use result() to properly re-raise exception with chain
                         task.result()
-                        
+
                 log.info(f"Async step {step_func.__name__} completed")
-                
+
             finally:
                 # Ensure cleanup
                 for task in [step_task, stop_task]:

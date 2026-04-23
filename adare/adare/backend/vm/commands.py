@@ -4,24 +4,27 @@ VM command operations.
 High-level VM operations for CLI and other interfaces.
 """
 
-from pathlib import Path
-from typing import List, Optional
 import logging
 import threading
+from pathlib import Path
 
-from adare.backend.vm import database as vm_database
-from adare.backend.vm.manager import VMFileManager
-from adare.backend.vm.exceptions import VMError
-from adare.types.environment import EnvironmentMetadata
-from adare.hypervisor.virtualbox.vm import VirtualBoxVM
-from adarelib.constants import VMStatus
-from adare.types.stages import VMIntegrityVerificationStage, VMImportStage, VMSnapshotRestoreStage, VMSnapshotCreateStage, VMExperimentSnapshotStage
 from adare.backend.experiment.stagectxmanager import StageCtxManager
+from adare.backend.vm import database as vm_database
+from adare.backend.vm.exceptions import VMError
+from adare.backend.vm.manager import VMFileManager
+from adare.hypervisor.virtualbox.vm import VirtualBoxVM
+from adare.types.environment import EnvironmentMetadata
+from adare.types.stages import (
+    VMImportStage,
+    VMSnapshotCreateStage,
+    VMSnapshotRestoreStage,
+)
+from adarelib.constants import VMStatus
 
 log = logging.getLogger(__name__)
 
 
-async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, interrupt_event: Optional[threading.Event] = None, test_mode: bool = False) -> None:
+async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, interrupt_event: threading.Event | None = None, test_mode: bool = False) -> None:
     """
     Verify VM file integrity before import/use.
     This ensures the VM file hasn't been tampered with since loading.
@@ -34,7 +37,7 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
     """
     # Skip verification in test mode (follows same pattern as experiment integrity checks)
     if test_mode:
-        log.info(f"Skipping VM integrity verification - running in test/development mode")
+        log.info("Skipping VM integrity verification - running in test/development mode")
         if experiment_run_ulid:
             from adare.backend.experiment.stagectxmanager import StageCtxManager
             from adare.types.stages import VMIntegrityVerificationStage
@@ -68,20 +71,19 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
                     "Use 'adare environment load' without --no-copy to copy the VM to managed storage"
                 ]
             )
-        else:
-            raise ExperimentIntegrityError(
-                log,
-                f"VM file not found: {vm_file_path}",
-                possible_solutions=[
-                    "Check if VM file was moved or deleted",
-                    "Re-import VM with correct file path",
-                    "Verify file system permissions"
-                ]
-            )
-    
+        raise ExperimentIntegrityError(
+            log,
+            f"VM file not found: {vm_file_path}",
+            possible_solutions=[
+                "Check if VM file was moved or deleted",
+                "Re-import VM with correct file path",
+                "Verify file system permissions"
+            ]
+        )
+
     # Calculate current hash and compare with stored hash
     vm_manager = VMFileManager()
-    
+
     async def verify_in_stage():
         log.info(f"Verifying integrity of VM: {vm_record.name}")
 
@@ -119,7 +121,7 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
             )
 
         log.info(f"VM integrity verification passed: {vm_record.name}")
-    
+
     # Run with stage context if experiment run provided
     if experiment_run_ulid:
         with StageCtxManager(VMIntegrityVerificationStage(), experiment_run_ulid, interrupt_event):
@@ -150,7 +152,7 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
     log.info(f"Using hypervisor: {hypervisor}")
 
     # Calculate hash FIRST (heavy operation done during environment load)
-    log.info(f"Calculating VM file hash during environment load...")
+    log.info("Calculating VM file hash during environment load...")
     file_hash = vm_manager.calculate_file_hash(vm_path, silent=False)
     log.info(f"VM file hash: {file_hash}")
 
@@ -158,28 +160,28 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
     existing_vm = vm_database.get_vm_by_hash(file_hash)
     if existing_vm:
         log.info(f"VM with hash {file_hash} already exists: {existing_vm.name}")
-        log.info(f"Skipping file copy operation - using existing VM")
+        log.info("Skipping file copy operation - using existing VM")
 
         # Check if existing VM has proper snapshot configuration
         if not existing_vm.use_snapshots:
             log.warning(f"Existing VM '{existing_vm.name}' has no snapshot configuration!")
-            log.warning(f"This VM may be in an unknown state from previous experiments.")
-            log.warning(f"Creating a NEW VM entry to ensure clean state.")
+            log.warning("This VM may be in an unknown state from previous experiments.")
+            log.warning("Creating a NEW VM entry to ensure clean state.")
             log.warning(f"You may have a RELICT VM '{existing_vm.name}' in VirtualBox that needs manual cleanup!")
             log.warning(f"Consider running: VBoxManage unregistervm '{existing_vm.name}' --delete")
 
             # Don't reuse - fall through to create new VM
         else:
             # VM has snapshot configuration - safe to reuse
-            log.info(f"VM ready for reuse with existing snapshot configuration")
+            log.info("VM ready for reuse with existing snapshot configuration")
             return {'vm_id': existing_vm.id, 'was_existing': True}
 
     # VM doesn't exist or existing VM can't be reused - create new one with file operations
-    log.info(f"Creating new VM entry with file operations...")
+    log.info("Creating new VM entry with file operations...")
 
     # Determine if we should copy or reference
     if no_copy:
-        log.info(f"Using --no-copy mode: VM file will be referenced at original location")
+        log.info("Using --no-copy mode: VM file will be referenced at original location")
         log.warning(f"IMPORTANT: VM file must remain at {vm_path} for experiments to work!")
 
     vm = vm_database.create_vm(
@@ -204,13 +206,13 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
     return {'vm_id': vm.id, 'was_existing': False}
 
 
-def load_vm(vm_file: Path, name: str = None, description: str = '', 
-           os_platform: str = '', os_type: str = '', os_distribution: str = '', 
+def load_vm(vm_file: Path, name: str = None, description: str = '',
+           os_platform: str = '', os_type: str = '', os_distribution: str = '',
            os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
            force: bool = False) -> str:
     """
     Load a VM from file into the system.
-    
+
     Args:
         vm_file: Path to VM file
         name: VM name (defaults to filename)
@@ -222,25 +224,25 @@ def load_vm(vm_file: Path, name: str = None, description: str = '',
         os_language: OS language
         os_architecture: Architecture (default: x86_64)
         force: If True, overwrite existing VM
-        
+
     Returns:
         VM ID
-        
+
     Raises:
         VMError: If loading fails
     """
     if not name:
         name = vm_file.stem
-    
+
     # Check if VM already exists
     vm_manager = VMFileManager()
     file_hash = vm_manager.calculate_file_hash(vm_file)
     existing_vm = vm_database.get_vm_by_hash(file_hash)
-    
+
     if existing_vm and not force:
         log.info(f"VM with hash {file_hash} already exists: {existing_vm.name}")
         return existing_vm.id
-    
+
     # Load VM
     vm = vm_database.load_vm_from_file(
         file_path=vm_file,
@@ -259,10 +261,10 @@ def load_vm(vm_file: Path, name: str = None, description: str = '',
     return vm.id
 
 
-def list_vms() -> List[dict]:
+def list_vms() -> list[dict]:
     """
     List available VMs.
-        
+
     Returns:
         List of VM information dictionaries
     """
@@ -276,30 +278,30 @@ def list_vms() -> List[dict]:
 def ensure_vm_available_for_environment(vm_id: str, experiment_id: str = None) -> str:
     """
     OPTIMIZED VM preparation using snapshots - Always 10-15x faster!
-    
+
     This function ALWAYS uses the snapshot-based workflow for maximum performance.
     VM file operations already done during environment load!
-    
+
     Args:
         vm_id: VM database ID (from environment)
         experiment_id: Unique experiment ID (generates one if not provided)
-        
+
     Returns:
         VM ID ready for experiment
-        
+
     Raises:
         VMError: If VM handling fails
         ValueError: If VM configuration is invalid
     """
     if not vm_id:
         raise ValueError("VM ID must be provided - should come from environment load")
-    
+
     # Generate experiment ID if not provided (for non-experiment use cases)
     if not experiment_id:
         import ulid
         experiment_id = str(ulid.ULID())
         log.info(f"Generated experiment ID for VM preparation: {experiment_id}")
-    
+
     log.info(f"Using OPTIMIZED snapshot workflow (experiment: {experiment_id})")
     return ensure_vm_ready_for_experiment(vm_id, experiment_id)
 
@@ -307,14 +309,14 @@ def ensure_vm_available_for_environment(vm_id: str, experiment_id: str = None) -
 async def delete_vm(vm_id: str, force: bool = False) -> bool:
     """
     Delete a VM from the system.
-    
+
     Args:
         vm_id: VM ID to delete
         force: If True, force deletion even if in use
-        
+
     Returns:
         True if successfully deleted
-        
+
     Raises:
         VMError: If deletion fails
     """
@@ -323,7 +325,7 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
         vm = vm_database.get_vm_by_id(vm_id)
         if not vm:
             raise VMError(log, f"VM with ID {vm_id} not found")
-        
+
         log.info(f"Deleting VM: {vm.name} (ID: {vm_id})")
 
         # Delete associated VmInstance records - they handle VirtualBox VM cleanup
@@ -344,7 +346,7 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
 
         # Delete from database (cascade will remove instances)
         return vm_database.delete_vm(vm_id)
-        
+
     except Exception as e:
         if not force:
             raise VMError(log, f"Failed to delete VM {vm_id}: {e}")
@@ -374,11 +376,11 @@ def verify_vm_status(vm_record, auto_cleanup: bool = False, experiment_context: 
 def check_base_snapshot_exists(vbox_uuid: str, snapshot_name: str) -> bool:
     """
     Check if a base snapshot exists for a VM.
-    
+
     Args:
         vbox_uuid: VirtualBox VM UUID
         snapshot_name: Name of the snapshot to check
-        
+
     Returns:
         True if snapshot exists, False otherwise
     """
@@ -464,7 +466,7 @@ def verify_and_cleanup_vm_instance_for_experiment(vm_instance_id: str, experimen
 # PHASE 4: OPTIMIZED EXPERIMENT WORKFLOW
 # ==========================================
 
-async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environment_ulid: str = None, experiment_run_ulid: Optional[str] = None, preserve_experiment_snapshot: bool = False, interrupt_event: Optional[threading.Event] = None, test_mode: bool = False) -> str:
+async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environment_ulid: str = None, experiment_run_ulid: str | None = None, preserve_experiment_snapshot: bool = False, interrupt_event: threading.Event | None = None, test_mode: bool = False) -> str:
     """
     OPTIMIZED VM preparation using instance management for concurrent experiments!
 
@@ -490,10 +492,10 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     start_time = time.time()
 
     from adare.backend.vm.instance_manager import allocate_vm_instance_for_experiment
-    from adare.backend.vm.snapshot_manager import (SnapshotManager, create_base_snapshot_for_vm, restore_vm_to_base_snapshot,
-                                                   create_base_snapshot_for_instance, restore_instance_to_base_snapshot)
-    from adare.hypervisor.virtualbox.vm import VirtualBoxVM
-    from adare.hypervisor.virtualbox.manager import VirtualBoxManager
+    from adare.backend.vm.snapshot_manager import (
+        create_base_snapshot_for_instance,
+        restore_instance_to_base_snapshot,
+    )
 
     log.info(f"Starting OPTIMIZED VM instance preparation for experiment {experiment_id}")
     log.debug(f"ensure_vm_ready_for_experiment called with vm_id={vm_id}, experiment_id={experiment_id}, experiment_run_ulid={experiment_run_ulid}")
@@ -505,13 +507,13 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         return None
 
     # Step 0: Verify VM exists and cleanup if missing (experiment-scoped)
-    log.debug(f"Step 0 - Verifying VM exists and cleaning up if missing")
+    log.debug("Step 0 - Verifying VM exists and cleaning up if missing")
     try:
         vm_is_available = verify_and_cleanup_vm_for_experiment(vm_id, experiment_id)
         if not vm_is_available:
             # VM was missing and cleaned up - cannot proceed
             raise VMError(log, f"VM with ID {vm_id} was missing from VirtualBox and has been removed from database. Cannot proceed with experiment.")
-        log.debug(f"VM verification passed - VM is available")
+        log.debug("VM verification passed - VM is available")
     except Exception as e:
         log.error(f"VM verification failed: {e}")
         raise
@@ -583,7 +585,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
                 with VmApi() as api:
                     vm_instance = api.get_vm_instance_by_id(vm_instance.id)
         elif is_qemu:
-            log.debug(f"QEMU instance - skipping snapshot creation (uses overlay disks)")
+            log.debug("QEMU instance - skipping snapshot creation (uses overlay disks)")
 
         # Restore instance to clean state (only if base snapshot exists, VirtualBox only)
         if not is_qemu and vm_instance.base_snapshot_name:
@@ -612,7 +614,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         elif not is_qemu and not vm_instance.base_snapshot_name:
             log.warning(f"VM instance '{vm_instance.instance_name}' has no base snapshot available - cannot restore to clean state")
         elif is_qemu:
-            log.debug(f"QEMU instance - skipping snapshot restoration (uses overlay disks)")
+            log.debug("QEMU instance - skipping snapshot restoration (uses overlay disks)")
 
     else:
         # New instance - need to import from source VM
@@ -652,7 +654,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
             if not success:
                 log.warning(f"Failed to create base snapshot for instance {vm_instance.instance_name}")
         else:
-            log.info(f"QEMU VM - skipping VirtualBox-style snapshot creation (uses overlay disks instead)")
+            log.info("QEMU VM - skipping VirtualBox-style snapshot creation (uses overlay disks instead)")
 
     total_time = time.time() - start_time
     log.info(f"VM instance preparation completed in {total_time:.1f} seconds!")
@@ -667,8 +669,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         if not verification_instance:
             log.error(f"CRITICAL - Instance {vm_instance.id} was created but cannot be retrieved!")
             raise VMError(log, f"Instance {vm_instance.id} was created but cannot be retrieved from database")
-        else:
-            log.debug(f"Instance verification successful: {verification_instance.instance_name}")
+        log.debug(f"Instance verification successful: {verification_instance.instance_name}")
 
     log.info(f"Returning VM instance ID: {vm_instance.id}")
     return vm_instance.id  # Return instance ID, not source VM ID
@@ -686,8 +687,8 @@ async def _import_vm_instance(vm_instance, source_vm, environment_ulid: str = No
     Returns:
         Updated VmInstance with hypervisor-specific identifiers
     """
-    from adare.hypervisor import get_hypervisor_manager
     from adare.database.api.vm import VmApi
+    from adare.hypervisor import get_hypervisor_manager
 
     # Get hypervisor type from source VM (default to virtualbox for backwards compatibility)
     hypervisor = getattr(source_vm, 'hypervisor', 'virtualbox')
@@ -745,9 +746,9 @@ async def cleanup_vm_instances_for_experiment(experiment_run_id: str):
     Args:
         experiment_run_id: Experiment run ID
     """
+    from adare.backend.vm.instance_manager import cleanup_vm_instance
     from adare.database.api.vm import VmApi
     from adare.database.models.global_models import VmInstance
-    from adare.backend.vm.instance_manager import cleanup_vm_instance
 
     with VmApi() as api:
         instances = api._session.query(VmInstance).filter_by(
@@ -763,14 +764,14 @@ def _reimport_missing_vm(vm_record, vm_path: Path, project_path: Path,
                         environment_metadata: EnvironmentMetadata):
     """
     Re-import a VM that exists in database but is missing from VirtualBox.
-    
+
     This is a recovery function for rare cases where VMs get deleted manually.
     """
     log.info(f"Re-importing missing VM '{vm_record.name}' from {vm_path}")
-    
+
     # The VM record exists but VirtualBox VM is missing
     # We need to re-import and update the UUID
-    
+
     # Import the VM again (this will create a new UUID)
     vm = vm_database.create_vm_with_uuid_capture(
         project_path=project_path,
@@ -787,7 +788,7 @@ def _reimport_missing_vm(vm_record, vm_path: Path, project_path: Path,
         capture_uuid_after_import=True,
         silent=False
     )
-    
+
     log.info(f"Successfully re-imported VM as '{vm.name}'")
     return vm
 
@@ -795,65 +796,65 @@ def _reimport_missing_vm(vm_record, vm_path: Path, project_path: Path,
 def clear_all_vms(force: bool = False) -> dict:
     """
     Clear all VMs from the system.
-    
+
     Args:
         force: If True, force deletion even if VMs are in use
-        
+
     Returns:
         Dictionary with deletion results
     """
     log.info("Starting VM cleanup - removing ALL VMs")
-    
+
     results = vm_database.delete_all_vms(force=force)
-    
+
     if results['deleted_count'] > 0:
         log.info(f"Successfully cleared {results['deleted_count']} VMs")
         for vm_name in results['deleted_vms']:
             log.info(f"   - {vm_name}")
-    
+
     if results['failed_count'] > 0:
         log.error(f"Failed to delete {results['failed_count']} VMs")
         for error in results['failed_vms']:
             log.error(f"   - {error}")
-    
+
     if results['deleted_count'] == 0 and results['failed_count'] == 0:
         log.info("No VMs found to delete")
-    
+
     return results
 
 
 def clear_vms_by_environment(environment_ulid: str, force: bool = False) -> dict:
     """
     Clear all VMs associated with a specific environment.
-    
+
     Args:
         environment_ulid: Environment ULID
         force: If True, force deletion even if VMs are in use
-        
+
     Returns:
         Dictionary with deletion results
     """
     log.info(f"Starting VM cleanup for environment: {environment_ulid}")
-    
+
     results = vm_database.delete_vms_by_environment(environment_ulid, force=force)
-    
+
     if results['deleted_count'] > 0:
         log.info(f"Successfully cleared {results['deleted_count']} VMs for environment {environment_ulid}")
         for vm_name in results['deleted_vms']:
             log.info(f"   - {vm_name}")
-    
+
     if results['failed_count'] > 0:
         log.error(f"Failed to delete {results['failed_count']} VMs")
         for error in results['failed_vms']:
             log.error(f"   - {error}")
-    
+
     if results['deleted_count'] == 0 and results['failed_count'] == 0:
         log.info(f"No VMs found for environment {environment_ulid}")
-    
+
     return results
 
 
-def list_all_vms() -> List[dict]:
+def list_all_vms() -> list[dict]:
     """
     List all VMs in the system.
 
@@ -866,17 +867,17 @@ def list_all_vms() -> List[dict]:
 def get_vm_info(vm_id: str) -> dict:
     """
     Get detailed information about a specific VM.
-    
+
     Args:
         vm_id: VM database ID
-        
+
     Returns:
         Dictionary with VM information
     """
     vm = vm_database.get_vm_by_id(vm_id)
     if not vm:
         return None
-    
+
     # Get snapshot information if available
     snapshot_info = {}
     try:
@@ -885,7 +886,7 @@ def get_vm_info(vm_id: str) -> dict:
         snapshot_info = manager.get_snapshot_info(vm)
     except Exception as e:
         log.debug(f"Could not get snapshot info for VM {vm_id}: {e}")
-    
+
     return {
         'id': vm.id,
         'name': vm.name,

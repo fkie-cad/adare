@@ -1,21 +1,27 @@
 # external imports
+# configure logging
+import logging
 import shutil
-import jinja2
 from pathlib import Path
-from typing import Optional
+
+import jinja2
 
 # internal imports
-import adare.config as config
 from adare.config.configdirectory import NETWORKDRIVE_TEMPLATES_DIR
+from adare.helperFunctions.jinja.jinjafeatures import init_jinja_environment
+from adare.networkdrive.attrs_classes import (
+    NetworkdriveVMConfiguration,
+    NFSConfiguration,
+    NFSShare,
+    SMBConfiguration,
+    SMBShare,
+    SMBUser,
+)
+from adare.networkdrive.exceptions import NetworkdriveCreationError
 from adare.vagrantapi.vagrantbox import VagrantBoxVM
 from adare.vagrantapi.vagrantfile import VagrantMachine
 from adare.vagrantapi.vagrantutils import is_box
-from adare.helperFunctions.jinja.jinjafeatures import init_jinja_environment
-from adare.networkdrive.exceptions import NetworkdriveCreationError
-from adare.networkdrive.attrs_classes import NFSConfiguration, NFSShare, SMBConfiguration, SMBShare, SMBUser, NetworkdriveVMConfiguration
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -94,7 +100,7 @@ class NetworkDrive:
         self.shares.append(smb_share)
         log.info(f'smb share {smb_share.name} got added successfully to the network drive vm')
 
-    def add_smb_user(self, smb_user: Optional[SMBUser] = None):
+    def add_smb_user(self, smb_user: SMBUser | None = None):
         """
             adds a user to your smb config
         """
@@ -200,7 +206,7 @@ class NetworkDrive:
         try:
             (self.vg_directory/"config").mkdir()
             log.debug(f'config directory was created successfully in network drive directory ({self.vg_directory})')
-        except FileExistsError as e:
+        except FileExistsError:
             log.debug(f'config directory already exists in network drive directory ({self.vg_directory})')
         except OSError as e:
             log.error(e)

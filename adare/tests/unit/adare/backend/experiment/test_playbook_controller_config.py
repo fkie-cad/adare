@@ -1,8 +1,7 @@
 """Tests for PlaybookControllerConfig dataclass."""
 
-import pytest
-from pathlib import Path
 from dataclasses import fields
+from pathlib import Path
 
 from adare.backend.experiment.playbook_controller import PlaybookControllerConfig
 

@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from adare.backend.experiment.runctx import ExperimentConfig, ExperimentRunCtx
 
 

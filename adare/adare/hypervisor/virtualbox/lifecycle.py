@@ -4,19 +4,15 @@ VirtualBox-specific VM lifecycle strategy.
 This module implements the VirtualBox lifecycle strategy using shared folders
 for file transfer. Files are accessible to the guest while the VM is running.
 """
-from pathlib import Path
-import logging
 import asyncio
+import logging
+from pathlib import Path
 
-from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
-from adare.hypervisor.virtualbox import VirtualBoxVM, VirtualBoxManager
-from adare.types.stages import VMCreateStage
 from adare.backend.experiment.stagectxmanager import StageCtxManager
-from adare.exceptions import LoggedException
 from adare.config import SHARE_POINT_VM, get_vm_credentials
-import adare.backend.environment.database as environment_database
-import adare.backend.experiment.database as experiment_database
-import adare.backend.vm.database as vm_database
+from adare.exceptions import LoggedException
+from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
+from adare.hypervisor.virtualbox import VirtualBoxManager, VirtualBoxVM
 
 log = logging.getLogger(__name__)
 
@@ -155,8 +151,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
         Args:
             context: ExperimentRunCtx containing VM
         """
-        from adare.types.stages import VMStartStage, VMGuestAgentWaitStage, VMMountSharedDirectoriesStage
-        from adare.backend.experiment.stagectxmanager import StageCtxManager
+        from adare.types.stages import VMGuestAgentWaitStage, VMMountSharedDirectoriesStage, VMStartStage
 
         # Stage 1: Start VM
         with StageCtxManager(
@@ -209,7 +204,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
             }
 
             # Check that all required folders exist
-            missing_folders = [name for name in folders.keys() if name not in existing_folders]
+            missing_folders = [name for name in folders if name not in existing_folders]
             if missing_folders:
                 raise LoggedException(
                     log,

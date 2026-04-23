@@ -6,28 +6,22 @@ Types that were previously in adarelib.types have been moved here.
 """
 
 # Environment types
-from .environment import (
-    EnvironmentMetadata,
-    OsInfo, 
-    PostsetupInstallations,
-    parse_environment_file
-)
-
 # Backend/Infrastructure types
 from .backend import (
-    UsbDevice,
     CopyData,
-    DownloadData,
     Disk,
-    Share,
-    NetworkdriveVMConfiguration,
-    NFSShare,
-    NFSConfiguration,
-    SMBUser,
-    SMBShare,
-    SMBConfiguration,
+    DownloadData,
     NetworkdriveMountData,
+    NetworkdriveVMConfiguration,
+    NFSConfiguration,
+    NFSShare,
+    Share,
+    SMBConfiguration,
+    SMBShare,
+    SMBUser,
+    UsbDevice,
 )
+from .environment import EnvironmentMetadata, OsInfo, PostsetupInstallations, parse_environment_file
 
 # Experiment types
 from .experiment import (
@@ -36,37 +30,36 @@ from .experiment import (
 
 # Playbook/Action types
 from .playbook import (
+    ActionTestAction,
+    ActionType,
+    BlockAction,
+    ClickAction,
+    CommandAction,
+    DragAction,
+    ExistsCondition,
+    GotoAction,
+    IdleAction,
+    KeyboardAction,
+    NotExistsCondition,
     Playbook,
+    ScrollAction,
     Settings,
     Target,
-    ActionType,
-    ClickAction,
-    DragAction,
-    KeyboardAction,
-    IdleAction,
-    ScrollAction,
-    GotoAction,
-    ActionTestAction,
-    CommandAction,
-    BlockAction,
-    ExistsCondition,
-    NotExistsCondition,
     parse_playbook,
 )
-
 from .stages import *
 
 __all__ = [
     # Environment types
     'EnvironmentMetadata',
     'OsInfo',
-    'PostsetupInstallations', 
+    'PostsetupInstallations',
     'parse_environment_file',
-    
+
     # Backend types
     'UsbDevice',
     'CopyData',
-    'DownloadData', 
+    'DownloadData',
     'Disk',
     'Share',
     'NetworkdriveVMConfiguration',
@@ -76,10 +69,10 @@ __all__ = [
     'SMBShare',
     'SMBConfiguration',
     'NetworkdriveMountData',
-    
+
     # Experiment types
     'ExperimentMetadata',
-    
+
     # Playbook types
     'Playbook',
     'Settings',
@@ -90,7 +83,7 @@ __all__ = [
     'DoubleClickAction',
     'DragAction',
     'KeyboardAction',
-    'IdleAction', 
+    'IdleAction',
     'ScrollAction',
     'GotoAction',
     'ActionTestAction',

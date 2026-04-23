@@ -23,7 +23,6 @@ shared folders.
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Optional
 
 from adare.hypervisor.base.mixins.networking import AbstractNetworkingMixin
 from adare.hypervisor.exceptions import UnsupportedFeatureException
@@ -47,9 +46,9 @@ class NetworkingMixin(AbstractNetworkingMixin):
         self,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
-    ) -> Dict[str, PortForwardingRule]:
+    ) -> dict[str, PortForwardingRule]:
         """
         List all port forwarding rules for the VM.
 
@@ -94,7 +93,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         guest_ip: str = "",
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> int:
         """
@@ -165,7 +164,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         name: str,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> int:
         """
@@ -215,10 +214,10 @@ class NetworkingMixin(AbstractNetworkingMixin):
         name: str,
         host_path: Path,
         readonly: bool = False,
-        guest_mount: Optional[str] = None,
+        guest_mount: str | None = None,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> int:
         """
@@ -291,7 +290,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         mountpoint: Path,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> bool:
         """
@@ -313,9 +312,9 @@ class NetworkingMixin(AbstractNetworkingMixin):
         self,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
-    ) -> Dict[str, SharedFolderConfig]:
+    ) -> dict[str, SharedFolderConfig]:
         """
         List shared folders configured for the VM.
 
@@ -338,10 +337,10 @@ class NetworkingMixin(AbstractNetworkingMixin):
     async def remove_shared_folder(
         self,
         name: str,
-        mountpoint: Optional[str] = None,
+        mountpoint: str | None = None,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> int:
         """
@@ -371,7 +370,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         self,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> int:
         """
@@ -404,7 +403,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         folders: dict,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> int:
         """

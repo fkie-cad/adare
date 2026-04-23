@@ -1,22 +1,22 @@
 """Event type definitions and registry for proper event handling."""
 
-from enum import Enum
-from typing import Dict, Type, Any, Optional
 import logging
+from enum import Enum
+from typing import Any
 
 log = logging.getLogger(__name__)
 
 
 class EventType(Enum):
     """Explicit event type enumeration."""
-    
+
     # Stage events
     STAGE = "stage"
-    
+
     # Action events - start/complete pairs
     ACTION_START = "action_start"
     ACTION_COMPLETE = "action_complete"
-    
+
     # Specific action types
     CLICK_START = "click_start"
     CLICK_COMPLETE = "click_complete"
@@ -60,7 +60,7 @@ class EventType(Enum):
 
 class ActionType(Enum):
     """Action type enumeration for cleaner categorization."""
-    
+
     CLICK = "click"
     RIGHTCLICK = "rightclick"
     DOUBLECLICK = "doubleclick"
@@ -90,10 +90,10 @@ class ActionType(Enum):
 
 class EventTypeResolver:
     """Resolves event types from serialized data and provides type-safe event handling."""
-    
+
     def __init__(self):
         # Map legacy class names to proper event types
-        self._class_name_mapping: Dict[str, EventType] = {
+        self._class_name_mapping: dict[str, EventType] = {
             # Legacy class name patterns
             "ClickStartEvent": EventType.CLICK_START,
             "ClickCompleteEvent": EventType.CLICK_COMPLETE,
@@ -134,11 +134,11 @@ class EventTypeResolver:
             "PullChangedFilesActionStartEvent": EventType.PULL_CHANGED_FILES_START,
             "PullChangedFilesActionCompleteEvent": EventType.PULL_CHANGED_FILES_COMPLETE,
         }
-    
-    def resolve_event_type(self, event_data: Dict[str, Any]) -> EventType:
+
+    def resolve_event_type(self, event_data: dict[str, Any]) -> EventType:
         """
         Resolve event type from event data.
-        
+
         Priority:
         1. Explicit 'event_type' field (preferred)
         2. Legacy '__class__' field mapping
@@ -150,143 +150,140 @@ class EventTypeResolver:
                 return EventType(event_data["event_type"])
             except ValueError:
                 log.warning(f"Unknown event_type: {event_data['event_type']}")
-        
+
         # Second priority: legacy __class__ mapping
         class_name = event_data.get("__class__", event_data.get("_type", ""))
         if class_name in self._class_name_mapping:
             return self._class_name_mapping[class_name]
-        
+
         # Third priority: pattern-based detection (fallback for legacy data)
         return self._detect_event_type_from_patterns(event_data, class_name)
-    
-    def _detect_event_type_from_patterns(self, event_data: Dict[str, Any], class_name: str) -> EventType:
+
+    def _detect_event_type_from_patterns(self, event_data: dict[str, Any], class_name: str) -> EventType:
         """Fallback detection based on data patterns and class name hints."""
-        
+
         # Check for success field to determine start vs complete
         has_success = "success" in event_data
         is_complete = has_success or "Complete" in class_name or class_name.endswith("Complete")
         is_start = "Start" in class_name or class_name.endswith("Start") or not is_complete
-        
+
         # Extract action type from class name
         action_type_raw = class_name.replace("Event", "").replace("Action", "").replace("Start", "").replace("Complete", "").lower()
-        
+
         # Map to action types and determine event type
         if action_type_raw in ["click", "rightclick", "doubleclick"]:
             return EventType.CLICK_COMPLETE if is_complete else EventType.CLICK_START
-        elif action_type_raw == "keyboard":
+        if action_type_raw == "keyboard":
             return EventType.KEYBOARD_COMPLETE if is_complete else EventType.KEYBOARD_START
-        elif action_type_raw == "command":
+        if action_type_raw == "command":
             return EventType.COMMAND_COMPLETE if is_complete else EventType.COMMAND_START
-        elif action_type_raw == "idle":
+        if action_type_raw == "idle":
             return EventType.IDLE_COMPLETE if is_complete else EventType.IDLE_START
-        elif action_type_raw == "test":
+        if action_type_raw == "test":
             return EventType.TEST_COMPLETE if is_complete else EventType.TEST_START
-        elif action_type_raw == "screenshot":
+        if action_type_raw == "screenshot":
             return EventType.SCREENSHOT_COMPLETE if is_complete else EventType.SCREENSHOT_START
-        elif action_type_raw == "scroll":
+        if action_type_raw == "scroll":
             return EventType.SCROLL_COMPLETE if is_complete else EventType.SCROLL_START
-        elif action_type_raw == "drag":
+        if action_type_raw == "drag":
             return EventType.DRAG_COMPLETE if is_complete else EventType.DRAG_START
-        elif action_type_raw == "goto":
+        if action_type_raw == "goto":
             return EventType.GOTO_COMPLETE if is_complete else EventType.GOTO_START
-        elif action_type_raw == "savetimestamp":
+        if action_type_raw == "savetimestamp":
             return EventType.SAVETIMESTAMP_COMPLETE if is_complete else EventType.SAVETIMESTAMP_START
-        elif action_type_raw == "pull":
+        if action_type_raw == "pull":
             return EventType.PULL_COMPLETE if is_complete else EventType.PULL_START
-        elif action_type_raw == "pause":
+        if action_type_raw == "pause":
             return EventType.PAUSE_COMPLETE if is_complete else EventType.PAUSE_START
-        elif action_type_raw == "block":
+        if action_type_raw == "block":
             return EventType.BLOCK_COMPLETE if is_complete else EventType.BLOCK_START
-        elif action_type_raw == "waituntil":
+        if action_type_raw == "waituntil":
             return EventType.WAIT_UNTIL_COMPLETE if is_complete else EventType.WAIT_UNTIL_START
-        elif action_type_raw == "loop":
+        if action_type_raw == "loop":
             return EventType.LOOP_COMPLETE if is_complete else EventType.LOOP_START
-        elif action_type_raw == "stop":
+        if action_type_raw == "stop":
             return EventType.STOP_COMPLETE if is_complete else EventType.STOP_START
-        elif action_type_raw == "continue":
+        if action_type_raw == "continue":
             return EventType.CONTINUE_COMPLETE if is_complete else EventType.CONTINUE_START
-        elif action_type_raw == "snapshotfilesystem":
+        if action_type_raw == "snapshotfilesystem":
             return EventType.SNAPSHOT_FILESYSTEM_COMPLETE if is_complete else EventType.SNAPSHOT_FILESYSTEM_START
-        elif action_type_raw == "pullchangedfiles":
+        if action_type_raw == "pullchangedfiles":
             return EventType.PULL_CHANGED_FILES_COMPLETE if is_complete else EventType.PULL_CHANGED_FILES_START
-        elif action_type_raw == "find":
+        if action_type_raw == "find" or action_type_raw == "execute":
             return EventType.ACTION_COMPLETE if is_complete else EventType.ACTION_START
-        elif action_type_raw == "execute":
-            return EventType.ACTION_COMPLETE if is_complete else EventType.ACTION_START
-        
+
         # Default fallback to generic action types
         log.warning(f"Could not determine specific event type for: {class_name}, defaulting to generic action")
         return EventType.ACTION_COMPLETE if is_complete else EventType.ACTION_START
-    
-    def get_action_type(self, event_type: EventType, action_data: Dict[str, Any] = None) -> ActionType:
+
+    def get_action_type(self, event_type: EventType, action_data: dict[str, Any] = None) -> ActionType:
         """Extract action type from event type and optionally action data."""
         event_name = event_type.value
-        
+
         if event_name.startswith("click_"):
             return ActionType.CLICK
-        elif event_name.startswith("keyboard_"):
+        if event_name.startswith("keyboard_"):
             return ActionType.KEYBOARD
-        elif event_name.startswith("command_"):
+        if event_name.startswith("command_"):
             return ActionType.COMMAND
-        elif event_name.startswith("idle_"):
+        if event_name.startswith("idle_"):
             return ActionType.IDLE
-        elif event_name.startswith("test_"):
+        if event_name.startswith("test_"):
             return ActionType.TEST
-        elif event_name.startswith("screenshot_"):
+        if event_name.startswith("screenshot_"):
             return ActionType.SCREENSHOT
-        elif event_name.startswith("scroll_"):
+        if event_name.startswith("scroll_"):
             return ActionType.SCROLL
-        elif event_name.startswith("drag_"):
+        if event_name.startswith("drag_"):
             return ActionType.DRAG
-        elif event_name.startswith("goto_"):
+        if event_name.startswith("goto_"):
             return ActionType.GOTO
-        elif event_name.startswith("savetimestamp_"):
+        if event_name.startswith("savetimestamp_"):
             return ActionType.SAVETIMESTAMP
-        elif event_name.startswith("pull_"):
+        if event_name.startswith("pull_"):
             return ActionType.PULL
-        elif event_name.startswith("pause_"):
+        if event_name.startswith("pause_"):
             return ActionType.PAUSE
-        elif event_name.startswith("block_"):
+        if event_name.startswith("block_"):
             return ActionType.BLOCK
-        elif event_name.startswith("wait_until_"):
+        if event_name.startswith("wait_until_"):
             return ActionType.WAIT_UNTIL
-        elif event_name.startswith("loop_"):
+        if event_name.startswith("loop_"):
             return ActionType.LOOP
-        elif event_name.startswith("stop_"):
+        if event_name.startswith("stop_"):
             return ActionType.STOP
-        elif event_name.startswith("continue_"):
+        if event_name.startswith("continue_"):
             return ActionType.CONTINUE
-        elif event_name.startswith("snapshot_filesystem_"):
+        if event_name.startswith("snapshot_filesystem_"):
             return ActionType.SNAPSHOT_FILESYSTEM
-        elif event_name.startswith("pull_changed_files_"):
+        if event_name.startswith("pull_changed_files_"):
             return ActionType.PULL_CHANGED_FILES
-        else:
-            # For generic action events, check the original action data
-            if action_data:
-                class_name = action_data.get("__class__", action_data.get("_type", ""))
-                if "Find" in class_name:
-                    return ActionType.FIND
-                elif "Execute" in class_name:
-                    return ActionType.EXECUTE
-            
-            # Check for find/execute in event names directly
-            event_name_lower = event_name.lower() if event_name else ""
-            if "find" in event_name_lower:
+        # For generic action events, check the original action data
+        if action_data:
+            class_name = action_data.get("__class__", action_data.get("_type", ""))
+            if "Find" in class_name:
                 return ActionType.FIND
-            elif "execute" in event_name_lower:
+            if "Execute" in class_name:
                 return ActionType.EXECUTE
-            
-            # Fallback for generic action events
-            return ActionType.CLICK  # Default fallback
-    
+
+        # Check for find/execute in event names directly
+        event_name_lower = event_name.lower() if event_name else ""
+        if "find" in event_name_lower:
+            return ActionType.FIND
+        if "execute" in event_name_lower:
+            return ActionType.EXECUTE
+
+        # Fallback for generic action events
+        return ActionType.CLICK  # Default fallback
+
     def is_start_event(self, event_type: EventType) -> bool:
         """Check if event type is a start event."""
         return event_type.value.endswith("_start") or event_type == EventType.ACTION_START
-    
+
     def is_complete_event(self, event_type: EventType) -> bool:
         """Check if event type is a complete event."""
         return event_type.value.endswith("_complete") or event_type == EventType.ACTION_COMPLETE
-    
+
     def resolve_event_type_from_name(self, event_type_name: str) -> EventType:
         """Resolve event type directly from event type name string."""
         try:

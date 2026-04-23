@@ -3,13 +3,8 @@ import base64
 import json
 import logging
 import subprocess
-import time
-import signal
-import os
 from pathlib import Path
-from types import SimpleNamespace
 
-import click
 from fastmcp import Client
 
 log = logging.getLogger(__name__)
@@ -17,59 +12,59 @@ log = logging.getLogger(__name__)
 
 class MCPServerManager:
     """Manages the MCP server lifecycle."""
-    
+
     def __init__(self, host='localhost', port=13109, log_file=None):
         self.host = host
         self.port = port
         self.process = None
         self.server_url = f"http://{host}:{port}/mcp"
         self.log_file = log_file
-    
+
     async def start_server(self):
         """Start the MCP server if not already running."""
         # Check if server is already running
         if await self._is_server_running():
             print(f"✅ MCP server already running at {self.server_url}")
             return True
-        
+
         print(f"🚀 Starting MCP server at {self.server_url}")
-        
+
         try:
             # Prepare command
             cmd = [
-                'adare-cv-server', 
-                '--host', self.host, 
+                'adare-cv-server',
+                '--host', self.host,
                 '--port', str(self.port),
                 '--debug'  # Always use debug for detailed logs
             ]
-            
+
             # Set up log file redirection if specified
             if self.log_file:
                 log_file_handle = open(self.log_file, 'w')
                 print(f"📋 MCP server logs will be saved to: {self.log_file}")
                 # Start the server process with logs redirected to file
-                self.process = subprocess.Popen(cmd, 
-                                              stdout=log_file_handle, 
+                self.process = subprocess.Popen(cmd,
+                                              stdout=log_file_handle,
                                               stderr=subprocess.STDOUT)
                 self._log_file_handle = log_file_handle
             else:
                 # Start the server process with logs captured but not shown
-                self.process = subprocess.Popen(cmd, 
-                                              stdout=subprocess.PIPE, 
+                self.process = subprocess.Popen(cmd,
+                                              stdout=subprocess.PIPE,
                                               stderr=subprocess.PIPE)
-            
+
             # Wait for server to start
             for attempt in range(30):  # 30 second timeout
                 await asyncio.sleep(1)
                 if await self._is_server_running():
-                    print(f"✅ MCP server started successfully")
+                    print("✅ MCP server started successfully")
                     return True
                 print(f"⏳ Waiting for server to start... ({attempt + 1}/30)")
-            
+
             print("❌ Server failed to start within 30 seconds")
             self.stop_server()
             return False
-            
+
         except FileNotFoundError:
             print("❌ adare-cv-server command not found. Make sure adare-cv-server package is installed.")
             return False
@@ -80,7 +75,7 @@ class MCPServerManager:
             print(f"❌ Unexpected error starting server: {e}")
             log.error(f"Unexpected error starting MCP server: {e}", exc_info=True)
             return False
-    
+
     async def _is_server_running(self):
         """Check if the MCP server is running."""
         try:
@@ -101,56 +96,56 @@ class MCPServerManager:
                 self.process.kill()
                 self.process.wait()
             self.process = None
-            
+
             # Close log file handle if it exists
             if hasattr(self, '_log_file_handle'):
                 self._log_file_handle.close()
                 delattr(self, '_log_file_handle')
-                
+
             print("✅ MCP server stopped")
-    
+
     async def __aenter__(self):
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         self.stop_server()
 
 
 async def exec_mcp_test_icon(args):
     """Test MCP server icon finding functionality."""
-    
+
     # Check that required paths are provided
     if not args.icon_path:
         print("❌ Icon file path is required. Use --icon option.")
         return
-        
+
     if not args.screenshot_path:
         print("❌ Screenshot file path is required. Use --screenshot option.")
         return
-    
+
     icon_path = Path(args.icon_path)
     screenshot_path = Path(args.screenshot_path)
-    
+
     # Check if files exist
     if not icon_path.exists():
         print(f"❌ Icon file not found: {icon_path}")
         return
-        
+
     if not screenshot_path.exists():
         print(f"❌ Screenshot file not found: {screenshot_path}")
         return
-    
+
     # Read and encode files
     try:
         with open(icon_path, "rb") as f:
             icon_base64 = base64.b64encode(f.read()).decode('utf-8')
-        
+
         with open(screenshot_path, "rb") as f:
             screenshot_base64 = base64.b64encode(f.read()).decode('utf-8')
-            
+
         print(f"📁 Using icon: {icon_path}")
         print(f"📁 Using screenshot: {screenshot_path}")
-        
+
     except FileNotFoundError as e:
         print(f"❌ File not found: {e}")
         return
@@ -161,29 +156,29 @@ async def exec_mcp_test_icon(args):
         print(f"❌ Unexpected error reading files: {e}")
         log.error(f"Unexpected error reading files: {e}", exc_info=True)
         return
-    
+
     # Start MCP server for this command
     host = getattr(args, 'host', 'localhost')
     port = getattr(args, 'port', 13109)
     threshold = getattr(args, 'threshold', 0.6)
     mcplog_path = getattr(args, 'mcplog_path', None)
-    
+
     async with MCPServerManager(host, port, log_file=mcplog_path) as server_manager:
-        # Start the server 
+        # Start the server
         if not await server_manager.start_server():
             return
-        
+
         try:
             async with Client(server_manager.server_url) as client:
                 print("✅ Connected to MCP server")
                 print(f"🔍 Finding icon with threshold: {threshold}")
-                
+
                 result = await client.call_tool("find_icon", {
                     "icon_base64": icon_base64,
                     "screenshot_base64": screenshot_base64,
                     "threshold": threshold
                 })
-                
+
                 # Parse result
                 if result.data is not None:
                     response = result.data
@@ -192,21 +187,21 @@ async def exec_mcp_test_icon(args):
                 else:
                     print("❌ No data found in result")
                     return
-                
+
                 # Display results
                 if "error" in response:
                     print(f"❌ Error: {response['error']}")
                     return
-                    
+
                 if "locations" in response:
                     locations = response["locations"]
                     similarities = response.get("similarities", [])
                     method_used = response.get("method_used", "template")  # Get detection method
-                    
+
                     # Debug: check what we got
                     print(f"🔍 Debug - Got {len(similarities)} similarities: {similarities[:5]}")  # Show first 5
                     print(f"🔍 Debug - Detection method used: {method_used}")
-                    
+
                     if locations:
                         print(f"✅ Found {len(locations)} icon matches:")
                         for i, location in enumerate(locations):
@@ -217,30 +212,31 @@ async def exec_mcp_test_icon(args):
                                 x, y = int(location[0]), int(location[1])
                             else:
                                 x, y = 0, 0
-                            
+
                             # Get similarity from separate array
                             similarity = similarities[i] if i < len(similarities) else "N/A"
                             if isinstance(similarity, float):
                                 similarity = f"{similarity:.3f}"
-                            
+
                             print(f"   Match {i+1}: x={x}, y={y}, similarity={similarity}")
-                        
+
                         # Create marked image if output path provided
                         if hasattr(args, 'output_path') and args.output_path:
                             try:
                                 # Use Pillow instead of OpenCV to avoid segfaults
-                                from PIL import Image, ImageDraw
                                 import io
-                                
+
+                                from PIL import Image, ImageDraw
+
                                 # Load images
                                 screenshot_img = Image.open(io.BytesIO(base64.b64decode(screenshot_base64)))
                                 icon_img = Image.open(io.BytesIO(base64.b64decode(icon_base64)))
                                 icon_width, icon_height = icon_img.size
-                                
+
                                 # Create result image copy
                                 result_img = screenshot_img.copy()
                                 draw = ImageDraw.Draw(result_img)
-                                
+
                                 # Calculate min/max similarity for better color scaling
                                 valid_similarities = []
                                 for s in similarities:
@@ -255,23 +251,23 @@ async def exec_mcp_test_icon(args):
                                     sim_range = max_sim - min_sim
                                 else:
                                     min_sim, max_sim, sim_range = 0, 1, 1
-                                
+
                                 def similarity_to_color(similarity):
                                     """Convert similarity score to color gradient using actual min/max range."""
                                     try:
                                         float_sim = float(similarity)
                                     except (ValueError, TypeError):
                                         return "purple"  # Default color for unknown similarity
-                                    
+
                                     # Scale similarity to 0-1 range based on actual min/max
                                     if sim_range > 0:
                                         normalized_sim = (float_sim - min_sim) / sim_range
                                     else:
                                         normalized_sim = 0.5  # If all similarities are the same
-                                    
+
                                     # Clamp to 0-1 range
                                     normalized_sim = max(0.0, min(1.0, normalized_sim))
-                                    
+
                                     # Create gradient from red (0) to yellow (0.5) to green (1)
                                     if normalized_sim < 0.5:
                                         # Red to yellow gradient
@@ -283,9 +279,9 @@ async def exec_mcp_test_icon(args):
                                         red = int(255 * (2 - normalized_sim * 2))
                                         green = 255
                                         blue = 0
-                                    
+
                                     return f"#{red:02x}{green:02x}{blue:02x}"
-                                
+
                                 for i, location in enumerate(locations):
                                     # Extract coordinates based on format
                                     if isinstance(location, dict):
@@ -295,11 +291,11 @@ async def exec_mcp_test_icon(args):
                                         x, y = int(location[0]), int(location[1])
                                     else:
                                         continue
-                                    
+
                                     # Get similarity for color coding
                                     similarity = similarities[i] if i < len(similarities) else None
                                     color = similarity_to_color(similarity)
-                                    
+
                                     # Handle coordinates differently based on detection method
                                     if method_used in ["sift", "orb"]:
                                         # SIFT and ORB return center coordinates
@@ -314,13 +310,13 @@ async def exec_mcp_test_icon(args):
                                         center_y = y + icon_height // 2
                                         rect_x = x
                                         rect_y = y
-                                    
+
                                     # Draw colored circle at center of found icon
                                     draw.ellipse([center_x-8, center_y-8, center_x+8, center_y+8], fill=color)
-                                    
+
                                     # Draw colored rectangle around the match
                                     draw.rectangle([rect_x, rect_y, rect_x + icon_width, rect_y + icon_height], outline=color, width=3)
-                                    
+
                                     # Add similarity text near the match
                                     try:
                                         sim_text = f"{float(similarity):.2f}"
@@ -329,7 +325,7 @@ async def exec_mcp_test_icon(args):
                                         draw.text([text_x, text_y], sim_text, fill=color)
                                     except (ValueError, TypeError):
                                         pass  # Skip text if similarity can't be converted
-                                
+
                                 # Save result
                                 output_path = Path(args.output_path)
                                 result_img.save(str(output_path))
@@ -337,17 +333,17 @@ async def exec_mcp_test_icon(args):
                                 if valid_similarities:
                                     print(f"🎨 Color coding scaled to range: {min_sim:.3f} (red) → {max_sim:.3f} (green)")
                                 else:
-                                    print(f"🎨 Color coding: Red=low similarity, Yellow=medium, Green=high similarity")
-                                
+                                    print("🎨 Color coding: Red=low similarity, Yellow=medium, Green=high similarity")
+
                             except Exception as e:
                                 print(f"⚠️  Could not save marked image: {e}")
                     else:
                         print("ℹ️  No icon matches found")
                 else:
                     print("❌ Unexpected response format")
-                    
+
         except ConnectionError:
-            print(f"❌ Could not connect to MCP server")
+            print("❌ Could not connect to MCP server")
         except (TimeoutError, OSError) as e:
             print(f"❌ Connection error testing MCP server: {e}")
         except Exception as e:
@@ -357,26 +353,26 @@ async def exec_mcp_test_icon(args):
 
 async def exec_mcp_get_all_text(args):
     """Get all detected text from screenshot using MCP server."""
-    
+
     # Check that required path is provided
     if not args.screenshot_path:
         print("❌ Screenshot file path is required. Use --screenshot option.")
         return
-    
+
     screenshot_path = Path(args.screenshot_path)
-    
+
     # Check if file exists
     if not screenshot_path.exists():
         print(f"❌ Screenshot file not found: {screenshot_path}")
         return
-    
+
     # Read and encode file
     try:
         with open(screenshot_path, "rb") as f:
             screenshot_base64 = base64.b64encode(f.read()).decode('utf-8')
-            
+
         print(f"📁 Using screenshot: {screenshot_path}")
-        
+
     except FileNotFoundError as e:
         print(f"❌ File not found: {e}")
         return
@@ -387,27 +383,27 @@ async def exec_mcp_get_all_text(args):
         print(f"❌ Unexpected error reading file: {e}")
         log.error(f"Unexpected error reading file: {e}", exc_info=True)
         return
-    
+
     # Start MCP server for this command
     host = getattr(args, 'host', 'localhost')
     port = getattr(args, 'port', 13109)
     format_type = getattr(args, 'format', 'json')
-    
+
     async with MCPServerManager(host, port) as server_manager:
         # Start the server
         if not await server_manager.start_server():
             return
-        
+
         try:
             async with Client(server_manager.server_url) as client:
                 print("✅ Connected to MCP server")
                 print(f"🔍 Getting all detected text (format: {format_type})")
-                
+
                 result = await client.call_tool("get_all_text", {
                     "screenshot_base64": screenshot_base64,
                     "format": format_type
                 })
-                
+
                 # Parse result
                 if result.data is not None:
                     response = result.data
@@ -416,12 +412,12 @@ async def exec_mcp_get_all_text(args):
                 else:
                     print("❌ No data found in result")
                     return
-                
+
                 # Display results
                 if "error" in response:
                     print(f"❌ Error: {response['error']}")
                     return
-                
+
                 if format_type.lower() == "csv" and "data" in response:
                     print("📊 All detected text (CSV format):")
                     print(response["data"])
@@ -439,9 +435,9 @@ async def exec_mcp_get_all_text(args):
                         print("ℹ️  No text detected")
                 else:
                     print("❌ Unexpected response format")
-                    
+
         except ConnectionError:
-            print(f"❌ Could not connect to MCP server")
+            print("❌ Could not connect to MCP server")
         except (TimeoutError, OSError) as e:
             print(f"❌ Connection error testing MCP server: {e}")
         except Exception as e:
@@ -451,26 +447,26 @@ async def exec_mcp_get_all_text(args):
 
 async def exec_mcp_test_text(args):
     """Test MCP server text finding functionality."""
-    
+
     # Check that required path is provided
     if not args.screenshot_path:
         print("❌ Screenshot file path is required. Use --screenshot option.")
         return
-    
+
     screenshot_path = Path(args.screenshot_path)
-    
+
     # Check if file exists
     if not screenshot_path.exists():
         print(f"❌ Screenshot file not found: {screenshot_path}")
         return
-    
+
     # Read and encode file
     try:
         with open(screenshot_path, "rb") as f:
             screenshot_base64 = base64.b64encode(f.read()).decode('utf-8')
-            
+
         print(f"📁 Using screenshot: {screenshot_path}")
-        
+
     except FileNotFoundError as e:
         print(f"❌ File not found: {e}")
         return
@@ -481,29 +477,29 @@ async def exec_mcp_test_text(args):
         print(f"❌ Unexpected error reading file: {e}")
         log.error(f"Unexpected error reading file: {e}", exc_info=True)
         return
-    
+
     # Start MCP server for this command
     host = getattr(args, 'host', 'localhost')
     port = getattr(args, 'port', 13109)
     text = args.text
     format_type = getattr(args, 'format', 'json')
-    
+
     async with MCPServerManager(host, port) as server_manager:
         # Start the server
         if not await server_manager.start_server():
             return
-        
+
         try:
             async with Client(server_manager.server_url) as client:
                 print("✅ Connected to MCP server")
                 print(f"🔍 Finding text: '{text}' (format: {format_type})")
-                
+
                 result = await client.call_tool("find_text", {
                     "text": text,
                     "screenshot_base64": screenshot_base64,
                     "format": format_type
                 })
-                
+
                 # Parse result
                 if result.data is not None:
                     response = result.data
@@ -512,12 +508,12 @@ async def exec_mcp_test_text(args):
                 else:
                     print("❌ No data found in result")
                     return
-                
+
                 # Display results
                 if "error" in response:
                     print(f"❌ Error: {response['error']}")
                     return
-                
+
                 if format_type.lower() == "csv" and "data" in response:
                     print("📊 Text search results (CSV format):")
                     print(response["data"])
@@ -535,9 +531,9 @@ async def exec_mcp_test_text(args):
                         print("ℹ️  No text matches found")
                 else:
                     print("❌ Unexpected response format")
-                    
+
         except ConnectionError:
-            print(f"❌ Could not connect to MCP server")
+            print("❌ Could not connect to MCP server")
         except (TimeoutError, OSError) as e:
             print(f"❌ Connection error testing MCP server: {e}")
         except Exception as e:
@@ -549,13 +545,13 @@ async def exec_mcp_start_server(args):
     """Start the MCP server and keep it running."""
     host = getattr(args, 'host', 'localhost')
     port = getattr(args, 'port', 13109)
-    
+
     server_manager = MCPServerManager(host, port)
-    
+
     if await server_manager.start_server():
         print(f"🎯 MCP server running at {server_manager.server_url}")
         print("Press Ctrl+C to stop the server...")
-        
+
         try:
             # Keep the server running until interrupted
             while True:

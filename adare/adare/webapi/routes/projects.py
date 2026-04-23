@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from adare.webapi.adapters import result_to_response, serialize_value
+from adare.webapi.adapters import result_to_response
 
 logger = logging.getLogger(__name__)
 

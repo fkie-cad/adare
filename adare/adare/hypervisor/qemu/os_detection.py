@@ -4,16 +4,15 @@ OS detection utilities for QEMU VMs using guestfish inspection.
 This module provides automatic OS platform detection from disk images,
 enabling proper boot mode selection (UEFI for Windows, BIOS for Linux).
 """
+import logging
 import shutil
 import subprocess
 from pathlib import Path
-import logging
-from typing import Tuple, Dict, Optional
 
 log = logging.getLogger(__name__)
 
 
-def detect_os_from_disk(disk_path: Path) -> Tuple[str, Dict[str, Optional[str]]]:
+def detect_os_from_disk(disk_path: Path) -> tuple[str, dict[str, str | None]]:
     """
     Detect OS platform and details from disk image using guestfish.
 
@@ -77,7 +76,7 @@ def detect_os_from_disk(disk_path: Path) -> Tuple[str, Dict[str, Optional[str]]]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False)
 
         if result.returncode != 0:
-            log.warning(f"Failed to get OS type")
+            log.warning("Failed to get OS type")
             return 'linux', {}
 
         os_type = result.stdout.strip().lower()
@@ -124,11 +123,11 @@ def detect_os_from_disk(disk_path: Path) -> Tuple[str, Dict[str, Optional[str]]]
         return 'linux', {}
     except (subprocess.SubprocessError, OSError, ValueError) as e:
         log.warning(f"OS detection error for {disk_path}: {e}")
-        log.debug(f"OS detection exception details:", exc_info=True)
+        log.debug("OS detection exception details:", exc_info=True)
         return 'linux', {}
 
 
-def detect_os_from_filename(filename: str) -> Optional[str]:
+def detect_os_from_filename(filename: str) -> str | None:
     """
     Attempt to infer OS platform from VM filename (fallback method).
 

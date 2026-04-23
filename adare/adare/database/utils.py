@@ -1,9 +1,9 @@
 # internal imports
-from adare.config.database import get_database_location
-
-
 # configure logging
 import logging
+
+from adare.config.database import get_database_location
+
 log = logging.getLogger(__name__)
 
 

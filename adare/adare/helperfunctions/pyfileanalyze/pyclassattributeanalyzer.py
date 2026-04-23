@@ -1,16 +1,16 @@
 # external imports
 import ast
-from typing import Union
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
 class PyClassAttributeAnalyzer:
-    root: Union[ast.AnnAssign, ast.Assign]
+    root: ast.AnnAssign | ast.Assign
 
-    def __init__(self, attribute: Union[ast.AnnAssign, ast.Assign]):
+    def __init__(self, attribute: ast.AnnAssign | ast.Assign):
         self.root = attribute
 
     def get_attribute_as_dict(self) -> dict:

@@ -1,16 +1,15 @@
 # external imports
-from datetime import datetime, timezone
+# configure logging
+import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 # internal imports
 import adare.config.database as config_database
-from adare.database.models.login import UserSession, Token
 from adare.database.api.database import DatabaseApi
-from adare.database.models.login import Base as BaseLogin
 from adare.database.exceptions import TokenExpired
-
-# configure logging
-import logging
+from adare.database.models.login import Base as BaseLogin
+from adare.database.models.login import Token, UserSession
 
 log = logging.getLogger(__name__)
 
@@ -56,12 +55,12 @@ class UserSessionApi(DatabaseApi):
 
     def remove_expired_user_sessions(self):
         for user_session in self._session.query(UserSession).all():
-            gitea_token_expiration = user_session.gitea_token.expiration.replace(tzinfo=timezone.utc)
-            if gitea_token_expiration <= datetime.now(timezone.utc):
+            gitea_token_expiration = user_session.gitea_token.expiration.replace(tzinfo=UTC)
+            if gitea_token_expiration <= datetime.now(UTC):
                 self.remove_user_session(user_session.username)
                 log.info(f'deleted gitea token for user session ({user_session.username}), because it expired')
-            django_token_expiration = user_session.django_token.expiration.replace(tzinfo=timezone.utc)
-            if django_token_expiration < datetime.now(timezone.utc):
+            django_token_expiration = user_session.django_token.expiration.replace(tzinfo=UTC)
+            if django_token_expiration < datetime.now(UTC):
                 self.remove_user_session(user_session.username)
                 log.info(f'deleted django token for user session ({user_session.username}), because it expired')
         self._session.commit()

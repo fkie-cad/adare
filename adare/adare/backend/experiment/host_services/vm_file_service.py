@@ -7,7 +7,6 @@ pull infrastructure for consistency and code reuse.
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -67,10 +66,9 @@ class VMFileService:
                 dest_path = Path(result.data.get('destination'))
                 log.debug(f"VM File Service: Successfully pulled '{vm_path}' to '{dest_path}'")
                 return dest_path
-            else:
-                error_msg = f"Failed to pull {vm_path}: {result.message}"
-                log.error(f"VM File Service: {error_msg}")
-                raise FileNotFoundError(error_msg)
+            error_msg = f"Failed to pull {vm_path}: {result.message}"
+            log.error(f"VM File Service: {error_msg}")
+            raise FileNotFoundError(error_msg)
 
         except FileNotFoundError:
             # Re-raise FileNotFoundError as-is

@@ -4,16 +4,16 @@ Target resolution logic for playbook actions.
 Handles finding targets on screen using image/text matching and screenshot management.
 """
 
+import base64
 import csv
 import logging
 import re
 import time
-import base64
 from pathlib import Path
-from typing import Optional, Tuple
 
-from adare.types.step_actions import FindAction, ExecuteAction
 from adare.backend.events.emitters import emit_action
+from adare.types.step_actions import ExecuteAction, FindAction
+
 from .base import ActionResult, get_target_info, serialize_target
 
 log = logging.getLogger(__name__)
@@ -22,8 +22,8 @@ log = logging.getLogger(__name__)
 class TargetResolutionExecutor:
     """Handles target resolution and screenshot management."""
 
-    def __init__(self, websocket_client, target_resolver, experiment_run_id: Optional[str] = None,
-                 debug_screenshots: bool = False, screenshots_dir: Optional[Path] = None,
+    def __init__(self, websocket_client, target_resolver, experiment_run_id: str | None = None,
+                 debug_screenshots: bool = False, screenshots_dir: Path | None = None,
                  gui_executor = None):
         """
         Initialize target resolution executor.
@@ -43,18 +43,18 @@ class TargetResolutionExecutor:
         self.screenshots_dir = screenshots_dir
         self.gui_executor = gui_executor
         self.screenshot_counter = 0
-        self.current_action_prefix: Optional[str] = None
+        self.current_action_prefix: str | None = None
         self._manifest_initialized = False
 
         # Cache for target resolution results: {'target_hash': str, 'result': MatchResult, 'timestamp': float, 'screenshot_path': str}
         self.last_match_cache = {}
-        
+
     def _get_target_hash(self, target) -> str:
         """Generate a unique hash for a target definition."""
         # Create a hashable representation of the target criteria
         # We include strategy type but not memory address
         strategy_repr = target.strategy.__class__.__name__ if hasattr(target, 'strategy') and target.strategy else "None"
-        
+
         # Combine key target attributes
         key_parts = [
             str(target.image) if hasattr(target, 'image') else "None",
@@ -68,7 +68,7 @@ class TargetResolutionExecutor:
     def cache_match(self, target, match_result, screenshot_path: str = None):
         """
         Cache a successful target match.
-        
+
         Args:
             target: The Target definition used
             match_result: The result from target_resolver.resolve_target
@@ -76,7 +76,7 @@ class TargetResolutionExecutor:
         """
         if not match_result:
             return
-            
+
         target_hash = self._get_target_hash(target)
         self.last_match_cache[target_hash] = {
             'result': match_result,
@@ -84,14 +84,14 @@ class TargetResolutionExecutor:
             'screenshot_path': screenshot_path
         }
         log.debug(f"Cached match for target {target_hash}")
-        
+
     def get_cached_match(self, target):
         """
         Retrieve a cached match for the target if available.
-        
+
         Args:
             target: The Target to look up
-            
+
         Returns:
             Tuple of (Match object or None, screenshot_path or None, age_seconds or None)
         """
@@ -99,15 +99,15 @@ class TargetResolutionExecutor:
         if target_hash in self.last_match_cache:
             cache_entry = self.last_match_cache[target_hash]
             age = time.time() - cache_entry['timestamp']
-            
+
             # Log debug info but don't commit to using it yet
             log.debug(f"Cache hit for target {target_hash} (age: {age:.2f}s)")
             return cache_entry['result'], cache_entry['screenshot_path'], age
-            
+
         return None, None, None
 
     async def resolve_target_with_steps(self, target, parent_action_id: str = None,
-                                       event_emitter = None, action_context: str = None) -> Optional[Tuple[int, int]]:
+                                       event_emitter = None, action_context: str = None) -> tuple[int, int] | None:
         """Resolve target with find step emitted as action event."""
         # Apply smart defaults if no strategy specified
         if target.strategy is None:
@@ -167,13 +167,13 @@ class TargetResolutionExecutor:
         # Check cache first if requested or if result is fresh (heuristic for "directly after")
         cached_match, cached_screenshot_path, cached_age = self.get_cached_match(target)
         should_use_cache = False
-        
+
         if cached_match:
             # Explicit request
             if hasattr(target, 'use_cache') and target.use_cache:
                 should_use_cache = True
                 log.info(f"Using cached target (explicit request, age: {cached_age:.2f}s)")
-            
+
             # Heuristic: If match is very recent (WaitUntil just finished), it's safe to reuse
             # Limit to 5.0 seconds (generous buffer for processing implementation delays)
             elif cached_age is not None and cached_age < 5.0:
@@ -183,9 +183,9 @@ class TargetResolutionExecutor:
         if should_use_cache and cached_match:
             # Use cached result effectively skipping new screenshot and expensive resolution
             return self._process_match_result(
-                target, cached_match, cached_screenshot_path, 
+                target, cached_match, cached_screenshot_path,
                 start_time=time.time(), # Fake start time for result structure
-                find_step=find_step, find_action_id=find_action_id, 
+                find_step=find_step, find_action_id=find_action_id,
                 parent_action_id=parent_action_id, event_emitter=event_emitter,
                 from_cache=True
             )
@@ -216,7 +216,7 @@ class TargetResolutionExecutor:
 
             # Process the match result (calculate offsets, emit events, etc.)
             return self._process_match_result(
-                target, match, screenshot_path, start_time, 
+                target, match, screenshot_path, start_time,
                 find_step, find_action_id, parent_action_id, event_emitter
             )
 
@@ -234,25 +234,25 @@ class TargetResolutionExecutor:
 
             return None
 
-    def _process_match_result(self, target, match, screenshot_path, start_time, 
-                             find_step, find_action_id, parent_action_id, event_emitter, 
+    def _process_match_result(self, target, match, screenshot_path, start_time,
+                             find_step, find_action_id, parent_action_id, event_emitter,
                              from_cache=False):
         """Helper to process match result, applying offsets and emitting events."""
         execution_time = time.time() - start_time
-        
+
         # Apply offset if target found and offset specified
         if match and hasattr(target, 'offset') and target.offset:
             coords = match.coordinates
             final_x, final_y = coords
             offset = target.offset
-            
+
             # Determine anchor point based on base
             anchor_x, anchor_y = coords  # Default to center (coordinates from resolver are usually center)
-            
+
             # If we have region info, we can be more precise about anchors
             if match.region:
                 rx, ry, rw, rh = match.region
-                
+
                 if offset.base == 'center':
                     anchor_x, anchor_y = rx + rw // 2, ry + rh // 2
                 elif offset.base == 'top-left':
@@ -271,11 +271,11 @@ class TargetResolutionExecutor:
                     anchor_x, anchor_y = rx + rw // 2, ry
                 elif offset.base == 'bottom-center':
                     anchor_x, anchor_y = rx + rw // 2, ry + rh
-            
+
             # Apply x/y offsets
             final_x = anchor_x + offset.x
             final_y = anchor_y + offset.y
-            
+
             log.info(f"Applied offset {offset} to match at {coords}. Region: {match.region}. New coords: ({final_x}, {final_y})")
             match.coordinates = (final_x, final_y)
 
@@ -351,7 +351,7 @@ class TargetResolutionExecutor:
 
             # Log execution result
             if execution_success:
-                log.info(f"Action executed successfully")
+                log.info("Action executed successfully")
             else:
                 log.error(f"Action execution failed: {result.get('message', 'Unknown error')}")
 
@@ -381,7 +381,7 @@ class TargetResolutionExecutor:
                 data={'target': serialize_target(action.target)}
             )
 
-    async def get_current_screenshot(self) -> Optional[str]:
+    async def get_current_screenshot(self) -> str | None:
         """
         Get current screenshot from WebSocket client.
 
@@ -391,7 +391,7 @@ class TargetResolutionExecutor:
         screenshot_data, _ = await self.get_current_screenshot_with_path()
         return screenshot_data
 
-    async def get_current_screenshot_with_path(self, action_context: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
+    async def get_current_screenshot_with_path(self, action_context: str | None = None) -> tuple[str | None, str | None]:
         """
         Get current screenshot from WebSocket client and save to disk.
 
@@ -429,15 +429,14 @@ class TargetResolutionExecutor:
 
                 log.debug("Screenshot captured")
                 return screenshot_base64, screenshot_path
-            else:
-                log.error("Screenshot result missing image data")
-                return None, None
+            log.error("Screenshot result missing image data")
+            return None, None
 
         except Exception as e:
             log.error(f"Failed to capture screenshot: {e}")
             return None, None
 
-    async def _save_debug_screenshot(self, screenshot_base64: str, action_context: Optional[str] = None) -> Optional[str]:
+    async def _save_debug_screenshot(self, screenshot_base64: str, action_context: str | None = None) -> str | None:
         """
         Save screenshot to disk for debugging purposes.
 
@@ -495,7 +494,7 @@ class TargetResolutionExecutor:
             log.error(f"Failed to save debug screenshot: {e}")
             return None
 
-    def _append_manifest_row(self, filename: str, action_context: Optional[str] = None) -> None:
+    def _append_manifest_row(self, filename: str, action_context: str | None = None) -> None:
         """Append a row to the screenshot manifest CSV.
 
         Parses action_index, action_type, detail, and phase from the action_context string

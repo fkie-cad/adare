@@ -1,6 +1,7 @@
 # external imports
+import logging
+
 from rich.layout import Layout
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -9,7 +10,6 @@ from rich.text import Text
 from adare.backend.vm.commands import list_all_vms
 from adare.frontend.terminal.console import DefaultConsole
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -34,7 +34,7 @@ class VMTablePanel:
                 vm['id'],
                 description or "No description"
             )
-        
+
         title = f"[b gold3]VMs ({len(self.vms)} found)[/b gold3]"
         return Panel(table, title=title, border_style="blue", title_align="left")
 

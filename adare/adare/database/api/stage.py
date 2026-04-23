@@ -1,14 +1,17 @@
 # external imports
-import sqlalchemy
-from pathlib import Path
-
-# internal imports
-from adare.database.models.project_models import Stage as StageModel, StageInRun as StageInRunModel
-from adare.database.api.base import ProjectDatabaseApi
-from adare.types.stages import Stage
-
 # configure logging
 import logging
+from pathlib import Path
+
+import sqlalchemy
+
+from adare.database.api.base import ProjectDatabaseApi
+
+# internal imports
+from adare.database.models.project_models import Stage as StageModel
+from adare.database.models.project_models import StageInRun as StageInRunModel
+from adare.types.stages import Stage
+
 log = logging.getLogger(__name__)
 
 
@@ -19,7 +22,7 @@ class StageDbApi(ProjectDatabaseApi):
     def update_stage_in_run(self, stage: Stage, run_id: str, stage_id: str) -> int:
         if not (stage_db := self._session.query(StageModel).filter(StageModel.name == stage.name).first()):
             raise sqlalchemy.orm.exc.NoResultFound(f"Stage '{stage.name}' not found in database")
-    
+
         stage_in_run = self._session.query(StageInRunModel).filter(StageInRunModel.stage_id == stage_db.id).filter(StageInRunModel.run_id == run_id).filter(StageInRunModel.id == stage_id).first()
 
         if stage_in_run:

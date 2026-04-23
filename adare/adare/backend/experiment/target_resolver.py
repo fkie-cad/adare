@@ -5,16 +5,28 @@ This module provides target resolution by leveraging the existing MCP GUI server
 for CV/OCR capabilities (find_icon and find_text tools).
 """
 
-import logging
-from pathlib import Path
-from typing import Tuple, Optional, List
-from dataclasses import dataclass
-import json
 import base64
-import ulid
+import json
+import logging
+from dataclasses import dataclass
+from pathlib import Path
 
 from fastmcp import Client
-from adare.types.playbook import Target, SweepStrategy, BestConfidenceStrategy, ClosestToStrategy, TopLeftStrategy, TopRightStrategy, BottomLeftStrategy, BottomRightStrategy, LargestStrategy, SmallestStrategy, TextMatchConfig
+
+from adare.types.playbook import (
+    BestConfidenceStrategy,
+    BottomLeftStrategy,
+    BottomRightStrategy,
+    ClosestToStrategy,
+    LargestStrategy,
+    SmallestStrategy,
+    SweepStrategy,
+    Target,
+    TextMatchConfig,
+    TopLeftStrategy,
+    TopRightStrategy,
+)
+
 # Stage events are now handled by action events in playbook controller
 
 log = logging.getLogger(__name__)
@@ -23,25 +35,25 @@ log = logging.getLogger(__name__)
 @dataclass
 class TargetMatch:
     """Represents a found target with confidence and location."""
-    coordinates: Tuple[int, int]
+    coordinates: tuple[int, int]
     confidence: float
     method: str  # 'image', 'text', 'position'
-    region: Optional[Tuple[int, int, int, int]] = None  # x, y, width, height
-    text: Optional[str] = None  # Original text for text matches
+    region: tuple[int, int, int, int] | None = None  # x, y, width, height
+    text: str | None = None  # Original text for text matches
 
 
 class MCPTargetResolver:
     """
     Target resolver using existing MCP GUI server for CV/OCR.
-    
+
     This class connects to your existing mcp_gui.py server to perform
     image recognition and text detection for target resolution.
     """
-    
-    def __init__(self, experiment_dir: Path, mcp_gui_url: str = "http://localhost:13109/mcp", experiment_run_ulid: Optional[str] = None):
+
+    def __init__(self, experiment_dir: Path, mcp_gui_url: str = "http://localhost:13109/mcp", experiment_run_ulid: str | None = None):
         """
         Initialize MCP target resolver.
-        
+
         Args:
             experiment_dir: Path to experiment directory (contains images/)
             mcp_gui_url: URL of the MCP GUI server
@@ -53,49 +65,48 @@ class MCPTargetResolver:
         self.experiment_run_ulid = experiment_run_ulid
         self._connection_tested = False
         self._connection_available = False
-    
-    def _select_match_by_strategy(self, matches: List[TargetMatch], strategy, reference_coords: Optional[Tuple[int, int]] = None) -> Optional[TargetMatch]:
+
+    def _select_match_by_strategy(self, matches: list[TargetMatch], strategy, reference_coords: tuple[int, int] | None = None) -> TargetMatch | None:
         """
         Select a single match from multiple matches based on strategy.
-        
+
         Args:
             matches: List of found matches
             strategy: Strategy object for selection
             reference_coords: Optional reference coordinates for ClosestToStrategy
-            
+
         Returns:
             Selected match or None if no valid match
         """
         if not matches:
             return None
-        
+
         # If only one match, return it directly without applying strategy
         if len(matches) == 1:
             return matches[0]
-        
+
         if strategy is None:
             # Error when multiple matches found but no strategy provided
             raise ValueError(f"Found {len(matches)} matches but no strategy was provided to select from them. "
                            f"Please specify a strategy (e.g., BestConfidence, TopLeft, etc.) to handle multiple matches.")
-        
-        elif isinstance(strategy, SweepStrategy):
+
+        if isinstance(strategy, SweepStrategy):
             # Sort matches spatially: top-to-bottom, left-to-right (reading order)
             sorted_matches = sorted(matches, key=lambda m: (m.coordinates[1], m.coordinates[0]))
             index = strategy.index
             if 1 <= index <= len(sorted_matches):
                 return sorted_matches[index - 1]  # Convert to 0-based
-            else:
-                log.warning(f"Sweep index {index} out of range (1-{len(sorted_matches)}), using first match")
-                return sorted_matches[0]
-        
-        elif isinstance(strategy, BestConfidenceStrategy):
+            log.warning(f"Sweep index {index} out of range (1-{len(sorted_matches)}), using first match")
+            return sorted_matches[0]
+
+        if isinstance(strategy, BestConfidenceStrategy):
             best_confidence = max(m.confidence for m in matches)
             best_matches = [m for m in matches if m.confidence == best_confidence]
             if len(best_matches) > 1:
                 log.warning(f"BestConfidenceStrategy: {len(best_matches)} matches tied with confidence {best_confidence}, using first")
             return best_matches[0]
-        
-        elif isinstance(strategy, ClosestToStrategy):
+
+        if isinstance(strategy, ClosestToStrategy):
             # Check mode: target reference vs coordinates
             if strategy.text or strategy.image:
                 # TARGET REFERENCE MODE (new)
@@ -126,19 +137,18 @@ class MCPTargetResolver:
                 if len(closest_matches) > 1:
                     log.warning(f"ClosestToStrategy: {len(closest_matches)} matches tied at distance {min_distance:.1f}, using first")
                 return closest_matches[0]
-            else:
-                # COORDINATES MODE (existing - unchanged for backwards compatibility)
-                def distance(match):
-                    x, y = match.coordinates
-                    return ((x - strategy.x) ** 2 + (y - strategy.y) ** 2) ** 0.5
+            # COORDINATES MODE (existing - unchanged for backwards compatibility)
+            def distance(match):
+                x, y = match.coordinates
+                return ((x - strategy.x) ** 2 + (y - strategy.y) ** 2) ** 0.5
 
-                min_distance = min(distance(m) for m in matches)
-                closest_matches = [m for m in matches if distance(m) == min_distance]
-                if len(closest_matches) > 1:
-                    log.warning(f"ClosestToStrategy: {len(closest_matches)} matches tied at distance {min_distance:.1f}, using first")
-                return closest_matches[0]
-        
-        elif isinstance(strategy, TopLeftStrategy):
+            min_distance = min(distance(m) for m in matches)
+            closest_matches = [m for m in matches if distance(m) == min_distance]
+            if len(closest_matches) > 1:
+                log.warning(f"ClosestToStrategy: {len(closest_matches)} matches tied at distance {min_distance:.1f}, using first")
+            return closest_matches[0]
+
+        if isinstance(strategy, TopLeftStrategy):
             # Sort by y (top), then x (left) - deterministic order
             sorted_matches = sorted(matches, key=lambda m: (m.coordinates[1], m.coordinates[0]))
             top_y = sorted_matches[0].coordinates[1]
@@ -146,8 +156,8 @@ class MCPTargetResolver:
             if len(top_matches) > 1:
                 log.warning(f"TopLeftStrategy: {len(top_matches)} matches at same top row y={top_y}, using leftmost")
             return top_matches[0]
-        
-        elif isinstance(strategy, TopRightStrategy):
+
+        if isinstance(strategy, TopRightStrategy):
             # Sort by y (top), then -x (right)
             sorted_matches = sorted(matches, key=lambda m: (m.coordinates[1], -m.coordinates[0]))
             top_y = sorted_matches[0].coordinates[1]
@@ -155,8 +165,8 @@ class MCPTargetResolver:
             if len(top_matches) > 1:
                 log.warning(f"TopRightStrategy: {len(top_matches)} matches at same top row y={top_y}, using rightmost")
             return top_matches[0]
-        
-        elif isinstance(strategy, BottomLeftStrategy):
+
+        if isinstance(strategy, BottomLeftStrategy):
             # Sort by -y (bottom), then x (left)
             sorted_matches = sorted(matches, key=lambda m: (-m.coordinates[1], m.coordinates[0]))
             bottom_y = sorted_matches[0].coordinates[1]
@@ -164,8 +174,8 @@ class MCPTargetResolver:
             if len(bottom_matches) > 1:
                 log.warning(f"BottomLeftStrategy: {len(bottom_matches)} matches at same bottom row y={bottom_y}, using leftmost")
             return bottom_matches[0]
-        
-        elif isinstance(strategy, BottomRightStrategy):
+
+        if isinstance(strategy, BottomRightStrategy):
             # Sort by -y (bottom), then -x (right)
             sorted_matches = sorted(matches, key=lambda m: (-m.coordinates[1], -m.coordinates[0]))
             bottom_y = sorted_matches[0].coordinates[1]
@@ -173,45 +183,44 @@ class MCPTargetResolver:
             if len(bottom_matches) > 1:
                 log.warning(f"BottomRightStrategy: {len(bottom_matches)} matches at same bottom row y={bottom_y}, using rightmost")
             return bottom_matches[0]
-        
-        elif isinstance(strategy, LargestStrategy):
+
+        if isinstance(strategy, LargestStrategy):
             def area(match):
                 if match.region:
                     return match.region[2] * match.region[3]  # width * height
                 return 0  # No region info, treat as zero area
-            
+
             max_area = max(area(m) for m in matches)
             largest_matches = [m for m in matches if area(m) == max_area]
             if len(largest_matches) > 1:
                 log.warning(f"LargestStrategy: {len(largest_matches)} matches tied with area {max_area}, using first")
             return largest_matches[0]
-        
-        elif isinstance(strategy, SmallestStrategy):
+
+        if isinstance(strategy, SmallestStrategy):
             def area(match):
                 if match.region:
                     return match.region[2] * match.region[3]  # width * height
                 return float('inf')  # No region info, treat as infinite
-            
+
             min_area = min(area(m) for m in matches)
             smallest_matches = [m for m in matches if area(m) == min_area]
             if len(smallest_matches) > 1:
                 log.warning(f"SmallestStrategy: {len(smallest_matches)} matches tied with area {min_area}, using first")
             return smallest_matches[0]
-        
-        else:
-            log.warning(f"Unknown strategy type: {type(strategy)}, using first match")
-            return matches[0]
-    
+
+        log.warning(f"Unknown strategy type: {type(strategy)}, using first match")
+        return matches[0]
+
     async def test_mcp_connection(self) -> bool:
         """
         Test if MCP GUI server is available.
-        
+
         Returns:
             True if MCP server is reachable, False otherwise
         """
         if self._connection_tested:
             return self._connection_available
-            
+
         try:
             async with Client(self.mcp_gui_url) as client:
                 # Try to call a simple tool to test connection
@@ -224,20 +233,20 @@ class MCPTargetResolver:
             log.warning("Target resolution will fail for image/text targets. Consider:")
             log.warning("1. Starting the MCP GUI server")
             log.warning("2. Using position-based targets instead")
-        
+
         self._connection_tested = True
         return self._connection_available
-        
-    async def resolve_target(self, target: Target, screenshot_base64: str = None, offset_x: int = 0, offset_y: int = 0) -> Optional[TargetMatch]:
+
+    async def resolve_target(self, target: Target, screenshot_base64: str = None, offset_x: int = 0, offset_y: int = 0) -> TargetMatch | None:
         """
         Resolve a playbook target to screen coordinates using MCP GUI server.
-        
+
         Args:
             target: Target to resolve (image, text, or position)
             screenshot_base64: Base64 encoded screenshot data (required for image/text targets)
             offset_x: X offset for coordinates
             offset_y: Y offset for coordinates
-            
+
         Returns:
             TargetMatch if found, None otherwise
         """
@@ -295,26 +304,26 @@ class MCPTargetResolver:
                     confidence=1.0,
                     method='position'
                 )
-            
+
             # Require screenshot data for image/text targets
             if (target.image or target.text) and not screenshot_base64:
                 log.error("Screenshot data required for image/text targets")
                 return None
-            
+
             # Connect to MCP GUI server with proper error handling
             try:
                 log.debug(f"Connecting to MCP GUI server at {self.mcp_gui_url}")
-                
+
                 # Create client with longer timeout for PaddleOCR operations
                 timeout = 120.0  # 2 minute timeout
                 async with Client(self.mcp_gui_url, timeout=timeout) as client:
-                    
+
                     # Image-based targeting using find_icon
                     if target.image:
                         log.debug(f"Using MCP find_icon for image: {target.image}")
                         image_path = self.images_dir / target.image
                         log.debug(f"Looking for image at: {image_path}")
-                        
+
                         # Read and encode icon file as base64
                         try:
                             with open(image_path, "rb") as f:
@@ -327,16 +336,16 @@ class MCPTargetResolver:
                         except Exception as e:
                             log.error(f"Failed to read icon file: {e}")
                             return None
-                        
+
                         # Find substage is now handled by action events in playbook controller
-                        
+
                         result = await client.call_tool("find_icon", {
                             "icon_base64": icon_base64,
                             "screenshot_base64": screenshot_base64,
                             "offset_x": offset_x,
                             "offset_y": offset_y
                         })
-                        
+
                         # Parse response
                         if result.data is not None:
                             locations_data = result.data
@@ -348,7 +357,7 @@ class MCPTargetResolver:
                             return None
                         locations = locations_data.get("locations", [])
                         similarities = locations_data.get("similarities", [])
-                        
+
                         if locations:
                             # Create matches for all found locations using actual similarities
                             matches = []
@@ -366,13 +375,13 @@ class MCPTargetResolver:
                             log.info(f"Found {len(matches)} matches for image '{target.image}':")
                             for i, match in enumerate(matches):
                                 log.info(f"  Match {i+1}: at {match.coordinates} (confidence: {match.confidence:.3f})")
-                            
+
                             # Set default strategy if none provided
                             if target.strategy is None:
                                 from adare.types.playbook import BestConfidenceStrategy
                                 target.strategy = BestConfidenceStrategy()
-                                log.info(f"No strategy specified for image target, using default BestConfidenceStrategy")
-                            
+                                log.info("No strategy specified for image target, using default BestConfidenceStrategy")
+
                             # Apply strategy to select from multiple matches
                             strategy_name = target.strategy.__class__.__name__ if target.strategy else "default"
                             strategy_params = ""
@@ -383,7 +392,7 @@ class MCPTargetResolver:
                                     if params:
                                         strategy_params = f" with params {params}"
                             log.info(f"Applying {strategy_name} strategy{strategy_params} to select from {len(matches)} matches")
-                            
+
                             try:
                                 selected_match = self._select_match_by_strategy(matches, target.strategy, reference_coords)
                                 if selected_match:
@@ -391,9 +400,8 @@ class MCPTargetResolver:
                                     log.info(f"Selected match {selected_index}: image '{target.image}' at {selected_match.coordinates} via MCP")
                                     # Mark substage as successful
                                     return selected_match
-                                else:
-                                    log.error(f"Strategy selection returned None for image '{target.image}' with {len(matches)} matches")
-                                    return None
+                                log.error(f"Strategy selection returned None for image '{target.image}' with {len(matches)} matches")
+                                return None
                             except ValueError as strategy_error:
                                 log.error(f"Strategy selection failed for image '{target.image}': {strategy_error}")
                                 log.error(f"Target strategy: {target.strategy}, Matches: {len(matches)}")
@@ -402,7 +410,7 @@ class MCPTargetResolver:
                             log.warning(f"Image '{target.image}' not found via MCP")
                             # Mark substage as failed when no matches found
                             return None
-                    
+
                     # Text-based targeting using find_text
                     if target.text:
                         log.debug(f"Using MCP find_text for text: {target.text}")
@@ -436,7 +444,7 @@ class MCPTargetResolver:
                         # Find substage is now handled by action events in playbook controller
 
                         result = await client.call_tool("find_text", mcp_params)
-                        
+
                         # Parse response
                         if result.data is not None:
                             locations_data = result.data
@@ -448,7 +456,7 @@ class MCPTargetResolver:
                             return None
                         locations = locations_data.get("locations", [])
                         confidences = locations_data.get("confidences", [])
-                        
+
                         if locations:
                             # Create matches for all found text locations using actual OCR confidences
                             matches = []
@@ -472,7 +480,7 @@ class MCPTargetResolver:
                                     # But let's verify. standard MCP find_text usually returns center x,y.
                                     # Verify location info content
                                     log.info(f"DEBUG: location_info['location'] keys: {location_info['location'].keys()}")
-                                    
+
                                     # User confirmed x,y are Center.
                                     # So Region Top-Left is Center - Half Dimension.
                                     if "width" in location_info["location"] and "height" in location_info["location"]:
@@ -483,18 +491,18 @@ class MCPTargetResolver:
                                         matches[-1].region = (rx, ry, w, h)
                                         log.info(f"DEBUG: Calculated Region: {matches[-1].region} from x={x}, y={y}, w={w}, h={h}")
 
-                            
+
                             # Log all found matches with their actual confidences
                             log.info(f"Found {len(matches)} matches for text '{target.text}':")
                             for i, match in enumerate(matches):
                                 log.info(f"  Match {i+1}: '{match.text}' at {match.coordinates} (confidence: {match.confidence:.3f})")
-                            
+
                             # Set default strategy if none provided
                             if target.strategy is None:
                                 from adare.types.playbook import TopLeftStrategy
                                 target.strategy = TopLeftStrategy()  # Text: natural reading order (top-left first)
-                                log.info(f"No strategy specified for text target, using default TopLeftStrategy")
-                            
+                                log.info("No strategy specified for text target, using default TopLeftStrategy")
+
                             # Apply strategy to select from multiple matches
                             strategy_name = target.strategy.__class__.__name__ if target.strategy else "default"
                             strategy_params = ""
@@ -505,7 +513,7 @@ class MCPTargetResolver:
                                     if params:
                                         strategy_params = f" with params {params}"
                             log.info(f"Applying {strategy_name} strategy{strategy_params} to select from {len(matches)} matches")
-                            
+
                             try:
                                 selected_match = self._select_match_by_strategy(matches, target.strategy, reference_coords)
                                 if selected_match:
@@ -513,9 +521,8 @@ class MCPTargetResolver:
                                     log.info(f"Selected match {selected_index}: '{selected_match.text}' at {selected_match.coordinates} via MCP")
                                     # Mark substage as successful
                                     return selected_match
-                                else:
-                                    log.error(f"Strategy selection returned None for text '{target.text}' with {len(matches)} matches")
-                                    return None
+                                log.error(f"Strategy selection returned None for text '{target.text}' with {len(matches)} matches")
+                                return None
                             except ValueError as strategy_error:
                                 log.error(f"Strategy selection failed for text '{target.text}': {strategy_error}")
                                 log.error(f"Target strategy: {target.strategy}, Matches: {len(matches)}")
@@ -524,17 +531,17 @@ class MCPTargetResolver:
                             log.warning(f"Text '{target.text}' not found via MCP")
                             # Mark substage as failed when no matches found
                             return None
-                        
+
             except Exception as mcp_error:
                 if isinstance(mcp_error, FileNotFoundError):
                     raise
                 log.error(f"MCP connection failed: {mcp_error}", exc_info=True)
                 log.error(f"Ensure MCP GUI server is running at {self.mcp_gui_url}")
                 return None
-            
+
             log.warning(f"Target has no valid resolution method: {target}")
             return None
-            
+
         except Exception as e:
             if isinstance(e, FileNotFoundError):
                 raise
@@ -544,11 +551,11 @@ class MCPTargetResolver:
     async def _crop_screenshot_region(
         self,
         screenshot_base64: str,
-        center_coords: Tuple[int, int],
+        center_coords: tuple[int, int],
         padding: int,
         offset_x: int = 0,
         offset_y: int = 0
-    ) -> Tuple[str, int, int]:
+    ) -> tuple[str, int, int]:
         """Crop screenshot to region around reference coordinates for optimization.
 
         Args:
@@ -561,9 +568,10 @@ class MCPTargetResolver:
         Returns:
             Tuple of (cropped_screenshot_base64, new_offset_x, new_offset_y)
         """
+        import base64
+
         import cv2
         import numpy as np
-        import base64
 
         try:
             # Decode screenshot
@@ -607,32 +615,32 @@ class MCPTargetResolver:
 class MCPConditionChecker:
     """
     Helper class for checking playbook conditions using MCP GUI server.
-    
+
     Used by BlockAction to evaluate 'when' conditions.
     """
-    
+
     def __init__(self, target_resolver: MCPTargetResolver):
         """
         Initialize condition checker.
-        
+
         Args:
             target_resolver: MCPTargetResolver instance
         """
         self.resolver = target_resolver
-    
-    async def check_conditions(self, conditions: List, screenshot_base64: str = None) -> bool:
+
+    async def check_conditions(self, conditions: list, screenshot_base64: str = None) -> bool:
         """
         Check if all conditions are met using MCP GUI server.
-        
+
         Args:
             conditions: List of ExistsCondition/NotExistsCondition objects
             screenshot_base64: Base64 encoded screenshot data
-            
+
         Returns:
             True if all conditions are met, False otherwise
         """
         from adare.types.playbook import ExistsCondition, NotExistsCondition
-        
+
         for condition in conditions:
             if isinstance(condition, ExistsCondition):
                 # Check if target exists
@@ -642,9 +650,9 @@ class MCPConditionChecker:
                 )
                 match = await self.resolver.resolve_target(target, screenshot_base64)
                 if not match:
-                    log.debug(f"Exists condition failed: target not found")
+                    log.debug("Exists condition failed: target not found")
                     return False
-                    
+
             elif isinstance(condition, NotExistsCondition):
                 # Check if target does NOT exist
                 target = Target(
@@ -653,8 +661,8 @@ class MCPConditionChecker:
                 )
                 match = await self.resolver.resolve_target(target, screenshot_base64)
                 if match:
-                    log.debug(f"NotExists condition failed: target found")
+                    log.debug("NotExists condition failed: target found")
                     return False
-        
+
         log.debug("All conditions met")
         return True

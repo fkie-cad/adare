@@ -16,10 +16,10 @@ import asyncio
 import logging
 from datetime import datetime
 
-from adarelib.testset.basictest import BasicTest, HostModeCategory
-from adarelib.event.event import TestResult
-from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
 from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
+from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
+from adarelib.event.event import TestResult
+from adarelib.testset.basictest import BasicTest, HostModeCategory
 
 log = logging.getLogger(__name__)
 
@@ -142,20 +142,18 @@ class GuestToHostTestExecutor:
         try:
             if category == HostModeCategory.QGA_PROBE:
                 return await self._execute_qga_probe_test(test_name, test_function, test_instance)
-            elif category in (HostModeCategory.FILE_BASED, HostModeCategory.FILE_CONTENT):
+            if category in (HostModeCategory.FILE_BASED, HostModeCategory.FILE_CONTENT):
                 return await self._execute_file_based_test(test_name, test_function, test_instance)
-            elif category == HostModeCategory.HOST_NATIVE:
+            if category == HostModeCategory.HOST_NATIVE:
                 # Host-native tests (e.g., visual) already run on host
                 # This shouldn't normally reach here (visual tests have execute_on_host=True)
                 return TestResult.error([f"Host-native test '{test_name}' should use existing host test executor"])
-            elif category == HostModeCategory.AGENT_ONLY:
+            if category == HostModeCategory.AGENT_ONLY:
                 return TestResult.error([f"Test '{test_function}' requires in-guest agent (category: agent_only)"])
-            else:
-                # Fallback: try file-based approach if parameter has dst
-                if hasattr(test_instance, 'parameter') and hasattr(test_instance.parameter, 'dst'):
-                    return await self._execute_file_based_test(test_name, test_function, test_instance)
-                else:
-                    return TestResult.error([f"Unknown test category for '{test_function}' in host mode"])
+            # Fallback: try file-based approach if parameter has dst
+            if hasattr(test_instance, 'parameter') and hasattr(test_instance.parameter, 'dst'):
+                return await self._execute_file_based_test(test_name, test_function, test_instance)
+            return TestResult.error([f"Unknown test category for '{test_function}' in host mode"])
         except Exception as e:
             log.error(f"GuestToHostTestExecutor: test '{test_name}' failed: {e}", exc_info=True)
             return TestResult.execution_error(e, f"Host-mode test execution failed for '{test_name}'")
@@ -215,11 +213,10 @@ class GuestToHostTestExecutor:
                 if func_name in ('file_does_not_exist', 'dir_does_not_exist'):
                     # File not found on guest = test should pass (file doesn't exist)
                     return TestResult.success([f'{original_dst} does not exist on guest'])
-                elif func_name in ('file_exists', 'dir_exists'):
+                if func_name in ('file_exists', 'dir_exists'):
                     return TestResult.failed([f'{original_dst} does not exist on guest: {e}'])
-                else:
-                    log.warning(f"GuestToHostTestExecutor: could not pull {original_dst}: {e}")
-                    local_dst = str(self.guest_file._guest_path_to_local(original_dst))
+                log.warning(f"GuestToHostTestExecutor: could not pull {original_dst}: {e}")
+                local_dst = str(self.guest_file._guest_path_to_local(original_dst))
 
         # Rewrite dst and run test
         object.__setattr__(test_instance.parameter, 'dst', local_dst)
@@ -247,22 +244,21 @@ class GuestToHostTestExecutor:
 
         if func_name == 'process_running':
             return await self._test_process_running(test_instance)
-        elif func_name == 'system_service_status':
+        if func_name == 'system_service_status':
             return await self._test_service_status(test_instance)
-        elif func_name == 'user_exists':
+        if func_name == 'user_exists':
             return await self._test_user_exists(test_instance)
-        elif func_name == 'log_entry_exists':
+        if func_name == 'log_entry_exists':
             return await self._test_log_entry_exists(test_instance)
-        elif func_name == 'registry_key_exists':
+        if func_name == 'registry_key_exists':
             return await self._test_registry_key_exists(test_instance)
-        elif func_name == 'registry_value_matches':
+        if func_name == 'registry_value_matches':
             return await self._test_registry_value_matches(test_instance)
-        elif func_name == 'file_permissions':
+        if func_name == 'file_permissions':
             return await self._test_file_permissions(test_instance)
-        elif func_name == 'file_timestamps':
+        if func_name == 'file_timestamps':
             return await self._test_file_timestamps(test_instance)
-        else:
-            return TestResult.error([f"Unknown QGA probe test: {func_name}"])
+        return TestResult.error([f"Unknown QGA probe test: {func_name}"])
 
     async def _test_process_running(self, test_instance: BasicTest) -> TestResult:
         """Check if process is running via QGA."""
@@ -274,8 +270,7 @@ class GuestToHostTestExecutor:
 
         if is_running:
             return TestResult.success([f'process {process_name} is running'])
-        else:
-            return TestResult.failed([f'process {process_name} is not running'])
+        return TestResult.failed([f'process {process_name} is not running'])
 
     async def _test_service_status(self, test_instance: BasicTest) -> TestResult:
         """Check service status via QGA."""
@@ -292,10 +287,9 @@ class GuestToHostTestExecutor:
 
         if actual_status == expected_status:
             return TestResult.success([f'service {service_name} is {actual_status}'])
-        else:
-            return TestResult.failed([
-                f'service {service_name} status mismatch. Expected: {expected_status}, Got: {actual_status}'
-            ])
+        return TestResult.failed([
+            f'service {service_name} status mismatch. Expected: {expected_status}, Got: {actual_status}'
+        ])
 
     async def _test_user_exists(self, test_instance: BasicTest) -> TestResult:
         """Check if user exists via QGA."""
@@ -307,8 +301,7 @@ class GuestToHostTestExecutor:
 
         if exists:
             return TestResult.success([f'user {username} exists'])
-        else:
-            return TestResult.failed([f'user {username} does not exist'])
+        return TestResult.failed([f'user {username} does not exist'])
 
     async def _test_log_entry_exists(self, test_instance: BasicTest) -> TestResult:
         """Search for log entries matching a pattern via QGA."""
@@ -326,8 +319,7 @@ class GuestToHostTestExecutor:
 
         if found:
             return TestResult.success([f'found {len(matches)} log entries matching pattern in {log_file}'])
-        else:
-            return TestResult.failed([f'no log entries matching pattern found in {log_file}'])
+        return TestResult.failed([f'no log entries matching pattern found in {log_file}'])
 
     async def _test_registry_key_exists(self, test_instance: BasicTest) -> TestResult:
         """Check if a Windows registry key exists via QGA PowerShell."""
@@ -339,8 +331,7 @@ class GuestToHostTestExecutor:
 
         if exists:
             return TestResult.success([f'registry key exists: {key_path}'])
-        else:
-            return TestResult.failed([f'registry key does not exist: {key_path}'])
+        return TestResult.failed([f'registry key does not exist: {key_path}'])
 
     async def _test_registry_value_matches(self, test_instance: BasicTest) -> TestResult:
         """Check if a Windows registry value matches expected value via QGA PowerShell."""
@@ -380,10 +371,9 @@ class GuestToHostTestExecutor:
         # Value comparison (compare as strings since QGA returns strings)
         if str(actual_value) == str(expected_value):
             return TestResult.success([f'registry value matches: {actual_value}'])
-        else:
-            return TestResult.failed([
-                f'registry value mismatch. Expected: {expected_value}, Got: {actual_value}'
-            ])
+        return TestResult.failed([
+            f'registry value mismatch. Expected: {expected_value}, Got: {actual_value}'
+        ])
 
     async def _test_file_permissions(self, test_instance: BasicTest) -> TestResult:
         """Check file permissions, owner, and group via QGA stat."""
@@ -452,8 +442,7 @@ class GuestToHostTestExecutor:
 
         if success:
             return TestResult.success(results)
-        else:
-            return TestResult.failed(results)
+        return TestResult.failed(results)
 
     @staticmethod
     def _parse_symbolic_permissions(perm_str: str) -> int:
@@ -505,33 +494,30 @@ class GuestToHostTestExecutor:
                 return TestResult.success([
                     f'{timestamp_type} timestamp matches (±{tolerance}s): {datetime.fromtimestamp(actual_time)}'
                 ])
-            else:
-                return TestResult.failed([
-                    f'{timestamp_type} timestamp mismatch. '
-                    f'Expected: {datetime.fromtimestamp(expected_time)}, Got: {datetime.fromtimestamp(actual_time)}'
-                ])
+            return TestResult.failed([
+                f'{timestamp_type} timestamp mismatch. '
+                f'Expected: {datetime.fromtimestamp(expected_time)}, Got: {datetime.fromtimestamp(actual_time)}'
+            ])
 
-        elif comparison_type == 'before':
+        if comparison_type == 'before':
             expected_time = self._parse_test_timestamp(
                 test_instance.parameter.expected_time,
                 getattr(test_instance.parameter, 'time_format', None)
             )
             if actual_time < expected_time:
                 return TestResult.success([f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected_time)}'])
-            else:
-                return TestResult.failed([f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected_time)}'])
+            return TestResult.failed([f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected_time)}'])
 
-        elif comparison_type == 'after':
+        if comparison_type == 'after':
             expected_time = self._parse_test_timestamp(
                 test_instance.parameter.expected_time,
                 getattr(test_instance.parameter, 'time_format', None)
             )
             if actual_time > expected_time:
                 return TestResult.success([f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected_time)}'])
-            else:
-                return TestResult.failed([f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected_time)}'])
+            return TestResult.failed([f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected_time)}'])
 
-        elif comparison_type == 'between':
+        if comparison_type == 'between':
             start_time = self._parse_test_timestamp(
                 test_instance.parameter.start_time,
                 getattr(test_instance.parameter, 'time_format', None)
@@ -545,24 +531,21 @@ class GuestToHostTestExecutor:
                     f'{timestamp_type} timestamp is between '
                     f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
                 ])
-            else:
-                return TestResult.failed([
-                    f'{timestamp_type} timestamp is not between '
-                    f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
-                ])
+            return TestResult.failed([
+                f'{timestamp_type} timestamp is not between '
+                f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
+            ])
 
-        elif comparison_type == 'within_last':
+        if comparison_type == 'within_last':
             within_duration = test_instance.parameter.within_duration
             duration_seconds = self._parse_duration(within_duration)
             current_time = datetime.now().timestamp()
             threshold_time = current_time - duration_seconds
             if actual_time >= threshold_time:
                 return TestResult.success([f'{timestamp_type} timestamp is within last {within_duration}'])
-            else:
-                return TestResult.failed([f'{timestamp_type} timestamp is not within last {within_duration}'])
+            return TestResult.failed([f'{timestamp_type} timestamp is not within last {within_duration}'])
 
-        else:
-            return TestResult.error([f'Unsupported comparison type: {comparison_type}'])
+        return TestResult.error([f'Unsupported comparison type: {comparison_type}'])
 
     @staticmethod
     def _parse_test_timestamp(timestamp, time_format=None) -> float:
@@ -611,9 +594,8 @@ class GuestToHostTestExecutor:
         test_method = test_instance.test
         if asyncio.iscoroutinefunction(test_method):
             return await test_method()
-        else:
-            # Run sync test in thread pool to avoid blocking the event loop
-            return await asyncio.to_thread(test_method)
+        # Run sync test in thread pool to avoid blocking the event loop
+        return await asyncio.to_thread(test_method)
 
     def cleanup(self):
         """Clean up temp files."""

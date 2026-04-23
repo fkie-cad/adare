@@ -6,7 +6,6 @@ All hypervisor implementations must provide networking functionality.
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Optional
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ class AbstractNetworkingMixin(ABC):
         self,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """
@@ -53,7 +52,7 @@ class AbstractNetworkingMixin(ABC):
         guest_ip: str = "",
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> int:
         """
@@ -82,7 +81,7 @@ class AbstractNetworkingMixin(ABC):
         name: str,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> int:
         """
@@ -110,7 +109,7 @@ class AbstractNetworkingMixin(ABC):
         readonly: bool = False,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """
@@ -137,7 +136,7 @@ class AbstractNetworkingMixin(ABC):
         mountpoint: Path,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """
@@ -161,7 +160,7 @@ class AbstractNetworkingMixin(ABC):
         self,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """
@@ -182,10 +181,10 @@ class AbstractNetworkingMixin(ABC):
     async def remove_shared_folder(
         self,
         name: str,
-        mountpoint: Optional[str] = None,
+        mountpoint: str | None = None,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """
@@ -209,7 +208,7 @@ class AbstractNetworkingMixin(ABC):
         self,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """
@@ -243,7 +242,7 @@ class AbstractNetworkingMixin(ABC):
         folders: dict,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """

@@ -1,7 +1,11 @@
 # external imports
-import aiohttp
 import asyncio
 import json
+
+# configure logging
+import logging
+
+import aiohttp
 
 # internal imports
 import adare.config.server as config_server
@@ -9,8 +13,6 @@ from adare.database.api.request import RequestSessionApi
 from adare.webappaccess.login import WebappLogin
 from adare.webappaccess.request_header import get_authenticated_request_header
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -28,10 +30,9 @@ async def check_request(request_ulid: str):
             if response.status == 200:
                 response_json = await response.json()
                 return response_json
-            else:
-                log.error(f'request error ({response.status}, {await response.text()})')
-                return None
-    except asyncio.exceptions.TimeoutError as e:
+            log.error(f'request error ({response.status}, {await response.text()})')
+            return None
+    except asyncio.exceptions.TimeoutError:
         log.error("request failed due to timeout")
         return None
     except aiohttp.ClientConnectorError as e:
@@ -54,7 +55,7 @@ async def send_experiment_request(request_ulid: str):
         usersession = login_interface.get_user_session()
         if not usersession:
             log.error("no user is logged in")
-            return False, f"no user is logged in"
+            return False, "no user is logged in"
         token = usersession.token
 
         # set token in header
@@ -150,16 +151,16 @@ async def send_experiment_request(request_ulid: str):
                     log.info("sending an experiment request was successful")
                 elif resp.status == 401:
                     log.error("sending an experiment request failed due to authentication error")
-                    error_msg = f"authentication failed"
+                    error_msg = "authentication failed"
                 elif resp.status == 400:
                     log.error("sending an experiment request failed due to bad request")
-                    error_msg = f"bad request"
+                    error_msg = "bad request"
                 else:
                     response_text = await resp.text()
                     log.error(f"request error ({resp.status}, {response_text})")
                     error_msg = f"request error ({resp.status}, {response_text})"
 
-        except asyncio.exceptions.TimeoutError as e:
+        except asyncio.exceptions.TimeoutError:
             log.error("request failed due to timeout")
             error_msg = f"server ({config_server.WEBSERVER_URL}) is not reachable (timeout)"
         except aiohttp.ClientConnectorError as e:
@@ -174,5 +175,4 @@ async def send_experiment_request(request_ulid: str):
 
         if error_msg:
             return False, error_msg
-        else:
-            return True, None
+        return True, None

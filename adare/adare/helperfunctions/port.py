@@ -1,8 +1,8 @@
 # external imports
-import socket
-
 # configure logging
 import logging
+import socket
+
 log = logging.getLogger(__name__)
 
 
@@ -16,7 +16,7 @@ def is_localhost_port_free(port: int) -> bool:
         s.bind((host, port))
         s.close()
         port_free = True
-    except socket.error:
+    except OSError:
         pass
 
     return port_free

@@ -7,9 +7,9 @@ log = logging.getLogger(__name__)
 
 def exec_status(arguments):
     """Show quick overview of current ADARE state."""
-    from adare.api import AdareAPI
     from rich.console import Console
-    from rich.table import Table
+
+    from adare.api import AdareAPI
 
     console = Console()
     api = AdareAPI()
@@ -52,7 +52,6 @@ def exec_status(arguments):
 
     # Database status
     try:
-        from adare.cli.manage import exec_manage_db_status
         from adare.database.manager import DatabaseManager
         db = DatabaseManager()
         if db.is_initialized():

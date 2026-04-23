@@ -1,16 +1,15 @@
 # external imports
-import sqlalchemy
-from sqlalchemy.orm import sessionmaker
-from pathlib import Path
-
-# internal imports
-import adare.config.database as config_database
-from adare.database.models.global_models import Project, Environment, OsInfo
-from adare.database.api.base import GlobalDatabaseApi
-from adare.database.exceptions import DatabaseProjectCreationError
-
 # configure logging
 import logging
+from pathlib import Path
+
+import sqlalchemy
+
+# internal imports
+from adare.database.api.base import GlobalDatabaseApi
+from adare.database.exceptions import DatabaseProjectCreationError
+from adare.database.models.global_models import Environment, OsInfo, Project
+
 log = logging.getLogger(__name__)
 
 
@@ -117,5 +116,4 @@ class ProjectDbApi(GlobalDatabaseApi):
             .first()
         ):
             return self._session.query(Environment).filter(Environment.project == project).all()
-        else:
-            raise sqlalchemy.orm.exc.NoResultFound(f"Project '{project_name}' not found in database")
+        raise sqlalchemy.orm.exc.NoResultFound(f"Project '{project_name}' not found in database")

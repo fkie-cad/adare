@@ -6,12 +6,10 @@ statistics, and management operations.
 """
 
 import logging
-from typing import List, Dict, Any
-from datetime import datetime
 
-from rich.table import Table
-from rich.panel import Panel
 from rich.layout import Layout
+from rich.panel import Panel
+from rich.table import Table
 
 from adare.backend.vm.instance_manager import get_vm_instance_stats
 from adare.backend.vm.port_manager import get_port_usage_stats
@@ -242,7 +240,7 @@ def print_port_usage_stats():
         print(f"Error: {e}")
 
 
-def print_vm_instance_cleanup_results(cleaned_instances: List[str], cleanup_type: str):
+def print_vm_instance_cleanup_results(cleaned_instances: list[str], cleanup_type: str):
     """Print results of VM instance cleanup operation."""
     if not cleaned_instances:
         print(f"No instances found for cleanup ({cleanup_type}).")

@@ -1,17 +1,19 @@
 """API for playbook database operations."""
 
-import logging
 import json
+import logging
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
-from sqlalchemy.exc import SQLAlchemyError
+from typing import Any
+
 import cattrs
 import yaml
+from sqlalchemy.exc import SQLAlchemyError
 
-from adare.database.models.project_models import Playbook, PlaybookItem, ActionExecution, Experiment
-from adare.types.playbook import parse_playbook, Playbook as PlaybookType, ActionType
 from adare.database.api.base import ProjectDatabaseApi
-from datetime import datetime, timezone
+from adare.database.models.project_models import ActionExecution, Experiment, Playbook, PlaybookItem
+from adare.types.playbook import ActionType, parse_playbook
+from adare.types.playbook import Playbook as PlaybookType
 
 log = logging.getLogger(__name__)
 
@@ -21,8 +23,8 @@ class PlaybookApi(ProjectDatabaseApi):
 
     def __init__(self, project_path: Path):
         super().__init__(project_path)
-    
-    def populate_playbook_from_file(self, experiment: Experiment, playbook_file_path: Path, parsed_playbook: Optional[PlaybookType] = None) -> Playbook:
+
+    def populate_playbook_from_file(self, experiment: Experiment, playbook_file_path: Path, parsed_playbook: PlaybookType | None = None) -> Playbook:
         """Parse YAML playbook file and populate database models."""
         try:
             # Read original YAML content for storage
@@ -34,9 +36,10 @@ class PlaybookApi(ProjectDatabaseApi):
             if experiment.environments:
                 # Use first environment's OS info - query from global database
                 env_id = experiment.environments[0].id
+                from sqlalchemy.orm import joinedload
+
                 from adare.database.api.base import GlobalDatabaseApi
                 from adare.database.models.global_models import Environment, Vm
-                from sqlalchemy.orm import joinedload
                 with GlobalDatabaseApi() as global_api:
                     env = global_api._session.query(Environment).options(
                         joinedload(Environment.vm).joinedload(Vm.osinfo)
@@ -50,27 +53,27 @@ class PlaybookApi(ProjectDatabaseApi):
 
             # Use pre-parsed playbook if available, otherwise parse from file
             config = parsed_playbook if parsed_playbook is not None else parse_playbook(playbook_file_path)
-            
+
             # Create or update playbook record
             playbook = self._get_or_create_playbook(experiment, config, original_yaml_content)
-            
+
             # Flush to get the playbook ID assigned before creating items
             self._session.flush()
-            
+
             # Clear existing items (for updates)
             self._session.query(PlaybookItem).filter(
                 PlaybookItem.playbook_id == playbook.id
             ).delete()
-            
+
             # Convert actions to database items
             for order, action in enumerate(config.actions):
                 self._create_playbook_item(playbook, action, order)
-            
+
             self._session.commit()
             log.info(f"Populated playbook for experiment {experiment.name} with {len(config.actions)} actions")
             return playbook
-            
-        except (OSError, IOError) as e:
+
+        except OSError as e:
             self._session.rollback()
             log.error(f"Failed to read playbook file {playbook_file_path}: {e}", exc_info=True)
             raise
@@ -86,13 +89,13 @@ class PlaybookApi(ProjectDatabaseApi):
             self._session.rollback()
             log.error(f"Database error populating playbook from {playbook_file_path}: {e}", exc_info=True)
             raise
-    
+
     def _get_or_create_playbook(self, experiment: Experiment, config: PlaybookType, original_yaml_content: str) -> Playbook:
         """Get existing playbook or create new one."""
         playbook = self._session.query(Playbook).filter(
             Playbook.experiment_id == experiment.id
         ).first()
-        
+
         if playbook:
             # Update existing
             playbook.settings = self._config_to_settings_json(config)
@@ -107,27 +110,27 @@ class PlaybookApi(ProjectDatabaseApi):
                 original_yaml_content=original_yaml_content
             )
             self._session.add(playbook)
-        
+
         return playbook
-    
+
     def _create_playbook_item(self, playbook: Playbook, action: ActionType, sequence_order: int) -> PlaybookItem:
         """Convert action to PlaybookItem."""
         # Determine action type from class name
         action_type = action.__class__.__name__.replace('Action', '').lower()
-        
+
         # Extract target information
         target_json = None
         if hasattr(action, 'target'):
             target_json = self._target_to_json(action.target)
-        
+
         # Extract parameters (all other fields)
         parameters = self._action_to_parameters_json(action)
-        
+
         # Extract conditions
         conditions_json = None
         if hasattr(action, 'when') and action.when:
             conditions_json = {"when": [self._condition_to_json(cond) for cond in action.when]}
-        
+
         item = PlaybookItem(
             playbook_id=playbook.id,
             item_type='action',
@@ -139,19 +142,19 @@ class PlaybookApi(ProjectDatabaseApi):
             description=getattr(action, 'description', ''),
             is_enabled=True
         )
-        
+
         self._session.add(item)
         return item
-    
-    def _config_to_settings_json(self, config: PlaybookType) -> Dict[str, Any]:
+
+    def _config_to_settings_json(self, config: PlaybookType) -> dict[str, Any]:
         """Convert Config.settings to JSON."""
         if not config.settings:
             return {}
-        
+
         result = {
             "idle": config.settings.idle
         }
-        
+
         # Add optional settings if they exist
         if hasattr(config.settings, 'timeout') and config.settings.timeout is not None:
             result["timeout"] = config.settings.timeout
@@ -159,103 +162,101 @@ class PlaybookApi(ProjectDatabaseApi):
             result["screenshot"] = config.settings.screenshot
         if hasattr(config.settings, 'continue_on_test_failure'):
             result["continue_on_test_failure"] = config.settings.continue_on_test_failure
-        
+
         return result
-    
-    def _target_to_json(self, target) -> Dict[str, Any]:
+
+    def _target_to_json(self, target) -> dict[str, Any]:
         """Convert Target object to JSON."""
         result = {}
         if target.image:
             result["image"] = target.image
         if target.text:
-            result["text"] = target.text  
+            result["text"] = target.text
         if target.position:
             result["position"] = target.position
         if target.strategy:
             result["strategy"] = self._strategy_to_json(target.strategy)
         return result
-    
-    def _strategy_to_json(self, strategy) -> Dict[str, Any]:
+
+    def _strategy_to_json(self, strategy) -> dict[str, Any]:
         """Convert strategy object to JSON."""
         import attrs
-        from adare.types.playbook import SweepStrategy, BestConfidenceStrategy, ClosestToStrategy
-        
+
+        from adare.types.playbook import SweepStrategy
+
         strategy_class = strategy.__class__.__name__
-        
+
         if isinstance(strategy, SweepStrategy):
             return {strategy_class: {"index": strategy.index}}
-        elif attrs.has(strategy):
+        if attrs.has(strategy):
             # For attrs-defined strategies, use attrs.asdict()
             return {strategy_class: attrs.asdict(strategy)}
-        elif hasattr(strategy, '__dict__'):
+        if hasattr(strategy, '__dict__'):
             # For regular classes with attributes, serialize all fields
             return {strategy_class: strategy.__dict__}
-        else:
-            # For simple strategies with no attributes
-            return {strategy_class: {}}
-    
-    def _condition_to_json(self, condition) -> Dict[str, Any]:
+        # For simple strategies with no attributes
+        return {strategy_class: {}}
+
+    def _condition_to_json(self, condition) -> dict[str, Any]:
         """Convert condition object to JSON."""
         condition_type = condition.__class__.__name__.replace('Condition', '').lower()
         result = {"type": condition_type}
-        
+
         # Serialize all non-callable attributes
         for attr_name in dir(condition):
-            if (not attr_name.startswith('_') and 
+            if (not attr_name.startswith('_') and
                 attr_name != '__class__' and
                 hasattr(condition, attr_name)):
-                
+
                 attr_value = getattr(condition, attr_name)
                 if not callable(attr_value) and attr_value is not None:
                     result[attr_name] = self._serialize_value(attr_value)
-            
+
         return result
-    
-    def _action_to_parameters_json(self, action: ActionType) -> Dict[str, Any]:
+
+    def _action_to_parameters_json(self, action: ActionType) -> dict[str, Any]:
         """Extract action-specific parameters to JSON."""
         parameters = {}
-        
+
         # Get all attributes except common ones
         exclude_attrs = {'target', 'when', 'description'}
-        
+
         for attr_name in dir(action):
-            if (not attr_name.startswith('_') and 
+            if (not attr_name.startswith('_') and
                 attr_name not in exclude_attrs and
                 hasattr(action, attr_name)):
-                
+
                 value = getattr(action, attr_name)
                 if not callable(value):
                     parameters[attr_name] = self._serialize_value(value)
-        
+
         return parameters
-    
-    def _serialize_wait_condition(self, condition) -> Dict[str, Any]:
+
+    def _serialize_wait_condition(self, condition) -> dict[str, Any]:
         """Serialize WaitCondition to JSON, only including the active field."""
-        from adare.types.playbook import WaitCondition
 
         # Serialize only the non-None field (one must be set per WaitCondition validation)
         if condition.exists is not None:
             return {"exists": self._target_to_json(condition.exists)}
-        elif condition.not_exists is not None:
+        if condition.not_exists is not None:
             return {"not_exists": self._target_to_json(condition.not_exists)}
-        elif condition.all is not None:
+        if condition.all is not None:
             return {"all": [self._serialize_wait_condition(c) for c in condition.all]}
-        elif condition.any is not None:
+        if condition.any is not None:
             return {"any": [self._serialize_wait_condition(c) for c in condition.any]}
-        elif condition.negate is not None:
+        if condition.negate is not None:
             return {"negate": self._serialize_wait_condition(condition.negate)}
-        else:
-            raise ValueError(f"Invalid WaitCondition: no active field found")
+        raise ValueError("Invalid WaitCondition: no active field found")
 
     def _serialize_value(self, value) -> Any:
         """Recursively serialize complex objects to JSON-compatible format."""
         if value is None:
             return None
-        elif isinstance(value, (str, int, float, bool)):
+        if isinstance(value, (str, int, float, bool)):
             return value
-        elif isinstance(value, list):
+        if isinstance(value, list):
             return [self._serialize_value(item) for item in value]
-        elif isinstance(value, dict):
+        if isinstance(value, dict):
             return {k: self._serialize_value(v) for k, v in value.items()}
 
         # CRITICAL: Check WaitCondition BEFORE hasattr(__dict__) because attrs classes
@@ -271,47 +272,45 @@ class PlaybookApi(ProjectDatabaseApi):
             if attrs.has(value):
                 # Use attrs.asdict() for attrs-defined classes
                 return attrs.asdict(value, recurse=True, filter=lambda attr, val: val is not None)
-            else:
-                # Handle regular classes with __dict__
-                result = {}
-                for attr_name in dir(value):
-                    if not attr_name.startswith('_') and hasattr(value, attr_name):
-                        attr_value = getattr(value, attr_name)
-                        if not callable(attr_value):
-                            result[attr_name] = self._serialize_value(attr_value)
-                return result
-        else:
-            # Fallback: try to convert to string
-            return str(value)
-    
-    def get_playbook_by_experiment(self, experiment_id: str) -> Optional[Playbook]:
+            # Handle regular classes with __dict__
+            result = {}
+            for attr_name in dir(value):
+                if not attr_name.startswith('_') and hasattr(value, attr_name):
+                    attr_value = getattr(value, attr_name)
+                    if not callable(attr_value):
+                        result[attr_name] = self._serialize_value(attr_value)
+            return result
+        # Fallback: try to convert to string
+        return str(value)
+
+    def get_playbook_by_experiment(self, experiment_id: str) -> Playbook | None:
         """Get playbook for an experiment."""
         return self._session.query(Playbook).filter(
             Playbook.experiment_id == experiment_id
         ).first()
-    
-    def get_playbook_items(self, playbook_id: str, parent_id: Optional[str] = None) -> List[PlaybookItem]:
+
+    def get_playbook_items(self, playbook_id: str, parent_id: str | None = None) -> list[PlaybookItem]:
         """Get playbook items, optionally filtered by parent."""
         query = self._session.query(PlaybookItem).filter(
             PlaybookItem.playbook_id == playbook_id
         )
-        
+
         if parent_id:
             query = query.filter(PlaybookItem.parent_id == parent_id)
         else:
             query = query.filter(PlaybookItem.parent_id.is_(None))
-        
+
         return query.order_by(PlaybookItem.sequence_order).all()
-    
-    def get_playbook_by_experiment_id(self, experiment_id: str) -> Optional[Playbook]:
+
+    def get_playbook_by_experiment_id(self, experiment_id: str) -> Playbook | None:
         """Get playbook by experiment ID."""
         return self._session.query(Playbook).filter(
             Playbook.experiment_id == experiment_id
         ).first()
-    
+
     def create_action_execution(
-        self, 
-        playbook_item_id: str, 
+        self,
+        playbook_item_id: str,
         experiment_run_id: str,
         status: str = 'pending'
     ) -> ActionExecution:
@@ -320,12 +319,12 @@ class PlaybookApi(ProjectDatabaseApi):
             playbook_item_id=playbook_item_id,
             experiment_run_id=experiment_run_id,
             status=status,
-            created_at=datetime.now(timezone.utc)
+            created_at=datetime.now(UTC)
         )
         self._session.add(execution)
         self._session.flush()  # Get ID assigned
         return execution
-    
+
     def update_action_execution_start(self, execution_id: str) -> None:
         """Mark action execution as started."""
         execution = self._session.query(ActionExecution).filter(
@@ -333,15 +332,15 @@ class PlaybookApi(ProjectDatabaseApi):
         ).first()
         if execution:
             execution.status = 'running'
-            execution.started_at = datetime.now(timezone.utc)
+            execution.started_at = datetime.now(UTC)
             self._session.flush()
-    
+
     def update_action_execution_complete(
         self,
         execution_id: str,
         success: bool,
-        result_data: Optional[Dict] = None,
-        error_message: Optional[str] = None,
+        result_data: dict | None = None,
+        error_message: str | None = None,
         attempt_number: int = 1
     ) -> None:
         """Mark action execution as completed."""
@@ -350,18 +349,18 @@ class PlaybookApi(ProjectDatabaseApi):
         ).first()
         if execution:
             execution.status = 'success' if success else 'failed'
-            execution.completed_at = datetime.now(timezone.utc)
+            execution.completed_at = datetime.now(UTC)
             execution.result_data = result_data
             execution.error_message = error_message
             execution.attempt_number = attempt_number
             self._session.flush()
-    
-    def get_action_executions_by_run(self, experiment_run_id: str) -> List[ActionExecution]:
+
+    def get_action_executions_by_run(self, experiment_run_id: str) -> list[ActionExecution]:
         """Get all action executions for an experiment run."""
         return self._session.query(ActionExecution).filter(
             ActionExecution.experiment_run_id == experiment_run_id
         ).order_by(ActionExecution.created_at).all()
-    
+
     def recover_playbook_yaml(self, experiment_id: str) -> str:
         """Recover the original playbook YAML from database.
 
@@ -387,7 +386,7 @@ class PlaybookApi(ProjectDatabaseApi):
     # DESERIALIZATION METHODS (Database models -> Python objects)
     # ============================================================================
 
-    def _json_to_settings(self, settings_json: Dict[str, Any]):
+    def _json_to_settings(self, settings_json: dict[str, Any]):
         """Convert settings JSON to Settings object."""
         if not settings_json:
             from adare.types.playbook import Settings
@@ -404,7 +403,7 @@ class PlaybookApi(ProjectDatabaseApi):
             forensic_logging=settings_json.get('forensic_logging', True)
         )
 
-    def _json_to_target(self, target_json: Optional[Dict[str, Any]]):
+    def _json_to_target(self, target_json: dict[str, Any] | None):
         """Convert target JSON to Target object."""
         if not target_json:
             return None
@@ -423,12 +422,18 @@ class PlaybookApi(ProjectDatabaseApi):
             strategy=strategy
         )
 
-    def _json_to_strategy(self, strategy_json: Dict[str, Any]):
+    def _json_to_strategy(self, strategy_json: dict[str, Any]):
         """Convert strategy JSON to strategy object."""
         from adare.types.playbook import (
-            SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
-            TopLeftStrategy, TopRightStrategy, BottomLeftStrategy, BottomRightStrategy,
-            LargestStrategy, SmallestStrategy
+            BestConfidenceStrategy,
+            BottomLeftStrategy,
+            BottomRightStrategy,
+            ClosestToStrategy,
+            LargestStrategy,
+            SmallestStrategy,
+            SweepStrategy,
+            TopLeftStrategy,
+            TopRightStrategy,
         )
 
         # Strategy JSON format: {"StrategyClassName": {params...}}
@@ -453,7 +458,7 @@ class PlaybookApi(ProjectDatabaseApi):
 
         return strategy_class(**strategy_params)
 
-    def _json_to_conditions(self, conditions_json: Optional[Dict[str, Any]]):
+    def _json_to_conditions(self, conditions_json: dict[str, Any] | None):
         """Convert conditions JSON to list of condition objects."""
         if not conditions_json or 'when' not in conditions_json:
             return None
@@ -482,10 +487,22 @@ class PlaybookApi(ProjectDatabaseApi):
     def _playbook_item_to_action(self, item: PlaybookItem) -> ActionType:
         """Convert PlaybookItem database model to Action object."""
         from adare.types.playbook import (
-            ClickAction, DragAction, KeyboardAction, IdleAction, ScrollAction, GotoAction,
-            ActionTestAction, CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction,
-            PullAction, PauseAction, WaitUntilAction, WaitCondition, Target,
-            SnapshotFilesystemAction, PullChangedFilesAction
+            ActionTestAction,
+            BlockAction,
+            ClickAction,
+            CommandAction,
+            DragAction,
+            GotoAction,
+            IdleAction,
+            KeyboardAction,
+            PauseAction,
+            PullAction,
+            PullChangedFilesAction,
+            SaveTimestampAction,
+            ScreenshotAction,
+            ScrollAction,
+            SnapshotFilesystemAction,
+            WaitUntilAction,
         )
 
         # Common fields
@@ -506,7 +523,7 @@ class PlaybookApi(ProjectDatabaseApi):
             log.warning(f"parameters is a string (double-encoding issue), parsing JSON: {params[:100]}...")
             try:
                 params = json.loads(params)
-                log.info(f"Successfully parsed JSON string to dict")
+                log.info("Successfully parsed JSON string to dict")
             except json.JSONDecodeError as e:
                 log.error(f"Failed to parse parameters JSON: {e}")
                 raise ValueError(f"Invalid JSON in {action_type} action parameters: {params[:200]}")
@@ -518,7 +535,7 @@ class PlaybookApi(ProjectDatabaseApi):
                 description=description
             )
 
-        elif action_type == 'drag':
+        if action_type == 'drag':
             # Drag has src and dst targets in parameters
             src_target = self._json_to_target(params.get('src'))
             dst_target = self._json_to_target(params.get('dst'))
@@ -528,7 +545,7 @@ class PlaybookApi(ProjectDatabaseApi):
                 description=description
             )
 
-        elif action_type == 'keyboard':
+        if action_type == 'keyboard':
             return KeyboardAction(
                 key=params.get('key'),
                 text=params.get('text'),
@@ -537,32 +554,32 @@ class PlaybookApi(ProjectDatabaseApi):
                 description=description
             )
 
-        elif action_type == 'idle':
+        if action_type == 'idle':
             return IdleAction(
                 duration=params.get('duration', 0.0),
                 description=description
             )
 
-        elif action_type == 'scroll':
+        if action_type == 'scroll':
             return ScrollAction(
                 direction=params.get('direction', 'down'),
                 amount=params.get('amount', 1),
                 description=description
             )
 
-        elif action_type == 'goto':
+        if action_type == 'goto':
             return GotoAction(
                 target=self._json_to_target(item.target),
                 description=description
             )
 
-        elif action_type == 'actiontest':
+        if action_type == 'actiontest':
             return ActionTestAction(
                 name=params.get('name', ''),
                 description=description
             )
 
-        elif action_type == 'command':
+        if action_type == 'command':
             return CommandAction(
                 command=params.get('command', ''),
                 name=params.get('name'),
@@ -576,7 +593,7 @@ class PlaybookApi(ProjectDatabaseApi):
                 background=params.get('background', False)
             )
 
-        elif action_type == 'screenshot':
+        if action_type == 'screenshot':
             return ScreenshotAction(
                 description=description,
                 name=params.get('name'),
@@ -586,13 +603,13 @@ class PlaybookApi(ProjectDatabaseApi):
                 height=params.get('height')
             )
 
-        elif action_type == 'savetimestamp':
+        if action_type == 'savetimestamp':
             return SaveTimestampAction(
                 variable=params.get('variable', ''),
                 description=description
             )
 
-        elif action_type == 'pull':
+        if action_type == 'pull':
             # Handle both old format (src as string) and new format (src as list)
             src = params.get('src', '')
             return PullAction(
@@ -602,14 +619,14 @@ class PlaybookApi(ProjectDatabaseApi):
                 description=description
             )
 
-        elif action_type == 'pause':
+        if action_type == 'pause':
             return PauseAction(
                 message=params.get('message'),
                 name=params.get('name'),
                 description=description
             )
 
-        elif action_type == 'waituntil':
+        if action_type == 'waituntil':
             # Reconstruct WaitCondition recursively
             condition_data = params.get('condition', {})
             condition = self._json_to_wait_condition(condition_data)
@@ -621,19 +638,19 @@ class PlaybookApi(ProjectDatabaseApi):
                 description=description
             )
 
-        elif action_type == 'block':
+        if action_type == 'block':
             # Block actions contain nested actions - reconstruct recursively
             nested_actions = []
             # Note: Nested actions would need to be stored as child PlaybookItems
             # For now, log warning if block actions are encountered
-            log.warning(f"Block actions not yet fully supported in database deserialization")
+            log.warning("Block actions not yet fully supported in database deserialization")
             return BlockAction(
                 actions=nested_actions,
                 description=description,
                 when=conditions
             )
 
-        elif action_type == 'snapshotfilesystem':
+        if action_type == 'snapshotfilesystem':
             return SnapshotFilesystemAction(
                 variable=params.get('variable', ''),
                 root_path=params.get('root_path'),
@@ -641,7 +658,7 @@ class PlaybookApi(ProjectDatabaseApi):
                 description=description
             )
 
-        elif action_type == 'pullchangedfiles':
+        if action_type == 'pullchangedfiles':
             return PullChangedFilesAction(
                 snapshot_before=params.get('snapshot_before', ''),
                 snapshot_after=params.get('snapshot_after', ''),
@@ -652,29 +669,27 @@ class PlaybookApi(ProjectDatabaseApi):
                 description=description
             )
 
-        else:
-            raise ValueError(f"Unknown action type in database: {action_type}")
+        raise ValueError(f"Unknown action type in database: {action_type}")
 
-    def _json_to_wait_condition(self, condition_data: Dict[str, Any]):
+    def _json_to_wait_condition(self, condition_data: dict[str, Any]):
         """Recursively convert condition JSON to WaitCondition object."""
         from adare.types.playbook import WaitCondition
 
         # Check which field is set
         if 'exists' in condition_data and condition_data['exists']:
             return WaitCondition(exists=self._json_to_target(condition_data['exists']))
-        elif 'not_exists' in condition_data and condition_data['not_exists']:
+        if 'not_exists' in condition_data and condition_data['not_exists']:
             return WaitCondition(not_exists=self._json_to_target(condition_data['not_exists']))
-        elif 'all' in condition_data and condition_data['all']:
+        if 'all' in condition_data and condition_data['all']:
             nested = [self._json_to_wait_condition(c) for c in condition_data['all']]
             return WaitCondition(all=nested)
-        elif 'any' in condition_data and condition_data['any']:
+        if 'any' in condition_data and condition_data['any']:
             nested = [self._json_to_wait_condition(c) for c in condition_data['any']]
             return WaitCondition(any=nested)
-        elif 'negate' in condition_data and condition_data['negate']:
+        if 'negate' in condition_data and condition_data['negate']:
             nested = self._json_to_wait_condition(condition_data['negate'])
             return WaitCondition(negate=nested)
-        else:
-            raise ValueError(f"Invalid WaitCondition data: {condition_data}")
+        raise ValueError(f"Invalid WaitCondition data: {condition_data}")
 
     def _load_variables_and_tests_from_yaml(self, yaml_content: str):
         """Load variables and tests from YAML content (complex structures)."""
@@ -692,7 +707,7 @@ class PlaybookApi(ProjectDatabaseApi):
         tests = data.get('tests', [])
 
         return variables, tests
-    
+
     def load_playbook_from_database(self, experiment_id: str) -> PlaybookType:
         """Load Playbook object from database models (no YAML parsing for actions).
 
@@ -710,7 +725,7 @@ class PlaybookApi(ProjectDatabaseApi):
             raise ValueError(f"No playbook found for experiment {experiment_id}")
 
         # Reconstruct actions from PlaybookItem database models
-        log.info(f"Loading playbook from database models (not parsing YAML for actions)")
+        log.info("Loading playbook from database models (not parsing YAML for actions)")
         items = self.get_playbook_items(playbook.id)
         log.info(f"Reconstructing {len(items)} actions from PlaybookItem database models")
         actions = [self._playbook_item_to_action(item) for item in items]
@@ -722,7 +737,7 @@ class PlaybookApi(ProjectDatabaseApi):
         variables = None
         tests = []
         if playbook.original_yaml_content:
-            log.info(f"Parsing variables/tests from stored YAML (not re-parsing actions)")
+            log.info("Parsing variables/tests from stored YAML (not re-parsing actions)")
             variables, tests = self._load_variables_and_tests_from_yaml(playbook.original_yaml_content)
 
         from adare.types.playbook import Playbook as PlaybookType

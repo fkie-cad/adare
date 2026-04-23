@@ -6,10 +6,10 @@ allowing host-side tests to perform visual analysis (text/icon detection)
 without directly coupling to the MCP client implementation.
 """
 
-import logging
 import base64
+import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -34,9 +34,9 @@ class CVService:
     async def find_text(
         self,
         text: str,
-        screenshot_data: Dict[str, Any],
+        screenshot_data: dict[str, Any],
         format: str = "json"
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Find text in screenshot.
 
@@ -81,10 +81,10 @@ class CVService:
     async def find_icon(
         self,
         icon_path: Path,
-        screenshot_data: Dict[str, Any],
+        screenshot_data: dict[str, Any],
         threshold: float = 0.5,
         max_results: int = 10
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Find icon/image in screenshot.
 
@@ -130,7 +130,7 @@ class CVService:
 
             return locations
 
-        except (OSError, IOError) as e:
+        except OSError as e:
             raise FileNotFoundError(f"Failed to read icon file {icon_path}: {e}")
         except KeyError as e:
             raise ValueError(f"Screenshot data missing required field: {e}")
@@ -140,9 +140,9 @@ class CVService:
 
     async def get_all_text(
         self,
-        screenshot_data: Dict[str, Any],
+        screenshot_data: dict[str, Any],
         format: str = "json"
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Extract all text from screenshot using OCR.
 

@@ -17,9 +17,9 @@ Instead, use:
         # Work with VM
 """
 
-from abc import ABC, abstractmethod
-from typing import Optional, TYPE_CHECKING
 import logging
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from adare.database.models.global_models import VmInstance
@@ -46,7 +46,7 @@ class HypervisorIdentifierStrategy(ABC):
         pass
 
     @abstractmethod
-    def get_identifier(self, vm_instance: 'VmInstance') -> Optional[str]:
+    def get_identifier(self, vm_instance: 'VmInstance') -> str | None:
         """
         Get the hypervisor-specific identifier for a VM instance.
 
@@ -84,7 +84,7 @@ class HypervisorIdentifierStrategy(ABC):
         """
         pass
 
-    def get_vm_name(self, identifier: str) -> Optional[str]:
+    def get_vm_name(self, identifier: str) -> str | None:
         """
         Get the VM name from the identifier.
 
@@ -108,7 +108,7 @@ class VirtualBoxIdentifierStrategy(HypervisorIdentifierStrategy):
     def hypervisor_name(self) -> str:
         return 'virtualbox'
 
-    def get_identifier(self, vm_instance: 'VmInstance') -> Optional[str]:
+    def get_identifier(self, vm_instance: 'VmInstance') -> str | None:
         """Get the VirtualBox UUID for the instance."""
         return vm_instance.vbox_uuid
 
@@ -131,8 +131,8 @@ class VirtualBoxIdentifierStrategy(HypervisorIdentifierStrategy):
             return "not_found"
 
         try:
-            from adare.hypervisor.virtualbox.vm import VirtualBoxVM
             from adare.hypervisor.virtualbox.manager import VirtualBoxManager
+            from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 
             vm_name = VirtualBoxVM.get_vm_name_by_uuid(identifier)
             if not vm_name:
@@ -146,7 +146,7 @@ class VirtualBoxIdentifierStrategy(HypervisorIdentifierStrategy):
             log.warning("VirtualBox hypervisor module not available")
             return "error"
 
-    def get_vm_name(self, identifier: str) -> Optional[str]:
+    def get_vm_name(self, identifier: str) -> str | None:
         """Look up VM name from VirtualBox UUID."""
         if not identifier:
             return None
@@ -166,7 +166,7 @@ class QEMUIdentifierStrategy(HypervisorIdentifierStrategy):
     def hypervisor_name(self) -> str:
         return 'qemu'
 
-    def get_identifier(self, vm_instance: 'VmInstance') -> Optional[str]:
+    def get_identifier(self, vm_instance: 'VmInstance') -> str | None:
         """Get the instance name (domain name) for QEMU instances."""
         return vm_instance.instance_name
 
@@ -245,7 +245,7 @@ def register_identifier_strategy(hypervisor: str, strategy: HypervisorIdentifier
     log.info(f"Registered identifier strategy for hypervisor: {hypervisor}")
 
 
-def get_vm_identifier(vm_instance: 'VmInstance') -> Optional[str]:
+def get_vm_identifier(vm_instance: 'VmInstance') -> str | None:
     """
     Convenience function to get the identifier for a VM instance.
 

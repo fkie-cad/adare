@@ -1,26 +1,28 @@
 # external imports
-from pathlib import Path
+# configure logging
+import logging
 import shutil
-import jinja2
-from datetime import datetime, timezone
-import cattrs
+from datetime import UTC, datetime
+from pathlib import Path
 
+import jinja2
+
+import adare
+from adare.backend.directory import Directory
+from adare.backend.experiment.exceptions import (
+    ExperimentDirectoryCreationError,
+    ExperimentFileCreationError,
+    ExperimentFileMissingError,
+    ExperimentRemovalError,
+)
+from adare.backend.project.directory import ProjectDirectory
+from adare.config.configdirectory import EXAMPLES_DIR
+from adare.helperfunctions.hash import hash_file_sha256
+from adare.parsers import parse_metadata_file
+from adare.types.experiment import ExperimentMetadata
 
 # internal imports
 from adarelib.testset.type import TestsetFile
-from adare.config.configdirectory import TEMPLATES_DIR, EXAMPLES_DIR
-import adare
-from adare.helperfunctions.hash import hash_file_sha256, combine_hashes
-from adare.types.experiment import ExperimentMetadata
-from adare.backend.experiment.exceptions import ExperimentFileCreationError, ExperimentDirectoryCreationError, \
-    ExperimentRemovalError, ExperimentFileMissingError
-from adare.parsers import parse_metadata_file
-from adare.backend.project.directory import ProjectDirectory
-from adare.backend.directory import Directory
-from adare.exceptions import DataStructuringError
-
-# configure logging
-import logging
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ class ExperimentRunDirectory(Directory):
     adarevm_log_file: Path
 
     def __init__(self, project_directory: ProjectDirectory, experiment: str):
-        super().__init__(project_directory.run / experiment / datetime.now(timezone.utc).strftime('%Y-%m-%d_%H-%M-%S'))
+        super().__init__(project_directory.run / experiment / datetime.now(UTC).strftime('%Y-%m-%d_%H-%M-%S'))
         self.log_directory = self.path / 'logs'
         self.adare_log_file = self.log_directory / 'adare.log'
         self.adarevm_log_file = self.log_directory / 'adarevm.log'
@@ -107,7 +109,7 @@ class DiffRunDirectory(Directory):
     def __init__(self, project_directory: ProjectDirectory, experiment: str):
         # Use 'diff' instead of 'run'
         diff_dir = project_directory.path / 'diff'
-        super().__init__(diff_dir / experiment / datetime.now(timezone.utc).strftime('%Y-%m-%d_%H-%M-%S'))
+        super().__init__(diff_dir / experiment / datetime.now(UTC).strftime('%Y-%m-%d_%H-%M-%S'))
         self.log_directory = self.path / 'logs'
         self.adare_log_file = self.log_directory / 'adare.log'
         self.mcp_gui_log_file = self.log_directory / 'mcp_gui.log'
@@ -235,7 +237,7 @@ class ExperimentDirectory(Directory):
                 log,
                 message=f'Failed to create experiment directory {self.path}: {e.strerror}'
             ) from e
-        
+
         if not empty:
             self.__create_experiment_files()
 
@@ -355,32 +357,32 @@ class ExperimentDirectory(Directory):
         that don't affect the core experimental logic.
         """
         # Parse the playbook to get structured data
-        from adare.types.playbook import parse_playbook
-        from adarelib.testset.yaml.customloader import get_custom_loader
         import yaml
-        
+
+        from adarelib.testset.yaml.customloader import get_custom_loader
+
         with self.playbookfile.open('r') as f:
             playbook_data = yaml.load(f, Loader=get_custom_loader())
-        
+
         # Create a copy to avoid modifying original
         semantic_data = playbook_data.copy() if playbook_data else {}
-        
+
         # Define infrastructure actions to exclude from integrity hash
         infrastructure_actions = {'pull'}
-        
+
         # Filter actions to keep only core experimental actions
         if 'actions' in semantic_data:
             filtered_actions = []
             for action in semantic_data['actions']:
                 # Check if this is an infrastructure action
                 is_infrastructure = any(action_type in action for action_type in infrastructure_actions)
-                
+
                 # Keep non-infrastructure actions
                 if not is_infrastructure:
                     filtered_actions.append(action)
-            
+
             semantic_data['actions'] = filtered_actions
-        
+
         # Hash the semantic content using existing utility
         from adare.helperfunctions.hash import hash_dict_sha256
         return hash_dict_sha256(semantic_data)

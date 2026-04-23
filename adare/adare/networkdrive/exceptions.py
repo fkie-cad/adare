@@ -1,8 +1,9 @@
 # internal imports
-from adare.exception_baseclasses import ClassCreationError
-
 # configure logging
 import logging
+
+from adare.exception_baseclasses import ClassCreationError
+
 log = logging.getLogger(__name__)
 
 

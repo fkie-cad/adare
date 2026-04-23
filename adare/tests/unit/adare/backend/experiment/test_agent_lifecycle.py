@@ -1,6 +1,5 @@
 """Tests for agent_lifecycle module extracted from run.py."""
 
-import asyncio
 import logging
 import threading
 from unittest.mock import AsyncMock, MagicMock
@@ -9,7 +8,6 @@ import pytest
 
 from adare.backend.experiment.agent_lifecycle import _run_command_with_retry
 from adare.backend.experiment.exceptions import VMSetupError
-
 
 LOG = logging.getLogger("test_agent_lifecycle")
 
@@ -99,7 +97,7 @@ class TestRunCommandWithRetry:
         ok_result.stderr = ""
 
         vm.run_command = AsyncMock(
-            side_effect=[asyncio.TimeoutError("timed out"), ok_result]
+            side_effect=[TimeoutError("timed out"), ok_result]
         )
         stop_event = _make_stop_event()
 
@@ -116,7 +114,7 @@ class TestRunCommandWithRetry:
         """Repeated timeouts should raise VMSetupError after max retries."""
         vm = MagicMock()
         vm.vm_name = "test-vm"
-        vm.run_command = AsyncMock(side_effect=asyncio.TimeoutError("timed out"))
+        vm.run_command = AsyncMock(side_effect=TimeoutError("timed out"))
         stop_event = _make_stop_event()
 
         with pytest.raises(VMSetupError, match="Timeout after 2 attempts"):

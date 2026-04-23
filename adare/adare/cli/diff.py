@@ -4,18 +4,14 @@ CLI handler for diff mode command.
 Executes experiments in visual diff mode (QEMU only, no agent).
 """
 
-import logging
 import asyncio
-from types import SimpleNamespace
+import logging
 from pathlib import Path
 
 from adare.backend.basics import determine_projectdirectory
-from adare.helperfunctions.path_resolution import (
-    resolve_experiment_path,
-    resolve_environment_path
-)
-from adare.exceptions import NoProjectFoundError
 from adare.console import print_error_message, print_success_message
+from adare.exceptions import NoProjectFoundError
+from adare.helperfunctions.path_resolution import resolve_environment_path, resolve_experiment_path
 
 log = logging.getLogger(__name__)
 

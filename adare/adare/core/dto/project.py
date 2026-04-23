@@ -6,7 +6,7 @@ They decouple the API layer from database models and presentation concerns.
 """
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any
 
 
 @dataclass
@@ -35,10 +35,10 @@ class ProjectInfo:
     name: str
     path: Path
     description: str
-    next_steps: List[str] = field(default_factory=list)
-    tip: Optional[str] = None
+    next_steps: list[str] = field(default_factory=list)
+    tip: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             'id': self.id,
@@ -59,7 +59,7 @@ class ProjectListItem:
     description: str
     experiment_count: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             'id': self.id,

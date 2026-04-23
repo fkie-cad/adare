@@ -1,13 +1,15 @@
 # external imports
-import aiohttp
 import asyncio
+
+# configure logging
+import logging
+
+import aiohttp
 
 # internal imports
 import adare.config.server as config_server
 from adare.database.api.experiment import ExperimentApi
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -28,11 +30,9 @@ async def check_experiment_published(experiment_ulid, project_path, force_check=
             raise ValueError(f"Experiment with ulid {experiment_ulid} not found in database")
         # get published status from database
         publish_status = experiment.publish_status
-        if publish_status.name == "published" and not force_check:
+        if publish_status.name == "published" and not force_check or publish_status.name == "not published" and not force_check:
             return
-        elif publish_status.name == "not published" and not force_check:
-            return
-        elif publish_status.name == "unknown" or force_check:
+        if publish_status.name == "unknown" or force_check:
             log.info(f"Check publish status of experiment {experiment_ulid}")
             # request publish status from webapp by sending experiment hash to api
             session = aiohttp.ClientSession()
@@ -65,7 +65,7 @@ async def check_experiment_published(experiment_ulid, project_path, force_check=
                                     post_func()
                     else:
                         log.error(f'request error ({response.status})')
-            except asyncio.exceptions.TimeoutError as e:
+            except asyncio.exceptions.TimeoutError:
                 log.error("request failed due to timeout")
             except aiohttp.ClientConnectorError as e:
                 log.error("request failed due to connection error")

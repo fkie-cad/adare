@@ -1,7 +1,6 @@
 """Test function endpoints."""
 import logging
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -37,7 +36,7 @@ def _api():
 # ---- Endpoints ----
 
 @router.get("")
-async def list_testfunctions(file_name: Optional[str] = Query(None)):
+async def list_testfunctions(file_name: str | None = Query(None)):
     """List all test functions, optionally filtered by source file."""
     result = _api().show.list_testfunctions(file_name=file_name)
     return result_to_response(result)

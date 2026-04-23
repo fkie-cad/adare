@@ -6,15 +6,19 @@ Includes: snapshot_filesystem, pull_changed_files, and related helpers.
 
 import logging
 import time
+from datetime import UTC
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
-from adare.types.playbook import (
-    SnapshotFilesystemAction, PullChangedFilesAction,
-)
 from adare.backend.experiment.filesystem_snapshot import (
-    FilesystemSnapshot, calculate_diff,
+    FilesystemSnapshot,
+    calculate_diff,
 )
+from adare.types.playbook import (
+    PullChangedFilesAction,
+    SnapshotFilesystemAction,
+)
+
 from .base import ActionResult
 
 log = logging.getLogger(__name__)
@@ -32,7 +36,7 @@ class FilesystemActionsMixin:
         Captures filesystem state (file list + timestamps) and stores in variable.
         Uses native WebSocket tool instead of shelling out to Python.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         try:
             # Determine OS type from VM
@@ -83,7 +87,7 @@ class FilesystemActionsMixin:
             # Create snapshot object
             snapshot = FilesystemSnapshot(
                 files=files,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 os_type=os_type
             )
 
@@ -255,7 +259,7 @@ class FilesystemActionsMixin:
             return ActionResult(success=False, message=str(e))
 
     async def _pull_changed_files_websocket(self, file_paths: list, dest_dir: Path,
-                                           event_emitter) -> Dict[str, Any]:
+                                           event_emitter) -> dict[str, Any]:
         """Pull changed files via WebSocket with batch chunked transfer."""
         try:
             # Progress callback for logging
@@ -292,7 +296,7 @@ class FilesystemActionsMixin:
                 'file_results': []
             }
 
-    async def _pull_changed_files_hypervisor(self, file_paths: list, dest_dir: Path) -> Dict[str, Any]:
+    async def _pull_changed_files_hypervisor(self, file_paths: list, dest_dir: Path) -> dict[str, Any]:
         """Pull changed files via VBoxManage (hypervisor mode)."""
         if not self.vm:
             return {

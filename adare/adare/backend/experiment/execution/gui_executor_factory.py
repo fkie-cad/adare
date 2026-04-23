@@ -3,7 +3,6 @@ Factory for creating appropriate GUI executor based on VM type and settings.
 """
 
 import logging
-from typing import Optional
 from pathlib import Path
 
 from .base import GUIExecutionMode
@@ -12,7 +11,7 @@ from .gui_executor_interface import AbstractGUIExecutor
 log = logging.getLogger(__name__)
 
 
-def resolve_gui_execution_mode(vm, playbook_settings, cli_override: Optional[str] = None) -> GUIExecutionMode:
+def resolve_gui_execution_mode(vm, playbook_settings, cli_override: str | None = None) -> GUIExecutionMode:
     """
     Resolve GUI execution mode based on hypervisor and playbook settings.
 
@@ -47,7 +46,7 @@ def resolve_gui_execution_mode(vm, playbook_settings, cli_override: Optional[str
     # Priority 3: Default to auto
     else:
         mode_str = 'auto'
-        log.debug(f"Using default GUI mode: auto")
+        log.debug("Using default GUI mode: auto")
 
     log.debug(f"Resolving GUI execution mode: mode={mode_str}, vm_type={type(vm).__name__}")
 
@@ -60,7 +59,7 @@ def resolve_gui_execution_mode(vm, playbook_settings, cli_override: Optional[str
 
     # Handle explicit mode settings
     if mode_str == 'agent':
-        log.info(f"Using agent-based GUI execution (explicit setting)")
+        log.info("Using agent-based GUI execution (explicit setting)")
         return GUIExecutionMode.AGENT
 
     if mode_str == 'host':
@@ -71,20 +70,19 @@ def resolve_gui_execution_mode(vm, playbook_settings, cli_override: Optional[str
                 "VirtualBox requires agent-based execution (gui_execution_mode='agent'). "
                 "Use gui_execution_mode='auto' for automatic selection."
             )
-        log.info(f"Using host-based GUI execution (explicit setting)")
+        log.info("Using host-based GUI execution (explicit setting)")
         return GUIExecutionMode.HOST
 
     # Auto mode: decide based on hypervisor type
     if isinstance(vm, QEMUVM):
-        log.info(f"Using host-based GUI execution for QEMU (auto mode)")
+        log.info("Using host-based GUI execution for QEMU (auto mode)")
         return GUIExecutionMode.HOST
-    elif isinstance(vm, VirtualBoxVM):
-        log.info(f"Using agent-based GUI execution for VirtualBox (auto mode)")
+    if isinstance(vm, VirtualBoxVM):
+        log.info("Using agent-based GUI execution for VirtualBox (auto mode)")
         return GUIExecutionMode.AGENT
-    else:
-        # Fallback to agent mode for unknown VM types
-        log.warning(f"Unknown VM type {type(vm).__name__}, defaulting to agent mode")
-        return GUIExecutionMode.AGENT
+    # Fallback to agent mode for unknown VM types
+    log.warning(f"Unknown VM type {type(vm).__name__}, defaulting to agent mode")
+    return GUIExecutionMode.AGENT
 
 
 def create_gui_executor(
@@ -92,10 +90,10 @@ def create_gui_executor(
     websocket_client,
     vm,
     target_resolution_executor,
-    experiment_run_id: Optional[str] = None,
+    experiment_run_id: str | None = None,
     playbook = None,
     execution_context: dict = None,
-    experiment_run_directory: Optional[Path] = None
+    experiment_run_directory: Path | None = None
 ) -> AbstractGUIExecutor:
     """
     Create appropriate GUI executor based on execution mode.
@@ -118,7 +116,7 @@ def create_gui_executor(
     """
     if mode == GUIExecutionMode.AGENT:
         from .agent_gui_executor import AgentGUIExecutor
-        log.debug(f"Creating AgentGUIExecutor")
+        log.debug("Creating AgentGUIExecutor")
         return AgentGUIExecutor(
             websocket_client=websocket_client,
             target_resolution_executor=target_resolution_executor,
@@ -127,9 +125,9 @@ def create_gui_executor(
             execution_context=execution_context,
             experiment_run_directory=experiment_run_directory
         )
-    elif mode == GUIExecutionMode.HOST:
+    if mode == GUIExecutionMode.HOST:
         from .qemu_host_gui_executor import QEMUHostGUIExecutor
-        log.debug(f"Creating QEMUHostGUIExecutor")
+        log.debug("Creating QEMUHostGUIExecutor")
         return QEMUHostGUIExecutor(
             vm=vm,
             target_resolution_executor=target_resolution_executor,
@@ -138,5 +136,4 @@ def create_gui_executor(
             execution_context=execution_context,
             experiment_run_directory=experiment_run_directory
         )
-    else:
-        raise ValueError(f"Invalid GUI execution mode: {mode}")
+    raise ValueError(f"Invalid GUI execution mode: {mode}")

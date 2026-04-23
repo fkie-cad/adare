@@ -1,4 +1,6 @@
 # external imports
+import logging
+
 import pandas as pd
 from rich.layout import Layout
 from rich.panel import Panel
@@ -7,9 +9,7 @@ from rich.table import Table
 # internal imports
 from adare.database.api.frontend import DataRetrievalApi
 from adare.frontend.terminal.console import DefaultConsole
-from adare.types.output_models import TestFunctionInfo
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -84,7 +84,7 @@ def print_testfunction_list(testfunction_file: str = None, formatter=None, outpu
     # Handle case where testfunction_file is the string 'None' instead of None
     if testfunction_file == 'None':
         testfunction_file = None
-        print(f"Changed testfunction_file to None")
+        print("Changed testfunction_file to None")
 
     # Get formatter if not provided
     if formatter is None:

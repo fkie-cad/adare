@@ -1,6 +1,10 @@
 # external imports
 import contextlib
+
+# configure logging
+import logging
 import threading
+
 from ulid import ULID
 
 # internal imports
@@ -8,12 +12,11 @@ from adare.backend.events.emitters import emit_stage
 from adare.types.stages import Stage
 from adarelib.constants import StatusEnum
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 # Thread-local storage to track active parent stages
 import contextvars
+
 _active_parent_stage = contextvars.ContextVar('active_parent_stage', default=None)
 
 

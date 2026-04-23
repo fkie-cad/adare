@@ -1,7 +1,6 @@
 """Local VM management endpoints (database-tracked VMs, not VirtualSpice proxy)."""
 import logging
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -97,7 +96,7 @@ async def test_ova(body: VmTestOvaBody):
 
 
 @router.get("/instances")
-async def list_instances(vm_id: Optional[str] = Query(None)):
+async def list_instances(vm_id: str | None = Query(None)):
     """List VM instances, optionally filtered by VM ID."""
     result = _api().vm.list_instances(vm_id=vm_id)
     return result_to_response(result)
@@ -132,7 +131,7 @@ async def remove_instance(instance_id: str):
 
 
 @router.get("/snapshots")
-async def list_snapshots(instance_id: Optional[str] = Query(None)):
+async def list_snapshots(instance_id: str | None = Query(None)):
     """List VM snapshots, optionally filtered by instance ID."""
     result = _api().vm.list_snapshots(instance_id=instance_id)
     return result_to_response(result)

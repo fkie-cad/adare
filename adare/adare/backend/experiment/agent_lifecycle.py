@@ -5,10 +5,11 @@ Extracted from run.py to isolate VM agent interaction from the experiment orches
 """
 
 import asyncio
-import threading
 
 # configure logging
 import logging
+import threading
+
 log = logging.getLogger(__name__)
 
 
@@ -79,7 +80,7 @@ async def _run_command_with_retry(
                     result.returncode, result.stdout, result.stderr,
                 )
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             if attempt < max_retries - 1:
                 log.warning(
                     f"{label} attempt {attempt + 1}/{max_retries} timed out, "
@@ -160,7 +161,7 @@ async def verify_guest_agent_readiness(
                     result.returncode, result.stdout, result.stderr,
                 )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             if attempt < max_retries - 1:
                 log.warning(
                     f"Guest agent readiness check timed out (attempt {attempt + 1}/{max_retries}), "
@@ -186,14 +187,16 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
     The heavy lifting is delegated to ``_run_command_with_retry`` to avoid
     duplicated retry/backoff logic.
     """
-    from .agent_command_builders import (
-        detect_environment,
-        WindowsAgentCommandBuilder,
-        LinuxAgentCommandBuilder,
-        CommandSet, EnvironmentInfo,
-    )
-    from adare.database.api.devmode import DevModeApi
     from adare.backend.experiment.exceptions import VMSetupError
+    from adare.database.api.devmode import DevModeApi
+
+    from .agent_command_builders import (
+        CommandSet,
+        EnvironmentInfo,
+        LinuxAgentCommandBuilder,
+        WindowsAgentCommandBuilder,
+        detect_environment,
+    )
 
     vm = context.vm
     wheels_dir = context.project_directory.vm_runtime / 'wheels'
@@ -244,8 +247,8 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
         env_info = await detect_environment(vm, context.guest_platform, stop_event)
 
         # Step 1.5: Determine GUI mode
-        from .execution.gui_executor_factory import resolve_gui_execution_mode
         from .execution.base import GUIExecutionMode
+        from .execution.gui_executor_factory import resolve_gui_execution_mode
 
         playbook_settings = (
             context.playbook.settings
@@ -379,7 +382,7 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
             log, vm.vm_name, commands.run_command,
             result.returncode, result.stdout, result.stderr,
         )
-    elif result.stderr:
+    if result.stderr:
         log.info(f"adarevm schtasks output: {result.stderr.strip()}")
 
     # Store PID for QEMU process monitoring
@@ -491,7 +494,7 @@ async def _diagnose_websocket_connection(vm, guest_platform: str, stop_event, fu
             log.info(f"[{label}]: {output}")
             if label == "adarevm process" and "NOT running" in output:
                 process_alive = False
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.warning(f"[{label}]: diagnostic timed out")
         except OSError as e:
             log.warning(f"[{label}]: diagnostic failed: {e}")
@@ -511,9 +514,10 @@ async def connect_websocket(context, stage_ctx):
         context: ExperimentRunCtx
         stage_ctx: StageCtxManager context for progress reporting
     """
+    from websockets.exceptions import ConnectionClosed, WebSocketException
+
     from adare.backend.experiment.websocket_client import AdareVMClient
     from adare.exceptions import LoggedException
-    from websockets.exceptions import ConnectionClosed, WebSocketException
 
     # Validate websocket port is set
     if not context.config.websocket_port:
@@ -539,8 +543,7 @@ async def connect_websocket(context, stage_ctx):
 
                 log.error(f"{error}")
                 raise LoggedException(log, error)
-            else:
-                log.info(f"adarevm process is alive, proceeding with connection attempts")
+            log.info("adarevm process is alive, proceeding with connection attempts")
         except LoggedException:
             raise
         except Exception as e:
@@ -618,14 +621,13 @@ async def connect_websocket(context, stage_ctx):
                 try:
                     status = await context.client.get_status()
                     log.info(f"AdareVM server status: {status}")
-                except (asyncio.TimeoutError, ConnectionClosed) as e:
+                except (TimeoutError, ConnectionClosed) as e:
                     log.warning(f"Could not get server status: {e}")
 
                 return  # Success
-            else:
-                raise ConnectionRefusedError("Failed to establish websocket connection")
+            raise ConnectionRefusedError("Failed to establish websocket connection")
 
-        except (asyncio.TimeoutError, ConnectionClosed, WebSocketException, ConnectionRefusedError, OSError) as e:
+        except (TimeoutError, ConnectionClosed, WebSocketException, ConnectionRefusedError, OSError) as e:
             last_error = e
             log.warning(f"Connection attempt {attempt}/{max_attempts} failed: {e}")
 

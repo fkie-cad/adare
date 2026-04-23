@@ -4,8 +4,8 @@ VirtualBox hypervisor implementation.
 Implements AbstractHypervisorManager and AbstractVM for VirtualBox.
 """
 from .manager import VirtualBoxManager
+from .models import CommandResult, PortForwardingRule, SharedFolderConfig
 from .vm import VirtualBoxVM
-from .models import PortForwardingRule, SharedFolderConfig, CommandResult
 
 
 def register():

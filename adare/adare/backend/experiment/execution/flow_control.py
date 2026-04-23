@@ -5,19 +5,24 @@ These actions control the flow of playbook execution with conditionals,
 loops, waits, and interactive pauses.
 """
 
-import logging
-import time
 import asyncio
 import functools
-from typing import Optional
+import logging
+import time
 
-from adare.types.playbook import (
-    BlockAction, LoopAction, WaitUntilAction, PauseAction,
-    StopAction, ContinueAction, VariableCondition
-)
 from adare.backend.events.emitters import emit_action
-from .base import ActionResult
 from adare.helperfunctions.image import calculate_pixel_change
+from adare.types.playbook import (
+    BlockAction,
+    ContinueAction,
+    LoopAction,
+    PauseAction,
+    StopAction,
+    VariableCondition,
+    WaitUntilAction,
+)
+
+from .base import ActionResult
 
 log = logging.getLogger(__name__)
 
@@ -29,7 +34,7 @@ class FlowControlExecutor:
     """Handles execution of control flow actions (block, loop, wait_until, pause)."""
 
     def __init__(self, websocket_client, target_resolution_executor, condition_checker,
-                 experiment_run_id: Optional[str] = None, execution_context: dict = None,
+                 experiment_run_id: str | None = None, execution_context: dict = None,
                  flow_console = None):
         """
         Initialize flow control executor.
@@ -112,7 +117,7 @@ class FlowControlExecutor:
 
             # Check for continue signal (skip remaining actions in block)
             if result.success and result.data and result.data.get('should_continue', False):
-                log.info(f"Continue triggered - skipping remaining actions in block")
+                log.info("Continue triggered - skipping remaining actions in block")
                 break  # Break out of block action loop
 
             if not result.success:
@@ -126,7 +131,7 @@ class FlowControlExecutor:
                     success=False,
                     message=f"Block action failed: {result.message}"
                 )
-            
+
             # Apply custom delay between actions if specified
             # Note: This is loop-internal delay (between block actions).
             # It does NOT duplicate the global idle delay which happens separately after the block finishes.
@@ -347,7 +352,7 @@ class FlowControlExecutor:
                      t = action.condition.not_exists
                      if t.text: condition_desc = f"not_exists_text_{t.text[:10]}"
                      elif t.image: condition_desc = "not_exists_img"
-                
+
                 check_context = f"wait_until_{check_count}_{condition_desc}"
 
                 # Take screenshot for condition evaluation
@@ -360,25 +365,23 @@ class FlowControlExecutor:
 
                 # --- Pixel Change Optimization ---
                 should_skip_check = False
-                
+
                 # Check if we should evaluate pixel constraints
                 # We evaluate if:
                 # 1. We have pixel change options configured
                 # 2. AND we have a previous screenshot
                 # 3. AND (we haven't satisfied the constraint yet OR strategy is 'continuous')
-                
+
                 should_evaluate_pixel_constraint = False
                 if action.skip and action.skip.pixel_change and last_screenshot_base64:
-                    if action.skip.pixel_change.strategy == 'continuous':
+                    if action.skip.pixel_change.strategy == 'continuous' or not pixel_constraint_satisfied:
                         should_evaluate_pixel_constraint = True
-                    elif not pixel_constraint_satisfied:
-                        should_evaluate_pixel_constraint = True
-                        
+
                 if should_evaluate_pixel_constraint:
                     try:
                         change_percent = calculate_pixel_change(last_screenshot_base64, screenshot_base64)
                         constraint = action.skip.pixel_change
-                        
+
                         if constraint.above is not None and change_percent > constraint.above:
                             log.debug(f"Skipping wait_until check: Pixel change {change_percent:.2f}% > {constraint.above}% (waiting for stability)")
                             should_skip_check = True
@@ -390,7 +393,7 @@ class FlowControlExecutor:
                         if not should_skip_check:
                             is_new_satisfaction = not pixel_constraint_satisfied
                             pixel_constraint_satisfied = True
-                            
+
                             if is_new_satisfaction and constraint.strategy == 'once':
                                 log.info("Pixel change constraint satisfied (latched) - proceeding with condition checks")
 
@@ -399,15 +402,15 @@ class FlowControlExecutor:
                             # 1. New satisfaction (once or continuous logic start)
                             # 2. OR Continuous strategy (always idle if we passed checks this time, to ensure stability after every accepted change)
                             should_idle = is_new_satisfaction or constraint.strategy == 'continuous'
-                            
+
                             if should_idle and constraint.idle and constraint.idle > 0:
                                 log.info(f"Pixel constraint satisfied, waiting configured idle {constraint.idle}s for UI to stabilize before search...")
                                 await asyncio.sleep(constraint.idle)
-                                
+
                                 # Refresh screenshot for actual search (UI might have finished rendering)
                                 refresh_context = f"{check_context}_post_idle"
                                 refresh_base64, refresh_path = await self.target_resolution.get_current_screenshot_with_path(action_context=refresh_context)
-                                
+
                                 if refresh_base64:
                                     screenshot_base64 = refresh_base64
                                     screenshot_path = refresh_path
@@ -417,11 +420,11 @@ class FlowControlExecutor:
                                     log.warning("Failed to refresh screenshot after idle, skipping check")
                                     continue
 
-                            
+
                     except Exception as e:
                         # If optimization fails, fallback to normal check (fail open)
                         log.warning(f"Failed to calculate pixel change: {e}. Proceeding with standard check.")
-                
+
                 # Update last screenshot tracking
                 last_screenshot_base64 = screenshot_base64
 
@@ -490,7 +493,7 @@ class FlowControlExecutor:
             log.error(f"Wait until action failed: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
 
-    async def _evaluate_wait_condition(self, condition, screenshot_base64: str, screenshot_path: Optional[str] = None) -> bool:
+    async def _evaluate_wait_condition(self, condition, screenshot_base64: str, screenshot_path: str | None = None) -> bool:
         """
         Recursively evaluate a WaitCondition tree.
 
@@ -517,14 +520,14 @@ class FlowControlExecutor:
                         log.debug("Applied default TopLeft strategy for text target")
 
                 target_match = await self.target_resolution.target_resolver.resolve_target(target, screenshot_base64)
-                
+
                 # Cache successful match if we have a path
                 if target_match and screenshot_path:
                     self.target_resolution.cache_match(target, target_match, screenshot_path)
-                    
+
                 return target_match is not None
 
-            elif condition.not_exists is not None:
+            if condition.not_exists is not None:
                 # Apply smart defaults if no strategy specified
                 target = condition.not_exists
                 if target.strategy is None:
@@ -540,27 +543,26 @@ class FlowControlExecutor:
                 return target_match is None
 
             # Boolean operators: all/any/not
-            elif condition.all is not None:
+            if condition.all is not None:
                 # AND logic: all conditions must be true
                 for sub_condition in condition.all:
                     if not await self._evaluate_wait_condition(sub_condition, screenshot_base64, screenshot_path):
                         return False
                 return True
 
-            elif condition.any is not None:
+            if condition.any is not None:
                 # OR logic: at least one condition must be true
                 for sub_condition in condition.any:
                     if await self._evaluate_wait_condition(sub_condition, screenshot_base64, screenshot_path):
                         return True
                 return False
 
-            elif condition.negate is not None:
+            if condition.negate is not None:
                 # NOT logic: invert the result
                 return not await self._evaluate_wait_condition(condition.negate, screenshot_base64, screenshot_path)
 
-            else:
-                log.error("WaitCondition has no valid field set")
-                return False
+            log.error("WaitCondition has no valid field set")
+            return False
 
         except Exception as e:
             if isinstance(e, FileNotFoundError):
@@ -593,53 +595,50 @@ class FlowControlExecutor:
                         message="Execution resumed by user",
                         data={"user_input": user_input}
                     )
-                elif user_input == 'interrupted':
+                if user_input == 'interrupted':
                     log.info("PAUSE: User interrupted with Ctrl+C")
                     return ActionResult(
                         success=False,
                         message="Pause action interrupted by user",
                         data={"user_input": "interrupted"}
                     )
-                else:
-                    log.warning(f"PAUSE: Unexpected input '{user_input}'")
+                log.warning(f"PAUSE: Unexpected input '{user_input}'")
+                return ActionResult(
+                    success=False,
+                    message=f"Pause action failed with input: {user_input}",
+                    data={"user_input": user_input}
+                )
+            # Fallback to simple input if no flow console available
+            pause_symbol = "⏸️"
+            display_message = f"{pause_symbol} {pause_message} - Press 'c' + Enter to continue"
+            log.info(f"PAUSE: {display_message}")
+
+            # Keep asking for input until we get 'c'
+            while True:
+                try:
+                    user_input = input(f"\n{display_message}: ").strip().lower()
+                    if user_input == 'c':
+                        log.info("PAUSE: User continued execution")
+                        return ActionResult(
+                            success=True,
+                            message="Execution resumed by user",
+                            data={"user_input": user_input}
+                        )
+                    print("Please press 'c' + Enter to continue execution")
+                except (EOFError, KeyboardInterrupt):
+                    # Handle Ctrl+C or EOF gracefully
+                    log.info("PAUSE: User interrupted with Ctrl+C")
                     return ActionResult(
                         success=False,
-                        message=f"Pause action failed with input: {user_input}",
-                        data={"user_input": user_input}
+                        message="Pause action interrupted by user",
+                        data={"user_input": "interrupted"}
                     )
-            else:
-                # Fallback to simple input if no flow console available
-                pause_symbol = "⏸️"
-                display_message = f"{pause_symbol} {pause_message} - Press 'c' + Enter to continue"
-                log.info(f"PAUSE: {display_message}")
-
-                # Keep asking for input until we get 'c'
-                while True:
-                    try:
-                        user_input = input(f"\n{display_message}: ").strip().lower()
-                        if user_input == 'c':
-                            log.info("PAUSE: User continued execution")
-                            return ActionResult(
-                                success=True,
-                                message="Execution resumed by user",
-                                data={"user_input": user_input}
-                            )
-                        else:
-                            print("Please press 'c' + Enter to continue execution")
-                    except (EOFError, KeyboardInterrupt):
-                        # Handle Ctrl+C or EOF gracefully
-                        log.info("PAUSE: User interrupted with Ctrl+C")
-                        return ActionResult(
-                            success=False,
-                            message="Pause action interrupted by user",
-                            data={"user_input": "interrupted"}
-                        )
-                    except Exception as e:
-                        log.error(f"Error during pause input: {e}")
-                        return ActionResult(
-                            success=False,
-                            message=f"Pause action failed: {str(e)}"
-                        )
+                except Exception as e:
+                    log.error(f"Error during pause input: {e}")
+                    return ActionResult(
+                        success=False,
+                        message=f"Pause action failed: {str(e)}"
+                    )
 
         except Exception as e:
             log.error(f"Error in pause action: {e}")
@@ -678,21 +677,21 @@ class FlowControlExecutor:
                 log.debug(f"Equals check: {value} == {condition.equals} -> {result}")
                 return result
 
-            elif condition.contains is not None:
+            if condition.contains is not None:
                 # Substring check (convert to string)
                 value_str = str(value)
                 result = condition.contains in value_str
                 log.debug(f"Contains check: '{condition.contains}' in '{value_str}' -> {result}")
                 return result
 
-            elif condition.matches is not None:
+            if condition.matches is not None:
                 # Regex match check
                 value_str = str(value)
                 result = bool(re.search(condition.matches, value_str))
                 log.debug(f"Matches check: pattern '{condition.matches}' in '{value_str}' -> {result}")
                 return result
 
-            elif condition.greater_than is not None:
+            if condition.greater_than is not None:
                 # Numeric comparison (convert to number)
                 if isinstance(value, (int, float)):
                     num_value = value
@@ -702,7 +701,7 @@ class FlowControlExecutor:
                 log.debug(f"Greater than check: {num_value} > {condition.greater_than} -> {result}")
                 return result
 
-            elif condition.less_than is not None:
+            if condition.less_than is not None:
                 # Numeric comparison (convert to number)
                 if isinstance(value, (int, float)):
                     num_value = value
@@ -712,7 +711,7 @@ class FlowControlExecutor:
                 log.debug(f"Less than check: {num_value} < {condition.less_than} -> {result}")
                 return result
 
-            elif condition.is_empty is not None:
+            if condition.is_empty is not None:
                 # Empty/None check
                 if condition.is_empty:
                     # Check if variable is empty/None
@@ -724,8 +723,7 @@ class FlowControlExecutor:
                     log.debug(f"Is not empty check: {value} -> {result}")
                 return result
 
-            else:
-                raise ValueError("No operator specified in VariableCondition")
+            raise ValueError("No operator specified in VariableCondition")
 
         except (ValueError, TypeError) as e:
             raise ValueError(f"Failed to evaluate condition: {e}")
@@ -760,18 +758,17 @@ class FlowControlExecutor:
                                 'variable': action.condition.variable
                             }
                         )
-                    else:
-                        # Condition is false - continue execution
-                        log.info("Stop condition not met - continuing execution")
-                        return ActionResult(
-                            success=True,
-                            message="Stop condition not met - continuing",
-                            data={
-                                'should_stop': False,
-                                'condition_met': False,
-                                'variable': action.condition.variable
-                            }
-                        )
+                    # Condition is false - continue execution
+                    log.info("Stop condition not met - continuing execution")
+                    return ActionResult(
+                        success=True,
+                        message="Stop condition not met - continuing",
+                        data={
+                            'should_stop': False,
+                            'condition_met': False,
+                            'variable': action.condition.variable
+                        }
+                    )
 
                 except ValueError as e:
                     # Condition evaluation failed
@@ -823,18 +820,17 @@ class FlowControlExecutor:
                                 'variable': action.condition.variable
                             }
                         )
-                    else:
-                        # Condition is false - continue normally
-                        log.info("Continue condition not met - proceeding with remaining actions")
-                        return ActionResult(
-                            success=True,
-                            message="Continue condition not met - proceeding normally",
-                            data={
-                                'should_continue': False,
-                                'condition_met': False,
-                                'variable': action.condition.variable
-                            }
-                        )
+                    # Condition is false - continue normally
+                    log.info("Continue condition not met - proceeding with remaining actions")
+                    return ActionResult(
+                        success=True,
+                        message="Continue condition not met - proceeding normally",
+                        data={
+                            'should_continue': False,
+                            'condition_met': False,
+                            'variable': action.condition.variable
+                        }
+                    )
 
                 except ValueError as e:
                     # Condition evaluation failed

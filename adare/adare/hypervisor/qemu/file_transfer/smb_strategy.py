@@ -19,7 +19,7 @@ import logging
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
@@ -55,8 +55,8 @@ class SMBStrategy(FileTransferStrategy):
 
     def __init__(self):
         self._smb_dir: Path | None = None
-        self._shares: List[Dict[str, Any]] = []
-        self._writeback_dirs: Dict[str, Path] = {}  # tag -> original host path (for read-write shares)
+        self._shares: list[dict[str, Any]] = []
+        self._writeback_dirs: dict[str, Path] = {}  # tag -> original host path (for read-write shares)
 
     @property
     def setup_description(self) -> str:

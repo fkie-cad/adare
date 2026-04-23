@@ -1,21 +1,22 @@
 # internal imports
+# configure logging
+import logging
+
 from adare.api import AdareAPI
 from adare.console import print_error_message
 from adare.core.dto.web import (
+    CheckExperimentRequest,
+    CheckRunRequest,
+    DownloadBundleRequest,
     DownloadEnvironmentRequest,
     DownloadExperimentRequest,
     DownloadTestfunctionRequest,
-    DownloadBundleRequest,
+    PublishRunRequest,
+    SubmitRequest,
     SyncRequest,
     UploadRunRequest,
-    PublishRunRequest,
-    CheckExperimentRequest,
-    CheckRunRequest,
-    SubmitRequest,
 )
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 

@@ -11,13 +11,13 @@ QGA Protocol Commands Used:
     guest-file-close  - closes handle
     guest-exec        - for mkdir/ls (via existing run_command infrastructure)
 """
-from pathlib import Path, PurePosixPath, PureWindowsPath
 import asyncio
 import base64
 import logging
 import tarfile
 import tempfile
 import time
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from adare.hypervisor.exceptions import HypervisorException
 
@@ -380,9 +380,7 @@ class QGAFileTransfer:
                 for item in manifest:
                     source = Path(item['source'])
                     dest_relative = item['dest']
-                    if source.is_dir():
-                        tar.add(str(source), arcname=dest_relative)
-                    elif source.is_file():
+                    if source.is_dir() or source.is_file():
                         tar.add(str(source), arcname=dest_relative)
                     else:
                         log.warning(f"Skipping missing manifest item: {source}")

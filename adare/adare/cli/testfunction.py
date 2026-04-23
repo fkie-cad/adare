@@ -1,13 +1,14 @@
 # internal imports
-from adare.backend.basics import determine_projectdirectory
-from adare.exceptions import NoProjectFoundError, TestFunctionNotFoundError
-from adare.helperfunctions.path_resolution import resolve_testfunction_path
-from adare.api import AdareAPI
-from adare.core.dto.testfunction import TestfunctionCreateRequest, TestfunctionLoadRequest
-from adare.console import print_success_message, print_error_message
-
 # configure logging
 import logging
+
+from adare.api import AdareAPI
+from adare.backend.basics import determine_projectdirectory
+from adare.console import print_error_message, print_success_message
+from adare.core.dto.testfunction import TestfunctionCreateRequest, TestfunctionLoadRequest
+from adare.exceptions import NoProjectFoundError, TestFunctionNotFoundError
+from adare.helperfunctions.path_resolution import resolve_testfunction_path
+
 log = logging.getLogger(__name__)
 
 
@@ -134,8 +135,8 @@ def exec_load_testfunction(arguments):
 
 def exec_list_testfunctions(arguments):
     """List testfunctions in the configured output format."""
-    from adare.run import get_formatter_from_context
     from adare.frontend.terminal.testfunction_list import print_testfunction_list
+    from adare.run import get_formatter_from_context
 
     # Get formatter from CLI context
     formatter, output_file, dual_output = get_formatter_from_context()

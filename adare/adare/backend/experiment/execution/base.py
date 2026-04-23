@@ -3,8 +3,8 @@ Base classes and utilities for action execution.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Tuple, Optional, Any
 from enum import Enum
+from typing import Any
 
 
 class GUIExecutionMode(Enum):
@@ -24,12 +24,12 @@ class ActionResult:
     """Result of a playbook action execution."""
     success: bool
     message: str = ""
-    coordinates: Optional[Tuple[int, int]] = None
-    data: Optional[Dict] = None
-    execution_time: Optional[float] = None
+    coordinates: tuple[int, int] | None = None
+    data: dict | None = None
+    execution_time: float | None = None
 
 
-def serialize_target(target) -> Optional[Dict[str, Any]]:
+def serialize_target(target) -> dict[str, Any] | None:
     """Serialize Target object for JSON storage."""
     if not target:
         return None
@@ -37,7 +37,7 @@ def serialize_target(target) -> Optional[Dict[str, Any]]:
     return converter.unstructure(target)
 
 
-def get_target_info(target) -> Optional[Dict[str, Any]]:
+def get_target_info(target) -> dict[str, Any] | None:
     """Extract target information for event logging."""
     if not target:
         return None

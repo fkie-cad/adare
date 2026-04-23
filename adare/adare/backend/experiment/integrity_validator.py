@@ -4,10 +4,10 @@ Integrity validation for experiments, projects, and playbook testfunctions.
 Extracted from run.py to keep the orchestrator focused on execution flow.
 """
 
-from pathlib import Path
-
 # configure logging
 import logging
+from pathlib import Path
+
 log = logging.getLogger(__name__)
 
 
@@ -38,10 +38,10 @@ class IntegrityValidator:
                 database or its hash no longer matches the stored value.
             LoggedException: if the testfunction database cannot be read.
         """
-        from adare.helperfunctions.integrity import verify_testfunction_integrity
-        from adare.backend.testfunction.database import get_testfunction_files_data
         from adare.backend.experiment.exceptions import ExperimentIntegrityError
+        from adare.backend.testfunction.database import get_testfunction_files_data
         from adare.exceptions import LoggedException
+        from adare.helperfunctions.integrity import verify_testfunction_integrity
 
         # Extract testfunction names from playbook tests
         testfunction_names: set[str] = set()
@@ -117,12 +117,12 @@ class IntegrityValidator:
             ExperimentIntegrityError: if any testfunction or environment
                 file has been modified after loading.
         """
-        from adare.helperfunctions.integrity import (
-            verify_testfunction_integrity,
-            verify_environment_integrity,
-        )
         import adare.backend.project.database as project_database
         from adare.backend.experiment.exceptions import ExperimentIntegrityError
+        from adare.helperfunctions.integrity import (
+            verify_environment_integrity,
+            verify_testfunction_integrity,
+        )
 
         # --- Testfunctions ---------------------------------------------------
         testfunctions_changed: list = []

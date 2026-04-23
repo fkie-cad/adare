@@ -1,17 +1,17 @@
-from rich.console import Console
-import threading
-import time
-from datetime import datetime, timezone
-from rich.live import Live
-from rich.text import Text
-from rich.layout import Layout
-from rich.spinner import SPINNERS
-
-from adarelib.constants import StatusEnum
-from adare.backend.experiment.console_state import ConsoleState
-
 # configure logging
 import logging
+import threading
+import time
+from datetime import UTC, datetime
+
+from rich.console import Console
+from rich.live import Live
+from rich.spinner import SPINNERS
+from rich.text import Text
+
+from adare.backend.experiment.console_state import ConsoleState
+from adarelib.constants import StatusEnum
+
 log = logging.getLogger(__name__)
 
 
@@ -25,7 +25,7 @@ class ExperimentFlowConsole:
     state: ConsoleState
     ticks_per_second: int = 15  # 15 FPS for smoother animations
     _original_log_level: int | None  # Store original console log level
-    
+
     indent_offset: int
     layout: Text
 
@@ -53,7 +53,7 @@ class ExperimentFlowConsole:
                     # Use snapshot to avoid holding lock during render
                     messages_snapshot = self.state.get_snapshot()
                     message_identifiers = list(messages_snapshot.keys())
-                    
+
                     # Ensure experiment timer appears first if it exists
                     if 'EXPERIMENT_TIMER' in message_identifiers:
                         message_identifiers.remove('EXPERIMENT_TIMER')
@@ -136,13 +136,13 @@ class ExperimentFlowConsole:
     def _suppress_console_logging(self):
         """Suppress console logging when flow console is active."""
         from adare.setup_logging import set_console_log_level
-        
+
         root_logger = logging.getLogger()
         for handler in root_logger.handlers:
             if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
                 self._original_log_level = handler.level
                 break
-        
+
         set_console_log_level(logging.CRITICAL)
 
     def _restore_console_logging(self):
@@ -189,14 +189,14 @@ class ExperimentFlowConsole:
             else:
                 duration_text = f"({message_object['duration']:.2f}s)"
         elif message_object.get('start_time'):
-            elapsed_seconds = (datetime.now(timezone.utc) - message_object['start_time']).total_seconds()
+            elapsed_seconds = (datetime.now(UTC) - message_object['start_time']).total_seconds()
             if message_object.get('is_experiment_timer'):
                 duration_text = self._format_experiment_timer_duration(
                     elapsed_seconds, message_object['status']
                 )
             else:
                 duration_text = f"({elapsed_seconds:.2f}s)"
-        
+
         if duration_text:
             message = self._fit_line_to_terminal(message, duration_text)
 
@@ -252,7 +252,7 @@ class ExperimentFlowConsole:
                 message = f"{message}{' ' * (padding - 1)} {duration_text}"
             else:
                 message = f"{message} {duration_text}"
-        
+
         return message
 
     def log_success(self, identifier: str, message: str, level: int = 0, duration: float = None):
@@ -264,7 +264,7 @@ class ExperimentFlowConsole:
     def log_multi_experiment_summary(self, experiment_name: str, environments: list, results: list, total_duration: float):
         # We perform the formatting here specifically for Rich console, then store the result string in state.
         # This keeps ConsoleState mostly UI-agnostic (it stores a string).
-        
+
         # Categorize results
         successful_runs = [r for r in results if r['status'] == 'SUCCESS']
         failed_runs = [r for r in results if r['status'] == 'FAILED']
@@ -342,7 +342,7 @@ class ExperimentFlowConsole:
 
         summary_parts.extend(["", separator])
         complete_message = "\n".join(summary_parts)
-        
+
         # Store in state
         with self.state._lock:
             self.state.messages.clear()
@@ -350,12 +350,12 @@ class ExperimentFlowConsole:
 
 
     def log_experiment_summary(self, ulid: str, success: bool, total_actions: int = 0, successful_actions: int = 0, failed_actions: int = 0, total_tests: int = 0, successful_tests: int = 0, failed_tests: int = 0, duration: float = None, level: int = 0, was_interrupted: bool = False):
-        
+
         # Formatting Logic locally
         def get_status_header(success, interrupted):
-            if success: return f"[bold green]EXPERIMENT COMPLETED SUCCESSFULLY[/bold green] ✅"
-            if interrupted: return f"[bold yellow]EXPERIMENT INTERRUPTED[/bold yellow] ⚡"
-            return f"[bold red]EXPERIMENT FAILED[/bold red] ❌"
+            if success: return "[bold green]EXPERIMENT COMPLETED SUCCESSFULLY[/bold green] ✅"
+            if interrupted: return "[bold yellow]EXPERIMENT INTERRUPTED[/bold yellow] ⚡"
+            return "[bold red]EXPERIMENT FAILED[/bold red] ❌"
 
         def format_action_summary(successful, total, failed):
             summary = f"Actions: [bold cyan]{successful}[/bold cyan]/[dim]{total}[/dim] passed"
@@ -367,7 +367,7 @@ class ExperimentFlowConsole:
             summary = f"Tests: [bold cyan]{successful}[/bold cyan]/[dim]{total}[/dim] passed"
             if failed > 0: summary += f", [bold red]{failed}[/bold red] failed"
             return summary
-        
+
         def format_dur(d):
             if not d: return ""
             if d >= 60: return f"[bold cyan]{int(d//60)}m {d%60:.1f}s[/bold cyan]"
@@ -377,13 +377,13 @@ class ExperimentFlowConsole:
         indent = "  "
         line_width = self.console.size.width
         separator = "[dim]" + "─" * line_width + "[/dim]"
-        
+
         summary_parts.extend(["", separator, get_status_header(success, was_interrupted)])
-        
+
         duration_text = format_dur(duration)
         if duration_text:
             summary_parts.append(f"{indent}⏱️  Duration: {duration_text}")
-        
+
         # Actions
         action_summary_txt = format_action_summary(successful_actions, total_actions, failed_actions)
         if total_actions > 0:
@@ -391,7 +391,7 @@ class ExperimentFlowConsole:
         elif not success:
             msg = "No actions executed (experiment was interrupted)" if was_interrupted else "No actions executed (experiment failed during setup)"
             summary_parts.append(f"{indent}📊 {msg}")
-        
+
         # Tests
         test_summary_txt = format_test_summary(successful_tests, total_tests, failed_tests)
         if total_tests > 0:
@@ -399,7 +399,7 @@ class ExperimentFlowConsole:
 
         summary_parts.extend([f"{indent}🆔 Run ID: [dim]{ulid}[/dim]"])
         summary_parts.extend(["", separator])
-        
+
         complete_message = "\n".join(summary_parts)
 
         with self.state._lock:
@@ -445,7 +445,7 @@ class ExperimentFlowConsole:
         if status == StatusEnum.SUCCESS: color = "green"
         elif status == StatusEnum.FAILED: color = "red"
         else: color = "cyan"
-        
+
         if seconds >= 60:
             minutes = int(seconds // 60)
             remaining = seconds % 60
@@ -466,11 +466,10 @@ class ExperimentFlowConsole:
         Shows the pause message in flow console only, without disrupting the display.
         Returns the user input.
         """
-        import platform
-        import threading
-        import queue
-        import sys
         import os
+        import platform
+        import queue
+        import threading
         import time
 
         # Show pause message in flow console
@@ -529,15 +528,14 @@ class ExperimentFlowConsole:
                     if char == 'c':
                         user_input = 'c'
                         break
-                    elif char in ['interrupted', '\x03', '\x04']:
+                    if char in ['interrupted', '\x03', '\x04']:
                         user_input = 'interrupted'
                         break
-                    elif char == 'error':
+                    if char == 'error':
                         user_input = 'error'
                         break
-                    else:
-                        # Invalid input, continue waiting
-                        continue
+                    # Invalid input, continue waiting
+                    continue
 
                 except queue.Empty:
                     # No input yet, continue polling
@@ -557,12 +555,11 @@ class ExperimentFlowConsole:
         if user_input == 'c':
             self.state.log_finished(identifier, f"{message} - Continued", display_level)
             return 'c'
-        elif user_input == 'interrupted':
+        if user_input == 'interrupted':
             self.state.log_interrupted(identifier, f"{message} - Interrupted", display_level)
             return 'interrupted'
-        else:
-            self.state.log_failed(identifier, f"{message} - Invalid input, continuing anyway", display_level)
-            return user_input or 'timeout'
+        self.state.log_failed(identifier, f"{message} - Invalid input, continuing anyway", display_level)
+        return user_input or 'timeout'
 
     def print_debug_flow_messages(self):
         with self.state._lock:

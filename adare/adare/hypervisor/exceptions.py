@@ -35,9 +35,9 @@ Usage:
     except HypervisorException as e:
         # Handle any hypervisor error
 """
-from adare.exceptions import LoggedErrorException
 import logging
-from typing import Optional
+
+from adare.exceptions import LoggedErrorException
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ class VMOperationException(HypervisorException):
         vm_identifier: str,
         operation: str,
         reason: str,
-        message: Optional[str] = None
+        message: str | None = None
     ):
         self.vm_identifier = vm_identifier
         self.operation = operation
@@ -137,7 +137,7 @@ class SnapshotOperationException(HypervisorException):
         snapshot_name: str,
         operation: str,
         reason: str,
-        message: Optional[str] = None
+        message: str | None = None
     ):
         self.vm_identifier = vm_identifier
         self.snapshot_name = snapshot_name
@@ -182,7 +182,7 @@ class InstanceOperationException(HypervisorException):
 
 class PortAllocationException(InstanceOperationException):
     """Raised when port allocation fails (no ports available or race condition)."""
-    def __init__(self, reason: str, port_range: Optional[tuple[int, int]] = None):
+    def __init__(self, reason: str, port_range: tuple[int, int] | None = None):
         self.port_range = port_range
         if port_range:
             message = f"Port allocation failed in range {port_range[0]}-{port_range[1]}: {reason}"

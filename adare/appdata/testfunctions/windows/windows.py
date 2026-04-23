@@ -123,8 +123,8 @@ def registry_key_exists(ctx: TestContext, key_path: str):
     category=HostModeCategory.QGA_PROBE,
 )
 def registry_value_matches(ctx: TestContext, key_path: str, value_name: str,
-                           expected_value: Union[str, int, bytes],
-                           value_type: Optional[str] = None):
+                           expected_value: str | int | bytes,
+                           value_type: str | None = None):
     if platform.system() != 'Windows':
         return TestResult.execution_error(None, "This test only runs on Windows")
 
@@ -165,8 +165,7 @@ def registry_value_matches(ctx: TestContext, key_path: str, value_name: str,
                 # Value comparison
                 if actual_value == expected_value:
                     return TestResult.success([f'registry value matches: {actual_value} ({_format_registry_type(reg_type)})'])
-                else:
-                    return TestResult.failed([f'registry value mismatch. Expected: {expected_value}, Got: {actual_value} ({_format_registry_type(reg_type)})'])
+                return TestResult.failed([f'registry value mismatch. Expected: {expected_value}, Got: {actual_value} ({_format_registry_type(reg_type)})'])
 
             except FileNotFoundError:
                 return TestResult.failed([f'registry key or value does not exist: {key_path}\\{value_name}'])

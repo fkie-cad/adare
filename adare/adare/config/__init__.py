@@ -109,9 +109,8 @@ def get_vm_credentials(guest_os: str) -> tuple[str, str]:
     if 'windows' in guest_os.lower():
         return (DEFAULT_VM_CREDENTIALS['windows']['username'],
                 DEFAULT_VM_CREDENTIALS['windows']['password'])
-    else:
-        return (DEFAULT_VM_CREDENTIALS['linux']['username'],
-                DEFAULT_VM_CREDENTIALS['linux']['password'])
+    return (DEFAULT_VM_CREDENTIALS['linux']['username'],
+            DEFAULT_VM_CREDENTIALS['linux']['password'])
 
 
 # Hypervisor Configuration
@@ -119,6 +118,7 @@ DEFAULT_HYPERVISOR = "virtualbox"
 SUPPORTED_HYPERVISORS = ["virtualbox", "qemu"]
 
 import platform as _platform
+
 _host_os = _platform.system().lower()
 _host_arch = _platform.machine().lower()
 _is_mac = _host_os == 'darwin'

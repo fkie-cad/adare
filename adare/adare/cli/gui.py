@@ -1,12 +1,13 @@
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
 def exec_gui(arguments):
     from adare.config import PORT_WEBAPP
-    from adare.helperfunctions.port import is_localhost_port_free
     from adare.frontend.gui.run import runserver as run_gui
+    from adare.helperfunctions.port import is_localhost_port_free
 
     port = PORT_WEBAPP
     if arguments.port:

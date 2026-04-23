@@ -1,13 +1,16 @@
 from __future__ import annotations
-import attrs
-from typing import List, Optional, Union, Any
-import yaml
-import cattrs
+
 from pathlib import Path
+from typing import Any, Optional, Union
+
+import attrs
+import cattrs
+import yaml
 
 # Import the new Variable system
 from adarelib.common.variables import VariableRegistry
 from adarelib.testset.type import Test
+
 
 # Target selection strategies
 @attrs.define
@@ -32,17 +35,17 @@ class ClosestToStrategy:
     Optional max_distance enables region-based search optimization.
     """
     # Mode 1: Fixed coordinates (existing - backwards compatible)
-    x: Optional[int] = None
-    y: Optional[int] = None
+    x: int | None = None
+    y: int | None = None
 
     # Mode 2: Text reference (new)
-    text: Optional[str] = None
+    text: str | None = None
 
     # Mode 3: Image reference (new)
-    image: Optional[str] = None
+    image: str | None = None
 
     # Optional distance limit (new)
-    max_distance: Optional[int] = None  # pixels
+    max_distance: int | None = None  # pixels
 
     def __attrs_post_init__(self):
         """Validate that exactly one mode is specified."""
@@ -102,7 +105,7 @@ class SmallestStrategy:
 
 TargetStrategyType = Union[
     SweepStrategy,
-    BestConfidenceStrategy, 
+    BestConfidenceStrategy,
     ClosestToStrategy,
     TopLeftStrategy,
     TopRightStrategy,
@@ -115,8 +118,8 @@ TargetStrategyType = Union[
 @attrs.define
 class Settings:
     idle: float = 0.1
-    timeout: Optional[float] = None
-    screenshot: Optional[dict] = None
+    timeout: float | None = None
+    screenshot: dict | None = None
     continue_on_test_failure: bool = False
     auto_pull_on_test_failure: bool = True
     collect_system_info: bool = True
@@ -149,10 +152,10 @@ class TextMatchConfig:
     - regex_fuzzy: Combined regex + fuzzy matching
     """
     mode: str = 'substring'  # 'substring', 'regex', 'fuzzy', 'regex_fuzzy'
-    flags: Optional[List[str]] = None  # Regex flags: IGNORECASE, MULTILINE, DOTALL, VERBOSE
-    allow_missing_chars: Optional[Union[bool, str, List[str]]] = None  # True = any char, "." = only dots, [".", ","] = specific chars
-    max_missing: Optional[int] = None  # Max missing chars allowed (requires allow_missing_chars)
-    min_similarity: Optional[float] = None  # Minimum similarity ratio 0.0-1.0
+    flags: list[str] | None = None  # Regex flags: IGNORECASE, MULTILINE, DOTALL, VERBOSE
+    allow_missing_chars: bool | str | list[str] | None = None  # True = any char, "." = only dots, [".", ","] = specific chars
+    max_missing: int | None = None  # Max missing chars allowed (requires allow_missing_chars)
+    min_similarity: float | None = None  # Minimum similarity ratio 0.0-1.0
     case_sensitive: bool = False  # Enable case-sensitive matching
 
     def __attrs_post_init__(self):
@@ -198,31 +201,31 @@ class TextMatchConfig:
 
 @attrs.define
 class Target:
-    image: Optional[str] = None
-    text: Optional[str] = None
-    text_match: Optional[TextMatchConfig] = None  # Text matching configuration
-    position: Optional[List[int]] = None
-    strategy: Optional[TargetStrategyType] = None
-    offset: Optional[Offset] = None
-    use_cache: Optional[bool] = None  # If True, use cached result from previous matching action
+    image: str | None = None
+    text: str | None = None
+    text_match: TextMatchConfig | None = None  # Text matching configuration
+    position: list[int] | None = None
+    strategy: TargetStrategyType | None = None
+    offset: Offset | None = None
+    use_cache: bool | None = None  # If True, use cached result from previous matching action
 
 
 @attrs.define
 class ExistsCondition:
-    text: Optional[str] = None
-    image: Optional[str] = None
+    text: str | None = None
+    image: str | None = None
 
 @attrs.define
 class NotExistsCondition:
-    text: Optional[str] = None
-    image: Optional[str] = None
+    text: str | None = None
+    image: str | None = None
 
 @attrs.define
 class KeyboardAction:
-    key: Optional[str] = None  # Single key press -> pyautogui.press()
-    text: Optional[str] = None  # Text typing -> pyautogui.typewrite()
-    combination: Optional[List[str]] = None  # Key combinations -> pyautogui.hotkey()
-    when: Optional[List[Union['ExistsCondition', 'NotExistsCondition']]] = None
+    key: str | None = None  # Single key press -> pyautogui.press()
+    text: str | None = None  # Text typing -> pyautogui.typewrite()
+    combination: list[str] | None = None  # Key combinations -> pyautogui.hotkey()
+    when: list[ExistsCondition | NotExistsCondition] | None = None
     description: str = ''
 
 @attrs.define
@@ -258,14 +261,14 @@ class GotoAction:
 class ActionTestAction:
     name: str
     description: str = ''
-    timeout: Optional[float] = None  # Test timeout in seconds (None = use Test default)
+    timeout: float | None = None  # Test timeout in seconds (None = use Test default)
 
 @attrs.define
 class CaptureSpec:
     """Specification for capturing command output to a variable."""
     variable: str  # Variable name to store the captured output
     source: str = 'stdout'  # Source to capture from: stdout, stderr, returncode, all
-    parser: Optional[str] = None  # Optional Python expression to parse the output
+    parser: str | None = None  # Optional Python expression to parse the output
 
     def __attrs_post_init__(self):
         """Validate capture specification."""
@@ -278,16 +281,16 @@ class CaptureSpec:
 @attrs.define
 class CommandAction:
     command: str  # Required field - the shell command to execute
-    name: Optional[str] = None
+    name: str | None = None
     description: str = ''
-    tool: Optional[str] = None
-    cwd: Optional[str] = None
-    env: Optional[dict] = None
-    timeout: Optional[float] = None
+    tool: str | None = None
+    cwd: str | None = None
+    env: dict | None = None
+    timeout: float | None = None
     shell: bool = False
     admin: bool = False  # Run with elevated privileges (Windows: RunAs, Linux: sudo)
     background: bool = False  # Run without waiting for completion
-    capture: Optional[CaptureSpec] = None  # Capture command output to variable
+    capture: CaptureSpec | None = None  # Capture command output to variable
     allow_failure: bool = False  # Continue execution even if command returns non-zero exit code
 
     def __attrs_post_init__(self):
@@ -300,20 +303,18 @@ class CommandAction:
 
         # Support for Python-style raw strings to make Windows paths easier in YAML
         # E.g. command: r"C:\Windows\System32" -> shell command: C:\Windows\System32
-        if self.command.startswith('r"') and self.command.endswith('"') and len(self.command) >= 3:
-            self.command = self.command[2:-1]
-        elif self.command.startswith("r'") and self.command.endswith("'") and len(self.command) >= 3:
+        if self.command.startswith('r"') and self.command.endswith('"') and len(self.command) >= 3 or self.command.startswith("r'") and self.command.endswith("'") and len(self.command) >= 3:
             self.command = self.command[2:-1]
 
 
 @attrs.define
 class ScreenshotAction:
     description: str = ''
-    name: Optional[str] = None  # Optional custom name for screenshot file
-    x: Optional[int] = None
-    y: Optional[int] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
+    name: str | None = None  # Optional custom name for screenshot file
+    x: int | None = None
+    y: int | None = None
+    width: int | None = None
+    height: int | None = None
 
 @attrs.define
 class SaveTimestampAction:
@@ -329,8 +330,8 @@ class SaveVariableAction:
 
 @attrs.define
 class PullAction:
-    src: Union[str, List[str]]  # Single path or list of paths to pull
-    dst: Optional[str] = None  # Optional destination name in artifacts folder
+    src: str | list[str]  # Single path or list of paths to pull
+    dst: str | None = None  # Optional destination name in artifacts folder
     description: str = ''
     mode: str = 'hypervisor'  # Transfer mode: 'hypervisor' or 'websocket'
 
@@ -346,8 +347,8 @@ class PullAction:
 class SnapshotFilesystemAction:
     """Capture filesystem snapshot and store in variable."""
     variable: str  # Variable name to store snapshot data
-    root_path: Optional[str] = None  # Root path to scan (default: / or C:\)
-    timeout: Optional[float] = 300.0  # Timeout in seconds (default: 5 minutes)
+    root_path: str | None = None  # Root path to scan (default: / or C:\)
+    timeout: float | None = 300.0  # Timeout in seconds (default: 5 minutes)
     description: str = ''
 
 @attrs.define
@@ -381,8 +382,8 @@ class PullChangedFilesAction:
 
 @attrs.define
 class PauseAction:
-    message: Optional[str] = None  # Optional message to display during pause
-    name: Optional[str] = None     # Optional name for the pause action
+    message: str | None = None  # Optional message to display during pause
+    name: str | None = None     # Optional name for the pause action
     description: str = ''
 
 @attrs.define
@@ -394,12 +395,12 @@ class VariableCondition:
     variable: str  # Variable name to test
 
     # Operators (mutually exclusive - exactly one must be specified)
-    equals: Optional[Any] = None  # Variable value equals this value (case-sensitive)
-    contains: Optional[str] = None  # String variable contains this substring
-    matches: Optional[str] = None  # Variable matches this regex pattern
-    greater_than: Optional[Union[int, float]] = None  # Numeric comparison
-    less_than: Optional[Union[int, float]] = None  # Numeric comparison
-    is_empty: Optional[bool] = None  # Check if variable is empty/None (True) or not empty (False)
+    equals: Any | None = None  # Variable value equals this value (case-sensitive)
+    contains: str | None = None  # String variable contains this substring
+    matches: str | None = None  # Variable matches this regex pattern
+    greater_than: int | float | None = None  # Numeric comparison
+    less_than: int | float | None = None  # Numeric comparison
+    is_empty: bool | None = None  # Check if variable is empty/None (True) or not empty (False)
 
     def __attrs_post_init__(self):
         """Validation: exactly one operator must be set."""
@@ -416,7 +417,7 @@ class VariableCondition:
         if operators_set != 1:
             raise ValueError(
                 "VariableCondition must have exactly one operator set. "
-                f"Valid operators: equals, contains, matches, greater_than, less_than, is_empty"
+                "Valid operators: equals, contains, matches, greater_than, less_than, is_empty"
             )
 
 @attrs.define
@@ -426,7 +427,7 @@ class StopAction:
     If condition is specified, stops only when condition evaluates to True.
     If no condition, always stops (unconditional stop).
     """
-    condition: Optional[VariableCondition] = None
+    condition: VariableCondition | None = None
     description: str = ''
 
 @attrs.define
@@ -437,27 +438,27 @@ class ContinueAction:
     If no condition, always continues (unconditional continue).
     Only valid within loop or block contexts.
     """
-    condition: Optional[VariableCondition] = None
+    condition: VariableCondition | None = None
     description: str = ''
 
 @attrs.define
 class BlockAction:
-    actions: List[ActionType]  # Remove quotes
+    actions: list[ActionType]  # Remove quotes
     description: str = ''
-    when: Optional[List[Union['ExistsCondition', 'NotExistsCondition']]] = None
-    delay: Optional[float] = None
+    when: list[ExistsCondition | NotExistsCondition] | None = None
+    delay: float | None = None
 
 @attrs.define
 class WaitCondition:
     """Recursive boolean condition for wait_until actions."""
     # Leaf conditions (mutually exclusive with operators)
-    exists: Optional[Target] = None
-    not_exists: Optional[Target] = None
+    exists: Target | None = None
+    not_exists: Target | None = None
 
     # Boolean operators (mutually exclusive with leaf conditions)
-    all: Optional[List['WaitCondition']] = None  # AND logic
-    any: Optional[List['WaitCondition']] = None  # OR logic
-    negate: Optional['WaitCondition'] = None     # NOT logic
+    all: list[WaitCondition] | None = None  # AND logic
+    any: list[WaitCondition] | None = None  # OR logic
+    negate: WaitCondition | None = None     # NOT logic
 
     def __attrs_post_init__(self):
         """Validation: exactly one field must be set."""
@@ -488,10 +489,10 @@ class WaitCondition:
 
 @attrs.define
 class PixelChangeConstraint:
-    above: Optional[float] = None  # Skip if change > value (Wait for stability)
-    below: Optional[float] = None  # Skip if change < value (Wait for activity)
+    above: float | None = None  # Skip if change > value (Wait for stability)
+    below: float | None = None  # Skip if change < value (Wait for activity)
     strategy: str = 'once'         # 'once' (latch) or 'continuous' (enforce always). Default: 'once'
-    idle: Optional[float] = None   # Wait (s) after constraint satisfied before searching.
+    idle: float | None = None   # Wait (s) after constraint satisfied before searching.
 
     def __attrs_post_init__(self):
         valid_strategies = {'once', 'continuous'}
@@ -500,7 +501,7 @@ class PixelChangeConstraint:
 
 @attrs.define
 class SkipOptions:
-    pixel_change: Optional[PixelChangeConstraint] = None
+    pixel_change: PixelChangeConstraint | None = None
 
 @attrs.define
 class WaitUntilAction:
@@ -508,7 +509,7 @@ class WaitUntilAction:
     timeout: float = 60.0
     check_interval: float = 3.0  # Default 3s check interval (previously 0.0)
     initial_delay: float = 5.0   # Default 5s delay to let UI stabilize
-    skip: Optional[SkipOptions] = None
+    skip: SkipOptions | None = None
     description: str = ''
 
     def __attrs_post_init__(self):
@@ -524,16 +525,16 @@ class LoopAction:
     - total: Total number of iterations
     - item: Current item (for list iteration)
     """
-    actions: List[ActionType]  # Will be resolved after ActionType is defined
+    actions: list[ActionType]  # Will be resolved after ActionType is defined
 
     # Simple iteration (mutually exclusive with items)
-    times: Optional[int] = None
+    times: int | None = None
 
     # List iteration (mutually exclusive with times)
-    items: Optional[Union[str, List[Any]]] = None  # Can be "{{var}}" or direct list
+    items: str | list[Any] | None = None  # Can be "{{var}}" or direct list
 
     # Optional: customize item variable name (defaults to 'item')
-    item_var: Optional[str] = None
+    item_var: str | None = None
 
     description: str = ''
 
@@ -555,12 +556,12 @@ ActionType = Union[
 
 @attrs.define
 class Playbook:
-    actions: List[ActionType]
+    actions: list[ActionType]
     settings: Settings = attrs.Factory(Settings)
-    variables: Optional[VariableRegistry] = None
-    tests: List[Test] = attrs.Factory(list)
+    variables: VariableRegistry | None = None
+    tests: list[Test] = attrs.Factory(list)
 
-def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or str
+def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
     import logging
     log = logging.getLogger(__name__)
 
@@ -576,15 +577,15 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
     if 'variables' in data and data['variables']:
         data['variables'] = VariableRegistry.from_dict(data['variables'])
     # Note: automatic variables will be merged during variable resolution, not during parsing
-    
+
     # Tests will be converted by cattrs when structuring the Playbook object
     # No need to convert them here
-    
+
     converter = cattrs.Converter()
-    
+
     # Configure converter to forbid extra keys - fail on unknown fields
     converter.forbid_extra_keys = True
-    
+
     # Register structure hooks for Union types if needed
     converter.register_structure_hook(
         ActionType,
@@ -598,7 +599,7 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
         Optional[TargetStrategyType],
         lambda obj, _: _structure_strategy(obj, converter) if obj is not None else None
     )
-    
+
     # Register structure hook for VariableRegistry
     converter.register_structure_hook(
         VariableRegistry,
@@ -611,7 +612,7 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
 
     # Register structure hook for Union[str, List[str]] in PullAction.src
     converter.register_structure_hook(
-        Union[str, List[str]],
+        Union[str, list[str]],
         lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj)
     )
 
@@ -627,13 +628,13 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
 
     # Register structure hook for LoopAction items field (Union[str, List[Any]])
     converter.register_structure_hook(
-        Optional[Union[str, List[Any]]],
+        Optional[str | list[Any]],
         lambda obj, _: obj  # Pass through as-is, will be resolved at runtime
     )
 
     # Register structure hook for allow_missing_chars field (Union[bool, str, List[str]])
     converter.register_structure_hook(
-        Optional[Union[bool, str, List[str]]],
+        Optional[bool | str | list[str]],
         lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None
     )
 
@@ -655,10 +656,10 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
         return obj
 
     converter.register_structure_hook(
-        Optional[Union[int, float]],
+        Optional[int | float],
         structure_optional_numeric
     )
-    
+
     # Register structure hook for SkipOptions
     converter.register_structure_hook(
         Optional[SkipOptions],
@@ -707,9 +708,8 @@ def _structure_action(obj, converter):
         if isinstance(obj['test'], str):
             # Handle inline test format: - test: testname
             return ActionTestAction(name=obj['test'])
-        else:
-            # Handle full test format with description
-            return converter.structure(obj['test'], ActionTestAction)
+        # Handle full test format with description
+        return converter.structure(obj['test'], ActionTestAction)
     if 'command' in obj:
         return converter.structure(obj['command'], CommandAction)
     if 'screenshot' in obj:
@@ -792,7 +792,7 @@ def _structure_skip_options(obj, converter):
 
 def _register_strict_hooks(converter):
     """Register strict structure hooks that validate all fields."""
-    
+
     def _validate_attrs_class(cls):
         """Create a strict structure hook for an attrs class."""
         def strict_structure_hook(obj, _):
@@ -800,9 +800,9 @@ def _register_strict_hooks(converter):
             if not attrs.has(cls):
                 # Use cattrs default structure for non-attrs classes
                 return cattrs.structure(obj, cls)
-                
+
             expected_fields = {field.name for field in attrs.fields(cls)}
-            
+
             # Check for unexpected fields
             if isinstance(obj, dict):
                 extra_fields = set(obj.keys()) - expected_fields
@@ -811,7 +811,7 @@ def _register_strict_hooks(converter):
                         f"Unexpected field(s) in {cls.__name__}: {', '.join(sorted(extra_fields))}. "
                         f"Expected fields: {', '.join(sorted(expected_fields))}"
                     )
-            
+
             # Use cattrs default structure with a fresh converter to avoid recursion
             fresh_converter = cattrs.Converter()
             # Copy union hooks to fresh converter to handle nested unions
@@ -844,7 +844,7 @@ def _register_strict_hooks(converter):
                 lambda obj, _: _structure_wait_condition(obj, fresh_converter) if obj is not None else None
             )
             fresh_converter.register_structure_hook(
-                Optional[Union[str, List[Any]]],
+                Optional[str | list[Any]],
                 lambda obj, _: obj  # Pass through as-is for LoopAction items
             )
             # Register numeric structure hook for VariableCondition fields
@@ -863,12 +863,12 @@ def _register_strict_hooks(converter):
                             raise ValueError(f"Cannot convert '{obj}' to numeric value")
                 return obj
             fresh_converter.register_structure_hook(
-                Optional[Union[int, float]],
+                Optional[int | float],
                 structure_optional_numeric
             )
             # Register structure hook for Union[str, List[str]] in PullAction.src
             fresh_converter.register_structure_hook(
-                Union[str, List[str]],
+                Union[str, list[str]],
                 lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj)
             )
             # Register structure hook for SkipOptions
@@ -878,12 +878,12 @@ def _register_strict_hooks(converter):
             )
             # Register structure hook for allow_missing_chars field (Union[bool, str, List[str]])
             fresh_converter.register_structure_hook(
-                Optional[Union[bool, str, List[str]]],
+                Optional[bool | str | list[str]],
                 lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None
             )
             return fresh_converter.structure(obj, cls)
         return strict_structure_hook
-    
+
     # Register hooks for all main attrs classes
     for cls in [Target, Settings, ClickAction,
                 DragAction, KeyboardAction, IdleAction, ScrollAction, GotoAction,

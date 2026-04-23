@@ -1,5 +1,6 @@
 """CLI handler for `adare vm create` command."""
 
+import logging
 from dataclasses import replace
 from pathlib import Path
 
@@ -7,7 +8,6 @@ from adare.console import print_error_message, print_success_message
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel, default_host_cpus, get_os_definition
 from adarelib.helper.yaml import dict_to_yaml
 
-import logging
 log = logging.getLogger(__name__)
 
 

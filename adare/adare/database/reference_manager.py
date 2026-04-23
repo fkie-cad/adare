@@ -5,16 +5,16 @@ This module handles validation and resolution of references between
 project databases and global resources (VMs, environments, test functions).
 """
 
-from pathlib import Path
-from typing import List, Dict, Optional, Any
 import logging
-from datetime import datetime, timedelta, timezone
 import threading
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
-from adare.database.models.global_models import Vm, Environment, TestFunction, Project
+from adare.database.exceptions import DatabaseError
+from adare.database.models.global_models import Environment, Project, TestFunction, Vm
 from adare.database.models.project_models import Experiment, ExperimentRun
-from adare.database.exceptions import DatabaseError, EntityNotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class ReferenceManager:
         if cache_key not in self._cache_timestamps:
             return False
 
-        age = datetime.now(timezone.utc) - self._cache_timestamps[cache_key]
+        age = datetime.now(UTC) - self._cache_timestamps[cache_key]
         return age < self._cache_ttl
 
     def _cache_get(self, cache_key: str):
@@ -80,7 +80,7 @@ class ReferenceManager:
         """Set cache with timestamp and evict old entries if needed."""
         with self._cache_lock:
             self._cache[cache_key] = value
-            self._cache_timestamps[cache_key] = datetime.now(timezone.utc)
+            self._cache_timestamps[cache_key] = datetime.now(UTC)
 
             # Evict oldest 20% of entries if cache too large
             if len(self._cache) > self._max_cache_size:
@@ -175,7 +175,7 @@ class ReferenceManager:
             log.error(f"Error validating test function {testfunction_id}: {e}")
             return False
 
-    def get_environment_info(self, environment_id: str) -> Optional[Dict[str, Any]]:
+    def get_environment_info(self, environment_id: str) -> dict[str, Any] | None:
         """
         Get environment information from global database.
 
@@ -202,7 +202,7 @@ class ReferenceManager:
             log.error(f"Error getting environment info {environment_id}: {e}")
             return None
 
-    def get_vm_info(self, vm_id: str) -> Optional[Dict[str, Any]]:
+    def get_vm_info(self, vm_id: str) -> dict[str, Any] | None:
         """
         Get VM information from global database.
 
@@ -229,7 +229,7 @@ class ReferenceManager:
             log.error(f"Error getting VM info {vm_id}: {e}")
             return None
 
-    def get_testfunction_info(self, testfunction_id: str) -> Optional[Dict[str, Any]]:
+    def get_testfunction_info(self, testfunction_id: str) -> dict[str, Any] | None:
         """
         Get test function information from global database.
 
@@ -370,7 +370,7 @@ class ReferenceManager:
             log.error(f"Error getting VM object {vm_id}: {e}")
             return None
 
-    def get_projects_using_environment(self, environment_id: str) -> List[str]:
+    def get_projects_using_environment(self, environment_id: str) -> list[str]:
         """
         Get list of project paths that use a specific environment.
 
@@ -403,7 +403,7 @@ class ReferenceManager:
 
         return projects
 
-    def get_projects_using_vm(self, vm_id: str) -> List[str]:
+    def get_projects_using_vm(self, vm_id: str) -> list[str]:
         """
         Get list of project paths that use a specific VM (via environments).
 
@@ -434,7 +434,7 @@ class ReferenceManager:
 
         return projects
 
-    def get_projects_using_testfunction(self, testfunction_id: str) -> List[str]:
+    def get_projects_using_testfunction(self, testfunction_id: str) -> list[str]:
         """
         Get list of project paths that use a specific test function.
 
@@ -468,7 +468,7 @@ class ReferenceManager:
 
         return projects
 
-    def validate_experiment_references(self, project_path: Path, experiment_id: str) -> Dict[str, Any]:
+    def validate_experiment_references(self, project_path: Path, experiment_id: str) -> dict[str, Any]:
         """
         Validate all global references in an experiment.
 
@@ -514,7 +514,7 @@ class ReferenceManager:
 
         return results
 
-    def validate_project_references(self, project_path: Path) -> Dict[str, Any]:
+    def validate_project_references(self, project_path: Path) -> dict[str, Any]:
         """
         Validate all global references in a project.
 

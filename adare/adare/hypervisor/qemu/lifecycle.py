@@ -10,24 +10,22 @@ Supported transfer modes (chosen automatically):
 - Libguestfs: offline guestfish disk access (fallback on Linux)
 - QGA: QEMU Guest Agent file operations (macOS fallback)
 """
-from pathlib import Path
 import logging
 import platform
 import shutil
 import subprocess
 import time
+from pathlib import Path
 
-from typing import List, Dict, Optional
-
+from adare.config import get_vm_credentials
+from adare.exceptions import LoggedException
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
-from adare.hypervisor.qemu.manager import QEMUManager
-from adare.hypervisor.qemu.libvirt_stderr_redirect import get_experiment_log_file
-from adare.hypervisor.qemu.guestfish_client import GuestfishClient
+from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.disk_diff import DiskDiffComparator
 from adare.hypervisor.qemu.file_transfer import get_file_transfer_strategy
-from adare.hypervisor.exceptions import HypervisorException
-from adare.exceptions import LoggedException
-from adare.config import get_vm_credentials
+from adare.hypervisor.qemu.guestfish_client import GuestfishClient
+from adare.hypervisor.qemu.libvirt_stderr_redirect import get_experiment_log_file
+from adare.hypervisor.qemu.manager import QEMUManager
 
 log = logging.getLogger(__name__)
 
@@ -103,9 +101,9 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         Args:
             context: ExperimentRunCtx with vm_name and guest_platform already set
         """
-        from adare.database.api.vm import VmApi
         from adare.backend.environment import database as environment_database
         from adare.backend.vm.commands import _is_vm_managed
+        from adare.database.api.vm import VmApi
         from adare.hypervisor.qemu.vm import QEMUVM
 
         # Query database for source VM to get disk path and architecture
@@ -124,7 +122,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             source_vm = api.get_vm_by_id(env_data['vm_id'])
 
         if not source_vm:
-            raise HypervisorException(f"Source VM not found in database")
+            raise HypervisorException("Source VM not found in database")
 
         source_vm_path = Path(source_vm.file)
 
@@ -165,7 +163,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             # Validate write permissions for external disk path
             self._validate_external_disk_writable(Path(disk_path))
         else:
-            log.debug(f"Managed VM detected, using managed storage")
+            log.debug("Managed VM detected, using managed storage")
 
         # Determine guest architecture
         vm_architecture = (env_data.get('vm_architecture') if env_data else None) or \
@@ -220,13 +218,13 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         # Create experiment overlay backed by immutable base disk
         # This ensures libguestfs operations don't modify the base disk,
         # preserving hash integrity for forensic validation
-        from adare.types.stages import (
-            VMDiskPreparationStage,
-            VMDiskFormatDetectionStage,
-            VMDiskConversionStage,
-            VMDiskOverlayCreationStage
-        )
         from adare.backend.experiment.stagectxmanager import StageCtxManager
+        from adare.types.stages import (
+            VMDiskConversionStage,
+            VMDiskFormatDetectionStage,
+            VMDiskOverlayCreationStage,
+            VMDiskPreparationStage,
+        )
 
         experiment_id = context.experiment_run_ulid or 'default'
 
@@ -252,7 +250,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             # Step 2: Conversion (only if needed)
             if is_external and detected_format == 'qcow2':
                 # External qcow2 - use directly without conversion
-                log.debug(f"Skipping conversion - external qcow2 will be used as base")
+                log.debug("Skipping conversion - external qcow2 will be used as base")
                 if not source_vm_path.exists():
                     raise HypervisorException(f"External qcow2 file not found: {source_vm_path}")
                 # _get_true_base_disk() will return external path directly
@@ -278,7 +276,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                         if return_code != 0:
                             raise HypervisorException(f"Failed to convert VM disk: {message}")
 
-                        log.debug(f"Conversion to base disk completed successfully")
+                        log.debug("Conversion to base disk completed successfully")
 
             # Step 3: Create overlay disk (always happens)
             with StageCtxManager(
@@ -390,8 +388,8 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         Args:
             context: ExperimentRunCtx containing VM
         """
-        from adare.types.stages import VMStartStage, VMGuestAgentWaitStage
         from adare.backend.experiment.stagectxmanager import StageCtxManager
+        from adare.types.stages import VMGuestAgentWaitStage, VMStartStage
 
         # Stage 1: Start VM
         with StageCtxManager(
@@ -401,7 +399,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         ) as start_stage:
             log.info(f"Starting VM '{context.vm.vm_name}' via libvirt")
             await context.vm.start(stop_event=context.user_interrupt_event, stage_ctx=start_stage)
-            log.debug(f"VM visible in virt-manager (use 'Open' button to access display)")
+            log.debug("VM visible in virt-manager (use 'Open' button to access display)")
 
         # Stage 2: Wait for guest agent
         with StageCtxManager(
@@ -409,8 +407,8 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             context.experiment_run_ulid,
             context.user_interrupt_event
         ):
-            from adare.backend.experiment.execution.gui_executor_factory import resolve_gui_execution_mode
             from adare.backend.experiment.execution.base import GUIExecutionMode
+            from adare.backend.experiment.execution.gui_executor_factory import resolve_gui_execution_mode
             playbook_settings = context.playbook.settings if context.playbook and hasattr(context.playbook, 'settings') else None
             gui_mode = resolve_gui_execution_mode(context.vm, playbook_settings)
             skip_x11 = (gui_mode == GUIExecutionMode.HOST)
@@ -517,8 +515,8 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         base_disk_path: str,
         overlay_disk_path: str,
         all: bool = False,
-        extract_dir: Optional[Path] = None
-    ) -> Optional[Dict[str, List[Dict]]]:
+        extract_dir: Path | None = None
+    ) -> dict[str, list[dict]] | None:
         """Compare base and overlay disks using manual virt-ls diff.
 
         Delegates to DiskDiffComparator for the actual comparison.

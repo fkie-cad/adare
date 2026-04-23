@@ -5,10 +5,10 @@ This module contains types for experiment configurations and metadata.
 Moved from adare.types.backend to consolidate application-specific types.
 """
 
-from typing import Optional
+
 import attrs
 
-from .backend import SMBConfiguration, NFSConfiguration, UsbDevice, Disk
+from .backend import Disk, NFSConfiguration, SMBConfiguration, UsbDevice
 
 
 @attrs.define
@@ -18,8 +18,8 @@ class ExperimentMetadata:
     """
     environments: list[str] = attrs.Factory(list)
     tags: list[str] = attrs.Factory(list)
-    smb: Optional[SMBConfiguration] = None
-    nfs: Optional[NFSConfiguration] = None
+    smb: SMBConfiguration | None = None
+    nfs: NFSConfiguration | None = None
     usb: list[UsbDevice] = attrs.Factory(list)
     disk: list[Disk] = attrs.Factory(list)
     description: str = attrs.Factory(str)

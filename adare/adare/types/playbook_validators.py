@@ -7,18 +7,26 @@ serialization to database.
 """
 
 from __future__ import annotations
+
+import logging
 import re
 from abc import ABC, abstractmethod
-from typing import List, Set, Dict, Any, Optional
 from dataclasses import dataclass, field
-import attrs
-import logging
 
 from adare.types.playbook import (
-    Playbook, ActionType, ClickAction, DragAction, KeyboardAction,
-    CommandAction, SaveTimestampAction, PullAction, ActionTestAction,
-    GotoAction, BlockAction, WaitUntilAction, Target,
-    StopAction, ContinueAction
+    ActionTestAction,
+    ActionType,
+    BlockAction,
+    CommandAction,
+    ContinueAction,
+    DragAction,
+    KeyboardAction,
+    Playbook,
+    PullAction,
+    SaveTimestampAction,
+    StopAction,
+    Target,
+    WaitUntilAction,
 )
 
 log = logging.getLogger(__name__)
@@ -28,10 +36,10 @@ log = logging.getLogger(__name__)
 class ValidationError:
     """Represents a validation error with context."""
     message: str
-    action_index: Optional[int] = None
-    action_type: Optional[str] = None
-    field_name: Optional[str] = None
-    variable_name: Optional[str] = None
+    action_index: int | None = None
+    action_type: str | None = None
+    field_name: str | None = None
+    variable_name: str | None = None
 
     def __str__(self) -> str:
         parts = [f"Validation Error: {self.message}"]
@@ -47,17 +55,17 @@ class ValidationError:
 @dataclass
 class ValidationResult:
     """Result of playbook validation."""
-    errors: List[ValidationError] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    errors: list[ValidationError] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def is_valid(self) -> bool:
         """Check if validation passed (no errors)."""
         return len(self.errors) == 0
 
-    def add_error(self, message: str, action_index: Optional[int] = None,
-                  action_type: Optional[str] = None, field_name: Optional[str] = None,
-                  variable_name: Optional[str] = None):
+    def add_error(self, message: str, action_index: int | None = None,
+                  action_type: str | None = None, field_name: str | None = None,
+                  variable_name: str | None = None):
         """Add a validation error."""
         self.errors.append(ValidationError(
             message=message,
@@ -112,14 +120,14 @@ class VariableUsageValidator(PlaybookValidator):
         log.debug(f"Found variable references: {self.variable_references}")
         return result
 
-    def _extract_all_references(self, playbook: Playbook) -> Dict[str, List[tuple]]:
+    def _extract_all_references(self, playbook: Playbook) -> dict[str, list[tuple]]:
         """
         Extract all variable references from playbook.
 
         Returns:
             Dict mapping variable names to list of (action_index, action_type, field_name) tuples
         """
-        references: Dict[str, List[tuple]] = {}
+        references: dict[str, list[tuple]] = {}
 
         for idx, action in enumerate(playbook.actions):
             action_type = action.__class__.__name__
@@ -133,9 +141,9 @@ class VariableUsageValidator(PlaybookValidator):
         return references
 
     def _extract_from_action(self, action: ActionType, action_index: int,
-                            action_type: str) -> Dict[str, List[tuple]]:
+                            action_type: str) -> dict[str, list[tuple]]:
         """Extract variable references from a single action."""
-        references: Dict[str, List[tuple]] = {}
+        references: dict[str, list[tuple]] = {}
 
         # Check description (common to all actions)
         if hasattr(action, 'description') and action.description:
@@ -223,7 +231,7 @@ class VariableUsageValidator(PlaybookValidator):
 
     def _extract_from_target(self, target: Target, field_prefix: str,
                             action_index: int, action_type: str,
-                            references: Dict[str, List[tuple]]):
+                            references: dict[str, list[tuple]]):
         """Extract variables from Target object."""
         if target.text:
             self._extract_from_string(target.text, f'{field_prefix}.text',
@@ -234,7 +242,7 @@ class VariableUsageValidator(PlaybookValidator):
 
     def _extract_from_wait_condition(self, condition, field_prefix: str,
                                     action_index: int, action_type: str,
-                                    references: Dict[str, List[tuple]]):
+                                    references: dict[str, list[tuple]]):
         """Extract variables from WaitCondition recursively."""
         if condition.exists:
             self._extract_from_target(condition.exists, f'{field_prefix}.exists',
@@ -256,7 +264,7 @@ class VariableUsageValidator(PlaybookValidator):
 
     def _extract_from_string(self, text: str, field_name: str,
                            action_index: int, action_type: str,
-                           references: Dict[str, List[tuple]]):
+                           references: dict[str, list[tuple]]):
         """Extract variable names from string using regex pattern."""
         matches = self.VARIABLE_PATTERN.findall(text)
         for var_name in matches:
@@ -350,7 +358,7 @@ class FilterValidator(PlaybookValidator):
 
         return result
 
-    def _get_variable_types(self, playbook: Playbook) -> Dict[str, str]:
+    def _get_variable_types(self, playbook: Playbook) -> dict[str, str]:
         """
         Get mapping of variable names to their types.
 
@@ -408,7 +416,7 @@ class FilterValidator(PlaybookValidator):
 
         return types
 
-    def _get_types_from_block(self, block_action: BlockAction) -> Dict[str, str]:
+    def _get_types_from_block(self, block_action: BlockAction) -> dict[str, str]:
         """Get variable types from block actions."""
         types = {}
         for action in block_action.actions:
@@ -424,7 +432,7 @@ class FilterValidator(PlaybookValidator):
                 types.update(self._get_types_from_block(action))
         return types
 
-    def _extract_variable_name(self, variable_field: str) -> Optional[str]:
+    def _extract_variable_name(self, variable_field: str) -> str | None:
         """Extract variable name from save_timestamp variable field."""
         if not variable_field:
             return None
@@ -434,7 +442,7 @@ class FilterValidator(PlaybookValidator):
         return variable_field
 
     def _extract_filters_from_action(self, playbook: Playbook, action_index: int,
-                                     field_name: str, var_name: str) -> List[str]:
+                                     field_name: str, var_name: str) -> list[str]:
         """
         Extract filter names used on a specific variable in a specific action field.
 
@@ -464,7 +472,7 @@ class FilterValidator(PlaybookValidator):
 
         return filters
 
-    def _get_field_value(self, action: ActionType, field_name: str) -> Optional[str]:
+    def _get_field_value(self, action: ActionType, field_name: str) -> str | None:
         """Get string value of a field from an action."""
         # Handle nested field names like 'target.text', 'env.PATH', etc.
         parts = field_name.split('.')
@@ -499,7 +507,7 @@ class DuplicateVariableValidator(PlaybookValidator):
         result = ValidationResult()
 
         # Track all variable definitions with their sources
-        variable_sources: Dict[str, List[tuple]] = {}  # var_name -> [(source, location)]
+        variable_sources: dict[str, list[tuple]] = {}  # var_name -> [(source, location)]
 
         # Check variables section (note: YAML will already merge duplicates,
         # but we can detect if someone redefines a variable)
@@ -549,8 +557,8 @@ class DuplicateVariableValidator(PlaybookValidator):
 
     def _collect_save_timestamp_variables(
         self,
-        actions: List[ActionType],
-        variable_sources: Dict[str, List[tuple]],
+        actions: list[ActionType],
+        variable_sources: dict[str, list[tuple]],
         action_offset: int = 0
     ) -> None:
         """
@@ -595,7 +603,7 @@ class DuplicateVariableValidator(PlaybookValidator):
                     action_offset=action_index
                 )
 
-    def _extract_variable_name(self, variable_field: str) -> Optional[str]:
+    def _extract_variable_name(self, variable_field: str) -> str | None:
         """Extract variable name from save_timestamp variable field."""
         if not variable_field:
             return None
@@ -668,7 +676,7 @@ class VariableDefinitionValidator(PlaybookValidator):
 
         return result
 
-    def _collect_defined_variables(self, playbook: Playbook) -> Set[str]:
+    def _collect_defined_variables(self, playbook: Playbook) -> set[str]:
         """
         Collect all defined variable names.
 
@@ -704,7 +712,7 @@ class VariableDefinitionValidator(PlaybookValidator):
 
         return defined
 
-    def _get_automatic_variable_names(self) -> Set[str]:
+    def _get_automatic_variable_names(self) -> set[str]:
         """
         Get names of automatic variables that are always available.
 
@@ -737,7 +745,7 @@ class VariableDefinitionValidator(PlaybookValidator):
             'adare_run_dir',
         }
 
-    def _collect_from_block(self, block_action: BlockAction) -> Set[str]:
+    def _collect_from_block(self, block_action: BlockAction) -> set[str]:
         """Collect variables defined within a block action."""
         defined = set()
         for action in block_action.actions:
@@ -753,7 +761,7 @@ class VariableDefinitionValidator(PlaybookValidator):
                 defined.update(self._collect_from_block(action))
         return defined
 
-    def _extract_variable_name(self, variable_field: str) -> Optional[str]:
+    def _extract_variable_name(self, variable_field: str) -> str | None:
         """
         Extract base variable name from save_timestamp variable field.
 

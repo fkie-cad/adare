@@ -5,7 +5,7 @@ These DTOs provide type-safe request/response objects for the EnvironmentService
 """
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any
 
 
 @dataclass
@@ -21,7 +21,7 @@ class EnvironmentCreateRequest:
     """Request DTO for creating a new environment template."""
     project_path: Path
     name: str
-    vm_path: Optional[Path] = None
+    vm_path: Path | None = None
 
 
 @dataclass
@@ -41,14 +41,14 @@ class EnvironmentInfo:
     id: str
     name: str
     description: str
-    vm_name: Optional[str]
+    vm_name: str | None
     hypervisor: str
-    os_platform: Optional[str]
-    file_path: Optional[Path]
-    next_steps: List[str] = field(default_factory=list)
-    tip: Optional[str] = None
+    os_platform: str | None
+    file_path: Path | None
+    next_steps: list[str] = field(default_factory=list)
+    tip: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             'id': self.id,
@@ -69,11 +69,11 @@ class EnvironmentListItem:
     id: str
     name: str
     description: str
-    vm_name: Optional[str]
+    vm_name: str | None
     hypervisor: str
-    os_platform: Optional[str]
+    os_platform: str | None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             'id': self.id,

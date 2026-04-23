@@ -1,25 +1,29 @@
-from pathlib import Path
-from datetime import datetime, timezone
-import threading
 import logging
-
-from adare.backend.experiment.stagectxmanager import StageCtxManager
-from adare.types.stages import (
-    VMCreateStage, VMWaitTillReadyStage,
-    VMStopStage, VMDestroyStage, VMExperimentSnapshotStage, VMImportStage, VMSnapshotCreateStage,
-    VMNetworkingStage, VMFileTransferSetupStage, VMRuntimePreparationStage,
-    VMInstanceSyncStage, VMInstanceVerificationStage
-)
-from adare.backend.experiment.runctx import ExperimentRunCtx
-from adare.backend.experiment.directory import ExperimentRunDirectory
-from adare.exceptions import LoggedException
-from adare.config import SHARE_POINT_VM
-from adare.hypervisor.virtualbox import VirtualBoxVM, VirtualBoxManager
-import adare.backend.experiment.database as experiment_database
-import adare.backend.environment.database as environment_database
-import adare.backend.vm.database as vm_database
-import shutil
 import os
+import shutil
+import threading
+from datetime import UTC, datetime
+from pathlib import Path
+
+import adare.backend.environment.database as environment_database
+import adare.backend.experiment.database as experiment_database
+import adare.backend.vm.database as vm_database
+from adare.backend.experiment.directory import ExperimentRunDirectory
+from adare.backend.experiment.runctx import ExperimentRunCtx
+from adare.backend.experiment.stagectxmanager import StageCtxManager
+from adare.exceptions import LoggedException
+from adare.hypervisor.virtualbox import VirtualBoxVM
+from adare.types.stages import (
+    VMDestroyStage,
+    VMExperimentSnapshotStage,
+    VMFileTransferSetupStage,
+    VMImportStage,
+    VMInstanceVerificationStage,
+    VMNetworkingStage,
+    VMRuntimePreparationStage,
+    VMSnapshotCreateStage,
+    VMStopStage,
+)
 
 log = logging.getLogger(__name__)
 
@@ -202,7 +206,7 @@ class VMLifecycleManager:
         vm_id = env_data['vm_id'] if env_data else None
         if not vm_id:
             raise LoggedException(log, "No VM associated with environment. Did you load the environment properly?")
-        
+
         # Prepare VM instance for experiment (includes port allocation and VM reuse)
         from adare.backend.vm.commands import ensure_vm_ready_for_experiment
         from adare.database.api.vm import VmApi
@@ -312,7 +316,7 @@ class VMLifecycleManager:
                     )
                     if not vm_instance_is_available:
                         # VM instance was missing and cleaned up - need to allocate a new one
-                        log.info(f"VM instance was cleaned up, allocating a new instance for the experiment")
+                        log.info("VM instance was cleaned up, allocating a new instance for the experiment")
 
                         # Re-allocate a new VM instance for this experiment
                         from adare.backend.vm.instance_manager import allocate_vm_instance_for_experiment
@@ -421,7 +425,7 @@ class VMLifecycleManager:
                 context.experiment_run_directory
             )
 
-        context.timestamp_before_vm_start = datetime.now(timezone.utc)
+        context.timestamp_before_vm_start = datetime.now(UTC)
 
     async def setup_networking(self, context: ExperimentRunCtx):
         """
@@ -588,17 +592,17 @@ class VMLifecycleManager:
 
                 # Call virt-diff through QEMU lifecycle strategy
                 log.info("Performing host-side filesystem diff (virt-diff)")
-                
+
                 # Prepare diff artifacts directory
                 diff_dir = None
                 extract_content_dir = None
-                
+
                 if context.experiment_run_directory:
                     artifacts_dir = context.experiment_run_directory.path / 'artifacts'
                     diff_dir = artifacts_dir / 'diff'
                     diff_dir.mkdir(parents=True, exist_ok=True)
                     extract_content_dir = diff_dir / 'content'
-                
+
                 diff_results = self.strategy.compare_disk_images_with_virt_diff(
                     base_disk_path=base_disk_path,
                     overlay_disk_path=overlay_disk_path,
@@ -616,7 +620,11 @@ class VMLifecycleManager:
                     }
 
                     # Export to JSON and CSV formats
-                    from adare.backend.experiment.filesystem_snapshot import export_diff_json, export_diff_csv, export_diff_bodyfile
+                    from adare.backend.experiment.filesystem_snapshot import (
+                        export_diff_bodyfile,
+                        export_diff_csv,
+                        export_diff_json,
+                    )
                     json_path = diff_dir / 'filesystem_diffs.json'
                     csv_path = diff_dir / 'filesystem_diffs.csv'
                     bodyfile_path = diff_dir / 'filesystem_diffs.bodyfile'
@@ -762,8 +770,8 @@ class VMLifecycleManager:
 
             # Get VM instance from database to create snapshot
             try:
-                from adare.database.api.vm import VmApi
                 from adare.database.api.experiment import ExperimentApi
+                from adare.database.api.vm import VmApi
                 from adare.database.models.project_models import ExperimentRun
 
                 # Get the VM instance ID from the experiment run
@@ -810,8 +818,8 @@ class VMLifecycleManager:
 
             # Get VM instance from database to delete snapshot
             try:
-                from adare.database.api.vm import VmApi
                 from adare.database.api.experiment import ExperimentApi
+                from adare.database.api.vm import VmApi
                 from adare.database.models.project_models import ExperimentRun
 
                 # Get the VM instance ID from the experiment run

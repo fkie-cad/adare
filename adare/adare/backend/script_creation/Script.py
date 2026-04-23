@@ -1,14 +1,15 @@
 # external imports
+# configure logging
+import logging
+import os
 import shutil
 from pathlib import Path
+
 import jinja2
-import os
 
 # internal imports
 from adare.helperfunctions.jinja import jinjafeatures
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -67,9 +68,8 @@ class Script:
             wrapper_script.render(self.destination_directory, name=f'wrapper_{self.name}')
             self.wrapper = wrapper_script
             return wrapper_script
-        else:
-            log.error('script was not rendered, therefore no wrapper could be created')
-            return None
+        log.error('script was not rendered, therefore no wrapper could be created')
+        return None
 
     def disable_render(self):
         """

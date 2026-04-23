@@ -2,10 +2,10 @@ from adare.config.configdirectory import (
     ADARE_DIR,
     ADAREVM_DIR,
     APPDATA_DIR,
-    STATE_DIR,
-    VMS_DIR,
     ENVIRONMENTS_DIR,
     OS_PROFILES_DIR,
+    STATE_DIR,
+    VMS_DIR,
     ensure_directories,
 )
 

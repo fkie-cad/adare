@@ -1,11 +1,10 @@
 # external imports
-from pathlib import Path
-import shutil
-
 # internal imports
-
 # configure logging
 import logging
+import shutil
+from pathlib import Path
+
 log = logging.getLogger(__name__)
 
 

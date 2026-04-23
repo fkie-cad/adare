@@ -1,13 +1,12 @@
 """Tests for disk_helpers module -- shared qcow2 disk creation logic."""
 
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from adare.hypervisor.qemu.vm_creator.disk_helpers import (
-    create_qcow2_disk,
     DiskCreationError,
+    create_qcow2_disk,
 )
 
 

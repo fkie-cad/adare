@@ -3,15 +3,14 @@ QEMU Manager for handling QEMU operations in a thread-safe manner.
 
 Implements AbstractHypervisorManager for QEMU-specific operations.
 """
-import asyncio
 import logging
 import platform
 import queue
 import shutil
 import subprocess
-import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 try:
     import libvirt
@@ -144,7 +143,7 @@ class QEMUManager(AbstractHypervisorManager):
             log.error(f"Error running async function {func.__name__}: {e}")
             raise e
 
-    async def import_vm_async(self, vm_file_path: Path, vm_name: str, environment_ulid: Optional[str] = None):
+    async def import_vm_async(self, vm_file_path: Path, vm_name: str, environment_ulid: str | None = None):
         """
         Import a VM from OVF/OVA file asynchronously.
 
@@ -162,8 +161,8 @@ class QEMUManager(AbstractHypervisorManager):
             VMImportException: If import fails
         """
         # Import here to avoid circular dependency
-        from adare.hypervisor.qemu.vm import QEMUVM
         from adare.config import get_vm_credentials
+        from adare.hypervisor.qemu.vm import QEMUVM
 
         log.info(f"Importing QEMU VM '{vm_name}' from '{vm_file_path}' (environment: {environment_ulid})")
 

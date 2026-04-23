@@ -6,20 +6,24 @@ using WebSocket protocol for real-time GUI automation and test execution.
 """
 
 import asyncio
-import websockets
+import base64
+import io
 import json
 import logging
 import time
-from typing import Dict, Any, Optional, Callable, List
-from pathlib import Path
-import base64
 import zipfile
-import io
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+import websockets
 
 from adarelib.websocket.protocol import (
-    parse_message, create_tool_call, create_tool_result, create_event,
-    MessageType, EventType, ToolRegistry, 
-    ToolCallMessage, ToolResultMessage, EventMessage
+    EventMessage,
+    ToolRegistry,
+    ToolResultMessage,
+    create_tool_call,
+    parse_message,
 )
 
 log = logging.getLogger(__name__)
@@ -33,28 +37,28 @@ class WebSocketTimeoutError(Exception):
 class AdareVMClient:
     """
     WebSocket client for communicating with adarevm server.
-    
+
     This client provides an interface for sending commands to the VM
     and receiving real-time events and results.
     """
-    
+
     def __init__(self, host: str = 'localhost', port: int = 18765):
         self.server_url = f'ws://{host}:{port}'
-        self.websocket: Optional[websockets.WebSocketClientProtocol] = None
+        self.websocket: websockets.WebSocketClientProtocol | None = None
         self.connected = False
-        
+
         # Pending tool calls (waiting for results)
-        self.pending_calls: Dict[str, asyncio.Future] = {}
-        
+        self.pending_calls: dict[str, asyncio.Future] = {}
+
         # Event handlers
-        self.event_handlers: Dict[str, List[Callable]] = {}
-        
+        self.event_handlers: dict[str, list[Callable]] = {}
+
         # Background task for handling messages
-        self.message_handler_task: Optional[asyncio.Task] = None
+        self.message_handler_task: asyncio.Task | None = None
 
         # Connection lock (event-loop-aware, recreated in current loop)
         self._connection_lock = None
-    
+
     async def connect(self, timeout: float = 10.0) -> bool:
         """
         Connect to the adarevm WebSocket server.
@@ -69,10 +73,10 @@ class AdareVMClient:
         async with self._connection_lock:
             if self.connected:
                 return True
-            
+
             try:
                 log.info(f"Connecting to adarevm server at {self.server_url}")
-                
+
                 self.websocket = await asyncio.wait_for(
                     websockets.connect(
                         self.server_url,
@@ -82,16 +86,16 @@ class AdareVMClient:
                     ),
                     timeout=timeout
                 )
-                
+
                 self.connected = True
-                
+
                 # Start message handler task
                 self.message_handler_task = asyncio.create_task(self._handle_messages())
-                
+
                 log.info("Successfully connected to adarevm server")
                 return True
-                
-            except asyncio.TimeoutError:
+
+            except TimeoutError:
                 log.error(f"Connection timeout after {timeout} seconds")
                 return False
             except (websockets.exceptions.WebSocketException, ConnectionError, OSError) as e:
@@ -190,15 +194,14 @@ class AdareVMClient:
                 if success:
                     log.info(f"Successfully reconnected on attempt {attempt + 1}")
                     return True
-                else:
-                    log.warning(f"Reconnection attempt {attempt + 1} failed")
+                log.warning(f"Reconnection attempt {attempt + 1} failed")
 
             except Exception as e:
                 log.error(f"Reconnection attempt {attempt + 1} failed with error: {e}")
 
         log.error(f"Failed to reconnect after {retries} attempts")
         return False
-    
+
     async def _handle_messages(self):
         """Handle incoming messages from the server."""
         try:
@@ -210,41 +213,41 @@ class AdareVMClient:
         except (websockets.exceptions.WebSocketException, ConnectionError, OSError) as e:
             log.error(f"WebSocket error handling messages: {e}")
             self.connected = False
-    
+
     async def _process_message(self, message_str: str):
         """Process a single incoming message."""
         try:
             message = parse_message(message_str)
-            
+
             if isinstance(message, ToolResultMessage):
                 await self._handle_tool_result(message)
             elif isinstance(message, EventMessage):
                 await self._handle_event(message)
             else:
                 log.debug(f"Received unknown message type: {message.type}")
-                
+
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             log.error(f"Message parsing error: {e}")
-    
+
     async def _handle_tool_result(self, message: ToolResultMessage):
         """Handle a tool result message."""
         call_id = message.id
-        
+
         if call_id in self.pending_calls:
             future = self.pending_calls.pop(call_id)
             if not future.cancelled():
                 future.set_result(message)
         else:
             log.warning(f"Received result for unknown call ID: {call_id}")
-    
+
     async def _handle_event(self, message: EventMessage):
         """Handle an event message."""
         event_type = message.event_type
-        
+
         # Call registered event handlers
         handlers = self.event_handlers.get(event_type, [])
         handlers.extend(self.event_handlers.get('*', []))  # Wildcard handlers
-        
+
         for handler in handlers:
             try:
                 if asyncio.iscoroutinefunction(handler):
@@ -253,11 +256,11 @@ class AdareVMClient:
                     handler(event_type, message.data)
             except Exception as e:
                 log.error(f"Error in event handler: {e}", exc_info=True)
-    
+
     def add_event_handler(self, event_type: str, handler: Callable):
         """
         Add an event handler for a specific event type.
-        
+
         Args:
             event_type: Event type to handle (or '*' for all events)
             handler: Function to call when event occurs
@@ -265,7 +268,7 @@ class AdareVMClient:
         if event_type not in self.event_handlers:
             self.event_handlers[event_type] = []
         self.event_handlers[event_type].append(handler)
-    
+
     def remove_event_handler(self, event_type: str, handler: Callable):
         """Remove an event handler."""
         if event_type in self.event_handlers:
@@ -295,9 +298,8 @@ class AdareVMClient:
                 if current_loop == task_loop:
                     # Task is running in current loop, all good
                     return
-                else:
-                    # Task is from a different event loop (previous asyncio.run())
-                    log.debug("Message handler task is from a different event loop, restarting")
+                # Task is from a different event loop (previous asyncio.run())
+                log.debug("Message handler task is from a different event loop, restarting")
             except RuntimeError:
                 # No running loop, which is odd but handle it
                 log.debug("No running event loop detected")
@@ -306,18 +308,18 @@ class AdareVMClient:
         log.info("Restarting message handler task in current event loop")
         self.message_handler_task = asyncio.create_task(self._handle_messages())
 
-    async def call_tool(self, tool_name: str, params: Dict[str, Any] = None, timeout: float = 30.0) -> Dict[str, Any]:
+    async def call_tool(self, tool_name: str, params: dict[str, Any] = None, timeout: float = 30.0) -> dict[str, Any]:
         """
         Call a tool on the adarevm server.
-        
+
         Args:
             tool_name: Name of the tool to call
             params: Parameters for the tool
             timeout: Timeout in seconds
-            
+
         Returns:
             Tool result data
-            
+
         Raises:
             WebSocketTimeoutError: If the call times out
             RuntimeError: If not connected or call fails
@@ -330,7 +332,7 @@ class AdareVMClient:
 
         # Create tool call message
         call_msg = create_tool_call(tool_name, params or {})
-        
+
         # Enhanced logging for command tracking
         import time
         start_time = time.time()
@@ -339,29 +341,28 @@ class AdareVMClient:
             log.info(f"[{call_msg.id[:8]}] Shell command: {params['shell_command']}")
         log.debug(f"[{call_msg.id[:8]}] Tool params: {params}")
         log.debug(f"[{call_msg.id[:8]}] Timeout: {timeout}s")
-        
+
         # Create future for the result
         result_future = asyncio.Future()
         self.pending_calls[call_msg.id] = result_future
-        
+
         try:
             # Send the message
             await self.websocket.send(call_msg.to_json())
             log.debug(f"[{call_msg.id[:8]}] Message sent, waiting for response...")
-            
+
             # Wait for result
             result_msg = await asyncio.wait_for(result_future, timeout=timeout)
-            
+
             execution_time = time.time() - start_time
             log.info(f"[{call_msg.id[:8]}] Tool call completed in {execution_time:.2f}s")
-            
+
             if result_msg.success:
                 return result_msg.result
-            else:
-                log.error(f"[{call_msg.id[:8]}] Tool call failed: {result_msg.error}")
-                raise RuntimeError(f"Tool call failed: {result_msg.error}")
-                
-        except asyncio.TimeoutError:
+            log.error(f"[{call_msg.id[:8]}] Tool call failed: {result_msg.error}")
+            raise RuntimeError(f"Tool call failed: {result_msg.error}")
+
+        except TimeoutError:
             execution_time = time.time() - start_time
             log.error(f"[{call_msg.id[:8]}] Tool call '{tool_name}' timed out after {timeout}s (actual: {execution_time:.2f}s)")
             # Clean up pending call
@@ -373,55 +374,55 @@ class AdareVMClient:
             # Clean up pending call
             self.pending_calls.pop(call_msg.id, None)
             raise e
-    
+
     # GUI Action Methods
-    
-    async def screenshot(self, x: int = None, y: int = None, width: int = None, height: int = None) -> Dict[str, Any]:
+
+    async def screenshot(self, x: int = None, y: int = None, width: int = None, height: int = None) -> dict[str, Any]:
         """Take a screenshot."""
         params = {}
         if x is not None and y is not None and width is not None and height is not None:
             params = {"x": x, "y": y, "width": width, "height": height}
         return await self.call_tool(ToolRegistry.SCREENSHOT, params)
-    
-    async def click(self, x: int, y: int) -> Dict[str, Any]:
+
+    async def click(self, x: int, y: int) -> dict[str, Any]:
         """Simulate a mouse click."""
         return await self.call_tool(ToolRegistry.CLICK, {"x": x, "y": y})
-    
-    async def right_click(self, x: int, y: int) -> Dict[str, Any]:
+
+    async def right_click(self, x: int, y: int) -> dict[str, Any]:
         """Simulate a right mouse click."""
         return await self.call_tool(ToolRegistry.RIGHT_CLICK, {"x": x, "y": y})
-    
-    async def double_click(self, x: int, y: int) -> Dict[str, Any]:
-        """Simulate a double mouse click.""" 
+
+    async def double_click(self, x: int, y: int) -> dict[str, Any]:
+        """Simulate a double mouse click."""
         return await self.call_tool(ToolRegistry.DOUBLE_CLICK, {"x": x, "y": y})
-    
-    async def drag(self, x1: int, y1: int, x2: int, y2: int) -> Dict[str, Any]:
+
+    async def drag(self, x1: int, y1: int, x2: int, y2: int) -> dict[str, Any]:
         """Simulate a mouse drag."""
         return await self.call_tool(ToolRegistry.DRAG, {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
-    
-    async def keyboard(self, type: str, key: str) -> Dict[str, Any]:
+
+    async def keyboard(self, type: str, key: str) -> dict[str, Any]:
         """Simulate keyboard actions."""
         return await self.call_tool(ToolRegistry.KEYBOARD, {"type": type, "key": key})
-    
-    async def scroll(self, direction: str, amount: int) -> Dict[str, Any]:
+
+    async def scroll(self, direction: str, amount: int) -> dict[str, Any]:
         """Simulate scroll action."""
         return await self.call_tool(ToolRegistry.SCROLL, {"direction": direction, "amount": amount})
-    
-    async def goto(self, x: int, y: int) -> Dict[str, Any]:
+
+    async def goto(self, x: int, y: int) -> dict[str, Any]:
         """Move mouse to coordinates."""
         return await self.call_tool(ToolRegistry.GOTO, {"x": x, "y": y})
-    
-    async def idle(self, duration: float) -> Dict[str, Any]:
+
+    async def idle(self, duration: float) -> dict[str, Any]:
         """Simulate idle time."""
         return await self.call_tool(ToolRegistry.IDLE, {"duration": duration})
-    
-    async def screenshot_window(self, window: str) -> Dict[str, Any]:
+
+    async def screenshot_window(self, window: str) -> dict[str, Any]:
         """Take screenshot of specific window."""
         return await self.call_tool(ToolRegistry.SCREENSHOT_WINDOW, {"window": window})
-    
+
     # Test Management Methods
-    
-    async def upload_testfunctions(self, testfunctions_path: Path, specific_files: set[Path] = None) -> Dict[str, Any]:
+
+    async def upload_testfunctions(self, testfunctions_path: Path, specific_files: set[Path] = None) -> dict[str, Any]:
         """
         Upload testfunctions to the VM.
 
@@ -459,28 +460,28 @@ class AdareVMClient:
         return await self.call_tool(ToolRegistry.UPLOAD_TESTFUNCTIONS, {
             "testfunctions_data": zip_data
         }, timeout=300.0)  # Increased timeout for dependency installation (5 minutes)
-    
-    async def install_testfunction_dependencies(self, dependencies: List[str]) -> Dict[str, Any]:
+
+    async def install_testfunction_dependencies(self, dependencies: list[str]) -> dict[str, Any]:
         """
         Install testfunction dependencies in the VM.
-        
+
         Args:
             dependencies: List of dependency strings (e.g., ["requests>=2.0.0", "numpy"])
-            
+
         Returns:
             Installation result
         """
         return await self.call_tool(ToolRegistry.INSTALL_DEPENDENCIES, {
             "dependencies": dependencies
         }, timeout=300.0)  # 5 minutes for dependency installation
-    
-    async def set_variables(self, variables: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def set_variables(self, variables: dict[str, Any]) -> dict[str, Any]:
         """Set variables for test execution."""
         return await self.call_tool(ToolRegistry.SET_VARIABLES, {
             "variables": json.dumps(variables)
         })
-    
-    async def run_test(self, test_name: str, resolved_test_data: Dict[str, Any], timeout: float = 130.0) -> Dict[str, Any]:
+
+    async def run_test(self, test_name: str, resolved_test_data: dict[str, Any], timeout: float = 130.0) -> dict[str, Any]:
         """Run a test with pre-resolved test data (variables already substituted).
 
         Args:
@@ -496,9 +497,9 @@ class AdareVMClient:
             "resolved_test_data": resolved_test_data
         }
         return await self.call_tool(ToolRegistry.RUN_TEST, params, timeout=timeout)
-    
-    
-    async def execute_shell(self, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True, admin: bool = False, websocket_timeout: float = None) -> Dict[str, Any]:
+
+
+    async def execute_shell(self, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True, admin: bool = False, websocket_timeout: float = None) -> dict[str, Any]:
         """Execute a raw shell command with advanced options."""
         params = {"shell_command": shell_command}
         if cwd is not None:
@@ -517,12 +518,12 @@ class AdareVMClient:
         # Use command timeout + buffer for WebSocket timeout, or default to 30s
         call_timeout = websocket_timeout or (timeout + 10 if timeout else 30.0)
         return await self.call_tool(ToolRegistry.EXECUTE_SHELL, params, timeout=call_timeout)
-    
-    async def get_status(self) -> Dict[str, Any]:
+
+    async def get_status(self) -> dict[str, Any]:
         """Get current server status."""
         return await self.call_tool(ToolRegistry.GET_STATUS)
 
-    async def collect_system_info(self, timeout: float = 120.0) -> Dict[str, Any]:
+    async def collect_system_info(self, timeout: float = 120.0) -> dict[str, Any]:
         """
         Collect comprehensive system information from the guest VM.
 
@@ -537,7 +538,7 @@ class AdareVMClient:
         """
         return await self.call_tool(ToolRegistry.COLLECT_SYSTEM_INFO, timeout=timeout)
 
-    async def get_filesystem_snapshot(self, root_path: str = '/', timeout: float = 660.0) -> Dict[str, Any]:
+    async def get_filesystem_snapshot(self, root_path: str = '/', timeout: float = 660.0) -> dict[str, Any]:
         """
         Get filesystem snapshot from the VM.
 
@@ -563,7 +564,7 @@ class AdareVMClient:
             "timeout": timeout - 60  # Subtract buffer for tool timeout
         }, timeout=timeout)
 
-    async def get_timestamp(self, use_local: bool = False, timeout: float = 10.0) -> Dict[str, Any]:
+    async def get_timestamp(self, use_local: bool = False, timeout: float = 10.0) -> dict[str, Any]:
         """
         Get timezone-aware timestamp from the VM.
 
@@ -616,7 +617,7 @@ class AdareVMClient:
 
     async def pull_file_chunked(self, guest_path: str, host_path: Path,
                                chunk_size: int = 1048576,
-                               progress_callback = None) -> Dict[str, Any]:
+                               progress_callback = None) -> dict[str, Any]:
         """
         Pull a file from guest to host using chunked transfer.
 
@@ -633,7 +634,6 @@ class AdareVMClient:
             RuntimeError: If transfer fails
         """
         import base64
-        from pathlib import Path
 
         log.info(f"Starting chunked pull: {guest_path} -> {host_path}")
 
@@ -727,9 +727,9 @@ class AdareVMClient:
             log.error(f"Chunked pull failed for {guest_path}: {e}")
             raise
 
-    async def pull_multiple_files_chunked(self, guest_paths: List[str], host_dest_dir: Path,
+    async def pull_multiple_files_chunked(self, guest_paths: list[str], host_dest_dir: Path,
                                          chunk_size: int = 1048576,
-                                         progress_callback = None) -> Dict[str, Any]:
+                                         progress_callback = None) -> dict[str, Any]:
         """
         Pull multiple files from guest to host using chunked transfer.
 
@@ -846,27 +846,27 @@ class AdareVMClient:
         return summary
 
     # Convenience Methods
-    
+
     async def ping(self) -> bool:
         """Check connectivity by testing if websocket is still connected."""
         return self.connected and self.websocket is not None
-    
+
     async def wait_for_connection(self, timeout: float = 30.0) -> bool:
         """Wait for connection to be established."""
         start_time = time.time()
         while not self.connected and (time.time() - start_time) < timeout:
             await asyncio.sleep(0.1)
         return self.connected
-    
+
     def is_connected(self) -> bool:
         """Check if connected to the server."""
         return self.connected
-    
+
     async def __aenter__(self):
         """Async context manager entry."""
         await self.connect()
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         await self.disconnect()

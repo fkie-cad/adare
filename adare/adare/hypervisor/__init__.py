@@ -29,7 +29,7 @@ def register_hypervisor(name: str, manager_class, vm_class):
     log.debug(f"Registered hypervisor: {name}")
 
 
-def get_hypervisor_manager(hypervisor: Optional[str] = None):
+def get_hypervisor_manager(hypervisor: str | None = None):
     """
     Get a hypervisor manager instance.
 
@@ -64,7 +64,7 @@ def get_hypervisor_manager(hypervisor: Optional[str] = None):
     return manager_class()
 
 
-def get_hypervisor_vm_class(hypervisor: Optional[str] = None):
+def get_hypervisor_vm_class(hypervisor: str | None = None):
     """
     Get the VM class for a specific hypervisor.
 

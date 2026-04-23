@@ -4,15 +4,14 @@ Tests for the file transfer strategy factory.
 Verifies that detect_file_transfer_mode() and get_file_transfer_strategy()
 select the correct strategy based on tool availability and platform.
 """
-import pytest
 from unittest.mock import patch
 
 from adare.hypervisor.qemu.file_transfer import (
-    detect_file_transfer_mode,
-    get_file_transfer_strategy,
-    VirtioFSStrategy,
     LibguestfsStrategy,
     QGAStrategy,
+    VirtioFSStrategy,
+    detect_file_transfer_mode,
+    get_file_transfer_strategy,
 )
 
 

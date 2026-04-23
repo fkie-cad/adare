@@ -1,7 +1,8 @@
 """Root-level pytest fixtures for ADARE tests."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture

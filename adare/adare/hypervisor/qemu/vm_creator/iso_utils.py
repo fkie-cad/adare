@@ -1,11 +1,11 @@
 """ISO extraction utilities using pycdlib (pure Python, cross-platform)."""
 
 import hashlib
+import logging
 from pathlib import Path
 
 from adare.hypervisor.exceptions import HypervisorException
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -204,6 +204,7 @@ def create_autounattend_iso(xml_content: bytes, output_path: Path) -> Path:
         Path to the created ISO
     """
     import io
+
     import pycdlib
 
     iso = pycdlib.PyCdlib()
@@ -354,6 +355,7 @@ def _build_tools_iso(source_dir: Path, output_path: Path) -> None:
 def _build_tools_iso_pycdlib(source_dir: Path, output_path: Path) -> None:
     """Build an ISO from a directory using pycdlib (fallback when system tools unavailable)."""
     import io
+
     import pycdlib
 
     iso = pycdlib.PyCdlib()

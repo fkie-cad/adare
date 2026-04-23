@@ -8,11 +8,10 @@ via HostTestContext and proper async execution handling.
 import asyncio
 import logging
 from pathlib import Path
-from typing import Optional
 
-from adarelib.testset.basictest import BasicTest
-from adarelib.event.event import TestResult
 from adare.backend.experiment.host_test_context import HostTestContext
+from adarelib.event.event import TestResult
+from adarelib.testset.basictest import BasicTest
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ class HostTestExecutor:
         self.experiment_dir = experiment_dir
 
         # Context is created lazily when needed
-        self._context: Optional[HostTestContext] = None
+        self._context: HostTestContext | None = None
 
     def _get_context(self) -> HostTestContext:
         """

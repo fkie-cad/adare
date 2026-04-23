@@ -7,12 +7,15 @@ network drives, and related mapping tables. These models are used to map
 Python objects to database tables and manage relationships between entities.
 """
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, Boolean, func, Enum as SAEnum
-from sqlalchemy.orm import relationship, backref
-import ulid
 from pathlib import Path
-from sqlalchemy_serializer import SerializerMixin
+
+import ulid
+from sqlalchemy import CHAR, Boolean, Column, DateTime, ForeignKey, Integer, String, Table, func
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import backref, relationship
+from sqlalchemy_serializer import SerializerMixin
+
 from adarelib.constants import StatusEnum
 
 from . import Base
@@ -112,16 +115,16 @@ class SyncMetadata(SerializerMixin, Base):
     RELATIONSHIPS_TO_DICT = True
 
     id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
-    
+
     # Sync timing
     last_sync_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=func.now())
-    
+
     # Sync state
     sync_status = Column(SyncStatusEnum, default='pending')
     sync_direction = Column(SyncDirectionEnum, default='push')
     failure_reason = Column(String, nullable=True)
-    
+
     # Remote tracking (replaces old remote_id, remote_url, in_request, published)
     remote_id = Column(String, nullable=True)
     remote_url = Column(String, nullable=True)
@@ -580,12 +583,12 @@ class Vm(SerializerMixin, Base):
 class VmSnapshot(SerializerMixin, Base):
     """
     Represents a VM snapshot created and managed by Adare.
-    
+
     Tracks snapshots for fast experiment setup using VirtualBox snapshot functionality.
     """
     __tablename__ = 'vm_snapshot'
     RELATIONSHIPS_TO_DICT = True
-    
+
     id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
     vm_id = Column(CHAR(26), ForeignKey('vm.id', ondelete='CASCADE'), nullable=False)
     snapshot_name = Column(String, nullable=False)  # VirtualBox snapshot name
@@ -593,7 +596,7 @@ class VmSnapshot(SerializerMixin, Base):
     experiment_id = Column(CHAR(26), nullable=True)  # If experiment snapshot
     created_at = Column(DateTime, default=func.now())
     description = Column(String, nullable=True)
-    
+
     # Relationships
     vm = relationship("Vm", backref=backref("snapshots", cascade="all, delete-orphan"))
 
@@ -729,14 +732,14 @@ class Event(SerializerMixin, Base):
 
     # Success/failure tracking for all events
     success = Column(Boolean, nullable=True)
-    
+
     # Universal event grouping ID to group start/complete event pairs
     event_group_id = Column(String, nullable=True)     # Groups related events (start/complete pairs)
-    
+
     # Specific event type (e.g., 'TEST_START', 'TEST_COMPLETE', 'CLICK_START', etc.)
     event_type_specific = Column(String, nullable=True)
     execution_time = Column(Integer, nullable=True)     # Duration in milliseconds
-    
+
     timestamp = Column(DateTime)
 
     @hybrid_property
@@ -831,18 +834,18 @@ class ActionEvent(Event):
         'polymorphic_identity': 'action_event',
     }
     id = Column(CHAR(26), ForeignKey('event.id'), primary_key=True)
-    
+
     # Action type and event type fields
     action_type = Column(String)  # e.g., 'click', 'keyboard', 'test', etc.
     # action_event_type = Column(String)   # e.g., 'click_start', 'click_complete', etc.
     action_id = Column(String)    # Unique action identifier for pairing start/complete events
-    
+
     # Execution time tracking is inherited from parent Event class
-    
+
     # Generic action data as JSON-like text field
     # This allows us to store any action-specific data flexibly
     action_data = Column(String, nullable=True)  # JSON serialized action data
-    
+
     # Display level is now computed from parent relationships
 
     @hybrid_property
@@ -853,20 +856,19 @@ class ActionEvent(Event):
         """
         if not self.parent_event_id:
             return 0  # Root level
-        
+
         # Find parent event and recursively compute depth
         parent = self.__class__.query.filter_by(id=self.parent_event_id).first()
         if parent and hasattr(parent, 'display_level'):
             return parent.display_level + 1
-        else:
-            # If parent not found or doesn't have display_level, assume next level
-            return 1
+        # If parent not found or doesn't have display_level, assume next level
+        return 1
 
     @hybrid_property
     def stage_submessage(self):
         return f'{self.action_type} action'
 
-    @hybrid_property  
+    @hybrid_property
     def stage_result(self):
         if self.success is None:
             return StatusEnum.PENDING
@@ -881,19 +883,18 @@ class EventFactory:
     def create_event(category, **kwargs):
         # add category to kwargs
         kwargs['category'] = category
-        
+
         # Handle error_message -> error field mapping for backward compatibility
         if 'error_message' in kwargs and kwargs['error_message']:
             kwargs['error'] = kwargs.pop('error_message')
-        
+
         if category == 'action' or category == 'command':
             return ActionEvent(**kwargs)
-        elif category == 'test':
+        if category == 'test':
             return TestEvent(**kwargs)
-        elif category == 'error':
+        if category == 'error':
             return ErrorEvent(**kwargs)
-        else:
-            raise ValueError(f'Invalid category: {category}')
+        raise ValueError(f'Invalid category: {category}')
 
 
 class ExperimentRunFiles(SerializerMixin, Base):

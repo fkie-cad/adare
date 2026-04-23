@@ -1,10 +1,11 @@
 # external imports
+# internal imports
+import logging
+
 import pandas as pd
 from rich.panel import Panel
 from rich.table import Table
 
-# internal imports
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -47,7 +48,7 @@ class DevSessionTablePanel:
                 str(row.get('actions_executed', 0)),
                 str(row.get('created_at', 'N/A')),
             )
-        
+
         return Panel(table, title="[b gold3]dev sessions[/b gold3]", border_style="blue", title_align="left")
 
 
@@ -80,5 +81,5 @@ class DevCheckpointTablePanel:
                 size_display,
                 str(row.get('checkpoint_id', 'N/A')),
             )
-        
+
         return Panel(table, title="[b gold3]checkpoints[/b gold3]", border_style="blue", title_align="left")

@@ -6,22 +6,45 @@ Base = declarative_base()
 # Import all models to ensure they're registered
 
 # Import new model structures
-from .global_models import GlobalBase
-from .project_models import ProjectBase
-
-# Import all global models
-from .global_models import (
-    SyncMetadata, Tag, PostSetupInstallation, TestParameter, TestFunctionFile,
-    TestFunction, OsInfo, Project, Vm, VmSnapshot, Environment
-)
+from .devcheckpoint import DevCheckpoint
 
 # Import dev mode models
 from .devsession import DevSession
-from .devcheckpoint import DevCheckpoint
+
+# Import all global models
+from .global_models import (
+    Environment,
+    GlobalBase,
+    OsInfo,
+    PostSetupInstallation,
+    Project,
+    SyncMetadata,
+    Tag,
+    TestFunction,
+    TestFunctionFile,
+    TestParameter,
+    Vm,
+    VmSnapshot,
+)
+from .project_models import (
+    AbstractTest,
+    ActionExecution,
+    Event,
+    Experiment,
+    ExperimentRun,
+    ExperimentRunFiles,
+    LogFile,
+    Playbook,
+    PlaybookItem,
+    ProjectBase,
+    Result,
+    Stage,
+    StageInRun,
+    Status,
+    TestParameterEntry,
+    Tool,
+    USBDrive,
+)
 
 # Import all project models
-from .project_models import (
-    Tag as ProjectTag, Status, Result, TestParameterEntry, Tool, AbstractTest, LogFile, USBDrive,
-    Experiment, Event, ExperimentRunFiles, Stage, StageInRun, ExperimentRun,
-    Playbook, PlaybookItem, ActionExecution
-)
+from .project_models import Tag as ProjectTag

@@ -4,8 +4,8 @@ WebSocket connection manager for real-time updates.
 
 import asyncio
 import logging
-from typing import Any
 from collections import defaultdict
+from typing import Any
 
 from fastapi import WebSocket
 

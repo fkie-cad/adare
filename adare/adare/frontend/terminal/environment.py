@@ -1,4 +1,6 @@
 # external imports
+import logging
+
 import pandas as pd
 from rich.layout import Layout
 from rich.panel import Panel
@@ -7,9 +9,8 @@ from rich.text import Text
 
 # internal imports
 from adare.database.api.frontend import DataRetrievalApi
-from adare.frontend.terminal.console import pad_string_to_length, DefaultConsole, TagsText
+from adare.frontend.terminal.console import DefaultConsole, TagsText, pad_string_to_length
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -20,7 +21,7 @@ class InfoPanel:
         self.environment = environment
 
     def __rich__(self) -> Panel:
-        title = f'[b medium_turquoise]info[/b medium_turquoise]'
+        title = '[b medium_turquoise]info[/b medium_turquoise]'
         grid = Table.grid(expand=True)
         grid.add_column(justify="left")
         grid.add_row(
@@ -51,7 +52,7 @@ class OsInfoPanel:
         self.environment = environment
 
     def __rich__(self) -> Panel:
-        title = f'[b honeydew2]os[/b honeydew2]'
+        title = '[b honeydew2]os[/b honeydew2]'
         grid = Table.grid(expand=True)
         grid.add_column(justify="left", ratio=1)
         grid.add_row(
@@ -82,7 +83,7 @@ class DescriptionPanel:
         self.description = description
 
     def __rich__(self) -> Panel:
-        title = f'[b light_steel_blue]description[/b light_steel_blue]'
+        title = '[b light_steel_blue]description[/b light_steel_blue]'
         return Panel(Text(self.description), title=title, border_style="blue", title_align="left")
 
 

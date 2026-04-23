@@ -6,7 +6,6 @@ All hypervisor implementations must provide snapshot functionality.
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ class AbstractSnapshotMixin(ABC):
         description: str = "",
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ):
         """
@@ -63,7 +62,7 @@ class AbstractSnapshotMixin(ABC):
         snapshot_name: str,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> bool:
         """
@@ -87,7 +86,7 @@ class AbstractSnapshotMixin(ABC):
         snapshot_name: str,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> bool:
         """

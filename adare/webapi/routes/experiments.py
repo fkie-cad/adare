@@ -1,7 +1,6 @@
 """Experiment management endpoints."""
 import logging
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -76,7 +75,7 @@ def _api():
 # ---- Endpoints ----
 
 @router.get("")
-async def list_experiments(tags: Optional[str] = Query(None, description="Comma-separated tags to filter by")):
+async def list_experiments(tags: str | None = Query(None, description="Comma-separated tags to filter by")):
     """List all experiments, optionally filtered by tags."""
     tag_list = [t.strip() for t in tags.split(",")] if tags else None
     result = _api().show.list_experiments(tags=tag_list)

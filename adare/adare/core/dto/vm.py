@@ -7,8 +7,6 @@ enabling consistent interfaces across CLI, REST API, and Web UI.
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
-
 
 # =============================================================================
 # VM Request DTOs
@@ -18,7 +16,7 @@ from typing import List, Optional
 class VmLoadRequest:
     """Request to load a VM from file."""
     file_path: Path
-    name: Optional[str] = None
+    name: str | None = None
     description: str = ""
     os_platform: str = ""
     os_type: str = ""
@@ -50,16 +48,16 @@ class VmInfo:
     description: str
     hypervisor: str
     use_snapshots: bool
-    os_platform: Optional[str] = None
-    os_type: Optional[str] = None
-    os_distribution: Optional[str] = None
-    os_version: Optional[str] = None
-    os_language: Optional[str] = None
-    os_architecture: Optional[str] = None
+    os_platform: str | None = None
+    os_type: str | None = None
+    os_distribution: str | None = None
+    os_version: str | None = None
+    os_language: str | None = None
+    os_architecture: str | None = None
     instance_count: int = 0
     is_external: bool = False
-    next_steps: List[str] = field(default_factory=list)
-    tip: Optional[str] = None
+    next_steps: list[str] = field(default_factory=list)
+    tip: str | None = None
 
 
 @dataclass
@@ -70,7 +68,7 @@ class VmListItem:
     description: str
     file_hash: str
     hypervisor: str
-    os_platform: Optional[str] = None
+    os_platform: str | None = None
     instance_count: int = 0
 
 
@@ -81,9 +79,9 @@ class VmListItem:
 @dataclass
 class VmInstanceRemoveRequest:
     """Request to remove VM instance(s)."""
-    instance_id: Optional[str] = None  # Specific instance ULID
+    instance_id: str | None = None  # Specific instance ULID
     all_stopped: bool = False  # Remove all stopped instances
-    experiment_id: Optional[str] = None  # Remove instances for specific experiment
+    experiment_id: str | None = None  # Remove instances for specific experiment
 
 
 # =============================================================================
@@ -98,12 +96,12 @@ class VmInstanceInfo:
     vm_name: str
     instance_name: str
     status: str  # active, available, stopped
-    websocket_port: Optional[int]
-    vbox_uuid: Optional[str]
-    base_snapshot_name: Optional[str]
-    current_experiment_run_id: Optional[str]
-    created_at: Optional[datetime]
-    last_used_at: Optional[datetime]
+    websocket_port: int | None
+    vbox_uuid: str | None
+    base_snapshot_name: str | None
+    current_experiment_run_id: str | None
+    created_at: datetime | None
+    last_used_at: datetime | None
     hypervisor: str = "virtualbox"
 
 
@@ -114,7 +112,7 @@ class VmInstanceListItem:
     vm_name: str
     instance_name: str
     status: str
-    websocket_port: Optional[int]
+    websocket_port: int | None
     hypervisor: str = "virtualbox"
 
 
@@ -138,11 +136,11 @@ class VmSnapshotInfo:
     id: str
     name: str
     snapshot_type: str  # base, experiment, backup
-    description: Optional[str]
-    created_at: Optional[datetime]
-    vm_id: Optional[str]
-    vm_instance_id: Optional[str]
-    vbox_uuid: Optional[str]
+    description: str | None
+    created_at: datetime | None
+    vm_id: str | None
+    vm_instance_id: str | None
+    vbox_uuid: str | None
 
 
 @dataclass
@@ -160,18 +158,18 @@ class VmSnapshotDeleteRequest:
 class VmClearResult:
     """Result of clearing VMs."""
     deleted_count: int
-    deleted_vms: List[str]
+    deleted_vms: list[str]
     failed_count: int
-    failed_vms: List[str]
+    failed_vms: list[str]
 
 
 @dataclass
 class VmInstanceCleanupResult:
     """Result of cleaning up VM instances."""
     removed_count: int
-    removed_instances: List[str]
+    removed_instances: list[str]
     failed_count: int
-    failed_instances: List[str]
+    failed_instances: list[str]
 
 
 # =============================================================================

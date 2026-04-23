@@ -1,5 +1,6 @@
 """HTTP server for autoinstall config and QEMU process monitoring."""
 
+import logging
 import socket
 import subprocess
 import threading
@@ -11,7 +12,6 @@ from rich.status import Status
 
 from adare.console import console
 
-import logging
 log = logging.getLogger(__name__)
 
 

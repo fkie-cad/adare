@@ -6,11 +6,12 @@ clean separation of test loading logic from action execution.
 """
 
 import logging
-from typing import Dict, List, Optional, Any
-from pathlib import Path
-import yaml
-import jinja2
 import subprocess
+from pathlib import Path
+from typing import Any
+
+import jinja2
+import yaml
 
 log = logging.getLogger(__name__)
 
@@ -18,16 +19,16 @@ log = logging.getLogger(__name__)
 class TestLoader:
     """
     Handles loading and local resolution of tests from playbooks.
-    
+
     This class contains all test loading and resolution logic that was previously
     in PlaybookController, providing clean separation of concerns.
     """
-    
-    def __init__(self, experiment_dir: Path, project_dir: Path, playbook = None, 
+
+    def __init__(self, experiment_dir: Path, project_dir: Path, playbook = None,
                  variable_resolver = None):
         """
         Initialize the test loader.
-        
+
         Args:
             experiment_dir: Path to experiment directory
             project_dir: Path to project directory (for testfunctions)
@@ -38,7 +39,7 @@ class TestLoader:
         self.project_dir = project_dir
         self.playbook = playbook
         self.variable_resolver = variable_resolver
-    
+
     async def _install_dependencies_only(self, websocket_client):
         """
         Install only testfunction dependencies without uploading files.
@@ -87,7 +88,7 @@ class TestLoader:
 
         # Dependencies should already be installed, just note that here
         log.debug("Skipping dependency installation (should already be done)")
-        
+
         # Upload only testfunctions that are actually used in the playbook
         from adare.config.configdirectory import STATE_DIR
         global_testfunctions_path = STATE_DIR / 'testfunctions'
@@ -104,7 +105,7 @@ class TestLoader:
                     log.info(f"Uploading {len(required_files)} testfunction files for functions: {sorted(used_function_names)}")
                     try:
                         await websocket_client.upload_testfunctions(global_testfunctions_path, required_files)
-                    except (OSError, IOError) as e:
+                    except OSError as e:
                         log.error(f"Failed to upload testfunctions due to file system error: {e}")
                     except (ValueError, TypeError) as e:
                         log.error(f"Failed to upload testfunctions due to invalid data: {e}")
@@ -115,11 +116,11 @@ class TestLoader:
         else:
             log.warning(f"Global testfunctions directory not found: {global_testfunctions_path}")
             log.info("Load testfunctions using 'adare testfunction load-global <path>' to enable testfunction uploads")
-        
+
         # Individual tests are sent via WebSocket when executed
         # No need to upload entire testset file to VM
-    
-    def _collect_testfunction_dependencies(self) -> List[str]:
+
+    def _collect_testfunction_dependencies(self) -> list[str]:
         """Collect dependencies only from testfunctions actually used in the playbook."""
         dependencies = set()
 
@@ -153,7 +154,7 @@ class TestLoader:
                                 # Skip comments and empty lines
                                 if line and not line.startswith('#'):
                                     dependencies.add(line)
-                    except (OSError, IOError, UnicodeDecodeError) as e:
+                    except (OSError, UnicodeDecodeError) as e:
                         log.warning(f"Failed to read requirements from {requirements_file}: {e}")
 
             dependencies_list = list(dependencies)
@@ -173,7 +174,7 @@ class TestLoader:
             # Fallback to collecting all dependencies if there's an error
             return self._collect_all_testfunction_dependencies()
 
-    def _collect_all_testfunction_dependencies(self) -> List[str]:
+    def _collect_all_testfunction_dependencies(self) -> list[str]:
         """Fallback: collect all dependencies from all testfunctions in the project (original behavior)."""
         dependencies = set()
 
@@ -201,7 +202,7 @@ class TestLoader:
                                     # Skip comments and empty lines
                                     if line and not line.startswith('#'):
                                         dependencies.add(line)
-                        except (OSError, IOError, UnicodeDecodeError) as e:
+                        except (OSError, UnicodeDecodeError) as e:
                             log.warning(f"Failed to read requirements from {req_file}: {e}")
 
             dependencies_list = list(dependencies)
@@ -216,42 +217,42 @@ class TestLoader:
             log.error(f"Failed to import testfunction database module: {e}")
             return []
 
-    async def resolve_test_locally(self, test_name: str) -> Optional[Dict[str, Any]]:
+    async def resolve_test_locally(self, test_name: str) -> dict[str, Any] | None:
         """Load and resolve a specific test locally with variable substitution."""
         try:
             # Load tests from playbook instead of separate testset file
             playbook_path = self.experiment_dir / "playbook.yml"
             if not playbook_path.exists():
                 return None
-            
+
             from adarelib.testset.yaml.customloader import get_custom_loader
             playbook_yaml = playbook_path.read_text()
             playbook_data = yaml.load(playbook_yaml, Loader=get_custom_loader())
-            
+
             if 'tests' not in playbook_data:
                 return None
-            
+
             # Get execution context for test resolution
             if self.variable_resolver:
                 formatted_context = self.variable_resolver.get_formatted_context(for_tests=True)
             else:
                 formatted_context = {}
-            
+
             log.debug(f"Resolving test '{test_name}' with execution context keys: {list(formatted_context.keys())}")
             log.debug(f"Execution context values: {formatted_context}")
-            
+
             # Find the test by name
             for test in playbook_data['tests']:
                 if test.get('name') == test_name:
                     log.debug(f"Found test '{test_name}' raw data: {test}")
                     # Apply variable substitution to all string values in the test
                     resolved_test = self._resolve_test_content(test)
-                    
+
                     # Metadata is now handled by the unified resolver in _resolve_test_content
-                    
+
                     log.debug(f"Resolved test '{test_name}' data: {resolved_test}")
                     return resolved_test
-            
+
             return None
         except (ImportError, ModuleNotFoundError, AttributeError, SyntaxError) as e:
             log.error(f"Failed to resolve test '{test_name}' locally: {e}")
@@ -260,7 +261,7 @@ class TestLoader:
             log.error(f"Unexpected error resolving test '{test_name}' locally: {e}", exc_info=True)
             return None
 
-    async def resolve_test_with_runtime_context(self, test_name: str, runtime_execution_context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def resolve_test_with_runtime_context(self, test_name: str, runtime_execution_context: dict[str, Any]) -> dict[str, Any] | None:
         """Load and resolve a specific test with runtime execution context for variables set during action execution."""
         try:
             # Load tests from playbook
@@ -306,9 +307,8 @@ class TestLoader:
                             log.info(f"Generated metadata during runtime resolution: {list(metadata.keys())}")
 
                         return resolved_test
-                    else:
-                        log.warning("No variable resolver available for runtime resolution")
-                        return test
+                    log.warning("No variable resolver available for runtime resolution")
+                    return test
 
             return None
         except (ImportError, ModuleNotFoundError, AttributeError, SyntaxError) as e:
@@ -318,7 +318,7 @@ class TestLoader:
             log.error(f"Unexpected error resolving test '{test_name}' with runtime context: {e}", exc_info=True)
             return None
 
-    def _resolve_test_content(self, test_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _resolve_test_content(self, test_data: dict[str, Any]) -> dict[str, Any]:
         """Enhanced test content resolution using unified variable resolver with lazy loading."""
         if not self.variable_resolver:
             log.warning("No variable resolver available, returning test data as-is")
@@ -358,10 +358,10 @@ class TestLoader:
             resolved_test['_VARIABLE_METADATA'] = metadata
             log.info(f"Added lazy variable metadata: {list(metadata.keys())}")
 
-        log.debug(f"Lazy resolver completed processing")
+        log.debug("Lazy resolver completed processing")
 
         return resolved_test
-    
+
     def _create_jinja_environment(self):
         """Create Jinja environment with all necessary filters."""
         # Get filters from variable registry if available
@@ -370,23 +370,22 @@ class TestLoader:
             from adarelib.common.variables import TimestampMetadata
             metadata = TimestampMetadata()  # Create temp metadata object
             filters.update(metadata.get_jinja_filters(self.playbook.variables))
-        
+
         env = jinja2.Environment()
         env.filters.update(filters)
         log.debug(f"Created Jinja environment with filters: {list(filters.keys())}")
         return env
-    
+
     def _resolve_test_content_recursive(self, test_data: Any) -> Any:
         """Recursively apply variable substitution without re-processing YAML custom tags."""
         if isinstance(test_data, dict):
             return {key: self._resolve_test_content_recursive(value) for key, value in test_data.items()}
-        elif isinstance(test_data, list):
+        if isinstance(test_data, list):
             return [self._resolve_test_content_recursive(item) for item in test_data]
-        elif isinstance(test_data, str):
+        if isinstance(test_data, str):
             return self._replace_variables_for_tests(test_data)
-        else:
-            return test_data
-    
+        return test_data
+
     def _extract_used_testfunction_names(self) -> set[str]:
         """Extract all testfunction names used in the current playbook."""
         try:
@@ -413,7 +412,7 @@ class TestLoader:
             log.info(f"Extracted {len(used_functions)} unique testfunction names from playbook: {sorted(used_functions)}")
             return used_functions
 
-        except (OSError, IOError, UnicodeDecodeError) as e:
+        except (OSError, UnicodeDecodeError) as e:
             log.error(f"Failed to read playbook file: {e}")
             return set()
         except (yaml.YAMLError, ImportError) as e:
@@ -509,7 +508,7 @@ class TestLoader:
         except Exception as e:
             log.warning(f"Unexpected error replacing variables in test text '{text}': {e}", exc_info=True)
             return text
-    
+
     def _is_test_action_result(self, action_result) -> bool:
         """Check if an action result corresponds to a test execution."""
         if hasattr(action_result, 'data') and action_result.data and isinstance(action_result.data, dict):
@@ -518,7 +517,7 @@ class TestLoader:
             return 'status' in result_data and 'details' in result_data
         return False
 
-    def get_test_class(self, test_name: str) -> Optional[type]:
+    def get_test_class(self, test_name: str) -> type | None:
         """
         Get test class definition for a test by loading from database.
 
@@ -571,14 +570,14 @@ class TestLoader:
 
             return test_class
 
-        except (OSError, IOError, yaml.YAMLError) as e:
+        except (OSError, yaml.YAMLError) as e:
             log.error(f"Failed to load test class for '{test_name}': {e}")
             return None
         except Exception as e:
             log.error(f"Unexpected error loading test class for '{test_name}': {e}", exc_info=True)
             return None
 
-    async def structure_host_test(self, test_name: str, resolved_test: Dict[str, Any]):
+    async def structure_host_test(self, test_name: str, resolved_test: dict[str, Any]):
         """
         Structure test instance for host execution.
 

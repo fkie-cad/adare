@@ -1,6 +1,7 @@
 # external imports
+import logging
+
 from rich.layout import Layout
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -9,7 +10,6 @@ from rich.text import Text
 from adare.backend.vm.commands import get_vm_info
 from adare.frontend.terminal.console import DefaultConsole
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -28,38 +28,38 @@ class VMInfoPanel:
         table.add_row("Description:", self.vm_info.get('description', 'N/A'))
         table.add_row("File Path:", self.vm_info['file'])
         table.add_row("Hash:", self.vm_info['hash'][:16] + "...")
-        
+
         # Note: VirtualBox UUID and base_snapshot are now tracked per-instance
         # This is an abstract VM template, not a concrete VirtualBox VM
-        
+
         uses_snapshots = self.vm_info.get('use_snapshots', False)
         snapshot_status = Text("✅ Enabled", style="green") if uses_snapshots else Text("❌ Disabled", style="red")
         table.add_row("Snapshots:", snapshot_status)
-        
+
         # Snapshot details
         snapshots = self.vm_info.get('snapshots', {})
         if snapshots:
             total_snapshots = snapshots.get('total_snapshots', 0)
             table.add_row("Total Snapshots:", str(total_snapshots))
-            
+
             base_snap = snapshots.get('base_snapshot', {})
             if base_snap.get('exists'):
                 base_status = Text(f"✅ {base_snap.get('name', 'Unknown')}", style="green")
             else:
                 base_status = Text("❌ Missing", style="red")
             table.add_row("Base Snapshot:", base_status)
-            
+
             exp_snapshots = snapshots.get('experiment_snapshots', [])
             if exp_snapshots:
                 table.add_row("Experiment Snapshots:", f"{len(exp_snapshots)} found")
-                
+
                 # Show first few experiment snapshots
                 for i, snap in enumerate(exp_snapshots[:3]):
                     created_at = snap.get('created_at', 'Unknown')
                     if isinstance(created_at, str) and len(created_at) > 16:
                         created_at = created_at[:16] + "..."
                     table.add_row(f"  Snapshot {i+1}:", f"{snap['name']} ({created_at})")
-                
+
                 if len(exp_snapshots) > 3:
                     table.add_row("", f"... and {len(exp_snapshots) - 3} more")
 
@@ -146,8 +146,8 @@ def print_vm_or_instance_info(vm_or_instance_id: str, formatter=None, output_fil
 
 def print_vm_instance_snapshots(instance_id: str):
     """Print all snapshots for a specific VM instance."""
-    from adare.virtualbox.snapshots import list_snapshots
     from adare.database.api.vm import VmApi
+    from adare.virtualbox.snapshots import list_snapshots
 
     console = DefaultConsole()
 
@@ -198,8 +198,8 @@ def print_vm_instance_snapshots(instance_id: str):
 
 def print_all_snapshots(instance_id_filter: str = None, formatter=None, output_file=None, dual_output=False):
     """Print all snapshots across all VM instances, optionally filtered by instance ID."""
-    from adare.virtualbox.snapshots import list_snapshots
     from adare.database.api.vm import VmApi
+    from adare.virtualbox.snapshots import list_snapshots
 
     # Get formatter if not provided
     if formatter is None:

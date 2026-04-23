@@ -9,12 +9,12 @@ import logging
 import os
 import platform
 import shutil
-from pathlib import Path
-from typing import Optional, Dict, Any, List
 import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import Any
 from xml.dom import minidom
 
-from .firmware import find_ovmf_firmware, create_nvram_for_vm
+from .firmware import create_nvram_for_vm, find_ovmf_firmware
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class PCIBusAllocator:
     """
 
     # Q35 machine type (PCIe-based, multiple buses)
-    _Q35_ASSIGNMENTS: Dict[str, tuple[int, int]] = {
+    _Q35_ASSIGNMENTS: dict[str, tuple[int, int]] = {
         'network': (1, 0),       # bus 1, slot 0
         'usb': (2, 0),           # bus 2, slot 0
         'virtio_serial': (3, 0), # bus 3, slot 0
@@ -41,7 +41,7 @@ class PCIBusAllocator:
     _Q35_VIRTIOFS_BASE_BUS = 6  # buses 6+ for virtiofs shares
 
     # PC/i440FX machine type (PCI-based, single bus)
-    _PC_ASSIGNMENTS: Dict[str, tuple[int, int]] = {
+    _PC_ASSIGNMENTS: dict[str, tuple[int, int]] = {
         'network': (0, 3),       # bus 0, slot 3
         'disk': (0, 4),          # bus 0, slot 4
         'virtio_serial': (0, 5), # bus 0, slot 5
@@ -52,7 +52,7 @@ class PCIBusAllocator:
     def __init__(self, is_q35: bool):
         self.is_q35 = is_q35
 
-    def address_for(self, device: str, index: int = 0) -> Dict[str, str]:
+    def address_for(self, device: str, index: int = 0) -> dict[str, str]:
         """Return PCI address attributes dict for ET.SubElement.
 
         Args:
@@ -70,9 +70,8 @@ class PCIBusAllocator:
             if self.is_q35:
                 bus = self._Q35_VIRTIOFS_BASE_BUS + index
                 return self._make_address(bus, 0)
-            else:
-                slot = self._PC_VIRTIOFS_BASE_SLOT + index
-                return self._make_address(0, slot)
+            slot = self._PC_VIRTIOFS_BASE_SLOT + index
+            return self._make_address(0, slot)
 
         if self.is_q35:
             assignments = self._Q35_ASSIGNMENTS
@@ -86,7 +85,7 @@ class PCIBusAllocator:
         return self._make_address(bus, slot)
 
     @staticmethod
-    def _make_address(bus: int, slot: int) -> Dict[str, str]:
+    def _make_address(bus: int, slot: int) -> dict[str, str]:
         """Create PCI address attribute dict."""
         return {
             'type': 'pci',
@@ -109,8 +108,8 @@ class DomainXMLBuilder:
         self,
         vm_config,  # QEMUVMConfig instance
         display_enabled: bool = False,
-        vnc_port: Optional[int] = None,
-        virtiofs_shares: Optional[List[Dict[str, Any]]] = None,
+        vnc_port: int | None = None,
+        virtiofs_shares: list[dict[str, Any]] | None = None,
     ):
         self._config = vm_config
         self._display_enabled = display_enabled
@@ -136,8 +135,8 @@ class DomainXMLBuilder:
 
         self._pci = PCIBusAllocator(self._is_q35)
 
-        self._domain: Optional[ET.Element] = None
-        self._devices: Optional[ET.Element] = None
+        self._domain: ET.Element | None = None
+        self._devices: ET.Element | None = None
 
     def build(self) -> str:
         """Build and return the complete domain XML string."""
@@ -738,7 +737,7 @@ def _prettify_xml(elem: ET.Element) -> str:
 
 
 def _generate_virtiofs_xml_element(
-    share: Dict[str, Any],
+    share: dict[str, Any],
     is_q35: bool,
     index: int,
     base_bus: int = 6,

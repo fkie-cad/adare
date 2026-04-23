@@ -1,16 +1,20 @@
 # external imports
+# configure logging
+import logging
 from pathlib import Path
 
-# internal imports
-from adare.backend.script_creation.scripts import PostsetupInstallationsScript, SaveInstalledPackagesScript, \
-    RunExperimentScript, ShutdownScript
 import adare.backend.experiment.database as experiment_database
-from adare.types.environment import PostsetupInstallations
 from adare.backend.experiment.directory import ExperimentRunDirectory
 from adare.backend.project.directory import ProjectDirectory
 
-# configure logging
-import logging
+# internal imports
+from adare.backend.script_creation.scripts import (
+    PostsetupInstallationsScript,
+    RunExperimentScript,
+    SaveInstalledPackagesScript,
+    ShutdownScript,
+)
+from adare.types.environment import PostsetupInstallations
 
 log = logging.getLogger(__name__)
 

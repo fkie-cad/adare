@@ -1,7 +1,8 @@
+import logging
 import sys
 import time
-import logging
 from types import SimpleNamespace
+
 import click
 from trogon import tui
 
@@ -37,9 +38,9 @@ class AliasedGroup(click.Group):
 
 
 # Internal imports - NOW LAZY LOADED inside functions
-from adare.setup_logging import setup_logging
-from adare.exceptions import LoggedException, LoggedErrorException
+from adare.exceptions import LoggedErrorException, LoggedException
 from adare.helperfunctions.output_formatter import get_formatter
+from adare.setup_logging import setup_logging
 
 
 def get_formatter_from_context():
@@ -63,7 +64,7 @@ def get_formatter_from_context():
 def exec_with_error_printing(func, args):
     import asyncio
     import inspect
-    
+
     try:
         if inspect.iscoroutinefunction(func):
             asyncio.run(func(args))
@@ -349,6 +350,7 @@ env.add_alias('rm', 'remove')
 # Experiment commands (extracted to cli/groups/experiment_commands.py)
 # ------------------------------
 from adare.cli.groups.experiment_commands import register as register_experiment_commands
+
 register_experiment_commands(cli, AliasedGroup, exec_with_error_printing)
 
 
@@ -356,6 +358,7 @@ register_experiment_commands(cli, AliasedGroup, exec_with_error_printing)
 # Development mode commands (extracted to cli/groups/dev_commands.py)
 # ------------------------------
 from adare.cli.groups.dev_commands import register as register_dev_commands
+
 register_dev_commands(cli, AliasedGroup, exec_with_error_printing)
 
 # ------------------------------
@@ -444,6 +447,7 @@ test.add_alias('rm', 'remove')
 # VM management commands (extracted to cli/groups/vm_commands.py)
 # ------------------------------
 from adare.cli.groups.vm_commands import register as register_vm_commands
+
 register_vm_commands(cli, AliasedGroup, exec_with_error_printing)
 
 
@@ -487,10 +491,12 @@ run.add_alias('rm', 'remove')
 # Web interface commands (extracted to cli/groups/web_commands.py)
 # ------------------------------
 from adare.cli.groups.web_commands import register as register_web_commands
+
 web = register_web_commands(cli, AliasedGroup, exec_with_error_printing)
 
 # Web UI commands (start, build, services)
-from adare.cli.web_cmd import web_start, web_build, web_services
+from adare.cli.web_cmd import web_build, web_services, web_start
+
 web.add_command(web_start, "start")
 web.add_command(web_build, "build")
 web.add_command(web_services, "services")
@@ -620,8 +626,9 @@ def action(action_file, host, port, vm_instance, connect_timeout, default_timeou
 @click.argument('output_file', type=click.Path())
 def ws_create_example(output_file):
     """Create an example action YAML file."""
-    from adare.cli.ws import create_example_action_file
     from pathlib import Path
+
+    from adare.cli.ws import create_example_action_file
     create_example_action_file(Path(output_file))
 
 # ------------------------------

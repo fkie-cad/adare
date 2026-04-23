@@ -2,8 +2,8 @@
 
 import logging
 import os
-import sys
 import signal
+import sys
 
 import click
 
@@ -99,6 +99,7 @@ def web_start(ctx, port, host, dev, no_browser, spice_port):
 def web_build():
     """Build the ADARE web frontend (pnpm build in adare-web)."""
     import subprocess
+
     from rich.console import Console
 
     console = Console()
@@ -145,8 +146,8 @@ def web_build():
 @click.option("--spice-port", default=8081, help="VirtualSpice backend port")
 def web_services(port, spice_port):
     """Show status of ADARE web services (FastAPI, VirtualSpice, frontend build)."""
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     from rich.console import Console
     from rich.table import Table

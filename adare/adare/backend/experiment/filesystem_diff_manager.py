@@ -8,10 +8,14 @@ Extracts snapshot/diff logic from PlaybookController for cleaner separation.
 import logging
 import shutil
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any
 
 from adare.backend.experiment.filesystem_snapshot import (
-    FilesystemSnapshot, calculate_diff, export_diff_json, export_diff_csv, export_diff_bodyfile
+    FilesystemSnapshot,
+    calculate_diff,
+    export_diff_bodyfile,
+    export_diff_csv,
+    export_diff_json,
 )
 
 log = logging.getLogger(__name__)
@@ -22,9 +26,9 @@ class FilesystemDiffManager:
 
     def __init__(
         self,
-        vm: Optional[Any],
-        execution_context: Dict[str, Any],
-        experiment_run_directory: Optional[Path],
+        vm: Any | None,
+        execution_context: dict[str, Any],
+        experiment_run_directory: Path | None,
         action_executor: Any,
     ):
         """
@@ -79,13 +83,11 @@ class FilesystemDiffManager:
                 if self._is_virt_diff_available():
                     log.info("Auto mode: Using host-side diff (QEMU + virt-diff available)")
                     return 'host'
-                else:
-                    log.warning("Auto mode: virt-diff not found, falling back to guest-side diff")
-                    log.warning("For faster diffs, install: sudo apt-get install libguestfs-tools")
-                    return 'guest'
-            else:
-                log.debug("Auto mode: Using guest-side diff (non-QEMU hypervisor)")
+                log.warning("Auto mode: virt-diff not found, falling back to guest-side diff")
+                log.warning("For faster diffs, install: sudo apt-get install libguestfs-tools")
                 return 'guest'
+            log.debug("Auto mode: Using guest-side diff (non-QEMU hypervisor)")
+            return 'guest'
 
         return requested_mode
 
@@ -117,7 +119,7 @@ class FilesystemDiffManager:
     # Snapshot capture
     # ------------------------------------------------------------------
 
-    async def capture_automatic_snapshot(self, variable_name: str) -> Optional[FilesystemSnapshot]:
+    async def capture_automatic_snapshot(self, variable_name: str) -> FilesystemSnapshot | None:
         """
         Capture filesystem snapshot programmatically (for automatic diff).
 

@@ -4,13 +4,14 @@ Tests for file transfer strategy classes.
 Verifies the ABC cannot be instantiated, the requires_vm_stop_for_retrieval()
 contract for each strategy, and basic setup/retrieve behaviour with mocks.
 """
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
-from adare.hypervisor.qemu.file_transfer.virtiofs_strategy import VirtioFSStrategy
 from adare.hypervisor.qemu.file_transfer.libguestfs_strategy import LibguestfsStrategy
 from adare.hypervisor.qemu.file_transfer.qga_strategy import QGAStrategy
+from adare.hypervisor.qemu.file_transfer.virtiofs_strategy import VirtioFSStrategy
 
 
 class TestFileTransferStrategyABC:

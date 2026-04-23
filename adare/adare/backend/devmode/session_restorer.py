@@ -7,19 +7,17 @@ is still running.
 """
 
 import logging
-from pathlib import Path
-from typing import Optional
 from datetime import datetime
+from pathlib import Path
 
 from adare.backend.devmode.session import DevModeSession, DevModeSnapshot
-from adare.backend.experiment.runctx import ExperimentRunCtx, ExperimentConfig
-from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
-from adare.backend.experiment.playbook_controller import PlaybookController
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
+from adare.backend.experiment.playbook_controller import PlaybookController
+from adare.backend.experiment.runctx import ExperimentConfig, ExperimentRunCtx
+from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
 from adare.backend.project.directory import ProjectDirectory
+from adare.config.configdirectory import ADARELIB_DIR, ADAREVM_DIR
 from adare.database.models.devsession import DevSession
-from adare.config.configdirectory import ADAREVM_DIR, ADARELIB_DIR
-from adare.types.playbook import Playbook
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +58,6 @@ async def restore_infrastructure_context(
         )
 
         # 2. Initialize ExperimentRunCtx (fake mode - no new VM creation)
-        from adare.backend.experiment import database as experiment_database
 
         # Create context
         session.experiment_ctx = ExperimentRunCtx(config=config)
@@ -125,9 +122,9 @@ async def restore_infrastructure_context(
         vm_name = db_session.vm_name
 
         if hypervisor == 'qemu':
-            from adare.hypervisor.qemu.vm import QEMUVM
-            from adare.hypervisor.qemu.manager import QEMUManager
             from adare.config import get_vm_credentials
+            from adare.hypervisor.qemu.manager import QEMUManager
+            from adare.hypervisor.qemu.vm import QEMUVM
 
             # Create QEMU manager
             qemu_manager = QEMUManager()
@@ -223,10 +220,10 @@ async def restore_infrastructure_context(
             session.run_directory_path = run_dir.path
 
         log.debug("Infrastructure context restored (VM, directories, config)")
-        
+
         # 8. Query and restore snapshots from hypervisor (needed for file cleanup)
         await _restore_snapshots(session)
-        
+
         return True
 
     except Exception as e:
@@ -236,12 +233,12 @@ async def restore_infrastructure_context(
 
 async def restore_application_context(
     session: DevModeSession,
-    console_ulid: Optional[str] = None,
+    console_ulid: str | None = None,
     should_start_vm: bool = False
 ) -> bool:
     """
     Restore application-layer context (playbooks, controllers, WebSocket).
-    
+
     This loads the "logic" part of the session. It requires infrastructure
     context to be loaded first.
 
@@ -256,10 +253,10 @@ async def restore_application_context(
     if not session.experiment_ctx:
         log.error("Infrastructure context not loaded - cannot restore application context")
         return False
-        
+
     try:
         log.info(f"Restoring application context for session {session.session_id}")
-        
+
         # 1. Load playbook from filesystem
         playbook_path = session.experiment_ctx.experiment_directory.playbookfile
         if playbook_path.exists():
@@ -272,8 +269,8 @@ async def restore_application_context(
 
         # 2. Initialize and start MCP server for target resolution (non-fatal)
         try:
-            from adare.backend.experiment.run import step_start_mcp_server
             from adare.backend.experiment.mcp_server_manager import MCPServerManager
+            from adare.backend.experiment.run import step_start_mcp_server
 
             # Initialize MCP server object
             session.experiment_ctx.mcp_server = MCPServerManager(
@@ -331,15 +328,15 @@ async def restore_application_context(
             os.environ['QEMU_LIBGUESTFS'] = 'true'
 
             # Import required step functions
-            from adare.backend.experiment.run import (
-                step_install_and_run_websocket_server,
-                step_connect_websocket,
-            )
-            from adare.backend.events.stages import (
-                VirtualMachineSetupStage,
-                SoftwareInstallationStage,
-            )
             from adare.backend.events.emitters import StageCtxManager
+            from adare.backend.events.stages import (
+                SoftwareInstallationStage,
+                VirtualMachineSetupStage,
+            )
+            from adare.backend.experiment.run import (
+                step_connect_websocket,
+                step_install_and_run_websocket_server,
+            )
 
             stage_ulid = console_ulid or session.experiment_ctx.experiment_run_ulid
 
@@ -374,8 +371,8 @@ async def restore_application_context(
 
         # 6. Mark session as running
         session.is_running = True
-        
-        # Restore original start time from DB if possible (need to pass db_session probably, 
+
+        # Restore original start time from DB if possible (need to pass db_session probably,
         # or just set current time if re-running)
         # Assuming caller tracks this, or we just set it to now if not available
         if not session.started_at:
@@ -392,7 +389,7 @@ async def restore_application_context(
 async def restore_context(
     session: DevModeSession,
     db_session: DevSession,
-    console_ulid: Optional[str] = None,
+    console_ulid: str | None = None,
     should_start_vm: bool = False
 ) -> bool:
     """
@@ -413,11 +410,11 @@ async def restore_context(
     # 1. Restore infrastructure (VM, files, config)
     if not await restore_infrastructure_context(session, db_session):
         return False
-        
+
     # 2. Restore application (playbook, websocket, logic)
     if not await restore_application_context(session, console_ulid, should_start_vm):
         return False
-        
+
     return True
 
 
@@ -429,8 +426,9 @@ async def _restore_snapshots(session: DevModeSession) -> None:
         session: DevModeSession to populate with snapshot metadata
     """
     try:
-        from adare.database.api.devmode import DevModeApi
         import os
+
+        from adare.database.api.devmode import DevModeApi
 
         log.debug(f"Loading checkpoints from database for session {session.session_id}")
 

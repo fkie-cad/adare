@@ -6,8 +6,6 @@ enabling consistent interfaces across CLI, REST API, and Web UI.
 """
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
-
 
 # =============================================================================
 # Database Management DTOs
@@ -18,40 +16,40 @@ class DbStatusResult:
     """Result of database status check."""
     global_db_exists: bool
     global_db_accessible: bool
-    global_db_location: Optional[Path]
+    global_db_location: Path | None
     valid: bool
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
 
 @dataclass
 class DbInitResult:
     """Result of database initialization."""
     global_db_initialized: bool
-    global_db_location: Optional[Path]
-    errors: List[str] = field(default_factory=list)
+    global_db_location: Path | None
+    errors: list[str] = field(default_factory=list)
 
 
 @dataclass
 class DbRepairResult:
     """Result of database repair."""
     repaired: bool
-    actions_taken: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    actions_taken: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
 
 @dataclass
 class DbCleanInstallResult:
     """Result of clean database installation."""
     installed: bool
-    actions_taken: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    actions_taken: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
 
 @dataclass
 class DbResetResult:
     """Result of database reset."""
     was_reset: bool
-    location: Optional[Path] = None
+    location: Path | None = None
 
 
 # =============================================================================
@@ -63,24 +61,24 @@ class VmResetResult:
     """Result of VM reset operation."""
     deleted_count: int
     failed_count: int
-    deleted_vms: List[str] = field(default_factory=list)
-    failed_vms: List[str] = field(default_factory=list)
+    deleted_vms: list[str] = field(default_factory=list)
+    failed_vms: list[str] = field(default_factory=list)
 
 
 @dataclass
 class VmRuntimeRefreshResult:
     """Result of VM runtime refresh."""
     refreshed: bool
-    project_path: Optional[Path] = None
-    error_message: Optional[str] = None
+    project_path: Path | None = None
+    error_message: str | None = None
 
 
 @dataclass
 class VmRuntimeBuildResult:
     """Result of VM runtime wheel build."""
     built: bool
-    project_path: Optional[Path] = None
-    wheels_dir: Optional[Path] = None
-    adarelib_wheel: Optional[str] = None
-    adarevm_wheel: Optional[str] = None
-    error_message: Optional[str] = None
+    project_path: Path | None = None
+    wheels_dir: Path | None = None
+    adarelib_wheel: str | None = None
+    adarevm_wheel: str | None = None
+    error_message: str | None = None

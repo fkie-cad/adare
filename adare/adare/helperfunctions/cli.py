@@ -1,10 +1,11 @@
 # external imports
-from rich.console import Console
-from rich.table import Table
-import pandas as pd
-
 # setup logging
 import logging
+
+import pandas as pd
+from rich.console import Console
+from rich.table import Table
+
 log = logging.getLogger(__name__)
 
 
@@ -82,6 +83,5 @@ def get_status_icon(status: str, include_text: bool = True):
 
     if include_text:
         return f'{icon} {status}'
-    else:
-        return icon
+    return icon
 

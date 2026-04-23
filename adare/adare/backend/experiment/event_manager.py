@@ -6,43 +6,79 @@ display system. It provides clean separation of event handling from action execu
 """
 
 import logging
-from typing import Dict, List, Optional, Any
-import time
+from typing import Any
 
+from adare.types.actions import (
+    ActionCompleteEvent,
+    ActionStartEvent,
+    BlockActionCompleteEvent,
+    BlockActionStartEvent,
+    ClickActionCompleteEvent,
+    ClickActionStartEvent,
+    CommandActionCompleteEvent,
+    CommandActionStartEvent,
+    ContinueActionCompleteEvent,
+    ContinueActionStartEvent,
+    DragActionCompleteEvent,
+    DragActionStartEvent,
+    ExecuteActionCompleteEvent,
+    ExecuteActionStartEvent,
+    FindActionCompleteEvent,
+    FindActionStartEvent,
+    GotoActionCompleteEvent,
+    GotoActionStartEvent,
+    IdleActionCompleteEvent,
+    IdleActionStartEvent,
+    KeyboardActionCompleteEvent,
+    KeyboardActionStartEvent,
+    LoopActionCompleteEvent,
+    LoopActionStartEvent,
+    PauseActionCompleteEvent,
+    PauseActionStartEvent,
+    PullActionCompleteEvent,
+    PullActionStartEvent,
+    PullChangedFilesActionCompleteEvent,
+    PullChangedFilesActionStartEvent,
+    SaveTimestampActionCompleteEvent,
+    SaveTimestampActionStartEvent,
+    ScreenshotActionCompleteEvent,
+    ScreenshotActionStartEvent,
+    ScrollActionCompleteEvent,
+    ScrollActionStartEvent,
+    SnapshotFilesystemActionCompleteEvent,
+    SnapshotFilesystemActionStartEvent,
+    StopActionCompleteEvent,
+    StopActionStartEvent,
+    TestActionCompleteEvent,
+    TestActionStartEvent,
+    WaitUntilActionCompleteEvent,
+    WaitUntilActionStartEvent,
+)
 from adare.types.playbook import (
-    ActionType, ClickAction, DragAction,
-    KeyboardAction, IdleAction, ScrollAction, GotoAction,
-    CommandAction, ScreenshotAction, BlockAction, ActionTestAction,
-    SaveTimestampAction, PullAction, WaitUntilAction, LoopAction, PauseAction,
-    StopAction, ContinueAction, SnapshotFilesystemAction, PullChangedFilesAction
+    ActionTestAction,
+    ActionType,
+    BlockAction,
+    ClickAction,
+    CommandAction,
+    ContinueAction,
+    DragAction,
+    GotoAction,
+    IdleAction,
+    KeyboardAction,
+    LoopAction,
+    PauseAction,
+    PullAction,
+    PullChangedFilesAction,
+    SaveTimestampAction,
+    ScreenshotAction,
+    ScrollAction,
+    SnapshotFilesystemAction,
+    StopAction,
+    WaitUntilAction,
 )
 
 # Action event imports for flow console display
-from adare.types.step_actions import FindAction, ExecuteAction
-from adare.types.actions import (
-    ActionStartEvent, ActionCompleteEvent,
-    ClickActionStartEvent, ClickActionCompleteEvent,
-    KeyboardActionStartEvent, KeyboardActionCompleteEvent,
-    CommandActionStartEvent, CommandActionCompleteEvent,
-    TestActionStartEvent, TestActionCompleteEvent,
-    ScreenshotActionStartEvent, ScreenshotActionCompleteEvent,
-    ScrollActionStartEvent, ScrollActionCompleteEvent,
-    IdleActionStartEvent, IdleActionCompleteEvent,
-    DragActionStartEvent, DragActionCompleteEvent,
-    GotoActionStartEvent, GotoActionCompleteEvent,
-    BlockActionStartEvent, BlockActionCompleteEvent,
-    SaveTimestampActionStartEvent, SaveTimestampActionCompleteEvent,
-    PullActionStartEvent, PullActionCompleteEvent,
-    WaitUntilActionStartEvent, WaitUntilActionCompleteEvent,
-    LoopActionStartEvent, LoopActionCompleteEvent,
-    PauseActionStartEvent, PauseActionCompleteEvent,
-    StopActionStartEvent, StopActionCompleteEvent,
-    ContinueActionStartEvent, ContinueActionCompleteEvent,
-    FindActionStartEvent, FindActionCompleteEvent,
-    ExecuteActionStartEvent, ExecuteActionCompleteEvent,
-    SnapshotFilesystemActionStartEvent, SnapshotFilesystemActionCompleteEvent,
-    PullChangedFilesActionStartEvent, PullChangedFilesActionCompleteEvent
-)
+from adare.types.step_actions import ExecuteAction, FindAction
 
 log = logging.getLogger(__name__)
 
@@ -50,22 +86,22 @@ log = logging.getLogger(__name__)
 class EventManager:
     """
     Manages creation and emission of action events for flow console display.
-    
+
     This class handles all event creation logic that was previously in 
     PlaybookController, providing clean separation of event handling concerns.
     """
-    
-    def __init__(self, experiment_run_id: Optional[str] = None, playbook_items_map: Dict[int, str] = None):
+
+    def __init__(self, experiment_run_id: str | None = None, playbook_items_map: dict[int, str] = None):
         """
         Initialize the event manager.
-        
+
         Args:
             experiment_run_id: Experiment run ID for event tracking
             playbook_items_map: Maps action index to playbook_item_id for database integration
         """
         self.experiment_run_id = experiment_run_id
         self.playbook_items_map = playbook_items_map or {}
-    
+
     def create_action_start_event(self, action: ActionType, action_index: int, action_id: str, parent_event_id: str = None):
         """Create appropriate start event for the given action type."""
         action_type = type(action).__name__
@@ -88,11 +124,11 @@ class EventManager:
             'experiment_run_id': self.experiment_run_id,
             'parent_event_id': parent_event_id
         }
-        
+
         # Create type-specific start event
         if isinstance(action, ClickAction):
             return ClickActionStartEvent(target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
-        elif isinstance(action, KeyboardAction):
+        if isinstance(action, KeyboardAction):
             return KeyboardActionStartEvent(
                 key=action.key if hasattr(action, 'key') else None,
                 text=action.text if hasattr(action, 'text') else None,
@@ -100,43 +136,43 @@ class EventManager:
                 keys=getattr(action, 'keys', None),  # Keep legacy field
                 **event_data
             )
-        elif isinstance(action, CommandAction):
+        if isinstance(action, CommandAction):
             return CommandActionStartEvent(command=getattr(action, 'command', None), **event_data)
-        elif isinstance(action, ActionTestAction):
+        if isinstance(action, ActionTestAction):
             return TestActionStartEvent(test_name=getattr(action, 'name', ''), **event_data)
-        elif isinstance(action, ScreenshotAction):
+        if isinstance(action, ScreenshotAction):
             return ScreenshotActionStartEvent(**event_data)
-        elif isinstance(action, ScrollAction):
+        if isinstance(action, ScrollAction):
             return ScrollActionStartEvent(
                 direction=getattr(action, 'direction', None),
                 amount=getattr(action, 'amount', None),
                 **event_data
             )
-        elif isinstance(action, IdleAction):
+        if isinstance(action, IdleAction):
             return IdleActionStartEvent(duration=getattr(action, 'duration', None), **event_data)
-        elif isinstance(action, DragAction):
+        if isinstance(action, DragAction):
             return DragActionStartEvent(
                 source_target=self._get_target_info(getattr(action, 'src', None)),
                 dest_target=self._get_target_info(getattr(action, 'dst', None)),
                 **event_data
             )
-        elif isinstance(action, GotoAction):
+        if isinstance(action, GotoAction):
             return GotoActionStartEvent(url=getattr(action, 'url', None), **event_data)
-        elif isinstance(action, BlockAction):
+        if isinstance(action, BlockAction):
             return BlockActionStartEvent(
                 action_count=len(getattr(action, 'actions', [])),
                 conditions=self._get_condition_info(getattr(action, 'when', None)),
                 **event_data
             )
-        elif isinstance(action, SaveTimestampAction):
+        if isinstance(action, SaveTimestampAction):
             return SaveTimestampActionStartEvent(variable=getattr(action, 'variable', None), **event_data)
-        elif isinstance(action, PullAction):
+        if isinstance(action, PullAction):
             return PullActionStartEvent(
                 source=getattr(action, 'src', None),
                 destination=getattr(action, 'dst', None),
                 **event_data
             )
-        elif isinstance(action, WaitUntilAction):
+        if isinstance(action, WaitUntilAction):
             # Extract target from condition (exists or not_exists)
             target = None
             if action.condition.exists:
@@ -150,7 +186,7 @@ class EventManager:
                 initial_delay=getattr(action, 'initial_delay', None),
                 **event_data
             )
-        elif isinstance(action, LoopAction):
+        if isinstance(action, LoopAction):
             # Determine iteration count
             iteration_count = action.times if action.times is not None else (len(action.items) if action.items else None)
             return LoopActionStartEvent(
@@ -158,12 +194,12 @@ class EventManager:
                 items=action.items if hasattr(action, 'items') else None,
                 **event_data
             )
-        elif isinstance(action, PauseAction):
+        if isinstance(action, PauseAction):
             return PauseActionStartEvent(
                 message=getattr(action, 'message', None),
                 **event_data
             )
-        elif isinstance(action, StopAction):
+        if isinstance(action, StopAction):
             # Extract condition info if available
             condition_info = None
             if hasattr(action, 'condition') and action.condition:
@@ -175,7 +211,7 @@ class EventManager:
                 condition_info=condition_info,
                 **event_data
             )
-        elif isinstance(action, ContinueAction):
+        if isinstance(action, ContinueAction):
             # Extract condition info if available
             condition_info = None
             if hasattr(action, 'condition') and action.condition:
@@ -187,24 +223,23 @@ class EventManager:
                 condition_info=condition_info,
                 **event_data
             )
-        elif isinstance(action, FindAction):
+        if isinstance(action, FindAction):
             return FindActionStartEvent(target_info=getattr(action, 'target_info', None), **event_data)
-        elif isinstance(action, ExecuteAction):
+        if isinstance(action, ExecuteAction):
             return ExecuteActionStartEvent(coordinates=getattr(action, 'coordinates', None), **event_data)
-        elif isinstance(action, SnapshotFilesystemAction):
+        if isinstance(action, SnapshotFilesystemAction):
             return SnapshotFilesystemActionStartEvent(
                 snapshot_type=getattr(action, 'snapshot_type', None),
                 **event_data
             )
-        elif isinstance(action, PullChangedFilesAction):
+        if isinstance(action, PullChangedFilesAction):
             return PullChangedFilesActionStartEvent(
                 destination=getattr(action, 'destination', None),
                 **event_data
             )
-        else:
-            # Generic start event for unknown action types
-            return ActionStartEvent(**event_data)
-    
+        # Generic start event for unknown action types
+        return ActionStartEvent(**event_data)
+
     def create_action_complete_event(self, action: ActionType, action_index: int, action_id: str, result, parent_event_id: str = None):
         """Create appropriate complete event for the given action type and result."""
         action_type = type(action).__name__
@@ -229,7 +264,7 @@ class EventManager:
             'execution_time': result.execution_time,
             'parent_event_id': parent_event_id
         }
-        
+
         # Create type-specific complete event
         if isinstance(action, ClickAction):
             event = ClickActionCompleteEvent(coordinates=result.coordinates, target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
@@ -361,12 +396,12 @@ class EventManager:
             event = ActionCompleteEvent(**event_data)
 
         return event
-    
-    def _get_target_info(self, target) -> Optional[Dict[str, Any]]:
+
+    def _get_target_info(self, target) -> dict[str, Any] | None:
         """Extract target information for event logging."""
         if not target:
             return None
-        
+
         info = {}
         if hasattr(target, 'image') and target.image:
             info['image'] = target.image
@@ -384,7 +419,7 @@ class EventManager:
                     strategy_params = attrs.asdict(target.strategy)
                     if strategy_params:
                         info['strategy_params'] = strategy_params
-        
+
         return info if info else None
 
     def _generate_command_description(self, action: CommandAction) -> str:
@@ -418,23 +453,21 @@ class EventManager:
         # Regular command truncation - always single line
         if len(command) > 40:
             return f"command: execute '{command[:37]}...'"
-        else:
-            return f"command: execute '{command}'"
-    
-    def _get_condition_info(self, conditions) -> Optional[Dict[str, Any]]:
+        return f"command: execute '{command}'"
+
+    def _get_condition_info(self, conditions) -> dict[str, Any] | None:
         """Extract condition information for event logging."""
         if not conditions:
             return None
-        
+
         # If conditions is a list, extract basic info from each
         if isinstance(conditions, list):
             return {
                 'count': len(conditions),
                 'types': [type(cond).__name__ for cond in conditions]
             }
-        else:
-            return {'type': type(conditions).__name__}
-    
-    def update_playbook_items_map(self, playbook_items_map: Dict[int, str]):
+        return {'type': type(conditions).__name__}
+
+    def update_playbook_items_map(self, playbook_items_map: dict[int, str]):
         """Update the playbook items mapping."""
         self.playbook_items_map = playbook_items_map

@@ -20,7 +20,6 @@ import subprocess
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from adare.hypervisor.qemu.guestfish_client import GuestfishClient
 
@@ -37,8 +36,8 @@ class DiskDiffComparator:
         self,
         base_disk_path: str,
         overlay_disk_path: str,
-        extract_dir: Optional[Path] = None,
-    ) -> Optional[Dict[str, List[Dict]]]:
+        extract_dir: Path | None = None,
+    ) -> dict[str, list[dict]] | None:
         """Compare two disk images and return diff results.
 
         Uses manual virt-ls scanning (avoids virt-diff's unreliable
@@ -65,8 +64,8 @@ class DiskDiffComparator:
         self,
         base_disk_path: str,
         overlay_disk_path: str,
-        extract_dir: Optional[Path] = None,
-    ) -> Optional[Dict[str, List[Dict]]]:
+        extract_dir: Path | None = None,
+    ) -> dict[str, list[dict]] | None:
         """Manually compare disks using optimized guestfish single-boot scan.
 
         Args:
@@ -110,7 +109,7 @@ class DiskDiffComparator:
             return None
 
         # Compute diff
-        diff: Dict[str, List[Dict]] = {
+        diff: dict[str, list[dict]] = {
             'added': [],
             'removed': [],
             'modified': [],
@@ -172,7 +171,7 @@ class DiskDiffComparator:
         base_disk: str,
         overlay_disk: str,
         part_suffix: str,
-    ) -> Tuple[Optional[Dict], Optional[Dict]]:
+    ) -> tuple[dict | None, dict | None]:
         """Scan both disks using separate virt-ls calls.
 
         Args:
@@ -203,7 +202,7 @@ class DiskDiffComparator:
 
     def _scan_single_disk(
         self, disk_path: str, part_suffix: str
-    ) -> Optional[Dict]:
+    ) -> dict | None:
         """Scan a single disk using virt-ls.
 
         Args:
@@ -242,7 +241,7 @@ class DiskDiffComparator:
             )
             return None
 
-        files: Dict = {}
+        files: dict = {}
 
         # virt-ls output has no header
         # Columns: type, perms, size, atime, mtime, ctime, path
@@ -268,7 +267,7 @@ class DiskDiffComparator:
         base_disk_path: str,
         overlay_disk_path: str,
         partition: str,
-        diff_results: Dict[str, List[Dict]],
+        diff_results: dict[str, list[dict]],
         extract_dir: Path,
     ) -> None:
         """Extract content of changed files from disks using batched guestfish.
@@ -293,7 +292,7 @@ class DiskDiffComparator:
             d.mkdir(parents=True, exist_ok=True)
 
         # Prepare batch specs: (source, guest_path, host_path)
-        specs: List[Tuple[str, str, Path]] = []
+        specs: list[tuple[str, str, Path]] = []
 
         # 1. Added files -> from Overlay
         for item in diff_results['added']:
@@ -352,7 +351,7 @@ class DiskDiffComparator:
             # Execute batch
             self.guestfish.run_script(disk_path, script_lines)
 
-    def _add_scanned_file(self, file_map: Dict, file_data: Dict) -> None:
+    def _add_scanned_file(self, file_map: dict, file_data: dict) -> None:
         """Process and add a file record from filesystem_walk.
 
         Handles both standard and TSK-style output formats.
@@ -395,7 +394,7 @@ class DiskDiffComparator:
 
     def parse_virt_diff_output(
         self, csv_output: str
-    ) -> Dict[str, List[Dict]]:
+    ) -> dict[str, list[dict]]:
         """Parse virt-diff CSV output into standard diff format.
 
         virt-diff CSV columns: Change,Path,Old Size,New Size,Old Time,New Time
@@ -408,7 +407,7 @@ class DiskDiffComparator:
             Dict with keys: added, removed, modified
             (each containing list of file dicts)
         """
-        diff: Dict[str, List[Dict]] = {
+        diff: dict[str, list[dict]] = {
             'added': [],
             'removed': [],
             'modified': [],

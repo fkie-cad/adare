@@ -1,9 +1,10 @@
 # external imports
-from pathlib import Path
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-
 # configure logging
 import logging
+from pathlib import Path
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
 log = logging.getLogger(__name__)
 
 

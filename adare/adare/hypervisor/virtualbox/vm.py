@@ -9,15 +9,13 @@ import logging
 import platform
 import threading
 from pathlib import Path
-from typing import Optional, List, Dict, Any
-
-from adarelib.constants import StatusEnum
 
 from adare.hypervisor.base.vm import AbstractVM
-from adare.hypervisor.exceptions import VMImportException, VMAlreadyRunningException, VMNotFoundException
+from adare.hypervisor.exceptions import VMAlreadyRunningException, VMImportException, VMNotFoundException
 from adare.hypervisor.virtualbox.manager import VirtualBoxManager
-from adare.hypervisor.virtualbox.mixins import CommandExecutionMixin, SnapshotMixin, NetworkingMixin
-from adare.hypervisor.virtualbox.utils import run_subprocess, read_file_hash
+from adare.hypervisor.virtualbox.mixins import CommandExecutionMixin, NetworkingMixin, SnapshotMixin
+from adare.hypervisor.virtualbox.utils import read_file_hash, run_subprocess
+from adarelib.constants import StatusEnum
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +25,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
     VirtualBox VM management class with modular operations.
     Inherits from mixins for command execution, snapshots, and networking.
     """
-    
+
     def __init__(
         self,
         vm_name: str,
@@ -55,7 +53,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
         self._command_queue = []
         log.info(f"Initialized VirtualBoxVM for '{self.vm_name}' ({self.guest_os})")
 
-    async def create(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+    async def create(self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False):
         """Create a new VM with the specified configuration."""
         async def _create_async():
             log.info(f"Creating VM '{self.vm_name}' with {self.cpus} CPUs, {self.ram}MB RAM, network: {self.network}")
@@ -68,11 +66,11 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 ["modifyvm", self.vm_name, "--graphicscontroller", "vmsvga"],
                 ["modifyvm", self.vm_name, "--vram", "128"]
             ]
-            
+
             total_return_value = 0
             for args in commands:
                 return_value, _, _ = await self._execute_streaming_command_async(
-                    args, 
+                    args,
                     log_file=log_file,
                     stop_event=stop_event,
                     silent=silent,
@@ -82,28 +80,28 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 if return_value != 0:
                     total_return_value = return_value
                     break
-            
+
             if total_return_value == 0:
                 log.info(f"VM '{self.vm_name}' created and configured.")
             return total_return_value
-        
+
         return await self.manager.run_async(_create_async)
 
-    async def start(self, ctx_manager=None, raise_if_running: bool = False, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+    async def start(self, ctx_manager=None, raise_if_running: bool = False, stop_event=None, log_file: Path | None = None, silent: bool = False):
         """Start the VM."""
         async def _start_async():
             current_state = self._get_state(raise_on_missing=False)
-            
+
             if current_state == "running":
                 message = f"VM '{self.vm_name}' is already running."
                 if raise_if_running:
                     raise VMAlreadyRunningException(message)
                 log.info(message)
                 return 0
-            
+
             log.info(f"Starting VM '{self.vm_name}'")
             args = ["startvm", self.vm_name, "--type", "headless"]
-            
+
             return_value, _, _ = await self._execute_streaming_command_async(
                 args,
                 log_file=log_file,
@@ -112,24 +110,24 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 ctx_manager=ctx_manager,
                 operation_name="VM startup"
             )
-            
+
             if return_value == 0:
                 log.info(f"VM '{self.vm_name}' started successfully")
             else:
                 log.error(f"Failed to start VM '{self.vm_name}': return code {return_value}")
-            
+
             return return_value
-        
+
         return await self.manager.run_async(_start_async)
 
-    async def set_video_mode_hint(self, width: int = 1920, height: int = 1080, depth: int = 32, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+    async def set_video_mode_hint(self, width: int = 1920, height: int = 1080, depth: int = 32, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False):
         """Set video mode hint for the VM (must be running)."""
         async def _set_video_mode_async():
             state = self._get_state()
             if state != "running":
                 log.warning(f"VM '{self.vm_name}' is not running (state: {state}). Cannot set video mode hint.")
                 return 1
-            
+
             log.info(f"Setting video mode hint for VM '{self.vm_name}' to {width}x{height}x{depth}")
             args = ["controlvm", self.vm_name, "setvideomodehint", str(width), str(height), str(depth)]
             return_value, _, _ = await self._execute_streaming_command_async(
@@ -140,14 +138,14 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 ctx_manager=ctx_manager,
                 operation_name="video mode hint"
             )
-            
+
             if return_value == 0:
                 log.info(f"Video mode hint set successfully for VM '{self.vm_name}'")
             else:
                 log.error(f"Failed to set video mode hint for VM '{self.vm_name}': return code {return_value}")
-            
+
             return return_value
-        
+
         return await self.manager.run_async(_set_video_mode_async)
 
     async def run_command(
@@ -155,8 +153,8 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
         command: str,
         background: bool = False,
         silent: bool = False,
-        stop_event: Optional[threading.Event] = None,
-        cwd: Optional[str] = None,
+        stop_event: threading.Event | None = None,
+        cwd: str | None = None,
         win_noprofile: bool = True,
         use_cmd: bool = False,
         admin: bool = False,
@@ -208,23 +206,23 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
         self._command_queue.clear()
         log.debug(f"Cleared {cleared_count} queued commands for VM '{self.vm_name}'")
 
-    async def execute_queued_commands(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False, win_noprofile: bool = False):
+    async def execute_queued_commands(self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False, win_noprofile: bool = False):
         """Execute all queued commands in a single batch."""
         async def _execute_queued_commands_async():
             if not self._command_queue:
                 log.info(f"No queued commands to execute for VM '{self.vm_name}'")
                 return 0
-            
+
             log.info(f"Executing {len(self._command_queue)} queued commands for VM '{self.vm_name}'")
             total_return_value = 0
-            
+
             for cmd_info in self._command_queue:
                 command = cmd_info['command']
                 description = cmd_info['description']
-                
+
                 if not silent:
                     log.info(f"[{self.vm_name}] {description}")
-                
+
                 return_value = await self.run_command(
                     command,
                     silent=silent,
@@ -237,22 +235,22 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                     log.error(f"Command failed in VM '{self.vm_name}': {description}")
                     total_return_value = return_value.returncode
                     break
-            
+
             # Clear the queue after execution
             self.clear_command_queue()
-            
+
             if total_return_value == 0:
                 log.info(f"All queued commands executed successfully for VM '{self.vm_name}'")
-            
+
             return total_return_value
-        
+
         return await self.manager.run_async(_execute_queued_commands_async)
 
     def cleanup_background_processes(self):
         """Kill all tracked background processes."""
         if not self._background_pids:
             return
-        
+
         if 'windows' in self.guest_os.lower():
             for pid in self._background_pids:
                 try:
@@ -270,7 +268,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                     asyncio.create_task(self.run_command(kill_cmd, silent=True))
                 except Exception as e:
                     log.debug(f"Failed to kill background process {pid}: {e}")
-        
+
         self._background_pids.clear()
         log.debug(f"Cleaned up background processes for VM '{self.vm_name}'")
 
@@ -290,18 +288,18 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 log.debug(f"Error checking if VM '{self.vm_name}' is booted: {e}")
             return False
 
-    async def stop(self, ctx_manager=None, log_file: Optional[Path] = None, silent: bool = False, force: bool = False):
+    async def stop(self, ctx_manager=None, log_file: Path | None = None, silent: bool = False, force: bool = False):
         """Stop the VM."""
         async def _stop_async():
             current_state = self._get_state(raise_on_missing=False)
-            
+
             if current_state not in ["running", "paused"]:
                 log.info(f"VM '{self.vm_name}' is not running (state: {current_state})")
                 return 0
-            
+
             log.info(f"Stopping VM '{self.vm_name}'")
             args = ["controlvm", self.vm_name, "poweroff"]
-            
+
             return_value, _, _ = await self._execute_streaming_command_async(
                 args,
                 log_file=log_file,
@@ -310,28 +308,28 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 ctx_manager=ctx_manager,
                 operation_name="VM shutdown"
             )
-            
+
             if return_value == 0:
                 log.info(f"VM '{self.vm_name}' stopped successfully")
             else:
                 log.error(f"Failed to stop VM '{self.vm_name}': return code {return_value}")
-            
+
             return return_value
-        
+
         return await self.manager.run_async(_stop_async)
 
-    async def remove(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+    async def remove(self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False):
         """Remove the VM completely."""
         async def _remove_async():
             try:
                 log.info(f"Removing VM '{self.vm_name}' completely")
-                
+
                 # First try to stop the VM if it's running
                 current_state = self._get_state(raise_on_missing=False)
                 if current_state in ["running", "paused"]:
                     log.info(f"VM '{self.vm_name}' is {current_state}, stopping it first")
                     await self.stop(ctx_manager=ctx_manager, log_file=log_file, silent=silent)
-                
+
                 args = ["unregistervm", self.vm_name, "--delete"]
                 return_value, _, _ = await self._execute_streaming_command_async(
                     args,
@@ -341,20 +339,20 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                     ctx_manager=ctx_manager,
                     operation_name="VM removal"
                 )
-                
+
                 if return_value == 0:
                     log.info(f"VM '{self.vm_name}' removed successfully")
                 else:
                     log.error(f"Failed to remove VM '{self.vm_name}': return code {return_value}")
-                
+
                 return return_value
             except Exception as e:
                 log.error(f"Error removing VM '{self.vm_name}': {e}")
                 return 1
-        
+
         return await self.manager.run_async(_remove_async)
 
-    async def destroy(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+    async def destroy(self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False):
         """Alias for remove() method for consistency with other VM operations."""
         return await self.remove(ctx_manager=ctx_manager, stop_event=stop_event, log_file=log_file, silent=silent)
 
@@ -367,19 +365,19 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                     log_prefix=f"_get_state({self.vm_name}): ",
                     check=False
                 )
-                
+
                 if result.returncode != 0:
                     if raise_on_missing:
                         raise VMNotFoundException(f"VM '{self.vm_name}' not found")
                     return "not_found"
-                
+
                 # Parse the output for the VM state
                 for line in result.stdout.split('\n'):
                     if line.startswith('VMState='):
                         state = line.split('=', 1)[1].strip('"')
                         log.debug(f"VM '{self.vm_name}' state: {state}")
                         return state
-                
+
                 log.warning(f"Could not determine state for VM '{self.vm_name}'")
                 return "unknown"
             except Exception as e:
@@ -387,7 +385,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 if raise_on_missing:
                     raise
                 return "error"
-        
+
         return self.manager.run(_get_vm_state)
 
     def get_state(self) -> str:
@@ -409,11 +407,11 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
             except Exception as e:
                 log.error(f"Error checking if VM '{self.vm_name}' exists: {e}")
                 return False
-        
+
         return self.manager.run(_vm_exists)
 
     @classmethod
-    def get_vm_by_name(cls, vm_name: str, manager: Optional[VirtualBoxManager] = None):
+    def get_vm_by_name(cls, vm_name: str, manager: VirtualBoxManager | None = None):
         """Get VM information by name and create a VirtualBoxVM instance."""
         # Ensure manager exists first to access executables
         if manager is None:
@@ -459,21 +457,21 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                     cpus=cpus,
                     ram=ram
                 )
-                
+
                 log.info(f"Retrieved VM '{vm_name}' with {cpus} CPUs, {ram}MB RAM, OS: {guest_os}")
                 return vm
-                
+
             except Exception as e:
                 log.error(f"Error getting VM info for '{vm_name}': {e}")
                 return None
-        
+
         if manager is None:
             manager = VirtualBoxManager()
-        
+
         return manager.run(_get_vm_info)
 
     @staticmethod
-    def get_vm_uuid_by_name(vm_name: str, vboxmanage_exe: str = 'VBoxManage') -> Optional[str]:
+    def get_vm_uuid_by_name(vm_name: str, vboxmanage_exe: str = 'VBoxManage') -> str | None:
         """
         Get VM UUID by name.
 
@@ -487,27 +485,27 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 log_prefix=f"get_vm_uuid_by_name({vm_name}): ",
                 check=False
             )
-            
+
             if result.returncode != 0:
                 return None
-            
+
             for line in result.stdout.split('\n'):
                 if line.startswith('UUID='):
                     uuid = line.split('=', 1)[1].strip('"')
                     log.debug(f"VM '{vm_name}' UUID: {uuid}")
                     return uuid
-            
+
             return None
         except Exception as e:
             log.error(f"Error getting UUID for VM '{vm_name}': {e}")
             return None
 
-    def get_vm_uuid(self) -> Optional[str]:
+    def get_vm_uuid(self) -> str | None:
         """Get VM UUID for this instance (convenience method)."""
         return self.get_vm_uuid_by_name(self.vm_name, self.vboxmanage_exe)
 
     @staticmethod
-    def get_vm_info_by_uuid(vbox_uuid: str, vboxmanage_exe: str = 'VBoxManage') -> Optional[dict]:
+    def get_vm_info_by_uuid(vbox_uuid: str, vboxmanage_exe: str = 'VBoxManage') -> dict | None:
         """
         Get VM information by UUID.
 
@@ -521,16 +519,16 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 log_prefix=f"get_vm_info_by_uuid({vbox_uuid}): ",
                 check=False
             )
-            
+
             if result.returncode != 0:
                 return None
-            
+
             vm_info = {}
             for line in result.stdout.split('\n'):
                 if '=' in line:
                     key, value = line.split('=', 1)
                     vm_info[key] = value.strip('"')
-            
+
             return vm_info
         except Exception as e:
             log.error(f"Error getting VM info by UUID '{vbox_uuid}': {e}")
@@ -557,7 +555,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
             return False
 
     @staticmethod
-    def get_vm_name_by_uuid(vbox_uuid: str) -> Optional[str]:
+    def get_vm_name_by_uuid(vbox_uuid: str) -> str | None:
         """Get VM name by UUID."""
         try:
             vm_info = VirtualBoxVM.get_vm_info_by_uuid(vbox_uuid)
@@ -568,7 +566,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
             log.error(f"Error getting VM name by UUID '{vbox_uuid}': {e}")
             return None
 
-    async def wait_until_fully_booted(self, timeout: int = 300, ctx_manager=None, stop_event: Optional[threading.Event] = None, consecutive_successes: int = 3):
+    async def wait_until_fully_booted(self, timeout: int = 300, ctx_manager=None, stop_event: threading.Event | None = None, consecutive_successes: int = 3):
         """Wait until VM is fully booted and accessible.
 
         Args:
@@ -625,7 +623,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                                         log.debug(f"VM boot check failed after {success_count} successes, resetting counter. Output: {stdout_str.strip()}, Error: {stderr_str.strip()}")
                                     success_count = 0
                                     log.debug(f"VM not ready yet. Output: {stdout_str.strip()}, Error: {stderr_str.strip()}")
-                            except asyncio.TimeoutError:
+                            except TimeoutError:
                                 if success_count > 0:
                                     log.debug(f"VM boot check timed out after {success_count} successes, resetting counter")
                                 success_count = 0
@@ -637,15 +635,15 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                                 log.debug(f"VM boot check error after {success_count} successes, resetting counter: {e}")
                             success_count = 0
                             log.debug(f"Error checking VM '{self.vm_name}' boot status: {e}")
-                    
+
                     await asyncio.sleep(0.2)
-                
+
                 log.warning(f"VM '{self.vm_name}' did not boot within {timeout} seconds")
                 return False
-        
+
         return await self.manager.run_async(_wait_async)
 
-    async def create_from_ovf_or_ova(self, file_path: Path, try_extract: bool = True, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+    async def create_from_ovf_or_ova(self, file_path: Path, try_extract: bool = True, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False):
         """Create VM by importing from OVF or OVA file."""
         async def _import_async():
             with ctx_manager if ctx_manager else contextlib.nullcontext():
@@ -691,17 +689,17 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 current_hash = read_file_hash(ovf_path)
                 if not current_hash:
                     return False
-                
+
                 # Get stored hash from VM info
                 result = run_subprocess(
                     [self.vboxmanage_exe, "getextradata", self.vm_name, "ovf_hash"],
                     log_prefix=f"ovf_is_identical({ovf_path}): ",
                     check=False
                 )
-                
+
                 if result.returncode != 0:
                     return False
-                
+
                 stored_hash = result.stdout.strip()
                 is_identical = current_hash == stored_hash
                 log.debug(f"OVF hash comparison for '{self.vm_name}': {is_identical}")
@@ -709,7 +707,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
             except Exception as e:
                 log.error(f"Error checking OVF hash for '{self.vm_name}': {e}")
                 return False
-        
+
         return self.manager.run(_ovf_is_identical)
 
     def store_ovf_hash(self, ovf_path: str):
@@ -719,44 +717,44 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 file_hash = read_file_hash(ovf_path)
                 if not file_hash:
                     return False
-                
+
                 result = run_subprocess(
                     [self.vboxmanage_exe, "setextradata", self.vm_name, "ovf_hash", file_hash],
                     log_prefix=f"store_ovf_hash({ovf_path}): "
                 )
-                
+
                 log.debug(f"Stored OVF hash for VM '{self.vm_name}': {file_hash}")
                 return True
             except Exception as e:
                 log.error(f"Error storing OVF hash for VM '{self.vm_name}': {e}")
                 return False
-        
+
         return self.manager.run(_store_ovf_hash)
 
     # !keep unused at the moment but maybe use later -> makes clock weird. Timezone and time do not match in vm
-    async def disable_time_sync(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+    async def disable_time_sync(self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False):
         """
         Disable time synchronization for the VM to prevent syncing with host time
         and configure RTC to use UTC.
-        
+
         Args:
             ctx_manager: Context manager for operation tracking
             stop_event: Event to check for cancellation
             log_file: Optional log file for output
             silent: Whether to suppress output
-        
+
         Returns:
             Return code (0 for success)
         """
         async def _disable_time_sync_async():
             log.info(f"Disabling time synchronization and configuring RTC for VM '{self.vm_name}'")
-            
+
             # Commands to configure time settings
             commands = [
                 ["setextradata", self.vm_name, "VBoxInternal/Devices/VMMDev/0/Config/GetHostTimeDisabled", "1"],
                 ["modifyvm", self.vm_name, "--rtcuseutc", "on"]
             ]
-            
+
             total_return_value = 0
             for args in commands:
                 return_value, _, _ = await self._execute_streaming_command_async(
@@ -771,10 +769,10 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                     total_return_value = return_value
                     log.error(f"Failed to execute {args[0]} for VM '{self.vm_name}': return code {return_value}")
                     break
-            
+
             if total_return_value == 0:
                 log.info(f"Successfully disabled time synchronization and set RTC to UTC for VM '{self.vm_name}'")
-            
+
             return total_return_value
-        
+
         return await self.manager.run_async(_disable_time_sync_async)

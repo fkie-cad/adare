@@ -1,14 +1,14 @@
-import aiohttp
-from pathlib import Path
-import requests
-import adare.config.server as config_server
-from adare.webappaccess.exceptions import NotLoggedInError, ExperimentWithNameAlreadyExistsError, DownloadError, MissingDataError
-from adare.webappaccess.login import WebappLogin
-from adare.helperfunctions.web.download import download_from_session
-from adare.database.api.experiment import ExperimentApi
-
 # configure logging
 import logging
+from pathlib import Path
+
+import requests
+
+import adare.config.server as config_server
+from adare.helperfunctions.web.download import download_from_session
+from adare.webappaccess.exceptions import DownloadError, ExperimentWithNameAlreadyExistsError, MissingDataError
+from adare.webappaccess.login import WebappLogin
+
 log = logging.getLogger(__name__)
 
 
@@ -16,7 +16,7 @@ def __download_json(session: requests.Session, download_url: str, not_found_igno
     with session.get(download_url) as response:
         if response.status_code == 200:
             return response.json()
-        elif response.status_code == 404:
+        if response.status_code == 404:
             if not_found_ignore:
                 return dict()
     raise DownloadError(log, f"Error downloading {download_url} ({response.status_code}, {response.text})")

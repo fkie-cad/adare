@@ -6,13 +6,14 @@ such as experiments, runs, and abstract tests. These models are stored in
 individual project databases and reference global resources by ID.
 """
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, Boolean, func, Enum as SAEnum, Text, JSON, Index
-from sqlalchemy.orm import relationship, backref
 import ulid
-from sqlalchemy_serializer import SerializerMixin
+from sqlalchemy import CHAR, JSON, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, Text, func
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import backref, declarative_base, relationship
+from sqlalchemy_serializer import SerializerMixin
+
 from adarelib.constants import StatusEnum
-from sqlalchemy.orm import declarative_base
 
 # Create separate base for project models
 ProjectBase = declarative_base()
@@ -439,9 +440,8 @@ class ActionEvent(Event):
         parent = self.__class__.query.filter_by(id=self.parent_event_id).first()
         if parent and hasattr(parent, 'display_level'):
             return parent.display_level + 1
-        else:
-            # If parent not found or doesn't have display_level, assume next level
-            return 1
+        # If parent not found or doesn't have display_level, assume next level
+        return 1
 
     @hybrid_property
     def stage_submessage(self):
@@ -469,12 +469,11 @@ class EventFactory:
 
         if category == 'action' or category == 'command':
             return ActionEvent(**kwargs)
-        elif category == 'test':
+        if category == 'test':
             return TestEvent(**kwargs)
-        elif category == 'error':
+        if category == 'error':
             return ErrorEvent(**kwargs)
-        else:
-            raise ValueError(f'Invalid category: {category}')
+        raise ValueError(f'Invalid category: {category}')
 
 
 class ExperimentRunFiles(SerializerMixin, ProjectBase):
@@ -703,7 +702,7 @@ class ExperimentRun(SerializerMixin, ProjectBase):
     def ulid(self, value):
         """Allow setting ulid which maps to the id field."""
         self.id = value
-    
+
 
 class Playbook(SerializerMixin, ProjectBase):
     """Main playbook container linked to experiment."""

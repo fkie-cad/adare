@@ -7,7 +7,6 @@ import logging
 import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Optional
 
 log = logging.getLogger(__name__)
 
@@ -23,9 +22,9 @@ class AbstractCommandMixin(ABC):
     @abstractmethod
     async def _execute_streaming_command_async(
         self,
-        args: List[str],
-        log_file: Optional[Path] = None,
-        stop_event: Optional[threading.Event] = None,
+        args: list[str],
+        log_file: Path | None = None,
+        stop_event: threading.Event | None = None,
         silent: bool = False,
         ctx_manager=None,
         operation_name: str = "command execution"
@@ -52,13 +51,13 @@ class AbstractCommandMixin(ABC):
     @abstractmethod
     def _execute_streaming_command(
         self,
-        args: List[str],
-        log_file: Optional[Path] = None,
-        stop_event: Optional[threading.Event] = None,
+        args: list[str],
+        log_file: Path | None = None,
+        stop_event: threading.Event | None = None,
         silent: bool = False,
         ctx_manager=None,
         operation_name: str = "command execution",
-        timeout: Optional[int] = None
+        timeout: int | None = None
     ) -> int:
         """
         Execute a hypervisor command synchronously with streaming output.
@@ -85,7 +84,7 @@ class AbstractCommandMixin(ABC):
         self,
         command: str,
         background: bool = False,
-        cwd: Optional[str] = None,
+        cwd: str | None = None,
         admin: bool = False,
         # VirtualBox-specific
         win_noprofile: bool = True,
@@ -97,7 +96,7 @@ class AbstractCommandMixin(ABC):
         redirect_stdout: str = "",
         hidden_window: bool = True,
         inject_user_path: bool = False,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Build hypervisor-specific command arguments for guest execution.
 

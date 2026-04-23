@@ -1,8 +1,8 @@
-from adare.console import console
-from adare.helperfunctions.text import clean_rich_inline_str
-
 # configure logging
 import logging
+
+from adare.console import console
+from adare.helperfunctions.text import clean_rich_inline_str
 
 
 class LoggedException(Exception):
@@ -72,11 +72,11 @@ class TestfunctionSyntaxError(LoggedErrorException):
 
 
 class NoProjectFoundError(LoggedErrorException):
-    def __init__(self, log: logging.Logger, message: str = None, specified_project: str = None, 
+    def __init__(self, log: logging.Logger, message: str = None, specified_project: str = None,
                  current_path: "Path" = None, possible_solutions: list = None):
         """
         Enhanced NoProjectFoundError with context-aware suggestions.
-        
+
         Args:
             log: Logger instance
             message: Custom error message (auto-generated if None)
@@ -86,21 +86,22 @@ class NoProjectFoundError(LoggedErrorException):
         """
         if message is None or possible_solutions is None:
             from pathlib import Path
+
             from adare.helperfunctions.project_suggestions import generate_no_project_error_message
-            
+
             if current_path is None:
                 current_path = Path.cwd()
-            
+
             auto_message, auto_solutions = generate_no_project_error_message(
                 current_path=current_path,
                 specified_project=specified_project
             )
-            
+
             if message is None:
                 message = auto_message
             if possible_solutions is None:
                 possible_solutions = auto_solutions
-        
+
         super().__init__(log, message, possible_solutions=possible_solutions)
 
 

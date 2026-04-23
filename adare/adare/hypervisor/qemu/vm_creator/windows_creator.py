@@ -1,5 +1,6 @@
 """Windows VM creation orchestrator - Autounattend via floppy/ISO + UEFI boot."""
 
+import logging
 import platform
 import shutil
 import struct
@@ -8,7 +9,9 @@ import tempfile
 import threading
 from pathlib import Path
 
-from adare.config.configdirectory import QEMU_CACHE_DIR
+from jinja2 import Environment, FileSystemLoader
+
+from adare.config.configdirectory import QEMU_CACHE_DIR, VM_TEMPLATES_DIR
 from adare.console import console, print_section, print_step
 from adare.helperfunctions.web.download import download
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
@@ -27,11 +30,6 @@ from adare.hypervisor.qemu.vm_creator.qmp_utils import (
     repeatedly_send_keypress,
 )
 
-from jinja2 import Environment, FileSystemLoader
-
-from adare.config.configdirectory import VM_TEMPLATES_DIR
-
-import logging
 log = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent / 'templates'

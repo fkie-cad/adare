@@ -52,8 +52,7 @@ def system_service_status(ctx: TestContext, service_name: str, expected_status: 
 
             if actual_status == expected_status:
                 return TestResult.success([f'service {service_name} is {actual_status}'])
-            else:
-                return TestResult.failed([f'service {service_name} status mismatch. Expected: {expected_status}, Got: {actual_status}'])
+            return TestResult.failed([f'service {service_name} status mismatch. Expected: {expected_status}, Got: {actual_status}'])
 
         except subprocess.TimeoutExpired:
             return TestResult.execution_error(None, f"Timeout checking service status for {service_name}")
@@ -93,10 +92,8 @@ def process_running(ctx: TestContext, process_name: str, min_instances: int = 1)
 
                 if instance_count >= min_instances:
                     return TestResult.success([f'process {process_name} running with {instance_count} instances (PIDs: {", ".join(pids)})'])
-                else:
-                    return TestResult.failed([f'process {process_name} has {instance_count} instances, expected at least {min_instances}'])
-            else:
-                return TestResult.failed([f'process {process_name} is not running'])
+                return TestResult.failed([f'process {process_name} has {instance_count} instances, expected at least {min_instances}'])
+            return TestResult.failed([f'process {process_name} is not running'])
 
         except subprocess.TimeoutExpired:
             return TestResult.execution_error(None, f"Timeout checking process {process_name}")
@@ -183,8 +180,7 @@ def log_entry_exists(ctx: TestContext, log_file: str, pattern: str, max_lines: i
             if result.returncode == 0:
                 matches = result.stdout.strip().splitlines()
                 return TestResult.success([f'found {len(matches)} log entries matching pattern in {log_file}'])
-            else:
-                return TestResult.failed([f'no log entries matching pattern found in {log_file}'])
+            return TestResult.failed([f'no log entries matching pattern found in {log_file}'])
 
         except subprocess.TimeoutExpired:
             return TestResult.execution_error(None, f"Timeout searching log file {log_file}")

@@ -6,11 +6,9 @@ Extends base hypervisor models with VirtualBox-specific format conversion.
 import logging
 from dataclasses import dataclass
 
-from adare.hypervisor.base.models import (
-    PortForwardingRule as BasePortForwardingRule,
-    SharedFolderConfig as BaseSharedFolderConfig,
-    CommandResult as BaseCommandResult
-)
+from adare.hypervisor.base.models import CommandResult as BaseCommandResult
+from adare.hypervisor.base.models import PortForwardingRule as BasePortForwardingRule
+from adare.hypervisor.base.models import SharedFolderConfig as BaseSharedFolderConfig
 
 log = logging.getLogger(__name__)
 

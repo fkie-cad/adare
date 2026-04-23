@@ -1,18 +1,19 @@
 import asyncio
-import threading
-
-from textual.app import App, ComposeResult, RenderResult
-from textual.containers import HorizontalGroup, VerticalScroll, Vertical, Horizontal, VerticalGroup
-from textual.widgets import Button, Footer, Header, Static, LoadingIndicator, Rule
-from textual.screen import Screen
-from adare.frontend.terminal.textualize.experiment_flow_console_widget import flowwidgetmanager
-from adare.backend.experiment.runctx import ExperimentRunCtx
-from typing import Callable, List
-from adare.backend.types import Step
-from rich.text import Text
-from textual.reactive import reactive
-
 import logging
+import threading
+from collections.abc import Callable
+
+from rich.text import Text
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, HorizontalGroup, Vertical, VerticalGroup, VerticalScroll
+from textual.reactive import reactive
+from textual.screen import Screen
+from textual.widgets import Button, Footer, Header, Static
+
+from adare.backend.experiment.runctx import ExperimentRunCtx
+from adare.backend.types import Step
+from adare.frontend.terminal.textualize.experiment_flow_console_widget import flowwidgetmanager
+
 log = logging.getLogger(__name__)
 
 
@@ -39,9 +40,7 @@ class PlayButton(Button):
         self.btn_id = btn_id
 
     def compose(self) -> ComposeResult:
-        if self.state == 'not_started':
-            yield Button(Text.from_markup('Play :play_button:'), id=self.btn_id, classes='playbtn')
-        elif self.state == 'waiting':
+        if self.state == 'not_started' or self.state == 'waiting':
             yield Button(Text.from_markup('Play :play_button:'), id=self.btn_id, classes='playbtn')
         elif self.state == 'running':
             yield Static(Text.from_markup('Running :hourglass:'), classes='center', id=self.btn_id)
@@ -65,10 +64,9 @@ class StepPanel(VerticalGroup):
         self.step_label = step.label
 
     def compose(self) -> ComposeResult:
-        with Horizontal():
-            with Vertical(classes='box-step-not_started', id=f'step-{self.step_index}') as box:
-                box.border_title = Text.from_markup(f'{self.step_label}')
-                yield PlayButton(btn_id=f"play-{self.step_index}")
+        with Horizontal(), Vertical(classes='box-step-not_started', id=f'step-{self.step_index}') as box:
+            box.border_title = Text.from_markup(f'{self.step_label}')
+            yield PlayButton(btn_id=f"play-{self.step_index}")
 
     def watch_state(self, old_state: str, new_state: str):
         log.info(f'State changed from {old_state} to {new_state}')
@@ -100,7 +98,7 @@ class CustomIconizedButton(Button):
         yield Button(label=self.btn_text, id=self.btn_id, classes='actionbtn')
 
 class MachinePanel(Vertical):
-    BORDER_TITLE = Text.from_markup(f'Machine :laptop_computer:')
+    BORDER_TITLE = Text.from_markup('Machine :laptop_computer:')
     interrupted: reactive[bool] = reactive(False, recompose=True)
     DEFAULT_CLASSES = 'interruptable'
 
@@ -127,12 +125,12 @@ class MachinePanel(Vertical):
 
 class StepListPanel(Vertical):
     """ A widget that displays multiple StepGroups vertically. """
-    steps: List[Step]
+    steps: list[Step]
     BORDER_TITLE = Text.from_markup('Steps Panel :rocket:')
     interrupted: reactive[bool] = reactive(False, recompose=True)
     DEFAULT_CLASSES = 'interruptable'
 
-    def __init__(self, steps: List[Step]):
+    def __init__(self, steps: list[Step]):
         super().__init__()
         self.steps = steps
 
@@ -166,8 +164,8 @@ class ExperimentApp(App):
     so they can be queued for execution later.
     """
     run_ctx: ExperimentRunCtx
-    steps: List[Step]
-    shutdown_steps: List[Step]
+    steps: list[Step]
+    shutdown_steps: list[Step]
     last_executed_index: int
     step_queue: asyncio.Queue[int]
     shutdown_queue: asyncio.Queue[Step]
@@ -181,8 +179,8 @@ class ExperimentApp(App):
     def __init__(
         self,
         run_ctx: ExperimentRunCtx,
-        steps: List[Step],
-        shutdown_steps: List[Step],
+        steps: list[Step],
+        shutdown_steps: list[Step],
         callbacks: dict[str, Callable],
     ):
         super().__init__()
@@ -272,10 +270,9 @@ class ExperimentApp(App):
                 log.warning(f"Step {step.label} has already been executed.")
                 self.step_queue.task_done()
                 return
-            else:
-                self.__update_step_panel(target_index, 'running', disabled=True)
-                await self.run_step(step)
-                self.__update_step_panel(target_index, 'replay', disabled=False)
+            self.__update_step_panel(target_index, 'running', disabled=True)
+            await self.run_step(step)
+            self.__update_step_panel(target_index, 'replay', disabled=False)
         else:
             for index in range(target_index, len(self.steps)):
                 self.__update_step_panel(index, 'not_started', disabled=True)

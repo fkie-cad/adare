@@ -1,7 +1,8 @@
 
-import pytest
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add paths for imports
 # Current file is in tests/unit/types/test_playbook_parsing.py
@@ -13,7 +14,8 @@ ADARELIB_ROOT = PROJECT_ROOT.parent / "adarelib"
 if str(ADARELIB_ROOT) not in sys.path:
     sys.path.insert(0, str(ADARELIB_ROOT))
 
-from adare.types.playbook import WaitUntilAction, WaitCondition, SkipOptions, PixelChangeConstraint, Target
+from adare.types.playbook import PixelChangeConstraint, SkipOptions, Target, WaitCondition, WaitUntilAction
+
 
 class TestPixelChangeConstraintParsing:
     """Tests for parsing PixelChangeConstraint and WaitUntilAction."""
@@ -50,15 +52,15 @@ class TestWaitUntilActionParsing:
         """Test initializing WaitUntilAction with a constraint containing idle."""
         target = Target(text="something")
         condition = WaitCondition(exists=target)
-        
+
         pixel_constraint = PixelChangeConstraint(above=1.0, idle=2.0)
         skip_options = SkipOptions(pixel_change=pixel_constraint)
-        
+
         action = WaitUntilAction(
             condition=condition,
             skip=skip_options
         )
-        
+
         assert action.skip is not None
         assert action.skip.pixel_change is not None
         assert action.skip.pixel_change.idle == 2.0

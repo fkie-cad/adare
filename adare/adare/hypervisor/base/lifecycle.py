@@ -5,10 +5,8 @@ This module defines the strategy pattern interface for hypervisor-specific
 VM lifecycle operations. Each hypervisor implementation (VirtualBox, QEMU, etc.)
 must provide a concrete strategy that handles its specific requirements.
 """
-from abc import ABC, abstractmethod
-import threading
-from typing import Optional
 import logging
+from abc import ABC, abstractmethod
 
 log = logging.getLogger(__name__)
 

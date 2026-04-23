@@ -29,25 +29,20 @@ def _detect_encoding_from_bom(file_path):
 
     if raw_data.startswith(b'\xef\xbb\xbf'):
         return 'utf-8', 3
-    elif raw_data.startswith(b'\xff\xfe\x00\x00'):
+    if raw_data.startswith(b'\xff\xfe\x00\x00'):
         return 'utf-32-le', 4
-    elif raw_data.startswith(b'\x00\x00\xfe\xff'):
+    if raw_data.startswith(b'\x00\x00\xfe\xff'):
         return 'utf-32-be', 4
-    elif raw_data.startswith(b'\xff\xfe'):
+    if raw_data.startswith(b'\xff\xfe'):
         return 'utf-16-le', 2
-    elif raw_data.startswith(b'\xfe\xff'):
+    if raw_data.startswith(b'\xfe\xff'):
         return 'utf-16-be', 2
-    else:
-        return None, 0
+    return None, 0
 
 
 def _strip_bom_from_text(text, encoding):
     """Strip BOM from text content"""
-    if encoding.lower() == 'utf-8' and text.startswith('\ufeff'):
-        return text[1:]
-    elif encoding.lower().startswith('utf-16') and text.startswith('\ufeff'):
-        return text[1:]
-    elif encoding.lower().startswith('utf-32') and text.startswith('\ufeff'):
+    if encoding.lower() == 'utf-8' and text.startswith('\ufeff') or encoding.lower().startswith('utf-16') and text.startswith('\ufeff') or encoding.lower().startswith('utf-32') and text.startswith('\ufeff'):
         return text[1:]
     return text
 
@@ -77,7 +72,7 @@ def _parse_duration(duration_str):
     """Parse duration string like '1h', '30m', '2d' to seconds"""
     units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
 
-    if not duration_str or not duration_str[-1] in units:
+    if not duration_str or duration_str[-1] not in units:
         raise ValueError(f"Invalid duration format: {duration_str}")
 
     try:
@@ -135,20 +130,19 @@ def _get_file_timestamp(filepath, timestamp_type):
 
     if timestamp_type == 'modified':
         return stat_info.st_mtime
-    elif timestamp_type == 'accessed':
+    if timestamp_type == 'accessed':
         return stat_info.st_atime
-    elif timestamp_type == 'created':
+    if timestamp_type == 'created':
         # On Unix, st_ctime is not creation time but change time
         # On Windows, it is creation time
         if platform.system() == 'Windows':
             return stat_info.st_ctime
-        else:
-            # Try to get birth time on systems that support it
-            try:
-                return stat_info.st_birthtime
-            except AttributeError:
-                # Fall back to change time
-                return stat_info.st_ctime
+        # Try to get birth time on systems that support it
+        try:
+            return stat_info.st_birthtime
+        except AttributeError:
+            # Fall back to change time
+            return stat_info.st_ctime
     else:
         raise ValueError(f"Unsupported timestamp type: {timestamp_type}")
 
@@ -231,18 +225,15 @@ def file_exists(ctx, dst: str = '', match_mode: str = "any"):
         if match_mode == "single":
             if len(files) == 1:
                 return TestResult.success([f'file {files[0]} exists'])
-            elif not files and paths:
+            if not files and paths:
                 return TestResult.failed([f'path {paths[0]} exists but is not a file'])
-            else:
-                return TestResult.failed([f'file with path {dst} does not exist'])
-        else:  # "any"
-            if files:
-                return TestResult.success([f'{len(files)} file(s) found: {", ".join(files)}'])
-            else:
-                if paths:
-                    return TestResult.failed([f'{len(paths)} path(s) matched but none are files'])
-                else:
-                    return TestResult.failed([f'no files match pattern {dst}'])
+            return TestResult.failed([f'file with path {dst} does not exist'])
+        # "any"
+        if files:
+            return TestResult.success([f'{len(files)} file(s) found: {", ".join(files)}'])
+        if paths:
+            return TestResult.failed([f'{len(paths)} path(s) matched but none are files'])
+        return TestResult.failed([f'no files match pattern {dst}'])
     except (OSError, PermissionError) as e:
         return TestResult.execution_error(e, f"Cannot check file existence for {dst}")
 
@@ -268,17 +259,14 @@ def file_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
         if match_mode == "single":
             if not files:
                 return TestResult.success([f'file {dst} does not exist'])
-            else:
-                return TestResult.failed([f'file {files[0]} exists'])
-        else:  # "any"
-            if not files:
-                count = len(paths)
-                if count > 0:
-                    return TestResult.success([f'{count} path(s) matched but none are files'])
-                else:
-                    return TestResult.success([f'no files match pattern {dst}'])
-            else:
-                return TestResult.failed([f'{len(files)} file(s) exist matching pattern: {", ".join(files)}'])
+            return TestResult.failed([f'file {files[0]} exists'])
+        # "any"
+        if not files:
+            count = len(paths)
+            if count > 0:
+                return TestResult.success([f'{count} path(s) matched but none are files'])
+            return TestResult.success([f'no files match pattern {dst}'])
+        return TestResult.failed([f'{len(files)} file(s) exist matching pattern: {", ".join(files)}'])
     except (OSError, PermissionError) as e:
         return TestResult.execution_error(e, f"Cannot check file existence for {dst}")
 
@@ -304,18 +292,15 @@ def dir_exists(ctx, dst: str = '', match_mode: str = "any"):
         if match_mode == "single":
             if len(dirs) == 1:
                 return TestResult.success([f'directory {dirs[0]} exists'])
-            elif not dirs and paths:
+            if not dirs and paths:
                 return TestResult.failed([f'path {paths[0]} exists but is not a directory'])
-            else:
-                return TestResult.failed([f'directory with path {dst} does not exist'])
-        else:  # "any"
-            if dirs:
-                return TestResult.success([f'{len(dirs)} directory(ies) found: {", ".join(dirs)}'])
-            else:
-                if paths:
-                    return TestResult.failed([f'{len(paths)} path(s) matched but none are directories'])
-                else:
-                    return TestResult.failed([f'no directories match pattern {dst}'])
+            return TestResult.failed([f'directory with path {dst} does not exist'])
+        # "any"
+        if dirs:
+            return TestResult.success([f'{len(dirs)} directory(ies) found: {", ".join(dirs)}'])
+        if paths:
+            return TestResult.failed([f'{len(paths)} path(s) matched but none are directories'])
+        return TestResult.failed([f'no directories match pattern {dst}'])
     except (OSError, PermissionError) as e:
         return TestResult.execution_error(e, f"Cannot check directory existence for {dst}")
 
@@ -341,17 +326,14 @@ def dir_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
         if match_mode == "single":
             if not dirs:
                 return TestResult.success([f'directory {dst} does not exist'])
-            else:
-                return TestResult.failed([f'directory {dirs[0]} exists'])
-        else:  # "any"
-            if not dirs:
-                count = len(paths)
-                if count > 0:
-                    return TestResult.success([f'{count} path(s) matched but none are directories'])
-                else:
-                    return TestResult.success([f'no directories match pattern {dst}'])
-            else:
-                return TestResult.failed([f'{len(dirs)} directory(ies) exist matching pattern: {", ".join(dirs)}'])
+            return TestResult.failed([f'directory {dirs[0]} exists'])
+        # "any"
+        if not dirs:
+            count = len(paths)
+            if count > 0:
+                return TestResult.success([f'{count} path(s) matched but none are directories'])
+            return TestResult.success([f'no directories match pattern {dst}'])
+        return TestResult.failed([f'{len(dirs)} directory(ies) exist matching pattern: {", ".join(dirs)}'])
     except (OSError, PermissionError) as e:
         return TestResult.execution_error(e, f"Cannot check directory existence for {dst}")
 
@@ -410,7 +392,7 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
                 return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
 
         try:
-            with open(dst, 'r', encoding=encoding) as f:
+            with open(dst, encoding=encoding) as f:
                 data = f.read()
 
             # Strip BOM if requested
@@ -430,8 +412,7 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
 
         if pattern.search(data):
             return TestResult.success()
-        else:
-            return TestResult.failed(['file content does not match regex expression'])
+        return TestResult.failed(['file content does not match regex expression'])
 
     except Exception as e:
         log.error(f"Unexpected error in file content regex test: {e}", exc_info=True)
@@ -460,7 +441,7 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
                 return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
 
         try:
-            with open(dst, 'r', encoding=encoding) as f:
+            with open(dst, encoding=encoding) as f:
                 data = f.read()
 
             # Strip BOM if requested
@@ -489,27 +470,26 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
 
         if success:
             return TestResult.success([message])
-        else:
-            # Show diff for debugging
-            try:
-                import difflib
-                expected_for_diff = expected_content
-                diff_lines = list(difflib.unified_diff(
-                    expected_for_diff.splitlines(keepends=True),
-                    data.splitlines(keepends=True),
-                    fromfile='expected',
-                    tofile='actual',
-                    lineterm=''
-                ))
-                diff_output = ''.join(diff_lines) if diff_lines else 'Content differs but no line-by-line diff available'
+        # Show diff for debugging
+        try:
+            import difflib
+            expected_for_diff = expected_content
+            diff_lines = list(difflib.unified_diff(
+                expected_for_diff.splitlines(keepends=True),
+                data.splitlines(keepends=True),
+                fromfile='expected',
+                tofile='actual',
+                lineterm=''
+            ))
+            diff_output = ''.join(diff_lines) if diff_lines else 'Content differs but no line-by-line diff available'
 
-                return TestResult.failed([
-                    message,
-                    f'Diff:\n{diff_output}'
-                ])
-            except Exception as e:
-                log.error(f"Error generating diff output: {e}", exc_info=True)
-                return TestResult.execution_error(e, "Error generating diff output")
+            return TestResult.failed([
+                message,
+                f'Diff:\n{diff_output}'
+            ])
+        except Exception as e:
+            log.error(f"Error generating diff output: {e}", exc_info=True)
+            return TestResult.execution_error(e, "Error generating diff output")
 
     except Exception as e:
         log.error(f"Unexpected error in file content equals test: {e}", exc_info=True)
@@ -536,8 +516,7 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
 
             if actual_hash == expected_hash:
                 return TestResult.success([f'{hash_type.upper()} hash matches: {actual_hash}'])
-            else:
-                return TestResult.failed([f'{hash_type.upper()} hash mismatch. Expected: {expected_hash}, Got: {actual_hash}'])
+            return TestResult.failed([f'{hash_type.upper()} hash mismatch. Expected: {expected_hash}, Got: {actual_hash}'])
 
         except FileNotFoundError:
             return TestResult.failed([f'file {dst} does not exist'])
@@ -557,9 +536,9 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
     category=HostModeCategory.QGA_PROBE
 )
 def file_timestamps(ctx, dst: str = '', timestamp_type: str = 'modified', comparison_type: str = 'equals',
-                    expected_time: Union[str, int, float] = None, time_format: str = None,
-                    tolerance_seconds: int = None, start_time: Union[str, int, float] = None,
-                    end_time: Union[str, int, float] = None, within_duration: str = None):
+                    expected_time: str | int | float = None, time_format: str = None,
+                    tolerance_seconds: int = None, start_time: str | int | float = None,
+                    end_time: str | int | float = None, within_duration: str = None):
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
@@ -576,43 +555,37 @@ def file_timestamps(ctx, dst: str = '', timestamp_type: str = 'modified', compar
                 tolerance = tolerance_seconds or 0
                 if abs(actual_time - expected) <= tolerance:
                     return TestResult.success([f'{timestamp_type} timestamp matches (±{tolerance}s): {datetime.fromtimestamp(actual_time)}'])
-                else:
-                    return TestResult.failed([f'{timestamp_type} timestamp mismatch. Expected: {datetime.fromtimestamp(expected)}, Got: {datetime.fromtimestamp(actual_time)}'])
+                return TestResult.failed([f'{timestamp_type} timestamp mismatch. Expected: {datetime.fromtimestamp(expected)}, Got: {datetime.fromtimestamp(actual_time)}'])
 
-            elif comparison_type == 'before':
+            if comparison_type == 'before':
                 expected = _parse_timestamp(expected_time, time_format)
                 if actual_time < expected:
                     return TestResult.success([f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected)}'])
-                else:
-                    return TestResult.failed([f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected)}'])
+                return TestResult.failed([f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected)}'])
 
-            elif comparison_type == 'after':
+            if comparison_type == 'after':
                 expected = _parse_timestamp(expected_time, time_format)
                 if actual_time > expected:
                     return TestResult.success([f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected)}'])
-                else:
-                    return TestResult.failed([f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected)}'])
+                return TestResult.failed([f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected)}'])
 
-            elif comparison_type == 'between':
+            if comparison_type == 'between':
                 start = _parse_timestamp(start_time, time_format)
                 end = _parse_timestamp(end_time, time_format)
                 if start <= actual_time <= end:
                     return TestResult.success([f'{timestamp_type} timestamp is between {datetime.fromtimestamp(start)} and {datetime.fromtimestamp(end)}'])
-                else:
-                    return TestResult.failed([f'{timestamp_type} timestamp is not between {datetime.fromtimestamp(start)} and {datetime.fromtimestamp(end)}'])
+                return TestResult.failed([f'{timestamp_type} timestamp is not between {datetime.fromtimestamp(start)} and {datetime.fromtimestamp(end)}'])
 
-            elif comparison_type == 'within_last':
+            if comparison_type == 'within_last':
                 duration_seconds = _parse_duration(within_duration)
                 current_time = datetime.now().timestamp()
                 threshold_time = current_time - duration_seconds
 
                 if actual_time >= threshold_time:
                     return TestResult.success([f'{timestamp_type} timestamp is within last {within_duration}'])
-                else:
-                    return TestResult.failed([f'{timestamp_type} timestamp is not within last {within_duration}'])
+                return TestResult.failed([f'{timestamp_type} timestamp is not within last {within_duration}'])
 
-            else:
-                return TestResult.error([f'Unsupported comparison type: {comparison_type}'])
+            return TestResult.error([f'Unsupported comparison type: {comparison_type}'])
 
         except FileNotFoundError:
             return TestResult.failed([f'file {dst} does not exist'])
@@ -674,8 +647,7 @@ def file_permissions(ctx, dst: str = '', expected_permissions: str = '', check_o
 
             if success:
                 return TestResult.success(results)
-            else:
-                return TestResult.failed(results)
+            return TestResult.failed(results)
 
         except FileNotFoundError:
             return TestResult.failed([f'file {dst} does not exist'])
@@ -712,33 +684,31 @@ def file_content_contains(ctx, dst: str = '', content: str = '', content_type: s
                 search_content = _parse_escape_sequences(content)
 
                 if search_content in file_data:
-                    return TestResult.success([f'byte pattern found in file'])
+                    return TestResult.success(['byte pattern found in file'])
+                return TestResult.failed(['byte pattern not found in file'])
+
+            # default: string content
+            # Handle BOM detection and encoding for string content
+            if encoding and encoding.upper() == 'BOM':
+                detected_encoding, bom_length = _detect_encoding_from_bom(dst)
+                if detected_encoding:
+                    encoding = detected_encoding
                 else:
-                    return TestResult.failed([f'byte pattern not found in file'])
+                    return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
 
-            else:  # default: string content
-                # Handle BOM detection and encoding for string content
-                if encoding and encoding.upper() == 'BOM':
-                    detected_encoding, bom_length = _detect_encoding_from_bom(dst)
-                    if detected_encoding:
-                        encoding = detected_encoding
-                    else:
-                        return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
+            # Read file as text
+            with open(dst, encoding=encoding, errors='ignore') as f:
+                file_content = f.read()
 
-                # Read file as text
-                with open(dst, 'r', encoding=encoding, errors='ignore') as f:
-                    file_content = f.read()
+            # Strip BOM if requested
+            if strip_bom:
+                file_content = _strip_bom_from_text(file_content, encoding)
 
-                # Strip BOM if requested
-                if strip_bom:
-                    file_content = _strip_bom_from_text(file_content, encoding)
+            search_string = content
 
-                search_string = content
-
-                if search_string in file_content:
-                    return TestResult.success([f'string content found in file'])
-                else:
-                    return TestResult.failed([f'string content not found in file'])
+            if search_string in file_content:
+                return TestResult.success(['string content found in file'])
+            return TestResult.failed(['string content not found in file'])
 
         except FileNotFoundError:
             return TestResult.failed([f'file {dst} does not exist'])

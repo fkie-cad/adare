@@ -4,7 +4,7 @@ DTO adapters for converting ADARE internal types to JSON-serializable formats.
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TypeVar, Union
+from typing import Any, TypeVar
 
 from adare.core.result import Result
 
@@ -19,17 +19,16 @@ def serialize_value(value: Any) -> Any:
     """
     if isinstance(value, Path):
         return str(value)
-    elif isinstance(value, datetime):
+    if isinstance(value, datetime):
         return value.isoformat()
-    elif isinstance(value, dict):
+    if isinstance(value, dict):
         return {k: serialize_value(v) for k, v in value.items()}
-    elif isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple)):
         return [serialize_value(item) for item in value]
-    elif hasattr(value, "__dict__"):
+    if hasattr(value, "__dict__"):
         # For dataclasses and similar objects
         return serialize_value(vars(value))
-    else:
-        return value
+    return value
 
 
 def result_to_response(result: Result[T]) -> dict[str, Any]:
@@ -47,15 +46,14 @@ def result_to_response(result: Result[T]) -> dict[str, Any]:
             "success": True,
             "data": serialize_value(result.data),
         }
-    else:
-        return {
-            "success": False,
-            "error": {
-                "code": result.error.code if result.error else "UNKNOWN",
-                "message": result.error.message if result.error else "Unknown error",
-                "solutions": result.error.solutions if result.error and result.error.solutions else []
-            },
-        }
+    return {
+        "success": False,
+        "error": {
+            "code": result.error.code if result.error else "UNKNOWN",
+            "message": result.error.message if result.error else "Unknown error",
+            "solutions": result.error.solutions if result.error and result.error.solutions else []
+        },
+    }
 
 
 # Note: These converter functions are not currently used.

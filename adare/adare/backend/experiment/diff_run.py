@@ -13,42 +13,50 @@ Features:
 - Uses HOST GUI mode for execution
 """
 
-import logging
 import asyncio
+import logging
+import signal
 import threading
 import time
-import signal
-import ulid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import List, Optional
 
-from adare.types.playbook import (
-    Playbook, ActionType, ClickAction, KeyboardAction, DragAction, ScrollAction,
-    GotoAction, ScreenshotAction, IdleAction, PauseAction, BlockAction, LoopAction,
-    parse_playbook
-)
-from adare.types.environment import parse_environment_file
-from adare.backend.project.directory import ProjectDirectory
-from adare.backend.experiment.directory import ExperimentDirectory, DiffRunDirectory
-from adare.backend.experiment.runctx import ExperimentRunCtx, ExperimentConfig
-from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
-from adare.backend.experiment.execution.base import GUIExecutionMode, ActionResult
-from adare.backend.experiment.variable_resolver import VariableResolver
-from adarelib.common.variables import VariableRegistry, Variable, VariableType
-from adarelib.common.automatic_variables import AutomaticVariables
-from adare.backend.experiment.target_resolver import MCPTargetResolver, MCPConditionChecker
-from adare.backend.experiment.mcp_server_manager import MCPServerManager
-from adare.backend.experiment.action_executor import ActionExecutor
-from adare.exceptions import LoggedException
-from adare.config.configdirectory import ADAREVM_DIR, ADARELIB_DIR
+import ulid
+import ulid as ulid_module
+
 import adare.backend.environment.database as environment_database
 import adare.backend.experiment.database as experiment_database
-from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
-from adare.backend.experiment.event_manager import EventManager
 from adare.backend.events.emitters import emit_action
-import ulid as ulid_module
+from adare.backend.experiment.action_executor import ActionExecutor
+from adare.backend.experiment.directory import DiffRunDirectory, ExperimentDirectory
+from adare.backend.experiment.event_manager import EventManager
+from adare.backend.experiment.mcp_server_manager import MCPServerManager
+from adare.backend.experiment.print import ExperimentFlowConsole, flowconsolemanager
+from adare.backend.experiment.runctx import ExperimentConfig, ExperimentRunCtx
+from adare.backend.experiment.target_resolver import MCPConditionChecker, MCPTargetResolver
+from adare.backend.experiment.variable_resolver import VariableResolver
+from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
+from adare.backend.project.directory import ProjectDirectory
+from adare.config.configdirectory import ADARELIB_DIR, ADAREVM_DIR
+from adare.exceptions import LoggedException
+from adare.types.environment import parse_environment_file
+from adare.types.playbook import (
+    ActionType,
+    BlockAction,
+    ClickAction,
+    DragAction,
+    GotoAction,
+    IdleAction,
+    KeyboardAction,
+    LoopAction,
+    PauseAction,
+    Playbook,
+    ScreenshotAction,
+    ScrollAction,
+    parse_playbook,
+)
+from adarelib.common.automatic_variables import AutomaticVariables
 
 log = logging.getLogger(__name__)
 
@@ -68,8 +76,8 @@ class DiffModeResult:
     failed_actions: int = 0
     actions_skipped: int = 0
     execution_time: float = 0.0
-    error: Optional[str] = None
-    diff_run_directory: Optional[Path] = None
+    error: str | None = None
+    diff_run_directory: Path | None = None
 
 
 def is_visual_action(action: ActionType) -> bool:
@@ -77,7 +85,7 @@ def is_visual_action(action: ActionType) -> bool:
     return type(action) in VISUAL_ACTION_TYPES
 
 
-def filter_nested_actions(actions: List[ActionType]) -> List[ActionType]:
+def filter_nested_actions(actions: list[ActionType]) -> list[ActionType]:
     """Recursively filter nested actions in blocks/loops."""
     filtered = []
     for action in actions:
@@ -142,8 +150,8 @@ def __start_event_listeners(experiment_run_ulid: str):
     Returns:
         Tuple of (cli_thread, db_thread)
     """
-    from adare.backend.events.listener import event_listener_cli
     from adare.backend.events.coordinator import start_stage_coordinator
+    from adare.backend.events.listener import event_listener_cli
 
     # Start the stage event coordinator first
     start_stage_coordinator()
@@ -243,8 +251,8 @@ async def experiment_diff_run(
         if filtered_action_count == 0:
             raise LoggedException(
                 log,
-                f"No visual actions found in playbook. "
-                f"Diff mode requires at least one visual action.",
+                "No visual actions found in playbook. "
+                "Diff mode requires at least one visual action.",
                 ValueError
             )
 
@@ -264,7 +272,7 @@ async def experiment_diff_run(
 
         # Initialize context fields manually (skip database)
         ctx.experiment_run_ulid = str(ulid.ULID())  # Fake ULID for diff mode
-        ctx.timestamp_start = datetime.now(timezone.utc)
+        ctx.timestamp_start = datetime.now(UTC)
         ctx.adarevm = ADAREVM_DIR
         ctx.adarelib = ADARELIB_DIR
         ctx.project_directory = project_directory
@@ -466,7 +474,7 @@ async def experiment_diff_run(
                 if flow_console:
                     total_duration = None
                     if ctx.timestamp_start:
-                        total_duration = (datetime.now(timezone.utc) - ctx.timestamp_start).total_seconds()
+                        total_duration = (datetime.now(UTC) - ctx.timestamp_start).total_seconds()
 
                     # Check if this was an interruption
                     was_interrupted = ctx.user_interrupt_event.is_set()

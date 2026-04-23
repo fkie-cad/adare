@@ -1,11 +1,12 @@
 """Manual VM creation -- boots QEMU with native display for interactive OS installation."""
 
+import logging
 import platform
 import subprocess
 import time
 from pathlib import Path
 
-from adare.console import console, print_section, print_step
+from adare.console import console, print_section
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
@@ -14,7 +15,6 @@ from adare.hypervisor.qemu.vm_creator.qmp_utils import (
     wait_for_input_or_exit,
 )
 
-import logging
 log = logging.getLogger(__name__)
 
 

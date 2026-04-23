@@ -1,15 +1,15 @@
-from queue import Queue
-from typing import Generator, Dict
 from collections import defaultdict
+from collections.abc import Generator
+from queue import Queue
 
-cli_queues: Dict[str, Queue] = defaultdict(Queue)
-db_queues: Dict[str, Queue] = defaultdict(Queue)
+cli_queues: dict[str, Queue] = defaultdict(Queue)
+db_queues: dict[str, Queue] = defaultdict(Queue)
 
 def publish_cli(ulid: str, message: dict) -> None:
     cli_queues[ulid].put(message)
 
 
-def subscribe_cli(ulid: str) -> Generator[dict, None, None]:
+def subscribe_cli(ulid: str) -> Generator[dict]:
     queue = cli_queues[ulid]
     while True:
         yield queue.get()
@@ -17,7 +17,7 @@ def subscribe_cli(ulid: str) -> Generator[dict, None, None]:
 def publish_db(ulid: str, message: dict) -> None:
     db_queues[ulid].put(message)
 
-def subscribe_db(ulid: str) -> Generator[dict, None, None]:
+def subscribe_db(ulid: str) -> Generator[dict]:
     queue = db_queues[ulid]
     while True:
         yield queue.get()

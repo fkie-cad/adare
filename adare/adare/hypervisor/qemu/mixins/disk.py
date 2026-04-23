@@ -70,11 +70,10 @@ class DiskManagementMixin:
             if external_path.exists():
                 log.debug(f"True base disk (external): {external_path}")
                 return str(external_path)
-            else:
-                raise HypervisorException(
-                    f"External disk not found: {external_path}\n"
-                    f"The original qcow2 file may have been moved or deleted."
-                )
+            raise HypervisorException(
+                f"External disk not found: {external_path}\n"
+                f"The original qcow2 file may have been moved or deleted."
+            )
 
         # Priority 2: Managed VM with -base suffix
         # Look for the base disk that was created during import/conversion
@@ -218,10 +217,9 @@ class DiskManagementMixin:
                 overlay_dir.mkdir(parents=True, exist_ok=True)
                 log.debug(f"Using managed storage for external VM overlay: {overlay_dir}")
                 return str(overlay_dir / overlay_name)
-            else:
-                # Managed VM - store overlay next to base disk
-                log.debug(f"Generated overlay name (external case): {overlay_name}")
-                return str(current_disk.parent / overlay_name)
+            # Managed VM - store overlay next to base disk
+            log.debug(f"Generated overlay name (external case): {overlay_name}")
+            return str(current_disk.parent / overlay_name)
 
         # Fallback: should not reach here, but use safe overlay generation
         # This maintains backward compatibility if we missed an edge case

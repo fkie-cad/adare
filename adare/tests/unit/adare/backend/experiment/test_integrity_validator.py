@@ -6,9 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from adare.backend.experiment.integrity_validator import IntegrityValidator
 from adare.backend.experiment.exceptions import ExperimentIntegrityError
-
+from adare.backend.experiment.integrity_validator import IntegrityValidator
 
 LOG = logging.getLogger("test_integrity_validator")
 
@@ -85,10 +84,9 @@ class TestVerifyPlaybookTestfunctions:
             patch(
                 "adare.helperfunctions.integrity.verify_testfunction_integrity",
                 side_effect=ExperimentIntegrityError(LOG, "hash mismatch"),
-            ),
+            ),pytest.raises(ExperimentIntegrityError, match="hash mismatch")
         ):
-            with pytest.raises(ExperimentIntegrityError, match="hash mismatch"):
-                validator.verify_playbook_testfunctions(playbook)
+            validator.verify_playbook_testfunctions(playbook)
 
     def test_no_tests_in_playbook_skips(self):
         """A playbook with no tests should return without error."""
@@ -141,10 +139,9 @@ class TestCheckProject:
             patch(
                 "adare.helperfunctions.integrity.verify_environment_integrity",
                 side_effect=ExperimentIntegrityError(LOG, "env modified"),
-            ),
+            ),pytest.raises(ExperimentIntegrityError, match="environment files have changed")
         ):
-            with pytest.raises(ExperimentIntegrityError, match="environment files have changed"):
-                validator.check_project()
+            validator.check_project()
 
     def test_modified_testfunction_raises_error(self):
         """A modified testfunction should raise ExperimentIntegrityError."""
@@ -161,10 +158,9 @@ class TestCheckProject:
             patch(
                 "adare.helperfunctions.integrity.verify_testfunction_integrity",
                 side_effect=ExperimentIntegrityError(LOG, "tf modified"),
-            ),
+            ),pytest.raises(ExperimentIntegrityError, match="testfunction files have changed")
         ):
-            with pytest.raises(ExperimentIntegrityError, match="testfunction files have changed"):
-                validator.check_project()
+            validator.check_project()
 
 
 # ---------------------------------------------------------------------------

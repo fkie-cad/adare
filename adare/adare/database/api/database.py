@@ -1,13 +1,14 @@
 # external imports
+# configure logging
+import logging
+from pathlib import Path
+
 import sqlalchemy
 from sqlalchemy.orm import sessionmaker
-from pathlib import Path
 
 # internal imports
 import adare.config.database as config_database
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 

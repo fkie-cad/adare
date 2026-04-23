@@ -6,19 +6,19 @@ redirects stderr at the file descriptor level to capture these messages
 in the experiment log instead of polluting console output.
 """
 
-import os
-import sys
 import contextlib
-import threading
-from typing import Optional
-from pathlib import Path
 
 # configure logging
 import logging
+import os
+import sys
+import threading
+from pathlib import Path
+
 log = logging.getLogger(__name__)
 
 
-def get_experiment_log_file() -> Optional[str]:
+def get_experiment_log_file() -> str | None:
     """Get the path to the current experiment log file.
 
     Returns:
@@ -49,7 +49,7 @@ class LibvirtStderrRedirect(contextlib.AbstractContextManager):
     # Class-level lock for thread safety
     _redirect_lock = threading.Lock()
 
-    def __init__(self, log_file: Optional[str] = None, suppress_console: bool = True):
+    def __init__(self, log_file: str | None = None, suppress_console: bool = True):
         """Initialize stderr redirect context manager.
 
         Args:
@@ -58,7 +58,7 @@ class LibvirtStderrRedirect(contextlib.AbstractContextManager):
         """
         self.log_file = log_file
         self.suppress_console = suppress_console
-        self._saved_stderr_fd: Optional[int] = None
+        self._saved_stderr_fd: int | None = None
         self._redirect_file = None
         self._lock_acquired = False
 

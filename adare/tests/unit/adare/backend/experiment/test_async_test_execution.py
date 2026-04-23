@@ -4,15 +4,12 @@ Verifies that _run_test() correctly handles both sync and async test() methods
 without triggering 'RuntimeError: This event loop is already running'.
 """
 
-import asyncio
 
 import pytest
 
-from adarelib.event.event import TestResult
-from adarelib.constants import StatusEnum
-
 from adare.backend.experiment.guest_to_host_test_executor import GuestToHostTestExecutor
-
+from adarelib.constants import StatusEnum
+from adarelib.event.event import TestResult
 
 # ============================================================================
 # Mock test instances (no attrs dependency needed — _run_test only calls .test())

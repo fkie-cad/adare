@@ -4,16 +4,18 @@ Development mode session manager.
 Singleton class for managing multiple concurrent dev mode sessions.
 """
 
-from typing import Dict, Optional, List
-from pathlib import Path
 import logging
+from pathlib import Path
+from typing import Optional
+
 import ulid
 
-from .session import DevModeSession, DevModeState
-from .vm_state_checker import is_vm_running
-from .session_restorer import restore_context, restore_infrastructure_context
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.types.stages import ConnectToVMStage
+
+from .session import DevModeSession, DevModeState
+from .session_restorer import restore_context, restore_infrastructure_context
+from .vm_state_checker import is_vm_running
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +48,7 @@ class DevModeSessionManager:
         if self._initialized:
             return
 
-        self._sessions: Dict[str, DevModeSession] = {}
+        self._sessions: dict[str, DevModeSession] = {}
         self._initialized = True
         log.info("DevModeSessionManager initialized")
 
@@ -54,12 +56,12 @@ class DevModeSessionManager:
         self,
         project_path: Path,
         environment_name: str,
-        gui_mode: Optional[str] = None,
-        vm_memory: Optional[int] = None,
-        vm_cpus: Optional[int] = None,
+        gui_mode: str | None = None,
+        vm_memory: int | None = None,
+        vm_cpus: int | None = None,
         debug_screenshots: bool = False,
-        console_ulid: Optional[str] = None,
-        shared_directories: Optional[Dict[str, Dict[str, Path]]] = None
+        console_ulid: str | None = None,
+        shared_directories: dict[str, dict[str, Path]] | None = None
     ) -> str:
         """
         Create and start a new dev mode session.
@@ -110,7 +112,7 @@ class DevModeSessionManager:
         log.info(f"Dev mode session {session_id} created successfully")
         return session_id
 
-    def get_session(self, session_id: str) -> Optional[DevModeSession]:
+    def get_session(self, session_id: str) -> DevModeSession | None:
         """
         Get active session by ID.
 
@@ -176,7 +178,7 @@ class DevModeSessionManager:
         """
         return await self.shutdown_session(session_id)
 
-    def list_sessions(self) -> List[DevModeState]:
+    def list_sessions(self) -> list[DevModeState]:
         """
         List all active sessions.
 
@@ -210,9 +212,9 @@ class DevModeSessionManager:
     async def restore_session(
         self,
         session_id: str,
-        console_ulid: Optional[str] = None,
+        console_ulid: str | None = None,
         connect_websocket: bool = True
-    ) -> Optional[DevModeSession]:
+    ) -> DevModeSession | None:
         """
         Restore a session from database when not in memory but VM is running.
 
@@ -436,8 +438,8 @@ class DevModeSessionManager:
     async def restore_and_restart_session(
         self,
         session_id: str,
-        console_ulid: Optional[str] = None
-    ) -> Optional[DevModeSession]:
+        console_ulid: str | None = None
+    ) -> DevModeSession | None:
         """
         Restore a stopped session and restart its VM.
 
@@ -533,7 +535,7 @@ class DevModeSessionManager:
     async def load_session_for_cleanup(
         self,
         session_id: str
-    ) -> Optional[DevModeSession]:
+    ) -> DevModeSession | None:
         """
         Load session infrastructure for cleanup operation.
 
@@ -581,12 +583,12 @@ class DevModeSessionManager:
             if not success:
                 log.error(f"Failed to restore infrastructure context for cleanup of {session_id}")
                 return None
-            
+
             # 4. Attempt to find VM instance ID for release (best effort)
             try:
                 from adare.database.api.experiment import ExperimentApi
                 from adare.database.models.project_models import ExperimentRun
-                
+
                 # Check if we can get the instance ID from fake experiment run (if it exists)
                 # But since we didn't fully restore, check DB directly again
                 if session.experiment_ctx:
@@ -613,9 +615,9 @@ class DevModeSessionManager:
     async def get_or_restore_session(
         self,
         session_id: str,
-        console_ulid: Optional[str] = None,
+        console_ulid: str | None = None,
         connect_websocket: bool = True
-    ) -> Optional[DevModeSession]:
+    ) -> DevModeSession | None:
         """
         Get session from memory or restore from database if not present.
 
@@ -659,22 +661,21 @@ class DevModeSessionManager:
             # Stopped sessions must be explicitly resumed via restore_and_restart_session()
             if db_session.status == 'running':
                 restored = await self.restore_session(
-                    session_id, 
+                    session_id,
                     console_ulid=console_ulid,
                     connect_websocket=connect_websocket
                 )
                 return restored
-            elif db_session.status == 'stopped':
+            if db_session.status == 'stopped':
                 log.info(
                     f"Session {session_id} is stopped. "
                     f"Use 'adare dev start' to resume it."
                 )
                 return None
-            else:
-                log.warning(
-                    f"Session {session_id} has unexpected status '{db_session.status}'"
-                )
-                return None
+            log.warning(
+                f"Session {session_id} has unexpected status '{db_session.status}'"
+            )
+            return None
 
         except Exception as e:
             log.error(f"Failed to restore session {session_id}: {e}", exc_info=True)
@@ -705,8 +706,8 @@ class DevModeSessionManager:
     async def restart_mcp_server(
         self,
         session_id: str,
-        debug: Optional[bool] = None,
-        debug_output_dir: Optional[Path] = None
+        debug: bool | None = None,
+        debug_output_dir: Path | None = None
     ) -> bool:
         """
         Restart MCP server for a session.
@@ -756,10 +757,10 @@ class DevModeSessionManager:
     async def execute_playbook_batch(
         self,
         session_id: str,
-        playbook_patterns: List[str],
+        playbook_patterns: list[str],
         checkpoint_name: str,
         timeout: int,
-        console_ulid: Optional[str]
+        console_ulid: str | None
     ) -> 'PlaybookBatchSummary':
         """
         Execute multiple playbooks with checkpoint restoration.

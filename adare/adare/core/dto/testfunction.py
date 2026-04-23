@@ -6,8 +6,6 @@ enabling consistent interfaces across CLI, REST API, and Web UI.
 """
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
-
 
 # =============================================================================
 # Testfunction Request DTOs
@@ -43,13 +41,13 @@ class TestfunctionInfo:
     """Detailed testfunction information."""
     id: str
     name: str
-    file_path: Optional[Path]
+    file_path: Path | None
     is_published: bool = False
-    remote_url: Optional[str] = None
+    remote_url: str | None = None
     usage_count: int = 0
-    experiments_using: List[str] = field(default_factory=list)
-    next_steps: List[str] = field(default_factory=list)
-    tip: Optional[str] = None
+    experiments_using: list[str] = field(default_factory=list)
+    next_steps: list[str] = field(default_factory=list)
+    tip: str | None = None
 
 
 @dataclass
@@ -65,10 +63,10 @@ class TestfunctionListItem:
 class TestfunctionUsage:
     """Usage information for a testfunction."""
     exists: bool
-    testfunction_file_id: Optional[int]
+    testfunction_file_id: int | None
     can_safely_delete: bool
-    projects_affected: List[str]
-    experiments: List[str]
+    projects_affected: list[str]
+    experiments: list[str]
     runs_count: int
 
 

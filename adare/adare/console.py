@@ -1,8 +1,10 @@
+import logging
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
-import logging
+
 from adare.helperfunctions.text import clean_rich_inline_str
 
 console = Console()

@@ -1,14 +1,14 @@
 # external imports
+# configure logging
+import logging
 from pathlib import Path
+
+from adare.backend.testfunction.exceptions import TestfunctionUpdatedError
 
 # internal imports
 from adare.database.api.testfunction import TestfunctionDbApi
-from adare.backend.testfunction.exceptions import TestfunctionUpdatedError
 from adare.database.models.global_models import TestFunctionFile
 
-
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -21,9 +21,8 @@ def load_testfunction_file(project_path: Path, testfunction_file: Path, requirem
             # Testfunctions are global - use existing file
             log.debug(f'Using existing global testfunction file: {testfunction_file.name}')
             return existing_file.id
-        else:
-            # Create a new testfunction file
-            return api.create_testfunction_file_obj(project_path, testfunction_file, requirements_file).id
+        # Create a new testfunction file
+        return api.create_testfunction_file_obj(project_path, testfunction_file, requirements_file).id
 
 
 def remove_testfunction_file(name: str):
@@ -43,21 +42,21 @@ def remove_testfunction_file(name: str):
 def list_testfunctions(fields: list[str] = None) -> list:
     """
     List all testfunctions.
-    
+
     Args:
         fields: Optional list of fields to extract. If None, returns full objects.
                 Available fields depend on the testfunction model structure.
-    
+
     Returns:
         list: Testfunction objects or data dictionaries
     """
     with TestfunctionDbApi() as api:
         testfunctions = api.get_testfunctions_by_file()
-        
+
         # Return full objects for backward compatibility
         if fields is None:
             return testfunctions
-        
+
         # Extract requested fields from each testfunction
         result = []
         for tf in testfunctions:
@@ -76,7 +75,7 @@ def list_testfunctions(fields: list[str] = None) -> list:
                 else:
                     log.warning(f'Unknown field requested: {field}. Available: id, name, description, file_path, dotnotation')
             result.append(tf_data)
-        
+
         return result
 
 
@@ -160,10 +159,11 @@ def get_testfunction_usage(testfunction_name: str) -> dict:
     Returns:
         dict: Usage information with 'exists', 'experiments', 'runs', 'can_safely_delete', 'projects_affected' keys
     """
-    from adare.database.models.global_models import TestFunctionFile, TestFunction, Project
-    from adare.database.models.project_models import AbstractTest, Experiment, ExperimentRun
-    from adare.database.api.base import ProjectDatabaseApi
     from pathlib import Path
+
+    from adare.database.api.base import ProjectDatabaseApi
+    from adare.database.models.global_models import Project, TestFunctionFile
+    from adare.database.models.project_models import AbstractTest, Experiment, ExperimentRun
 
     with TestfunctionDbApi() as api:
         # Find the testfunction file in global database

@@ -8,10 +8,8 @@ subprocess for target detection in experiments.
 import asyncio
 import logging
 import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -19,16 +17,16 @@ log = logging.getLogger(__name__)
 class MCPServerManager:
     """
     Manager for the MCP GUI server subprocess.
-    
+
     Handles starting, stopping, and health checking the MCP GUI server
     that provides image and text detection services for playbook execution.
     """
-    
-    
-    def __init__(self, server_port: int = 13109, log_file: Optional[Path] = None, debug: bool = False, debug_output_dir: Optional[Path] = None):
+
+
+    def __init__(self, server_port: int = 13109, log_file: Path | None = None, debug: bool = False, debug_output_dir: Path | None = None):
         """
         Initialize MCP server manager.
-        
+
         Args:
             server_port: Port for MCP server (default: 13109)
             log_file: Path to log file for MCP server output
@@ -36,16 +34,16 @@ class MCPServerManager:
             debug_output_dir: Directory for debug output images
         """
         self.server_port = server_port
-        self.process: Optional[subprocess.Popen] = None
+        self.process: subprocess.Popen | None = None
         self.server_url = f"http://localhost:{server_port}/mcp"
         self.log_file = log_file
         self.debug = debug
         self.debug_output_dir = debug_output_dir
-    
+
     async def start(self, allow_existing: bool = True) -> bool:
         """
         Start the MCP GUI server as a non-blocking subprocess.
-        
+
         Args:
             allow_existing: If True, attach to existing server on port.
                            If False, fail if port is already in use.
@@ -58,17 +56,16 @@ class MCPServerManager:
             if allow_existing:
                 log.info(f"MCP server already running on port {self.server_port}")
                 return True
-            else:
-                log.error(f"Port {self.server_port} is already in use and allow_existing=False")
-                return False
+            log.error(f"Port {self.server_port} is already in use and allow_existing=False")
+            return False
 
         if self.process and self.process.poll() is None:
             log.info("MCP server already running")
             return True
-        
+
         try:
             log.info(f"Starting MCP GUI server on port {self.server_port}...")
-            
+
             # Open log file if specified
             log_file_handle = None
             if self.log_file:
@@ -76,11 +73,11 @@ class MCPServerManager:
                 log_file_handle = open(self.log_file, 'w')
                 log_file_handle.write(f"=== MCP GUI Server Log Started at {datetime.now()} ===\n")
                 log_file_handle.flush()
-            
+
             cmd = ["adare-cv-server", "--port", str(self.server_port)]
             if self.debug:
                 cmd.append("--debug")
-            
+
             if self.debug_output_dir:
                 cmd.extend(["--debug-output-dir", str(self.debug_output_dir)])
 
@@ -93,7 +90,7 @@ class MCPServerManager:
                 text=True,
                 start_new_session=True
             )
-            
+
             # Wait briefly and check if process started successfully
             await asyncio.sleep(1)
             if self.process.poll() is not None:
@@ -102,21 +99,21 @@ class MCPServerManager:
                 log.error(f"MCP server failed to start: {stderr}")
                 self.process = None
                 return False
-            
+
             # Wait for server to be ready (brief delay)
             await asyncio.sleep(2)  # Give server time to start up
             log.info("MCP GUI server started successfully")
             return True
-                
+
         except Exception as e:
             log.error(f"Failed to start MCP server: {e}")
             self.process = None
             return False
-    
+
     async def stop(self, force_external: bool = False):
         """
         Stop the MCP GUI server subprocess gracefully.
-        
+
         Args:
             force_external: If True, check for and kill process on port even if not child.
                            If False, only stop local child process.
@@ -144,21 +141,21 @@ class MCPServerManager:
                     log.info("External MCP GUI server stopped")
                 else:
                     log.warning("Failed to stop external MCP GUI server")
-            
+
         except Exception as e:
             log.error(f"Error stopping MCP server: {e}")
-    
+
     def is_running(self) -> bool:
         """
         Check if MCP server process is running (local or external).
-        
+
         Returns:
             True if process is running, False otherwise
         """
         # Check local process
         if self.process and self.process.poll() is None:
             return True
-            
+
         # Check port usage
         return self._is_port_in_use(self.server_port)
 
@@ -176,7 +173,7 @@ class MCPServerManager:
     def _kill_process_on_port(self, port: int) -> bool:
         """
         Kill process listening on the specified port.
-        
+
         Uses lsof or fuser to find PID and terminate it.
         """
         try:
@@ -201,15 +198,14 @@ class MCPServerManager:
             cmd = f"fuser -k {port}/tcp"
             try:
                 subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-                # We assume if it ran without crashing, it might have worked? 
+                # We assume if it ran without crashing, it might have worked?
                 # fuser returns non-zero if no process killed.
                 return True
             except Exception as e:
                 log.warning(f"Error using fuser: {e}")
-                
+
             return False
-            
+
         except Exception as e:
             log.error(f"Failed to kill process on port {port}: {e}")
             return False
-    

@@ -1,19 +1,20 @@
 # external imports
-import cattrs
 from pathlib import Path
 
+import cattrs
 
 try:
-    from adare.types.experiment import ExperimentMetadata
     from adare.types.environment import EnvironmentMetadata
+    from adare.types.experiment import ExperimentMetadata
 except ImportError:
     # Should not happen after consolidation
     pass
+# configure logging
+import logging
+
 from adare.exceptions import DataStructuringError
 from adarelib.helper.yaml import yaml_to_dict
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
