@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 import attrs
 import cattrs
@@ -594,7 +594,7 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
         lambda obj, _: _structure_condition(obj, converter)
     )
     converter.register_structure_hook(
-        Optional[TargetStrategyType],
+        TargetStrategyType | None,
         lambda obj, _: _structure_strategy(obj, converter) if obj is not None else None
     )
 
@@ -604,7 +604,7 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
         lambda obj, _: obj if isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
     )
     converter.register_structure_hook(
-        Optional[VariableRegistry],
+        VariableRegistry | None,
         lambda obj, _: obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
     )
 
@@ -620,19 +620,19 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
         lambda obj, _: _structure_wait_condition(obj, converter)
     )
     converter.register_structure_hook(
-        Optional[WaitCondition],
+        WaitCondition | None,
         lambda obj, _: _structure_wait_condition(obj, converter) if obj is not None else None
     )
 
     # Register structure hook for LoopAction items field (Union[str, List[Any]])
     converter.register_structure_hook(
-        Optional[str | list[Any]],
+        str | list[Any] | None,
         lambda obj, _: obj  # Pass through as-is, will be resolved at runtime
     )
 
     # Register structure hook for allow_missing_chars field (Union[bool, str, List[str]])
     converter.register_structure_hook(
-        Optional[bool | str | list[str]],
+        bool | str | list[str] | None,
         lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None
     )
 
@@ -654,25 +654,25 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
         return obj
 
     converter.register_structure_hook(
-        Optional[int | float],
+        int | float | None,
         structure_optional_numeric
     )
 
     # Register structure hook for SkipOptions
     converter.register_structure_hook(
-        Optional[SkipOptions],
+        SkipOptions | None,
         lambda obj, _: _structure_skip_options(obj, converter) if obj is not None else None
     )
 
     # Register structure hook for Offset
     converter.register_structure_hook(
-        Optional[Offset],
+        Offset | None,
         lambda obj, _: converter.structure(obj, Offset) if obj is not None else None
     )
 
     # Register structure hook for TextMatchConfig
     converter.register_structure_hook(
-        Optional[TextMatchConfig],
+        TextMatchConfig | None,
         lambda obj, _: converter.structure(obj, TextMatchConfig) if obj is not None else None
     )
 
@@ -822,7 +822,7 @@ def _register_strict_hooks(converter):
                 lambda obj, _: _structure_condition(obj, fresh_converter)
             )
             fresh_converter.register_structure_hook(
-                Optional[TargetStrategyType],
+                TargetStrategyType | None,
                 lambda obj, _: _structure_strategy(obj, fresh_converter) if obj is not None else None
             )
             fresh_converter.register_structure_hook(
@@ -830,7 +830,7 @@ def _register_strict_hooks(converter):
                 lambda obj, _: obj if isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
             )
             fresh_converter.register_structure_hook(
-                Optional[VariableRegistry],
+                VariableRegistry | None,
                 lambda obj, _: obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
             )
             fresh_converter.register_structure_hook(
@@ -838,11 +838,11 @@ def _register_strict_hooks(converter):
                 lambda obj, _: _structure_wait_condition(obj, fresh_converter)
             )
             fresh_converter.register_structure_hook(
-                Optional[WaitCondition],
+                WaitCondition | None,
                 lambda obj, _: _structure_wait_condition(obj, fresh_converter) if obj is not None else None
             )
             fresh_converter.register_structure_hook(
-                Optional[str | list[Any]],
+                str | list[Any] | None,
                 lambda obj, _: obj  # Pass through as-is for LoopAction items
             )
             # Register numeric structure hook for VariableCondition fields
@@ -861,7 +861,7 @@ def _register_strict_hooks(converter):
                             raise ValueError(f"Cannot convert '{obj}' to numeric value") from None
                 return obj
             fresh_converter.register_structure_hook(
-                Optional[int | float],
+                int | float | None,
                 structure_optional_numeric
             )
             # Register structure hook for Union[str, List[str]] in PullAction.src
@@ -871,12 +871,12 @@ def _register_strict_hooks(converter):
             )
             # Register structure hook for SkipOptions
             fresh_converter.register_structure_hook(
-                Optional[SkipOptions],
+                SkipOptions | None,
                 lambda obj, _: _structure_skip_options(obj, fresh_converter) if obj is not None else None
             )
             # Register structure hook for allow_missing_chars field (Union[bool, str, List[str]])
             fresh_converter.register_structure_hook(
-                Optional[bool | str | list[str]],
+                bool | str | list[str] | None,
                 lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None
             )
             return fresh_converter.structure(obj, cls)
