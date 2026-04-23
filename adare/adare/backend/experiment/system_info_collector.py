@@ -57,7 +57,7 @@ async def collect_system_info(websocket_client, guest_platform: str, output_file
         log.warning(f"System info collection failed: {error_msg}")
         return False
 
-    except Exception as e:
+    except (OSError, ConnectionError, TimeoutError, RuntimeError, ValueError) as e:
         log.warning(f"System info collection failed with exception: {e}", exc_info=True)
         return False
 
@@ -104,7 +104,7 @@ async def collect_system_info_via_qga(vm, guest_platform: str, output_file: Path
 
         return True
 
-    except Exception as e:
+    except (OSError, ConnectionError, TimeoutError, RuntimeError, ValueError) as e:
         log.warning(f"QGA system info collection failed: {e}", exc_info=True)
         return False
 

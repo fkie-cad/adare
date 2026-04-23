@@ -10,7 +10,9 @@ from typing import Optional
 
 import ulid
 
+from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
 from adare.backend.experiment.stagectxmanager import StageCtxManager
+from adare.database.exceptions import DatabaseError
 from adare.types.stages import ConnectToVMStage
 
 from .session import DevModeSession, DevModeState
@@ -262,7 +264,7 @@ class DevModeSessionManager:
                     db_session.environment_name
                 )
                 hypervisor_type = environment_database.get_environment_hypervisor(environment_ulid)
-            except Exception as e:
+            except (EnvironmentDoesNotExistInDatabase, DatabaseError, OSError) as e:
                 log.error(f"Failed to resolve environment: {e}")
                 return None
 
@@ -313,7 +315,7 @@ class DevModeSessionManager:
                         log.info(f"Restored VM instance ID: {session.vm_instance_id}")
                     else:
                         log.warning("No VM instance ID found during restoration")
-            except Exception as e:
+            except (ImportError, DatabaseError, OSError, AttributeError) as e:
                 log.error(f"Failed to restore VM instance ID: {e}")
 
             # 6. Attempt WebSocket reconnection (optional - some ops work without it)
@@ -408,7 +410,7 @@ class DevModeSessionManager:
                             stage_ctx.stage.sub_msg = "Connection failed"
                             # Don't raise error - session can still be used for cleanup operations
 
-                except Exception as e:
+                except (RuntimeError, ConnectionError, OSError, TimeoutError) as e:
                     log.warning(f"WebSocket reconnection failed: {e}")
                     log.info(
                         "Session restored but WebSocket unavailable. "
@@ -431,7 +433,7 @@ class DevModeSessionManager:
 
             return session
 
-        except Exception as e:
+        except Exception as e:  # Intentionally broad: top-level session restoration must not crash caller
             log.error(f"Failed to restore session {session_id}: {e}", exc_info=True)
             return None
 
@@ -482,7 +484,7 @@ class DevModeSessionManager:
                     db_session.environment_name
                 )
                 environment_database.get_environment_hypervisor(environment_ulid)
-            except Exception as e:
+            except (EnvironmentDoesNotExistInDatabase, DatabaseError, OSError) as e:
                 log.error(f"Failed to resolve environment: {e}")
                 return None
 
@@ -530,7 +532,7 @@ class DevModeSessionManager:
             log.info(f"Session {session_id} restored and restarted successfully")
             return session
 
-        except Exception as e:
+        except Exception as e:  # Intentionally broad: top-level session restoration must not crash caller
             log.error(f"Failed to restore and restart session {session_id}: {e}", exc_info=True)
     async def load_session_for_cleanup(
         self,
@@ -603,12 +605,12 @@ class DevModeSessionManager:
                         if experiment_run and experiment_run.vm_instance_id:
                             session.vm_instance_id = experiment_run.vm_instance_id
                             log.debug(f"Loaded VM instance ID for cleanup: {session.vm_instance_id}")
-            except Exception as e:
+            except (ImportError, DatabaseError, OSError, AttributeError) as e:
                 log.debug(f"Could not load VM instance ID (non-fatal): {e}")
 
             return session
 
-        except Exception as e:
+        except Exception as e:  # Intentionally broad: cleanup session loading must not crash caller
             log.error(f"Failed to load session for cleanup {session_id}: {e}", exc_info=True)
             return None
 
@@ -676,7 +678,7 @@ class DevModeSessionManager:
             )
             return None
 
-        except Exception as e:
+        except Exception as e:  # Intentionally broad: session lookup must not crash caller
             log.error(f"Failed to restore session {session_id}: {e}", exc_info=True)
             return None
 

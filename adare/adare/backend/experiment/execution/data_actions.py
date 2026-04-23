@@ -5,6 +5,7 @@ Includes: command, save_timestamp, save_variable, pull, and related helpers.
 """
 
 import logging
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -108,7 +109,7 @@ class DataActionsMixin:
                 message=result.get('message', ''),
                 data=result
             )
-        except Exception as e:
+        except (RuntimeError, OSError, KeyError, ValueError, TypeError) as e:
             return ActionResult(success=False, message=str(e))
 
     async def execute_save_timestamp(self, action: SaveTimestampAction, parent_event_id: str = None,
@@ -144,7 +145,7 @@ class DataActionsMixin:
                 message=f"Timestamp saved to {action.variable}",
                 data={action.variable: current_timestamp}
             )
-        except Exception as e:
+        except (RuntimeError, OSError, KeyError, ValueError, TypeError) as e:
             return ActionResult(success=False, message=str(e))
 
     async def execute_save_variable(
@@ -333,7 +334,7 @@ class DataActionsMixin:
                 }
             )
 
-        except Exception as e:
+        except (RuntimeError, OSError, ValueError, KeyError) as e:
             log.error(f"Pull operation failed: {e}", exc_info=True)
             return ActionResult(
                 success=False,
@@ -413,7 +414,7 @@ class DataActionsMixin:
                 "metadata": result.get("metadata", {})
             }
 
-        except Exception as e:
+        except (RuntimeError, OSError, KeyError, ValueError) as e:
             log.error(f"WebSocket pull failed for {src_path}: {e}")
             return {
                 "success": False,
@@ -446,7 +447,7 @@ class DataActionsMixin:
                 "error": "VBoxManage copy_from_guest returned False"
             }
 
-        except Exception as e:
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
             log.error(f"Hypervisor pull failed for {src_path}: {e}")
             return {
                 "success": False,

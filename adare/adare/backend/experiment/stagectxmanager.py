@@ -94,7 +94,6 @@ class StageCtxManager(contextlib.AbstractContextManager):
                 drained = coordinator.wait_for_queue_drain(timeout=0.05)
                 if not drained:
                     log.debug(f"Event queue did not drain within timeout for parent stage: {self.stage.name}")
-        except Exception as e:
+        except (RuntimeError, AttributeError, ImportError) as e:
             # If we can't check the queue, just continue
             log.debug(f"Could not wait for event queue drain: {e}")
-            pass

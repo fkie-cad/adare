@@ -6,6 +6,7 @@ Includes: click, drag, keyboard, idle, scroll, goto, screenshot actions.
 
 import asyncio
 import base64
+import binascii
 import logging
 import time
 from pathlib import Path
@@ -164,7 +165,7 @@ class GUIActionsMixin:
                 success=True,
                 message=f"Idle completed ({action.duration}s)"
             )
-        except Exception as e:
+        except (asyncio.CancelledError, OSError) as e:
             log.error(f"Idle action failed: {e}")
             return ActionResult(success=False, message=str(e))
 
@@ -207,7 +208,7 @@ class GUIActionsMixin:
 
                     # Save screenshot with custom naming logic
                     screenshot_path = await self._save_explicit_screenshot(screenshot_base64, action.name)
-                except Exception as save_error:
+                except (OSError, ValueError, KeyError) as save_error:
                     # Don't fail the action if screenshot save fails, but log it
                     log.warning(f"Failed to save screenshot: {save_error}")
 
@@ -216,7 +217,7 @@ class GUIActionsMixin:
                 message=result.get('message', ''),
                 data={**result, 'screenshot_path': screenshot_path} if screenshot_path else result
             )
-        except Exception as e:
+        except (RuntimeError, OSError, KeyError, ValueError) as e:
             return ActionResult(success=False, message=str(e))
 
     async def _save_explicit_screenshot(self, screenshot_base64: str, custom_name: str | None = None) -> str | None:
@@ -281,6 +282,6 @@ class GUIActionsMixin:
             # Return relative path (relative to run directory)
             return f"reporting/screenshots/{filename}"
 
-        except Exception as e:
+        except (OSError, ValueError, binascii.Error) as e:
             log.error(f"Failed to save explicit screenshot: {e}")
             return None

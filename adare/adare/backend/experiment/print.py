@@ -82,7 +82,7 @@ class ExperimentFlowConsole:
                     live.refresh()  # Force manual refresh since auto_refresh=False
                     tick_count += 1
 
-                except Exception as e:
+                except (KeyError, AttributeError, TypeError, ValueError, RuntimeError) as e:
                     # Don't let message generation errors break the refresh cycle
                     log.error(f"Error in flow console refresh cycle: {e}")
                     try:
@@ -506,7 +506,7 @@ class ExperimentFlowConsole:
                             input_queue.put('c')  # Empty input treated as continue
                     except (EOFError, KeyboardInterrupt):
                         input_queue.put('interrupted')
-            except Exception as e:
+            except (OSError, ValueError, RuntimeError) as e:
                 log.error(f"Input worker thread error: {e}")
                 input_queue.put('error')
 

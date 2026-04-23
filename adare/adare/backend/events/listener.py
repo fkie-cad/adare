@@ -280,8 +280,7 @@ def event_listener_cli(ulid):
             else:
                 log.warning(f"[EventListener CLI] Unknown event type: {event_type}")
 
-        except Exception as e:
-            # Log or handle malformed events
+        except Exception as e:  # Intentionally broad: event loop must not crash on malformed events
             log.error(f"[EventListener CLI] Error processing event: {e}", exc_info=True)
 
 

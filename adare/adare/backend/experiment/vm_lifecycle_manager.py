@@ -257,7 +257,9 @@ class VMLifecycleManager:
                     raise LoggedException(log, f"VM instance with ID {vm_instance_id} not found after preparation")
 
                 log.debug(f"Successfully found VM instance: {vm_instance.instance_name}")
-        except Exception as e:
+        except LoggedException:
+            raise
+        except (OSError, ValueError, RuntimeError) as e:
             log.error(f"Error fetching VM instance: {e}")
             import traceback
             log.debug(f"Fetch VM instance traceback: {traceback.format_exc()}")
@@ -407,7 +409,9 @@ class VMLifecycleManager:
                                     log.info(f"Successfully created base snapshot for new instance {vm_instance.instance_name}")
 
                             log.info(f"Successfully imported and prepared new VM instance: {vm_instance.instance_name}")
-                except Exception as e:
+                except LoggedException:
+                    raise
+                except (OSError, ValueError, RuntimeError, TimeoutError) as e:
                     log.error(f"VM instance verification failed: {e}")
                     raise LoggedException(log, f"VM instance verification failed: {e}") from e
 
@@ -650,7 +654,7 @@ class VMLifecycleManager:
 
             except FileNotFoundError as e:
                 log.warning(f"virt-diff tool not found - install libguestfs-tools: {e}")
-            except Exception as e:
+            except (OSError, RuntimeError, ValueError, KeyError) as e:
                 log.warning(f"Host-side diff failed (continuing cleanup): {e}", exc_info=True)
 
     def _is_diff_enabled(self, context: ExperimentRunCtx) -> bool:
@@ -705,7 +709,7 @@ class VMLifecycleManager:
                 try:
                     await context.vm.cleanup_overlay_disk(experiment_id)
                     log.info(f"Cleaned up QEMU overlay for experiment {experiment_id}")
-                except Exception as e:
+                except (OSError, RuntimeError) as e:
                     log.warning(f"Failed to cleanup overlay disk: {e}")
 
             # QEMU-specific: Undefine libvirt domain to prevent stale disk path references
@@ -733,7 +737,7 @@ class VMLifecycleManager:
                             # Always clear cached domain object to force redefinition
                             context.vm._libvirt_domain = None
                             log.debug(f"Cleared libvirt domain cache for '{context.vm.vm_name}'")
-                except Exception as e:
+                except (OSError, RuntimeError, ImportError) as e:
                     log.warning(f"Failed to cleanup libvirt domain: {e}")
 
             # Release VM instance for reuse by other experiments
@@ -758,7 +762,7 @@ class VMLifecycleManager:
                 log.info(f"Released VM instance {experiment_run.vm_instance_id} for reuse")
             else:
                 log.warning("No VM instance ID found in experiment run - cannot release")
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             log.error(f"Failed to release VM instance: {e}")
 
 
@@ -807,7 +811,7 @@ class VMLifecycleManager:
                 else:
                     log.warning('VM instance not found or missing UUID - cannot create experiment snapshot')
 
-            except Exception as e:
+            except (OSError, ValueError, RuntimeError) as e:
                 log.warning(f'Error creating experiment snapshot: {e}')
 
     async def _cleanup_experiment_snapshot(self, context: ExperimentRunCtx):
@@ -851,5 +855,5 @@ class VMLifecycleManager:
                 else:
                     log.warning('VM instance not found or missing UUID - cannot cleanup experiment snapshot')
 
-            except Exception as e:
+            except (OSError, ValueError, RuntimeError) as e:
                 log.warning(f'Error during snapshot cleanup: {e}')

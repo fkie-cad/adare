@@ -17,6 +17,7 @@ from adare.backend.experiment.runctx import ExperimentConfig, ExperimentRunCtx
 from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
 from adare.backend.project.directory import ProjectDirectory
 from adare.config.configdirectory import ADARELIB_DIR, ADAREVM_DIR
+from adare.database.exceptions import DatabaseError
 from adare.database.models.devsession import DevSession
 
 log = logging.getLogger(__name__)
@@ -173,7 +174,7 @@ async def restore_infrastructure_context(
                     session.experiment_ctx.config.websocket_port = vm_instance.websocket_port
                 else:
                     log.warning(f"Could not restore websocket_port for VM instance {vm_name}")
-        except Exception as e:
+        except (ImportError, DatabaseError, OSError, AttributeError) as e:
             log.warning(f"Failed to restore websocket_port from database: {e}")
 
         # 6. Recreate VMLifecycleManager
@@ -226,7 +227,7 @@ async def restore_infrastructure_context(
 
         return True
 
-    except Exception as e:
+    except Exception as e:  # Intentionally broad: infrastructure restoration must not crash caller
         log.error(f"Failed to restore infrastructure context: {e}", exc_info=True)
         return False
 
@@ -381,7 +382,7 @@ async def restore_application_context(
         log.info(f"Successfully restored dev session application context {session.session_id}")
         return True
 
-    except Exception as e:
+    except Exception as e:  # Intentionally broad: application restoration must not crash caller
         log.error(f"Failed to restore application context: {e}", exc_info=True)
         return False
 
@@ -467,6 +468,6 @@ async def _restore_snapshots(session: DevModeSession) -> None:
 
         log.info(f"Restored {len(session.snapshots)} checkpoints from database")
 
-    except Exception as e:
+    except (OSError, DatabaseError, KeyError, AttributeError) as e:
         log.warning(f"Failed to restore checkpoints from database: {e}", exc_info=True)
         # Non-fatal - session can work without checkpoint metadata

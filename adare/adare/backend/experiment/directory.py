@@ -91,7 +91,7 @@ class ExperimentRunDirectory(Directory):
             if self.tmp_directory.exists():
                 shutil.rmtree(self.tmp_directory)
                 log.debug(f"Cleaned up temporary directory: {self.tmp_directory}")
-        except Exception as e:
+        except OSError as e:
             log.warning(f"Failed to clean up temporary directory {self.tmp_directory}: {e}")
 
 
@@ -164,7 +164,7 @@ class DiffRunDirectory(Directory):
             if self.tmp_directory.exists():
                 shutil.rmtree(self.tmp_directory)
                 log.debug(f"Cleaned up temporary directory: {self.tmp_directory}")
-        except Exception as e:
+        except OSError as e:
             log.warning(f"Failed to clean up temporary directory {self.tmp_directory}: {e}")
 
 

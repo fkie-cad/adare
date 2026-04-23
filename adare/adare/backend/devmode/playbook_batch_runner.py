@@ -281,7 +281,7 @@ class PlaybookBatchRunner:
                                 memory_path=existing.memory_file_path,
                                 disk_path=existing.disk_file_path
                             )
-                        except Exception as e:
+                        except (OSError, RuntimeError) as e:
                             log.warning(f"Failed to delete existing snapshot files: {e}")
                     # Delete from database
                     api.delete_checkpoint(self.session.session_id, checkpoint_name)

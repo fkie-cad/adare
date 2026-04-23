@@ -105,7 +105,7 @@ class MCPServerManager:
             log.info("MCP GUI server started successfully")
             return True
 
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError, ValueError) as e:
             log.error(f"Failed to start MCP server: {e}")
             self.process = None
             return False
@@ -142,7 +142,7 @@ class MCPServerManager:
                 else:
                     log.warning("Failed to stop external MCP GUI server")
 
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError) as e:
             log.error(f"Error stopping MCP server: {e}")
 
     def is_running(self) -> bool:
@@ -191,7 +191,7 @@ class MCPServerManager:
             except subprocess.CalledProcessError:
                 # No process found with lsof
                 pass
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 log.warning(f"Error using lsof: {e}")
 
             # Fallback to fuser (common on some linux distros)
@@ -201,11 +201,11 @@ class MCPServerManager:
                 # We assume if it ran without crashing, it might have worked?
                 # fuser returns non-zero if no process killed.
                 return True
-            except Exception as e:
+            except OSError as e:
                 log.warning(f"Error using fuser: {e}")
 
             return False
 
-        except Exception as e:
+        except OSError as e:
             log.error(f"Failed to kill process on port {port}: {e}")
             return False

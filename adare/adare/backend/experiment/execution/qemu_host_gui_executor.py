@@ -132,7 +132,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
         # Ensure QEMU process (running as different user) can write to this directory
         try:
             self._temp_screenshot_dir.chmod(0o777)
-        except Exception as e:
+        except OSError as e:
             log.warning(f"Failed to set permissions on {self._temp_screenshot_dir}: {e}")
 
         log.debug("Initialized QEMUHostGUIExecutor (QMP-based)")
@@ -186,7 +186,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             # Cleanup temp file
             try:
                 temp_ppm.unlink()
-            except Exception as e:
+            except OSError as e:
                 log.warning(f"Failed to cleanup temp screenshot: {e}")
 
             log.info("Screenshot captured successfully")

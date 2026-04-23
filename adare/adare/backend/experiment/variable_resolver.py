@@ -445,7 +445,7 @@ class JinjaTemplateResolver:
         except (jinja2.TemplateError, jinja2.UndefinedError, TypeError, ValueError) as e:
             log.warning(f"Template resolution error for '{template_string}': {e}")
             return template_string
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             log.warning(f"Unexpected error resolving template '{template_string}': {e}", exc_info=True)
             return template_string
 
@@ -470,7 +470,7 @@ class JinjaTemplateResolver:
             resolved = template.render(template_context)
             log.debug(f"Resolved template '{template_string}' to '{resolved}'")
             return resolved
-        except Exception as e:
+        except (jinja2.TemplateError, jinja2.UndefinedError, TypeError, ValueError, KeyError) as e:
             log.warning(f"Failed to resolve template '{template_string}': {e}")
             return template_string
 
@@ -594,7 +594,7 @@ class JinjaTemplateResolver:
             log.info(f"Successfully formatted timestamp '{variable_name}' -> '{formatted}'")
             return formatted
 
-        except Exception as e:
+        except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as e:
             log.warning(f"Failed to apply format filter to '{template_expr}': {e}")
             return template_expr
 
@@ -634,7 +634,7 @@ class JinjaTemplateResolver:
             target_tz = self._parse_timezone(tz_str)
             return dt.astimezone(target_tz)
 
-        except Exception as e:
+        except (ValueError, TypeError, KeyError, AttributeError, pytz.exceptions.UnknownTimeZoneError) as e:
             log.debug(f"Could not apply timezone conversion: {e}")
             return dt
 

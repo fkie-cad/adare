@@ -210,7 +210,7 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
                 if session and session.cached_start_command:
                     cached_command_str = session.cached_start_command
                     log.info("Using cached adarevm start command from database (skipping detection/install)")
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             log.warning(f"Failed to check for cached start command: {e}")
 
     commands = None
@@ -419,7 +419,7 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
             with DevModeApi() as api:
                 api.update_session_cached_command(context.experiment_run_ulid, command_to_cache)
                 log.info("Cached adarevm start command to database")
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             log.warning(f"Failed to cache command to DB: {e}")
 
 
@@ -545,7 +545,7 @@ async def connect_websocket(context, stage_ctx):
             log.info("adarevm process is alive, proceeding with connection attempts")
         except LoggedException:
             raise
-        except Exception as e:
+        except (OSError, TimeoutError, RuntimeError) as e:
             log.warning(f"Could not verify adarevm process status: {e}")
 
     # Pre-flight guest-side diagnostics (uses guest agent, not network)
@@ -704,7 +704,7 @@ async def execute_installations_via_websocket(context, stage_ctx):
                     log.error(f"Installation output: {result['stdout']}")
                 log.warning("Continuing with remaining installations despite failure")
 
-        except Exception as e:
+        except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
             log.error(f"Failed to execute installation '{installation_name}': {e}", exc_info=True)
             log.warning("Continuing with remaining installations despite error")
 
@@ -756,7 +756,7 @@ async def execute_installations_via_qga(context, stage_ctx):
                     log.error(f"Installation output: {result.stdout}")
                 log.warning("Continuing with remaining installations despite failure")
 
-        except Exception as e:
+        except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
             log.error(f"Failed to execute installation '{installation_name}': {e}", exc_info=True)
             log.warning("Continuing with remaining installations despite error")
 

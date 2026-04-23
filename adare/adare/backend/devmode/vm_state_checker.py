@@ -28,7 +28,7 @@ def is_vm_running(vm_name: str, hypervisor_type: str) -> bool:
             return _check_virtualbox_vm(vm_name)
         log.warning(f"Unknown hypervisor type: {hypervisor_type}")
         return False
-    except Exception as e:
+    except Exception as e:  # Intentionally broad: VM state check must not crash caller
         log.error(f"Error checking VM state for {vm_name}: {e}", exc_info=True)
         return False
 
@@ -88,7 +88,7 @@ def _check_qemu_vm(vm_name: str) -> bool:
     except ImportError:
         log.error("libvirt-python not installed. Install with: pip install libvirt-python")
         return False
-    except Exception as e:
+    except OSError as e:
         log.error(f"Error checking QEMU VM state: {e}", exc_info=True)
         return False
 
@@ -128,13 +128,13 @@ def _check_virtualbox_vm(vm_name: str) -> bool:
             log.debug(f"VirtualBox VM '{vm_name}' is in state: {state}")
             return False
 
-        except Exception as e:
+        except (ValueError, AttributeError) as e:
             log.debug(f"VirtualBox VM '{vm_name}' not found or error: {e}")
             return False
 
     except ImportError:
         log.error("virtualbox module not available")
         return False
-    except Exception as e:
+    except OSError as e:
         log.error(f"Error checking VirtualBox VM state: {e}", exc_info=True)
         return False

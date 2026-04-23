@@ -63,7 +63,7 @@ class ForensicReporter:
             log.info(f"Forensic report generated: {output_path}")
             return True
 
-        except Exception as e:
+        except (OSError, ValueError, yaml.YAMLError) as e:
             log.error(f"Failed to generate forensic report for run {experiment_run_id}: {e}")
             return False
 
@@ -133,7 +133,7 @@ class ForensicReporter:
 
             return action_entry
 
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError, ValueError, json.JSONDecodeError) as e:
             log.warning(f"Failed to process event {event.id}: {e}")
             return None
 
