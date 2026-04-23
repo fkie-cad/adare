@@ -3,7 +3,7 @@
 import logging
 
 from adare.api import AdareAPI
-from adare.console import print_error_message
+from adare.cli.utils import get_project_path, handle_api_error
 from adare.core.dto.web import (
     CheckExperimentRequest,
     CheckRunRequest,
@@ -20,48 +20,13 @@ from adare.core.dto.web import (
 log = logging.getLogger(__name__)
 
 
-def _handle_api_error(result) -> None:
-    """
-    Handle an API error result by printing formatted error message and exiting.
-
-    Args:
-        result: Result object with error information
-    """
-    error = result.error
-    print_error_message(
-        title=f'{error.code}: {error.message}',
-        next_steps=error.solutions
-    )
-    exit(1)
-
-
-def _get_project_path(arguments):
-    """
-    Get project path from arguments or current directory.
-
-    Args:
-        arguments: CLI arguments
-
-    Returns:
-        Path to project directory
-    """
-    from adare.backend.basics import determine_projectdirectory
-    from adare.exceptions import NoProjectFoundError
-
-    project = getattr(arguments, 'project', None)
-    project_directory = determine_projectdirectory(project)
-    if not project_directory:
-        raise NoProjectFoundError(log, message='project directory not found')
-    return project_directory
-
-
 def exec_web_login(arguments):
     """Login to web app using AdareAPI."""
     api = AdareAPI()
     result = api.web.login()
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_web_logout(arguments):
@@ -70,7 +35,7 @@ def exec_web_logout(arguments):
     result = api.web.logout()
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_web_status(arguments):
@@ -84,7 +49,7 @@ def exec_web_status(arguments):
     result = api.web.get_status()
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
         return
 
     status = result.data
@@ -105,7 +70,7 @@ def exec_download_environment(arguments):
     """Download environment from web using AdareAPI."""
     from adare.helperfunctions.path_resolution import resolve_environment_path
 
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     environment_name = resolve_environment_path(arguments.name, project_directory)
 
     api = AdareAPI()
@@ -115,12 +80,12 @@ def exec_download_environment(arguments):
     ))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_download_experiment(arguments):
     """Download experiment from web using AdareAPI."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
 
     api = AdareAPI()
     result = api.web.download_experiment(DownloadExperimentRequest(
@@ -129,14 +94,14 @@ def exec_download_experiment(arguments):
     ))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_download_testfunction(arguments):
     """Download testfunction from web using AdareAPI."""
     from adare.helperfunctions.path_resolution import resolve_testfunction_path
 
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     testfunction_name = resolve_testfunction_path(arguments.name, project_directory)
 
     api = AdareAPI()
@@ -147,12 +112,12 @@ def exec_download_testfunction(arguments):
     ))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_download_bundle(arguments):
     """Download an experiment bundle (experiment + all dependencies)."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     include_disk_images = getattr(arguments, 'include_disk_images', False)
 
     api = AdareAPI()
@@ -163,7 +128,7 @@ def exec_download_bundle(arguments):
     ))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
     else:
         print(result.data.message)
 
@@ -179,7 +144,7 @@ def exec_web_sync(arguments):
     result = api.web.sync(SyncRequest(project_path=project_directory))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_web_upload_experiment_run(arguments):
@@ -188,12 +153,12 @@ def exec_web_upload_experiment_run(arguments):
     result = api.web.upload_run(UploadRunRequest(ulid=arguments.ulid))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_web_publish_run(arguments):
     """Publish an experiment run to the server using AdareAPI."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
 
     api = AdareAPI()
     result = api.web.publish_run(PublishRunRequest(
@@ -202,7 +167,7 @@ def exec_web_publish_run(arguments):
     ))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_web_check_experiment(arguments):
@@ -215,7 +180,7 @@ def exec_web_check_experiment(arguments):
     result = api.web.check_experiment(CheckExperimentRequest(ulid=arguments.ulid))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
         return
 
     check_result = result.data
@@ -244,7 +209,7 @@ def exec_web_check_run(arguments):
     result = api.web.check_run(CheckRunRequest(ulid=arguments.ulid))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
         return
 
     check_result = result.data
@@ -269,7 +234,7 @@ def exec_web_check_run(arguments):
 
 def exec_submit_experiment(arguments):
     """Submit an experiment as a PR to the shared repository."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
 
     api = AdareAPI()
     result = api.web.submit_experiment(SubmitRequest(
@@ -278,7 +243,7 @@ def exec_submit_experiment(arguments):
     ))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
     else:
         print(result.data.message)
         print(f'PR URL: {result.data.pr_url}')
@@ -286,7 +251,7 @@ def exec_submit_experiment(arguments):
 
 def exec_submit_testfunction(arguments):
     """Submit a testfunction as a PR to the shared repository."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
 
     api = AdareAPI()
     result = api.web.submit_testfunction(SubmitRequest(
@@ -295,7 +260,7 @@ def exec_submit_testfunction(arguments):
     ))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
     else:
         print(result.data.message)
         print(f'PR URL: {result.data.pr_url}')
@@ -303,7 +268,7 @@ def exec_submit_testfunction(arguments):
 
 def exec_submit_environment(arguments):
     """Submit an environment as a PR to the shared repository."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
 
     api = AdareAPI()
     result = api.web.submit_environment(SubmitRequest(
@@ -312,7 +277,7 @@ def exec_submit_environment(arguments):
     ))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
     else:
         print(result.data.message)
         print(f'PR URL: {result.data.pr_url}')

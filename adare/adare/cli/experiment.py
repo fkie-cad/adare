@@ -5,7 +5,8 @@ from datetime import UTC
 
 from adare.api import AdareAPI
 from adare.backend.basics import determine_projectdirectory
-from adare.console import print_error_message, print_success_message
+from adare.cli.utils import get_project_path, handle_api_error
+from adare.console import print_success_message
 from adare.core.dto.experiment import (
     ExperimentCloneRequest,
     ExperimentCreateRequest,
@@ -20,30 +21,6 @@ from adare.helperfunctions.path_resolution import resolve_environment_path, reso
 log = logging.getLogger(__name__)
 
 
-def _handle_api_error(result) -> None:
-    """
-    Handle an API error result by printing formatted error message and exiting.
-
-    Args:
-        result: Result object with error information
-    """
-    error = result.error
-    print_error_message(
-        title=f'{error.code}: {error.message}',
-        next_steps=error.solutions
-    )
-    exit(1)
-
-
-def _get_project_path(arguments):
-    """Get project path from arguments or current directory."""
-    project = getattr(arguments, 'project', None)
-    project_directory = determine_projectdirectory(project)
-    if not project_directory:
-        raise NoProjectFoundError(log, message='no project directory found')
-    return project_directory
-
-
 def exec_experiment_load(arguments):
     """Load an experiment from files into the database using AdareAPI."""
     import shutil
@@ -51,7 +28,7 @@ def exec_experiment_load(arguments):
 
     from adare.backend.project.directory import ProjectDirectory
 
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     original_input = arguments.experiment
     project_dir_obj = ProjectDirectory(project_directory)
 
@@ -121,7 +98,7 @@ def exec_experiment_load(arguments):
                 tip=result.data.tip
             )
         else:
-            _handle_api_error(result)
+            handle_api_error(result)
 
     except Exception:
         # Only cleanup if we actually copied during this run
@@ -138,7 +115,7 @@ def exec_experiment_load(arguments):
 
 def exec_experiment_create(arguments):
     """Create a new experiment using AdareAPI."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
 
     api = AdareAPI()
@@ -155,12 +132,12 @@ def exec_experiment_create(arguments):
             tip=result.data.tip
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_experiment_example(arguments):
     """Create an example experiment using AdareAPI."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
 
     api = AdareAPI()
@@ -174,7 +151,7 @@ def exec_experiment_example(arguments):
             tip=result.data.tip
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def _handle_environment_interruption(environments, current_index, results):
@@ -613,7 +590,7 @@ def exec_experiment_run(arguments):
 
 def exec_experiment_test(arguments):
     """Run experiment tests (dry-run) using AdareAPI."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
     environment_name = resolve_environment_path(arguments.environment, project_directory)
 
@@ -627,7 +604,7 @@ def exec_experiment_test(arguments):
     ))
 
     if not load_result.success:
-        _handle_api_error(load_result)
+        handle_api_error(load_result)
 
     # Run test
     result = api.experiment.test(project_directory, experiment_name, environment_name)
@@ -637,12 +614,12 @@ def exec_experiment_test(arguments):
             title=f'Experiment "{experiment_name}" test completed successfully!'
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_experiment_clean(arguments):
     """Execute experiment clean command to remove fake runs using AdareAPI."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
 
     api = AdareAPI()
@@ -658,12 +635,12 @@ def exec_experiment_clean(arguments):
                 title=f'No fake runs to clean for experiment "{result.data.experiment_name}"'
             )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_experiment_remove(arguments):
     """Execute experiment remove command to delete an experiment using AdareAPI."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
 
     api = AdareAPI()
@@ -679,12 +656,12 @@ def exec_experiment_remove(arguments):
             title=f'Experiment "{result.data.experiment_name}" removed successfully!'
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_experiment_add_env(arguments):
     """Execute experiment add-env command to add environments to experiments using AdareAPI."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     experiment_pattern = resolve_experiment_path(arguments.experiment_pattern, project_directory)
     # Resolve environment names
     environment_names = [resolve_environment_path(env, project_directory) for env in arguments.environments]
@@ -703,12 +680,12 @@ def exec_experiment_add_env(arguments):
             title=f'Environments added to experiments: {affected}'
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_experiment_remove_env(arguments):
     """Execute experiment remove-env command to remove environments from experiments using AdareAPI."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     experiment_pattern = resolve_experiment_path(arguments.experiment_pattern, project_directory)
     # Resolve environment names
     environment_names = [resolve_environment_path(env, project_directory) for env in arguments.environments]
@@ -727,12 +704,12 @@ def exec_experiment_remove_env(arguments):
             title=f'Environments removed from experiments: {affected}'
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_experiment_clone(arguments):
     """Execute experiment clone command to create experiment variations using AdareAPI."""
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     source_experiment = resolve_experiment_path(arguments.source_experiment, project_directory)
     target_experiment = resolve_experiment_path(arguments.target_experiment, project_directory)
 
@@ -756,14 +733,14 @@ def exec_experiment_clone(arguments):
             tip=result.data.tip
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_experiment_validate(arguments):
     """Validate experiment configuration and integrity without starting a VM."""
     from rich.console import Console
 
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
     environment_name = None
     if hasattr(arguments, 'environment') and arguments.environment:
@@ -777,7 +754,7 @@ def exec_experiment_validate(arguments):
     ))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
         return
 
     console = Console()

@@ -3,24 +3,10 @@
 import logging
 
 from adare.api import AdareAPI
-from adare.console import print_error_message, print_success_message
+from adare.cli.utils import handle_api_error
+from adare.console import print_success_message
 
 log = logging.getLogger(__name__)
-
-
-def _handle_api_error(result) -> None:
-    """
-    Handle an API error result by printing formatted error message and exiting.
-
-    Args:
-        result: Result object with error information
-    """
-    error = result.error
-    print_error_message(
-        title=f'{error.code}: {error.message}',
-        next_steps=error.solutions
-    )
-    exit(1)
 
 
 def exec_manage_reset_db(arguments):
@@ -37,7 +23,7 @@ def exec_manage_reset_db(arguments):
         else:
             print("No global database found to reset")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_manage_init_db(arguments):
@@ -56,7 +42,7 @@ def exec_manage_init_db(arguments):
             for error in result.data.errors:
                 print(f"  Error: {error}")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_manage_db_status(arguments):
@@ -98,7 +84,7 @@ def exec_manage_db_status(arguments):
             else:
                 print("\n❌ Database system has issues")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_manage_repair_db(arguments):
@@ -124,7 +110,7 @@ def exec_manage_repair_db(arguments):
         else:
             print("❌ Database system repair failed")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_manage_clean_install_db(arguments):
@@ -158,7 +144,7 @@ def exec_manage_clean_install_db(arguments):
         else:
             print("❌ Clean database installation failed")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_manage_reset_vm(arguments):
@@ -200,7 +186,7 @@ def exec_manage_reset_vm(arguments):
             for error in result.data.failed_vms[:3]:
                 print(f"  - {error}")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_manage_vm_runtime_refresh(arguments):
@@ -215,7 +201,7 @@ def exec_manage_vm_runtime_refresh(arguments):
         )
         print("VM runtime files are now up-to-date")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_manage_vm_runtime_build(arguments):
@@ -234,4 +220,4 @@ def exec_manage_vm_runtime_build(arguments):
         if result.data.adarevm_wheel:
             print(f"  - {result.data.adarevm_wheel}")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)

@@ -3,24 +3,10 @@
 import logging
 
 from adare.api import AdareAPI
+from adare.cli.utils import handle_api_error
 from adare.console import print_error_message, print_success_message
 
 log = logging.getLogger(__name__)
-
-
-def _handle_api_error(result) -> None:
-    """
-    Handle an API error result by printing formatted error message and exiting.
-
-    Args:
-        result: Result object with error information
-    """
-    error = result.error
-    print_error_message(
-        title=f'{error.code}: {error.message}',
-        next_steps=error.solutions
-    )
-    exit(1)
 
 
 def exec_vm_list(arguments):
@@ -60,7 +46,7 @@ def exec_vm_delete_snapshot(arguments):
             title=f'Snapshot "{arguments.snapshot_name}" deleted successfully!'
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_vm_clear_all(arguments):
@@ -84,7 +70,7 @@ def exec_vm_clear_all(arguments):
         }
         print_vm_clear_all_results(results)
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_vm_clear_by_environment(arguments):
@@ -111,7 +97,7 @@ def exec_vm_clear_by_environment(arguments):
         }
         print_vm_clear_environment_results(results, arguments.environment_ulid)
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 async def exec_vm_test(arguments):
@@ -139,7 +125,7 @@ async def exec_vm_test(arguments):
             print(f"❌ {result.data.message}")
             sys.exit(1)
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 # ==========================================
@@ -177,7 +163,7 @@ async def exec_vm_instance_remove(arguments):
         if result.success:
             print_vm_instance_cleanup_results([arguments.instance_id], "specific instance")
         else:
-            _handle_api_error(result)
+            handle_api_error(result)
 
     elif arguments.all and arguments.force:
         # Remove ALL instances (running or not) — replaces 'vm clear all --force'
@@ -192,7 +178,7 @@ async def exec_vm_instance_remove(arguments):
             }
             print_vm_clear_all_results(results)
         else:
-            _handle_api_error(result)
+            handle_api_error(result)
 
     elif arguments.all and not arguments.force:
         print_error_message(
@@ -219,7 +205,7 @@ async def exec_vm_instance_remove(arguments):
             }
             print_vm_clear_environment_results(results, arguments.environment_ulid)
         else:
-            _handle_api_error(result)
+            handle_api_error(result)
 
     elif getattr(arguments, 'stopped', False):
         # Remove all stopped instances — replaces old '--all' behavior
@@ -231,7 +217,7 @@ async def exec_vm_instance_remove(arguments):
         if result.success:
             print_vm_instance_cleanup_results(result.data.removed_instances, "all stopped instances")
         else:
-            _handle_api_error(result)
+            handle_api_error(result)
 
     elif arguments.experiment_id:
         from adare.backend.vm.commands import cleanup_vm_instances_for_experiment

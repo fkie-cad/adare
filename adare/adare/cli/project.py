@@ -7,25 +7,11 @@ from adare.api import AdareAPI
 
 # internal imports
 from adare.backend.basics import determine_projectdirectory_for_removal
-from adare.console import print_error_message, print_success_message
+from adare.cli.utils import handle_api_error
+from adare.console import print_success_message
 from adare.core.dto.project import ProjectCreateRequest, ProjectRemoveRequest
 
 log = logging.getLogger(__name__)
-
-
-def _handle_api_error(result) -> None:
-    """
-    Handle an API error result by printing formatted error message and exiting.
-
-    Args:
-        result: Result object with error information
-    """
-    error = result.error
-    print_error_message(
-        title=f'{error.code}: {error.message}',
-        next_steps=error.solutions
-    )
-    exit(1)
 
 
 def exec_create_project(arguments):
@@ -53,7 +39,7 @@ def exec_create_project(arguments):
             tip=result.data.tip
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_remove_project(arguments):
@@ -75,7 +61,7 @@ def exec_remove_project(arguments):
             title=f'Project at "{path}" removed successfully!',
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_list_projects(arguments):
@@ -92,7 +78,7 @@ def exec_list_projects(arguments):
     result = api.project.list_all()
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
         return
 
     if not result.data:
