@@ -21,10 +21,11 @@ All API methods return Result[T] objects for consistent error handling.
 class DevModeAPI:
     """Dev mode operations API."""
 
-    def __init__(self):
-        # Lazy import to avoid circular dependencies
-        from adare.services.devmode import DevModeService
-        self._service = DevModeService()
+    def __init__(self, service=None):
+        if service is None:
+            from adare.services.devmode import DevModeService
+            service = DevModeService()
+        self._service = service
 
     def start_session(self, request):
         """Start a new dev mode session."""
@@ -102,10 +103,11 @@ class DevModeAPI:
 class TestFunctionAPI:
     """Testfunction operations API."""
 
-    def __init__(self):
-        # Lazy import to avoid circular dependencies
-        from adare.services import testfunction_service
-        self._service = testfunction_service.TestfunctionService()
+    def __init__(self, service=None):
+        if service is None:
+            from adare.services import testfunction_service
+            service = testfunction_service.TestfunctionService()
+        self._service = service
 
     def create(self, request):
         """Create a new testfunction."""
@@ -135,10 +137,11 @@ class TestFunctionAPI:
 class ExperimentAPI:
     """Experiment operations API."""
 
-    def __init__(self):
-        # Lazy import to avoid circular dependencies
-        from adare.services import experiment_service
-        self._service = experiment_service.ExperimentService()
+    def __init__(self, service=None):
+        if service is None:
+            from adare.services import experiment_service
+            service = experiment_service.ExperimentService()
+        self._service = service
 
     def create(self, request):
         """Create a new experiment."""
@@ -196,10 +199,11 @@ class ExperimentAPI:
 class ManageAPI:
     """Database and system management API."""
 
-    def __init__(self):
-        # Lazy import to avoid circular dependencies
-        from adare.services import manage_service
-        self._service = manage_service.ManageService()
+    def __init__(self, service=None):
+        if service is None:
+            from adare.services import manage_service
+            service = manage_service.ManageService()
+        self._service = service
 
     def get_db_status(self):
         """Check database system status."""
@@ -237,10 +241,11 @@ class ManageAPI:
 class EnvironmentAPI:
     """Environment configuration API."""
 
-    def __init__(self):
-        # Lazy import to avoid circular dependencies
-        from adare.services import environment_service
-        self._service = environment_service.EnvironmentService()
+    def __init__(self, service=None):
+        if service is None:
+            from adare.services import environment_service
+            service = environment_service.EnvironmentService()
+        self._service = service
 
     def load(self, request):
         """Load an environment."""
@@ -270,10 +275,11 @@ class EnvironmentAPI:
 class ProjectAPI:
     """Project management API."""
 
-    def __init__(self):
-        # Lazy import to avoid circular dependencies
-        from adare.services import project_service
-        self._service = project_service.ProjectService()
+    def __init__(self, service=None):
+        if service is None:
+            from adare.services import project_service
+            service = project_service.ProjectService()
+        self._service = service
 
     def create(self, request):
         """Create a new project."""
@@ -295,10 +301,11 @@ class ProjectAPI:
 class ShowAPI:
     """Data retrieval and display API."""
 
-    def __init__(self):
-        # Lazy import to avoid circular dependencies
-        from adare.services import show_service
-        self._service = show_service.ShowService()
+    def __init__(self, service=None):
+        if service is None:
+            from adare.services import show_service
+            service = show_service.ShowService()
+        self._service = service
 
     def list_runs(self, request=None):
         """List all runs."""
@@ -344,10 +351,11 @@ class ShowAPI:
 class VMAPI:
     """Virtual machine operations API."""
 
-    def __init__(self):
-        # Lazy import to avoid circular dependencies
-        from adare.services import vm_service
-        self._service = vm_service.VMService()
+    def __init__(self, service=None):
+        if service is None:
+            from adare.services import vm_service
+            service = vm_service.VMService()
+        self._service = service
 
     def load(self, request):
         """Load a VM from file."""
@@ -413,10 +421,11 @@ class VMAPI:
 class WebAPI:
     """Web integration and sync API."""
 
-    def __init__(self):
-        # Lazy import to avoid circular dependencies
-        from adare.services import web_service
-        self._service = web_service.WebService()
+    def __init__(self, service=None):
+        if service is None:
+            from adare.services import web_service
+            service = web_service.WebService()
+        self._service = service
 
     def login(self):
         """Login to web service."""
