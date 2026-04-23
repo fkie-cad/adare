@@ -4,6 +4,7 @@ VirtualBox VM networking operations mixin.
 Implements AbstractNetworkingMixin for VirtualBox-specific networking operations.
 """
 import asyncio
+import contextlib
 import logging
 from pathlib import Path
 
@@ -537,7 +538,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
                         unmount_cmd = f'sudo umount "{mountpoint}" 2>/dev/null || true'
 
                     args = self._build_guest_command_args(unmount_cmd)
-                    try:
+                    with contextlib.suppress(Exception):
                         await self._execute_streaming_command_async(
                             args,
                             log_file=log_file,
@@ -546,8 +547,6 @@ class NetworkingMixin(AbstractNetworkingMixin):
                             ctx_manager=ctx_manager,
                             operation_name="shared folder unmount"
                         )
-                    except Exception:
-                        pass  # Ignore unmount errors
 
                 # Remove shared folder from VM configuration
                 args = ["sharedfolder", "remove", self.vm_name, "--name", name]
@@ -628,7 +627,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
 
             # Create parent directories and set ownership
             processed_parents = set()
-            for name, mountpoint in folders.items():
+            for _name, mountpoint in folders.items():
                 parent_dir = mountpoint.parent
                 parent_str = str(parent_dir)
 

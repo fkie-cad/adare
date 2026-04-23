@@ -54,13 +54,8 @@ def _parse_filter(arguments) -> tuple:
         # Backward compatibility with old --project option
         project = arguments.project
     else:
-        # No filter provided, use current project if available
-        # Use silent=True to avoid warning message when outside project directory
-        if project_path := determine_projectdirectory(None, silent=True):
-            project = project_path.name
-        else:
-            # When outside of project, show all runs from all projects (like experiments/environments do)
-            project = None
+        # No filter provided, use current project if available (None = show all projects)
+        project = project_path.name if (project_path := determine_projectdirectory(None, silent=True)) else None
 
     return project, environment, experiment
 

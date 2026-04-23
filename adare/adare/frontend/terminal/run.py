@@ -296,7 +296,7 @@ class ExperimentRunActionsPanel:
         root_actions = []
 
         # Group actions by parent_event_id
-        for event_group_id, action in actions_by_id.items():
+        for _event_group_id, action in actions_by_id.items():
             parent_event_id = action.get('parent_event_id')
 
             if parent_event_id:

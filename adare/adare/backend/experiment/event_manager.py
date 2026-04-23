@@ -104,7 +104,6 @@ class EventManager:
 
     def create_action_start_event(self, action: ActionType, action_index: int, action_id: str, parent_event_id: str = None):
         """Create appropriate start event for the given action type."""
-        type(action).__name__
         description = getattr(action, 'description', '')
 
         # Generate better description for CommandActions (always override for clean display)
@@ -125,124 +124,66 @@ class EventManager:
             'parent_event_id': parent_event_id
         }
 
-        # Create type-specific start event
-        if isinstance(action, ClickAction):
-            return ClickActionStartEvent(target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
-        if isinstance(action, KeyboardAction):
-            return KeyboardActionStartEvent(
-                key=action.key if hasattr(action, 'key') else None,
-                text=action.text if hasattr(action, 'text') else None,
-                combination=action.combination if hasattr(action, 'combination') else None,
-                keys=getattr(action, 'keys', None),  # Keep legacy field
-                **event_data
-            )
-        if isinstance(action, CommandAction):
-            return CommandActionStartEvent(command=getattr(action, 'command', None), **event_data)
-        if isinstance(action, ActionTestAction):
-            return TestActionStartEvent(test_name=getattr(action, 'name', ''), **event_data)
-        if isinstance(action, ScreenshotAction):
-            return ScreenshotActionStartEvent(**event_data)
-        if isinstance(action, ScrollAction):
-            return ScrollActionStartEvent(
-                direction=getattr(action, 'direction', None),
-                amount=getattr(action, 'amount', None),
-                **event_data
-            )
-        if isinstance(action, IdleAction):
-            return IdleActionStartEvent(duration=getattr(action, 'duration', None), **event_data)
-        if isinstance(action, DragAction):
-            return DragActionStartEvent(
-                source_target=self._get_target_info(getattr(action, 'src', None)),
-                dest_target=self._get_target_info(getattr(action, 'dst', None)),
-                **event_data
-            )
-        if isinstance(action, GotoAction):
-            return GotoActionStartEvent(url=getattr(action, 'url', None), **event_data)
-        if isinstance(action, BlockAction):
-            return BlockActionStartEvent(
-                action_count=len(getattr(action, 'actions', [])),
-                conditions=self._get_condition_info(getattr(action, 'when', None)),
-                **event_data
-            )
-        if isinstance(action, SaveTimestampAction):
-            return SaveTimestampActionStartEvent(variable=getattr(action, 'variable', None), **event_data)
-        if isinstance(action, PullAction):
-            return PullActionStartEvent(
-                source=getattr(action, 'src', None),
-                destination=getattr(action, 'dst', None),
-                **event_data
-            )
-        if isinstance(action, WaitUntilAction):
-            # Extract target from condition (exists or not_exists)
-            target = None
-            if action.condition.exists:
-                target = action.condition.exists
-            elif action.condition.not_exists:
-                target = action.condition.not_exists
-            return WaitUntilActionStartEvent(
-                target_info=self._get_target_info(target),
-                timeout=getattr(action, 'timeout', None),
-                check_interval=getattr(action, 'check_interval', None),
-                initial_delay=getattr(action, 'initial_delay', None),
-                **event_data
-            )
-        if isinstance(action, LoopAction):
-            # Determine iteration count
-            iteration_count = action.times if action.times is not None else (len(action.items) if action.items else None)
-            return LoopActionStartEvent(
-                iteration_count=iteration_count,
-                items=action.items if hasattr(action, 'items') else None,
-                **event_data
-            )
-        if isinstance(action, PauseAction):
-            return PauseActionStartEvent(
-                message=getattr(action, 'message', None),
-                **event_data
-            )
-        if isinstance(action, StopAction):
-            # Extract condition info if available
-            condition_info = None
-            if hasattr(action, 'condition') and action.condition:
-                condition_info = {
-                    'variable': action.condition.variable,
-                    'has_condition': True
-                }
-            return StopActionStartEvent(
-                condition_info=condition_info,
-                **event_data
-            )
-        if isinstance(action, ContinueAction):
-            # Extract condition info if available
-            condition_info = None
-            if hasattr(action, 'condition') and action.condition:
-                condition_info = {
-                    'variable': action.condition.variable,
-                    'has_condition': True
-                }
-            return ContinueActionStartEvent(
-                condition_info=condition_info,
-                **event_data
-            )
-        if isinstance(action, FindAction):
-            return FindActionStartEvent(target_info=getattr(action, 'target_info', None), **event_data)
-        if isinstance(action, ExecuteAction):
-            return ExecuteActionStartEvent(coordinates=getattr(action, 'coordinates', None), **event_data)
-        if isinstance(action, SnapshotFilesystemAction):
-            return SnapshotFilesystemActionStartEvent(
-                snapshot_type=getattr(action, 'snapshot_type', None),
-                **event_data
-            )
-        if isinstance(action, PullChangedFilesAction):
-            return PullChangedFilesActionStartEvent(
-                destination=getattr(action, 'destination', None),
-                **event_data
-            )
+        # Dispatch to type-specific factory
+        for action_cls, factory in self._start_event_factories():
+            if isinstance(action, action_cls):
+                return factory(action, event_data)
+
         # Generic start event for unknown action types
         return ActionStartEvent(**event_data)
 
+    def _start_event_factories(self):
+        """Yield (action_class, factory_callable) pairs for start events."""
+        yield ClickAction, lambda a, d: ClickActionStartEvent(
+            target_info=self._get_target_info(getattr(a, 'target', None)), **d)
+        yield KeyboardAction, lambda a, d: KeyboardActionStartEvent(
+            key=a.key if hasattr(a, 'key') else None,
+            text=a.text if hasattr(a, 'text') else None,
+            combination=a.combination if hasattr(a, 'combination') else None,
+            keys=getattr(a, 'keys', None),
+            **d)
+        yield CommandAction, lambda a, d: CommandActionStartEvent(
+            command=getattr(a, 'command', None), **d)
+        yield ActionTestAction, lambda a, d: TestActionStartEvent(
+            test_name=getattr(a, 'name', ''), **d)
+        yield ScreenshotAction, lambda a, d: ScreenshotActionStartEvent(**d)
+        yield ScrollAction, lambda a, d: ScrollActionStartEvent(
+            direction=getattr(a, 'direction', None),
+            amount=getattr(a, 'amount', None), **d)
+        yield IdleAction, lambda a, d: IdleActionStartEvent(
+            duration=getattr(a, 'duration', None), **d)
+        yield DragAction, lambda a, d: DragActionStartEvent(
+            source_target=self._get_target_info(getattr(a, 'src', None)),
+            dest_target=self._get_target_info(getattr(a, 'dst', None)), **d)
+        yield GotoAction, lambda a, d: GotoActionStartEvent(
+            url=getattr(a, 'url', None), **d)
+        yield BlockAction, lambda a, d: BlockActionStartEvent(
+            action_count=len(getattr(a, 'actions', [])),
+            conditions=self._get_condition_info(getattr(a, 'when', None)), **d)
+        yield SaveTimestampAction, lambda a, d: SaveTimestampActionStartEvent(
+            variable=getattr(a, 'variable', None), **d)
+        yield PullAction, lambda a, d: PullActionStartEvent(
+            source=getattr(a, 'src', None),
+            destination=getattr(a, 'dst', None), **d)
+        yield WaitUntilAction, self._create_wait_until_start_event
+        yield LoopAction, self._create_loop_start_event
+        yield PauseAction, lambda a, d: PauseActionStartEvent(
+            message=getattr(a, 'message', None), **d)
+        yield StopAction, lambda a, d: StopActionStartEvent(
+            condition_info=self._extract_condition_info(a), **d)
+        yield ContinueAction, lambda a, d: ContinueActionStartEvent(
+            condition_info=self._extract_condition_info(a), **d)
+        yield FindAction, lambda a, d: FindActionStartEvent(
+            target_info=getattr(a, 'target_info', None), **d)
+        yield ExecuteAction, lambda a, d: ExecuteActionStartEvent(
+            coordinates=getattr(a, 'coordinates', None), **d)
+        yield SnapshotFilesystemAction, lambda a, d: SnapshotFilesystemActionStartEvent(
+            snapshot_type=getattr(a, 'snapshot_type', None), **d)
+        yield PullChangedFilesAction, lambda a, d: PullChangedFilesActionStartEvent(
+            destination=getattr(a, 'destination', None), **d)
+
     def create_action_complete_event(self, action: ActionType, action_index: int, action_id: str, result, parent_event_id: str = None):
         """Create appropriate complete event for the given action type and result."""
-        type(action).__name__
         description = getattr(action, 'description', '')
 
         # Generate better description for CommandActions (always override for clean display)

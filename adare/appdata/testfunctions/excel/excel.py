@@ -1,7 +1,7 @@
 # external imports
 from pathlib import Path
 import pandas as pd
-from typing import Optional, List, Tuple, Union
+from typing import Optional
 import re
 
 # internal imports

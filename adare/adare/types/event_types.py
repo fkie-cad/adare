@@ -88,6 +88,58 @@ class ActionType(Enum):
     EXECUTE = "execute"
 
 
+_ACTION_RAW_TO_EVENT: dict[str, tuple[EventType, EventType]] = {
+    "click": (EventType.CLICK_START, EventType.CLICK_COMPLETE),
+    "rightclick": (EventType.CLICK_START, EventType.CLICK_COMPLETE),
+    "doubleclick": (EventType.CLICK_START, EventType.CLICK_COMPLETE),
+    "keyboard": (EventType.KEYBOARD_START, EventType.KEYBOARD_COMPLETE),
+    "command": (EventType.COMMAND_START, EventType.COMMAND_COMPLETE),
+    "idle": (EventType.IDLE_START, EventType.IDLE_COMPLETE),
+    "test": (EventType.TEST_START, EventType.TEST_COMPLETE),
+    "screenshot": (EventType.SCREENSHOT_START, EventType.SCREENSHOT_COMPLETE),
+    "scroll": (EventType.SCROLL_START, EventType.SCROLL_COMPLETE),
+    "drag": (EventType.DRAG_START, EventType.DRAG_COMPLETE),
+    "goto": (EventType.GOTO_START, EventType.GOTO_COMPLETE),
+    "savetimestamp": (EventType.SAVETIMESTAMP_START, EventType.SAVETIMESTAMP_COMPLETE),
+    "pull": (EventType.PULL_START, EventType.PULL_COMPLETE),
+    "pause": (EventType.PAUSE_START, EventType.PAUSE_COMPLETE),
+    "block": (EventType.BLOCK_START, EventType.BLOCK_COMPLETE),
+    "waituntil": (EventType.WAIT_UNTIL_START, EventType.WAIT_UNTIL_COMPLETE),
+    "loop": (EventType.LOOP_START, EventType.LOOP_COMPLETE),
+    "stop": (EventType.STOP_START, EventType.STOP_COMPLETE),
+    "continue": (EventType.CONTINUE_START, EventType.CONTINUE_COMPLETE),
+    "snapshotfilesystem": (EventType.SNAPSHOT_FILESYSTEM_START, EventType.SNAPSHOT_FILESYSTEM_COMPLETE),
+    "pullchangedfiles": (EventType.PULL_CHANGED_FILES_START, EventType.PULL_CHANGED_FILES_COMPLETE),
+    "find": (EventType.ACTION_START, EventType.ACTION_COMPLETE),
+    "execute": (EventType.ACTION_START, EventType.ACTION_COMPLETE),
+}
+
+# Ordered list of (prefix, ActionType) for get_action_type dispatch.
+# Longer prefixes MUST come before shorter ones to avoid false matches
+# (e.g. "pull_changed_files_" before "pull_", "snapshot_filesystem_" before "stop_").
+_EVENT_PREFIX_TO_ACTION: list[tuple[str, ActionType]] = [
+    ("snapshot_filesystem_", ActionType.SNAPSHOT_FILESYSTEM),
+    ("pull_changed_files_", ActionType.PULL_CHANGED_FILES),
+    ("wait_until_", ActionType.WAIT_UNTIL),
+    ("screenshot_", ActionType.SCREENSHOT),
+    ("savetimestamp_", ActionType.SAVETIMESTAMP),
+    ("continue_", ActionType.CONTINUE),
+    ("keyboard_", ActionType.KEYBOARD),
+    ("command_", ActionType.COMMAND),
+    ("scroll_", ActionType.SCROLL),
+    ("click_", ActionType.CLICK),
+    ("pause_", ActionType.PAUSE),
+    ("block_", ActionType.BLOCK),
+    ("idle_", ActionType.IDLE),
+    ("test_", ActionType.TEST),
+    ("drag_", ActionType.DRAG),
+    ("goto_", ActionType.GOTO),
+    ("loop_", ActionType.LOOP),
+    ("stop_", ActionType.STOP),
+    ("pull_", ActionType.PULL),
+]
+
+
 class EventTypeResolver:
     """Resolves event types from serialized data and provides type-safe event handling."""
 
@@ -165,52 +217,14 @@ class EventTypeResolver:
         # Check for success field to determine start vs complete
         has_success = "success" in event_data
         is_complete = has_success or "Complete" in class_name or class_name.endswith("Complete")
-        "Start" in class_name or class_name.endswith("Start") or not is_complete
 
         # Extract action type from class name
         action_type_raw = class_name.replace("Event", "").replace("Action", "").replace("Start", "").replace("Complete", "").lower()
 
-        # Map to action types and determine event type
-        if action_type_raw in ["click", "rightclick", "doubleclick"]:
-            return EventType.CLICK_COMPLETE if is_complete else EventType.CLICK_START
-        if action_type_raw == "keyboard":
-            return EventType.KEYBOARD_COMPLETE if is_complete else EventType.KEYBOARD_START
-        if action_type_raw == "command":
-            return EventType.COMMAND_COMPLETE if is_complete else EventType.COMMAND_START
-        if action_type_raw == "idle":
-            return EventType.IDLE_COMPLETE if is_complete else EventType.IDLE_START
-        if action_type_raw == "test":
-            return EventType.TEST_COMPLETE if is_complete else EventType.TEST_START
-        if action_type_raw == "screenshot":
-            return EventType.SCREENSHOT_COMPLETE if is_complete else EventType.SCREENSHOT_START
-        if action_type_raw == "scroll":
-            return EventType.SCROLL_COMPLETE if is_complete else EventType.SCROLL_START
-        if action_type_raw == "drag":
-            return EventType.DRAG_COMPLETE if is_complete else EventType.DRAG_START
-        if action_type_raw == "goto":
-            return EventType.GOTO_COMPLETE if is_complete else EventType.GOTO_START
-        if action_type_raw == "savetimestamp":
-            return EventType.SAVETIMESTAMP_COMPLETE if is_complete else EventType.SAVETIMESTAMP_START
-        if action_type_raw == "pull":
-            return EventType.PULL_COMPLETE if is_complete else EventType.PULL_START
-        if action_type_raw == "pause":
-            return EventType.PAUSE_COMPLETE if is_complete else EventType.PAUSE_START
-        if action_type_raw == "block":
-            return EventType.BLOCK_COMPLETE if is_complete else EventType.BLOCK_START
-        if action_type_raw == "waituntil":
-            return EventType.WAIT_UNTIL_COMPLETE if is_complete else EventType.WAIT_UNTIL_START
-        if action_type_raw == "loop":
-            return EventType.LOOP_COMPLETE if is_complete else EventType.LOOP_START
-        if action_type_raw == "stop":
-            return EventType.STOP_COMPLETE if is_complete else EventType.STOP_START
-        if action_type_raw == "continue":
-            return EventType.CONTINUE_COMPLETE if is_complete else EventType.CONTINUE_START
-        if action_type_raw == "snapshotfilesystem":
-            return EventType.SNAPSHOT_FILESYSTEM_COMPLETE if is_complete else EventType.SNAPSHOT_FILESYSTEM_START
-        if action_type_raw == "pullchangedfiles":
-            return EventType.PULL_CHANGED_FILES_COMPLETE if is_complete else EventType.PULL_CHANGED_FILES_START
-        if action_type_raw == "find" or action_type_raw == "execute":
-            return EventType.ACTION_COMPLETE if is_complete else EventType.ACTION_START
+        # Dispatch via lookup table
+        event_pair = _ACTION_RAW_TO_EVENT.get(action_type_raw)
+        if event_pair is not None:
+            return event_pair[1] if is_complete else event_pair[0]
 
         # Default fallback to generic action types
         log.warning(f"Could not determine specific event type for: {class_name}, defaulting to generic action")
@@ -220,44 +234,11 @@ class EventTypeResolver:
         """Extract action type from event type and optionally action data."""
         event_name = event_type.value
 
-        if event_name.startswith("click_"):
-            return ActionType.CLICK
-        if event_name.startswith("keyboard_"):
-            return ActionType.KEYBOARD
-        if event_name.startswith("command_"):
-            return ActionType.COMMAND
-        if event_name.startswith("idle_"):
-            return ActionType.IDLE
-        if event_name.startswith("test_"):
-            return ActionType.TEST
-        if event_name.startswith("screenshot_"):
-            return ActionType.SCREENSHOT
-        if event_name.startswith("scroll_"):
-            return ActionType.SCROLL
-        if event_name.startswith("drag_"):
-            return ActionType.DRAG
-        if event_name.startswith("goto_"):
-            return ActionType.GOTO
-        if event_name.startswith("savetimestamp_"):
-            return ActionType.SAVETIMESTAMP
-        if event_name.startswith("pull_"):
-            return ActionType.PULL
-        if event_name.startswith("pause_"):
-            return ActionType.PAUSE
-        if event_name.startswith("block_"):
-            return ActionType.BLOCK
-        if event_name.startswith("wait_until_"):
-            return ActionType.WAIT_UNTIL
-        if event_name.startswith("loop_"):
-            return ActionType.LOOP
-        if event_name.startswith("stop_"):
-            return ActionType.STOP
-        if event_name.startswith("continue_"):
-            return ActionType.CONTINUE
-        if event_name.startswith("snapshot_filesystem_"):
-            return ActionType.SNAPSHOT_FILESYSTEM
-        if event_name.startswith("pull_changed_files_"):
-            return ActionType.PULL_CHANGED_FILES
+        # Dispatch via ordered prefix table
+        for prefix, action_type in _EVENT_PREFIX_TO_ACTION:
+            if event_name.startswith(prefix):
+                return action_type
+
         # For generic action events, check the original action data
         if action_data:
             class_name = action_data.get("__class__", action_data.get("_type", ""))

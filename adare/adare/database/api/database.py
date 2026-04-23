@@ -13,6 +13,12 @@ log = logging.getLogger(__name__)
 
 
 class DatabaseApi:
+    """Legacy database API providing basic SQLAlchemy session management.
+
+    This class handles database connection setup, session lifecycle,
+    and common operations like add/commit and expunge.
+    """
+
     engine: sqlalchemy.engine.base.Engine
     _session: sqlalchemy.orm.Session
 
@@ -39,6 +45,7 @@ class DatabaseApi:
         self._session.close()
 
     def expunge(self, obj):
+        """Remove an object from the current session."""
         self._session.expunge(obj)
 
     def __start_sqlalchemy_session(self):
@@ -64,6 +71,17 @@ class DatabaseApi:
         self._session.expunge_all()
 
     def get_or_create(self, model, defaults=None, **kwargs):
+        """Get an existing entity or create a new one.
+
+        Args:
+            model: SQLAlchemy model class.
+            defaults: Default values merged into kwargs when creating.
+            **kwargs: Filter criteria used for lookup and creation.
+
+        Returns:
+            Tuple of (instance, created) where created is True if a new
+            entity was created.
+        """
         if instance := self._session.query(model).filter_by(**kwargs).first():
             return instance, False
         params = {k: v for k, v in kwargs.items() if not callable(v)}

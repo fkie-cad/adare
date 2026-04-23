@@ -357,12 +357,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         env_vars = []
 
         # Set HOME directory based on guest OS
-        if 'windows' in self.guest_os.lower():
-            # Windows: C:\Users\username
-            home_path = f"C:\\Users\\{self.username}"
-        else:
-            # Linux/Unix: /home/username
-            home_path = f"/home/{self.username}"
+        home_path = f"C:\\Users\\{self.username}" if 'windows' in self.guest_os.lower() else f"/home/{self.username}"
 
         env_vars.append(f"HOME={home_path}")
 
