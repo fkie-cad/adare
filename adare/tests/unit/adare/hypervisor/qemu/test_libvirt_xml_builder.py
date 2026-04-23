@@ -269,14 +269,14 @@ class TestDomainXMLBuilderBasic:
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/opt/homebrew/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Darwin')
-    def test_build_domain_type_qemu_on_darwin(self, mock_platform, mock_which):
-        """build() uses qemu domain type on macOS."""
+    def test_build_domain_type_hvf_on_darwin(self, mock_platform, mock_which):
+        """build() uses hvf domain type on macOS."""
         config = make_linux_pc_config()
         builder = DomainXMLBuilder(config)
         xml_str = builder.build()
         root = ET.fromstring(xml_str)
 
-        assert root.get('type') == 'qemu'
+        assert root.get('type') == 'hvf'
 
 
 class TestDomainXMLBuilderBIOS:
@@ -551,20 +551,14 @@ class TestDomainXMLBuilderQemuCommandline:
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/opt/homebrew/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Darwin')
-    def test_hvf_accel_on_darwin(self, mock_platform, mock_which):
-        """HVF acceleration is added on macOS."""
+    def test_hvf_domain_type_on_darwin(self, mock_platform, mock_which):
+        """HVF acceleration is set via domain type='hvf' on macOS (not -accel arg)."""
         config = make_linux_pc_config()
         builder = DomainXMLBuilder(config)
         xml_str = builder.build()
         root = ET.fromstring(xml_str)
 
-        ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0'}
-        args = root.findall('.//qemu:commandline/qemu:arg', ns)
-        arg_values = [a.get('value') for a in args]
-
-        assert '-accel' in arg_values
-        accel_idx = arg_values.index('-accel')
-        assert arg_values[accel_idx + 1] == 'hvf'
+        assert root.get('type') == 'hvf'
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Linux')

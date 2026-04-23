@@ -181,7 +181,7 @@ class TestCreateTemplateMethod:
 
         mock_config_panel.side_effect = lambda *a, **kw: call_order.append('config_panel')
         mock_prereqs.side_effect = lambda *a, **kw: call_order.append('check_prerequisites')
-        mock_create_disk.side_effect = lambda *a, **kw: None  # no-op
+        mock_create_disk.side_effect = lambda path, *a, **kw: path.write_bytes(b'\0' * 2_000_000)
 
         result = creator.create()
 
@@ -212,6 +212,7 @@ class TestCreateTemplateMethod:
     ):
         """create() returns the path to the qcow2 disk image."""
         os_def = _make_os_def()
+        mock_create_disk.side_effect = lambda path, *a, **kw: path.write_bytes(b'\0' * 2_000_000)
         creator = ConcreteCreator(os_def=os_def, vm_name='myvm', vm_dir=tmp_path)
         result = creator.create()
         assert result == tmp_path / 'myvm.qcow2'

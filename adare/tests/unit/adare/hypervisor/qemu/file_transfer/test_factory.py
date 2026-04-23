@@ -8,7 +8,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from adare.hypervisor.qemu.file_transfer import (
     LibguestfsStrategy,
@@ -71,9 +71,15 @@ class TestDetectFileTransferMode:
                 return '/usr/local/bin/guestfish'
             return None
 
+        mock_subprocess_result = MagicMock()
+        mock_subprocess_result.returncode = 0
+
         with (
             patch('adare.hypervisor.qemu.file_transfer.shutil.which', side_effect=which_side_effect),
             patch('adare.hypervisor.qemu.file_transfer.platform.system', return_value='Darwin'),
+            patch('adare.hypervisor.qemu.file_transfer.subprocess.run', return_value=mock_subprocess_result),
+            patch('adare.hypervisor.qemu.file_transfer.os.path.isdir', return_value=True),
+            patch('adare.hypervisor.qemu.file_transfer.os.listdir', return_value=['appliance']),
             patch.dict('os.environ', {'QEMU_LIBGUESTFS': ''}, clear=False),
         ):
             result = detect_file_transfer_mode()
