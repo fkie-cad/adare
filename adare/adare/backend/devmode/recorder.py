@@ -264,7 +264,7 @@ class SessionRecorder:
                     )
                     self._actions.append(action)
                     log.info(f"Recorded Click: {button} at {x_pixel},{y_pixel}")
-                except Exception as e:
+                except (ValueError, TypeError, AttributeError) as e:
                     log.error(f"Error processing click event: {e}")
                 finally:
                     self._pending_click = None

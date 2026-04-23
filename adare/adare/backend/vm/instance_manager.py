@@ -12,6 +12,7 @@ Uses:
 
 import asyncio
 import logging
+import subprocess
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -581,7 +582,7 @@ class VmInstanceManager:
             # Convert to GB
             return total_size / (1024 ** 3)
 
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError, ValueError) as e:
             log.debug(f"Could not determine disk usage for instance {instance.instance_name}: {e}")
             return 0.0
 

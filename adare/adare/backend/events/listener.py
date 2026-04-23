@@ -356,7 +356,7 @@ def _handle_stage_event(event, console, ulid):
             try:
                 current_time = time.time()
                 spinner_visible_time = current_time - event_start_time
-            except Exception:
+            except (TypeError, ValueError, AttributeError):
                 spinner_visible_time = 0
 
         min_display_time_needed = max(0, _MIN_SPINNER_DISPLAY_TIME - spinner_visible_time)

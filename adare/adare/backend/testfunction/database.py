@@ -7,6 +7,7 @@ from adare.backend.testfunction.exceptions import TestfunctionUpdatedError
 
 # internal imports
 from adare.database.api.testfunction import TestfunctionDbApi
+from adare.database.exceptions import DatabaseError
 from adare.database.models.global_models import TestFunctionFile
 
 log = logging.getLogger(__name__)
@@ -232,7 +233,7 @@ def get_testfunction_usage(testfunction_name: str) -> dict:
                                     'project': project.name
                                 })
 
-            except Exception as e:
+            except (OSError, DatabaseError) as e:
                 log.warning(f'Could not check project {project.name} at {project.path}: {e}')
                 continue
 
