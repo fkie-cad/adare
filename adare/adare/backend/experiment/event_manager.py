@@ -206,137 +206,136 @@ class EventManager:
             'parent_event_id': parent_event_id
         }
 
-        # Create type-specific complete event
-        if isinstance(action, ClickAction):
-            event = ClickActionCompleteEvent(coordinates=result.coordinates, target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
-        elif isinstance(action, KeyboardAction):
-            event = KeyboardActionCompleteEvent(
-                key=result.data.get('key') if result.data else None,
-                text=result.data.get('text') if result.data else None,
-                combination=result.data.get('combination') if result.data else None,
-                keys_sent=getattr(action, 'keys', None),  # Keep legacy field
-                **event_data
-            )
-        elif isinstance(action, CommandAction):
-            event = CommandActionCompleteEvent(
-                command_executed=getattr(action, 'command', None),
-                output=result.data.get('output') if result.data else None,
-                return_code=result.data.get('return_code') if result.data else None,
-                **event_data
-            )
-        elif isinstance(action, ActionTestAction):
-            event = TestActionCompleteEvent(
-                test_name=getattr(action, 'name', ''),
-                test_output=result.data.get('result', {}).get('details') if result.data else None,
-                result_category=result.data.get('result_category') if result.data else None,
-                expect_to_fail=result.data.get('expect_to_fail', False) if result.data else False,
-                **event_data
-            )
-        elif isinstance(action, ScreenshotAction):
-            event = ScreenshotActionCompleteEvent(
-                screenshot_path=result.data.get('screenshot_path') if result.data else None,
-                **event_data
-            )
-        elif isinstance(action, ScrollAction):
-            event = ScrollActionCompleteEvent(**event_data)
-        elif isinstance(action, IdleAction):
-            event = IdleActionCompleteEvent(actual_duration=result.execution_time, **event_data)
-        elif isinstance(action, DragAction):
-            event = DragActionCompleteEvent(
-                source_coordinates=result.data.get('source_coordinates') if result.data else None,
-                dest_coordinates=result.coordinates,
-                **event_data
-            )
-        elif isinstance(action, GotoAction):
-            event = GotoActionCompleteEvent(
-                final_url=result.data.get('final_url') if result.data else None,
-                **event_data
-            )
-        elif isinstance(action, BlockAction):
-            event = BlockActionCompleteEvent(
-                actions_executed=result.data.get('actions_executed', 0) if result.data else 0,
-                **event_data
-            )
-        elif isinstance(action, SaveTimestampAction):
-            event = SaveTimestampActionCompleteEvent(
-                variable=getattr(action, 'variable', None),
-                timestamp_value=result.data.get(getattr(action, 'variable', 'timestamp')) if result.data else None,
-                **event_data
-            )
-        elif isinstance(action, PullAction):
-            event = PullActionCompleteEvent(
-                source=getattr(action, 'src', None),
-                destination=getattr(action, 'dst', None),
-                files_copied=result.data.get('files_copied') if result.data else None,
-                total_size=result.data.get('total_size') if result.data else None,
-                **event_data
-            )
-        elif isinstance(action, WaitUntilAction):
-            # Extract target from condition (exists or not_exists)
-            target = None
-            if action.condition.exists:
-                target = action.condition.exists
-            elif action.condition.not_exists:
-                target = action.condition.not_exists
-            event = WaitUntilActionCompleteEvent(
-                target_info=self._get_target_info(target),
-                coordinates=result.coordinates,
-                found=result.success,
-                **event_data
-            )
-        elif isinstance(action, LoopAction):
-            event = LoopActionCompleteEvent(
-                iterations_completed=result.data.get('iterations') if result.data else None,
-                actions_executed=result.data.get('actions_executed') if result.data else None,
-                **event_data
-            )
-        elif isinstance(action, PauseAction):
-            event = PauseActionCompleteEvent(
-                user_input=result.data.get('user_input') if result.data else None,
-                **event_data
-            )
-        elif isinstance(action, StopAction):
-            event = StopActionCompleteEvent(
-                condition_met=result.data.get('condition_met') if result.data else None,
-                stopped_execution=result.data.get('should_stop', False) if result.data else False,
-                **event_data
-            )
-        elif isinstance(action, ContinueAction):
-            event = ContinueActionCompleteEvent(
-                condition_met=result.data.get('condition_met') if result.data else None,
-                skipped_remaining=result.data.get('should_continue', False) if result.data else False,
-                **event_data
-            )
-        elif isinstance(action, FindAction):
-            event = FindActionCompleteEvent(
-                target_info=getattr(action, 'target_info', None),
-                coordinates=result.coordinates,
-                matched_text=result.data.get('matched_text') if result.data else None,
-                **event_data
-            )
-        elif isinstance(action, ExecuteAction):
-            event = ExecuteActionCompleteEvent(
-                coordinates=result.coordinates,
-                **event_data
-            )
-        elif isinstance(action, SnapshotFilesystemAction):
-            event = SnapshotFilesystemActionCompleteEvent(
-                snapshot_type=getattr(action, 'snapshot_type', None),
-                files_count=result.data.get('files_count') if result.data else None,
-                **event_data
-            )
-        elif isinstance(action, PullChangedFilesAction):
-            event = PullChangedFilesActionCompleteEvent(
-                destination=getattr(action, 'destination', None),
-                files_pulled=result.data.get('files_pulled') if result.data else None,
-                total_size=result.data.get('total_size') if result.data else None,
-                **event_data
-            )
-        else:
-            # Generic complete event for unknown action types
-            event = ActionCompleteEvent(**event_data)
+        # Dispatch to type-specific factory
+        for action_cls, factory in self._complete_event_factories():
+            if isinstance(action, action_cls):
+                return factory(action, result, event_data)
 
-        return event
+        # Generic complete event for unknown action types
+        return ActionCompleteEvent(**event_data)
+
+    def _complete_event_factories(self):
+        """Yield (action_class, factory_callable) pairs for complete events."""
+        yield ClickAction, lambda a, r, d: ClickActionCompleteEvent(
+            coordinates=r.coordinates,
+            target_info=self._get_target_info(getattr(a, 'target', None)), **d)
+        yield KeyboardAction, lambda a, r, d: KeyboardActionCompleteEvent(
+            key=r.data.get('key') if r.data else None,
+            text=r.data.get('text') if r.data else None,
+            combination=r.data.get('combination') if r.data else None,
+            keys_sent=getattr(a, 'keys', None),
+            **d)
+        yield CommandAction, lambda a, r, d: CommandActionCompleteEvent(
+            command_executed=getattr(a, 'command', None),
+            output=r.data.get('output') if r.data else None,
+            return_code=r.data.get('return_code') if r.data else None,
+            **d)
+        yield ActionTestAction, lambda a, r, d: TestActionCompleteEvent(
+            test_name=getattr(a, 'name', ''),
+            test_output=r.data.get('result', {}).get('details') if r.data else None,
+            result_category=r.data.get('result_category') if r.data else None,
+            expect_to_fail=r.data.get('expect_to_fail', False) if r.data else False,
+            **d)
+        yield ScreenshotAction, lambda a, r, d: ScreenshotActionCompleteEvent(
+            screenshot_path=r.data.get('screenshot_path') if r.data else None,
+            **d)
+        yield ScrollAction, lambda a, r, d: ScrollActionCompleteEvent(**d)
+        yield IdleAction, lambda a, r, d: IdleActionCompleteEvent(
+            actual_duration=r.execution_time, **d)
+        yield DragAction, lambda a, r, d: DragActionCompleteEvent(
+            source_coordinates=r.data.get('source_coordinates') if r.data else None,
+            dest_coordinates=r.coordinates, **d)
+        yield GotoAction, lambda a, r, d: GotoActionCompleteEvent(
+            final_url=r.data.get('final_url') if r.data else None, **d)
+        yield BlockAction, lambda a, r, d: BlockActionCompleteEvent(
+            actions_executed=r.data.get('actions_executed', 0) if r.data else 0, **d)
+        yield SaveTimestampAction, lambda a, r, d: SaveTimestampActionCompleteEvent(
+            variable=getattr(a, 'variable', None),
+            timestamp_value=r.data.get(getattr(a, 'variable', 'timestamp')) if r.data else None,
+            **d)
+        yield PullAction, lambda a, r, d: PullActionCompleteEvent(
+            source=getattr(a, 'src', None),
+            destination=getattr(a, 'dst', None),
+            files_copied=r.data.get('files_copied') if r.data else None,
+            total_size=r.data.get('total_size') if r.data else None,
+            **d)
+        yield WaitUntilAction, self._create_wait_until_complete_event
+        yield LoopAction, lambda a, r, d: LoopActionCompleteEvent(
+            iterations_completed=r.data.get('iterations') if r.data else None,
+            actions_executed=r.data.get('actions_executed') if r.data else None,
+            **d)
+        yield PauseAction, lambda a, r, d: PauseActionCompleteEvent(
+            user_input=r.data.get('user_input') if r.data else None, **d)
+        yield StopAction, lambda a, r, d: StopActionCompleteEvent(
+            condition_met=r.data.get('condition_met') if r.data else None,
+            stopped_execution=r.data.get('should_stop', False) if r.data else False,
+            **d)
+        yield ContinueAction, lambda a, r, d: ContinueActionCompleteEvent(
+            condition_met=r.data.get('condition_met') if r.data else None,
+            skipped_remaining=r.data.get('should_continue', False) if r.data else False,
+            **d)
+        yield FindAction, lambda a, r, d: FindActionCompleteEvent(
+            target_info=getattr(a, 'target_info', None),
+            coordinates=r.coordinates,
+            matched_text=r.data.get('matched_text') if r.data else None,
+            **d)
+        yield ExecuteAction, lambda a, r, d: ExecuteActionCompleteEvent(
+            coordinates=r.coordinates, **d)
+        yield SnapshotFilesystemAction, lambda a, r, d: SnapshotFilesystemActionCompleteEvent(
+            snapshot_type=getattr(a, 'snapshot_type', None),
+            files_count=r.data.get('files_count') if r.data else None,
+            **d)
+        yield PullChangedFilesAction, lambda a, r, d: PullChangedFilesActionCompleteEvent(
+            destination=getattr(a, 'destination', None),
+            files_pulled=r.data.get('files_pulled') if r.data else None,
+            total_size=r.data.get('total_size') if r.data else None,
+            **d)
+
+    def _create_wait_until_start_event(self, action, event_data):
+        """Create start event for WaitUntilAction."""
+        target = self._extract_wait_until_target(action)
+        return WaitUntilActionStartEvent(
+            target_info=self._get_target_info(target),
+            timeout=getattr(action, 'timeout', None),
+            check_interval=getattr(action, 'check_interval', None),
+            initial_delay=getattr(action, 'initial_delay', None),
+            **event_data
+        )
+
+    def _create_wait_until_complete_event(self, action, result, event_data):
+        """Create complete event for WaitUntilAction."""
+        target = self._extract_wait_until_target(action)
+        return WaitUntilActionCompleteEvent(
+            target_info=self._get_target_info(target),
+            coordinates=result.coordinates,
+            found=result.success,
+            **event_data
+        )
+
+    def _create_loop_start_event(self, action, event_data):
+        """Create start event for LoopAction."""
+        iteration_count = action.times if action.times is not None else (len(action.items) if action.items else None)
+        return LoopActionStartEvent(
+            iteration_count=iteration_count,
+            items=action.items if hasattr(action, 'items') else None,
+            **event_data
+        )
+
+    @staticmethod
+    def _extract_condition_info(action) -> dict | None:
+        """Extract condition info dict from StopAction or ContinueAction."""
+        if hasattr(action, 'condition') and action.condition:
+            return {'variable': action.condition.variable, 'has_condition': True}
+        return None
+
+    @staticmethod
+    def _extract_wait_until_target(action):
+        """Extract target from WaitUntilAction condition."""
+        if action.condition.exists:
+            return action.condition.exists
+        if action.condition.not_exists:
+            return action.condition.not_exists
+        return None
 
     def _get_target_info(self, target) -> dict[str, Any] | None:
         """Extract target information for event logging."""
