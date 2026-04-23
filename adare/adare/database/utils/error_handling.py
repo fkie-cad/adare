@@ -50,13 +50,13 @@ def safe_query_one(query: Query, error_class: type[Exception] = ObjectNotFoundEr
         return query.one()
     except NoResultFound:
         log.warning(f"No result found: {error_message}")
-        raise error_class(error_message)
+        raise error_class(error_message) from None
     except MultipleResultsFound:
         log.warning(f"Multiple results found: {error_message}")
-        raise MultipleObjectsFoundError(f"Multiple objects found: {error_message}")
+        raise MultipleObjectsFoundError(f"Multiple objects found: {error_message}") from None
     except Exception as e:
         log.error(f"Unexpected database error: {e}")
-        raise DataRetrievalError(f"Database error: {e}")
+        raise DataRetrievalError(f"Database error: {e}") from e
 
 
 def safe_query_first(query: Query, default: Any = None) -> Any:
@@ -188,4 +188,4 @@ def safe_execute_with_fallback(primary_func, fallback_func, *args, **kwargs):
             return fallback_func(*args, **kwargs)
         except Exception as fallback_e:
             log.error(f"Both primary and fallback functions failed: {e}, {fallback_e}")
-            raise DataRetrievalError(f"All operations failed: {e}")
+            raise DataRetrievalError(f"All operations failed: {e}") from fallback_e

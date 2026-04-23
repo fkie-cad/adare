@@ -326,7 +326,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                         f"Failed to create overlay disk: {e}\n"
                         f"Overlay creation failed. Ensure base disk exists and is accessible.\n"
                         f"VM: {context.vm_name}, External: {is_external}"
-                    )
+                    ) from e
 
 
     async def setup_file_transfer(self, context):

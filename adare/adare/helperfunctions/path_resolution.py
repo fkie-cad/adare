@@ -144,7 +144,7 @@ def _resolve_relative_path(relative_path: str, project_dir: Path, resource_type:
                     raise InvalidPathError(
                         log,
                         f'Environment file "{relative_path}" not found and not within the environments directory.'
-                    )
+                    ) from None
         else:
             # For experiments and testfunctions, check if within resource directory
             try:
@@ -161,17 +161,17 @@ def _resolve_relative_path(relative_path: str, project_dir: Path, resource_type:
                             raise InvalidPathError(
                                 log,
                                 f'External experiment path "{relative_path}" does not exist. Please check the path and try again.'
-                            )
+                            ) from None
                         raise InvalidPathError(
                             log,
                             f'External experiment path "{relative_path}" exists but is not a directory.'
-                        )
+                        ) from None
                 else:
                     # For non-experiments, keep original behavior
                     raise InvalidPathError(
                         log,
                         f'Path "{relative_path}" is not within the {resource_type} directory. Use a path within the {resource_type}/ directory or just the {resource_type[:-1]} name without path separators.'
-                    )
+                    ) from None
 
         return name
 
@@ -181,7 +181,7 @@ def _resolve_relative_path(relative_path: str, project_dir: Path, resource_type:
         raise InvalidPathError(
             log,
             f'Failed to resolve path "{relative_path}": {str(e)}. Check that the path is valid and exists. Ensure the path points to a {resource_type[:-1]} within the {resource_type}/ directory.'
-        )
+        ) from e
 
 
 def resolve_experiment_path(input_path: str, project_dir: Path) -> str:

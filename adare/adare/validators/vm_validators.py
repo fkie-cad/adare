@@ -95,7 +95,7 @@ class QEMUValidator(VMFileValidator):
                         f"(expected b'QFI\\xfb', got {magic!r}), but proceeding anyway"
                     )
         except OSError as e:
-            raise VMValidationError(log, f"Cannot read VM file {file_path}: {e}")
+            raise VMValidationError(log, f"Cannot read VM file {file_path}: {e}") from e
 
 
 class VMValidatorFactory:

@@ -75,7 +75,7 @@ class VMFileService:
             raise
         except Exception as e:
             log.error(f"VM File Service: Pull operation failed: {e}", exc_info=True)
-            raise RuntimeError(f"VM file pull failed: {e}")
+            raise RuntimeError(f"VM file pull failed: {e}") from e
 
     async def read_file(
         self,
@@ -122,7 +122,7 @@ class VMFileService:
             raise
         except Exception as e:
             log.error(f"VM File Service: Read operation failed: {e}", exc_info=True)
-            raise RuntimeError(f"VM file read failed: {e}")
+            raise RuntimeError(f"VM file read failed: {e}") from e
 
     async def read_bytes(self, vm_path: str) -> bytes:
         """
@@ -163,7 +163,7 @@ class VMFileService:
             raise
         except Exception as e:
             log.error(f"VM File Service: Read bytes operation failed: {e}", exc_info=True)
-            raise RuntimeError(f"VM file read bytes failed: {e}")
+            raise RuntimeError(f"VM file read bytes failed: {e}") from e
 
     async def pull_directory(
         self,

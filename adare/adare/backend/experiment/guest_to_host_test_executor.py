@@ -585,8 +585,8 @@ class GuestToHostTestExecutor:
         try:
             value = int(duration_str[:-1])
             return value * units[duration_str[-1]]
-        except ValueError:
-            raise ValueError(f"Invalid duration format: {duration_str}")
+        except ValueError as e:
+            raise ValueError(f"Invalid duration format: {duration_str}") from e
 
     async def _run_test(self, test_instance) -> TestResult:
         """Run a test method, handling both sync and async test() methods."""

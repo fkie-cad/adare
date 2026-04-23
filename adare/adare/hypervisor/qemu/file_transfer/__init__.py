@@ -13,7 +13,6 @@ import os
 import platform
 import shutil
 import subprocess
-from typing import Optional
 
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
 from adare.hypervisor.qemu.file_transfer.libguestfs_strategy import LibguestfsStrategy

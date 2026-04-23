@@ -373,7 +373,7 @@ class DevModeSessionManager:
                             log.warning(f"Using websocket_port from config as fallback: {websocket_port}")
                         else:
                             log.error("No websocket port available from VM config or database")
-                            raise RuntimeError("Cannot determine WebSocket port for reconnection")
+                            raise RuntimeError("Cannot determine WebSocket port for reconnection") from e
 
                     # Use console_ulid if available, otherwise fall back to session/context ulid
                     stage_ulid = console_ulid or session.console_ulid or session.experiment_ctx.experiment_run_ulid

@@ -5,7 +5,6 @@ This module provides a factory pattern for creating hypervisor instances,
 allowing different hypervisors (VirtualBox, QEMU, etc.) to be used interchangeably.
 """
 import logging
-from typing import Optional
 
 log = logging.getLogger(__name__)
 

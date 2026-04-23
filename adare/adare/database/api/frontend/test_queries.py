@@ -94,7 +94,7 @@ class TestQueryMixin:
         try:
             testfunction_data = pd.read_sql(self._global_api._session.query(TestFunction).filter_by(id=testfunction_id).statement, self._global_api._session.bind).map(str)
         except sqlalchemy.orm.exc.NoResultFound:
-            raise TestFunctionNotFoundError(log, f'Testfunction with id "{testfunction_id}" not found')
+            raise TestFunctionNotFoundError(log, f'Testfunction with id "{testfunction_id}" not found') from None
         testfunction_data = self._enrich_testfunction_data(testfunction_data)
         # get all parameters for the testfunction in a pandas dataframe (test parameters can be in multiple functions)
         testfunction = self._global_api._session.query(TestFunction).filter_by(id=testfunction_id).one()
@@ -129,6 +129,6 @@ class TestQueryMixin:
             testfunction = self._global_api._session.query(TestFunction).filter_by(file_id=testfunction_file.id, name=function_name).one()
         except sqlalchemy.orm.exc.NoResultFound:
             if project_name:
-                raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found in project "{project_name}"')
-            raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found')
+                raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found in project "{project_name}"') from None
+            raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found') from None
         return testfunction.id

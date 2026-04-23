@@ -144,7 +144,7 @@ def wait_for_qemu_exit(
                     process.kill()
                 raise TimeoutError(
                     f'{label} did not complete within {timeout_minutes} minutes'
-                )
+                ) from None
 
             # Periodic status update
             now = time.monotonic()

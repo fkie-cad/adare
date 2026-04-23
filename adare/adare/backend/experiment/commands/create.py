@@ -87,7 +87,7 @@ def experiment_clone(project_path: Path, source_experiment: str, target_experime
         raise ExperimentDirectoryCreationError(
             log,
             message=f'failed to clone experiment directory: {e.strerror}'
-        )
+        ) from e
 
     if environments:
         metadata = target_dir.load_metadata()

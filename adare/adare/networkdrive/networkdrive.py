@@ -56,7 +56,7 @@ class NetworkDrive:
                 log.debug(f'directory for network drive ({vg_directory}) was created successfully')
             except OSError or FileExistsError as e:
                 log.error(e)
-                raise NetworkdriveCreationError
+                raise NetworkdriveCreationError from e
 
         self.vm_config = NetworkdriveVMConfiguration()
 

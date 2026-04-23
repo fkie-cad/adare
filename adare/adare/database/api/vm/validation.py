@@ -119,7 +119,7 @@ class VmValidationMixin:
         except VMLoadError:
             raise  # Don't re-wrap our own errors
         except OSError as e:
-            raise VMLoadError(log, f"Failed to copy VM file: {e}")
+            raise VMLoadError(log, f"Failed to copy VM file: {e}") from e
 
     def _is_file_managed(self, file_path: Path) -> bool:
         """

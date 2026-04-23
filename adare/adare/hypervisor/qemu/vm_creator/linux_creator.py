@@ -277,7 +277,7 @@ def _run_direct_kernel_installation(
             console.print('\n  [bold red]Installation interrupted by user[/bold red]')
             process.terminate()
             process.wait(timeout=30)
-            raise LinuxVMCreationError('Installation interrupted by user')
+            raise LinuxVMCreationError('Installation interrupted by user') from None
 
 
 def _run_uefi_installation(
@@ -369,4 +369,4 @@ def _run_uefi_installation(
         console.print('\n  [bold red]Installation interrupted by user[/bold red]')
         process.terminate()
         process.wait(timeout=30)
-        raise LinuxVMCreationError('Installation interrupted by user')
+        raise LinuxVMCreationError('Installation interrupted by user') from None

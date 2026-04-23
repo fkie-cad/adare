@@ -80,7 +80,7 @@ def _parse_duration(duration_str):
         unit = duration_str[-1]
         return value * units[unit]
     except ValueError:
-        raise ValueError(f"Invalid duration format: {duration_str}")
+        raise ValueError(f"Invalid duration format: {duration_str}") from None
 
 
 def _parse_timestamp(timestamp, time_format=None):

@@ -60,7 +60,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             dir_path.mkdir(parents=True, exist_ok=True)
             log.debug(f"Ensured snapshot directory: {dir_path}")
         except OSError as e:
-            raise HypervisorException(f"Failed to create snapshot directory {dir_path}: {e}")
+            raise HypervisorException(f"Failed to create snapshot directory {dir_path}: {e}") from e
 
     def _cleanup_snapshot_dir_if_empty(self) -> bool:
         """

@@ -58,7 +58,7 @@ async def exec_ws_action(args: SimpleNamespace):
             with open(action_file) as f:
                 actions_data = yaml.safe_load(f)
         except yaml.YAMLError as e:
-            raise WSActionError(f"Invalid YAML in action file: {e}")
+            raise WSActionError(f"Invalid YAML in action file: {e}") from e
 
         # Validate YAML structure - support both playbook and simple action format
         if not isinstance(actions_data, dict):
@@ -105,7 +105,7 @@ async def exec_ws_action(args: SimpleNamespace):
 
     except Exception as e:
         log.error(f"WebSocket action execution failed: {e}", exc_info=True)
-        raise WSActionError(str(e))
+        raise WSActionError(str(e)) from e
 
 async def execute_single_action(client: AdareVMClient, action: dict[str, Any],
                                action_num: int, args: SimpleNamespace) -> dict[str, Any]:

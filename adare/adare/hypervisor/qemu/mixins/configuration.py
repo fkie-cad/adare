@@ -72,15 +72,15 @@ class ConfigurationMixin:
         except json.JSONDecodeError as e:
             raise HypervisorException(
                 f"Failed to parse qemu-img info output: {e}"
-            )
+            ) from e
         except FileNotFoundError:
             raise HypervisorException(
                 "qemu-img executable not found. Please install QEMU tools."
-            )
+            ) from None
         except OSError as e:
             raise HypervisorException(
                 f"Error detecting disk format: {e}"
-            )
+            ) from e
 
     def _detect_disk_format(self: 'QEMUVM', file_path: Path) -> str:
         """

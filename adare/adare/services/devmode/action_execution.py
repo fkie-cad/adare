@@ -191,7 +191,7 @@ class ActionExecutionMixin:
             try:
                 parsed_indices = parse_indices_with_bounds(request.indices, len(playbook.actions))
             except ValueError as e:
-                raise ValueError(f"Invalid indices specification: {e}")
+                raise ValueError(f"Invalid indices specification: {e}") from e
 
         # Restore to initial checkpoint if requested
         if request.restore_initial:

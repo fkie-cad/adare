@@ -67,7 +67,7 @@ class VmInstanceMixin:
                 return instance
         except SQLAlchemyError as e:
             self._session.rollback()
-            raise VMLoadError(log, f"Database error while creating VM instance: {e}")
+            raise VMLoadError(log, f"Database error while creating VM instance: {e}") from e
 
     def get_vm_instance_by_id(self, instance_id: str) -> VmInstance | None:
         """
@@ -171,7 +171,7 @@ class VmInstanceMixin:
                 log.info(f"Updated VM instance {instance.instance_name}: {kwargs}")
         except SQLAlchemyError as e:
             self._session.rollback()
-            raise VMLoadError(log, f"Database error while updating VM instance: {e}")
+            raise VMLoadError(log, f"Database error while updating VM instance: {e}") from e
 
     def delete_vm_instance(self, instance_id: str) -> bool:
         """

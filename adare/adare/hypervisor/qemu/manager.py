@@ -84,18 +84,18 @@ class QEMUManager(AbstractHypervisorManager):
                 raise HypervisorException(
                     "libvirt Python bindings not found. "
                     "Install with: pip install libvirt-python"
-                )
+                ) from None
             except libvirt.libvirtError as e:
                 from adare.hypervisor.exceptions import HypervisorException
                 if platform.system() == 'Darwin':
                     raise HypervisorException(
                         f"Failed to connect to libvirt daemon: {e}. "
                         f"On macOS, install with: brew install libvirt && brew services start libvirt"
-                    )
+                    ) from e
                 raise HypervisorException(
                     f"Failed to connect to libvirt daemon: {e}. "
                     f"Ensure libvirtd is running: sudo systemctl start libvirtd"
-                )
+                ) from e
         else:
             log.info("libvirt integration disabled in config (use_libvirt=False)")
 
@@ -232,4 +232,4 @@ class QEMUManager(AbstractHypervisorManager):
 
         except (VMImportException, HypervisorException, subprocess.CalledProcessError, OSError) as e:
             log.error(f"Failed to import QEMU VM '{vm_name}' from '{vm_file_path}': {e}")
-            raise VMImportException(vm_name, f"QEMU VM import failed: {e}")
+            raise VMImportException(vm_name, f"QEMU VM import failed: {e}") from e

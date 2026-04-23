@@ -608,7 +608,7 @@ class TestLoader:
 
         except cattrs.errors.ClassValidationError as e:
             log.error(f"Test Loader: Validation error structuring test '{test_name}': {e}")
-            raise ValueError(f"Invalid test parameters: {e.message}")
+            raise ValueError(f"Invalid test parameters: {e.message}") from e
         except Exception as e:
             log.error(f"Test Loader: Failed to structure test '{test_name}': {e}", exc_info=True)
-            raise ValueError(f"Failed to structure test: {e}")
+            raise ValueError(f"Failed to structure test: {e}") from e

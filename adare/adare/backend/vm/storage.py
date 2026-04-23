@@ -28,7 +28,7 @@ def ensure_global_vm_directory() -> Path:
         log.info(f"Ensured global VM directory exists: {VMS_DIR}")
         return VMS_DIR
     except Exception as e:
-        raise VMStorageError(log, f"Failed to create global VM directory: {e}")
+        raise VMStorageError(log, f"Failed to create global VM directory: {e}") from e
 
 
 def ensure_project_vm_directory(project_path: Path) -> Path:
@@ -50,7 +50,7 @@ def ensure_project_vm_directory(project_path: Path) -> Path:
         log.info(f"Ensured project VM directory exists: {vm_dir}")
         return vm_dir
     except Exception as e:
-        raise VMStorageError(log, f"Failed to create project VM directory: {e}")
+        raise VMStorageError(log, f"Failed to create project VM directory: {e}") from e
 
 
 def get_vm_storage_directory(scope: str, project_path: Path = None) -> Path:

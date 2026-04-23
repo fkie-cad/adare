@@ -182,9 +182,9 @@ class VmCrudMixin:
             # Return a new instance by querying it back to avoid session issues
             return self.get_vm_by_name(name)
         except SQLAlchemyError as e:
-            raise VMLoadError(log, f"Database error creating VM '{name}': {e}")
+            raise VMLoadError(log, f"Database error creating VM '{name}': {e}") from e
         except OSError as e:
-            raise VMLoadError(log, f"File system error creating VM '{name}': {e}")
+            raise VMLoadError(log, f"File system error creating VM '{name}': {e}") from e
 
     def get_vm_by_name(self, name: str) -> Vm | None:
         """

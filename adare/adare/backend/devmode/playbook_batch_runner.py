@@ -296,7 +296,7 @@ class PlaybookBatchRunner:
         except Exception as e:
             raise RuntimeError(
                 f"Failed to create base checkpoint '{checkpoint_name}': {e}"
-            )
+            ) from e
 
         log.info(f"Base checkpoint '{checkpoint_name}' created successfully")
 
@@ -333,7 +333,7 @@ class PlaybookBatchRunner:
                 except Exception as e:
                     raise RuntimeError(
                         f"Failed to restore checkpoint '{checkpoint_name}': {e}"
-                    )
+                    ) from e
 
         # 4. Create summary
         summary = PlaybookBatchSummary(

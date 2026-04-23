@@ -92,7 +92,7 @@ async def _run_command_with_retry(
                 raise VMSetupError(
                     log, vm.vm_name, command,
                     -1, "", f"Timeout after {max_retries} attempts: {e}",
-                )
+                ) from e
 
     # Should not be reachable, but satisfies the type checker
     raise VMSetupError(log, vm.vm_name, command, -1, "", "Unexpected retry loop exit")  # pragma: no cover

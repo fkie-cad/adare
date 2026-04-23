@@ -675,4 +675,4 @@ def _run_qemu_install_phase(
         console.print('\n  [bold red]Installation interrupted by user[/bold red]')
         process.terminate()
         process.wait(timeout=30)
-        raise WindowsVMCreationError('Installation interrupted by user')
+        raise WindowsVMCreationError('Installation interrupted by user') from None

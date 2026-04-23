@@ -104,7 +104,7 @@ class IntegrityValidator:
             log.warning(f"Integrity verification modules not available: {e}")
         except (FileNotFoundError, KeyError) as e:
             log.error(f"Testfunction database access failed: {e}")
-            raise LoggedException(log, f"Failed to access testfunction database for integrity verification: {e}")
+            raise LoggedException(log, f"Failed to access testfunction database for integrity verification: {e}") from e
 
     def check_project(
         self,

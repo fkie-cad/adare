@@ -342,14 +342,14 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
                     except Exception as inst_error:
                         log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
                         if not force:
-                            raise VMError(log, f"Failed to delete VM instance: {inst_error}")
+                            raise VMError(log, f"Failed to delete VM instance: {inst_error}") from inst_error
 
         # Delete from database (cascade will remove instances)
         return vm_database.delete_vm(vm_id)
 
     except Exception as e:
         if not force:
-            raise VMError(log, f"Failed to delete VM {vm_id}: {e}")
+            raise VMError(log, f"Failed to delete VM {vm_id}: {e}") from e
         log.warning(f"Failed to delete VM {vm_id}: {e} (continuing due to force=True)")
         return False
 
@@ -456,7 +456,7 @@ def verify_and_cleanup_vm_instance_for_experiment(vm_instance_id: str, experimen
             return False  # VM instance was missing and cleaned up
         except Exception as e:
             log.error(f"Failed to cleanup missing VM instance '{vm_instance.instance_name}': {e}")
-            raise VMError(log, f"Failed to cleanup missing VM instance: {e}")
+            raise VMError(log, f"Failed to cleanup missing VM instance: {e}") from e
 
     log.debug(f"VM instance '{vm_instance.instance_name}' verified as ready in VirtualBox")
     return True
