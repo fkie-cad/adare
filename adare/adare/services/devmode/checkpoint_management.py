@@ -10,6 +10,8 @@ import os
 import time
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from adare.backend.environment import database as environment_database
 from adare.core.dto.devmode import (
     DevCheckpointCreateRequest,
@@ -95,7 +97,7 @@ class CheckpointManagementMixin:
                     "VM may not be running - check with hypervisor tools"
                 ]
             )
-        except Exception as e:
+        except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error during soft reset: {e}", exc_info=True)
             return Result.fail(
                 "RESET_ERROR",

@@ -7,6 +7,8 @@ and returns Result[T] objects that can be consumed by any frontend (CLI, Web UI,
 
 import logging
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from adare.core.dto.web import (
     CheckExperimentRequest,
     CheckExperimentResult,
@@ -50,6 +52,7 @@ class WebService:
         Returns:
             Result[WebLoginResult] with login status.
         """
+        from adare.web.exceptions import AlreadyLoggedIn, LoginFailedError
         from adare.web.login import login
 
         try:
@@ -60,7 +63,7 @@ class WebService:
                 message="Login successful"
             ))
 
-        except Exception as e:
+        except (LoginFailedError, AlreadyLoggedIn, ConnectionError, OSError) as e:
             log.error(f"Login failed: {e}")
             return Result.fail(
                 code="LoginError",
@@ -75,6 +78,7 @@ class WebService:
         Returns:
             Result[WebLogoutResult] with logout status.
         """
+        from adare.web.exceptions import NoUserLoggedIn
         from adare.web.login import logout
 
         try:
@@ -84,7 +88,7 @@ class WebService:
                 message="Logout successful"
             ))
 
-        except Exception as e:
+        except (NoUserLoggedIn, SQLAlchemyError, OSError) as e:
             log.error(f"Logout failed: {e}")
             return Result.fail(
                 code="LogoutError",
@@ -111,7 +115,7 @@ class WebService:
                     username=user_session.username if user_session else None
                 ))
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to get web status: {e}")
             return Result.fail(
                 code="StatusError",
@@ -142,7 +146,7 @@ class WebService:
                 message=f"Environment '{request.environment_name}' downloaded successfully"
             ))
 
-        except Exception as e:
+        except (ConnectionError, OSError, ValueError) as e:
             log.error(f"Failed to download environment: {e}")
             return Result.fail(
                 code="DownloadError",
@@ -316,7 +320,7 @@ class WebService:
                 message="Sync completed successfully"
             ))
 
-        except Exception as e:
+        except (ConnectionError, OSError, SQLAlchemyError) as e:
             log.error(f"Sync failed: {e}")
             return Result.fail(
                 code="SyncError",
@@ -347,7 +351,7 @@ class WebService:
                 message=f"Run '{request.ulid}' uploaded successfully"
             ))
 
-        except Exception as e:
+        except (ConnectionError, OSError, SQLAlchemyError) as e:
             log.error(f"Failed to upload run: {e}")
             return Result.fail(
                 code="UploadError",
@@ -374,7 +378,7 @@ class WebService:
                 message=f"Run '{request.ulid}' published successfully"
             ))
 
-        except Exception as e:
+        except (ConnectionError, OSError, SQLAlchemyError) as e:
             log.error(f"Failed to publish run: {e}")
             return Result.fail(
                 code="PublishError",
@@ -406,7 +410,7 @@ class WebService:
                 status='published' if exists else 'not_found'
             ))
 
-        except Exception as e:
+        except (ConnectionError, OSError) as e:
             log.error(f"Failed to check experiment: {e}")
             return Result.fail(
                 code="CheckError",
@@ -434,7 +438,7 @@ class WebService:
                 status='published' if exists else 'not_found'
             ))
 
-        except Exception as e:
+        except (ConnectionError, OSError) as e:
             log.error(f"Failed to check run: {e}")
             return Result.fail(
                 code="CheckError",

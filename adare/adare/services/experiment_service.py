@@ -11,6 +11,8 @@ on simpler CRUD operations that benefit from the API pattern.
 import logging
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from adare.backend.experiment import database as experiment_database
 from adare.backend.experiment.commands import (
     experiment_add_environments as backend_experiment_add_environments,
@@ -423,7 +425,7 @@ class ExperimentService:
                     run_count = 0
                     try:
                         run_count = experiment_database.get_experiment_run_count(exp.id, exclude_fake=False)
-                    except Exception:
+                    except (SQLAlchemyError, ValueError):
                         pass
 
                     items.append(ExperimentListItem(
@@ -436,7 +438,7 @@ class ExperimentService:
 
                 return Result.ok(items)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to list experiments: {e}")
             return Result.fail(
                 code="ExperimentListError",
@@ -479,7 +481,7 @@ class ExperimentService:
                 try:
                     run_count = experiment_database.get_experiment_run_count(experiment.id, exclude_fake=False)
                     productive_run_count = experiment_database.get_experiment_run_count(experiment.id, exclude_fake=True)
-                except Exception:
+                except (SQLAlchemyError, ValueError):
                     pass
 
                 experiment_dir = ExperimentDirectory(project_path, name)
@@ -496,7 +498,7 @@ class ExperimentService:
                     is_loaded=True,
                 ))
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to get experiment: {e}")
             return Result.fail(
                 code="ExperimentGetError",
@@ -531,7 +533,7 @@ class ExperimentService:
 
                 return self.get_by_name(project_path, experiment.name)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to get experiment by ID: {e}")
             return Result.fail(
                 code="ExperimentGetError",

@@ -3,6 +3,7 @@
 import logging
 
 import pandas as pd
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
 from adare.database.models.global_models import (
@@ -162,7 +163,7 @@ class RunQueryMixin:
                 if status_obj:
                     return StatusEnum.from_string(status_obj.name)
                 return StatusEnum.PENDING
-            except Exception:
+            except (SQLAlchemyError, ValueError, KeyError):
                 return StatusEnum.PENDING
 
         # Apply the conversion and ensure we have a proper 'status' column

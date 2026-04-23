@@ -115,7 +115,7 @@ class EnhancedDatabaseApi:
                     self._session.rollback()
                 else:
                     self._session.commit()
-            except Exception as e:
+            except SQLAlchemyError as e:
                 log.error(f"Error during session cleanup: {e}")
                 self._session.rollback()
             finally:
@@ -130,7 +130,7 @@ class EnhancedDatabaseApi:
 
         try:
             self._session = self._session_factory()
-        except Exception as e:
+        except SQLAlchemyError as e:
             log.error(f"Failed to start session: {e}")
             raise DatabaseConnectionError(log, f"Cannot start database session: {e}")
 
@@ -228,7 +228,7 @@ class EnhancedDatabaseApi:
             self._session.add(entity)
             self._session.flush()  # Get ID without committing
             return entity
-        except Exception as e:
+        except (SQLAlchemyError, TypeError, ValueError) as e:
             log.error(f"Failed to create {model.__name__}: {e}")
             raise
 
@@ -538,7 +538,7 @@ class GlobalDatabaseApi(EnhancedDatabaseApi):
             from adare.database.models.global_models import GlobalBase
             GlobalBase.metadata.create_all(self.engine)
             log.debug("Global database schema ensured")
-        except Exception as e:
+        except (SQLAlchemyError, ImportError) as e:
             log.error(f"Failed to create global database schema: {e}")
             raise DatabaseError(log, f"Cannot initialize global database: {e}")
 
@@ -571,7 +571,7 @@ class ProjectDatabaseApi(EnhancedDatabaseApi):
             from adare.database.models.project_models import ProjectBase
             ProjectBase.metadata.create_all(self.engine)
             log.debug(f"Project database schema ensured for {self.project_path}")
-        except Exception as e:
+        except (SQLAlchemyError, ImportError) as e:
             log.error(f"Failed to create project database schema: {e}")
             raise DatabaseError(log, f"Cannot initialize project database: {e}")
 

@@ -7,6 +7,8 @@ that can be consumed by any frontend (CLI, Web UI, REST API).
 
 import logging
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from adare.backend.testfunction import database as testfunction_database
 from adare.backend.testfunction.commands import (
     testfunction_create as backend_testfunction_create,
@@ -189,7 +191,7 @@ class TestfunctionService:
 
                 return Result.ok(items)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to list testfunctions: {e}")
             return Result.fail(
                 code="TestfunctionListError",
@@ -219,7 +221,7 @@ class TestfunctionService:
                 runs_count=len(usage.get('runs', [])),
             ))
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to get testfunction usage: {e}")
             return Result.fail(
                 code="TestfunctionUsageError",
@@ -245,7 +247,7 @@ class TestfunctionService:
                 exists=exists,
             ))
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to check testfunction existence: {e}")
             return Result.fail(
                 code="TestfunctionExistsError",

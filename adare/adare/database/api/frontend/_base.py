@@ -3,7 +3,10 @@
 import logging
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
+from adare.database.exceptions import DatabaseError
 from adare.database.models.global_models import (
     Environment,
     Project,
@@ -58,7 +61,7 @@ class DataRetrievalBase:
             self._global_api.__enter__()
             self._project_api.__enter__()
             return self
-        except Exception as e:
+        except (SQLAlchemyError, DatabaseError, OSError) as e:
             # Clean up if initialization fails
             self.__exit__(type(e), e, e.__traceback__)
             raise
@@ -72,7 +75,7 @@ class DataRetrievalBase:
         if self._project_api:
             try:
                 self._project_api.__exit__(exc_type, exc_val, exc_tb)
-            except Exception as e:
+            except SQLAlchemyError as e:
                 project_exception = e
                 log.error(f"Error closing project database: {e}")
             finally:
@@ -82,7 +85,7 @@ class DataRetrievalBase:
         if self._global_api:
             try:
                 self._global_api.__exit__(exc_type, exc_val, exc_tb)
-            except Exception as e:
+            except SQLAlchemyError as e:
                 global_exception = e
                 log.error(f"Error closing global database: {e}")
             finally:

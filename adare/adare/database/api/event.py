@@ -6,6 +6,7 @@ from pathlib import Path
 from threading import Lock
 
 import ulid
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
 from adare.database.api.experiment import ExperimentApi
@@ -60,7 +61,7 @@ class EventDbApi(ExperimentApi):
                     if run:
                         log.debug(f"Found experiment run {experiment_run_ulid} in project {project_path}")
                         return project_path
-            except Exception as e:
+            except (SQLAlchemyError, OSError, KeyError) as e:
                 log.debug(f"Error checking project {project_dict.get('path', 'unknown')}: {e}")
                 continue
 
@@ -148,7 +149,7 @@ class EventDbApi(ExperimentApi):
                 self._session.commit()
                 log.info(f'Added action event {model_event.ulid} ({action_type.value}) to experiment run {experiment_run_ulid}')
 
-            except Exception as e:
+            except (SQLAlchemyError, ValueError, KeyError, TypeError) as e:
                 log.error(f'Failed to add action event: {e}', exc_info=True)
                 self._session.rollback()
 
@@ -235,6 +236,6 @@ class EventDbApi(ExperimentApi):
                 event_description = "start" if not is_complete else f"complete (success: {success})"
                 log.info(f'Added test event {model_event.ulid} ({event_description}) for test: {test_name} to experiment run {experiment_run_ulid}')
 
-            except Exception as e:
+            except (SQLAlchemyError, ValueError, KeyError, TypeError) as e:
                 log.error(f'Failed to add test event: {e}', exc_info=True)
                 self._session.rollback()

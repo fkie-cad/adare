@@ -32,7 +32,7 @@ async def test_restart_mcp_server_success(mock_session):
     mock_session.experiment_ctx.mcp_server = mock_old_server
 
     # Mock MCPServerManager constructor and start method
-    with patch('adare.backend.devmode.session.MCPServerManager') as MockManager:
+    with patch('adare.backend.devmode.session.action_execution.MCPServerManager') as MockManager:
         mock_new_manager = AsyncMock(spec=MCPServerManager)
         mock_new_manager.start.return_value = True
         MockManager.return_value = mock_new_manager
@@ -69,7 +69,7 @@ async def test_restart_mcp_server_defaults(mock_session):
 
     mock_session.experiment_ctx.mcp_server = mock_old_server
 
-    with patch('adare.backend.devmode.session.MCPServerManager') as MockManager:
+    with patch('adare.backend.devmode.session.action_execution.MCPServerManager') as MockManager:
         mock_new_manager = AsyncMock(spec=MCPServerManager)
         mock_new_manager.start.return_value = True
         MockManager.return_value = mock_new_manager
@@ -90,7 +90,7 @@ async def test_restart_mcp_server_defaults(mock_session):
 async def test_restart_mcp_server_failure(mock_session):
     mock_session.experiment_ctx.mcp_server = AsyncMock()
 
-    with patch('adare.backend.devmode.session.MCPServerManager') as MockManager:
+    with patch('adare.backend.devmode.session.action_execution.MCPServerManager') as MockManager:
         mock_new_manager = AsyncMock()
         mock_new_manager.start.return_value = False # fail
         MockManager.return_value = mock_new_manager

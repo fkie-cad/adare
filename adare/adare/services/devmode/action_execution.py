@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import yaml
+from sqlalchemy.exc import SQLAlchemyError
 
 from adare.backend.devmode.playbook_batch_runner import PlaybookBatchSummary
 from adare.core.dto.devmode import (
@@ -131,7 +132,7 @@ class ActionExecutionMixin:
                 f"Action file not found: {str(e)}",
                 ["Check file path is correct"]
             )
-        except Exception as e:
+        except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error executing action: {e}", exc_info=True)
             return Result.fail(
                 "ACTION_EXECUTION_ERROR",
@@ -290,7 +291,7 @@ class ActionExecutionMixin:
                 f"Playbook file not found: {str(e)}",
                 ["Check file path is correct"]
             )
-        except Exception as e:
+        except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error executing playbook: {e}", exc_info=True)
             return Result.fail(
                 "PLAYBOOK_EXECUTION_ERROR",
@@ -327,7 +328,7 @@ class ActionExecutionMixin:
                 ["Check session status", "Check playbook paths", "Check VM state"]
             )
 
-        except Exception as e:
+        except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error executing playbook batch: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",

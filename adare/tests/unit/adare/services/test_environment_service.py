@@ -203,7 +203,8 @@ class TestEnvironmentServiceListAll:
 
     @patch("adare.services.environment_service.EnvironmentDbApi")
     def test_list_all_db_error(self, mock_api_cls, service):
-        mock_api_cls.side_effect = RuntimeError("db down")
+        from sqlalchemy.exc import SQLAlchemyError
+        mock_api_cls.side_effect = SQLAlchemyError("db down")
 
         result = service.list_all()
 

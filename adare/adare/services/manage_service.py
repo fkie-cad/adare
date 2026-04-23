@@ -7,6 +7,8 @@ that can be consumed by any frontend (CLI, Web UI, REST API).
 import logging
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from adare.config.database import get_global_database_location
 from adare.core.dto.manage import (
     DbCleanInstallResult,
@@ -59,7 +61,7 @@ class ManageService:
                 errors=status.get('errors', []),
             ))
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to check database status: {e}")
             return Result.fail(
                 code="DbStatusError",
@@ -83,7 +85,7 @@ class ManageService:
                 errors=results.get('errors', []),
             ))
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to initialize database: {e}")
             return Result.fail(
                 code="DbInitError",
@@ -107,7 +109,7 @@ class ManageService:
                 errors=results.get('errors', []),
             ))
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to repair database: {e}")
             return Result.fail(
                 code="DbRepairError",
@@ -144,7 +146,7 @@ class ManageService:
                 errors=results.get('errors', []),
             ))
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed clean database installation: {e}")
             return Result.fail(
                 code="DbCleanInstallError",
@@ -175,7 +177,7 @@ class ManageService:
                 location=database_location,
             ))
 
-        except Exception as e:
+        except OSError as e:
             log.error(f"Failed to reset database: {e}")
             return Result.fail(
                 code="DbResetError",
@@ -216,7 +218,7 @@ class ManageService:
                 failed_vms=results.get('failed_vms', []),
             ))
 
-        except Exception as e:
+        except (OSError, SQLAlchemyError, RuntimeError) as e:
             log.error(f"Failed to reset VMs: {e}")
             return Result.fail(
                 code="VmResetError",
@@ -272,7 +274,7 @@ class ManageService:
 
         except NoProjectFoundError as e:
             return Result.from_exception(e)
-        except Exception as e:
+        except OSError as e:
             log.error(f"Failed to refresh VM runtime: {e}")
             return Result.fail(
                 code="VmRuntimeRefreshError",

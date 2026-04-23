@@ -210,7 +210,7 @@ class StructuredDataApi(DatabaseApi):
                     file_description=tf_file.description if tf_file else ""
                 )
                 result.append(tf_info)
-            except Exception as e:
+            except (AttributeError, TypeError, ValueError) as e:
                 log.error(f"Error processing testfunction {tf.id}: {e}")
                 continue
 

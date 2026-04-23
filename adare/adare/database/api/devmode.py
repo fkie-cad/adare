@@ -320,7 +320,7 @@ class DevModeApi(EnhancedDatabaseApi):
                             f"VM '{session.vm_name}' no longer exists"
                         )
                         should_cleanup = True
-                except Exception as e:
+                except (OSError, RuntimeError) as e:
                     log.warning(
                         f"Error checking VM existence for session {session.session_id}: {e}"
                     )

@@ -6,9 +6,12 @@ executing individual actions, full playbooks, test function reloading,
 MCP server management, and recording.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adare.backend.experiment.exceptions import ExperimentException
 from adare.backend.experiment.mcp_server_manager import MCPServerManager
@@ -17,6 +20,10 @@ from adare.core.result import Result
 from adare.exceptions import LoggedErrorException
 from adare.hypervisor.exceptions import HypervisorException
 from adare.types.playbook import ActionType, Playbook
+
+if TYPE_CHECKING:
+    from adare.backend.experiment.execution.base import ActionResult
+    from adare.backend.experiment.playbook_controller import PlaybookExecutionResult
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +39,7 @@ class DevModeActionExecutionMixin:
         _ensure_playbook_controller, _command_logger
     """
 
-    async def execute_action(self, action: ActionType) -> 'ActionResult':
+    async def execute_action(self, action: ActionType) -> ActionResult:
         """
         Execute a single action interactively.
 
@@ -95,7 +102,7 @@ class DevModeActionExecutionMixin:
             from adare.backend.experiment.execution.base import ActionResult
             return ActionResult(success=False, message=str(e))
 
-    async def execute_playbook(self, playbook: Playbook, experiment_dir: Path | None = None, indices: list[int] | None = None) -> 'PlaybookExecutionResult':
+    async def execute_playbook(self, playbook: Playbook, experiment_dir: Path | None = None, indices: list[int] | None = None) -> PlaybookExecutionResult:
         """
         Execute a full playbook (for testing sequences).
 

@@ -77,7 +77,7 @@ class TestWebServiceLogout:
         assert result.data.logged_out is True
 
     def test_logout_failure(self, service):
-        with patch("adare.web.login.logout", side_effect=RuntimeError("failed")):
+        with patch("adare.web.login.logout", side_effect=OSError("failed")):
             result = service.logout()
 
         assert result.success is False
@@ -123,7 +123,7 @@ class TestWebServiceDownloadEnvironment:
 
     def test_download_environment_failure(self, service, download_env_request):
         with patch("adare.backend.environment.commands.environment_download",
-                    side_effect=RuntimeError("network error")):
+                    side_effect=ConnectionError("network error")):
             result = service.download_environment(download_env_request)
 
         assert result.success is False
@@ -205,7 +205,7 @@ class TestWebServiceUploadRun:
 
     def test_upload_run_failure(self, service, upload_run_request):
         with patch("adare.webappaccess.upload.publish_experiment_run",
-                    side_effect=RuntimeError("upload failed")):
+                    side_effect=ConnectionError("upload failed")):
             result = service.upload_run(upload_run_request)
 
         assert result.success is False

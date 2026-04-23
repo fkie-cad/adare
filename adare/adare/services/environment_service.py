@@ -7,6 +7,8 @@ that can be consumed by any frontend (CLI, Web UI, REST API).
 import logging
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 import adare.backend.environment.database as environment_database
 from adare.backend.environment.commands import (
     environment_create as backend_environment_create,
@@ -213,7 +215,7 @@ class EnvironmentService:
 
                 return Result.ok(items)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to list environments: {e}")
             return Result.fail(
                 code="EnvironmentListError",

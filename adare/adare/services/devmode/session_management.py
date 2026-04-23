@@ -9,6 +9,8 @@ import logging
 import time
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from adare.backend.environment import database as environment_database
 from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
 from adare.core.dto.devmode import (
@@ -155,7 +157,7 @@ class SessionManagementMixin:
                     "Check experiment and environment configuration"
                 ]
             )
-        except Exception as e:
+        except (SQLAlchemyError, OSError, NotImplementedError, asyncio.CancelledError) as e:
             log.error(f"Unexpected error starting dev session: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",
@@ -264,7 +266,7 @@ class SessionManagementMixin:
                 tip=tip
             ))
 
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, OSError, asyncio.CancelledError) as e:
             log.error(f"Unexpected error resuming session: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",
@@ -310,7 +312,7 @@ class SessionManagementMixin:
             # Resume the session
             return self.resume_session(most_recent.session_id, console_ulid)
 
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, OSError) as e:
             log.error(f"Unexpected error resuming most recent session: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",
@@ -396,7 +398,7 @@ class SessionManagementMixin:
 
             return Result.ok(True)
 
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, OSError, asyncio.CancelledError) as e:
             log.error(f"Error stopping dev session: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",
@@ -437,7 +439,7 @@ class SessionManagementMixin:
 
             return Result.ok(True)
 
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, OSError) as e:
             log.error(f"Error starting recording: {e}", exc_info=True)
             return Result.fail("INTERNAL_ERROR", str(e))
 
@@ -465,7 +467,7 @@ class SessionManagementMixin:
                 )
 
             return Result.ok(True)
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, OSError) as e:
             log.error(f"Error stopping recording: {e}", exc_info=True)
             return Result.fail("INTERNAL_ERROR", str(e))
 
@@ -511,7 +513,7 @@ class SessionManagementMixin:
 
             return Result.ok(items)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Error listing dev sessions: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",
@@ -569,7 +571,7 @@ class SessionManagementMixin:
                 tip=None
             ))
 
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, OSError) as e:
             log.error(f"Error getting session state: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",
@@ -607,7 +609,7 @@ class SessionManagementMixin:
                 ["Check if session is active and running", "Check logs for details"]
             )
 
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, OSError) as e:
             log.error(f"Error updating testfunctions: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",
@@ -641,7 +643,7 @@ class SessionManagementMixin:
                 ["Check if session is active and running", "Check logs for details"]
             )
 
-        except Exception as e:
+        except (RuntimeError, OSError, asyncio.CancelledError) as e:
             log.error(f"Error restarting CV server: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",
@@ -672,7 +674,7 @@ class SessionManagementMixin:
                 ["Check if session is active and running", "Check logs for details"]
             )
 
-        except Exception as e:
+        except (RuntimeError, OSError, asyncio.CancelledError) as e:
             log.error(f"Error stopping CV server: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",
@@ -719,7 +721,7 @@ class SessionManagementMixin:
                 removed_session_ids=removed_ids
             ))
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Error cleaning up sessions: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",
