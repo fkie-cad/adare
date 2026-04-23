@@ -155,78 +155,95 @@ class VariableUsageValidator(PlaybookValidator):
             self._extract_from_target(action.target, 'target',
                                      action_index, action_type, references)
 
-        # Check drag action src/dst targets
-        if isinstance(action, DragAction):
-            if action.src:
-                self._extract_from_target(action.src, 'src',
-                                         action_index, action_type, references)
-            if action.dst:
-                self._extract_from_target(action.dst, 'dst',
-                                         action_index, action_type, references)
+        # Dispatch to type-specific extractors
+        for action_cls, extractor in self._action_extractors():
+            if isinstance(action, action_cls):
+                extractor(action, action_index, action_type, references)
 
-        # Check keyboard text
-        if isinstance(action, KeyboardAction) and action.text:
+        return references
+
+    def _action_extractors(self):
+        """Yield (action_class, extractor_callable) pairs for variable extraction."""
+        yield DragAction, self._extract_from_drag
+        yield KeyboardAction, self._extract_from_keyboard
+        yield CommandAction, self._extract_from_command
+        yield PullAction, self._extract_from_pull
+        yield ActionTestAction, self._extract_from_test
+        yield BlockAction, self._extract_from_block_refs
+        yield WaitUntilAction, self._extract_from_wait_until_refs
+        yield (StopAction, ContinueAction), self._extract_from_stop_continue
+
+    def _extract_from_drag(self, action, action_index, action_type, references):
+        """Extract variable references from DragAction src/dst targets."""
+        if action.src:
+            self._extract_from_target(action.src, 'src',
+                                     action_index, action_type, references)
+        if action.dst:
+            self._extract_from_target(action.dst, 'dst',
+                                     action_index, action_type, references)
+
+    def _extract_from_keyboard(self, action, action_index, action_type, references):
+        """Extract variable references from KeyboardAction text."""
+        if action.text:
             self._extract_from_string(action.text, 'text',
                                      action_index, action_type, references)
 
-        # Check command fields
-        if isinstance(action, CommandAction):
-            if action.command:
-                self._extract_from_string(action.command, 'command',
-                                         action_index, action_type, references)
-            if action.cwd:
-                self._extract_from_string(action.cwd, 'cwd',
-                                         action_index, action_type, references)
-            if action.env:
-                for key, value in action.env.items():
-                    self._extract_from_string(str(value), f'env.{key}',
-                                             action_index, action_type, references)
-
-        # Check pull action paths
-        if isinstance(action, PullAction):
-            if action.src:
-                # Handle both string and list of strings
-                if isinstance(action.src, list):
-                    for src_item in action.src:
-                        self._extract_from_string(src_item, 'src',
-                                                 action_index, action_type, references)
-                else:
-                    self._extract_from_string(action.src, 'src',
-                                             action_index, action_type, references)
-            if action.dst:
-                self._extract_from_string(action.dst, 'dst',
+    def _extract_from_command(self, action, action_index, action_type, references):
+        """Extract variable references from CommandAction fields."""
+        if action.command:
+            self._extract_from_string(action.command, 'command',
+                                     action_index, action_type, references)
+        if action.cwd:
+            self._extract_from_string(action.cwd, 'cwd',
+                                     action_index, action_type, references)
+        if action.env:
+            for key, value in action.env.items():
+                self._extract_from_string(str(value), f'env.{key}',
                                          action_index, action_type, references)
 
-        # Check test name
-        if isinstance(action, ActionTestAction) and action.name:
+    def _extract_from_pull(self, action, action_index, action_type, references):
+        """Extract variable references from PullAction paths."""
+        if action.src:
+            if isinstance(action.src, list):
+                for src_item in action.src:
+                    self._extract_from_string(src_item, 'src',
+                                             action_index, action_type, references)
+            else:
+                self._extract_from_string(action.src, 'src',
+                                         action_index, action_type, references)
+        if action.dst:
+            self._extract_from_string(action.dst, 'dst',
+                                     action_index, action_type, references)
+
+    def _extract_from_test(self, action, action_index, action_type, references):
+        """Extract variable references from ActionTestAction name."""
+        if action.name:
             self._extract_from_string(action.name, 'name',
                                      action_index, action_type, references)
 
-        # Check block actions recursively
-        if isinstance(action, BlockAction):
-            for nested_idx, nested_action in enumerate(action.actions):
-                nested_refs = self._extract_from_action(
-                    nested_action, action_index, f"{action_type}.block[{nested_idx}]"
-                )
-                for var_name, locations in nested_refs.items():
-                    if var_name not in references:
-                        references[var_name] = []
-                    references[var_name].extend(locations)
+    def _extract_from_block_refs(self, action, action_index, action_type, references):
+        """Extract variable references from BlockAction nested actions."""
+        for nested_idx, nested_action in enumerate(action.actions):
+            nested_refs = self._extract_from_action(
+                nested_action, action_index, f"{action_type}.block[{nested_idx}]"
+            )
+            for var_name, locations in nested_refs.items():
+                if var_name not in references:
+                    references[var_name] = []
+                references[var_name].extend(locations)
 
-        # Check WaitUntilAction condition targets
-        if isinstance(action, WaitUntilAction):
-            self._extract_from_wait_condition(action.condition, 'condition',
-                                             action_index, action_type, references)
+    def _extract_from_wait_until_refs(self, action, action_index, action_type, references):
+        """Extract variable references from WaitUntilAction condition targets."""
+        self._extract_from_wait_condition(action.condition, 'condition',
+                                         action_index, action_type, references)
 
-        # Check StopAction and ContinueAction conditions
-        if isinstance(action, (StopAction, ContinueAction)) and action.condition:
-            # Variable condition references the variable being tested
+    def _extract_from_stop_continue(self, action, action_index, action_type, references):
+        """Extract variable references from StopAction/ContinueAction conditions."""
+        if action.condition:
             var_name = action.condition.variable
             if var_name not in references:
                 references[var_name] = []
             references[var_name].append((action_index, action_type, 'condition.variable'))
-
-        return references
 
     def _extract_from_target(self, target: Target, field_prefix: str,
                             action_index: int, action_type: str,
