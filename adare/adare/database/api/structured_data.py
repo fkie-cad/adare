@@ -101,6 +101,7 @@ class StructuredDataApi(DatabaseApi):
             selectinload(Experiment.tags)
         ))
         result = []
+        dangling_env_refs: list[tuple[str, str]] = []  # (experiment_name, env_id)
 
         # Use explicitly passed project_name first, fall back to CWD detection
         project_name = project_name or get_current_project_name() or ""
@@ -110,8 +111,26 @@ class StructuredDataApi(DatabaseApi):
             dotnotation = f"{project_name}.{exp.name}" if project_name else exp.name
 
             display_name = get_smart_display_name(exp, 'experiment')
-            env_names = [env.name for env in exp.environments if env]
-            primary_env = env_names[0] if env_names else ""
+
+            # Raw environment_ids from the JSON column (may contain dangling refs).
+            raw_env_ids: list[str] = list(exp.environment_ids or [])
+
+            # Per-id resolution so a single dangling reference doesn't drop the row.
+            resolved_env_names: list[str] = []
+            from adare.database.reference_manager import reference_manager
+            for env_id in raw_env_ids:
+                if not env_id:
+                    continue
+                try:
+                    env_obj = reference_manager.get_environment_object(env_id)
+                except (FileNotFoundError, OSError, KeyError, AttributeError):
+                    env_obj = None
+                if env_obj is None:
+                    dangling_env_refs.append((exp.name, env_id))
+                    continue
+                resolved_env_names.append(env_obj.name)
+
+            primary_env = resolved_env_names[0] if resolved_env_names else ""
             tags = safe_get_tags(exp)
             published, in_request = safe_get_sync_status(exp)
 
@@ -122,7 +141,9 @@ class StructuredDataApi(DatabaseApi):
                 dotnotation=dotnotation,
                 project=project_name,
                 environment=primary_env,
-                environments=env_names,
+                environments=resolved_env_names,
+                environment_ids=raw_env_ids,
+                environment_names=resolved_env_names,
                 description=exp.description or "",
                 tags=tags,
                 created_at=exp.created_at,
@@ -130,6 +151,16 @@ class StructuredDataApi(DatabaseApi):
                 in_request=in_request
             )
             result.append(exp_info)
+
+        if dangling_env_refs:
+            preview = ", ".join(f"{name}->{env_id}" for name, env_id in dangling_env_refs[:5])
+            more = f" (+{len(dangling_env_refs) - 5} more)" if len(dangling_env_refs) > 5 else ""
+            log.warning(
+                "Skipped %d dangling experiment->environment reference(s): %s%s",
+                len(dangling_env_refs),
+                preview,
+                more,
+            )
 
         return result
 

@@ -1,4 +1,5 @@
-import { Server, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { Server, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from '@/components/ui/table'
@@ -6,10 +7,13 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
-import { useEnvironments } from '@/api/hooks/use-environments'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { CreateEnvironmentDialog } from '@/components/dialogs/create-environment-dialog'
+import { useEnvironments, useDeleteEnvironment, type Environment } from '@/api/hooks/use-environments'
+import { toast } from '@/components/ui/toast'
 
 const SKELETON_ROWS = 5
-const COLUMNS = 5
+const COLUMNS = 6
 
 function LoadingTable() {
   return (
@@ -21,6 +25,7 @@ function LoadingTable() {
           <TableHead>VM</TableHead>
           <TableHead>Project</TableHead>
           <TableHead>Sync</TableHead>
+          <TableHead className="w-24 text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -46,10 +51,38 @@ function SyncBadge({ synced }: { synced: unknown }) {
 
 export default function EnvironmentsListPage() {
   const { data, isPending, isError, error, refetch } = useEnvironments()
+  const deleteMutation = useDeleteEnvironment()
+  const [createOpen, setCreateOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Environment | null>(null)
+
+  const handleDelete = () => {
+    if (!deleteTarget) return
+    deleteMutation.mutate(
+      { name: deleteTarget.name },
+      {
+        onSuccess: () => {
+          toast.success('Environment removed', deleteTarget.name)
+          setDeleteTarget(null)
+        },
+        onError: (err) => {
+          toast.error('Failed to remove environment', (err as Error)?.message)
+        },
+      },
+    )
+  }
 
   return (
     <div className="p-6 space-y-6">
-      <PageHeader title="Environments" description="VM environments for running experiments" />
+      <PageHeader
+        title="Environments"
+        description="VM environments for running experiments"
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus size={16} />
+            New environment
+          </Button>
+        }
+      />
 
       {isPending && <LoadingTable />}
 
@@ -84,6 +117,7 @@ export default function EnvironmentsListPage() {
               <TableHead>VM</TableHead>
               <TableHead>Project</TableHead>
               <TableHead>Sync</TableHead>
+              <TableHead className="w-24 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -108,6 +142,16 @@ export default function EnvironmentsListPage() {
                 <TableCell>
                   <SyncBadge synced={(env as any).synced} />
                 </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="Delete environment"
+                    onClick={() => setDeleteTarget(env)}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -116,6 +160,23 @@ export default function EnvironmentsListPage() {
           </TableCaption>
         </Table>
       )}
+
+      <CreateEnvironmentDialog open={createOpen} onOpenChange={setCreateOpen} />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Remove environment"
+        description={
+          deleteTarget
+            ? `Are you sure you want to remove "${deleteTarget.name}"? This cannot be undone.`
+            : undefined
+        }
+        confirmLabel="Remove"
+        variant="destructive"
+        loading={deleteMutation.isPending}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

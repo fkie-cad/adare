@@ -46,6 +46,7 @@ export const endpoints = {
   experiment: (name: string) => `/experiments/${name}`,
   experimentClone: (name: string) => `/experiments/${name}/clone`,
   experimentValidate: (name: string) => `/experiments/${name}/validate`,
+  experimentEnvironments: (name: string) => `/experiments/${name}/environments`,
 
   // Environments
   environments: '/environments',

@@ -40,6 +40,13 @@ class ExperimentValidateBody(BaseModel):
     environment: str | None = None
 
 
+class ExperimentEnvLinkBody(BaseModel):
+    """Request body for adding/removing environments from an experiment."""
+    project_path: str
+    environments: list[str]
+    force: bool = False
+
+
 # ---- Helpers ----
 
 def _api():
@@ -118,4 +125,35 @@ async def validate_experiment(name: str, body: ExperimentValidateBody):
         environment=body.environment,
     )
     result = _api().experiment.validate(dto)
+    return result_to_response(result)
+
+
+@router.post("/{name}/environments")
+async def add_experiment_environments(name: str, body: ExperimentEnvLinkBody):
+    """Link one or more environments to an experiment."""
+    from adare.core.dto.experiment import ExperimentEnvModifyRequest
+
+    dto = ExperimentEnvModifyRequest(
+        project_path=Path(body.project_path),
+        experiment_pattern=name,
+        environments=body.environments,
+        force=body.force,
+    )
+    result = _api().experiment.add_environments(dto)
+    return result_to_response(result)
+
+
+# DELETE with body: use api_route so FastAPI accepts the body parameter.
+@router.api_route("/{name}/environments", methods=["DELETE"])
+async def remove_experiment_environments(name: str, body: ExperimentEnvLinkBody):
+    """Unlink one or more environments from an experiment."""
+    from adare.core.dto.experiment import ExperimentEnvModifyRequest
+
+    dto = ExperimentEnvModifyRequest(
+        project_path=Path(body.project_path),
+        experiment_pattern=name,
+        environments=body.environments,
+        force=body.force,
+    )
+    result = _api().experiment.remove_environments(dto)
     return result_to_response(result)

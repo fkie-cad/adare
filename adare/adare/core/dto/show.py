@@ -210,6 +210,8 @@ class ExperimentListItem:
     project: str
     environment: str
     environments: list[str] = field(default_factory=list)
+    environment_ids: list[str] = field(default_factory=list)
+    environment_names: list[str] = field(default_factory=list)
     description: str = ""
     tags: list[str] = field(default_factory=list)
     published: bool = False
@@ -229,6 +231,8 @@ class ExperimentListItem:
             'tags': self.tags,
             'project': self.project,
             'environments': self.environments,
+            'environment_ids': self.environment_ids,
+            'environment_names': self.environment_names,
             'primary_environment': self.environment,
             'sync_status': {
                 'published': self.published,

@@ -1,4 +1,5 @@
-import { FolderKanban, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { FolderKanban, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from '@/components/ui/table'
@@ -6,11 +7,14 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
-import { useProjects } from '@/api/hooks/use-projects'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { CreateProjectDialog } from '@/components/dialogs/create-project-dialog'
+import { useProjects, useDeleteProject, type Project } from '@/api/hooks/use-projects'
 import { formatDateTime } from '@/lib/formatters'
+import { toast } from '@/components/ui/toast'
 
 const SKELETON_ROWS = 5
-const COLUMNS = 4
+const COLUMNS = 5
 
 function LoadingTable() {
   return (
@@ -21,6 +25,7 @@ function LoadingTable() {
           <TableHead>Path</TableHead>
           <TableHead>Description</TableHead>
           <TableHead>Created</TableHead>
+          <TableHead className="w-24 text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -40,10 +45,38 @@ function LoadingTable() {
 
 export default function ProjectsListPage() {
   const { data, isPending, isError, error, refetch } = useProjects()
+  const deleteMutation = useDeleteProject()
+  const [createOpen, setCreateOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
+
+  const handleDelete = () => {
+    if (!deleteTarget) return
+    deleteMutation.mutate(
+      { name: deleteTarget.name, path: String(deleteTarget.path) },
+      {
+        onSuccess: () => {
+          toast.success('Project removed', deleteTarget.name)
+          setDeleteTarget(null)
+        },
+        onError: (err) => {
+          toast.error('Failed to remove project', (err as Error)?.message)
+        },
+      },
+    )
+  }
 
   return (
     <div className="p-6 space-y-6">
-      <PageHeader title="Projects" description="Organized collections of experiments and environments" />
+      <PageHeader
+        title="Projects"
+        description="Organized collections of experiments and environments"
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus size={16} />
+            New project
+          </Button>
+        }
+      />
 
       {isPending && <LoadingTable />}
 
@@ -77,6 +110,7 @@ export default function ProjectsListPage() {
               <TableHead>Path</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Created</TableHead>
+              <TableHead className="w-24 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -95,6 +129,16 @@ export default function ProjectsListPage() {
                 </TableCell>
                 <TableCell>{project.description || '—'}</TableCell>
                 <TableCell>{formatDateTime((project as any).created_at)}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="Delete project"
+                    onClick={() => setDeleteTarget(project)}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -103,6 +147,23 @@ export default function ProjectsListPage() {
           </TableCaption>
         </Table>
       )}
+
+      <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Remove project"
+        description={
+          deleteTarget
+            ? `Are you sure you want to remove "${deleteTarget.name}"? This cannot be undone.`
+            : undefined
+        }
+        confirmLabel="Remove"
+        variant="destructive"
+        loading={deleteMutation.isPending}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }
