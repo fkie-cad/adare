@@ -6,8 +6,17 @@ import type { ApiResponse } from '@/types/api'
 export interface Experiment {
   name: string
   project_path?: string
+  project?: string
   tags?: string[]
+  environment_ids?: string[]
+  environment_names?: string[]
   [key: string]: unknown
+}
+
+export interface ExperimentEnvModifyRequest {
+  project_path: string
+  environments: string[]
+  force?: boolean
 }
 
 export interface CreateExperimentRequest {
@@ -98,6 +107,40 @@ export function useValidateExperiment() {
         request,
       )
       return data.data
+    },
+  })
+}
+
+export function useAddExperimentEnvironments() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ name, request }: { name: string; request: ExperimentEnvModifyRequest }) => {
+      const { data } = await api.post<ApiResponse<unknown>>(
+        endpoints.experimentEnvironments(name),
+        request,
+      )
+      return data.data
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['experiments'] })
+      qc.invalidateQueries({ queryKey: ['experiment', vars.name] })
+    },
+  })
+}
+
+export function useRemoveExperimentEnvironments() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ name, request }: { name: string; request: ExperimentEnvModifyRequest }) => {
+      const { data } = await api.delete<ApiResponse<unknown>>(
+        endpoints.experimentEnvironments(name),
+        { data: request },
+      )
+      return data.data
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['experiments'] })
+      qc.invalidateQueries({ queryKey: ['experiment', vars.name] })
     },
   })
 }

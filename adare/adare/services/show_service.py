@@ -446,6 +446,8 @@ class ShowService:
                     project=exp.project,
                     environment=exp.environment,
                     environments=exp.environments,
+                    environment_ids=list(getattr(exp, "environment_ids", []) or []),
+                    environment_names=list(getattr(exp, "environment_names", []) or []),
                     description=exp.description,
                     tags=exp.tags,
                     published=exp.published,

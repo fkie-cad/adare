@@ -100,6 +100,8 @@ class ExperimentInfo:
     dotnotation: str = ""
     display_name: str = ""
     environments: list[str] = attrs.Factory(list)
+    environment_ids: list[str] = attrs.Factory(list)
+    environment_names: list[str] = attrs.Factory(list)
     published: bool = False
     in_request: bool = False
 
@@ -114,6 +116,8 @@ class ExperimentInfo:
             'tags': self.tags,
             'project': self.project,
             'environments': self.environments,
+            'environment_ids': self.environment_ids,
+            'environment_names': self.environment_names,
             'primary_environment': self.environment,
             'sync_status': {
                 'published': self.published,

@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Outlet } from '@tanstack/react-router'
 import { useThemeStore } from '@/stores/theme-store'
 import { useSidebarStore } from '@/stores/sidebar-store'
+import { ToastViewport } from '@/components/ui/toast'
 import { Sidebar } from './sidebar'
 
 export function MainLayout() {
@@ -37,6 +38,7 @@ export function MainLayout() {
       <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
+      <ToastViewport />
     </div>
   )
 }
