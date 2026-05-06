@@ -743,7 +743,10 @@ class VmInstanceManager:
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # Process results and batch update database
+            instances_by_id = {instance.id: instance for instance in instances}
             updates_to_apply = []
+            deletes_to_apply = []
+            qemu_config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
 
             for result in results:
                 if isinstance(result, Exception):
@@ -756,8 +759,23 @@ class VmInstanceManager:
                 new_db_status = None
 
                 if hypervisor_state in ["not_found", "error"]:
-                    # VM doesn't exist in hypervisor - mark as available for cleanup/reuse
-                    if current_db_status != "available":
+                    # VM doesn't exist in hypervisor - either reusable (config still
+                    # there) or orphaned (config also gone). Orphaned rows must be
+                    # deleted; reusing them ends in VMNotFoundException at lookup.
+                    instance = instances_by_id.get(instance_id)
+                    is_qemu_orphan = False
+                    if instance is not None and instance.vm is not None and instance.vm.hypervisor == 'qemu':
+                        config_path = qemu_config_dir / f"{instance.instance_name}.json"
+                        if not config_path.exists():
+                            is_qemu_orphan = True
+
+                    if is_qemu_orphan:
+                        deletes_to_apply.append(instance_id)
+                        log.info(
+                            f"Instance {instance_id} orphaned (no hypervisor entry, "
+                            f"no QEMU config); deleting row"
+                        )
+                    elif current_db_status != "available":
                         new_db_status = "available"
                         log.info(f"Instance {instance_id} not found in hypervisor, will mark as available")
 
@@ -784,6 +802,12 @@ class VmInstanceManager:
                 )
                 updated_count += 1
                 log.info(f"Updated instance {instance_id} status to {new_status}")
+
+            # Apply deletes after updates so orphans are evicted before any caller
+            # tries to allocate them.
+            for instance_id in deletes_to_apply:
+                api.delete_vm_instance(instance_id)
+                updated_count += 1
 
             log.info(f"Synchronized {updated_count} instance states for vm_id={vm_id} (parallel mode)")
             return updated_count
