@@ -48,7 +48,7 @@ def exec_os_profile_show(arguments):
     source = 'built-in' if name in _BUILTIN_CATALOG else 'custom'
 
     # Resolve the template that would be used
-    resolved_template = _resolve_template_path(os_def)
+    resolved_template, template_meta, template_source = _resolve_template_path(os_def)
 
     fields = [
         ('Name', os_def.name),
@@ -73,6 +73,10 @@ def exec_os_profile_show(arguments):
         ('Extra Packages', ', '.join(os_def.extra_packages) if os_def.extra_packages else '(none)'),
         ('Template (explicit)', os_def.template or '(default lookup)'),
         ('Resolved Template', resolved_template),
+        ('Template Source', template_source),
+        ('Template ID', template_meta.id if template_meta else '(none)'),
+        ('Template Description', template_meta.description if template_meta else '(none)'),
+        ('Template Revision', template_meta.revision if template_meta else '(none)'),
     ]
 
     max_label = max(len(label) for label, _ in fields)
@@ -82,43 +86,45 @@ def exec_os_profile_show(arguments):
     print()
 
 
-def _resolve_template_path(os_def) -> str:
-    """Resolve which template file would be used for this OS definition."""
-    from adare.hypervisor.qemu.vm_creator.autoinstall import _TEMPLATE_MAP
-    from adare.hypervisor.qemu.vm_creator.autoinstall import TEMPLATES_DIR as LINUX_TEMPLATES_DIR
+def _resolve_template_path(os_def):
+    """Resolve which template file would be used for this OS definition.
+
+    Returns ``(resolved_path_str, metadata_or_None, source_label)``.
+    """
+    from adare.hypervisor.qemu.vm_creator.autoinstall import (
+        TEMPLATES_DIR as LINUX_TEMPLATES_DIR,
+        resolve_template,
+        resolve_template_metadata,
+    )
     from adare.hypervisor.qemu.vm_creator.windows_creator import _AUTOUNATTEND_MAP
     from adare.hypervisor.qemu.vm_creator.windows_creator import TEMPLATES_DIR as WIN_TEMPLATES_DIR
 
     if os_def.install_mode == 'manual':
-        return '(manual install -- no template)'
+        return '(manual install -- no template)', None, '(n/a)'
 
-    # Check explicit template field
-    if os_def.template:
-        template_file = os_def.template
-    elif os_def.platform == 'linux':
-        template_file = _TEMPLATE_MAP.get(os_def.name)
-        if template_file is None:
-            distro_templates = {k: v for k, v in _TEMPLATE_MAP.items() if k.startswith(os_def.distribution)}
-            template_file = distro_templates[max(distro_templates.keys())] if distro_templates else None
+    template_meta = None
+    if os_def.platform == 'linux':
+        template_file = resolve_template(os_def)
+        template_meta = resolve_template_metadata(os_def)
     elif os_def.platform == 'windows':
-        template_file = _AUTOUNATTEND_MAP.get(os_def.name)
+        template_file = os_def.template or _AUTOUNATTEND_MAP.get(os_def.name)
     else:
-        return '(unknown platform)'
+        return '(unknown platform)', None, '(unknown)'
 
     if template_file is None:
-        return '(no template found)'
+        return '(no template found)', None, '(none)'
 
     # Check user templates first, then built-in
     user_path = VM_TEMPLATES_DIR / template_file
     if user_path.is_file():
-        return str(user_path)
+        return str(user_path), template_meta, f'user ({VM_TEMPLATES_DIR})'
 
     builtin_dir = WIN_TEMPLATES_DIR if os_def.platform == 'windows' else LINUX_TEMPLATES_DIR
     builtin_path = builtin_dir / template_file
     if builtin_path.is_file():
-        return str(builtin_path)
+        return str(builtin_path), template_meta, f'built-in ({builtin_dir})'
 
-    return f'{template_file} (not found on disk)'
+    return f'{template_file} (not found on disk)', template_meta, '(missing)'
 
 
 def exec_os_profile_add(arguments):
