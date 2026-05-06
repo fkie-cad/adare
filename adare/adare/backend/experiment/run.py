@@ -51,6 +51,60 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
 
 
+def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_success: bool) -> tuple[bool, dict]:
+    """Resolve the success verdict for an experiment run.
+
+    A "smoke run" (verify-vm and similar) declares no abstract tests and is
+    invoked with test=False. For these, the playbook completing without an
+    unhandled error is the verdict — applying a test-suite verdict here can
+    falsely report failure when there were never tests to satisfy.
+
+    For full test runs (test=True or any experiment with abstract tests),
+    keep the strict result_status == SUCCESS rule so missing or failed test
+    coverage is never silently green-lit.
+
+    Returns (success, diagnostics) where diagnostics carries the inputs to
+    the decision so they can be logged at a single grep-friendly site.
+    """
+    abstract_tests_count = 0
+    test_events_count = 0
+    result_status = None
+    experiment_loaded = False
+
+    if experiment_run is not None:
+        try:
+            if experiment_run.experiment is not None:
+                experiment_loaded = True
+                abstract_tests_count = len(experiment_run.experiment.abstract_tests or [])
+            test_events_count = len(experiment_run.tests or [])
+            result_status = experiment_run.result_status
+        except Exception:
+            # Session-boundary or lazy-load failure on a relationship — leave
+            # counts at zero and result_status as None so the smoke gate can
+            # still trigger when test_mode is False.
+            pass
+
+    is_smoke_run = (not test_mode) and abstract_tests_count == 0
+
+    if is_smoke_run:
+        success = bool(execution_success)
+    else:
+        success = result_status == StatusEnum.SUCCESS
+
+    diagnostics = {
+        "verdict": "SUCCESS" if success else "FAILED",
+        "smoke_mode": is_smoke_run,
+        "test_mode": test_mode,
+        "run_found": experiment_run is not None,
+        "experiment_loaded": experiment_loaded,
+        "abstract_tests": abstract_tests_count,
+        "test_events": test_events_count,
+        "result_status": str(result_status) if result_status is not None else None,
+        "execution_success": bool(execution_success),
+    }
+    return success, diagnostics
+
+
 async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', file_log_level: int = logging.INFO, run_ulid: str | None = None):
     import signal
 
@@ -385,19 +439,54 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 # Intentionally broad: last-resort cleanup must not raise.
                 log.error(f"Error stopping stage coordinator during error cleanup: {cleanup_error}", exc_info=True)
 
-    # Query the database to get the actual experiment success status
+    # Resolve the success verdict. For smoke/verify runs (test=False AND no
+    # abstract tests on the experiment) trust the playbook completion signal.
+    # For full test runs keep the strict result_status == SUCCESS rule so
+    # missing/failed test coverage is never silently green-lit.
+    execution_result = getattr(experiment_run_context, 'execution_result', None)
+    execution_success = bool(getattr(execution_result, 'success', False))
+
     experiment_success = False
+    diagnostics: dict = {
+        "verdict": "FAILED",
+        "smoke_mode": not test,
+        "test_mode": test,
+        "run_found": False,
+        "experiment_loaded": False,
+        "abstract_tests": 0,
+        "test_events": 0,
+        "result_status": None,
+        "execution_success": execution_success,
+        "lookup_error": None,
+    }
     try:
         from adare.database.api.experiment import ExperimentApi
         from adare.database.models.project_models import ExperimentRun
         with ExperimentApi(experiment_run_context.project_directory.path) as api:
-            experiment_run = api._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_context.experiment_run_ulid).first()
-            if experiment_run:
-                # Use the result_status property to determine actual success
-                experiment_success = experiment_run.result_status == StatusEnum.SUCCESS
+            experiment_run_row = api._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_context.experiment_run_ulid).first()
+            experiment_success, diagnostics = _resolve_experiment_verdict(
+                experiment_run_row, test_mode=test, execution_success=execution_success
+            )
     except (ValueError, KeyError, OSError) as e:
         log.error(f"Error checking experiment run status: {e}")
-        experiment_success = False
+        diagnostics["lookup_error"] = repr(e)
+        # Fallback: smoke runs can still pass on the playbook completion signal alone.
+        if not test:
+            experiment_success = execution_success
+            diagnostics["verdict"] = "SUCCESS" if experiment_success else "FAILED"
+            diagnostics["smoke_mode"] = True
+
+    log.info(
+        "experiment verdict resolved: "
+        f"verdict={diagnostics['verdict']} smoke_mode={diagnostics['smoke_mode']} "
+        f"test_mode={diagnostics['test_mode']} run_found={diagnostics['run_found']} "
+        f"experiment_loaded={diagnostics['experiment_loaded']} "
+        f"abstract_tests={diagnostics['abstract_tests']} test_events={diagnostics['test_events']} "
+        f"result_status={diagnostics['result_status']} "
+        f"execution_success={diagnostics['execution_success']} "
+        f"lookup_error={diagnostics.get('lookup_error')} "
+        f"run_ulid={experiment_run_context.experiment_run_ulid}"
+    )
 
     # Generate forensic report after experiment completion
     try:
