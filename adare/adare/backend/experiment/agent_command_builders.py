@@ -419,14 +419,22 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
 
     def _build_conda_install_command(self) -> str:
         """Build Conda installation command."""
+        env_py = '/home/adare/.miniforge3/envs/pyadare/bin/python'
         if self.wheels_available:
-            # Wheel install + X11 permission for GUI automation (if needed)
-            cmd = '/home/adare/.miniforge3/bin/conda run -n pyadare pip install --force-reinstall /adare/vm/wheels/*.whl'
+            cmd = (
+                f'{env_py} -m ensurepip --upgrade && '
+                f'{env_py} -m pip install --no-cache-dir --force-reinstall '
+                f'/adare/vm/wheels/*.whl'
+            )
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
         # Editable install from mounted source
-        cmd = 'cd /adare/vm/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/vm/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install .'
+        cmd = (
+            f'{env_py} -m ensurepip --upgrade && '
+            f'cd /adare/vm/adarelib && {env_py} -m pip install --no-cache-dir . && '
+            f'cd /adare/vm/adarevm && {env_py} -m pip install --no-cache-dir .'
+        )
         if not self.skip_xhost:
             cmd += ' && xhost +SI:localuser:root'
         return cmd

@@ -1,3 +1,15 @@
+{# adare-template
+schema: 1
+id: ubuntu-lts
+description: Ubuntu 22.04 / 24.04 LTS desktop (server ISO autoinstall)
+maintainer: ADARE
+revision: 2026-05-06
+supports:
+  - ubuntu2204
+  - ubuntu2204arm64
+  - ubuntu2404
+  - ubuntu2404arm64
+-#}
 #cloud-config
 autoinstall:
   version: 1
@@ -68,7 +80,7 @@ autoinstall:
     - curtin in-target -- wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-{{ miniforge_arch }}.sh -O /tmp/miniforge.sh
     - curtin in-target -- chmod +x /tmp/miniforge.sh
     - curtin in-target -- bash /tmp/miniforge.sh -b -p /home/adare/.miniforge3
-    - curtin in-target -- /home/adare/.miniforge3/bin/conda create -n pyadare python=3.10 -y
+    - curtin in-target -- /home/adare/.miniforge3/bin/conda create -n pyadare python=3.10 pip -y
     - rm -f /target/tmp/miniforge.sh
     - chown -R 1000:1000 /target/home/adare
     {% endif %}
