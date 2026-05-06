@@ -2,9 +2,12 @@
 
 import hashlib
 import logging
+import re
 import secrets
+from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
 from jinja2 import Environment, FileSystemLoader
 
 from adare.config.configdirectory import VM_TEMPLATES_DIR
@@ -14,17 +17,154 @@ log = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent / 'templates'
 
-# Template file mapping by OS name
-_TEMPLATE_MAP = {
-    'ubuntu2604': 'autoinstall_ubuntu_latest.yaml',
-    'ubuntu2604arm64': 'autoinstall_ubuntu_latest.yaml',
-    'ubuntu2510': 'autoinstall_ubuntu_latest.yaml',
-    'ubuntu2510arm64': 'autoinstall_ubuntu_latest.yaml',
-    'ubuntu2404': 'autoinstall_ubuntu_2404.yaml',
-    'ubuntu2404arm64': 'autoinstall_ubuntu_2404.yaml',
-    'ubuntu2204': 'autoinstall_ubuntu_2204.yaml',
-    'ubuntu2204arm64': 'autoinstall_ubuntu_2204.yaml',
-}
+_SUPPORTED_TEMPLATE_SCHEMA = 1
+_FRONTMATTER_RE = re.compile(
+    r'\{#-?\s*adare-template\s*\n(?P<body>.*?)\n\s*-?#\}',
+    re.DOTALL,
+)
+
+
+@dataclass(frozen=True)
+class TemplateMetadata:
+    """Self-describing metadata parsed from a template's Jinja-comment frontmatter."""
+    id: str
+    description: str
+    supports: tuple[str, ...]
+    schema: int
+    maintainer: str
+    revision: str
+    path: Path
+
+
+def parse_template_metadata(path: Path) -> TemplateMetadata | None:
+    """Parse the ``{# adare-template ... #}`` frontmatter from a template file.
+
+    Returns ``None`` if no frontmatter block is present. Raises ``ValueError``
+    if the block is malformed or declares an unsupported schema.
+    """
+    try:
+        head = path.read_text(encoding='utf-8', errors='replace')[:4096]
+    except OSError:
+        return None
+    m = _FRONTMATTER_RE.search(head)
+    if not m:
+        return None
+    try:
+        data = yaml.safe_load(m.group('body')) or {}
+    except yaml.YAMLError as e:
+        raise ValueError(f'Invalid YAML in template frontmatter of {path}: {e}') from e
+    if not isinstance(data, dict):
+        raise ValueError(f'Template frontmatter in {path} must be a YAML mapping')
+
+    schema = data.get('schema', 1)
+    if schema != _SUPPORTED_TEMPLATE_SCHEMA:
+        raise ValueError(
+            f'Unsupported template schema {schema!r} in {path} '
+            f'(this adare release supports schema {_SUPPORTED_TEMPLATE_SCHEMA})'
+        )
+
+    supports = data.get('supports') or []
+    if not isinstance(supports, list) or not all(isinstance(x, str) for x in supports):
+        raise ValueError(f"'supports' must be a list of strings in {path}")
+
+    return TemplateMetadata(
+        id=str(data.get('id') or path.stem),
+        description=str(data.get('description', '')),
+        supports=tuple(supports),
+        schema=int(schema),
+        maintainer=str(data.get('maintainer', '')),
+        revision=str(data.get('revision', '')),
+        path=path,
+    )
+
+
+def discover_templates(*dirs: Path) -> dict[str, TemplateMetadata]:
+    """Scan ``dirs`` for templates with ``adare-template`` frontmatter.
+
+    Returns a mapping ``os_name -> metadata``. Within a single directory, two
+    templates claiming the same ``os_name`` raises ``ValueError``. Across
+    directories, later arguments override earlier (so user templates can
+    override built-ins).
+    """
+    result: dict[str, TemplateMetadata] = {}
+    for d in dirs:
+        if d is None or not d.is_dir():
+            continue
+        per_dir: dict[str, TemplateMetadata] = {}
+        for entry in sorted(d.iterdir()):
+            if not entry.is_file() or entry.suffix.lower() not in ('.yaml', '.yml'):
+                continue
+            meta = parse_template_metadata(entry)
+            if meta is None:
+                continue
+            for os_name in meta.supports:
+                if os_name in per_dir:
+                    raise ValueError(
+                        f"Conflicting templates in {d}: '{os_name}' is claimed "
+                        f'by both {per_dir[os_name].path.name} and {entry.name}'
+                    )
+                per_dir[os_name] = meta
+        result.update(per_dir)
+    return result
+
+
+_DISCOVERY_CACHE: tuple[tuple[float, float], dict[str, TemplateMetadata]] | None = None
+
+
+def _discovery_cache_key() -> tuple[float, float]:
+    def _mtime(p: Path) -> float:
+        try:
+            return p.stat().st_mtime
+        except OSError:
+            return -1.0
+    return (_mtime(TEMPLATES_DIR), _mtime(VM_TEMPLATES_DIR))
+
+
+def _cached_discovery() -> dict[str, TemplateMetadata]:
+    global _DISCOVERY_CACHE
+    key = _discovery_cache_key()
+    if _DISCOVERY_CACHE is not None and _DISCOVERY_CACHE[0] == key:
+        return _DISCOVERY_CACHE[1]
+    discovered = discover_templates(TEMPLATES_DIR, VM_TEMPLATES_DIR)
+    _DISCOVERY_CACHE = (key, discovered)
+    return discovered
+
+
+def resolve_template(os_def: OsDefinition) -> str | None:
+    """Resolve the template filename for ``os_def``.
+
+    Priority: explicit ``os_def.template`` > discovered metadata map (user dir
+    overrides built-in) > distribution-prefix fallback (any discovered entry
+    whose ``os_name`` begins with ``os_def.distribution``; ties broken by
+    ``max()`` over the keys). Returns ``None`` if nothing matches.
+    """
+    if os_def.template:
+        return os_def.template
+    discovered = _cached_discovery()
+    meta = discovered.get(os_def.name)
+    if meta is not None:
+        return meta.path.name
+    prefix_matches = {k: v for k, v in discovered.items() if k.startswith(os_def.distribution)}
+    if prefix_matches:
+        return prefix_matches[max(prefix_matches.keys())].path.name
+    return None
+
+
+def resolve_template_metadata(os_def: OsDefinition) -> TemplateMetadata | None:
+    """Return the discovered ``TemplateMetadata`` that would be used for ``os_def``.
+
+    Returns ``None`` if ``os_def.template`` overrides discovery or nothing matches.
+    """
+    if os_def.template:
+        return None
+    discovered = _cached_discovery()
+    meta = discovered.get(os_def.name)
+    if meta is not None:
+        return meta
+    prefix_matches = {k: v for k, v in discovered.items() if k.startswith(os_def.distribution)}
+    if prefix_matches:
+        return prefix_matches[max(prefix_matches.keys())]
+    return None
 
 
 def generate_password_hash(password: str) -> str:
@@ -190,18 +330,15 @@ def generate_user_data(os_def: OsDefinition, vm_name: str, setup_level: int = Se
     Raises:
         KeyError: If no template exists for the given OS
     """
-    # Resolve template: os_def.template > _TEMPLATE_MAP > distro fallback
-    if os_def.template:
-        template_file = os_def.template
-    else:
-        template_file = _TEMPLATE_MAP.get(os_def.name)
-        if template_file is None:
-            # Fallback: use latest template matching this distribution
-            distro_templates = {k: v for k, v in _TEMPLATE_MAP.items() if k.startswith(os_def.distribution)}
-            if distro_templates:
-                template_file = distro_templates[max(distro_templates.keys())]
-            else:
-                raise KeyError(f"No autoinstall template for OS '{os_def.name}'")
+    template_file = resolve_template(os_def)
+    if template_file is None:
+        discovered = _cached_discovery()
+        ids = sorted({m.id for m in discovered.values()}) or ['(none)']
+        raise KeyError(
+            f"No autoinstall template for OS '{os_def.name}'. "
+            f"Discovered template IDs: {', '.join(ids)}. "
+            f'Searched: built-in={TEMPLATES_DIR}, user={VM_TEMPLATES_DIR}.'
+        )
 
     # Sanitize hostname (RFC 1123: lowercase alphanumeric and hyphens)
     hostname = vm_name.lower().replace('_', '-').replace(' ', '-')
