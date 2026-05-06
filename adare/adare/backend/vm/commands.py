@@ -17,6 +17,7 @@ from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 from adare.types.environment import EnvironmentMetadata
 from adare.types.stages import (
     VMImportStage,
+    VMIntegrityVerificationStage,
     VMSnapshotCreateStage,
     VMSnapshotRestoreStage,
 )
@@ -40,8 +41,6 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
     if test_mode:
         log.info("Skipping VM integrity verification - running in test/development mode")
         if experiment_run_ulid:
-            from adare.backend.experiment.stagectxmanager import StageCtxManager
-            from adare.types.stages import VMIntegrityVerificationStage
             with StageCtxManager(VMIntegrityVerificationStage(), experiment_run_ulid, interrupt_event) as stage_ctx:
                 stage_ctx.stage.sub_msg = "SKIPPED - Development/Test Mode"
                 stage_ctx.set_status(stage_ctx.stage.status)
