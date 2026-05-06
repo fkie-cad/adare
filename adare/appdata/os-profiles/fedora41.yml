@@ -4,7 +4,6 @@ platform: linux
 distribution: fedora
 version: "41"
 install_mode: manual
-architecture: aarch64
 iso_url: ""
 iso_sha256: ""
 iso_filename: ""

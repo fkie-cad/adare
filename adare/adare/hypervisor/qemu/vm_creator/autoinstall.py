@@ -16,9 +16,14 @@ TEMPLATES_DIR = Path(__file__).parent / 'templates'
 
 # Template file mapping by OS name
 _TEMPLATE_MAP = {
+    'ubuntu2604': 'autoinstall_ubuntu_2604.yaml',
+    'ubuntu2604arm64': 'autoinstall_ubuntu_2604.yaml',
     'ubuntu2510': 'autoinstall_ubuntu_2510.yaml',
+    'ubuntu2510arm64': 'autoinstall_ubuntu_2510.yaml',
     'ubuntu2404': 'autoinstall_ubuntu_2404.yaml',
+    'ubuntu2404arm64': 'autoinstall_ubuntu_2404.yaml',
     'ubuntu2204': 'autoinstall_ubuntu_2204.yaml',
+    'ubuntu2204arm64': 'autoinstall_ubuntu_2204.yaml',
 }
 
 
