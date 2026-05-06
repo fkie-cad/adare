@@ -869,7 +869,7 @@ class VariableResolver:
         max_iterations = 10  # Prevent infinite loops
         previous_results = set()  # Track previous results to detect cycles
 
-        for _i in range(max_iterations):
+        for i in range(max_iterations):
             # If no more variables to replace, we're done
             if '{{' not in result:
                 break

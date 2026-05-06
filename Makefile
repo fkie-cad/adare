@@ -5,8 +5,8 @@ help:
 	@echo "--------------- HELP -----------------"
 	@echo "Available targets:"
 	@echo "  help            Show this help message."
-	@echo "  install         Run the installer (PowerShell on Windows, shell on *nix)."
-	@echo "  install-qemu    Run the installer with QEMU support (*nix only)."
+	@echo "  install         Run the installer (PowerShell on Windows, shell on *nix; QEMU support included on *nix)."
+	@echo "  install-qemu    Alias for install (kept for backwards compatibility)."
 	@echo "  adare-clean     Reset adare state."
 	@echo "  docs            Build HTML documentation with Sphinx."
 	@echo "  docs-sphinx     Build HTML documentation with Sphinx."
@@ -18,8 +18,8 @@ ifeq ($(OS),Windows_NT)
 	@powershell.exe -File ./adare/install/install.ps1
 else
 	chmod +x ./adare/install/install.sh
-	@echo "Running shell script..."
-	@./adare/install/install.sh
+	@echo "Running shell script (with QEMU support)..."
+	@./adare/install/install.sh qemu
 endif
 
 install-qemu:

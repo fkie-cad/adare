@@ -1,0 +1,748 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html"><link rel="next" title="file_content_matches_regex" href="file_content_matches_regex.html"><link rel="prev" title="file_content_equals" href="file_content_equals.html">
+        <link rel="prefetch" href="../../../_static/logo.png" as="image">
+
+    <link rel="shortcut icon" href="../../../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.12.19 -->
+        <title>file_content_contains - ADARE documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=d5f4d14b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">ADARE  documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../../../_static/logo.png" alt="Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../index.html">Home</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting-started/tutorial.html">Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting-started/concepts.html">Core Concepts</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../guide/projects.html">Projects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guide/environments.html">Environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guide/experiments.html">Experiments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guide/test-driven-analysis.html">Test-Driven Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guide/diff-analysis.html">Diff Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guide/vm-image-creation.html">VM Image Creation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guide/dev-mode.html">Dev Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guide/sharing.html">Sharing</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../actions.html">Actions</a><input aria-label="Toggle navigation of Actions" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../actions/index.html">Actions Reference</a><input aria-label="Toggle navigation of Actions Reference" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../actions/gui/index.html">GUI Actions</a><input aria-label="Toggle navigation of GUI Actions" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/gui/click.html">click</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/gui/keyboard.html">keyboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/gui/drag.html">drag</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/gui/scroll.html">scroll</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../actions/command/index.html">Command Actions</a><input aria-label="Toggle navigation of Command Actions" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/command/command.html">command</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../actions/test/index.html">Test Actions</a><input aria-label="Toggle navigation of Test Actions" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/test/test.html">test</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../actions/flow/index.html">Flow Control</a><input aria-label="Toggle navigation of Flow Control" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/flow/idle.html">idle</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/flow/wait_until.html">wait_until</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/flow/block.html">block</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/flow/loop.html">loop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/flow/stop.html">stop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/flow/continue.html">continue</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../actions/variable/index.html">Variable Actions</a><input aria-label="Toggle navigation of Variable Actions" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/variable/save_timestamp.html">save_timestamp</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/variable/save_variable.html">save_variable</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../actions/file/index.html">File Actions</a><input aria-label="Toggle navigation of File Actions" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/file/pull.html">pull</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/file/snapshot_filesystem.html">snapshot_filesystem</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/file/pull_changed_files.html">pull_changed_files</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../actions/debug/index.html">Debug Actions</a><input aria-label="Toggle navigation of Debug Actions" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/debug/pause.html">pause</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../actions/debug/screenshot.html">screenshot</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../index.html">Test Functions</a><input aria-label="Toggle navigation of Test Functions" checked="" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2 current has-children"><a class="reference internal" href="index.html">Standard</a><input aria-label="Toggle navigation of Standard" checked="" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="file_exists.html">file_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="file_does_not_exist.html">file_does_not_exist</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dir_exists.html">dir_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dir_does_not_exist.html">dir_does_not_exist</a></li>
+<li class="toctree-l3"><a class="reference internal" href="file_content_equals.html">file_content_equals</a></li>
+<li class="toctree-l3 current current-page"><a class="current reference internal" href="#">file_content_contains</a></li>
+<li class="toctree-l3"><a class="reference internal" href="file_content_matches_regex.html">file_content_matches_regex</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dir_content.html">dir_content</a></li>
+<li class="toctree-l3"><a class="reference internal" href="file_hash_matches.html">file_hash_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="file_timestamps.html">file_timestamps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="file_permissions.html">file_permissions</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../json/index.html">JSON</a><input aria-label="Toggle navigation of JSON" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../json/contains_key.html">contains_key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../json/value_matches.html">value_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../json/array_contains.html">array_contains</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../csv/index.html">CSV</a><input aria-label="Toggle navigation of CSV" class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" role="switch" type="checkbox"/><label for="toctree-checkbox-13"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../csv/contains_line.html">contains_line</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../xml/index.html">XML</a><input aria-label="Toggle navigation of XML" class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" role="switch" type="checkbox"/><label for="toctree-checkbox-14"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../xml/element_exists.html">element_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xml/element_text_matches.html">element_text_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xml/attribute_matches.html">attribute_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xml/element_count.html">element_count</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xml/xpath_result_matches.html">xpath_result_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xml/namespace_matches.html">namespace_matches</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sqlite/index.html">SQLite</a><input aria-label="Toggle navigation of SQLite" class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" role="switch" type="checkbox"/><label for="toctree-checkbox-15"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sqlite/query_result.html">query_result</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../linux/index.html">Linux</a><input aria-label="Toggle navigation of Linux" class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" role="switch" type="checkbox"/><label for="toctree-checkbox-16"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../linux/system_service_status.html">system_service_status</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../linux/process_running.html">process_running</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../linux/user_exists.html">user_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../linux/log_entry_exists.html">log_entry_exists</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../windows/index.html">Windows</a><input aria-label="Toggle navigation of Windows" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../windows/registry_key_exists.html">registry_key_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../windows/registry_value_matches.html">registry_value_matches</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../output-formats.html">Output Formats (in development)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../architecture/index.html">Architecture</a><input aria-label="Toggle navigation of Architecture" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../architecture/file-sharing.html">File Sharing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../architecture/guest-agent.html">Guest Agent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../architecture/cv-server.html">CV Server</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture/file-sharing.html">File Sharing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture/guest-agent.html">Guest Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture/cv-server.html">CV Server</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Paper</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../paper/demos.html">Demo Videos</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../../../_sources/reference/testfunctions/standard/file_content_contains.rst.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="file-content-contains">
+<h1>file_content_contains<a class="headerlink" href="#file-content-contains" title="Link to this heading">¶</a></h1>
+<dl class="field-list simple">
+<dt class="field-odd">Status<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="status-tested">● Tested</span></p>
+</dd>
+<dt class="field-even">Category<span class="colon">:</span></dt>
+<dd class="field-even"><p>File System</p>
+</dd>
+<dt class="field-odd">Function Name<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">file_content_contains</span></code></p>
+</dd>
+</dl>
+<p><strong>Tests if file content contains specified string or byte pattern.</strong></p>
+<p>This test function reads a file and checks if it contains the specified content. It supports both string-based and byte-based pattern matching, making it versatile for text files and binary files.</p>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 15.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dst</span></code></p></td>
+<td><p>string</p></td>
+<td><p><strong>Required.</strong> The file path to read and test. Supports glob patterns for dynamic path resolution.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">content</span></code></p></td>
+<td><p>string</p></td>
+<td><p><strong>Required.</strong> The content to search for within the file.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">content_type</span></code></p></td>
+<td><p>string</p></td>
+<td><p><strong>Optional.</strong> Either “string” (default) or “bytes”. Determines how content is interpreted.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">encoding</span></code></p></td>
+<td><p>string</p></td>
+<td><p><strong>Optional.</strong> Text encoding to use when reading the file for string content (default: “utf-8”). Ignored for byte content. Common values: “utf-8”, “utf-16”, “latin-1”, “ascii”. Use “BOM” to auto-detect encoding from file’s Byte Order Mark.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strip_bom</span></code></p></td>
+<td><p>boolean</p></td>
+<td><p><strong>Optional.</strong> Remove Byte Order Mark (BOM) from file content before searching (default: false). Only applies to string content type. Useful for Windows files that include BOM.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="usage-example">
+<h2>Usage Example<a class="headerlink" href="#usage-example" title="Link to this heading">¶</a></h2>
+<section id="text-content-search">
+<h3>Text Content Search<a class="headerlink" href="#text-content-search" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">verify_error_in_log</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_contains</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/var/log/application.log&quot;</span>
+<span class="w">      </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Authentication</span><span class="nv"> </span><span class="s">failed</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">user&quot;</span>
+<span class="w">      </span><span class="nt">content_type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;string&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">authentication</span><span class="nv"> </span><span class="s">error</span><span class="nv"> </span><span class="s">appears</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">log&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="binary-content-search">
+<h3>Binary Content Search<a class="headerlink" href="#binary-content-search" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check_binary_signature</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_contains</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/tmp/generated_file.bin&quot;</span>
+<span class="w">      </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;\\x50\\x4B\\x03\\x04&quot;</span><span class="w">  </span><span class="c1"># ZIP file signature</span>
+<span class="w">      </span><span class="nt">content_type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;bytes&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">contains</span><span class="nv"> </span><span class="s">ZIP</span><span class="nv"> </span><span class="s">signature&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="log-monitoring">
+<h3>Log Monitoring<a class="headerlink" href="#log-monitoring" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Process</span><span class="nv"> </span><span class="s">Data&quot;</span>
+
+<span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">verify_processing_logged</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_contains</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/var/log/processor.log&quot;</span>
+<span class="w">      </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Data</span><span class="nv"> </span><span class="s">processing</span><span class="nv"> </span><span class="s">completed</span><span class="nv"> </span><span class="s">successfully&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">processing</span><span class="nv"> </span><span class="s">completion</span><span class="nv"> </span><span class="s">was</span><span class="nv"> </span><span class="s">logged&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="windows-utf-16-log-analysis">
+<h3>Windows UTF-16 Log Analysis<a class="headerlink" href="#windows-utf-16-log-analysis" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check_windows_event_log</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_contains</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;C:\\Windows\\Logs\\application.log&quot;</span>
+<span class="w">      </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Service</span><span class="nv"> </span><span class="s">started</span><span class="nv"> </span><span class="s">successfully&quot;</span>
+<span class="w">      </span><span class="nt">content_type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;string&quot;</span>
+<span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;utf-16&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Search</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">service</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">message</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">UTF-16</span><span class="nv"> </span><span class="s">encoded</span><span class="nv"> </span><span class="s">log&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="bom-handling-examples">
+<h3>BOM Handling Examples<a class="headerlink" href="#bom-handling-examples" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Search in file with BOM, automatically strip BOM</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">search_in_bom_file</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_contains</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/windows_file.txt&quot;</span>
+<span class="w">      </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Error</span><span class="nv"> </span><span class="s">occurred&quot;</span>
+<span class="w">      </span><span class="nt">content_type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;string&quot;</span>
+<span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;utf-8&quot;</span>
+<span class="w">      </span><span class="nt">strip_bom</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Search</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">error</span><span class="nv"> </span><span class="s">message,</span><span class="nv"> </span><span class="s">ignoring</span><span class="nv"> </span><span class="s">BOM&quot;</span>
+
+<span class="w">  </span><span class="c1"># Auto-detect encoding and search</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">search_unknown_encoding</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_contains</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/unknown_file.txt&quot;</span>
+<span class="w">      </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;SUCCESS&quot;</span>
+<span class="w">      </span><span class="nt">content_type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;string&quot;</span>
+<span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;BOM&quot;</span>
+<span class="w">      </span><span class="nt">strip_bom</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Auto-detect</span><span class="nv"> </span><span class="s">encoding</span><span class="nv"> </span><span class="s">from</span><span class="nv"> </span><span class="s">BOM</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">search&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="common-use-cases">
+<h2>Common Use Cases<a class="headerlink" href="#common-use-cases" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt><strong>Log File Analysis</strong></dt><dd><p>Search for specific events, errors, or messages in log files</p>
+</dd>
+<dt><strong>Configuration Validation</strong></dt><dd><p>Verify that configuration files contain required settings or values</p>
+</dd>
+<dt><strong>Generated Content Verification</strong></dt><dd><p>Ensure generated files contain expected content or markers</p>
+</dd>
+<dt><strong>Error Detection</strong></dt><dd><p>Monitor files for error messages or failure indicators</p>
+</dd>
+<dt><strong>Binary File Analysis</strong></dt><dd><p>Search for specific byte patterns or signatures in binary files</p>
+</dd>
+<dt><strong>Process Monitoring</strong></dt><dd><p>Verify that processes write expected status or completion messages</p>
+</dd>
+<dt><strong>Forensic Analysis</strong></dt><dd><p>Search for specific patterns that might indicate malicious activity or data presence</p>
+</dd>
+</dl>
+</section>
+<section id="content-type-details">
+<h2>Content Type Details<a class="headerlink" href="#content-type-details" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt><strong>String Content (default)</strong></dt><dd><ul class="simple">
+<li><p>File is read as text using the specified encoding (default: UTF-8) with error handling</p></li>
+<li><p>Search is performed on the decoded string content</p></li>
+<li><p>Suitable for text files, logs, configuration files</p></li>
+<li><p>Use the encoding parameter to handle different character encodings</p></li>
+<li><p>BOM can be automatically detected and optionally stripped before searching</p></li>
+</ul>
+</dd>
+<dt><strong>Byte Content</strong></dt><dd><ul class="simple">
+<li><p>File is read in binary mode</p></li>
+<li><p>Content parameter is parsed for escape sequences (\x41, \n, \t, etc.)</p></li>
+<li><p>Search is performed on raw byte data</p></li>
+<li><p>Suitable for binary files, executables, or specific byte pattern detection</p></li>
+</ul>
+</dd>
+</dl>
+<section id="escape-sequence-examples">
+<h3>Escape Sequence Examples<a class="headerlink" href="#escape-sequence-examples" title="Link to this heading">¶</a></h3>
+<p>When using <code class="docutils literal notranslate"><span class="pre">content_type:</span> <span class="pre">&quot;bytes&quot;</span></code>, you can use Python-style escape sequences:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Search for null-terminated string</span>
+<span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;admin\\x00&quot;</span>
+
+<span class="c1"># Search for newline patterns</span>
+<span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;\\r\\n\\r\\n&quot;</span>
+
+<span class="c1"># Search for specific hex patterns</span>
+<span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;\\xFF\\xFE&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="return-values">
+<h2>Return Values<a class="headerlink" href="#return-values" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt><strong>Success</strong></dt><dd><p>Returns success when the specified content is found within the file</p>
+</dd>
+<dt><strong>Failure</strong></dt><dd><p>Returns failure when:</p>
+<ul class="simple">
+<li><p>The specified content is not found in the file</p></li>
+<li><p>File is empty and content is expected</p></li>
+</ul>
+</dd>
+<dt><strong>Execution Error</strong></dt><dd><p>Returns execution error when:</p>
+<ul class="simple">
+<li><p>The file cannot be found or read</p></li>
+<li><p>Permission denied reading the file</p></li>
+<li><p>Path resolution fails due to glob pattern ambiguity</p></li>
+<li><p>Unicode decoding errors occur (for string content - try specifying correct encoding parameter)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="example-results">
+<h2>Example Results<a class="headerlink" href="#example-results" title="Link to this heading">¶</a></h2>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Success case - string content</span>
+<span class="nt">result</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">success</span>
+<span class="nt">details</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;string</span><span class="nv"> </span><span class="s">content</span><span class="nv"> </span><span class="s">found</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">file&quot;</span>
+
+<span class="c1"># Success case - byte content</span>
+<span class="nt">result</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">success</span>
+<span class="nt">details</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;byte</span><span class="nv"> </span><span class="s">pattern</span><span class="nv"> </span><span class="s">found</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">file&quot;</span>
+
+<span class="c1"># Failure case</span>
+<span class="nt">result</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">failed</span>
+<span class="nt">details</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;string</span><span class="nv"> </span><span class="s">content</span><span class="nv"> </span><span class="s">not</span><span class="nv"> </span><span class="s">found</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">file&quot;</span>
+
+<span class="c1"># Execution error case</span>
+<span class="nt">result</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">execution_error</span>
+<span class="nt">error</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;FileNotFoundError&quot;</span>
+<span class="nt">context</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">path</span><span class="nv"> </span><span class="s">/missing/log.txt</span><span class="nv"> </span><span class="s">does</span><span class="nv"> </span><span class="s">not</span><span class="nv"> </span><span class="s">exist&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="file_content_matches_regex.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">file_content_matches_regex</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="file_content_equals.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">file_content_equals</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Fraunhofer FKIE
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">file_content_contains</a><ul>
+<li><a class="reference internal" href="#parameters">Parameters</a></li>
+<li><a class="reference internal" href="#usage-example">Usage Example</a><ul>
+<li><a class="reference internal" href="#text-content-search">Text Content Search</a></li>
+<li><a class="reference internal" href="#binary-content-search">Binary Content Search</a></li>
+<li><a class="reference internal" href="#log-monitoring">Log Monitoring</a></li>
+<li><a class="reference internal" href="#windows-utf-16-log-analysis">Windows UTF-16 Log Analysis</a></li>
+<li><a class="reference internal" href="#bom-handling-examples">BOM Handling Examples</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#common-use-cases">Common Use Cases</a></li>
+<li><a class="reference internal" href="#content-type-details">Content Type Details</a><ul>
+<li><a class="reference internal" href="#escape-sequence-examples">Escape Sequence Examples</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#return-values">Return Values</a></li>
+<li><a class="reference internal" href="#example-results">Example Results</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"></script>
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+  if (!window.simpleDatatables) {
+    console.warn('simpleDatatables not loaded yet');
+    return;
+  }
+  document.querySelectorAll('table.sdtable').forEach(function(el) {
+    if (!el.dataset.sdInit) {
+      el.dataset.sdInit = '1';
+      try {
+        new window.simpleDatatables.DataTable(el, {});
+      } catch (e) {
+        console.error('Simple-DataTables init failed:', e);
+      }
+    }
+  });
+});
+</script>
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+  if (!window.simpleDatatables) {
+    console.warn('simpleDatatables not loaded yet');
+    return;
+  }
+  document.querySelectorAll('table.sdtable').forEach(function(el) {
+    if (!el.dataset.sdInit) {
+      el.dataset.sdInit = '1';
+      try {
+        new window.simpleDatatables.DataTable(el, {});
+      } catch (e) {
+        console.error('Simple-DataTables init failed:', e);
+      }
+    }
+  });
+});
+</script>
+    </body>
+</html>

@@ -1,0 +1,727 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Actions" href="../reference/actions.html"><link rel="prev" title="Dev Mode" href="dev-mode.html">
+        <link rel="prefetch" href="../_static/logo.png" as="image">
+
+    <link rel="shortcut icon" href="../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.12.19 -->
+        <title>Sharing - ADARE documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d5f4d14b" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">ADARE  documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../_static/logo.png" alt="Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul>
+<li class="toctree-l1"><a class="reference internal" href="../index.html">Home</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/tutorial.html">Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/concepts.html">Core Concepts</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="projects.html">Projects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environments.html">Environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="experiments.html">Experiments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="test-driven-analysis.html">Test-Driven Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="diff-analysis.html">Diff Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vm-image-creation.html">VM Image Creation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dev-mode.html">Dev Mode</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Sharing</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/actions.html">Actions</a><input aria-label="Toggle navigation of Actions" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/actions/index.html">Actions Reference</a><input aria-label="Toggle navigation of Actions Reference" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/gui/index.html">GUI Actions</a><input aria-label="Toggle navigation of GUI Actions" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/gui/click.html">click</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/gui/keyboard.html">keyboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/gui/drag.html">drag</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/gui/scroll.html">scroll</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/command/index.html">Command Actions</a><input aria-label="Toggle navigation of Command Actions" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/command/command.html">command</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/test/index.html">Test Actions</a><input aria-label="Toggle navigation of Test Actions" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/test/test.html">test</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/flow/index.html">Flow Control</a><input aria-label="Toggle navigation of Flow Control" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/flow/idle.html">idle</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/flow/wait_until.html">wait_until</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/flow/block.html">block</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/flow/loop.html">loop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/flow/stop.html">stop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/flow/continue.html">continue</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/variable/index.html">Variable Actions</a><input aria-label="Toggle navigation of Variable Actions" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/variable/save_timestamp.html">save_timestamp</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/variable/save_variable.html">save_variable</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/file/index.html">File Actions</a><input aria-label="Toggle navigation of File Actions" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/file/pull.html">pull</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/file/snapshot_filesystem.html">snapshot_filesystem</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/file/pull_changed_files.html">pull_changed_files</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/debug/index.html">Debug Actions</a><input aria-label="Toggle navigation of Debug Actions" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/debug/pause.html">pause</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/debug/screenshot.html">screenshot</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/testfunctions/index.html">Test Functions</a><input aria-label="Toggle navigation of Test Functions" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/standard/index.html">Standard</a><input aria-label="Toggle navigation of Standard" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_exists.html">file_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_does_not_exist.html">file_does_not_exist</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/dir_exists.html">dir_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/dir_does_not_exist.html">dir_does_not_exist</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_content_equals.html">file_content_equals</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_content_contains.html">file_content_contains</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_content_matches_regex.html">file_content_matches_regex</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/dir_content.html">dir_content</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_hash_matches.html">file_hash_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_timestamps.html">file_timestamps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_permissions.html">file_permissions</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/json/index.html">JSON</a><input aria-label="Toggle navigation of JSON" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/json/contains_key.html">contains_key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/json/value_matches.html">value_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/json/array_contains.html">array_contains</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/csv/index.html">CSV</a><input aria-label="Toggle navigation of CSV" class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" role="switch" type="checkbox"/><label for="toctree-checkbox-13"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/csv/contains_line.html">contains_line</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/xml/index.html">XML</a><input aria-label="Toggle navigation of XML" class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" role="switch" type="checkbox"/><label for="toctree-checkbox-14"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/xml/element_exists.html">element_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/xml/element_text_matches.html">element_text_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/xml/attribute_matches.html">attribute_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/xml/element_count.html">element_count</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/xml/xpath_result_matches.html">xpath_result_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/xml/namespace_matches.html">namespace_matches</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/sqlite/index.html">SQLite</a><input aria-label="Toggle navigation of SQLite" class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" role="switch" type="checkbox"/><label for="toctree-checkbox-15"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/sqlite/query_result.html">query_result</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/linux/index.html">Linux</a><input aria-label="Toggle navigation of Linux" class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" role="switch" type="checkbox"/><label for="toctree-checkbox-16"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/linux/system_service_status.html">system_service_status</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/linux/process_running.html">process_running</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/linux/user_exists.html">user_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/linux/log_entry_exists.html">log_entry_exists</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/windows/index.html">Windows</a><input aria-label="Toggle navigation of Windows" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/windows/registry_key_exists.html">registry_key_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/windows/registry_value_matches.html">registry_value_matches</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/output-formats.html">Output Formats (in development)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../architecture/index.html">Architecture</a><input aria-label="Toggle navigation of Architecture" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/file-sharing.html">File Sharing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/guest-agent.html">Guest Agent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/cv-server.html">CV Server</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/file-sharing.html">File Sharing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/guest-agent.html">Guest Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/cv-server.html">CV Server</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Paper</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../paper/demos.html">Demo Videos</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/guide/sharing.rst.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="sharing">
+<h1>Sharing<a class="headerlink" href="#sharing" title="Link to this heading">¶</a></h1>
+<section id="adare-web-platform">
+<h2>ADARE Web Platform<a class="headerlink" href="#adare-web-platform" title="Link to this heading">¶</a></h2>
+<p>The ADARE web platform at <a class="reference external" href="https://adare.seclab-bonn.de">adare.seclab-bonn.de</a> is a community hub for sharing forensic experiments, environments, test functions, and results. Researchers can publish their work, download experiments created by others, and build on the community’s collective forensic analysis.</p>
+<p>The platform supports sharing of:</p>
+<ul class="simple">
+<li><p><strong>Experiments</strong> – playbooks and metadata for forensic analysis workflows</p></li>
+<li><p><strong>Environments</strong> – VM configurations (OS profiles, settings)</p></li>
+<li><p><strong>Test functions</strong> – reusable validation logic for forensic artifacts</p></li>
+<li><p><strong>Experiment bundles</strong> – complete packages with experiments and all their dependencies</p></li>
+<li><p><strong>Run results</strong> – published experiment execution results with forensic data</p></li>
+</ul>
+<p>All sharing operations are performed through the <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span></code> command group.</p>
+</section>
+<section id="authentication">
+<h2>Authentication<a class="headerlink" href="#authentication" title="Link to this heading">¶</a></h2>
+<p>You must be logged in to interact with the ADARE web platform.</p>
+<section id="logging-in">
+<h3>Logging In<a class="headerlink" href="#logging-in" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>login
+</pre></div>
+</div>
+<p>This starts an interactive authentication flow that connects your local ADARE installation to your account on the web platform.</p>
+</section>
+<section id="logging-out">
+<h3>Logging Out<a class="headerlink" href="#logging-out" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span><span class="nb">logout</span>
+</pre></div>
+</div>
+</section>
+<section id="checking-login-status">
+<h3>Checking Login Status<a class="headerlink" href="#checking-login-status" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>status
+</pre></div>
+</div>
+<p>Shows whether you are currently logged in and displays your username.</p>
+</section>
+</section>
+<section id="downloading-resources">
+<h2>Downloading Resources<a class="headerlink" href="#downloading-resources" title="Link to this heading">¶</a></h2>
+<p>Download shared content from the platform into your local project. All download commands require being inside an ADARE project directory (or specifying one with <code class="docutils literal notranslate"><span class="pre">-p</span></code>).</p>
+<section id="downloading-experiments">
+<h3>Downloading Experiments<a class="headerlink" href="#downloading-experiments" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>experiment<span class="w"> </span>&lt;ulid&gt;
+</pre></div>
+</div>
+<p>Downloads an experiment by its ULID (unique identifier). The experiment is added to your project’s <code class="docutils literal notranslate"><span class="pre">experiments/</span></code> directory.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Example</span>
+adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>experiment<span class="w"> </span>01JQXYZ123ABC
+</pre></div>
+</div>
+</section>
+<section id="downloading-test-functions">
+<h3>Downloading Test Functions<a class="headerlink" href="#downloading-test-functions" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>testfunction<span class="w"> </span>&lt;name&gt;
+
+<span class="c1"># Download a specific version</span>
+adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>testfunction<span class="w"> </span>&lt;name&gt;<span class="w"> </span>-v<span class="w"> </span><span class="m">2</span>
+</pre></div>
+</div>
+<p>Downloads a test function by name. By default, the latest version is downloaded. Use <code class="docutils literal notranslate"><span class="pre">-v</span></code> to specify a particular version.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Download the latest version</span>
+adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>testfunction<span class="w"> </span>standard.file_exists
+
+<span class="c1"># Download version 3 specifically</span>
+adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>testfunction<span class="w"> </span>excel.validate_columns<span class="w"> </span>-v<span class="w"> </span><span class="m">3</span>
+</pre></div>
+</div>
+</section>
+<section id="downloading-environments">
+<h3>Downloading Environments<a class="headerlink" href="#downloading-environments" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>environment<span class="w"> </span>&lt;name&gt;
+</pre></div>
+</div>
+<p>Downloads an environment configuration by name.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>environment<span class="w"> </span>ubuntu24043
+</pre></div>
+</div>
+</section>
+<section id="downloading-bundles">
+<h3>Downloading Bundles<a class="headerlink" href="#downloading-bundles" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>bundle<span class="w"> </span>&lt;ulid&gt;
+</pre></div>
+</div>
+<p>Downloads an experiment bundle, which includes the experiment and all its dependencies (test functions, environment configurations, shared resources). This is the easiest way to get a complete, runnable experiment.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Download bundle without disk images</span>
+adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>bundle<span class="w"> </span>01JQXYZ123ABC
+
+<span class="c1"># Include disk images (large download)</span>
+adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>bundle<span class="w"> </span>01JQXYZ123ABC<span class="w"> </span>--include-disk-images
+</pre></div>
+</div>
+<section id="options">
+<h4>Options<a class="headerlink" href="#options" title="Link to this heading">¶</a></h4>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--include-disk-images</span></code></dt><dd><p>Also download the VM disk images. These can be very large (multiple GB). Without this flag, only the configuration files are downloaded.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-p,</span> <span class="pre">--project</span></code></dt><dd><p>Target project name or path.</p>
+</dd>
+</dl>
+</section>
+</section>
+</section>
+<section id="running-downloaded-experiments">
+<h2>Running Downloaded Experiments<a class="headerlink" href="#running-downloaded-experiments" title="Link to this heading">¶</a></h2>
+<p>After downloading, experiments appear in your project and can be run like any locally created experiment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Download an experiment</span>
+adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>experiment<span class="w"> </span>01JQXYZ123ABC
+
+<span class="c1"># Run it (same as any local experiment)</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>downloaded-experiment<span class="w"> </span>-e<span class="w"> </span>ubuntu24043
+
+<span class="c1"># Or use it in dev mode</span>
+adare<span class="w"> </span>dev<span class="w"> </span>start<span class="w"> </span>-e<span class="w"> </span>ubuntu24043
+adare<span class="w"> </span>dev<span class="w"> </span>playbook<span class="w"> </span>-f<span class="w"> </span>experiments/downloaded-experiment/playbook.yml
+</pre></div>
+</div>
+<p>Downloaded test functions are automatically available for use in playbooks.</p>
+</section>
+<section id="syncing">
+<h2>Syncing<a class="headerlink" href="#syncing" title="Link to this heading">¶</a></h2>
+<p>Synchronize your project data with the web platform:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>sync
+
+<span class="c1"># Sync a specific project</span>
+adare<span class="w"> </span>web<span class="w"> </span>sync<span class="w"> </span>-p<span class="w"> </span>my-project
+</pre></div>
+</div>
+<p>This updates the platform with your local project information, ensuring the web interface reflects your current experiments, environments, and test functions.</p>
+</section>
+<section id="publishing-results">
+<h2>Publishing Results<a class="headerlink" href="#publishing-results" title="Link to this heading">¶</a></h2>
+<p>Share your experiment run results with the community:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>publish<span class="w"> </span>&lt;run_ulid&gt;
+
+<span class="c1"># With explicit project</span>
+adare<span class="w"> </span>web<span class="w"> </span>publish<span class="w"> </span>01JRXYZ456DEF<span class="w"> </span>-p<span class="w"> </span>my-project
+</pre></div>
+</div>
+<p>This uploads the results of a specific experiment run, including all collected forensic data, test outcomes, and execution metadata. Published results are visible to other researchers on the platform.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">&lt;run_ulid&gt;</span></code> is the unique identifier of the experiment run, which is displayed when you execute <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">run</span></code> or can be found with <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">list-runs</span></code>.</p>
+</section>
+<section id="submitting-to-the-community">
+<h2>Submitting to the Community<a class="headerlink" href="#submitting-to-the-community" title="Link to this heading">¶</a></h2>
+<p>Submit your experiments, test functions, or environments for inclusion in the shared community repository. Submissions are created as pull requests that are reviewed before being merged.</p>
+<section id="submitting-an-experiment">
+<h3>Submitting an Experiment<a class="headerlink" href="#submitting-an-experiment" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>submit<span class="w"> </span>experiment<span class="w"> </span>&lt;name&gt;
+
+<span class="c1"># With explicit project</span>
+adare<span class="w"> </span>web<span class="w"> </span>submit<span class="w"> </span>experiment<span class="w"> </span>browser-analysis<span class="w"> </span>-p<span class="w"> </span>my-project
+</pre></div>
+</div>
+</section>
+<section id="submitting-a-test-function">
+<h3>Submitting a Test Function<a class="headerlink" href="#submitting-a-test-function" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>submit<span class="w"> </span>testfunction<span class="w"> </span>&lt;name&gt;
+
+<span class="c1"># Example</span>
+adare<span class="w"> </span>web<span class="w"> </span>submit<span class="w"> </span>testfunction<span class="w"> </span>standard.file_exists<span class="w"> </span>-p<span class="w"> </span>my-project
+</pre></div>
+</div>
+</section>
+<section id="submitting-an-environment">
+<h3>Submitting an Environment<a class="headerlink" href="#submitting-an-environment" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>submit<span class="w"> </span>environment<span class="w"> </span>&lt;name&gt;
+
+<span class="c1"># Example</span>
+adare<span class="w"> </span>web<span class="w"> </span>submit<span class="w"> </span>environment<span class="w"> </span>ubuntu24043<span class="w"> </span>-p<span class="w"> </span>my-project
+</pre></div>
+</div>
+<p>Each submit command creates a pull request on the shared repository. You receive a PR URL upon successful submission that you can use to track the review process.</p>
+</section>
+</section>
+<section id="checking-status">
+<h2>Checking Status<a class="headerlink" href="#checking-status" title="Link to this heading">¶</a></h2>
+<p>Verify whether your experiments or runs have been published to the server.</p>
+<section id="checking-an-experiment">
+<h3>Checking an Experiment<a class="headerlink" href="#checking-an-experiment" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>check<span class="w"> </span>experiment<span class="w"> </span>&lt;ulid&gt;
+</pre></div>
+</div>
+<p>Reports whether the experiment exists on the server and its publication status.</p>
+</section>
+<section id="checking-a-run">
+<h3>Checking a Run<a class="headerlink" href="#checking-a-run" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>check<span class="w"> </span>run<span class="w"> </span>&lt;ulid&gt;
+</pre></div>
+</div>
+<p>Reports whether the experiment run exists on the server.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="experiments.html"><span class="doc">Experiments</span></a></dt><dd><p>Experiment structure and running experiments</p>
+</dd>
+<dt><a class="reference internal" href="../reference/cli.html"><span class="doc">CLI Reference</span></a></dt><dd><p>Full CLI reference</p>
+</dd>
+<dt><a class="reference internal" href="../getting-started/concepts.html"><span class="doc">Core Concepts</span></a></dt><dd><p>ADARE concepts including the web platform</p>
+</dd>
+</dl>
+</div>
+</section>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="../reference/actions.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Actions</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="dev-mode.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Dev Mode</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Fraunhofer FKIE
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Sharing</a><ul>
+<li><a class="reference internal" href="#adare-web-platform">ADARE Web Platform</a></li>
+<li><a class="reference internal" href="#authentication">Authentication</a><ul>
+<li><a class="reference internal" href="#logging-in">Logging In</a></li>
+<li><a class="reference internal" href="#logging-out">Logging Out</a></li>
+<li><a class="reference internal" href="#checking-login-status">Checking Login Status</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#downloading-resources">Downloading Resources</a><ul>
+<li><a class="reference internal" href="#downloading-experiments">Downloading Experiments</a></li>
+<li><a class="reference internal" href="#downloading-test-functions">Downloading Test Functions</a></li>
+<li><a class="reference internal" href="#downloading-environments">Downloading Environments</a></li>
+<li><a class="reference internal" href="#downloading-bundles">Downloading Bundles</a><ul>
+<li><a class="reference internal" href="#options">Options</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#running-downloaded-experiments">Running Downloaded Experiments</a></li>
+<li><a class="reference internal" href="#syncing">Syncing</a></li>
+<li><a class="reference internal" href="#publishing-results">Publishing Results</a></li>
+<li><a class="reference internal" href="#submitting-to-the-community">Submitting to the Community</a><ul>
+<li><a class="reference internal" href="#submitting-an-experiment">Submitting an Experiment</a></li>
+<li><a class="reference internal" href="#submitting-a-test-function">Submitting a Test Function</a></li>
+<li><a class="reference internal" href="#submitting-an-environment">Submitting an Environment</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#checking-status">Checking Status</a><ul>
+<li><a class="reference internal" href="#checking-an-experiment">Checking an Experiment</a></li>
+<li><a class="reference internal" href="#checking-a-run">Checking a Run</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"></script>
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+  if (!window.simpleDatatables) {
+    console.warn('simpleDatatables not loaded yet');
+    return;
+  }
+  document.querySelectorAll('table.sdtable').forEach(function(el) {
+    if (!el.dataset.sdInit) {
+      el.dataset.sdInit = '1';
+      try {
+        new window.simpleDatatables.DataTable(el, {});
+      } catch (e) {
+        console.error('Simple-DataTables init failed:', e);
+      }
+    }
+  });
+});
+</script>
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+  if (!window.simpleDatatables) {
+    console.warn('simpleDatatables not loaded yet');
+    return;
+  }
+  document.querySelectorAll('table.sdtable').forEach(function(el) {
+    if (!el.dataset.sdInit) {
+      el.dataset.sdInit = '1';
+      try {
+        new window.simpleDatatables.DataTable(el, {});
+      } catch (e) {
+        console.error('Simple-DataTables init failed:', e);
+      }
+    }
+  });
+});
+</script>
+    </body>
+</html>

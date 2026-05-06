@@ -9,6 +9,7 @@ This module provides CRUD operations for persistent dev mode sessions:
 """
 
 import logging
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -294,7 +295,7 @@ class DevModeApi(EnhancedDatabaseApi):
         log.info(f"Deleted dev session {session_id} from database")
         return True
 
-    def cleanup_stale_sessions(self, check_vm_exists: callable | None = None) -> int:
+    def cleanup_stale_sessions(self, check_vm_exists: Callable | None = None) -> int:
         """
         Cleanup stale sessions (e.g., VMs that no longer exist).
 

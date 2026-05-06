@@ -198,6 +198,7 @@ async def should_skip_installation(
         pass
 
     adarevm_version = None
+    adarelib_version = None
     if platform == 'windows' and vm_is_qemu:
         log.debug("Using injected user PATH to check adarevm version on Windows QEMU")
         adarevm_version = await check_installed_version(
