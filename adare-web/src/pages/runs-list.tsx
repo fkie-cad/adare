@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react'
 import { Play, RefreshCw } from 'lucide-react'
+import { useSearch } from '@tanstack/react-router'
 import { PageHeader } from '@/components/layout/page-header'
+import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from '@/components/ui/table'
 import { Badge, statusToVariant } from '@/components/ui/badge'
@@ -55,6 +58,16 @@ function LoadingTable() {
 
 export default function RunsListPage() {
   const { data, isPending, isError, error, refetch } = useRuns()
+  const search = useSearch({ from: '/runs' }) as { focus?: string }
+  const focusUlid = search.focus
+  const [highlightUlid, setHighlightUlid] = useState<string | undefined>(focusUlid)
+
+  useEffect(() => {
+    setHighlightUlid(focusUlid)
+    if (!focusUlid) return
+    const t = setTimeout(() => setHighlightUlid(undefined), 5000)
+    return () => clearTimeout(t)
+  }, [focusUlid])
 
   return (
     <div className="p-6 space-y-6">
@@ -99,7 +112,13 @@ export default function RunsListPage() {
           </TableHeader>
           <TableBody>
             {(data as unknown as RunRow[]).map((run) => (
-              <TableRow key={run.ulid} className="hover:bg-muted/50">
+              <TableRow
+                key={run.ulid}
+                className={cn(
+                  'hover:bg-muted/50',
+                  highlightUlid === run.ulid && 'bg-primary/10 ring-2 ring-primary',
+                )}
+              >
                 <TableCell>
                   <Badge variant={statusToVariant(run.status ?? null)}>
                     {run.status ?? '—'}

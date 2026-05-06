@@ -78,6 +78,7 @@ class EnvironmentService:
 
                 if env_data:
                     next_steps = [
+                        f'Verify the VM is ready: adare env verify {env_name}',
                         f'Run experiments in this environment with: adare experiment run <experiment> -e {env_name}',
                         'List available environments with: adare environment list',
                         f'View environment details with: adare environment show {env_name}'
@@ -138,6 +139,7 @@ class EnvironmentService:
             next_steps = [
                 'Edit the environment file to configure VM and OS settings',
                 f'Load the environment with: adare environment load {request.name}',
+                f'Verify the VM is ready: adare env verify {request.name}',
             ]
 
             return Result.ok(EnvironmentInfo(

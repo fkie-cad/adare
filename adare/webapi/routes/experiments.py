@@ -58,6 +58,12 @@ class ExperimentTestBody(BaseModel):
     environment_name: str
 
 
+class ExperimentRunBody(BaseModel):
+    """Request body for starting an experiment run."""
+    project_path: str
+    environment_name: str
+
+
 class ExperimentEnvModifyBody(BaseModel):
     """Request body for adding/removing environments."""
     project_path: str
@@ -179,6 +185,15 @@ async def create_example_experiment(name: str, body: ExperimentProjectBody):
 async def test_experiment(name: str, body: ExperimentTestBody):
     """Test (dry-run) an experiment."""
     result = _api().experiment.test(Path(body.project_path), name, body.environment_name)
+    return result_to_response(result)
+
+
+@router.post("/{name}/run")
+async def run_experiment(name: str, body: ExperimentRunBody):
+    """Start an experiment run in the background. Returns the run ULID immediately."""
+    result = await _api().experiment.run(
+        Path(body.project_path), name, body.environment_name
+    )
     return result_to_response(result)
 
 

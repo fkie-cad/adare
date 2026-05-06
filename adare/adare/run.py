@@ -307,6 +307,19 @@ def create(name, project, with_vm):
     exec_with_error_printing(exec_environment_create, args)
 
 @env.command()
+@click.argument('name')
+@click.option('--project', '-p', help='Name of the project')
+def verify(name, project):
+    """Verify an environment by running the built-in verify_vm experiment.
+
+    Idempotently registers the verify_vm example experiment, attaches the
+    environment, and runs it in the foreground with live progress."""
+    from adare.cli.environment import exec_environment_verify
+    args = SimpleNamespace(name=name, project=project)
+    exec_with_error_printing(exec_environment_verify, args)
+
+
+@env.command()
 @click.argument('identifier')
 @click.option('--force', '-f', is_flag=True, help='Force deletion of the environment and any orphaned experiments')
 def remove(identifier, force):

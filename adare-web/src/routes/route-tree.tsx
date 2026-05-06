@@ -25,6 +25,10 @@ const runsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/runs',
   component: RunsListPage,
+  validateSearch: (search: Record<string, unknown>): { focus?: string } => {
+    const focus = search.focus
+    return typeof focus === 'string' && focus.length > 0 ? { focus } : {}
+  },
 })
 
 const experimentsRoute = createRoute({
