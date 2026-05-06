@@ -414,6 +414,14 @@ def load(name, force):
     args = SimpleNamespace(name=name, force=force)
     exec_with_error_printing(exec_load_testfunction, args)
 
+@test.command()
+def sync():
+    """Sync all testfunctions from appdata: create new, update changed, skip unchanged."""
+    from adare.cli.testfunction import exec_sync_testfunctions
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_sync_testfunctions, args)
+
+
 @test.command(name='list')
 @click.option('--set', help='Filter testfunctions by set (e.g., standard)')
 def list_testfunctions(set):

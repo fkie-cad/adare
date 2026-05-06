@@ -1,5 +1,5 @@
 .DEFAULT_GOAL = help
-.PHONY: help install adare-clean docs docs-sphinx
+.PHONY: help install update adare-clean docs docs-sphinx
 
 help:
 	@echo "--------------- HELP -----------------"
@@ -7,6 +7,7 @@ help:
 	@echo "  help            Show this help message."
 	@echo "  install         Run the installer (PowerShell on Windows, shell on *nix; QEMU support included on *nix)."
 	@echo "  install-qemu    Alias for install (kept for backwards compatibility)."
+	@echo "  update          Refresh dependencies, appdata, and testfunctions (hash-based, no symlink rebuild)."
 	@echo "  adare-clean     Reset adare state."
 	@echo "  docs            Build HTML documentation with Sphinx."
 	@echo "  docs-sphinx     Build HTML documentation with Sphinx."
@@ -20,6 +21,15 @@ else
 	chmod +x ./adare/install/install.sh
 	@echo "Running shell script (with QEMU support)..."
 	@./adare/install/install.sh qemu
+endif
+
+update:
+ifeq ($(OS),Windows_NT)
+	@echo "update.ps1 is not yet provided; please run the steps from update.sh manually on Windows."
+	@exit 1
+else
+	chmod +x ./adare/install/update.sh
+	@./adare/install/update.sh qemu
 endif
 
 install-qemu:
