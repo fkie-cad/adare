@@ -179,6 +179,10 @@ class ExperimentAPI:
         """Idempotently prep the built-in verify_vm experiment for an environment."""
         return self._service.ensure_verify_setup(project_path, environment_name)
 
+    def get_or_create_verify_scratch(self):
+        """Return a freestanding scratch directory for project-less verify runs."""
+        return self._service.get_or_create_verify_scratch()
+
     def add_environments(self, request):
         """Add environments to experiment."""
         return self._service.add_environments(request)

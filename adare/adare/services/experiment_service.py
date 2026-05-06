@@ -311,6 +311,18 @@ class ExperimentService:
         except ExperimentDirectoryAlreadyExistsError as e:
             return Result.from_exception(e)
 
+    def get_or_create_verify_scratch(self) -> Result[Path]:
+        """Return a freestanding scratch directory with project shape for
+        running `verify_vm` outside any registered project. The directory
+        is initialized with the per-project SQLite but is never added to
+        the global project registry."""
+        from adare.database.init import ensure_project_database_exists
+
+        target = Path.home() / ".adare" / "state" / "verify-runs"
+        target.mkdir(parents=True, exist_ok=True)
+        ensure_project_database_exists(target)
+        return Result.ok(target)
+
     def ensure_verify_setup(
         self, project_path: Path, environment_name: str
     ) -> Result[str]:
