@@ -47,12 +47,14 @@ export const endpoints = {
   experimentClone: (name: string) => `/experiments/${name}/clone`,
   experimentValidate: (name: string) => `/experiments/${name}/validate`,
   experimentEnvironments: (name: string) => `/experiments/${name}/environments`,
+  runExperiment: (name: string) => `/experiments/${name}/run`,
 
   // Environments
   environments: '/environments',
   environment: (name: string) => `/environments/${name}`,
   environmentDelete: (name: string, force = false) =>
     `/environments/${name}?force=${force}`,
+  verifyEnvironment: (name: string) => `/environments/${name}/verify`,
 
   // Runs
   runs: '/runs',

@@ -7,12 +7,6 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from adare.core.result import Result
-from adare.types.devmode import (
-    CheckpointInfo,
-    DevSessionInfo,
-    DevSessionListItem,
-    DevSessionState,
-)
 
 T = TypeVar("T")
 
@@ -47,69 +41,17 @@ def result_to_response[T](result: Result[T]) -> dict[str, Any]:
     Returns:
         Dict with 'success', 'data', and optional 'error' fields
     """
-    if result.is_success():
+    if result.success:
         return {
             "success": True,
-            "data": serialize_value(result.value),
+            "data": serialize_value(result.data),
         }
     return {
         "success": False,
         "error": {
-            "type": type(result.error).__name__,
-            "message": str(result.error),
+            "type": result.error.code if result.error else "UNKNOWN",
+            "message": result.error.message if result.error else "Unknown error",
         },
-    }
-
-
-def session_info_to_dict(session_info: DevSessionInfo) -> dict[str, Any]:
-    """Convert DevSessionInfo to JSON-serializable dict."""
-    return {
-        "session_id": session_info.session_id,
-        "project_name": session_info.project_name,
-        "experiment_name": session_info.experiment_name,
-        "environment_name": session_info.environment_name,
-        "vm_running": session_info.vm_running,
-        "websocket_connected": session_info.websocket_connected,
-        "hypervisor_type": session_info.hypervisor_type,
-        "created_at": session_info.created_at.isoformat(),
-        "last_activity": session_info.last_activity.isoformat(),
-    }
-
-
-def session_list_item_to_dict(item: DevSessionListItem) -> dict[str, Any]:
-    """Convert DevSessionListItem to JSON-serializable dict."""
-    return {
-        "session_id": item.session_id,
-        "project_name": item.project_name,
-        "experiment_name": item.experiment_name,
-        "environment_name": item.environment_name,
-        "status": item.status,
-        "created_at": item.created_at.isoformat(),
-        "action_count": item.action_count,
-    }
-
-
-def session_state_to_dict(state: DevSessionState) -> dict[str, Any]:
-    """Convert DevSessionState to JSON-serializable dict."""
-    return {
-        "session_id": state.session_id,
-        "variables": serialize_value(state.variables),
-        "checkpoints": [checkpoint_info_to_dict(cp) for cp in state.checkpoints],
-        "last_action": state.last_action,
-        "action_count": state.action_count,
-        "vm_status": state.vm_status,
-    }
-
-
-def checkpoint_info_to_dict(checkpoint: CheckpointInfo) -> dict[str, Any]:
-    """Convert CheckpointInfo to JSON-serializable dict."""
-    return {
-        "name": checkpoint.name,
-        "description": checkpoint.description,
-        "created_at": checkpoint.created_at.isoformat(),
-        "memory_size_mb": checkpoint.memory_size_mb,
-        "disk_size_mb": checkpoint.disk_size_mb,
-        "variables_snapshot": serialize_value(checkpoint.variables_snapshot),
     }
 
 

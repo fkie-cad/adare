@@ -1,0 +1,23 @@
+settings:
+  idle: 0.5
+  timeout: 90
+  continue_on_test_failure: true
+
+actions:
+  - idle:
+      duration: 1.0
+  - command:
+      command: "echo adare-verify-ok"
+      shell: true
+      description: "Capture a known string to verify command channel"
+      capture:
+        variable: verify_echo
+  - click:
+      target:
+        position: [400, 400]
+      description: "Dummy click at fixed coordinates (OS-agnostic)"
+  - keyboard:
+      combination: ["escape"]
+      description: "Press Escape to dismiss any popups"
+  - idle:
+      duration: 1.0

@@ -8,10 +8,13 @@ Note: Some complex operations (like experiment_run with async and interactive fl
 are kept in the CLI/backend for now due to their complexity. This service focuses
 on simpler CRUD operations that benefit from the API pattern.
 """
+import asyncio
 import contextlib
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
+import ulid
 from sqlalchemy.exc import SQLAlchemyError
 
 from adare.backend.experiment import database as experiment_database
@@ -50,6 +53,7 @@ from adare.backend.experiment.exceptions import (
     ExperimentIntegrityError,
     ExperimentNotChanged,
 )
+from adare.backend.experiment.run import experiment_run as backend_experiment_run
 from adare.backend.experiment.run import experiment_test as backend_experiment_test
 from adare.core.dto.experiment import (
     ExperimentCleanResult,
@@ -67,8 +71,17 @@ from adare.core.dto.experiment import (
 )
 from adare.core.result import Result
 from adare.database.api.experiment import ExperimentApi
+from adare.exceptions import LoggedException
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class ExperimentRunStartedInfo:
+    """Returned from ExperimentService.run() — minimal payload for callers
+    that kick off an experiment run as a background task."""
+    run_ulid: str
+    experiment_name: str
 
 
 class ExperimentService:
@@ -298,6 +311,36 @@ class ExperimentService:
         except ExperimentDirectoryAlreadyExistsError as e:
             return Result.from_exception(e)
 
+    def ensure_verify_setup(
+        self, project_path: Path, environment_name: str
+    ) -> Result[str]:
+        """Idempotently prepare the built-in `verify_vm` experiment for this
+        environment: register the example experiment if missing, and attach
+        the environment with force=True. Returns the experiment name."""
+        experiment_name = "verify_vm"
+
+        example_result = self.example(project_path, experiment_name)
+        if not example_result.success:
+            already_exists = (
+                example_result.error is not None
+                and example_result.error.code
+                == ExperimentDirectoryAlreadyExistsError.__name__
+            )
+            if not already_exists:
+                return Result(success=False, error=example_result.error)
+
+        add_req = ExperimentEnvModifyRequest(
+            project_path=project_path,
+            experiment_pattern=experiment_name,
+            environments=[environment_name],
+            force=True,
+        )
+        add_result = self.add_environments(add_req)
+        if not add_result.success:
+            return Result(success=False, error=add_result.error)
+
+        return Result.ok(experiment_name)
+
     def test(self, project_path: Path, name: str, environment_name: str) -> Result[None]:
         """
         Run experiment tests without full execution (dry-run).
@@ -316,6 +359,57 @@ class ExperimentService:
 
         except ExperimentDirectoryDoesNotExistError as e:
             return Result.from_exception(e)
+
+    async def run(
+        self,
+        project_path: Path,
+        name: str,
+        environment_name: str,
+    ) -> Result[ExperimentRunStartedInfo]:
+        """
+        Start an experiment run as a background asyncio task.
+
+        Generates a ULID upfront so the caller can navigate to the run detail
+        page immediately. The background task forwards the ULID to
+        step_initialize so the DB row is created with the expected id.
+        """
+        try:
+            ulid_str = str(ulid.ULID())
+
+            async def _run_in_background():
+                try:
+                    await backend_experiment_run(
+                        project_path,
+                        name,
+                        environment_name,
+                        run_ulid=ulid_str,
+                        test=False,
+                        runlog=True,
+                    )
+                except (LoggedException, OSError, ValueError, SQLAlchemyError):
+                    log.exception(
+                        "Background experiment run %s failed", ulid_str
+                    )
+
+            asyncio.create_task(_run_in_background())
+
+            return Result.ok(ExperimentRunStartedInfo(
+                run_ulid=ulid_str,
+                experiment_name=name,
+            ))
+
+        except ExperimentDirectoryDoesNotExistError as e:
+            return Result.from_exception(e)
+        except (SQLAlchemyError, OSError) as e:
+            log.error(f"Failed to start experiment run: {e}")
+            return Result.fail(
+                code="ExperimentRunStartError",
+                message=f"Failed to start experiment run: {e}",
+                solutions=[
+                    'Check that the experiment is loaded',
+                    'Verify the environment exists and is attached to the experiment',
+                ],
+            )
 
     def validate(self, request: ExperimentValidateRequest) -> Result[ExperimentValidateResult]:
         """

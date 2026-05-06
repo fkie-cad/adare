@@ -51,7 +51,7 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', file_log_level: int = logging.INFO):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', file_log_level: int = logging.INFO, run_ulid: str | None = None):
     import signal
 
     log.info(f"Starting experiment run {experiment_name} in project {project_path}")
@@ -134,9 +134,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     experiment_run_context.debug_screenshots = debug_screenshots
     experiment_run_context.test_mode = test  # Store test mode flag (default: True for test mode)
     if test:
-        step_initialize(experiment_run_context, fake=True)  # Test mode: creates fake run
+        step_initialize(experiment_run_context, fake=True, run_ulid=run_ulid)  # Test mode: creates fake run
     else:
-        step_initialize(experiment_run_context)  # Production mode: creates real run
+        step_initialize(experiment_run_context, run_ulid=run_ulid)  # Production mode: creates real run
 
     # Create an asyncio Event to signal shutdown.
     stop_event = asyncio.Event()

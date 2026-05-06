@@ -28,6 +28,12 @@ class EnvironmentLoadBody(BaseModel):
     no_copy: bool = False
 
 
+class EnvironmentVerifyBody(BaseModel):
+    """Request body for verifying an environment by running the built-in
+    verify_vm experiment against it."""
+    project_path: str
+
+
 # ---- Helpers ----
 
 def _api():
@@ -84,3 +90,19 @@ async def delete_environment(name: str, force: bool = False):
     """Delete an environment by name or ULID."""
     result = _api().environment.delete(name, force=force)
     return result_to_response(result)
+
+
+@router.post("/{name}/verify")
+async def verify_environment(name: str, body: EnvironmentVerifyBody):
+    """Register the built-in verify_vm experiment for this environment (if
+    needed) and start a run. Returns the run ULID immediately so the UI can
+    navigate to a run-detail page."""
+    project_path = Path(body.project_path)
+    api = _api()
+
+    setup_result = api.experiment.ensure_verify_setup(project_path, name)
+    if not setup_result.success:
+        return result_to_response(setup_result)
+
+    run_result = await api.experiment.run(project_path, setup_result.data, name)
+    return result_to_response(run_result)
