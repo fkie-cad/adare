@@ -410,11 +410,8 @@ class DomainXMLBuilder:
 
     def _add_usb_controller(self) -> None:
         """Add USB controller."""
-        usb_model = 'qemu-xhci' if self._is_virt else 'nec-usb-xhci'
-        usb = ET.SubElement(self._devices, 'controller', type='usb', index='0', model=usb_model)
-        if self._is_virt:
-            pass
-        elif self._is_q35:
+        usb = ET.SubElement(self._devices, 'controller', type='usb', index='0', model='qemu-xhci')
+        if self._is_q35:
             ET.SubElement(usb, 'address', **self._pci.address_for('usb'))
 
     def _add_graphics(self) -> None:
