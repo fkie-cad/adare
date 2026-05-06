@@ -77,14 +77,18 @@ def exec_environment_verify(arguments):
 
     from adare.backend.basics import determine_projectdirectory
     from adare.backend.experiment.run import experiment_run
-    from adare.exceptions import NoProjectFoundError
-
-    project_directory = determine_projectdirectory(arguments.project)
-    if not project_directory:
-        raise NoProjectFoundError(log, specified_project=arguments.project)
 
     env_name = arguments.name
     api = AdareAPI()
+
+    project_directory = determine_projectdirectory(arguments.project)
+    if not project_directory:
+        fallback = api.experiment.get_or_create_verify_scratch()
+        if not fallback.success:
+            handle_api_error(fallback)
+            return
+        project_directory = fallback.data
+        log.info(f"No project specified — verify artifacts will be saved to {project_directory}")
 
     setup_result = api.experiment.ensure_verify_setup(project_directory, env_name)
     if not setup_result.success:
