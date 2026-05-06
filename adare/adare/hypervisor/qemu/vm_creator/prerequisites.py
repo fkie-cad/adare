@@ -20,12 +20,19 @@ class PrerequisiteError(HypervisorException):
         super().__init__(message)
 
 
-def check_prerequisites(os_def: OsDefinition, iso_path: Path | None = None) -> None:
+def check_prerequisites(
+    os_def: OsDefinition,
+    iso_path: Path | None = None,
+    vm_dir: Path | None = None,
+    disk_size: str | None = None,
+) -> None:
     """Check that all required tools and resources are available.
 
     Args:
         os_def: OS definition for the VM to create
         iso_path: User-supplied ISO path (for Windows or manual installs)
+        vm_dir: Target directory where the qcow2 will be written (overrides VMS_DIR)
+        disk_size: User-requested disk size (overrides os_def.default_disk_size)
 
     Raises:
         PrerequisiteError: If any prerequisite is missing
@@ -119,30 +126,79 @@ def check_prerequisites(os_def: OsDefinition, iso_path: Path | None = None) -> N
                 missing.append(f'OVMF firmware required for UEFI boot. {hint}')
 
     # Disk space check (rough estimate)
-    _check_disk_space(os_def, missing)
+    _check_disk_space(os_def, missing, iso_path=iso_path, vm_dir=vm_dir, disk_size=disk_size)
 
     if missing:
         raise PrerequisiteError(missing)
 
 
-def _check_disk_space(os_def: OsDefinition, missing: list[str]) -> None:
-    """Check approximate free disk space for VM creation."""
-    import shutil as _shutil
+def _existing_parent(path: Path) -> Path | None:
+    """Walk up `path` until we find an existing directory (or None)."""
+    current = path
+    while True:
+        if current.exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
 
-    from adare.config.configdirectory import APPDATA_DIR
 
-    try:
-        usage = _shutil.disk_usage(APPDATA_DIR)
-        free_gb = usage.free / (1024 ** 3)
+def _parse_disk_size_gb(value: str) -> int:
+    """Parse a disk size string like '60G' or '60g' into integer GB."""
+    return int(value.rstrip('Gg'))
 
-        # Need space for: ISO cache (~3-6GB) + disk image (default size) + temp files (~2GB)
-        disk_size_gb = int(os_def.default_disk_size.rstrip('G'))
-        required_gb = disk_size_gb + 8  # disk + ISO + overhead
 
-        if free_gb < required_gb:
-            missing.append(
-                f'Insufficient disk space: {free_gb:.1f}GB free, ~{required_gb}GB required '
-                f'(disk image: {os_def.default_disk_size}, plus ISO and temp files)'
-            )
-    except OSError:
-        pass  # Skip check if we can't determine disk usage
+def _check_disk_space(
+    os_def: OsDefinition,
+    missing: list[str],
+    iso_path: Path | None = None,
+    vm_dir: Path | None = None,
+    disk_size: str | None = None,
+) -> None:
+    """Check approximate free disk space for VM creation.
+
+    Probes the actual filesystem the qcow2 will land on (vm_dir, falling back to
+    VMS_DIR) using the user-requested disk size. Separately checks the ISO cache
+    drive only when an ISO download is actually going to happen.
+    """
+    from adare.config.configdirectory import QEMU_CACHE_DIR, VMS_DIR
+
+    # 1) Target VM directory: NVRAM + qcow2 metadata (image is sparse, grows on demand).
+    target_dir = vm_dir or VMS_DIR
+    probe_dir = _existing_parent(target_dir)
+    if probe_dir is not None:
+        try:
+            usage = shutil.disk_usage(probe_dir)
+            free_gb = usage.free / (1024 ** 3)
+            disk_size_gb = _parse_disk_size_gb(disk_size or os_def.default_disk_size)
+            required_gb = disk_size_gb + 1  # NVRAM + qcow2 metadata overhead
+            if free_gb < required_gb:
+                missing.append(
+                    f'Insufficient disk space at {target_dir}: '
+                    f'{free_gb:.1f}GB free, ~{required_gb}GB required '
+                    f'(disk image: {disk_size or os_def.default_disk_size})'
+                )
+        except OSError:
+            pass  # Skip check if we can't determine disk usage
+
+    # 2) ISO cache directory: only checked when a download will actually happen.
+    iso_download_expected = (
+        os_def.platform == 'linux'
+        and os_def.install_mode != 'manual'
+        and iso_path is None
+    )
+    if iso_download_expected:
+        cache_probe = _existing_parent(QEMU_CACHE_DIR)
+        if cache_probe is not None:
+            try:
+                usage = shutil.disk_usage(cache_probe)
+                free_gb = usage.free / (1024 ** 3)
+                iso_size_gb = getattr(os_def, 'iso_size_gb', None) or 6
+                if free_gb < iso_size_gb:
+                    missing.append(
+                        f'Insufficient disk space at {QEMU_CACHE_DIR}: '
+                        f'{free_gb:.1f}GB free, ~{iso_size_gb}GB required for ISO download'
+                    )
+            except OSError:
+                pass  # Skip check if we can't determine disk usage
