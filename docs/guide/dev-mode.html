@@ -1,0 +1,912 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Sharing" href="sharing.html"><link rel="prev" title="VM Image Creation" href="vm-image-creation.html">
+        <link rel="prefetch" href="../_static/logo.png" as="image">
+
+    <link rel="shortcut icon" href="../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.12.19 -->
+        <title>Dev Mode - ADARE documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d5f4d14b" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">ADARE  documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../_static/logo.png" alt="Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul>
+<li class="toctree-l1"><a class="reference internal" href="../index.html">Home</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/tutorial.html">Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/concepts.html">Core Concepts</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="projects.html">Projects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environments.html">Environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="experiments.html">Experiments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="test-driven-analysis.html">Test-Driven Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="diff-analysis.html">Diff Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vm-image-creation.html">VM Image Creation</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Dev Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sharing.html">Sharing</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/actions.html">Actions</a><input aria-label="Toggle navigation of Actions" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/actions/index.html">Actions Reference</a><input aria-label="Toggle navigation of Actions Reference" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/gui/index.html">GUI Actions</a><input aria-label="Toggle navigation of GUI Actions" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/gui/click.html">click</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/gui/keyboard.html">keyboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/gui/drag.html">drag</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/gui/scroll.html">scroll</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/command/index.html">Command Actions</a><input aria-label="Toggle navigation of Command Actions" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/command/command.html">command</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/test/index.html">Test Actions</a><input aria-label="Toggle navigation of Test Actions" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/test/test.html">test</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/flow/index.html">Flow Control</a><input aria-label="Toggle navigation of Flow Control" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/flow/idle.html">idle</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/flow/wait_until.html">wait_until</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/flow/block.html">block</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/flow/loop.html">loop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/flow/stop.html">stop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/flow/continue.html">continue</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/variable/index.html">Variable Actions</a><input aria-label="Toggle navigation of Variable Actions" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/variable/save_timestamp.html">save_timestamp</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/variable/save_variable.html">save_variable</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/file/index.html">File Actions</a><input aria-label="Toggle navigation of File Actions" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/file/pull.html">pull</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/file/snapshot_filesystem.html">snapshot_filesystem</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/file/pull_changed_files.html">pull_changed_files</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/actions/debug/index.html">Debug Actions</a><input aria-label="Toggle navigation of Debug Actions" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/debug/pause.html">pause</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/actions/debug/screenshot.html">screenshot</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/testfunctions/index.html">Test Functions</a><input aria-label="Toggle navigation of Test Functions" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/standard/index.html">Standard</a><input aria-label="Toggle navigation of Standard" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_exists.html">file_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_does_not_exist.html">file_does_not_exist</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/dir_exists.html">dir_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/dir_does_not_exist.html">dir_does_not_exist</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_content_equals.html">file_content_equals</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_content_contains.html">file_content_contains</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_content_matches_regex.html">file_content_matches_regex</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/dir_content.html">dir_content</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_hash_matches.html">file_hash_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_timestamps.html">file_timestamps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/standard/file_permissions.html">file_permissions</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/json/index.html">JSON</a><input aria-label="Toggle navigation of JSON" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/json/contains_key.html">contains_key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/json/value_matches.html">value_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/json/array_contains.html">array_contains</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/csv/index.html">CSV</a><input aria-label="Toggle navigation of CSV" class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" role="switch" type="checkbox"/><label for="toctree-checkbox-13"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/csv/contains_line.html">contains_line</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/xml/index.html">XML</a><input aria-label="Toggle navigation of XML" class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" role="switch" type="checkbox"/><label for="toctree-checkbox-14"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/xml/element_exists.html">element_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/xml/element_text_matches.html">element_text_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/xml/attribute_matches.html">attribute_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/xml/element_count.html">element_count</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/xml/xpath_result_matches.html">xpath_result_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/xml/namespace_matches.html">namespace_matches</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/sqlite/index.html">SQLite</a><input aria-label="Toggle navigation of SQLite" class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" role="switch" type="checkbox"/><label for="toctree-checkbox-15"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/sqlite/query_result.html">query_result</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/linux/index.html">Linux</a><input aria-label="Toggle navigation of Linux" class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" role="switch" type="checkbox"/><label for="toctree-checkbox-16"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/linux/system_service_status.html">system_service_status</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/linux/process_running.html">process_running</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/linux/user_exists.html">user_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/linux/log_entry_exists.html">log_entry_exists</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/testfunctions/windows/index.html">Windows</a><input aria-label="Toggle navigation of Windows" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/windows/registry_key_exists.html">registry_key_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/testfunctions/windows/registry_value_matches.html">registry_value_matches</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/output-formats.html">Output Formats (in development)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../architecture/index.html">Architecture</a><input aria-label="Toggle navigation of Architecture" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/file-sharing.html">File Sharing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/guest-agent.html">Guest Agent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/cv-server.html">CV Server</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/file-sharing.html">File Sharing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/guest-agent.html">Guest Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/cv-server.html">CV Server</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Paper</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../paper/demos.html">Demo Videos</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/guide/dev-mode.rst.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="dev-mode">
+<h1>Dev Mode<a class="headerlink" href="#dev-mode" title="Link to this heading">¶</a></h1>
+<section id="what-is-dev-mode">
+<h2>What is Dev Mode<a class="headerlink" href="#what-is-dev-mode" title="Link to this heading">¶</a></h2>
+<p>Dev mode provides persistent VM sessions for iterative playbook development. Instead of running full experiments that boot a VM, execute a playbook, and shut down, dev mode keeps a VM running so you can execute playbook steps interactively, inspect results, and refine your automation in real time.</p>
+<p>This is essential for developing and debugging playbooks. Without dev mode, every small change would require a full experiment cycle – boot the VM, install the agent, run the playbook, and shut down. Dev mode eliminates that overhead by maintaining a long-lived session with checkpoints you can restore to when something goes wrong.</p>
+<p>Dev mode reuses the standard experiment run infrastructure (VM lifecycle, WebSocket communication, playbook controller) but wraps it in an interactive facade that keeps the VM alive between commands.</p>
+</section>
+<section id="starting-a-session">
+<h2>Starting a Session<a class="headerlink" href="#starting-a-session" title="Link to this heading">¶</a></h2>
+<p>Start a dev mode session with <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">start</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>start<span class="w"> </span>-e<span class="w"> </span>ubuntu24043
+</pre></div>
+</div>
+<p>This boots the VM, installs the guest agent, connects via WebSocket, and creates a base checkpoint. The session stays running until you explicitly stop it.</p>
+<section id="options">
+<h3>Options<a class="headerlink" href="#options" title="Link to this heading">¶</a></h3>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">-e,</span> <span class="pre">--environment</span></code> (required)</dt><dd><p>Name of the environment (VM) to use.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-p,</span> <span class="pre">--project</span></code></dt><dd><p>Project name or path. Defaults to the current directory.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--gui-mode</span></code></dt><dd><p>GUI execution mode: <code class="docutils literal notranslate"><span class="pre">auto</span></code> (default), <code class="docutils literal notranslate"><span class="pre">agent</span></code> (WebSocket-based), or <code class="docutils literal notranslate"><span class="pre">host</span></code> (QMP for QEMU).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--vm-memory</span></code></dt><dd><p>VM RAM in MB. Defaults to 4096 for Linux, 8192 for Windows.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--vm-cpus</span></code></dt><dd><p>VM CPU count. Defaults to 4.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--shared-dir</span></code></dt><dd><p>Mount shared directories between host and guest. Format: <code class="docutils literal notranslate"><span class="pre">HOST_PATH:VM_PATH</span></code>. Can be specified multiple times. The host directory is created automatically if it does not exist.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--debug-screenshots</span></code></dt><dd><p>Save screenshots for debugging during execution.</p>
+</dd>
+</dl>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Start with custom VM resources</span>
+adare<span class="w"> </span>dev<span class="w"> </span>start<span class="w"> </span>-e<span class="w"> </span>win11<span class="w"> </span>--vm-memory<span class="w"> </span><span class="m">8192</span><span class="w"> </span>--vm-cpus<span class="w"> </span><span class="m">8</span>
+
+<span class="c1"># Start with a shared directory</span>
+adare<span class="w"> </span>dev<span class="w"> </span>start<span class="w"> </span>-e<span class="w"> </span>ubuntu24043<span class="w"> </span>--shared-dir<span class="w"> </span>/tmp/testdata:/mnt/data
+
+<span class="c1"># Start in a specific project</span>
+adare<span class="w"> </span>dev<span class="w"> </span>start<span class="w"> </span>-e<span class="w"> </span>ubuntu24043<span class="w"> </span>-p<span class="w"> </span>my-forensics-project
+</pre></div>
+</div>
+<p>Once the session starts, you receive a session ID. If only one session is running, subsequent commands auto-detect it, so you do not need to specify <code class="docutils literal notranslate"><span class="pre">-s</span> <span class="pre">&lt;session_id&gt;</span></code> every time.</p>
+</section>
+</section>
+<section id="executing-playbooks">
+<h2>Executing Playbooks<a class="headerlink" href="#executing-playbooks" title="Link to this heading">¶</a></h2>
+<p>Run a complete playbook in the current session:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>playbook<span class="w"> </span>-f<span class="w"> </span>playbook.yml
+</pre></div>
+</div>
+<p>The playbook is executed using the same engine as <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">run</span></code>, but within your persistent dev session. Variables carry over between executions, and the VM state is preserved.</p>
+<section id="playbook-options">
+<h3>Playbook Options<a class="headerlink" href="#playbook-options" title="Link to this heading">¶</a></h3>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">-f,</span> <span class="pre">--file</span></code></dt><dd><p>Path to a playbook YAML file.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-u,</span> <span class="pre">--url</span></code></dt><dd><p>Load a playbook from a URL.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--stdin</span></code></dt><dd><p>Read the playbook from standard input.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--restore</span></code></dt><dd><p>Restore to the initial checkpoint before execution. Useful for running a playbook from a clean state without manually resetting.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--indices</span></code></dt><dd><p>Select specific action indices to execute. Supports ranges, comma-separated values, and the special tokens <code class="docutils literal notranslate"><span class="pre">S</span></code> (start, i.e. index 1) and <code class="docutils literal notranslate"><span class="pre">E</span></code> (end, i.e. the last action).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-s,</span> <span class="pre">--session</span></code></dt><dd><p>Session ID. Auto-detected if only one session is running.</p>
+</dd>
+</dl>
+</section>
+<section id="index-selection-examples">
+<h3>Index Selection Examples<a class="headerlink" href="#index-selection-examples" title="Link to this heading">¶</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">--indices</span></code> option lets you run subsets of a playbook:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run only actions 1 through 5</span>
+adare<span class="w"> </span>dev<span class="w"> </span>playbook<span class="w"> </span>-f<span class="w"> </span>playbook.yml<span class="w"> </span>--indices<span class="w"> </span><span class="s2">&quot;1-5&quot;</span>
+
+<span class="c1"># Run actions 3, 7, and 10</span>
+adare<span class="w"> </span>dev<span class="w"> </span>playbook<span class="w"> </span>-f<span class="w"> </span>playbook.yml<span class="w"> </span>--indices<span class="w"> </span><span class="s2">&quot;3,7,10&quot;</span>
+
+<span class="c1"># Run from the start through action 5</span>
+adare<span class="w"> </span>dev<span class="w"> </span>playbook<span class="w"> </span>-f<span class="w"> </span>playbook.yml<span class="w"> </span>--indices<span class="w"> </span><span class="s2">&quot;S-5&quot;</span>
+
+<span class="c1"># Run from action 10 to the end</span>
+adare<span class="w"> </span>dev<span class="w"> </span>playbook<span class="w"> </span>-f<span class="w"> </span>playbook.yml<span class="w"> </span>--indices<span class="w"> </span><span class="s2">&quot;10-E&quot;</span>
+
+<span class="c1"># Run the entire playbook (equivalent to no --indices)</span>
+adare<span class="w"> </span>dev<span class="w"> </span>playbook<span class="w"> </span>-f<span class="w"> </span>playbook.yml<span class="w"> </span>--indices<span class="w"> </span><span class="s2">&quot;S-E&quot;</span>
+
+<span class="c1"># Combine ranges and individual indices</span>
+adare<span class="w"> </span>dev<span class="w"> </span>playbook<span class="w"> </span>-f<span class="w"> </span>playbook.yml<span class="w"> </span>--indices<span class="w"> </span><span class="s2">&quot;1-3,7,15-E&quot;</span>
+</pre></div>
+</div>
+<p>The tokens <code class="docutils literal notranslate"><span class="pre">S</span></code> and <code class="docutils literal notranslate"><span class="pre">E</span></code> are case-insensitive (<code class="docutils literal notranslate"><span class="pre">s</span></code> and <code class="docutils literal notranslate"><span class="pre">e</span></code> work too). All indices are 1-based.</p>
+</section>
+</section>
+<section id="executing-individual-actions">
+<h2>Executing Individual Actions<a class="headerlink" href="#executing-individual-actions" title="Link to this heading">¶</a></h2>
+<p>Run a single action without a full playbook:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># From an inline YAML string</span>
+adare<span class="w"> </span>dev<span class="w"> </span>action<span class="w"> </span>-y<span class="w"> </span><span class="s2">&quot;action: click_icon</span>
+<span class="s2">parameter:</span>
+<span class="s2">  icon: firefox.png&quot;</span>
+
+<span class="c1"># From a YAML file</span>
+adare<span class="w"> </span>dev<span class="w"> </span>action<span class="w"> </span>-i<span class="w"> </span>action.yml
+
+<span class="c1"># From standard input</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;action: wait</span>
+<span class="s2">parameter:</span>
+<span class="s2">  seconds: 5&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>adare<span class="w"> </span>dev<span class="w"> </span>action<span class="w"> </span>--stdin
+</pre></div>
+</div>
+<p>This is useful for testing one action at a time during development. The action is executed in the current session context with access to all session variables.</p>
+<section id="action-options">
+<h3>Action Options<a class="headerlink" href="#action-options" title="Link to this heading">¶</a></h3>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">-y,</span> <span class="pre">--yaml</span></code></dt><dd><p>Inline YAML string defining the action.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-i,</span> <span class="pre">--input</span></code></dt><dd><p>Path to a YAML file containing the action.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--stdin</span></code></dt><dd><p>Read the action definition from standard input.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-s,</span> <span class="pre">--session</span></code></dt><dd><p>Session ID. Auto-detected if only one session is running.</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="checkpoints">
+<h2>Checkpoints<a class="headerlink" href="#checkpoints" title="Link to this heading">¶</a></h2>
+<p>Checkpoints are live VM snapshots that capture the full state of the virtual machine, including memory, disk, and session variables. They allow fast iteration: create a checkpoint before risky actions, and restore it when things go wrong.</p>
+<section id="creating-checkpoints">
+<h3>Creating Checkpoints<a class="headerlink" href="#creating-checkpoints" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>checkpoint<span class="w"> </span>create<span class="w"> </span>before-install
+adare<span class="w"> </span>dev<span class="w"> </span>checkpoint<span class="w"> </span>create<span class="w"> </span>after-setup<span class="w"> </span>-d<span class="w"> </span><span class="s2">&quot;Setup complete, ready for tests&quot;</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">-d,</span> <span class="pre">--description</span></code> option adds a human-readable description to the checkpoint.</p>
+</section>
+<section id="listing-checkpoints">
+<h3>Listing Checkpoints<a class="headerlink" href="#listing-checkpoints" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>checkpoint<span class="w"> </span>list
+</pre></div>
+</div>
+<p>Displays a table with checkpoint names, descriptions, creation timestamps, variable counts, and file sizes.</p>
+</section>
+<section id="restoring-checkpoints">
+<h3>Restoring Checkpoints<a class="headerlink" href="#restoring-checkpoints" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>checkpoint<span class="w"> </span>restore<span class="w"> </span>before-install
+</pre></div>
+</div>
+<p>Restores the VM to the exact state at the time the checkpoint was created, including all variable values.</p>
+</section>
+<section id="removing-checkpoints">
+<h3>Removing Checkpoints<a class="headerlink" href="#removing-checkpoints" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>checkpoint<span class="w"> </span>remove<span class="w"> </span>cleanup-point
+</pre></div>
+</div>
+<p>Removes the checkpoint and its associated snapshot files from disk.</p>
+</section>
+</section>
+<section id="reset">
+<h2>Reset<a class="headerlink" href="#reset" title="Link to this heading">¶</a></h2>
+<p>Reset commands restore the session to a known state. There are two types of reset:</p>
+<section id="soft-reset">
+<h3>Soft Reset<a class="headerlink" href="#soft-reset" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>reset<span class="w"> </span>soft
+</pre></div>
+</div>
+<p>Resets session variables only. The VM state is untouched. This is nearly instantaneous (less than 1 second) and is useful when you want to clear variable state without waiting for a full VM restore.</p>
+</section>
+<section id="hard-reset">
+<h3>Hard Reset<a class="headerlink" href="#hard-reset" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>reset<span class="w"> </span>hard
+</pre></div>
+</div>
+<p>Performs a full VM restore to the initial base checkpoint. This resets both the VM state and all variables. Takes 10–30 seconds depending on the VM size. Use this when you need a completely clean slate.</p>
+</section>
+</section>
+<section id="cv-server-management">
+<h2>CV Server Management<a class="headerlink" href="#cv-server-management" title="Link to this heading">¶</a></h2>
+<p>The computer vision (CV) server handles GUI element detection – finding icons, text, and UI components in screenshots. You can manage it independently during dev sessions.</p>
+<section id="starting-or-restarting">
+<h3>Starting or Restarting<a class="headerlink" href="#starting-or-restarting" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Start/restart with default settings</span>
+adare<span class="w"> </span>dev<span class="w"> </span>cv<span class="w"> </span>start
+
+<span class="c1"># Enable debug logging</span>
+adare<span class="w"> </span>dev<span class="w"> </span>cv<span class="w"> </span>start<span class="w"> </span>--debug
+
+<span class="c1"># Disable debug logging</span>
+adare<span class="w"> </span>dev<span class="w"> </span>cv<span class="w"> </span>start<span class="w"> </span>--no-debug
+
+<span class="c1"># Set a custom debug output directory</span>
+adare<span class="w"> </span>dev<span class="w"> </span>cv<span class="w"> </span>start<span class="w"> </span>--debug<span class="w"> </span>-o<span class="w"> </span>/tmp/cv-debug
+</pre></div>
+</div>
+</section>
+<section id="stopping">
+<h3>Stopping<a class="headerlink" href="#stopping" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>cv<span class="w"> </span>stop
+</pre></div>
+</div>
+</section>
+</section>
+<section id="session-management">
+<h2>Session Management<a class="headerlink" href="#session-management" title="Link to this heading">¶</a></h2>
+<section id="listing-sessions">
+<h3>Listing Sessions<a class="headerlink" href="#listing-sessions" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List all sessions</span>
+adare<span class="w"> </span>dev<span class="w"> </span>list
+
+<span class="c1"># Filter by project</span>
+adare<span class="w"> </span>dev<span class="w"> </span>list<span class="w"> </span>-p<span class="w"> </span>my-project
+</pre></div>
+</div>
+<p>Displays a table with session IDs, experiment/environment names, status, action counts, and creation timestamps.</p>
+</section>
+<section id="showing-session-state">
+<h3>Showing Session State<a class="headerlink" href="#showing-session-state" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>state
+</pre></div>
+</div>
+<p>Shows detailed session information including current variables, available checkpoints, execution statistics, and VM status.</p>
+</section>
+<section id="resuming-sessions">
+<h3>Resuming Sessions<a class="headerlink" href="#resuming-sessions" title="Link to this heading">¶</a></h3>
+<p>Stopped sessions can be resumed without losing state:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Resume the most recently stopped session</span>
+adare<span class="w"> </span>dev<span class="w"> </span>resume
+
+<span class="c1"># Resume a specific session by ID</span>
+adare<span class="w"> </span>dev<span class="w"> </span>resume<span class="w"> </span>01K72QABC123
+</pre></div>
+</div>
+<p>On resume, the VM is restarted and all variables and checkpoints are preserved.</p>
+</section>
+<section id="stopping-sessions">
+<h3>Stopping Sessions<a class="headerlink" href="#stopping-sessions" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Stop session (preserves resources for later resume)</span>
+adare<span class="w"> </span>dev<span class="w"> </span>stop
+
+<span class="c1"># Stop and remove all resources (VM, snapshots, database entries)</span>
+adare<span class="w"> </span>dev<span class="w"> </span>stop<span class="w"> </span>--rm
+
+<span class="c1"># Alternatively, use the remove command</span>
+adare<span class="w"> </span>dev<span class="w"> </span>remove
+</pre></div>
+</div>
+<p>Without <code class="docutils literal notranslate"><span class="pre">--rm</span></code>, the session can be resumed later. With <code class="docutils literal notranslate"><span class="pre">--rm</span></code>, the session and all its resources are permanently deleted.</p>
+</section>
+<section id="cleaning-up-stale-sessions">
+<h3>Cleaning Up Stale Sessions<a class="headerlink" href="#cleaning-up-stale-sessions" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>cleanup
+adare<span class="w"> </span>dev<span class="w"> </span>cleanup<span class="w"> </span>-p<span class="w"> </span>my-project
+</pre></div>
+</div>
+<p>Removes sessions that are in an inconsistent state (e.g., the VM was deleted externally).</p>
+</section>
+<section id="updating-test-functions">
+<h3>Updating Test Functions<a class="headerlink" href="#updating-test-functions" title="Link to this heading">¶</a></h3>
+<p>When you modify test function code on the host, push the changes to the running VM:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>update-testfunctions
+</pre></div>
+</div>
+<p>This repackages the test files from the host and uploads them to the VM. The guest agent extracts them and uses the updated code for subsequent test executions.</p>
+</section>
+</section>
+<section id="batch-execution">
+<h2>Batch Execution<a class="headerlink" href="#batch-execution" title="Link to this heading">¶</a></h2>
+<p>Run multiple playbooks in sequence with automatic checkpoint restoration between each:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run specific playbooks</span>
+adare<span class="w"> </span>dev<span class="w"> </span>playbook-batch<span class="w"> </span>playbook1.yml<span class="w"> </span>playbook2.yml
+
+<span class="c1"># Use glob patterns</span>
+adare<span class="w"> </span>dev<span class="w"> </span>playbook-batch<span class="w"> </span>experiments/*/playbook.yml
+adare<span class="w"> </span>dev<span class="w"> </span>playbook-batch<span class="w"> </span>playbooks/test_*.yml
+</pre></div>
+</div>
+<p>A base checkpoint is created before execution. After each playbook completes, the VM is restored to this checkpoint, ensuring each playbook starts from the same clean state.</p>
+<section id="batch-options">
+<h3>Batch Options<a class="headerlink" href="#batch-options" title="Link to this heading">¶</a></h3>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--checkpoint-name</span></code></dt><dd><p>Name for the base checkpoint. Defaults to <code class="docutils literal notranslate"><span class="pre">batch_base</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--timeout</span></code></dt><dd><p>Checkpoint restore timeout in seconds. Defaults to 120.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-s,</span> <span class="pre">--session</span></code></dt><dd><p>Session ID. Auto-detected if only one session is running.</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="command-aliases">
+<h2>Command Aliases<a class="headerlink" href="#command-aliases" title="Link to this heading">¶</a></h2>
+<p>For convenience, dev mode provides short aliases:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">l</span></code> is equivalent to <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">list</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">res</span></code> is equivalent to <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">reset</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">cp</span></code> is equivalent to <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">checkpoint</span></code></p></li>
+</ul>
+</section>
+<section id="tips-and-workflow-patterns">
+<h2>Tips and Workflow Patterns<a class="headerlink" href="#tips-and-workflow-patterns" title="Link to this heading">¶</a></h2>
+<section id="iterative-playbook-development">
+<h3>Iterative Playbook Development<a class="headerlink" href="#iterative-playbook-development" title="Link to this heading">¶</a></h3>
+<p>A typical workflow for building a new playbook:</p>
+<ol class="arabic simple">
+<li><p>Start a dev session: <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">start</span> <span class="pre">-e</span> <span class="pre">ubuntu24043</span></code></p></li>
+<li><p>Create a checkpoint at the clean state: <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">checkpoint</span> <span class="pre">create</span> <span class="pre">clean</span></code></p></li>
+<li><p>Test individual actions: <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">action</span> <span class="pre">-y</span> <span class="pre">&quot;action:</span> <span class="pre">click_icon</span> <span class="pre">...&quot;</span></code></p></li>
+<li><p>When a sequence works, add it to your playbook file</p></li>
+<li><p>Run the playbook to verify: <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">playbook</span> <span class="pre">-f</span> <span class="pre">playbook.yml</span></code></p></li>
+<li><p>If something goes wrong, restore: <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">checkpoint</span> <span class="pre">restore</span> <span class="pre">clean</span></code></p></li>
+<li><p>Refine and repeat</p></li>
+</ol>
+</section>
+<section id="incremental-checkpointing">
+<h3>Incremental Checkpointing<a class="headerlink" href="#incremental-checkpointing" title="Link to this heading">¶</a></h3>
+<p>Use checkpoints as save points during long playbook development:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>checkpoint<span class="w"> </span>create<span class="w"> </span>step1-app-installed
+<span class="c1"># ... develop more actions ...</span>
+adare<span class="w"> </span>dev<span class="w"> </span>checkpoint<span class="w"> </span>create<span class="w"> </span>step2-configured
+<span class="c1"># ... something breaks ...</span>
+adare<span class="w"> </span>dev<span class="w"> </span>checkpoint<span class="w"> </span>restore<span class="w"> </span>step2-configured
+</pre></div>
+</div>
+</section>
+<section id="testing-subsets-of-actions">
+<h3>Testing Subsets of Actions<a class="headerlink" href="#testing-subsets-of-actions" title="Link to this heading">¶</a></h3>
+<p>When debugging a specific part of a playbook, use index ranges to skip actions you know work:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Skip setup (actions 1-10), run only the problematic section</span>
+adare<span class="w"> </span>dev<span class="w"> </span>playbook<span class="w"> </span>-f<span class="w"> </span>playbook.yml<span class="w"> </span>--indices<span class="w"> </span><span class="s2">&quot;11-15&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="using-shared-directories">
+<h3>Using Shared Directories<a class="headerlink" href="#using-shared-directories" title="Link to this heading">¶</a></h3>
+<p>Share files between host and guest in real time:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>start<span class="w"> </span>-e<span class="w"> </span>ubuntu24043<span class="w"> </span>--shared-dir<span class="w"> </span>./test-data:/mnt/shared
+</pre></div>
+</div>
+<p>Files placed in <code class="docutils literal notranslate"><span class="pre">./test-data</span></code> on the host appear immediately at <code class="docutils literal notranslate"><span class="pre">/mnt/shared</span></code> inside the VM, and vice versa. This is useful for transferring test data, collecting artifacts, or sharing scripts.</p>
+</section>
+<section id="session-auto-detection">
+<h3>Session Auto-Detection<a class="headerlink" href="#session-auto-detection" title="Link to this heading">¶</a></h3>
+<p>When only one dev session is running, all commands auto-detect it. You only need to specify <code class="docutils literal notranslate"><span class="pre">-s</span> <span class="pre">&lt;session_id&gt;</span></code> when multiple sessions are active:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># These work when one session is running:</span>
+adare<span class="w"> </span>dev<span class="w"> </span>state
+adare<span class="w"> </span>dev<span class="w"> </span>playbook<span class="w"> </span>-f<span class="w"> </span>playbook.yml
+adare<span class="w"> </span>dev<span class="w"> </span>checkpoint<span class="w"> </span>create<span class="w"> </span>my-save
+
+<span class="c1"># With multiple sessions, specify the target:</span>
+adare<span class="w"> </span>dev<span class="w"> </span>state<span class="w"> </span>-s<span class="w"> </span>01K72QABC123
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="experiments.html"><span class="doc">Experiments</span></a></dt><dd><p>Experiment structure and configuration</p>
+</dd>
+<dt><a class="reference internal" href="../reference/actions.html"><span class="doc">Actions</span></a></dt><dd><p>Available playbook actions</p>
+</dd>
+<dt><a class="reference internal" href="../reference/cli.html"><span class="doc">CLI Reference</span></a></dt><dd><p>Full CLI reference</p>
+</dd>
+</dl>
+</div>
+</section>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="sharing.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Sharing</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="vm-image-creation.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">VM Image Creation</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Fraunhofer FKIE
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Dev Mode</a><ul>
+<li><a class="reference internal" href="#what-is-dev-mode">What is Dev Mode</a></li>
+<li><a class="reference internal" href="#starting-a-session">Starting a Session</a><ul>
+<li><a class="reference internal" href="#options">Options</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#executing-playbooks">Executing Playbooks</a><ul>
+<li><a class="reference internal" href="#playbook-options">Playbook Options</a></li>
+<li><a class="reference internal" href="#index-selection-examples">Index Selection Examples</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#executing-individual-actions">Executing Individual Actions</a><ul>
+<li><a class="reference internal" href="#action-options">Action Options</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#checkpoints">Checkpoints</a><ul>
+<li><a class="reference internal" href="#creating-checkpoints">Creating Checkpoints</a></li>
+<li><a class="reference internal" href="#listing-checkpoints">Listing Checkpoints</a></li>
+<li><a class="reference internal" href="#restoring-checkpoints">Restoring Checkpoints</a></li>
+<li><a class="reference internal" href="#removing-checkpoints">Removing Checkpoints</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#reset">Reset</a><ul>
+<li><a class="reference internal" href="#soft-reset">Soft Reset</a></li>
+<li><a class="reference internal" href="#hard-reset">Hard Reset</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#cv-server-management">CV Server Management</a><ul>
+<li><a class="reference internal" href="#starting-or-restarting">Starting or Restarting</a></li>
+<li><a class="reference internal" href="#stopping">Stopping</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#session-management">Session Management</a><ul>
+<li><a class="reference internal" href="#listing-sessions">Listing Sessions</a></li>
+<li><a class="reference internal" href="#showing-session-state">Showing Session State</a></li>
+<li><a class="reference internal" href="#resuming-sessions">Resuming Sessions</a></li>
+<li><a class="reference internal" href="#stopping-sessions">Stopping Sessions</a></li>
+<li><a class="reference internal" href="#cleaning-up-stale-sessions">Cleaning Up Stale Sessions</a></li>
+<li><a class="reference internal" href="#updating-test-functions">Updating Test Functions</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#batch-execution">Batch Execution</a><ul>
+<li><a class="reference internal" href="#batch-options">Batch Options</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#command-aliases">Command Aliases</a></li>
+<li><a class="reference internal" href="#tips-and-workflow-patterns">Tips and Workflow Patterns</a><ul>
+<li><a class="reference internal" href="#iterative-playbook-development">Iterative Playbook Development</a></li>
+<li><a class="reference internal" href="#incremental-checkpointing">Incremental Checkpointing</a></li>
+<li><a class="reference internal" href="#testing-subsets-of-actions">Testing Subsets of Actions</a></li>
+<li><a class="reference internal" href="#using-shared-directories">Using Shared Directories</a></li>
+<li><a class="reference internal" href="#session-auto-detection">Session Auto-Detection</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"></script>
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+  if (!window.simpleDatatables) {
+    console.warn('simpleDatatables not loaded yet');
+    return;
+  }
+  document.querySelectorAll('table.sdtable').forEach(function(el) {
+    if (!el.dataset.sdInit) {
+      el.dataset.sdInit = '1';
+      try {
+        new window.simpleDatatables.DataTable(el, {});
+      } catch (e) {
+        console.error('Simple-DataTables init failed:', e);
+      }
+    }
+  });
+});
+</script>
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+  if (!window.simpleDatatables) {
+    console.warn('simpleDatatables not loaded yet');
+    return;
+  }
+  document.querySelectorAll('table.sdtable').forEach(function(el) {
+    if (!el.dataset.sdInit) {
+      el.dataset.sdInit = '1';
+      try {
+        new window.simpleDatatables.DataTable(el, {});
+      } catch (e) {
+        console.error('Simple-DataTables init failed:', e);
+      }
+    }
+  });
+});
+</script>
+    </body>
+</html>

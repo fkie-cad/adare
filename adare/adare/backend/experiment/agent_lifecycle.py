@@ -417,8 +417,9 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
 
         try:
             with DevModeApi() as api:
-                api.update_session_cached_command(context.experiment_run_ulid, command_to_cache)
-                log.info("Cached adarevm start command to database")
+                if api.get_session(context.experiment_run_ulid):
+                    api.update_session_cached_command(context.experiment_run_ulid, command_to_cache)
+                    log.info("Cached adarevm start command to database")
         except (OSError, ValueError, RuntimeError) as e:
             log.warning(f"Failed to cache command to DB: {e}")
 
@@ -470,7 +471,7 @@ async def _diagnose_websocket_connection(vm, guest_platform: str, stop_event, fu
             ])
     elif guest_platform == 'linux':
         diagnostics = [
-            ("adarevm process", "pgrep -af adarevm || echo 'adarevm NOT running'"),
+            ("adarevm process", "pgrep -af '[a]darevm' || echo 'agent NOT running'"),
             ("port 18765", "ss -tlnp 2>/dev/null | grep 18765 || netstat -tlnp 2>/dev/null | grep 18765 || echo 'Port 18765 NOT listening'"),
         ]
         if full:
