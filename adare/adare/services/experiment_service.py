@@ -316,10 +316,22 @@ class ExperimentService:
         running `verify_vm` outside any registered project. The directory
         is initialized with the per-project SQLite but is never added to
         the global project registry."""
+        from adare.backend.project.directory import ProjectDirectory
         from adare.database.init import ensure_project_database_exists
 
         target = Path.home() / ".adare" / "state" / "verify-runs"
-        target.mkdir(parents=True, exist_ok=True)
+        project_directory = ProjectDirectory(target)
+        for subdir in (
+            target,
+            project_directory.experiments,
+            project_directory.shared,
+            project_directory.shared_tools,
+            project_directory.shared_data,
+            project_directory.vm_runtime,
+            project_directory.run,
+            project_directory.adare_config,
+        ):
+            subdir.mkdir(parents=True, exist_ok=True)
         ensure_project_database_exists(target)
         return Result.ok(target)
 
