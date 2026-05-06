@@ -207,12 +207,27 @@ class TestfunctionDbApi(GlobalDatabaseApi):
             # Note: Usage checks should be done at command level using can_safely_update_testfunction()
             # because abstract_tests and test_events are in project databases, not global database
             self.remove_testfunction(Path(testfunction_file.path), testfunction_obj.name)
+            # Flush so the pending delete clears before parse_and_create_testfunction's get_or_create.
+            self._session.flush()
 
             self.parse_and_create_testfunction(
                 t_func_class, module_analyzer, testfunction_file
             )
 
             log.info(f'Updated testfunction {testfunction_obj.name}')
+
+    def upsert_testfunction_file_obj(self, path: Path, requirements: Path) -> tuple[str, TestFunctionFile]:
+        """Upsert by hash. Returns ('created' | 'updated' | 'unchanged', file_obj)."""
+        existing = self._session.query(TestFunctionFile).filter(
+            TestFunctionFile.name == path.stem).first()
+        if not existing:
+            return 'created', self.create_testfunction_file_obj(path.parent, path, requirements)
+
+        current_hash = combine_hashes([hash_file_sha256(path), hash_file_sha256(requirements)])
+        if existing.sha256hash == current_hash:
+            return 'unchanged', existing
+
+        return 'updated', self.update_testfunction_file_obj(path, requirements)
 
     def update_testfunction_file_obj(self, path: Path, requirements_path: Path):
         if not self.testfunction_file_obj_exists(path):
@@ -223,6 +238,15 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         module_analyzer = PyModuleAnalyzer(path)
         testfunction_file = self._session.query(TestFunctionFile).filter(
             TestFunctionFile.path == path.as_posix()).first()
+
+        # Drop rows whose type is no longer in source first; otherwise their stale
+        # `name` collides with the new rows we are about to create (e.g. when a
+        # testfunction class was renamed but the testname stayed the same).
+        class_names = [c.name for c in module_analyzer.get_classes(parent='BasicTest')]
+        for testfunction_obj in list(testfunction_file.test_functions):
+            if testfunction_obj.type not in class_names:
+                self.remove_testfunction(path, testfunction_obj.name)
+        self._session.flush()
 
         for t_func_class in module_analyzer.get_classes(parent='BasicTest'):
             sha256_testfunction = self.__get_testfunction_hash(t_func_class)
@@ -237,10 +261,6 @@ class TestfunctionDbApi(GlobalDatabaseApi):
             else:
                 self.parse_and_create_testfunction(t_func_class, module_analyzer, testfunction_file)
 
-        class_names = [t_func_class.name for t_func_class in module_analyzer.get_classes(parent='BasicTest')]
-        for testfunction_obj in testfunction_file.test_functions:
-            if testfunction_obj.type not in class_names:
-                self.remove_testfunction(path, testfunction_obj.name)
         testfunction_file.sha256hash = combine_hashes([hash_file_sha256(path), hash_file_sha256(requirements_path)])
         self._session.commit()
         return testfunction_file
