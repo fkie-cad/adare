@@ -16,10 +16,10 @@ TEMPLATES_DIR = Path(__file__).parent / 'templates'
 
 # Template file mapping by OS name
 _TEMPLATE_MAP = {
-    'ubuntu2604': 'autoinstall_ubuntu_2604.yaml',
-    'ubuntu2604arm64': 'autoinstall_ubuntu_2604.yaml',
-    'ubuntu2510': 'autoinstall_ubuntu_2510.yaml',
-    'ubuntu2510arm64': 'autoinstall_ubuntu_2510.yaml',
+    'ubuntu2604': 'autoinstall_ubuntu_latest.yaml',
+    'ubuntu2604arm64': 'autoinstall_ubuntu_latest.yaml',
+    'ubuntu2510': 'autoinstall_ubuntu_latest.yaml',
+    'ubuntu2510arm64': 'autoinstall_ubuntu_latest.yaml',
     'ubuntu2404': 'autoinstall_ubuntu_2404.yaml',
     'ubuntu2404arm64': 'autoinstall_ubuntu_2404.yaml',
     'ubuntu2204': 'autoinstall_ubuntu_2204.yaml',
@@ -235,7 +235,7 @@ def generate_user_data(os_def: OsDefinition, vm_name: str, setup_level: int = Se
 def write_autoinstall_dir(os_def: OsDefinition, vm_name: str, output_dir: Path, setup_level: int = SetupLevel.FULL) -> Path:
     """Write autoinstall user-data and meta-data files to a directory.
 
-    Creates the directory structure expected by cloud-init nocloud-net:
+    Creates the file pair expected by the cloud-init NoCloud datasource:
       output_dir/
         user-data
         meta-data   (empty file, required by cloud-init)

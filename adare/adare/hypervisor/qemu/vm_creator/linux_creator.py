@@ -19,10 +19,7 @@ from adare.hypervisor.qemu.vm_creator.iso_utils import (
     verify_iso_hash,
 )
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
-from adare.hypervisor.qemu.vm_creator.progress import (
-    AutoinstallHTTPServer,
-    wait_for_qemu_exit,
-)
+from adare.hypervisor.qemu.vm_creator.progress import wait_for_qemu_exit
 from adare.hypervisor.qemu.vm_creator.qmp_utils import qemu_params_for_arch
 
 log = logging.getLogger(__name__)
@@ -42,9 +39,9 @@ class LinuxVMCreator(BaseVMCreator):
     1. Check prerequisites
     2. Download ISO (with caching)
     3. Extract kernel/initrd from ISO
-    4. Generate autoinstall config
+    4. Generate autoinstall config + cidata ISO
     5. Create disk image
-    6. Boot QEMU with direct kernel + autoinstall HTTP server
+    6. Boot QEMU with direct kernel + cidata ISO
     7. Wait for installation to complete (VM self-shutdown)
     8. Return path to the finished qcow2 disk image
     """
@@ -71,7 +68,6 @@ class LinuxVMCreator(BaseVMCreator):
         with tempfile.TemporaryDirectory(prefix='adare-vmcreate-') as tmpdir:
             tmpdir_path = Path(tmpdir)
 
-            # Generate autoinstall config
             autoinstall_dir = write_autoinstall_dir(
                 os_def=self.os_def,
                 vm_name=self.vm_name,
@@ -79,7 +75,6 @@ class LinuxVMCreator(BaseVMCreator):
                 setup_level=self.setup_level,
             )
 
-            # Extract kernel and initrd (needed for direct kernel boot)
             try:
                 kernel_path, initrd_path = extract_kernel_and_initrd(
                     iso_path=self.iso_path,
@@ -92,38 +87,23 @@ class LinuxVMCreator(BaseVMCreator):
             except (OSError, ValueError) as e:
                 raise LinuxVMCreationError(f'Kernel extraction failed: {e}') from e
 
-            # Boot QEMU and wait for install
-            # aarch64 uses cidata ISO as datasource (no HTTP server needed);
-            # x86_64 uses HTTP server for the autoinstall config.
+            cidata_path = create_cidata_iso(
+                autoinstall_dir, tmpdir_path / 'cidata.iso',
+            )
+            print_step(f'Created cidata ISO for autoinstall: [dim]{cidata_path}[/dim]')
+
             try:
-                if self.os_def.architecture == 'aarch64':
-                    cidata_path = create_cidata_iso(
-                        autoinstall_dir, tmpdir_path / 'cidata.iso',
-                    )
-                    print_step(f'Created cidata ISO for autoinstall: [dim]{cidata_path}[/dim]')
-                    _run_uefi_installation(
-                        iso_path=self.iso_path,
-                        kernel_path=kernel_path,
-                        initrd_path=initrd_path,
-                        cidata_path=cidata_path,
-                        disk_path=disk_path,
-                        os_def=self.os_def,
-                        ram_mb=self.ram_mb,
-                        cpus=self.cpus,
-                        nvram_path=nvram_path,
-                    )
-                else:
-                    _run_direct_kernel_installation(
-                        iso_path=self.iso_path,
-                        kernel_path=kernel_path,
-                        initrd_path=initrd_path,
-                        autoinstall_dir=autoinstall_dir,
-                        disk_path=disk_path,
-                        os_def=self.os_def,
-                        ram_mb=self.ram_mb,
-                        cpus=self.cpus,
-                        nvram_path=nvram_path,
-                    )
+                _run_qemu_installation(
+                    iso_path=self.iso_path,
+                    kernel_path=kernel_path,
+                    initrd_path=initrd_path,
+                    cidata_path=cidata_path,
+                    disk_path=disk_path,
+                    os_def=self.os_def,
+                    ram_mb=self.ram_mb,
+                    cpus=self.cpus,
+                    nvram_path=nvram_path,
+                )
             except (TimeoutError, subprocess.CalledProcessError) as e:
                 raise LinuxVMCreationError(str(e)) from e
 
@@ -183,104 +163,7 @@ def _download_and_cache_iso(os_def: OsDefinition) -> Path:
     return iso_path
 
 
-def _run_direct_kernel_installation(
-    iso_path: Path,
-    kernel_path: Path,
-    initrd_path: Path,
-    autoinstall_dir: Path,
-    disk_path: Path,
-    os_def: OsDefinition,
-    ram_mb: int,
-    cpus: int,
-    nvram_path: Path | None = None,
-) -> None:
-    """Boot QEMU with direct kernel boot + HTTP-served autoinstall (x86_64)."""
-    arch_params = qemu_params_for_arch(os_def)
-    needs_uefi = os_def.requires_uefi or os_def.architecture == 'aarch64'
-
-    with AutoinstallHTTPServer(autoinstall_dir) as http_server:
-        port = http_server.port
-
-        # Build kernel command line for autoinstall
-        # ds=nocloud-net tells cloud-init to fetch config from HTTP
-        kernel_cmdline = (
-            f'autoinstall '
-            f'ds=nocloud-net;seedfrom=http://10.0.2.2:{port}/ '
-            f'console=ttyS0 ---'
-        )
-
-        cmd = [
-            arch_params['exe'],
-            '-machine', arch_params['machine'],
-            '-cpu', arch_params['cpu'],
-            '-m', str(ram_mb),
-            '-smp', str(cpus),
-            # Disk
-            '-drive', f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
-            # ISO as CD-ROM
-            '-cdrom', str(iso_path),
-            # Direct kernel boot for autoinstall
-            '-kernel', str(kernel_path),
-            '-initrd', str(initrd_path),
-            '-append', kernel_cmdline,
-            # Network (user mode - 10.0.2.2 routes to host)
-            '-netdev', 'user,id=net0',
-            '-device', 'virtio-net-pci,netdev=net0',
-            # Display — show QEMU window so user can watch install progress
-            '-display', 'cocoa' if platform.system() == 'Darwin' else 'gtk',
-            # USB devices for input in display window
-            '-device', 'qemu-xhci',
-            '-device', 'usb-tablet',
-            '-device', 'usb-kbd',
-            # Virtio RNG for faster entropy
-            '-device', 'virtio-rng-pci',
-            # Serial console for installer log output
-            '-serial', f'file:{disk_path.parent / (disk_path.stem + "_install.log")}',
-            # Exit QEMU on guest reboot (Subiquity reboots after install)
-            '-no-reboot',
-        ]
-        # VGA / display device (architecture-specific)
-        cmd.extend(arch_params['vga_args'])
-
-        # Add UEFI firmware if required
-        if needs_uefi and nvram_path is not None:
-            ovmf_code, _ = find_ovmf_firmware(os_def.architecture)
-            pflash_args = [
-                '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
-                '-drive', f'if=pflash,format=raw,file={nvram_path}',
-            ]
-            machine_idx = cmd.index('-machine') + 2
-            cmd[machine_idx:machine_idx] = pflash_args
-
-        log.info(f'Starting QEMU installation: {" ".join(cmd)}')
-        print_section('Installation')
-        print_step('Starting unattended installation [dim](this may take 15-45 minutes)[/dim]')
-        print_step(f'Autoinstall config served on port [bold]{port}[/bold]')
-
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-
-        try:
-            with console.status(f'  [cyan]{disk_path.stem}[/cyan] installing...', spinner='dots') as status:
-                wait_for_qemu_exit(
-                    process,
-                    timeout_minutes=60,
-                    label=f'{disk_path.stem} installation',
-                    status=status,
-                )
-        except (TimeoutError, subprocess.CalledProcessError):
-            raise
-        except KeyboardInterrupt:
-            console.print('\n  [bold red]Installation interrupted by user[/bold red]')
-            process.terminate()
-            process.wait(timeout=30)
-            raise LinuxVMCreationError('Installation interrupted by user') from None
-
-
-def _run_uefi_installation(
+def _run_qemu_installation(
     iso_path: Path,
     kernel_path: Path,
     initrd_path: Path,
@@ -291,20 +174,18 @@ def _run_uefi_installation(
     cpus: int,
     nvram_path: Path | None = None,
 ) -> None:
-    """Boot QEMU via UEFI with direct kernel boot + cidata ISO (aarch64).
+    """Boot QEMU with direct kernel boot + cidata ISO autoinstall.
 
-    Uses direct kernel boot so the `autoinstall` kernel parameter reaches
-    Subiquity (bypasses the confirmation prompt). The autoinstall config
-    is delivered via a cidata ISO (NoCloud datasource) instead of HTTP,
-    which is more reliable on aarch64 UEFI.
+    cloud-init auto-detects the attached drive labelled `cidata` as a NoCloud
+    datasource regardless of architecture, so the same flow works for x86_64
+    and aarch64. The `autoinstall` kernel parameter tells Subiquity to skip
+    the confirmation prompt and run unattended.
     """
     arch_params = qemu_params_for_arch(os_def)
+    needs_uefi = os_def.requires_uefi or os_def.architecture == 'aarch64'
+    console_dev = 'ttyAMA0' if os_def.architecture == 'aarch64' else 'ttyS0'
 
-    ovmf_code, _ = find_ovmf_firmware(os_def.architecture)
-
-    # ds=nocloud tells cloud-init to look for local NoCloud datasources
-    # (the cidata ISO) instead of fetching via HTTP (nocloud-net).
-    kernel_cmdline = 'autoinstall ds=nocloud console=ttyAMA0 ---'
+    kernel_cmdline = f'autoinstall console={console_dev} ---'
 
     cmd = [
         arch_params['exe'],
@@ -312,9 +193,6 @@ def _run_uefi_installation(
         '-cpu', arch_params['cpu'],
         '-m', str(ram_mb),
         '-smp', str(cpus),
-        # UEFI firmware
-        '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
-        '-drive', f'if=pflash,format=raw,file={nvram_path}',
         # Disk
         '-drive', f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
         # Ubuntu ISO as CD-ROM
@@ -323,9 +201,9 @@ def _run_uefi_installation(
         '-kernel', str(kernel_path),
         '-initrd', str(initrd_path),
         '-append', kernel_cmdline,
-        # cidata ISO — cloud-init reads autoinstall config from here
+        # cidata ISO — cloud-init NoCloud datasource (auto-detected by label)
         '-drive', f'file={cidata_path},format=raw,if=virtio,readonly=on',
-        # Network (user mode - 10.0.2.2 routes to host)
+        # Network (user mode)
         '-netdev', 'user,id=net0',
         '-device', 'virtio-net-pci,netdev=net0',
         # Display — show QEMU window so user can watch install progress
@@ -341,13 +219,20 @@ def _run_uefi_installation(
         # Exit QEMU on guest reboot (Subiquity reboots after install)
         '-no-reboot',
     ]
-    # VGA / display device (architecture-specific)
     cmd.extend(arch_params['vga_args'])
 
-    log.info(f'Starting QEMU UEFI installation: {" ".join(cmd)}')
+    if needs_uefi and nvram_path is not None:
+        ovmf_code, _ = find_ovmf_firmware(os_def.architecture)
+        pflash_args = [
+            '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
+            '-drive', f'if=pflash,format=raw,file={nvram_path}',
+        ]
+        machine_idx = cmd.index('-machine') + 2
+        cmd[machine_idx:machine_idx] = pflash_args
+
+    log.info(f'Starting QEMU installation: {" ".join(cmd)}')
     print_section('Installation')
-    print_step('Starting unattended UEFI installation [dim](this may take 15-45 minutes)[/dim]')
-    print_step(f'Autoinstall config via cidata ISO: [dim]{cidata_path}[/dim]')
+    print_step('Starting unattended installation [dim](this may take 15-45 minutes)[/dim]')
 
     process = subprocess.Popen(
         cmd,
