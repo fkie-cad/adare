@@ -321,6 +321,48 @@ Available template variables
 - ``driver_arch`` -- ``amd64`` or ``ARM64`` (for virtio-win driver paths)
 - ``miniforge_arch`` -- ``x86_64`` or ``aarch64`` (for Miniforge download URL)
 
+Template metadata
+-----------------
+
+Each Linux autoinstall template carries a self-describing metadata block as a
+Jinja comment at the top of the file. The block declares which OS profiles the
+template covers, so dropping a template into ``~/.adare/vm-templates/`` is
+enough to register it -- no Python edits required.
+
+.. code-block:: jinja
+
+   {# adare-template
+   schema: 1
+   id: my-ubuntu
+   description: Custom Ubuntu 24.04 with extra tooling
+   maintainer: yourname
+   revision: 2026-05-06
+   supports:
+     - ubuntu2404
+     - ubuntu2404arm64
+   #}
+   #cloud-config
+   autoinstall:
+     ...
+
+Field reference:
+
+- ``schema`` (required, integer) -- Metadata schema version. Currently ``1``.
+  Loading a template with an unknown schema raises an explicit error.
+- ``id`` (required, string) -- Stable identifier surfaced in
+  ``adare manage os-profile show``. Independent of filename.
+- ``description`` (string) -- Human-readable summary.
+- ``maintainer`` (string) -- Name or handle responsible for the template.
+- ``revision`` (string) -- Free-form revision marker (date, version, etc.).
+- ``supports`` (list of strings) -- OS profile names this template applies to.
+  Order does not matter. Within a single template directory, two templates
+  cannot claim the same OS name; across directories, user templates override
+  built-ins.
+
+Because the block is a Jinja ``{# ... #}`` comment, it is stripped at render
+time and never reaches cloud-init. The line ``#cloud-config`` remains the first
+line of the rendered output.
+
 Writing a custom template
 -------------------------
 
@@ -328,7 +370,7 @@ Writing a custom template
 
    .. code-block:: bash
 
-      cp $(python -c "import adare.hypervisor.qemu.vm_creator.autoinstall as a; print(a.TEMPLATES_DIR)")/autoinstall_ubuntu_2404.yaml \
+      cp $(python -c "import adare.hypervisor.qemu.vm_creator.autoinstall as a; print(a.TEMPLATES_DIR)")/autoinstall_ubuntu_lts.yaml \
          ~/.adare/vm-templates/my_autoinstall.yaml
 
 2. Edit the template using the Jinja2 variables listed above.
