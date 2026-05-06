@@ -16,6 +16,16 @@ export interface CreateEnvironmentRequest {
   vm_path?: string
 }
 
+export interface VerifyEnvironmentRequest {
+  name: string
+  project_path: string
+}
+
+export interface VerifyEnvironmentResponse {
+  run_ulid: string
+  experiment_name: string
+}
+
 export function useEnvironments() {
   return useQuery({
     queryKey: ['environments'],
@@ -45,6 +55,20 @@ export function useCreateEnvironment() {
       return data.data!
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['environments'] }),
+  })
+}
+
+export function useVerifyEnvironment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (request: VerifyEnvironmentRequest) => {
+      const { data } = await api.post<ApiResponse<VerifyEnvironmentResponse>>(
+        endpoints.verifyEnvironment(request.name),
+        { project_path: request.project_path },
+      )
+      return data.data!
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['runs'] }),
   })
 }
 

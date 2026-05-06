@@ -14,6 +14,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { useCreateEnvironment } from '@/api/hooks/use-environments'
 import { useProjects } from '@/api/hooks/use-projects'
 import { toast } from '@/components/ui/toast'
+import { VerifyEnvironmentDialog } from '@/components/dialogs/verify-environment-dialog'
 
 interface Props {
   open: boolean
@@ -26,6 +27,7 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
   const [projectPath, setProjectPath] = useState(defaultProjectPath ?? '')
   const [name, setName] = useState('')
   const [vmPath, setVmPath] = useState('')
+  const [verifyState, setVerifyState] = useState<{ name: string; projectPath: string } | null>(null)
   const mutation = useCreateEnvironment()
 
   useEffect(() => {
@@ -50,15 +52,17 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!canSubmit) return
+    const submittedProjectPath = projectPath.trim()
     mutation.mutate(
       {
-        project_path: projectPath.trim(),
+        project_path: submittedProjectPath,
         name: name.trim(),
         vm_path: vmPath.trim() || undefined,
       },
       {
-        onSuccess: () => {
-          toast.success('Environment created', name.trim())
+        onSuccess: (env) => {
+          const createdName = env?.name ?? name.trim()
+          setVerifyState({ name: createdName, projectPath: submittedProjectPath })
           onOpenChange(false)
         },
       },
@@ -66,6 +70,7 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -132,5 +137,19 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
         </form>
       </DialogContent>
     </Dialog>
+    <VerifyEnvironmentDialog
+      open={verifyState !== null}
+      onOpenChange={(o) => {
+        if (!o) setVerifyState(null)
+      }}
+      environmentName={verifyState?.name ?? null}
+      projectPath={verifyState?.projectPath ?? null}
+      onSkip={() => {
+        if (verifyState) {
+          toast.success('Environment created', verifyState.name)
+        }
+      }}
+    />
+    </>
   )
 }
