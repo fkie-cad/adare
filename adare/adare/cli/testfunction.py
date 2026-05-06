@@ -140,6 +140,27 @@ def exec_list_testfunctions(arguments):
     )
 
 
+def exec_sync_testfunctions(arguments):
+    """Sync all testfunctions from appdata: hash-based create/update/skip."""
+    from adare.backend.testfunction.commands import testfunction_sync_all
+    from adare.config.configdirectory import APPDATA_DIR
+
+    root = APPDATA_DIR / 'adare' / 'adare' / 'appdata' / 'testfunctions'
+    if not root.is_dir():
+        raise TestFunctionNotFoundError(log, message=f'testfunctions appdata directory not found: {root}')
+    summary = testfunction_sync_all(root)
+
+    print_success_message(
+        title='Testfunction sync complete',
+        next_steps=[
+            f"created:   {', '.join(summary['created']) or '—'}",
+            f"updated:   {', '.join(summary['updated']) or '—'}",
+            f"unchanged: {', '.join(summary['unchanged']) or '—'}",
+            f"skipped:   {', '.join(summary['skipped']) or '—'}",
+        ],
+    )
+
+
 def exec_check_testfunction_exists(arguments):
     """Check if a testfunction exists in the database using AdareAPI."""
     from pathlib import Path
