@@ -1,6 +1,7 @@
 # external imports
 # configure logging
 import logging
+import shutil
 from pathlib import Path
 
 # internal imports
@@ -278,3 +279,70 @@ def testfunction_download(project_path: Path, name: str, version: int = None):
     testfunction_directory.path.mkdir(parents=True, exist_ok=True)
     download_testfunction(name, testfunction_directory.path, version=version)
     log.info(f'Testfunction {name} downloaded')
+
+
+def _refresh_global_testfunction(manager, source_py: Path, source_req: Path, name: str) -> tuple[Path, Path]:
+    """Make sure the global STATE_DIR copy mirrors the source files.
+
+    Why: install_testfunction is a no-op when targets exist, so source edits would not propagate.
+    """
+    from adare.helperfunctions.hash import combine_hashes, hash_file_sha256
+    from adare.helperfunctions.integrity import unprotect_files_for_update
+
+    target_dir = manager.global_testfunctions_dir / name
+    target_py = target_dir / source_py.name
+    target_req = target_dir / 'requirements.txt'
+
+    if not target_py.exists():
+        return manager.install_testfunction(
+            source_python_file=source_py,
+            source_requirements_file=source_req,
+            name=name,
+        )
+
+    src_files = [source_py, source_req] if source_req.exists() else [source_py]
+    tgt_files = [target_py, target_req] if target_req.exists() else [target_py]
+    if len(src_files) == len(tgt_files):
+        if combine_hashes([hash_file_sha256(f) for f in src_files]) == \
+                combine_hashes([hash_file_sha256(f) for f in tgt_files]):
+            return target_py, target_req
+
+    unprotect_files_for_update([target_py, target_req])
+    target_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_py, target_py)
+    if source_req.exists():
+        shutil.copy2(source_req, target_req)
+    elif not target_req.exists():
+        target_req.touch()
+    return target_py, target_req
+
+
+def testfunction_sync_all(root: Path, skip_names: tuple[str, ...] = ('visual',)) -> dict:
+    """Walk root/<name>/ dirs and upsert each testfunction by hash."""
+    from adare.backend.testfunction.manager import TestfunctionManager
+    from adare.database.api.testfunction import TestfunctionDbApi
+    from adare.helperfunctions.integrity import protect_loaded_files
+
+    manager = TestfunctionManager()
+    manager.ensure_global_directory_exists()
+
+    summary: dict[str, list[str]] = {'created': [], 'updated': [], 'unchanged': [], 'skipped': []}
+
+    with TestfunctionDbApi() as api:
+        for sub in sorted(p for p in root.iterdir() if p.is_dir()):
+            if sub.name in skip_names:
+                summary['skipped'].append(sub.name)
+                continue
+            py_files = list(sub.glob('*.py'))
+            if not py_files:
+                continue
+            source_py = py_files[0]
+            source_req = sub / 'requirements.txt'
+
+            target_py, target_req = _refresh_global_testfunction(manager, source_py, source_req, sub.name)
+            action, _ = api.upsert_testfunction_file_obj(target_py, target_req)
+            summary[action].append(sub.name)
+            if action in ('created', 'updated'):
+                protect_loaded_files([target_py, target_req])
+
+    return summary
