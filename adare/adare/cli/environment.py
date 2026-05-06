@@ -68,6 +68,60 @@ def exec_environment_create(arguments):
         handle_api_error(result)
 
 
+def exec_environment_verify(arguments):
+    """
+    Verify an environment by running the built-in verify_vm experiment foreground.
+    """
+    import asyncio
+    import sys
+
+    from adare.backend.basics import determine_projectdirectory
+    from adare.backend.experiment.run import experiment_run
+    from adare.exceptions import NoProjectFoundError
+
+    project_directory = determine_projectdirectory(arguments.project)
+    if not project_directory:
+        raise NoProjectFoundError(log, specified_project=arguments.project)
+
+    env_name = arguments.name
+    api = AdareAPI()
+
+    setup_result = api.experiment.ensure_verify_setup(project_directory, env_name)
+    if not setup_result.success:
+        handle_api_error(setup_result)
+        return
+
+    experiment_name = setup_result.data
+
+    was_interrupted, was_successful = asyncio.run(experiment_run(
+        project_directory,
+        experiment_name,
+        env_name,
+        test=False,
+        runlog=True,
+    ))
+
+    if not was_successful:
+        from adare.console import print_error_message
+        print_error_message(
+            title=f'Environment "{env_name}" verification failed',
+            next_steps=[
+                f'Inspect run artifacts under {project_directory}/.adare/runs/',
+                f'Re-run verification with: adare env verify {env_name}',
+            ],
+        )
+        sys.exit(1)
+
+    print_success_message(
+        title=f'Environment "{env_name}" verified',
+        next_steps=[
+            f'Inspect run artifacts under {project_directory}/.adare/runs/',
+            f'Re-run verification anytime with: adare env verify {env_name}',
+        ],
+        tip='The verify_vm experiment is now attached and can be run again as needed.',
+    )
+
+
 def exec_environment_delete(arguments):
     """
     Delete an environment using the AdareAPI.

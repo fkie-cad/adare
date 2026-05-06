@@ -171,6 +171,14 @@ class ExperimentAPI:
         """Test experiment."""
         return self._service.test(project_path, name, environment_name)
 
+    async def run(self, project_path, name, environment_name):
+        """Run experiment in the background."""
+        return await self._service.run(project_path, name, environment_name)
+
+    def ensure_verify_setup(self, project_path, environment_name):
+        """Idempotently prep the built-in verify_vm experiment for an environment."""
+        return self._service.ensure_verify_setup(project_path, environment_name)
+
     def add_environments(self, request):
         """Add environments to experiment."""
         return self._service.add_environments(request)
