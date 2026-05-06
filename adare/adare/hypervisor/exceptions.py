@@ -44,8 +44,8 @@ log = logging.getLogger(__name__)
 
 class HypervisorException(LoggedErrorException):
     """Base exception for all hypervisor operations."""
-    def __init__(self, message: str):
-        super().__init__(log, message)
+    def __init__(self, message: str, possible_solutions: list[str] | None = None):
+        super().__init__(log, message, possible_solutions=possible_solutions)
 
 
 # =============================================================================
