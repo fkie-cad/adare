@@ -61,6 +61,44 @@ class OsDefinition:
     template: str = ''  # Custom template filename (empty = use default lookup)
 
 
+# Ubuntu 26.04 LTS (Resolute Raccoon) - Server ISO with autoinstall support
+UBUNTU_2604 = OsDefinition(
+    name='ubuntu2604',
+    display_name='Ubuntu 26.04 LTS (Resolute Raccoon)',
+    platform='linux',
+    distribution='ubuntu',
+    distribution_label='Resolute Raccoon',
+    version='26.04',
+    iso_url='https://releases.ubuntu.com/26.04/ubuntu-26.04-live-server-amd64.iso',
+    iso_sha256='dec49008a71f6098d0bcfc822021f4d042d5f2db279e4d75bdd981304f1ca5d9',
+    iso_filename='ubuntu-26.04-live-server-amd64.iso',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/casper/vmlinuz',
+    initrd_path_in_iso='/casper/initrd',
+)
+
+# Ubuntu 26.04 LTS (Resolute Raccoon, ARM64) - User must supply ISO
+UBUNTU_2604_ARM64 = OsDefinition(
+    name='ubuntu2604arm64',
+    display_name='Ubuntu 26.04 LTS (Resolute Raccoon, ARM64)',
+    platform='linux',
+    distribution='ubuntu',
+    distribution_label='Resolute Raccoon',
+    version='26.04',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    requires_uefi=True,
+    kernel_path_in_iso='/casper/vmlinuz',
+    initrd_path_in_iso='/casper/initrd',
+    architecture='aarch64',
+)
+
 # Ubuntu 24.04 LTS (Noble Numbat) - Server ISO with autoinstall support
 UBUNTU_2404 = OsDefinition(
     name='ubuntu2404',
@@ -79,12 +117,51 @@ UBUNTU_2404 = OsDefinition(
     initrd_path_in_iso='/casper/initrd',
 )
 
-# Ubuntu 25.10 - Desktop ARM64 ISO with autoinstall support
-UBUNTU_2510 = OsDefinition(
-    name='ubuntu2510',
-    display_name='Ubuntu 25.10',
+# Ubuntu 24.04 LTS (Noble Numbat, ARM64) - User must supply ISO
+UBUNTU_2404_ARM64 = OsDefinition(
+    name='ubuntu2404arm64',
+    display_name='Ubuntu 24.04 LTS (Noble Numbat, ARM64)',
     platform='linux',
     distribution='ubuntu',
+    distribution_label='Noble Numbat',
+    version='24.04',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    requires_uefi=True,
+    kernel_path_in_iso='/casper/vmlinuz',
+    initrd_path_in_iso='/casper/initrd',
+    architecture='aarch64',
+)
+
+# Ubuntu 25.10 (Questing Quokka) - Server ISO with autoinstall support
+UBUNTU_2510 = OsDefinition(
+    name='ubuntu2510',
+    display_name='Ubuntu 25.10 (Questing Quokka)',
+    platform='linux',
+    distribution='ubuntu',
+    distribution_label='Questing Quokka',
+    version='25.10',
+    iso_url='https://releases.ubuntu.com/25.10/ubuntu-25.10-live-server-amd64.iso',
+    iso_sha256='dc54870e5261c0abad19f74b8146659d10e625971792bd42d7ecde820b60a1d0',
+    iso_filename='ubuntu-25.10-live-server-amd64.iso',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/casper/vmlinuz',
+    initrd_path_in_iso='/casper/initrd',
+)
+
+# Ubuntu 25.10 (Questing Quokka, ARM64) - User must supply ISO
+UBUNTU_2510_ARM64 = OsDefinition(
+    name='ubuntu2510arm64',
+    display_name='Ubuntu 25.10 (Questing Quokka, ARM64)',
+    platform='linux',
+    distribution='ubuntu',
+    distribution_label='Questing Quokka',
     version='25.10',
     iso_url='',
     iso_sha256='',
@@ -114,6 +191,26 @@ UBUNTU_2204 = OsDefinition(
     default_cpus=0,
     kernel_path_in_iso='/casper/vmlinuz',
     initrd_path_in_iso='/casper/initrd',
+)
+
+# Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64) - User must supply ISO
+UBUNTU_2204_ARM64 = OsDefinition(
+    name='ubuntu2204arm64',
+    display_name='Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64)',
+    platform='linux',
+    distribution='ubuntu',
+    distribution_label='Jammy Jellyfish',
+    version='22.04',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    requires_uefi=True,
+    kernel_path_in_iso='/casper/vmlinuz',
+    initrd_path_in_iso='/casper/initrd',
+    architecture='aarch64',
 )
 
 # Windows 11 - User must supply ISO
@@ -163,9 +260,14 @@ UTM_GUEST_TOOLS_ISO_FILENAME = 'utm-guest-tools.iso'
 
 # Built-in OS definitions
 _BUILTIN_CATALOG: dict[str, OsDefinition] = {
+    'ubuntu2604': UBUNTU_2604,
+    'ubuntu2604arm64': UBUNTU_2604_ARM64,
     'ubuntu2510': UBUNTU_2510,
+    'ubuntu2510arm64': UBUNTU_2510_ARM64,
     'ubuntu2404': UBUNTU_2404,
+    'ubuntu2404arm64': UBUNTU_2404_ARM64,
     'ubuntu2204': UBUNTU_2204,
+    'ubuntu2204arm64': UBUNTU_2204_ARM64,
     'windows11': WINDOWS_11,
     'windows10': WINDOWS_10,
 }
