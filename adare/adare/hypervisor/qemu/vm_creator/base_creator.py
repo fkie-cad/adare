@@ -130,7 +130,12 @@ class BaseVMCreator(ABC):
 
     def _check_prerequisites(self) -> None:
         """Verify that the host has all required tools and resources."""
-        check_prerequisites(self.os_def, iso_path=self.iso_path)
+        check_prerequisites(
+            self.os_def,
+            iso_path=self.iso_path,
+            vm_dir=self.vm_dir,
+            disk_size=self.disk_size,
+        )
 
     def _create_disk(self) -> tuple[Path, Path | None]:
         """Create the qcow2 disk image and optional NVRAM file.
