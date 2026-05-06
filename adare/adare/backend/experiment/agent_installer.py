@@ -85,13 +85,13 @@ async def check_installed_version(
     # Build platform-specific command
     if platform == 'windows':
         if use_conda:
-            cmd = f'C:\\Users\\adare\\.miniforge3\\Scripts\\conda.exe run -n pyadare pip show {package_name}'
+            cmd = f'C:\\Users\\adare\\.miniforge3\\envs\\pyadare\\Scripts\\python.exe -m pip show {package_name}'
         else:
             # Wheels: pip is in PATH; Editable: needs uv context
             cmd = f'pip show {package_name}' if wheels_available else f'uv run pip show {package_name}'
     else:  # linux
         if use_conda:
-            cmd = f'/home/adare/.miniforge3/bin/conda run -n pyadare pip show {package_name}'
+            cmd = f'/home/adare/.miniforge3/envs/pyadare/bin/python -m pip show {package_name}'
         else:
             # Wheels: pip3 is in PATH; Editable: needs uv context
             cmd = f'pip3 show {package_name}' if wheels_available else f'uv run pip show {package_name}'

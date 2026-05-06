@@ -186,6 +186,24 @@ def _execute_db_batch(batch):
 
             successful_operations += 1
 
+        except ValueError as e:
+            # Verify-only runs (`adare env verify`) intentionally have no
+            # project row, so stage updates emitted late in the run unwind
+            # cleanly raise here. Demote to DEBUG so the cascade does not
+            # bury the real error in user-facing output.
+            if str(e).startswith("Cannot find project for experiment run"):
+                ulid = operation.get('data', {}).get('ulid', 'unknown')
+                log.debug(
+                    f"Skipping stage update for run {ulid} with no project "
+                    f"row (verify-only or pre-init run): {e}"
+                )
+                successful_operations += 1
+            else:
+                failed_operations += 1
+                operation_type = operation.get('type', 'unknown')
+                ulid = operation.get('data', {}).get('ulid', 'unknown')
+                log.error(f"Error executing {operation_type} operation for ULID {ulid}: {e}", exc_info=True)
+
         except Exception as e:
             failed_operations += 1
             operation_type = operation.get('type', 'unknown')
