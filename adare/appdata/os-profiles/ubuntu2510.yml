@@ -1,17 +1,14 @@
 name: ubuntu2510
-display_name: "Ubuntu 25.10"
+display_name: "Ubuntu 25.10 (Questing Quokka)"
 platform: linux
 distribution: ubuntu
-distribution_label: ""
+distribution_label: "Questing Quokka"
 version: "25.10"
-install_mode: auto
-architecture: aarch64
-iso_url: ""
-iso_sha256: ""
-iso_filename: ""
+iso_url: "https://releases.ubuntu.com/25.10/ubuntu-25.10-live-server-amd64.iso"
+iso_sha256: "dc54870e5261c0abad19f74b8146659d10e625971792bd42d7ecde820b60a1d0"
+iso_filename: "ubuntu-25.10-live-server-amd64.iso"
 default_disk_size: "60G"
 default_ram_mb: 8192
 default_cpus: 0
-requires_uefi: true
-kernel_path_in_iso: /casper/vmlinuz
-initrd_path_in_iso: /casper/initrd
+kernel_path_in_iso: "/casper/vmlinuz"
+initrd_path_in_iso: "/casper/initrd"
