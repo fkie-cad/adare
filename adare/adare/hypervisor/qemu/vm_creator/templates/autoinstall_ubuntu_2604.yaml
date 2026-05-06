@@ -1,0 +1,110 @@
+#cloud-config
+autoinstall:
+  version: 1
+  refresh-installer:
+    update: false
+  source:
+    id: ubuntu-desktop-minimal
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  storage:
+    layout:
+      name: lvm
+      sizing-policy: all
+      match:
+        size: largest
+  identity:
+    hostname: {{ hostname }}
+    username: adare
+    password: {{ password_hash }}
+  ssh:
+    install-server: true
+    allow-pw: true
+  packages:
+    - ubuntu-desktop-minimal
+    {% if setup_level >= 1 %}
+    - qemu-guest-agent
+    {% endif %}
+    {% if setup_level >= 2 %}
+    - python3-pip
+    {% endif %}
+    - openssh-server
+    - curl
+    - wget
+    - git
+  late-commands:
+    - echo "adare ALL=(ALL) NOPASSWD:ALL" > /target/etc/sudoers.d/adare
+    - chmod 440 /target/etc/sudoers.d/adare
+    - mkdir -p /target/etc/gdm3
+    - "printf '[daemon]\\nAutomaticLoginEnable=true\\nAutomaticLogin=adare\\n' > /target/etc/gdm3/custom.conf"
+    - curtin in-target -- systemctl disable unattended-upgrades || true
+    - curtin in-target -- apt-get remove -y unattended-upgrades || true
+    # Disable APT periodic update/upgrade timers
+    - curtin in-target -- systemctl disable apt-daily.timer || true
+    - curtin in-target -- systemctl disable apt-daily-upgrade.timer || true
+    - curtin in-target -- systemctl mask apt-daily.service || true
+    - curtin in-target -- systemctl mask apt-daily-upgrade.service || true
+    # Disable APT periodic updates via config
+    - 'echo "APT::Periodic::Update-Package-Lists \"0\";" > /target/etc/apt/apt.conf.d/99disable-auto-updates'
+    - 'echo "APT::Periodic::Unattended-Upgrade \"0\";" >> /target/etc/apt/apt.conf.d/99disable-auto-updates'
+    - 'echo "APT::Periodic::Download-Upgradeable-Packages \"0\";" >> /target/etc/apt/apt.conf.d/99disable-auto-updates'
+    # Disable snap auto-refresh
+    - mkdir -p /target/etc/snap
+    - 'echo "refresh.hold: forever" > /target/etc/snap/snapd.conf || true'
+    - curtin in-target -- snap set system refresh.hold="$(date -d '+100 years' +%Y-%m-%dT%H:%M:%S%:z)" || true
+    {% if setup_level >= 1 %}
+    - curtin in-target -- systemctl enable qemu-guest-agent
+    {% endif %}
+    # Ensure adare user exists in target (cloud-init creates it on first boot, but we need it now)
+    - curtin in-target -- id adare || curtin in-target -- useradd -m -u 1000 -G sudo -s /bin/bash adare
+    - curtin in-target -- mkdir -p /home/adare
+    - curtin in-target -- bash -c 'echo "adare:adare" | chpasswd'
+    # Disable GNOME initial setup welcome wizard
+    - mkdir -p /target/home/adare/.config
+    - echo "yes" > /target/home/adare/.config/gnome-initial-setup-done
+    - chown -R 1000:1000 /target/home/adare
+    {% if setup_level >= 2 %}
+    # Install Miniforge3 and conda env as root, then fix ownership
+    - curtin in-target -- wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-{{ miniforge_arch }}.sh -O /tmp/miniforge.sh
+    - curtin in-target -- chmod +x /tmp/miniforge.sh
+    - curtin in-target -- bash /tmp/miniforge.sh -b -p /home/adare/.miniforge3
+    - curtin in-target -- /home/adare/.miniforge3/bin/conda create -n pyadare python=3.10 -y
+    - rm -f /target/tmp/miniforge.sh
+    - chown -R 1000:1000 /target/home/adare
+    {% endif %}
+    # System-wide dconf overrides for power management, screen lock, and update notifications
+    - mkdir -p /target/etc/dconf/db/local.d
+    - |
+      cat > /target/etc/dconf/db/local.d/00-adare <<'DCONF'
+      [org/gnome/desktop/session]
+      idle-delay=uint32 0
+
+      [org/gnome/desktop/screensaver]
+      lock-enabled=false
+      lock-delay=uint32 0
+
+      [org/gnome/software]
+      download-updates=false
+      download-updates-notify=false
+      allow-updates=false
+      first-run=false
+      DCONF
+    - mkdir -p /target/etc/dconf/db/local.d/locks
+    - |
+      cat > /target/etc/dconf/db/local.d/locks/00-adare <<'LOCKS'
+      /org/gnome/desktop/session/idle-delay
+      /org/gnome/desktop/screensaver/lock-enabled
+      /org/gnome/desktop/screensaver/lock-delay
+      /org/gnome/software/download-updates
+      /org/gnome/software/download-updates-notify
+      LOCKS
+    - curtin in-target -- dconf update || true
+    # Disable GNOME Software background service and update-notifier
+    - mkdir -p /target/etc/xdg/autostart
+    - |
+      if [ -f /target/etc/xdg/autostart/gnome-software-service.desktop ]; then
+        echo "Hidden=true" >> /target/etc/xdg/autostart/gnome-software-service.desktop
+      fi
+    - curtin in-target -- apt-get remove -y update-notifier update-notifier-common || true
+  shutdown: poweroff

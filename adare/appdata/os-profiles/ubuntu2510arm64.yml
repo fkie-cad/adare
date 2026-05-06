@@ -1,0 +1,17 @@
+name: ubuntu2510arm64
+display_name: "Ubuntu 25.10 (Questing Quokka, ARM64)"
+platform: linux
+distribution: ubuntu
+distribution_label: "Questing Quokka"
+version: "25.10"
+install_mode: auto
+architecture: aarch64
+iso_url: ""
+iso_sha256: ""
+iso_filename: ""
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0
+requires_uefi: true
+kernel_path_in_iso: /casper/vmlinuz
+initrd_path_in_iso: /casper/initrd

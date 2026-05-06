@@ -1,0 +1,14 @@
+name: ubuntu2604
+display_name: "Ubuntu 26.04 LTS (Resolute Raccoon)"
+platform: linux
+distribution: ubuntu
+distribution_label: "Resolute Raccoon"
+version: "26.04"
+iso_url: "https://releases.ubuntu.com/26.04/ubuntu-26.04-live-server-amd64.iso"
+iso_sha256: "dec49008a71f6098d0bcfc822021f4d042d5f2db279e4d75bdd981304f1ca5d9"
+iso_filename: "ubuntu-26.04-live-server-amd64.iso"
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0
+kernel_path_in_iso: "/casper/vmlinuz"
+initrd_path_in_iso: "/casper/initrd"

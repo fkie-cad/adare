@@ -1,9 +1,10 @@
-name: fedora41
-display_name: "Fedora 41 Workstation"
+name: fedora41arm64
+display_name: "Fedora 41 Workstation (ARM64)"
 platform: linux
 distribution: fedora
 version: "41"
 install_mode: manual
+architecture: aarch64
 iso_url: ""
 iso_sha256: ""
 iso_filename: ""
