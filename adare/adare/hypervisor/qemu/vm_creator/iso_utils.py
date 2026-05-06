@@ -140,8 +140,9 @@ def create_cidata_iso(autoinstall_dir: Path, output_path: Path) -> Path:
     """Create a minimal ISO with volume label 'cidata' for cloud-init NoCloud.
 
     Cloud-init auto-detects an attached drive with the label 'cidata' and reads
-    user-data / meta-data from it. This avoids the need for direct kernel boot
-    with ds=nocloud-net, which doesn't work reliably on aarch64 UEFI.
+    user-data / meta-data from it. Used as the autoinstall datasource for both
+    x86_64 and aarch64; avoids the deprecated `ds=nocloud-net;seedfrom=...` HTTP
+    flow which is unreliable on cloud-init 24+ (Ubuntu 25.10 / 26.04).
 
     Args:
         autoinstall_dir: Directory containing user-data and meta-data files
