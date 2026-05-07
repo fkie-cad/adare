@@ -1,0 +1,87 @@
+{# adare-template
+schema: 1
+id: fedora-kde
+description: Fedora 41 / 42 / 43 / 44 KDE Plasma Spin install via Anaconda kickstart
+maintainer: ADARE
+revision: 2026-05-07
+supports:
+  - fedora41kde
+  - fedora42kde
+  - fedora43kde
+  - fedora44kde
+-#}
+# Anaconda kickstart - ADARE Fedora KDE Plasma template
+text
+keyboard us
+lang en_US.UTF-8
+timezone UTC
+network --bootproto=dhcp --hostname={{ hostname }}
+
+# Authentication / users
+rootpw --iscrypted --lock {{ password_hash }}
+user --name=adare --password={{ password_hash }} --iscrypted --groups=wheel --gecos="ADARE User"
+
+# Services
+services --enabled=sshd --disabled=firewalld
+
+# Disk
+clearpart --all --initlabel
+autopart --type=lvm --noswap
+bootloader --location=mbr
+
+# End of install
+reboot
+
+%packages
+@kde-desktop-environment
+openssh-server
+sudo
+curl
+wget
+git
+gnome-screenshot
+ImageMagick
+{% if setup_level >= 1 %}
+qemu-guest-agent
+{% endif %}
+{% if setup_level >= 2 %}
+python3-pip
+python3-tkinter
+xdotool
+{% endif %}
+%end
+
+%post --log=/dev/null
+# Passwordless sudo for adare user
+echo "adare ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/adare
+chmod 0440 /etc/sudoers.d/adare
+
+# Boot to graphical target
+systemctl set-default graphical.target
+
+# SDDM autologin into KDE Plasma (X11 session for GUI automation compatibility)
+mkdir -p /etc/sddm.conf.d
+cat > /etc/sddm.conf.d/autologin.conf <<'EOF'
+[Autologin]
+User=adare
+Session=plasma.desktop
+EOF
+
+# Disable background package metadata refresh
+systemctl disable dnf-makecache.timer || true
+systemctl disable dnf-makecache.service || true
+
+{% if setup_level >= 1 %}
+# Enable QEMU Guest Agent
+systemctl enable qemu-guest-agent
+{% endif %}
+
+{% if setup_level >= 2 %}
+# Install Miniforge3 and create pyadare conda env
+curl -fsSL https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-{{ miniforge_arch }}.sh -o /tmp/miniforge.sh
+bash /tmp/miniforge.sh -b -p /home/adare/.miniforge3
+/home/adare/.miniforge3/bin/conda create -n pyadare python=3.10 pip -y
+chown -R adare:adare /home/adare/.miniforge3
+rm -f /tmp/miniforge.sh
+{% endif %}
+%end

@@ -1,0 +1,97 @@
+{# adare-template
+schema: 1
+id: debian-desktop
+description: Debian 12 (Bookworm) / 13 (Trixie) GNOME desktop via debian-installer preseed
+maintainer: ADARE
+revision: 2026-05-07
+supports:
+  - debian12
+  - debian13
+-#}
+# Locale and keyboard
+d-i debian-installer/locale string en_US.UTF-8
+d-i keyboard-configuration/xkb-keymap select us
+
+# Network configuration (DHCP)
+d-i netcfg/choose_interface select auto
+d-i netcfg/get_hostname string {{ hostname }}
+d-i netcfg/get_domain string localdomain
+d-i netcfg/hostname string {{ hostname }}
+
+# Mirror
+d-i mirror/country string manual
+d-i mirror/http/hostname string http.us.debian.org
+d-i mirror/http/directory string /debian
+d-i mirror/http/proxy string
+
+# Clock and time zone
+d-i clock-setup/utc boolean true
+d-i time/zone string UTC
+d-i clock-setup/ntp boolean true
+
+# Root: keep crypted hash for single-user/recovery, but disable interactive login
+d-i passwd/root-login boolean false
+d-i passwd/root-password-crypted password {{ password_hash }}
+
+# Primary user account
+d-i passwd/user-fullname string ADARE User
+d-i passwd/username string adare
+d-i passwd/user-password-crypted password {{ password_hash }}
+d-i passwd/user-default-groups string audio cdrom dip floppy sudo video plugdev netdev
+d-i passwd/user-uid string 1000
+
+# Partitioning: LVM atomic on /dev/vda, no encryption
+d-i partman-auto/method string lvm
+d-i partman-auto/disk string /dev/vda
+d-i partman-auto-lvm/guided_size string max
+d-i partman-auto/choose_recipe select atomic
+d-i partman-lvm/device_remove_lvm boolean true
+d-i partman-md/device_remove_md boolean true
+d-i partman-lvm/confirm boolean true
+d-i partman-lvm/confirm_nooverwrite boolean true
+d-i partman/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+d-i partman-basicfilesystems/no_swap boolean false
+
+# Base system and APT
+d-i base-installer/install-recommends boolean true
+d-i apt-setup/use_mirror boolean true
+d-i apt-setup/services-select multiselect security, updates
+d-i apt-setup/security_host string security.debian.org
+d-i pkgsel/upgrade select full-upgrade
+d-i pkgsel/update-policy select none
+d-i popularity-contest/participate boolean false
+
+# Task selection (GNOME desktop + SSH server)
+tasksel tasksel/first multiselect standard, gnome-desktop, ssh-server
+
+# Additional packages
+d-i pkgsel/include string openssh-server curl wget git sudo {% if setup_level >= 1 %}qemu-guest-agent{% endif %} {% if setup_level >= 2 %}python3-pip python3-tk xdotool maim{% endif %}
+
+# GRUB
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/with_other_os boolean true
+d-i grub-installer/bootdev string /dev/vda
+
+# Post-install configuration: sudoers, autologin, apt timers, optional Miniforge.
+# Trailing `true` guarantees a non-failing terminator regardless of which
+# conditional blocks expanded.
+d-i preseed/late_command string \
+  echo 'adare ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/adare; \
+  chmod 0440 /target/etc/sudoers.d/adare; \
+  mkdir -p /target/etc/gdm3; \
+  printf '[daemon]\nAutomaticLoginEnable=true\nAutomaticLogin=adare\nWaylandEnable=false\n' > /target/etc/gdm3/daemon.conf; \
+  in-target systemctl disable apt-daily.timer apt-daily-upgrade.timer || true; \
+  {% if setup_level >= 1 %}in-target systemctl enable qemu-guest-agent; \{% endif %} \
+  {% if setup_level >= 2 %}in-target wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-{{ miniforge_arch }}.sh -O /tmp/miniforge.sh; \
+  in-target bash /tmp/miniforge.sh -b -p /home/adare/.miniforge3; \
+  in-target /home/adare/.miniforge3/bin/conda create -n pyadare python=3.10 pip -y; \
+  in-target chown -R adare:adare /home/adare/.miniforge3; \
+  in-target rm -f /tmp/miniforge.sh; \{% endif %} \
+  true
+
+# Finish: power off so the orchestrator can detect completion
+d-i finish-install/reboot_in_progress note
+d-i debian-installer/exit/poweroff boolean true
