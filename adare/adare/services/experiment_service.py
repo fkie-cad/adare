@@ -480,7 +480,7 @@ class ExperimentService:
                 request.experiment_pattern,
                 request.environments,
                 force=request.force
-            )
+            ) or {}
 
             return Result.ok(ExperimentEnvModifyResult(
                 affected_experiments=result.get('affected_experiments', []),
@@ -507,7 +507,7 @@ class ExperimentService:
                 request.experiment_pattern,
                 request.environments,
                 force=request.force
-            )
+            ) or {}
 
             return Result.ok(ExperimentEnvModifyResult(
                 affected_experiments=result.get('affected_experiments', []),
