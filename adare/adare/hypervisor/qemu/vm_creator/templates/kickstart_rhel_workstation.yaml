@@ -1,0 +1,93 @@
+{# adare-template
+schema: 1
+id: rhel-workstation
+description: Rocky Linux 9 + AlmaLinux 9 Workstation (GNOME) install via Anaconda kickstart
+maintainer: ADARE
+revision: 2026-05-07
+supports:
+  - rocky9
+  - alma9
+-#}
+# Anaconda kickstart - ADARE RHEL-family Workstation template (Rocky 9 / Alma 9)
+text
+keyboard us
+lang en_US.UTF-8
+timezone UTC
+network --bootproto=dhcp --hostname={{ hostname }}
+
+# DVD repos (BaseOS + AppStream are on the install media) and online extras + EPEL
+repo --name=BaseOS --baseurl=file:///run/install/repo/BaseOS
+repo --name=AppStream --baseurl=file:///run/install/repo/AppStream
+repo --name=extras --baseurl=https://dl.rockylinux.org/pub/rocky/9/extras/x86_64/os/
+repo --name=epel --baseurl=https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/
+
+# Authentication / users
+rootpw --iscrypted --lock {{ password_hash }}
+user --name=adare --password={{ password_hash }} --iscrypted --groups=wheel --gecos="ADARE User"
+
+# Services
+services --enabled=sshd --disabled=firewalld
+
+# Disk
+clearpart --all --initlabel
+autopart --type=lvm --noswap
+bootloader --location=mbr
+
+# End of install
+reboot
+
+%packages
+@base-x
+@workstation-product-environment
+openssh-server
+sudo
+curl
+wget
+git
+gnome-screenshot
+ImageMagick
+{% if setup_level >= 1 %}
+qemu-guest-agent
+{% endif %}
+{% if setup_level >= 2 %}
+python3-pip
+python3-tkinter
+xdotool
+{% endif %}
+%end
+
+%post --log=/dev/null
+# Passwordless sudo for adare user
+echo "adare ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/adare
+chmod 0440 /etc/sudoers.d/adare
+
+# Boot to graphical target
+systemctl set-default graphical.target
+
+# GDM autologin (Wayland disabled for PyAutoGUI / xdotool compatibility)
+mkdir -p /etc/gdm
+cat > /etc/gdm/custom.conf <<'EOF'
+[daemon]
+AutomaticLoginEnable=true
+AutomaticLogin=adare
+WaylandEnable=false
+EOF
+
+# Disable background package metadata refresh
+systemctl disable dnf-makecache.timer || true
+systemctl disable dnf-makecache.service || true
+
+{% if setup_level >= 1 %}
+# Enable QEMU Guest Agent
+systemctl enable qemu-guest-agent
+{% endif %}
+
+{% if setup_level >= 2 %}
+# Install Miniforge3 and create pyadare conda env
+curl -fsSL https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-{{ miniforge_arch }}.sh -o /tmp/miniforge.sh
+bash /tmp/miniforge.sh -b -p /home/adare/.miniforge3
+/home/adare/.miniforge3/bin/conda create -n pyadare python=3.10 pip -y
+chown -R adare:adare /home/adare/.miniforge3
+rm -f /tmp/miniforge.sh
+{% endif %}
+%end

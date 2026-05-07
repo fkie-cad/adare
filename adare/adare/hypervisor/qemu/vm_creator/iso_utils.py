@@ -44,15 +44,16 @@ def extract_kernel_and_initrd(
     initrd_iso_path: str,
     output_dir: Path,
 ) -> tuple[Path, Path]:
-    """Extract kernel (vmlinuz) and initrd from an Ubuntu Server ISO.
+    """Extract kernel (vmlinuz) and initrd from an installation ISO.
 
     Uses pycdlib for pure-Python ISO reading - works on Linux and macOS
     without xorriso, 7z, or mount.
 
     Args:
-        iso_path: Path to the Ubuntu Server ISO file
-        kernel_iso_path: Path to vmlinuz inside the ISO (e.g. '/casper/vmlinuz')
-        initrd_iso_path: Path to initrd inside the ISO (e.g. '/casper/initrd')
+        iso_path: Path to the installation ISO file
+        kernel_iso_path: Path to vmlinuz inside the ISO (e.g. ``/casper/vmlinuz``,
+            ``/install.amd/vmlinuz``, ``/images/pxeboot/vmlinuz``)
+        initrd_iso_path: Path to initrd inside the ISO
         output_dir: Directory to write extracted files to
 
     Returns:
@@ -100,7 +101,8 @@ def extract_kernel_and_initrd(
         raise ISOExtractionError(
             str(iso_path),
             f'Could not find {kernel_iso_path} and {initrd_iso_path} in the ISO. '
-            'The ISO may not be an Ubuntu Server installation image.'
+            'The ISO does not appear to contain a kernel/initrd at the '
+            'expected locations for this distro.'
         )
     finally:
         iso.close()
@@ -136,55 +138,70 @@ def _to_iso9660_path(path: str) -> str:
     return '/' + '/'.join(iso_parts)
 
 
-def create_cidata_iso(autoinstall_dir: Path, output_path: Path) -> Path:
-    """Create a minimal ISO with volume label 'cidata' for cloud-init NoCloud.
+def create_seed_iso(autoinstall_dir: Path, output_path: Path, *, label: str = 'cidata') -> Path:
+    """Create a seed ISO from every file in ``autoinstall_dir``.
 
-    Cloud-init auto-detects an attached drive with the label 'cidata' and reads
-    user-data / meta-data from it. Used as the autoinstall datasource for both
-    x86_64 and aarch64; avoids the deprecated `ds=nocloud-net;seedfrom=...` HTTP
-    flow which is unreliable on cloud-init 24+ (Ubuntu 25.10 / 26.04).
+    The volume label drives auto-detection by the target installer:
+
+    * ``cidata`` — cloud-init NoCloud (Ubuntu Subiquity, Arch w/ cloud-init).
+    * ``OEMDRV`` — debian-installer (preseed.cfg) and Anaconda (ks.cfg).
+    * any label — AutoYaST and friends that take a device path on the kernel
+      command line; the label is then informational.
+
+    Joliet long-name and Rock Ridge entries are emitted so the guest sees the
+    canonical filenames (``user-data``, ``preseed.cfg``, ``ks.cfg``,
+    ``autoinst.xml``, ...) regardless of which name namespace it consults.
 
     Args:
-        autoinstall_dir: Directory containing user-data and meta-data files
+        autoinstall_dir: Directory whose files become the ISO contents
         output_path: Where to write the ISO file
+        label: Volume label (max 32 chars, ``-V`` semantics)
 
     Returns:
         Path to the created ISO
     """
-    import pycdlib
+    import io
 
-    user_data = (autoinstall_dir / 'user-data').read_bytes()
-    meta_data = (autoinstall_dir / 'meta-data').read_bytes()
+    import pycdlib
 
     iso = pycdlib.PyCdlib()
     iso.new(
         interchange_level=3,
         sys_ident='LINUX',
-        vol_ident='cidata',
+        vol_ident=label,
         joliet=3,
         rock_ridge='1.09',
     )
 
-    iso.add_fp(
-        fp=__import__('io').BytesIO(user_data),
-        length=len(user_data),
-        iso_path='/USER_DATA.;1',
-        joliet_path='/user-data',
-        rr_name='user-data',
-    )
-    iso.add_fp(
-        fp=__import__('io').BytesIO(meta_data),
-        length=len(meta_data),
-        iso_path='/META_DATA.;1',
-        joliet_path='/meta-data',
-        rr_name='meta-data',
-    )
+    for entry in sorted(autoinstall_dir.iterdir()):
+        if not entry.is_file():
+            continue
+        content = entry.read_bytes()
+        name = entry.name
+        iso_name = name.upper().replace('-', '_').replace('.', '_', name.count('.') - 1)
+        iso_name = iso_name + ('.;1' if '.' not in iso_name else ';1')
+        iso.add_fp(
+            fp=io.BytesIO(content),
+            length=len(content),
+            iso_path=f'/{iso_name}',
+            joliet_path=f'/{name}',
+            rr_name=name,
+        )
 
     iso.write(str(output_path))
     iso.close()
 
-    log.info(f'Created cidata ISO: {output_path} ({output_path.stat().st_size} bytes)')
+    log.info(f'Created seed ISO ({label}): {output_path} ({output_path.stat().st_size} bytes)')
     return output_path
+
+
+def create_cidata_iso(autoinstall_dir: Path, output_path: Path) -> Path:
+    """Create a 'cidata'-labeled seed ISO (cloud-init NoCloud).
+
+    Thin wrapper around :func:`create_seed_iso` for callers that specifically
+    want the historical Subiquity / cloud-init layout.
+    """
+    return create_seed_iso(autoinstall_dir, output_path, label='cidata')
 
 
 def create_autounattend_iso(xml_content: bytes, output_path: Path) -> Path:
