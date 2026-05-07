@@ -1,4 +1,10 @@
-"""Linux VM creation orchestrator - Ubuntu autoinstall via QEMU direct kernel boot."""
+"""Linux VM creation orchestrator — unattended installs via QEMU direct kernel boot.
+
+Supports any installer family declared in ``OsDefinition.installer`` (Subiquity,
+preseed, kickstart, AutoYaST, archinstall-over-cloud-init). The seed medium and
+kernel command line are chosen per OS, so a single orchestrator drives all of
+them.
+"""
 
 import logging
 import platform
@@ -14,7 +20,7 @@ from adare.hypervisor.qemu.vm_creator.autoinstall import write_autoinstall_dir
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
 from adare.hypervisor.qemu.vm_creator.iso_utils import (
     ISOExtractionError,
-    create_cidata_iso,
+    create_seed_iso,
     extract_kernel_and_initrd,
     verify_iso_hash,
 )
@@ -33,15 +39,15 @@ class LinuxVMCreationError(VMCreationError):
 
 
 class LinuxVMCreator(BaseVMCreator):
-    """Create a fully configured Linux VM from an Ubuntu Server ISO.
+    """Create a fully configured Linux VM from an installation ISO.
 
     Orchestrates the full creation flow:
     1. Check prerequisites
     2. Download ISO (with caching)
     3. Extract kernel/initrd from ISO
-    4. Generate autoinstall config + cidata ISO
+    4. Generate autoinstall config + seed ISO
     5. Create disk image
-    6. Boot QEMU with direct kernel + cidata ISO
+    6. Boot QEMU with direct kernel + seed ISO
     7. Wait for installation to complete (VM self-shutdown)
     8. Return path to the finished qcow2 disk image
     """
@@ -87,17 +93,22 @@ class LinuxVMCreator(BaseVMCreator):
             except (OSError, ValueError) as e:
                 raise LinuxVMCreationError(f'Kernel extraction failed: {e}') from e
 
-            cidata_path = create_cidata_iso(
-                autoinstall_dir, tmpdir_path / 'cidata.iso',
+            seed_path = create_seed_iso(
+                autoinstall_dir,
+                tmpdir_path / 'seed.iso',
+                label=self.os_def.seed_label,
             )
-            print_step(f'Created cidata ISO for autoinstall: [dim]{cidata_path}[/dim]')
+            print_step(
+                f'Created seed ISO ([dim]{self.os_def.seed_label}[/dim]) for '
+                f'autoinstall: [dim]{seed_path}[/dim]'
+            )
 
             try:
                 _run_qemu_installation(
                     iso_path=self.iso_path,
                     kernel_path=kernel_path,
                     initrd_path=initrd_path,
-                    cidata_path=cidata_path,
+                    seed_path=seed_path,
                     disk_path=disk_path,
                     os_def=self.os_def,
                     ram_mb=self.ram_mb,
@@ -119,7 +130,7 @@ def create_linux_vm(
     vm_dir: Path | None = None,
     setup_level: SetupLevel = SetupLevel.FULL,
 ) -> Path:
-    """Create a fully configured Linux VM from an Ubuntu Server ISO.
+    """Create a fully configured Linux VM from an installation ISO.
 
     Convenience wrapper around ``LinuxVMCreator`` for backward compatibility.
     """
@@ -167,25 +178,27 @@ def _run_qemu_installation(
     iso_path: Path,
     kernel_path: Path,
     initrd_path: Path,
-    cidata_path: Path,
+    seed_path: Path,
     disk_path: Path,
     os_def: OsDefinition,
     ram_mb: int,
     cpus: int,
     nvram_path: Path | None = None,
 ) -> None:
-    """Boot QEMU with direct kernel boot + cidata ISO autoinstall.
+    """Boot QEMU with direct kernel boot + seed ISO for unattended install.
 
-    cloud-init auto-detects the attached drive labelled `cidata` as a NoCloud
-    datasource regardless of architecture, so the same flow works for x86_64
-    and aarch64. The `autoinstall` kernel parameter tells Subiquity to skip
-    the confirmation prompt and run unattended.
+    The seed ISO carries the rendered installer config (cloud-init NoCloud,
+    preseed, kickstart, AutoYaST, ...). Each installer family announces
+    itself through ``os_def.kernel_cmdline`` and ``os_def.seed_label``; the
+    label drives auto-detection (``cidata`` for cloud-init, ``OEMDRV`` for
+    debian-installer / Anaconda) while the cmdline carries any extra hints
+    (``inst.ks=``, ``autoyast=``, ``auto=true preseed/file=...``).
     """
     arch_params = qemu_params_for_arch(os_def)
     needs_uefi = os_def.requires_uefi or os_def.architecture == 'aarch64'
     console_dev = 'ttyAMA0' if os_def.architecture == 'aarch64' else 'ttyS0'
 
-    kernel_cmdline = f'autoinstall console={console_dev} ---'
+    kernel_cmdline = os_def.kernel_cmdline.format(console=console_dev)
 
     cmd = [
         arch_params['exe'],
@@ -197,12 +210,12 @@ def _run_qemu_installation(
         '-drive', f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
         # Ubuntu ISO as CD-ROM
         '-cdrom', str(iso_path),
-        # Direct kernel boot — passes 'autoinstall' to Subiquity
+        # Direct kernel boot — passes installer-specific cmdline to the guest
         '-kernel', str(kernel_path),
         '-initrd', str(initrd_path),
         '-append', kernel_cmdline,
-        # cidata ISO — cloud-init NoCloud datasource (auto-detected by label)
-        '-drive', f'file={cidata_path},format=raw,if=virtio,readonly=on',
+        # Seed ISO — auto-detected by volume label (cidata / OEMDRV / ...)
+        '-drive', f'file={seed_path},format=raw,if=virtio,readonly=on',
         # Network (user mode)
         '-netdev', 'user,id=net0',
         '-device', 'virtio-net-pci,netdev=net0',
