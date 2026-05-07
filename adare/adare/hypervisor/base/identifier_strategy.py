@@ -176,8 +176,12 @@ class QEMUIdentifierStrategy(HypervisorIdentifierStrategy):
             return False
 
         try:
+            from adare.hypervisor.exceptions import VMNotFoundException
             from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
-            vm = QEMUVMRegistry.get_vm_by_name(identifier)
+            try:
+                vm = QEMUVMRegistry.get_vm_by_name(identifier)
+            except VMNotFoundException:
+                return False
             return vm is not None
         except ImportError:
             log.warning("QEMU hypervisor module not available")
@@ -189,8 +193,12 @@ class QEMUIdentifierStrategy(HypervisorIdentifierStrategy):
             return "not_found"
 
         try:
+            from adare.hypervisor.exceptions import VMNotFoundException
             from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
-            vm = QEMUVMRegistry.get_vm_by_name(identifier)
+            try:
+                vm = QEMUVMRegistry.get_vm_by_name(identifier)
+            except VMNotFoundException:
+                return "not_found"
             if not vm:
                 return "not_found"
 

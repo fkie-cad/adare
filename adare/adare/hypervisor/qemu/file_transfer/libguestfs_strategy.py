@@ -20,7 +20,10 @@ from typing import Any
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
 from adare.hypervisor.qemu.file_transfer.shares import build_config_json
-from adare.hypervisor.qemu.guestfish_client import GuestfishClient
+from adare.hypervisor.qemu.guestfish_client import (
+    GuestfishClient,
+    _classify_libguestfs_failure,
+)
 
 log = logging.getLogger(__name__)
 
@@ -386,24 +389,29 @@ class LibguestfsStrategy(FileTransferStrategy):
         )
 
         if returncode != 0:
+            headline, host_solutions = _classify_libguestfs_failure(stderr)
+            file_transfer_solutions = [
+                (
+                    "For Windows VMs: disable Fast Startup in "
+                    "Control Panel > Power Options"
+                ),
+                (
+                    "Ensure the VM was shut down cleanly "
+                    "(not hibernated or forced off)"
+                ),
+                (
+                    "Inspect the disk: "
+                    f"guestfish --ro --format=qcow2 -a {disk_path} "
+                    ": run : list-filesystems"
+                ),
+                f"Check backing file: qemu-img info {disk_path}",
+            ]
             raise HypervisorException(
+                f"{headline}\n\n"
                 f"Failed to copy files to guest disk.\n"
                 f"Guestfish error: {stderr}\n"
-                f"Disk: {disk_path}\n\n"
-                f"Troubleshooting:\n"
-                f"  1. For Windows VMs: Disable Fast Startup in "
-                f"Control Panel > Power Options\n"
-                f"  2. Ensure VM was shut down cleanly "
-                f"(not hibernated or forced off)\n"
-                f"  3. Run with verbose logging: "
-                f"export LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1\n"
-                f"  4. Test filesystem detection: "
-                f"guestfish --ro --format=qcow2 -a {disk_path} "
-                f": run : list-filesystems\n"
-                f"  5. Mount manually: guestfish --rw --format=qcow2 "
-                f"-a {disk_path} : run : mount /dev/sdaX /\n"
-                f"  6. Check backing file: qemu-img info {disk_path}\n"
-                f"  7. Verify libguestfs: libguestfs-test-tool"
+                f"Disk: {disk_path}",
+                possible_solutions=host_solutions + file_transfer_solutions,
             )
 
         log.info(f"Successfully copied {len(files_to_copy)} items to guest disk")

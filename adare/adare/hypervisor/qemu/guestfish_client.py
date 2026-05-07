@@ -27,6 +27,82 @@ from adare.hypervisor.qemu.libvirt_stderr_redirect import (
 log = logging.getLogger(__name__)
 
 
+def _classify_libguestfs_failure(stderr: str) -> tuple[str, list[str]]:
+    """Classify a libguestfs/guestfish failure based on stderr signatures.
+
+    Returns:
+        (headline, possible_solutions): a short, user-facing one-line summary
+        naming the likely cause, plus a list of concrete next-step commands.
+        The headline is meant to lead the error message; the solutions list
+        is rendered by ``LoggedErrorException.print()`` as a numbered block.
+    """
+    stderr_lower = (stderr or '').lower()
+
+    if 'supermin' in stderr_lower:
+        headline = (
+            "libguestfs failed to build its appliance (supermin error). "
+            "This is a host-tooling problem on your machine — most often "
+            "the kernel image in /boot is not readable by your user."
+        )
+        return headline, [
+            "Make the kernel readable: sudo chmod +r /boot/vmlinuz-*",
+            (
+                "Persist across kernel updates: "
+                "sudo dpkg-statoverride --update --add root root 0644 "
+                "/boot/vmlinuz-$(uname -r)"
+            ),
+            "Diagnose the exact cause: libguestfs-test-tool",
+            (
+                "Re-run with full tracing: "
+                "LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1 "
+                "guestfish --ro -a <disk> run"
+            ),
+        ]
+
+    if (
+        'command not found' in stderr_lower
+        or 'guestfish: not found' in stderr_lower
+        or (
+            'no such file or directory' in stderr_lower
+            and 'guestfish' in stderr_lower
+        )
+    ):
+        headline = "guestfish/libguestfs is not installed on this host."
+        return headline, [
+            "Debian/Ubuntu: sudo apt install libguestfs-tools",
+            "Fedora/RHEL: sudo dnf install libguestfs-tools",
+            "Verify install: libguestfs-test-tool",
+        ]
+
+    if 'permission denied' in stderr_lower:
+        headline = (
+            "libguestfs could not access a required file (permission denied)."
+        )
+        return headline, [
+            "Check that your user can read the disk file (qcow2)",
+            "Check kernel readability: sudo chmod +r /boot/vmlinuz-*",
+            "Diagnose host setup: libguestfs-test-tool",
+        ]
+
+    headline = (
+        "libguestfs/guestfish exited with an error. This is most likely "
+        "a host-tooling problem on your machine, not an ADARE bug."
+    )
+    return headline, [
+        "Diagnose host setup: libguestfs-test-tool",
+        (
+            "Re-run with full tracing: "
+            "LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1 "
+            "guestfish --ro -a <disk> run"
+        ),
+        "Common cause (kernel unreadable): sudo chmod +r /boot/vmlinuz-*",
+        (
+            "Common cause (not installed): "
+            "sudo apt install libguestfs-tools"
+        ),
+    ]
+
+
 class GuestfishClient:
     """Abstraction over the guestfish CLI for offline disk operations.
 
@@ -140,13 +216,16 @@ class GuestfishClient:
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
         if result.returncode != 0:
+            headline, solutions = _classify_libguestfs_failure(result.stderr)
             raise HypervisorException(
+                f"{headline}\n\n"
                 f"Failed to detect filesystems on {disk_path}\n"
                 f"Error: {result.stderr}\n\n"
-                f"Manual troubleshooting:\n"
+                f"Manual reproduction:\n"
                 f"  guestfish --ro -a {disk_path}\n"
                 f"  ><fs> run\n"
-                f"  ><fs> list-filesystems"
+                f"  ><fs> list-filesystems",
+                possible_solutions=solutions,
             )
 
         # Parse output: "/dev/sda1: ext4\n/dev/sda2: unknown\n"
@@ -155,12 +234,22 @@ class GuestfishClient:
         if not os_filesystems:
             raise HypervisorException(
                 f"No suitable OS filesystem found on {disk_path}\n"
-                f"Detected filesystems:\n{result.stdout}\n\n"
-                f"Manual mount required:\n"
-                f"  guestfish --ro -a {disk_path}\n"
-                f"  ><fs> run\n"
-                f"  ><fs> list-filesystems\n"
-                f"  ><fs> mount /dev/sdaX /"
+                f"Detected filesystems:\n{result.stdout}",
+                possible_solutions=[
+                    (
+                        "Inspect the disk manually: "
+                        f"guestfish --ro -a {disk_path} : run : list-filesystems"
+                    ),
+                    (
+                        "Mount the correct partition manually: "
+                        f"guestfish --ro -a {disk_path} : run : "
+                        "mount /dev/sdaX /"
+                    ),
+                    (
+                        "Confirm this disk image actually contains a "
+                        "supported OS filesystem (ext4, ext3, xfs, ntfs)"
+                    ),
+                ],
             )
 
         # Get sizes and select largest
