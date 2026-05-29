@@ -1,4 +1,9 @@
-"""Ubuntu autoinstall user-data generation from Jinja2 templates."""
+"""Linux autoinstall config generation from Jinja2 templates.
+
+Renders installer-specific config (Subiquity user-data, preseed.cfg, ks.cfg,
+autoinst.xml, ...) from a discovered Jinja2 template. The output filename is
+chosen by ``OsDefinition.installer``; see ``_INSTALLER_LAYOUTS`` below.
+"""
 
 import hashlib
 import logging
@@ -369,13 +374,24 @@ def generate_user_data(os_def: OsDefinition, vm_name: str, setup_level: int = Se
     return user_data
 
 
-def write_autoinstall_dir(os_def: OsDefinition, vm_name: str, output_dir: Path, setup_level: int = SetupLevel.FULL) -> Path:
-    """Write autoinstall user-data and meta-data files to a directory.
+# Installer-family layout: rendered-template filename, plus auxiliary empty
+# files the seed medium needs. cloud-init NoCloud requires `meta-data` to be
+# present even when empty; preseed / kickstart / autoyast don't.
+_INSTALLER_LAYOUTS: dict[str, tuple[str, tuple[str, ...]]] = {
+    'subiquity': ('user-data', ('meta-data',)),
+    'archinstall-cloudinit': ('user-data', ('meta-data',)),
+    'preseed': ('preseed.cfg', ()),
+    'kickstart': ('ks.cfg', ()),
+    'autoyast': ('autoinst.xml', ()),
+}
 
-    Creates the file pair expected by the cloud-init NoCloud datasource:
-      output_dir/
-        user-data
-        meta-data   (empty file, required by cloud-init)
+
+def write_autoinstall_dir(os_def: OsDefinition, vm_name: str, output_dir: Path, setup_level: int = SetupLevel.FULL) -> Path:
+    """Write the rendered autoinstall template and any auxiliary seed files.
+
+    Filenames are chosen by ``os_def.installer``. Subiquity / cloud-init use
+    ``user-data`` + empty ``meta-data``; preseed uses ``preseed.cfg``;
+    kickstart uses ``ks.cfg``; AutoYaST uses ``autoinst.xml``.
 
     Args:
         os_def: OS definition from the catalog
@@ -386,11 +402,19 @@ def write_autoinstall_dir(os_def: OsDefinition, vm_name: str, output_dir: Path, 
     Returns:
         Path to the output directory
     """
-    output_dir.mkdir(parents=True, exist_ok=True)
+    layout = _INSTALLER_LAYOUTS.get(os_def.installer)
+    if layout is None:
+        raise ValueError(
+            f"Unknown installer family '{os_def.installer}' for {os_def.name}. "
+            f'Known: {sorted(_INSTALLER_LAYOUTS)}'
+        )
+    rendered_name, aux_files = layout
 
-    user_data = generate_user_data(os_def, vm_name, setup_level=setup_level)
-    (output_dir / 'user-data').write_text(user_data)
-    (output_dir / 'meta-data').write_text('')
+    output_dir.mkdir(parents=True, exist_ok=True)
+    rendered = generate_user_data(os_def, vm_name, setup_level=setup_level)
+    (output_dir / rendered_name).write_text(rendered)
+    for aux in aux_files:
+        (output_dir / aux).write_text('')
 
     log.info(f'Wrote autoinstall files to {output_dir}')
     return output_dir

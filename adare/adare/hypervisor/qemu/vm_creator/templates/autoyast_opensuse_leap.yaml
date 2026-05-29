@@ -1,0 +1,176 @@
+{# adare-template
+schema: 1
+id: opensuse-leap
+description: openSUSE Leap 15.6 / Tumbleweed KDE Plasma desktop (AutoYaST)
+maintainer: ADARE
+revision: 2026-05-07
+supports:
+  - opensuseleap156
+  - opensusetumbleweed
+-#}
+<?xml version="1.0"?>
+<!DOCTYPE profile>
+<profile xmlns="http://www.suse.com/1.0/yast2ns" xmlns:config="http://www.suse.com/1.0/configns">
+  <bootloader>
+    <loader_type>grub2</loader_type>
+  </bootloader>
+
+  <general>
+    <mode>
+      <confirm config:type="boolean">false</confirm>
+      <final_reboot config:type="boolean">true</final_reboot>
+    </mode>
+  </general>
+
+  <keyboard>
+    <keymap>english-us</keymap>
+  </keyboard>
+
+  <language>
+    <language>en_US</language>
+  </language>
+
+  <timezone>
+    <timezone>UTC</timezone>
+    <hwclock>UTC</hwclock>
+  </timezone>
+
+  <networking>
+    <keep_install_network config:type="boolean">true</keep_install_network>
+    <dhcp_options>
+      <dhclient_set_hostname config:type="boolean">false</dhclient_set_hostname>
+    </dhcp_options>
+    <dns>
+      <hostname>{{ hostname }}</hostname>
+    </dns>
+  </networking>
+
+  <partitioning_advanced config:type="list"/>
+  <storage>
+    <partition_alignment config:type="symbol">align_optimal</partition_alignment>
+    <proposal>
+      <lvm config:type="boolean">true</lvm>
+      <delete_resize_disabled config:type="boolean">false</delete_resize_disabled>
+    </proposal>
+  </storage>
+
+  <users config:type="list">
+    <user>
+      <username>root</username>
+      <user_password>{{ password_hash }}</user_password>
+      <encrypted config:type="boolean">true</encrypted>
+    </user>
+    <user>
+      <username>adare</username>
+      <fullname>ADARE User</fullname>
+      <user_password>{{ password_hash }}</user_password>
+      <encrypted config:type="boolean">true</encrypted>
+      <gid>100</gid>
+      <home>/home/adare</home>
+      <shell>/bin/bash</shell>
+      <groups>users,wheel,audio,video</groups>
+    </user>
+  </users>
+
+  <software>
+    <patterns config:type="list">
+      <pattern>base</pattern>
+      <pattern>enhanced_base</pattern>
+      <pattern>x11</pattern>
+      <pattern>kde</pattern>
+      <pattern>kde_plasma</pattern>
+    </patterns>
+    <packages config:type="list">
+      <package>openssh</package>
+      <package>sudo</package>
+      <package>curl</package>
+      <package>wget</package>
+      <package>git</package>
+      {% if setup_level >= 1 %}
+      <package>qemu-guest-agent</package>
+      {% endif %}
+      {% if setup_level >= 2 %}
+      <package>python3-pip</package>
+      <package>python3-tk</package>
+      <package>xdotool</package>
+      <package>ImageMagick</package>
+      {% endif %}
+    </packages>
+  </software>
+
+  <services-manager>
+    <default_target>graphical</default_target>
+    <services>
+      <enable config:type="list">
+        <service>sshd</service>
+        {% if setup_level >= 1 %}
+        <service>qemu-ga</service>
+        {% endif %}
+      </enable>
+    </services>
+  </services-manager>
+
+  <scripts>
+    <post-scripts config:type="list">
+      <script>
+        <filename>10-sudoers-adare.sh</filename>
+        <interpreter>shell</interpreter>
+        <source><![CDATA[
+#!/bin/sh
+set -e
+echo 'adare ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/adare
+chmod 440 /etc/sudoers.d/adare
+]]></source>
+      </script>
+
+      <script>
+        <filename>20-sddm-autologin.sh</filename>
+        <interpreter>shell</interpreter>
+        <source><![CDATA[
+#!/bin/sh
+set -e
+mkdir -p /etc/sddm.conf.d
+cat > /etc/sddm.conf.d/autologin.conf <<'EOF'
+[Autologin]
+User=adare
+Session=plasma.desktop
+EOF
+chmod 644 /etc/sddm.conf.d/autologin.conf
+]]></source>
+      </script>
+
+      <script>
+        <filename>30-disable-auto-refresh.sh</filename>
+        <interpreter>shell</interpreter>
+        <source><![CDATA[
+#!/bin/sh
+systemctl disable packagekit.service || true
+systemctl mask packagekit.service || true
+if systemctl list-unit-files | grep -q '^zypper-refresh.timer'; then
+  systemctl disable zypper-refresh.timer || true
+fi
+if systemctl list-unit-files | grep -q '^auto-update.timer'; then
+  systemctl disable auto-update.timer || true
+fi
+exit 0
+]]></source>
+      </script>
+
+      {% if setup_level >= 2 %}
+      <script>
+        <filename>40-miniforge.sh</filename>
+        <interpreter>shell</interpreter>
+        <source><![CDATA[
+#!/bin/sh
+set -e
+curl -fsSL https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-{{ miniforge_arch }}.sh -o /tmp/miniforge.sh
+bash /tmp/miniforge.sh -b -p /home/adare/.miniforge3
+/home/adare/.miniforge3/bin/conda create -n pyadare python=3.10 pip -y
+chown -R adare:users /home/adare/.miniforge3
+rm -f /tmp/miniforge.sh
+]]></source>
+      </script>
+      {% endif %}
+    </post-scripts>
+  </scripts>
+</profile>

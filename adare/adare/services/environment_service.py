@@ -59,48 +59,58 @@ class EnvironmentService:
             or error information on failure.
         """
         try:
-            # Call existing backend command
-            backend_environment_load(
+            # Call existing backend command. It returns the real ULID and
+            # whether a new environment was created (created=False means the
+            # .yml was byte-identical to an existing environment and was reused).
+            environment_ulid, created = backend_environment_load(
                 request.environment,
                 force=request.force,
                 no_copy=request.no_copy
             )
+            reused_existing = not created
 
-            # Get the loaded environment info
-            # The environment name is derived from the filename
+            # Derive a fallback display name from the filename in case the
+            # database lookup somehow comes up empty.
             env_path = Path(request.environment)
             env_name = env_path.stem if env_path.suffix in ['.yml', '.yaml'] else request.environment
 
-            # Try to get the environment from database
-            try:
-                ulid = environment_database.resolve_environment_identifier(env_name)
-                env_data = environment_database.get_environment_data(ulid)
+            # We hold the real ULID, so this lookup can't miss and gives us the
+            # real stored name (e.g. the original environment on a reuse).
+            env_data = environment_database.get_environment_data(environment_ulid)
 
-                if env_data:
-                    next_steps = [
-                        f'Verify the VM is ready: adare env verify {env_name}',
-                        f'Run experiments in this environment with: adare experiment run <experiment> -e {env_name}',
-                        'List available environments with: adare environment list',
-                        f'View environment details with: adare environment show {env_name}'
-                    ]
+            if env_data:
+                stored_name = env_data.get('name', env_name)
+                next_steps = [
+                    f'Verify the VM is ready: adare env verify {stored_name}',
+                    f'Run experiments in this environment with: adare experiment run <experiment> -e {stored_name}',
+                    'List available environments with: adare environment list',
+                    f'View environment details with: adare environment show {stored_name}'
+                ]
+                if reused_existing:
+                    tip = (
+                        f'No new environment was created — the file content matches '
+                        f'the existing environment "{stored_name}".'
+                    )
+                else:
+                    tip = f'Environment "{stored_name}" is now ready for experiments'
 
-                    return Result.ok(EnvironmentInfo(
-                        id=env_data.get('id', ''),
-                        name=env_data.get('name', env_name),
-                        description=env_data.get('description', ''),
-                        vm_name=env_data.get('vm_name'),
-                        hypervisor=env_data.get('hypervisor', 'virtualbox') if 'hypervisor' in env_data else 'virtualbox',
-                        os_platform=env_data.get('vm_os_type'),
-                        file_path=Path(env_data['file']) if env_data.get('file') else None,
-                        next_steps=next_steps,
-                        tip=f'Environment "{env_name}" is now ready for experiments',
-                    ))
-            except EnvironmentDoesNotExistInDatabase:
-                pass
+                return Result.ok(EnvironmentInfo(
+                    id=env_data.get('id', ''),
+                    name=stored_name,
+                    description=env_data.get('description', ''),
+                    vm_name=env_data.get('vm_name'),
+                    hypervisor=env_data.get('hypervisor', 'virtualbox') if 'hypervisor' in env_data else 'virtualbox',
+                    os_platform=env_data.get('vm_os_type'),
+                    file_path=Path(env_data['file']) if env_data.get('file') else None,
+                    next_steps=next_steps,
+                    tip=tip,
+                    reused_existing=reused_existing,
+                ))
 
-            # Fallback if we couldn't get full info
+            # True error path: the load reported success but the row is missing.
+            log.error(f'environment {environment_ulid} not found after load')
             return Result.ok(EnvironmentInfo(
-                id='',
+                id=environment_ulid,
                 name=env_name,
                 description='',
                 vm_name=None,
@@ -108,6 +118,7 @@ class EnvironmentService:
                 os_platform=None,
                 file_path=None,
                 next_steps=[f'Environment "{env_name}" loaded'],
+                reused_existing=reused_existing,
             ))
 
         except EnvironmentLoadFailed as e:

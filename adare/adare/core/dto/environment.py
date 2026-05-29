@@ -47,6 +47,7 @@ class EnvironmentInfo:
     file_path: Path | None
     next_steps: list[str] = field(default_factory=list)
     tip: str | None = None
+    reused_existing: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -60,6 +61,7 @@ class EnvironmentInfo:
             'file_path': str(self.file_path) if self.file_path else None,
             'next_steps': self.next_steps,
             'tip': self.tip,
+            'reused_existing': self.reused_existing,
         }
 
 

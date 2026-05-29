@@ -18,7 +18,6 @@ from adare.backend.environment.exceptions import (
 )
 from adare.backend.project.directory import ProjectDirectory
 from adare.config.configdirectory import ENVIRONMENTS_DIR, TEMPLATES_DIR, VMS_DIR
-from adare.console import print_success_message
 from adare.exceptions import NotLoggedInError, TemplateMissingError
 from adare.helperfunctions.file.hash import file_sha256_with_progress
 from adare.helperfunctions.web.download import download
@@ -178,6 +177,12 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
         environment: Environment name or path
         force: Force reload even if already exists
         no_copy: Keep VM file at original location (local files only)
+
+    Returns:
+        Tuple of (environment_ulid, created). ``created`` is False only on the
+        silent hash-dedup branch where the .yml is byte-identical to an
+        environment already in the database; True for fresh loads and forced
+        updates.
     """
     import time
     start_time = time.time()
@@ -215,11 +220,11 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
     # Override environment name with filename without extension to match what we do later
     environment_name = environment_file.stem
 
-    try:
-        # Check if environment with this name already exists
-        existing_ulid = environment_database.resolve_environment_identifier(environment_name)
-
-        # If we get here, it exists
+    # Check if environment with this name already exists. Use the non-raising
+    # lookup so a clean "no conflict" result doesn't emit a spurious error log
+    # and transaction-rollback warning.
+    existing_ulid = environment_database.resolve_environment_identifier(environment_name, trigger_exception=False)
+    if existing_ulid:
         if not force:
             raise EnvironmentAlreadyExists(
                 log,
@@ -236,11 +241,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
             log.info(f"Successfully deleted previous version of '{environment_name}'")
         except (ValueError, KeyError, OSError) as e:
             log.warning(f"Failed to delete existing environment '{environment_name}': {e}")
-                # We continue anyway, as the DB update might surely fail later, but maybe we cleared enough
-
-    except EnvironmentDoesNotExistInDatabase:
-        # This is good - no conflict
-        pass
+            # We continue anyway, as the DB update might surely fail later, but maybe we cleared enough
 
     # Calculate environment file hash with progress bar for better UX
     log.info('Calculating environment file hash...')
@@ -270,7 +271,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
             log.info(f'Environment with hash {environment_file_sha256} already exists in database - skipping all VM processing!')
             log.info('Optimization: No file copying or VM processing needed!')
             log.info(f'Total time: {elapsed_time:.1f} seconds (vs potentially minutes for full VM processing)')
-            return existing_environment_id
+            return (existing_environment_id, False)
         log.info(f'Environment with hash {environment_file_sha256} exists, but force=True, so updating')
 
     if not existing_environment_id:
@@ -414,39 +415,9 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
 
     log.info(f'environment file {environment_file} loaded and copied to managed storage')
 
-    # Generate next steps based on environment configuration
-    next_steps = [
-        f'Run experiments in this environment with: adare experiment run <experiment> -e {environment_name}',
-        'List available environments with: adare environment list',
-        f'View environment details with: adare environment show {environment_name}'
-    ]
-
-    # Add VM-specific info if VM was processed
-    if vm_id:
-        next_steps.insert(1, 'VM successfully configured and ready for use')
-
-    # Create tip based on environment features
-    tip = f'Environment "{environment_name}" is now ready for experiments'
-    if environment_metadata.vm:
-        tip += f' with VM "{environment_metadata.vm}"'
-    if hasattr(environment_metadata, 'description') and environment_metadata.description:
-        tip += f' - {environment_metadata.description}'
-
-    # Add note about file being copied to managed storage OR external reference
-    if no_copy and not is_url and vm_path:
-        tip += f'\n\nNote: VM file is referenced at original location: {vm_path}'
-        tip += '\n[bold red]IMPORTANT: Do not move or delete this file![/bold red]'
-        tip += f'\n\nOriginal file: {environment_file}\nManaged copy: {managed_environment_file}'
-    else:
-        tip += f'\n\nOriginal file: {environment_file}\nManaged copy: {managed_environment_file}'
-
-    print_success_message(
-        title=f'Environment "{environment_name}" loaded successfully!',
-        location=str(managed_environment_file),
-        next_steps=next_steps,
-        tip=tip
-    )
-    return None
+    # Presentation (success message / next steps / tip) is owned by the
+    # service + CLI layer; the backend only reports the result.
+    return (environment_ulid, True)
 
 
 def environment_create(project: Path, environment: str, vm_path: Path = None):

@@ -277,18 +277,22 @@ def update_environment(project_path: Path, environment_metadata: EnvironmentMeta
         return environment_id
 
 
-def resolve_environment_identifier(identifier: str) -> str:
+def resolve_environment_identifier(identifier: str, trigger_exception: bool = True) -> str | None:
     """
     Resolve environment identifier (name or ULID) to ULID.
 
     Args:
         identifier: Environment name or ULID
+        trigger_exception: If True (default), raise when not found. If False,
+            return None instead — lets callers probe for existence without the
+            noisy error log + transaction rollback that an exception triggers.
 
     Returns:
-        Environment ULID
+        Environment ULID, or None when not found and trigger_exception is False.
 
     Raises:
-        EnvironmentDoesNotExistInDatabase: If environment not found
+        EnvironmentDoesNotExistInDatabase: If environment not found and
+            trigger_exception is True.
     """
     from adare.database.models.global_models import Environment
 
@@ -304,6 +308,9 @@ def resolve_environment_identifier(identifier: str) -> str:
             return env.id
 
         # Not found by either method
+        if not trigger_exception:
+            return None
+
         raise EnvironmentDoesNotExistInDatabase(
             log,
             f'Environment "{identifier}" not found (tried as both ULID and name)',

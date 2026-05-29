@@ -145,19 +145,28 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, bare, env_name, interactive, arch):
         """Create a new ADARE-ready VM from scratch.
 
-        OS_NAME is the target OS: ubuntu2404, ubuntu2204, windows11, windows11arm64, windows10
+        OS_NAME is the target OS. Run `adare manage os-profile list` to see all entries.
+
+        \b
+        Common targets:
+          Ubuntu (autoinstall):  ubuntu2204, ubuntu2404, ubuntu2510, ubuntu2604
+          Debian (preseed):      debian12, debian13, kali
+          Fedora/RHEL (kickstart): fedora44, fedora44kde, fedora43, fedora43kde, fedora42, fedora42kde, fedora41, fedora41kde, rocky9, alma9
+          openSUSE (autoyast):   opensuseleap156, opensusetumbleweed
+          GUI manual install:    mint, popos, nixos, elementary
+          Windows (unattend):    windows10, windows11, windows11arm64
 
         \b
         Examples:
           adare vm create ubuntu2404
+          adare vm create debian12 --iso /path/to/debian-12-netinst.iso
+          adare vm create fedora41 --iso /path/to/Fedora-Workstation-Live.iso
+          adare vm create kali --iso /path/to/kali-linux-installer.iso
+          adare vm create mint --iso /path/to/linuxmint.iso       # manual install
           adare vm create ubuntu2404 --bare
           adare vm create ubuntu2404 --interactive
           adare vm create windows11 --iso /path/to/Win11.iso
-          adare vm create windows11arm64 --iso /path/to/Win11_ARM64.iso
-          adare vm create windows11 --arch aarch64 --iso /path/to/Win11_ARM64.iso
           adare vm create ubuntu2204 --name my-ubuntu --disk-size 100G --ram 8192
-          adare vm create ubuntu2404 --name my-vm --env-name my-env
-          adare vm create ubuntu2404 --vm-dir /tmp/my-vms
         """
         from adare.cli.vm_create import exec_vm_create
         args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, bare=bare, env_name=env_name, interactive=interactive, arch=arch)

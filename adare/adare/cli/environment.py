@@ -24,8 +24,15 @@ def exec_environment_load(arguments):
     ))
 
     if result.success:
+        if result.data.reused_existing:
+            title = (
+                f'Environment file is identical to existing environment '
+                f'"{result.data.name}" — reused it (no new environment created)'
+            )
+        else:
+            title = f'Environment "{result.data.name}" loaded successfully!'
         print_success_message(
-            title=f'Environment "{result.data.name}" loaded successfully!',
+            title=title,
             location=str(result.data.file_path) if result.data.file_path else None,
             next_steps=result.data.next_steps,
             tip=result.data.tip
@@ -109,20 +116,11 @@ def exec_environment_verify(arguments):
         from adare.console import print_error_message
         print_error_message(
             title=f'Environment "{env_name}" verification failed',
-            next_steps=[
-                f'Inspect run artifacts under {project_directory}/.adare/runs/',
-                f'Re-run verification with: adare env verify {env_name}',
-            ],
         )
         sys.exit(1)
 
     print_success_message(
         title=f'Environment "{env_name}" verified',
-        next_steps=[
-            f'Inspect run artifacts under {project_directory}/.adare/runs/',
-            f'Re-run verification anytime with: adare env verify {env_name}',
-        ],
-        tip='The verify_vm experiment is now attached and can be run again as needed.',
     )
 
 
