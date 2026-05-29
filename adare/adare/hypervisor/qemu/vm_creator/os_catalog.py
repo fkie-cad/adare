@@ -59,6 +59,18 @@ class OsDefinition:
     install_mode: str = 'auto'  # 'auto' (unattended) or 'manual' (interactive VNC)
     architecture: str = 'x86_64'  # 'x86_64' or 'aarch64'
     template: str = ''  # Custom template filename (empty = use default lookup)
+    # Installer family — selects how the rendered template is laid out on the
+    # seed medium. One of: 'subiquity' | 'preseed' | 'kickstart' | 'autoyast'
+    # | 'archinstall-cloudinit' | 'manual'. The default keeps Ubuntu working.
+    installer: str = 'subiquity'
+    # Kernel command line passed via QEMU `-append`. Supports {console}
+    # substitution (ttyS0/ttyAMA0). Distros like Anaconda or AutoYaST need
+    # their own boot params (e.g. `inst.ks=...`, `autoyast=...`).
+    kernel_cmdline: str = 'autoinstall console={console} ---'
+    # Volume label of the seed ISO attached as the second drive. Cloud-init
+    # NoCloud auto-detects 'cidata'; debian-installer and Anaconda detect
+    # 'OEMDRV'; AutoYaST reads from a device path so the label is informational.
+    seed_label: str = 'cidata'
 
 
 # Ubuntu 26.04 LTS (Resolute Raccoon) - Server ISO with autoinstall support
@@ -213,6 +225,417 @@ UBUNTU_2204_ARM64 = OsDefinition(
     architecture='aarch64',
 )
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Debian family (preseed via debian-installer)
+# ─────────────────────────────────────────────────────────────────────────────
+# All Debian/Kali entries use the debian-installer netinst ISO. The seed ISO
+# is labeled OEMDRV; d-i auto-loads /preseed.cfg from any OEMDRV-labeled drive
+# without needing an explicit preseed/file= path. tasksel inside the preseed
+# selects the desktop environment so the resulting VM has a GUI.
+
+_PRESEED_CMDLINE = 'auto=true priority=critical console={console} --- quiet'
+
+DEBIAN_12 = OsDefinition(
+    name='debian12',
+    display_name='Debian 12 (Bookworm) — GNOME',
+    platform='linux',
+    distribution='debian',
+    distribution_label='Bookworm',
+    version='12',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/install.amd/vmlinuz',
+    initrd_path_in_iso='/install.amd/initrd.gz',
+    installer='preseed',
+    kernel_cmdline=_PRESEED_CMDLINE,
+    seed_label='OEMDRV',
+)
+
+DEBIAN_13 = OsDefinition(
+    name='debian13',
+    display_name='Debian 13 (Trixie) — GNOME',
+    platform='linux',
+    distribution='debian',
+    distribution_label='Trixie',
+    version='13',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/install.amd/vmlinuz',
+    initrd_path_in_iso='/install.amd/initrd.gz',
+    installer='preseed',
+    kernel_cmdline=_PRESEED_CMDLINE,
+    seed_label='OEMDRV',
+)
+
+KALI_ROLLING = OsDefinition(
+    name='kali',
+    display_name='Kali Linux (Rolling) — Xfce',
+    platform='linux',
+    distribution='kali',
+    distribution_label='Rolling',
+    version='rolling',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='80G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/install.amd/vmlinuz',
+    initrd_path_in_iso='/install.amd/initrd.gz',
+    installer='preseed',
+    kernel_cmdline=_PRESEED_CMDLINE,
+    seed_label='OEMDRV',
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Red Hat family (Anaconda / kickstart)
+# ─────────────────────────────────────────────────────────────────────────────
+# Fedora Workstation/Spins and Rocky/Alma DVDs all boot Anaconda from
+# /images/pxeboot/. Anaconda picks up ks.cfg from an OEMDRV-labeled drive
+# when given inst.ks=hd:LABEL=OEMDRV:/ks.cfg. inst.text keeps the install
+# unattended; the *installed* system still has the chosen DE.
+
+_KICKSTART_CMDLINE = (
+    'inst.ks=hd:LABEL=OEMDRV:/ks.cfg inst.text console={console}'
+)
+
+FEDORA_41_WORKSTATION = OsDefinition(
+    name='fedora41',
+    display_name='Fedora 41 Workstation (GNOME)',
+    platform='linux',
+    distribution='fedora',
+    distribution_label='Workstation',
+    version='41',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/images/pxeboot/vmlinuz',
+    initrd_path_in_iso='/images/pxeboot/initrd.img',
+    installer='kickstart',
+    kernel_cmdline=_KICKSTART_CMDLINE,
+    seed_label='OEMDRV',
+)
+
+FEDORA_41_KDE = OsDefinition(
+    name='fedora41kde',
+    display_name='Fedora 41 KDE Plasma',
+    platform='linux',
+    distribution='fedora',
+    distribution_label='KDE Plasma Spin',
+    version='41',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/images/pxeboot/vmlinuz',
+    initrd_path_in_iso='/images/pxeboot/initrd.img',
+    installer='kickstart',
+    kernel_cmdline=_KICKSTART_CMDLINE,
+    seed_label='OEMDRV',
+)
+
+FEDORA_42_WORKSTATION = OsDefinition(
+    name='fedora42',
+    display_name='Fedora 42 Workstation (GNOME)',
+    platform='linux',
+    distribution='fedora',
+    distribution_label='Workstation',
+    version='42',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/images/pxeboot/vmlinuz',
+    initrd_path_in_iso='/images/pxeboot/initrd.img',
+    installer='kickstart',
+    kernel_cmdline=_KICKSTART_CMDLINE,
+    seed_label='OEMDRV',
+)
+
+FEDORA_42_KDE = OsDefinition(
+    name='fedora42kde',
+    display_name='Fedora 42 KDE Plasma',
+    platform='linux',
+    distribution='fedora',
+    distribution_label='KDE Plasma Spin',
+    version='42',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/images/pxeboot/vmlinuz',
+    initrd_path_in_iso='/images/pxeboot/initrd.img',
+    installer='kickstart',
+    kernel_cmdline=_KICKSTART_CMDLINE,
+    seed_label='OEMDRV',
+)
+
+FEDORA_43_WORKSTATION = OsDefinition(
+    name='fedora43',
+    display_name='Fedora 43 Workstation (GNOME)',
+    platform='linux',
+    distribution='fedora',
+    distribution_label='Workstation',
+    version='43',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/images/pxeboot/vmlinuz',
+    initrd_path_in_iso='/images/pxeboot/initrd.img',
+    installer='kickstart',
+    kernel_cmdline=_KICKSTART_CMDLINE,
+    seed_label='OEMDRV',
+)
+
+FEDORA_43_KDE = OsDefinition(
+    name='fedora43kde',
+    display_name='Fedora 43 KDE Plasma',
+    platform='linux',
+    distribution='fedora',
+    distribution_label='KDE Plasma Spin',
+    version='43',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/images/pxeboot/vmlinuz',
+    initrd_path_in_iso='/images/pxeboot/initrd.img',
+    installer='kickstart',
+    kernel_cmdline=_KICKSTART_CMDLINE,
+    seed_label='OEMDRV',
+)
+
+# Fedora 44 (released 2026-04-28) — current stable. GNOME 50 / KDE Plasma 6.6.
+FEDORA_44_WORKSTATION = OsDefinition(
+    name='fedora44',
+    display_name='Fedora 44 Workstation (GNOME 50)',
+    platform='linux',
+    distribution='fedora',
+    distribution_label='Workstation',
+    version='44',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/images/pxeboot/vmlinuz',
+    initrd_path_in_iso='/images/pxeboot/initrd.img',
+    installer='kickstart',
+    kernel_cmdline=_KICKSTART_CMDLINE,
+    seed_label='OEMDRV',
+)
+
+FEDORA_44_KDE = OsDefinition(
+    name='fedora44kde',
+    display_name='Fedora 44 KDE Plasma 6.6',
+    platform='linux',
+    distribution='fedora',
+    distribution_label='KDE Plasma Spin',
+    version='44',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/images/pxeboot/vmlinuz',
+    initrd_path_in_iso='/images/pxeboot/initrd.img',
+    installer='kickstart',
+    kernel_cmdline=_KICKSTART_CMDLINE,
+    seed_label='OEMDRV',
+)
+
+ROCKY_9 = OsDefinition(
+    name='rocky9',
+    display_name='Rocky Linux 9 (Workstation, GNOME)',
+    platform='linux',
+    distribution='rocky',
+    distribution_label='Blue Onyx',
+    version='9',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/images/pxeboot/vmlinuz',
+    initrd_path_in_iso='/images/pxeboot/initrd.img',
+    installer='kickstart',
+    kernel_cmdline=_KICKSTART_CMDLINE,
+    seed_label='OEMDRV',
+    template='kickstart_rhel_workstation.yaml',
+)
+
+ALMA_9 = OsDefinition(
+    name='alma9',
+    display_name='AlmaLinux 9 (Workstation, GNOME)',
+    platform='linux',
+    distribution='alma',
+    distribution_label='Teal Serval',
+    version='9',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/images/pxeboot/vmlinuz',
+    initrd_path_in_iso='/images/pxeboot/initrd.img',
+    installer='kickstart',
+    kernel_cmdline=_KICKSTART_CMDLINE,
+    seed_label='OEMDRV',
+    template='kickstart_rhel_workstation.yaml',
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUSE family (AutoYaST)
+# ─────────────────────────────────────────────────────────────────────────────
+# AutoYaST autoloads autoinst.xml from an OEMDRV-labeled drive when invoked
+# with `autoyast=default`. textmode=1 suppresses the graphical installer; the
+# resulting system still boots into the configured KDE/GNOME desktop.
+
+_AUTOYAST_CMDLINE = 'autoyast=default console={console} textmode=1'
+
+OPENSUSE_LEAP_156 = OsDefinition(
+    name='opensuseleap156',
+    display_name='openSUSE Leap 15.6 — KDE Plasma',
+    platform='linux',
+    distribution='opensuse',
+    distribution_label='Leap',
+    version='15.6',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/boot/x86_64/loader/linux',
+    initrd_path_in_iso='/boot/x86_64/loader/initrd',
+    installer='autoyast',
+    kernel_cmdline=_AUTOYAST_CMDLINE,
+    seed_label='OEMDRV',
+)
+
+OPENSUSE_TUMBLEWEED = OsDefinition(
+    name='opensusetumbleweed',
+    display_name='openSUSE Tumbleweed — KDE Plasma',
+    platform='linux',
+    distribution='opensuse',
+    distribution_label='Tumbleweed',
+    version='rolling',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    kernel_path_in_iso='/boot/x86_64/loader/linux',
+    initrd_path_in_iso='/boot/x86_64/loader/initrd',
+    installer='autoyast',
+    kernel_cmdline=_AUTOYAST_CMDLINE,
+    seed_label='OEMDRV',
+    template='autoyast_opensuse_leap.yaml',  # same template works for both
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Manual-mode GUI distros (Phase 6 — Calamares / distinst / nixos installers
+# with no documented unattended path)
+# ─────────────────────────────────────────────────────────────────────────────
+# These boot the live ISO normally; the user clicks through the graphical
+# installer. linux_creator skips kernel/seed plumbing for install_mode='manual'
+# and writes INSTALL_INSTRUCTIONS.md alongside the qcow2.
+
+LINUX_MINT = OsDefinition(
+    name='mint',
+    display_name='Linux Mint (Cinnamon) — manual install',
+    platform='linux',
+    distribution='mint',
+    distribution_label='Cinnamon',
+    version='22',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    install_mode='manual',
+    installer='manual',
+)
+
+POP_OS = OsDefinition(
+    name='popos',
+    display_name='Pop!_OS (COSMIC) — manual install',
+    platform='linux',
+    distribution='popos',
+    distribution_label='COSMIC',
+    version='24.04',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    install_mode='manual',
+    installer='manual',
+)
+
+NIXOS = OsDefinition(
+    name='nixos',
+    display_name='NixOS (GNOME live) — manual install',
+    platform='linux',
+    distribution='nixos',
+    distribution_label='GNOME',
+    version='25.05',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    install_mode='manual',
+    installer='manual',
+)
+
+ELEMENTARY_OS = OsDefinition(
+    name='elementary',
+    display_name='elementary OS (Pantheon) — manual install',
+    platform='linux',
+    distribution='elementary',
+    distribution_label='Pantheon',
+    version='8',
+    iso_url='',
+    iso_sha256='',
+    iso_filename='',
+    default_disk_size='60G',
+    default_ram_mb=8192,
+    default_cpus=0,
+    install_mode='manual',
+    installer='manual',
+)
+
 # Windows 11 - User must supply ISO
 WINDOWS_11 = OsDefinition(
     name='windows11',
@@ -268,6 +691,25 @@ _BUILTIN_CATALOG: dict[str, OsDefinition] = {
     'ubuntu2404arm64': UBUNTU_2404_ARM64,
     'ubuntu2204': UBUNTU_2204,
     'ubuntu2204arm64': UBUNTU_2204_ARM64,
+    'debian12': DEBIAN_12,
+    'debian13': DEBIAN_13,
+    'kali': KALI_ROLLING,
+    'fedora41': FEDORA_41_WORKSTATION,
+    'fedora41kde': FEDORA_41_KDE,
+    'fedora42': FEDORA_42_WORKSTATION,
+    'fedora42kde': FEDORA_42_KDE,
+    'fedora43': FEDORA_43_WORKSTATION,
+    'fedora43kde': FEDORA_43_KDE,
+    'fedora44': FEDORA_44_WORKSTATION,
+    'fedora44kde': FEDORA_44_KDE,
+    'rocky9': ROCKY_9,
+    'alma9': ALMA_9,
+    'opensuseleap156': OPENSUSE_LEAP_156,
+    'opensusetumbleweed': OPENSUSE_TUMBLEWEED,
+    'mint': LINUX_MINT,
+    'popos': POP_OS,
+    'nixos': NIXOS,
+    'elementary': ELEMENTARY_OS,
     'windows11': WINDOWS_11,
     'windows10': WINDOWS_10,
 }
@@ -335,6 +777,11 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     install_mode=install_mode,
                     architecture=architecture,
                     template=data.get('template', ''),
+                    installer=data.get('installer', 'subiquity'),
+                    kernel_cmdline=data.get(
+                        'kernel_cmdline', 'autoinstall console={console} ---'
+                    ),
+                    seed_label=data.get('seed_label', 'cidata'),
                 )
             except (OSError, yaml.YAMLError, TypeError, ValueError) as e:
                 log.warning('Skipping %s: %s', yml_file, e)
