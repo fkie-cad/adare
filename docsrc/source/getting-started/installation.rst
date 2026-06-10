@@ -2,277 +2,311 @@
 Installation
 ************
 
-ADARE drives one of two hypervisors per environment — **QEMU** (recommended)
-or **VirtualBox** — and you only ever need to install one. ADARE runs on Linux
-and macOS hosts; Windows host support is **experimental**. ADARE is officially
-tested only on Ubuntu (Linux) and macOS hosts. See
-:ref:`choose-hypervisor` below to pick the right backend for your host.
-
-System Requirements
-*******************
-
-.. list-table::
-   :widths: 20 40
-   :header-rows: 1
-
-   * - Component
-     - Minimum
-   * - **RAM**
-     - 16 GB or more
-   * - **Storage**
-     - 50 GB (for windows VM more)
-   * - **CPU**
-     - 6+ cores with virtualization support
-   * - **OS**
-     - Linux (tested on Ubuntu 22.04) or macOS 13+; Windows 10+ is experimental
-
-
-.. _choose-hypervisor:
-
-Choose Your Hypervisor
-**********************
-
-ADARE drives one of two hypervisors per environment, and you only need to
-install one. The choice is per-environment: set ``hypervisor: qemu`` or
-``hypervisor: virtualbox`` in the environment YAML to override the project
-default. You can switch later without reinstalling ADARE.
-
-.. list-table::
-   :widths: 35 20 25
-   :header-rows: 1
-
-   * - Host OS
-     - Recommended
-     - Also works
-   * - Ubuntu / Linux (x86_64)
-     - QEMU
-     - VirtualBox
-   * - macOS Intel
-     - QEMU
-     - VirtualBox
-   * - macOS Apple Silicon (arm64)
-     - QEMU
-     - — (VirtualBox not viable)
-   * - Windows 10/11 (experimental)
-     - VirtualBox
-     - —
-
-Pick **QEMU** if:
-
-- You're on Apple Silicon (ARM) — VirtualBox isn't a viable backend there.
-- You want VirtioFS (Linux hosts) or HVF/KVM acceleration for fast
-  host-to-guest file sharing and near-native VM performance.
-- You want the recommended/primary backend for new projects.
-
-Pick **VirtualBox** if:
-
-- You're on Windows — it's the only supported backend for Windows hosts.
-- You want a GUI-managed VM you can also poke at outside ADARE.
-- You already have it installed and don't need QEMU's extras.
-
-After installing the :ref:`Common Prerequisites <common-prereqs>` below, jump
-to either :ref:`hypervisor-virtualbox` or :ref:`hypervisor-qemu` — you only
-need to read one.
-
+ADARE uses **QEMU** as its hypervisor on Linux and macOS hosts — that's the
+recommended path and the rest of this page walks through it top-to-bottom.
+**VirtualBox** is also supported and is the only option for Windows hosts; if
+that's you, jump to :ref:`hypervisor-virtualbox` below.
 
 .. _common-prereqs:
 
-Common Prerequisites
-********************
+Step 1: Install Prerequisites
+*****************************
 
-These are required regardless of which hypervisor you choose.
+These are required regardless of which hypervisor you use: **Python 3.10+**,
+**uv**, **make**, and **git**.
 
-1. **Python 3.10 or higher**
+.. tab-set::
 
-   Check your Python version:
+   .. tab-item:: Linux
 
-   .. code-block:: bash
+      .. tab-set::
 
-      python3 --version
+         .. tab-item:: Ubuntu/Debian
 
-   If below 3.10 or not installed, download and install from `python.org <https://www.python.org/downloads/>`_ or use your package manager.
+            .. code-block:: bash
 
-   **Windows Installation**
+               sudo apt update
+               sudo apt install python3 python3-venv make git
+               curl -LsSf https://astral.sh/uv/install.sh | sh
 
-   For Windows users, you can install Python using PowerShell:
+         .. tab-item:: Fedora/RHEL
 
-   .. code-block:: powershell
+            .. code-block:: bash
 
-      # Download Python installer
-      $pythonInstaller = "https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe"
-      $installerPath = "$env:TEMP\python-installer.exe"
-      Invoke-WebRequest $pythonInstaller -OutFile $installerPath
+               sudo dnf install python3 make git
+               curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      # Install Python (add to PATH, install pip)
-      Start-Process -FilePath $installerPath -ArgumentList "/quiet", "InstallAllUsers=1", "PrependPath=1" -Wait
+         .. tab-item:: Arch
 
-   After installation, restart your PowerShell session and verify:
+            .. code-block:: bash
 
-   .. code-block:: powershell
+               sudo pacman -S python make git
+               curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      python --version
+      After installing ``uv``, restart your shell so it appears on ``PATH``.
 
-2. **uv** (Python package manager)
+   .. tab-item:: macOS
 
-   Install using the official installer:
+      Install Python via `python.org <https://www.python.org/downloads/>`_ or
+      Homebrew, then install ``uv`` and the build tools:
 
-   .. code-block:: bash
+      .. code-block:: bash
 
-      curl -LsSf https://astral.sh/uv/install.sh | sh
+         brew install python make git
+         curl -LsSf https://astral.sh/uv/install.sh | sh
 
-   **Windows:**
+      After installing ``uv``, restart your shell so it appears on ``PATH``.
 
-   .. code-block:: powershell
+   .. tab-item:: Windows
 
-      powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+      Install Python from PowerShell:
 
-   After installation, restart your shell and verify:
+      .. code-block:: powershell
 
-   .. code-block:: bash
+         # Download Python installer
+         $pythonInstaller = "https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe"
+         $installerPath = "$env:TEMP\python-installer.exe"
+         Invoke-WebRequest $pythonInstaller -OutFile $installerPath
 
-      uv --version
+         # Install Python (add to PATH, install pip)
+         Start-Process -FilePath $installerPath -ArgumentList "/quiet", "InstallAllUsers=1", "PrependPath=1" -Wait
 
-3. **Make** and **git**
+      Install ``uv``:
 
-   Make sure to have ``make`` and ``git`` installed via your package manager.
+      .. code-block:: powershell
 
+         powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-.. _hypervisor-virtualbox:
+      Install ``make`` and ``git`` via your preferred method (Git for Windows,
+      Chocolatey, or Scoop). Restart your shell, then verify:
 
-Hypervisor: VirtualBox
-**********************
+      .. code-block:: powershell
 
-Download and install from `virtualbox.org <https://www.virtualbox.org/>`_
-
-.. note::
-   ADARE supports **Windows and Ubuntu guest VMs only** under VirtualBox.
-   macOS guest VMs are not supported.
-
-.. note::
-   On Windows, ensure **Hyper-V is disabled** as it conflicts with VirtualBox:
-
-   - Open "Turn Windows features on or off"
-   - Uncheck "Hyper-V"
-   - Restart your computer
+         python --version
+         uv --version
 
 
 .. _hypervisor-qemu:
 
-Hypervisor: QEMU
-****************
+Step 2: Install QEMU
+********************
 
 .. note::
-   ADARE supports **Ubuntu and Windows guest VMs only** under QEMU.
-   macOS guest VMs are not supported.
+   QEMU is not supported on Windows hosts. If you're on Windows, skip ahead
+   to :ref:`hypervisor-virtualbox`.
 
-Install QEMU and libguestfs for your host:
+.. tab-set::
 
-**Ubuntu/Debian:**
+   .. tab-item:: Linux
+
+      .. tab-set::
+
+         .. tab-item:: Ubuntu/Debian
+
+            .. code-block:: bash
+
+               sudo apt update
+               sudo apt install qemu-system-x86 qemu-utils python3-guestfs libguestfs-tools libvirt-dev
+
+         .. tab-item:: Fedora/RHEL
+
+            .. code-block:: bash
+
+               sudo dnf install qemu-kvm qemu-img python3-libguestfs libguestfs-tools libvirt-devel
+
+         .. tab-item:: Arch
+
+            .. code-block:: bash
+
+               sudo pacman -S qemu python-guestfs libguestfs libvirt
+
+      .. note::
+         ADARE supports **Ubuntu and Windows guest VMs only** under QEMU.
+         macOS guest VMs are not supported.
+
+      .. note::
+         ``libvirt-dev`` / ``libvirt-devel`` / ``libvirt`` provide the headers
+         required to build the ``libvirt-python`` wheel that ``make install``
+         pulls in by default. Install the system package before running
+         ``make install`` in Step 3.
+
+      .. note::
+         The libguestfs tools are required for file operations with stopped
+         QEMU VMs.
+
+   .. tab-item:: macOS
+
+      On macOS, QEMU must be installed via **MacPorts**. The Homebrew build of
+      QEMU has the ``smbd`` path hardcoded to ``/opt/local/sbin/smbd`` (a
+      MacPorts path), so the MacPorts build is the supported way to get
+      working SMB host-to-guest sharing out of the box.
+
+      First, install MacPorts itself by following the official installer for
+      your macOS version: `macports.org/install.php
+      <https://www.macports.org/install.php>`_. After installation, restart
+      your shell so ``/opt/local/bin`` is on ``PATH``, then verify:
+
+      .. code-block:: bash
+
+         port version
+
+      Install QEMU and its samba/libvirt dependencies via MacPorts:
+
+      .. code-block:: bash
+
+         sudo port install qemu samba4 libvirt
+
+      MacPorts installs samba's ``smbd`` at ``/opt/local/sbin/smbd``, which is
+      exactly the path QEMU expects — no symlink needed.
+
+      .. note::
+         ADARE supports **Ubuntu and Windows guest VMs only** under QEMU.
+         macOS guest VMs are not supported.
+
+      .. note::
+         On macOS, virtiofsd is not available. ADARE uses QEMU's built-in SMB
+         sharing (via ``samba``) to mount host directories in the guest VM.
+         This provides the same shared-directory experience as virtiofs on
+         Linux. If ``samba`` is not installed at ``/opt/local/sbin/smbd``,
+         ADARE falls back to QGA file transfer (slower, but functional).
+         ADARE will detect the mismatch and print the exact command needed.
+
+
+Step 3: Install ADARE
+*********************
+
+With prerequisites and QEMU in place, clone and install ADARE.
+
+.. tab-set::
+
+   .. tab-item:: Linux
+
+      .. code-block:: bash
+
+         git clone https://github.com/fkie-cad/adare.git
+         cd adare
+         make install
+
+      ``make install`` sets up a Python virtual environment, installs
+      dependencies via uv, and installs the ADARE command-line tools. It
+      includes QEMU support by default (it pulls in the ``libvirt-python``
+      extra), so make sure the libvirt development headers from Step 2 are
+      installed first or the wheel build will fail.
+
+      .. note::
+         ``make install-qemu`` is kept as a backwards-compatible alias for
+         ``make install`` on Linux/macOS.
+
+   .. tab-item:: macOS
+
+      .. code-block:: bash
+
+         git clone https://github.com/fkie-cad/adare.git
+         cd adare
+         make install
+
+      ``make install`` sets up a Python virtual environment, installs
+      dependencies via uv, and installs the ADARE command-line tools. It
+      includes QEMU support by default (it pulls in the ``libvirt-python``
+      extra), so make sure ``libvirt`` is installed via MacPorts (Step 2) or
+      the wheel build will fail.
+
+
+Verify Installation
+*******************
+
+Check that ADARE is on your ``PATH``:
 
 .. code-block:: bash
 
-   sudo apt update
-   sudo apt install qemu-system-x86 qemu-utils python3-guestfs libguestfs-tools libvirt-dev
+   adare --version
 
-**Fedora/RHEL/CentOS:**
-
-.. code-block:: bash
-
-   sudo dnf install qemu-kvm qemu-img python3-libguestfs libguestfs-tools libvirt-devel
-
-**Arch Linux:**
+You should see output similar to ``ADARE version 0.1.0``. Then test the help
+menu:
 
 .. code-block:: bash
 
-   sudo pacman -S qemu python-guestfs libguestfs libvirt
+   adare --help
 
-**macOS (Apple Silicon / ARM):**
-
-.. code-block:: bash
-
-   brew install qemu samba libvirt
-
-.. note::
-   ``libvirt-dev`` / ``libvirt-devel`` / ``libvirt`` provide the headers required
-   to build the ``libvirt-python`` wheel that ``make install`` pulls in by default
-   on Linux/macOS. Install the system package before running ``make install``,
-   or use ``./adare/install/install.sh`` directly to skip QEMU extras entirely.
-
-QEMU on macOS (Homebrew) has the smbd path hardcoded to ``/opt/local/sbin/smbd``
-(a MacPorts path). You must create a symlink so QEMU can find Homebrew's samba:
-
-.. code-block:: bash
-
-   sudo mkdir -p /opt/local/sbin
-   sudo ln -s /opt/homebrew/opt/samba/sbin/samba-dot-org-smbd /opt/local/sbin/smbd
-
-.. note::
-   On macOS, virtiofsd is not available. ADARE uses QEMU's built-in SMB sharing
-   (via ``samba``) to mount host directories in the guest VM. This provides the
-   same shared-directory experience as virtiofs on Linux. If ``samba`` is not
-   installed or the symlink above is missing, ADARE falls back to QGA file
-   transfer (slower, but functional). ADARE will detect the mismatch and print
-   the exact symlink command needed.
-
-.. note::
-   The libguestfs tools are required for file operations with stopped QEMU VMs.
+This should display the main help menu without errors.
 
 
-Install ADARE
-*************
+.. _choose-hypervisor:
+.. _hypervisor-virtualbox:
 
-With prerequisites and your chosen hypervisor in place:
+Alternative: VirtualBox
+***********************
 
-1. **Clone the repository**
+VirtualBox is a supported alternative to QEMU. Pick it if:
 
-   .. code-block:: bash
+- You're on a **Windows host** — VirtualBox is the only supported backend
+  there.
+- You want a **GUI-managed VM** you can also poke at outside ADARE.
+- You **already have VirtualBox installed** and don't need QEMU's extras
+  (VirtioFS on Linux, HVF acceleration, SMB sharing on macOS).
 
-      git clone https://github.com/fkie-cad/adare.git
-      cd adare
+The choice is per-environment: set ``hypervisor: virtualbox`` in the
+environment YAML to override the project default. You can switch later
+without reinstalling ADARE.
 
-2. **Install ADARE**
+Install VirtualBox
+==================
 
-   .. code-block:: bash
+.. tab-set::
 
-      make install
+   .. tab-item:: Linux
 
-   This sets up a Python virtual environment, installs all dependencies via
-   uv, installs the ADARE command-line tools, and configures the development
-   environment.
+      Download and install from
+      `virtualbox.org <https://www.virtualbox.org/>`_.
 
-   On **Linux and macOS**, ``make install`` includes QEMU support by default
-   (it pulls in the ``libvirt-python`` extra). Make sure the libvirt
-   development headers listed under :ref:`hypervisor-qemu` are installed
-   first, otherwise the wheel build will fail. If you only need VirtualBox
-   and want to skip QEMU extras, run the installer directly:
+      .. note::
+         ADARE supports **Windows and Ubuntu guest VMs only** under
+         VirtualBox. macOS guest VMs are not supported.
 
-   .. code-block:: bash
+   .. tab-item:: Windows
 
-      ./adare/install/install.sh
+      Download and install from
+      `virtualbox.org <https://www.virtualbox.org/>`_.
 
-   On **Windows**, ``make install`` runs the PowerShell installer and does
-   **not** install QEMU extras (Windows host support is experimental and
-   VirtualBox is the supported backend there).
+      .. note::
+         On Windows, ensure **Hyper-V is disabled** as it conflicts with
+         VirtualBox:
 
-   .. note::
-      ``make install-qemu`` is kept as a backwards-compatible alias for
-      ``make install`` on Linux/macOS.
+         - Open "Turn Windows features on or off"
+         - Uncheck "Hyper-V"
+         - Restart your computer
 
-3. **Verify the install**
+      .. note::
+         ADARE supports **Windows and Ubuntu guest VMs only** under
+         VirtualBox. macOS guest VMs are not supported.
 
-   .. code-block:: bash
+Install ADARE (VirtualBox-only)
+===============================
 
-      adare --version
+.. tab-set::
 
-   You should see output similar to ``ADARE version 0.1.0``.
+   .. tab-item:: Linux
 
-4. **Test your setup**
+      If you only need VirtualBox and want to skip QEMU extras, run the
+      installer directly instead of ``make install``:
 
-   .. code-block:: bash
+      .. code-block:: bash
 
-      adare --help
+         git clone https://github.com/fkie-cad/adare.git
+         cd adare
+         ./adare/install/install.sh
 
-   This should display the main help menu without errors.
+   .. tab-item:: Windows
+
+      .. code-block:: powershell
+
+         git clone https://github.com/fkie-cad/adare.git
+         cd adare
+         make install
+
+      On Windows, ``make install`` runs the PowerShell installer and does
+      **not** install QEMU extras (Windows host support is experimental and
+      VirtualBox is the supported backend there).
 
 
 Tested Configurations
@@ -308,6 +342,26 @@ ADARE has been tested with the following software versions:
 
 .. note::
    While later versions should work, earlier versions (especially Python < 3.10) are not supported due to language features used by ADARE.
+
+
+System Requirements
+*******************
+
+.. list-table::
+   :widths: 20 40
+   :header-rows: 1
+
+   * - Component
+     - Minimum
+   * - **RAM**
+     - 16 GB or more
+   * - **Storage**
+     - 50 GB (for windows VM more)
+   * - **CPU**
+     - 6+ cores with virtualization support
+   * - **OS**
+     - Linux (tested on Ubuntu 22.04) or macOS 13+; Windows 10+ is experimental
+
 
 Next Steps
 **********
