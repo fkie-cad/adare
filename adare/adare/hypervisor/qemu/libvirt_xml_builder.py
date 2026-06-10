@@ -649,8 +649,12 @@ class DomainXMLBuilder:
         _add_qemu_arg(qemu_commandline, '-device')
         if self._is_virt:
             _add_qemu_arg(qemu_commandline, 'virtio-net-pci,netdev=net0,bus=pcie.0,addr=0x1f')
+        elif self._is_q35:
+            # network root-port = PCIBusAllocator network slot (bus 1, slot 0)
+            _add_qemu_arg(qemu_commandline, 'virtio-net-pci,netdev=net0,bus=pci.1,addr=0x0')
         else:
-            _add_qemu_arg(qemu_commandline, 'virtio-net-pci,netdev=net0')
+            # PC/i440FX: PCIBusAllocator reserves bus 0 slot 3 for network
+            _add_qemu_arg(qemu_commandline, 'virtio-net-pci,netdev=net0,addr=0x3')
 
     def _prettify(self) -> str:
         """Convert the domain XML tree to a pretty-printed string."""
