@@ -46,8 +46,9 @@ class PCIBusAllocator:
         'disk': (0, 4),          # bus 0, slot 4
         'virtio_serial': (0, 5), # bus 0, slot 5
         'memballoon': (0, 6),    # bus 0, slot 6
+        'usb': (0, 7),           # bus 0, slot 7 (qemu-xhci)
     }
-    _PC_VIRTIOFS_BASE_SLOT = 7  # slots 7+ for virtiofs shares
+    _PC_VIRTIOFS_BASE_SLOT = 8  # slots 8+ for virtiofs shares
 
     def __init__(self, is_q35: bool):
         self.is_q35 = is_q35
@@ -411,7 +412,7 @@ class DomainXMLBuilder:
     def _add_usb_controller(self) -> None:
         """Add USB controller."""
         usb = ET.SubElement(self._devices, 'controller', type='usb', index='0', model='qemu-xhci')
-        if self._is_q35:
+        if not self._is_virt:
             ET.SubElement(usb, 'address', **self._pci.address_for('usb'))
 
     def _add_graphics(self) -> None:
