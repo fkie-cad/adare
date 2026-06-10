@@ -169,33 +169,33 @@ class TestPCIBusAllocatorPC:
         assert addr['bus'] == '0x00'
         assert addr['slot'] == '0x06'
 
-    def test_virtiofs_index_0_returns_slot_7(self):
+    def test_usb_returns_slot_7(self):
         pci = PCIBusAllocator(is_q35=False)
-        addr = pci.address_for('virtiofs', index=0)
+        addr = pci.address_for('usb')
         assert addr['bus'] == '0x00'
         assert addr['slot'] == '0x07'
 
-    def test_virtiofs_index_1_returns_slot_8(self):
+    def test_virtiofs_index_0_returns_slot_8(self):
         pci = PCIBusAllocator(is_q35=False)
-        addr = pci.address_for('virtiofs', index=1)
+        addr = pci.address_for('virtiofs', index=0)
         assert addr['bus'] == '0x00'
         assert addr['slot'] == '0x08'
 
+    def test_virtiofs_index_1_returns_slot_9(self):
+        pci = PCIBusAllocator(is_q35=False)
+        addr = pci.address_for('virtiofs', index=1)
+        assert addr['bus'] == '0x00'
+        assert addr['slot'] == '0x09'
+
     def test_all_named_devices_have_unique_slots(self):
         pci = PCIBusAllocator(is_q35=False)
-        devices = ['network', 'disk', 'virtio_serial', 'memballoon']
+        devices = ['network', 'disk', 'virtio_serial', 'memballoon', 'usb']
         slots = set()
         for device in devices:
             addr = pci.address_for(device)
             key = (addr['bus'], addr['slot'])
             assert key not in slots, f"Duplicate address for {device}: {key}"
             slots.add(key)
-
-    def test_pc_does_not_have_usb_assignment(self):
-        """PC machine type does not have explicit USB PCI address (no root port needed)."""
-        pci = PCIBusAllocator(is_q35=False)
-        with pytest.raises(KeyError):
-            pci.address_for('usb')
 
 
 # --- DomainXMLBuilder tests ---
@@ -583,7 +583,8 @@ class TestDomainXMLBuilderQemuCommandline:
 
         assert '-device' in arg_values
         device_idx = arg_values.index('-device')
-        assert arg_values[device_idx + 1] == 'virtio-net-pci,netdev=net0'
+        # PC/i440FX: NIC pinned to the allocator's reserved network slot (0x3)
+        assert arg_values[device_idx + 1] == 'virtio-net-pci,netdev=net0,addr=0x3'
 
 
 class TestDomainXMLBuilderVirtioFS:
