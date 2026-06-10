@@ -435,7 +435,7 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
                     log.warning(f'Could not verify environment file path {env_file}: {e}')
 
     # Clean up VM if force is used and VM is not used by other environments
-    if force and vm_id and cleanup_vm:
+    if vm_id and cleanup_vm:
         try:
             # Check if VM is still used by any other environments
             with EnvironmentDbApi() as db:
