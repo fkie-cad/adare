@@ -596,8 +596,8 @@ class ExperimentService:
                 run_count = 0
                 productive_run_count = 0
                 try:
-                    run_count = experiment_database.get_experiment_run_count(experiment.id, exclude_fake=False)
-                    productive_run_count = experiment_database.get_experiment_run_count(experiment.id, exclude_fake=True)
+                    run_count = experiment_database.get_experiment_run_count(project_path, experiment.id, exclude_fake=False)
+                    productive_run_count = experiment_database.get_experiment_run_count(project_path, experiment.id, exclude_fake=True)
                 except (SQLAlchemyError, ValueError):
                     pass
 

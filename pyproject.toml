@@ -19,7 +19,7 @@ adareexp = "adare.example:main"
 mcp_gui = "adare.mcp_gui:main"
 
 [project.optional-dependencies]
-docs = ["sphinx", "furo"]
+docs = ["sphinx", "furo", "sphinx-design"]
 qemu = ["adare[qemu]"]
 
 [dependency-groups]
@@ -32,6 +32,7 @@ test = [
 dev = [
     "sphinx<8.0",
     "furo>=2025.7.1",
+    "sphinx-design>=0.6.0",
     "ruff>=0.15.11",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.3.0",
@@ -41,6 +42,7 @@ dev = [
 docs = [
     "sphinx<8.0",
     "furo>=2025.7.1",
+    "sphinx-design>=0.6.0",
 ]
 
 [tool.uv.sources]
