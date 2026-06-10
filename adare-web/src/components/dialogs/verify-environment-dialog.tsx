@@ -66,8 +66,8 @@ export function VerifyEnvironmentDialog({
           <DialogHeader>
             <DialogTitle>Environment created</DialogTitle>
             <DialogDescription>
-              Want to run a quick verification? It exercises boot, agent install, screenshot,
-              command, and action dispatch — about 1–2 minutes.
+              Want to run a quick verification? It exercises boot, agent install, command,
+              and action dispatch — about 1–2 minutes.
             </DialogDescription>
           </DialogHeader>
 

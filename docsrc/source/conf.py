@@ -30,6 +30,7 @@ author = 'Fraunhofer FKIE'
 extensions = [
     # 'sphinx.ext.autodoc',
     'sphinx.ext.autosectionlabel',
+    'sphinx_design',
     'simple_datatables'
 ]
 
