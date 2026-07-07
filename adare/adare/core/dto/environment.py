@@ -32,6 +32,32 @@ class EnvironmentDeleteRequest:
 
 
 @dataclass
+class EnvironmentExtendRequest:
+    """
+    Request DTO for extending an environment (or VM) into a new environment
+    that reuses the same base disk plus additional post-setup installations.
+
+    Declarative mode (default) is driven by `installs`/`from_file`/`shell`/`cwd`.
+    `interactive` and the Mode-B-only fields (`ram`, `cpus`, `disk_name`) are
+    accepted for CLI/API surface stability but are not implemented yet.
+    """
+    source: str  # Environment name/ULID or VM name
+    name: str  # Name for the new environment (must be unique)
+    installs: list[tuple[str, str]] = field(default_factory=list)  # (name, command) from --install
+    from_file: Path | None = None
+    shell: bool = False
+    cwd: str | None = None
+    interactive: bool = False
+    ram: int | None = None
+    cpus: int | None = None
+    disk_name: str | None = None
+    description: str | None = None
+    tags: list[str] = field(default_factory=list)
+    force: bool = False
+    project: str | None = None
+
+
+@dataclass
 class EnvironmentInfo:
     """
     Response DTO for environment operations.

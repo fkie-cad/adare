@@ -263,6 +263,10 @@ class EnvironmentAPI:
         """Load an environment."""
         return self._service.load(request)
 
+    def extend(self, request):
+        """Extend an environment (or VM) into a new environment (declarative mode)."""
+        return self._service.extend(request)
+
     def create(self, request):
         """Create a new environment."""
         return self._service.create(request)
