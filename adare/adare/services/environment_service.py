@@ -39,6 +39,7 @@ from adare.core.dto.environment import (
 )
 from adare.core.result import Result
 from adare.database.api.environment import EnvironmentDbApi
+from adare.hypervisor.exceptions import HypervisorException
 
 log = logging.getLogger(__name__)
 
@@ -200,12 +201,10 @@ class EnvironmentService:
             return Result.from_exception(e)
         except EnvironmentDoesNotExistInDatabase as e:
             return Result.from_exception(e)
-        except NotImplementedError as e:
-            return Result.fail(
-                code='NotImplemented',
-                message=str(e),
-                solutions=['Use declarative mode: pass --install/--from-file without --interactive']
-            )
+        except HypervisorException as e:
+            # Interactive mode: QEMU-only guard, Apple-Silicon guard, and any
+            # overlay/boot/flatten failure surface as HypervisorException.
+            return Result.from_exception(e)
 
     def create(self, request: EnvironmentCreateRequest) -> Result[EnvironmentInfo]:
         """

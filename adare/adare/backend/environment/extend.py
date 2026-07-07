@@ -9,7 +9,10 @@ matches the existing `Vm` row, so `environment_load` reuses that row and
 only creates a new `Environment` + its installations — the source
 environment, its `Vm`, and its installations are never mutated.
 
-Interactive/manual mode (Mode B) is a placeholder for a later task.
+Interactive/manual mode (Mode B) boots a throwaway overlay of the base disk
+in a GUI QEMU window, lets the user install software by hand, then flattens
+the overlay into a NEW standalone qcow2 (fresh hash) and registers it as a new
+base VM + environment via the same `environment_load` primitive. QEMU only.
 """
 import logging
 import tempfile
@@ -17,6 +20,7 @@ from pathlib import Path
 
 import attrs
 import cattrs
+from sqlalchemy.exc import SQLAlchemyError
 
 from adare.backend.environment.commands import environment_load
 from adare.backend.environment.database import resolve_environment_identifier
@@ -24,6 +28,7 @@ from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDataba
 from adare.backend.vm.database import get_vm_by_name
 from adare.database.api.environment import EnvironmentDbApi
 from adare.exceptions import DataStructuringError
+from adare.hypervisor.exceptions import HypervisorException
 from adare.types.environment import PostsetupInstallations, parse_environment_file
 from adarelib.helper.yaml import dict_to_yaml, yaml_to_dict
 
@@ -91,6 +96,7 @@ def _resolve_source(source: str) -> dict:
 
             return {
                 'vm_file': env.vm.file,
+                'vm_id': env.vm.id,
                 'hypervisor': env.vm.hypervisor or env.hypervisor or 'qemu',
                 'os': os_dict,
                 'installations': [_installation_dict(inst) for inst in env.installations],
@@ -98,10 +104,11 @@ def _resolve_source(source: str) -> dict:
                 'description': env.description or '',
             }
 
-    vm = get_vm_by_name(source, fields=['file', 'hypervisor', 'osinfo'])
+    vm = get_vm_by_name(source, fields=['file', 'hypervisor', 'osinfo', 'id'])
     if vm:
         return {
             'vm_file': vm['file'],
+            'vm_id': vm.get('id'),
             'hypervisor': vm.get('hypervisor') or 'qemu',
             'os': _os_dict(vm.get('osinfo')),
             'installations': [],
@@ -145,40 +152,20 @@ def _merged_installations(existing: list[dict], installs: list[tuple[str, str]],
     return list(merged.values())
 
 
-def environment_extend(request) -> tuple[str, bool]:
+def _finalize_environment(request, vm_file: str, source_view: dict,
+                          installations: list[dict], tags: list[str]) -> tuple[str, bool]:
     """
-    Extend `request.source` into a new environment `request.name`, reusing
-    the same base VM disk and merging in additional post-setup installs.
-
-    Declarative mode only. Return shape mirrors `environment_load`.
-
-    Args:
-        request: EnvironmentExtendRequest
+    Build the new environment YAML referencing `vm_file`, write it to a temp
+    file, and hand off to `environment_load`. Shared by both modes; the only
+    thing that differs is `vm_file` (the source base for declarative mode, the
+    freshly-flattened disk for interactive mode).
 
     Returns:
         Tuple of (environment_ulid, created).
-
-    Raises:
-        NotImplementedError: If `request.interactive` is set (Mode B is a
-            later task).
-        EnvironmentDoesNotExistInDatabase: If the source cannot be resolved.
-        EnvironmentAlreadyExists / EnvironmentUpdateError / EnvironmentLoadFailed:
-            Propagated from `environment_load`.
     """
-    if request.interactive:
-        raise NotImplementedError('Interactive extend is implemented in a later task')
-
-    source_view = _resolve_source(request.source)
-
-    installations = _merged_installations(
-        source_view['installations'], request.installs, request.from_file,
-        request.shell, request.cwd
-    )
-    tags = list(dict.fromkeys([*source_view['tags'], *request.tags]))
-
     environment_content = {
         'name': request.name,
-        'vm': source_view['vm_file'],
+        'vm': vm_file,
         'os': source_view['os'],
         'hypervisor': source_view['hypervisor'],
         'postsetupinstallations': installations,
@@ -190,3 +177,96 @@ def environment_extend(request) -> tuple[str, bool]:
         yaml_path = Path(tmp_dir) / f'{request.name}.yml'
         dict_to_yaml(yaml_path, environment_content)
         return environment_load(str(yaml_path), force=request.force, no_copy=False)
+
+
+def _warn_if_base_in_use(vm_id: str | None) -> None:
+    """Log a warning if the base VM has active `VmInstance` rows.
+
+    The interactive overlay reads the base read-only through its backing chain,
+    so this is advisory rather than blocking. Any DB hiccup degrades to a
+    warning rather than aborting the extend.
+    """
+    if not vm_id:
+        return
+    from adare.database.api.vm import VmApi
+    try:
+        with VmApi() as api:
+            active = api.get_vm_instances_for_vm(vm_id, status='active')
+    except SQLAlchemyError as e:
+        log.warning('Could not check for active VM instances on the base disk: %s', e)
+        return
+    if active:
+        log.warning(
+            'Base VM has %d active instance(s). The interactive overlay reads '
+            'the base read-only, so this is safe, but note the base is in use.',
+            len(active),
+        )
+
+
+def _interactive_extend(request, source_view: dict, installations: list[dict],
+                        tags: list[str]) -> tuple[str, bool]:
+    """
+    Interactive/manual extend (Mode B), QEMU only.
+
+    Boots a throwaway overlay of the base disk in a GUI window, flattens the
+    result into a new standalone qcow2, then registers that disk as a NEW base
+    VM + environment. See `hypervisor/qemu/vm_creator/extend_creator.py`.
+
+    Raises:
+        HypervisorException: If the source is not a QEMU environment, or the
+            overlay/boot/flatten step fails (caught cleanly by the service).
+    """
+    if source_view['hypervisor'] != 'qemu':
+        raise HypervisorException(
+            f"Interactive extend is QEMU-only (source hypervisor is "
+            f"'{source_view['hypervisor']}')."
+        )
+
+    # Imported lazily so the declarative path never pulls in the QEMU creator.
+    from adare.hypervisor.qemu.vm_creator.extend_creator import run_interactive_extend
+
+    base_disk = Path(source_view['vm_file'])
+    dest = Path.cwd() / f'{request.disk_name or request.name}.qcow2'
+
+    _warn_if_base_in_use(source_view.get('vm_id'))
+
+    run_interactive_extend(base_disk, dest, source_view['os'], request.ram, request.cpus)
+
+    return _finalize_environment(request, str(dest), source_view, installations, tags)
+
+
+def environment_extend(request) -> tuple[str, bool]:
+    """
+    Extend `request.source` into a new environment `request.name`.
+
+    Declarative mode reuses the SAME base disk plus merged post-setup installs.
+    Interactive mode (`request.interactive`, QEMU only) boots an overlay of the
+    base for manual customization, flattens it into a NEW standalone disk, and
+    registers that as a new base VM. Both modes may also carry `--install`
+    entries. Return shape mirrors `environment_load`.
+
+    Args:
+        request: EnvironmentExtendRequest
+
+    Returns:
+        Tuple of (environment_ulid, created).
+
+    Raises:
+        EnvironmentDoesNotExistInDatabase: If the source cannot be resolved.
+        HypervisorException: Interactive mode on a non-QEMU source, or a QEMU
+            overlay/boot/flatten failure.
+        EnvironmentAlreadyExists / EnvironmentUpdateError / EnvironmentLoadFailed:
+            Propagated from `environment_load`.
+    """
+    source_view = _resolve_source(request.source)
+
+    installations = _merged_installations(
+        source_view['installations'], request.installs, request.from_file,
+        request.shell, request.cwd
+    )
+    tags = list(dict.fromkeys([*source_view['tags'], *request.tags]))
+
+    if request.interactive:
+        return _interactive_extend(request, source_view, installations, tags)
+
+    return _finalize_environment(request, source_view['vm_file'], source_view, installations, tags)
