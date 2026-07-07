@@ -796,46 +796,101 @@ async def start_qemu_test_vm(context):
     log.info("QEMU test VM started and ready")
 
 
-async def _cleanup_registered_test_vm(context, keep_vm: bool = False):
+class _CleanupFailed(Exception):
+    """Sentinel: cleanup completed but one or more best-effort steps failed.
+
+    Raised from _cleanup_registered_test_vm so StageCtxManagerLite.__aexit__
+    marks the cleanup stage FAILED; caught at the call site so it does NOT
+    propagate out of the finally block and does NOT flip the compatibility
+    verdict.
+    """
+    def __init__(self, errors: list[str]):
+        super().__init__("; ".join(errors))
+        self.errors = errors
+
+
+async def _cleanup_registered_test_vm(context, keep_vm: bool = False,
+                                      flow_console=None, stage_id: str | None = None):
     """Stop the test VM and remove its transient overlay + libvirt domain.
 
     Replicates the overlay + libvirt-undefine parts of the QEMU cleanup in
     vm_lifecycle_manager (NOT _release_vm_instance, which touches the
     VmInstance DB table). The immutable base disk is left untouched.
     """
+    def _update_message(message: str) -> None:
+        if flow_console is not None and stage_id is not None:
+            try:
+                flow_console.change_log_message(stage_id, message)
+            except (AttributeError, KeyError, RuntimeError):
+                pass
+
+    # Each best-effort step records its failure here; if non-empty at the end
+    # we raise _CleanupFailed so the stage finalizes as ✖, but the per-step
+    # ✖ children (rendered via _surface_error) are what the reader actually sees.
+    cleanup_errors: list[str] = []
+
+    def _surface_error(step_key: str, label: str, err: BaseException) -> None:
+        cleanup_errors.append(f"{label}: {err}")
+        if flow_console is not None and stage_id is not None:
+            try:
+                flow_console.log_failed(f"{stage_id}:err:{step_key}", f"{label} failed: {err}", level=2)
+            except (AttributeError, KeyError, RuntimeError):
+                pass
+        # File log only (the flow console suppresses console logging to
+        # CRITICAL while active); the flow ✖ child line above is the
+        # user-facing surface.
+        log.warning(f"{label} failed: {err}")
+
     log.info("Cleaning up QEMU test resources...")
 
+    # Intentionally broad `except Exception` on every step below: best-effort
+    # cleanup must not abort the remaining steps, and each failure is surfaced
+    # to the flow console (never swallowed). Mirrors the shutdown precedent
+    # in run.py (~L430).
+    _update_message("Disconnecting WebSocket…")
     try:
         if context.client:
-            await context.client.disconnect()
+            await asyncio.wait_for(context.client.disconnect(), timeout=10)
             log.info("WebSocket client disconnected")
-    except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
-        log.warning(f"Error disconnecting WebSocket client: {e}")
+    except Exception as e:
+        _surface_error("disconnect", "Disconnecting WebSocket", e)
 
     if not context.vm:
+        if cleanup_errors:
+            raise _CleanupFailed(cleanup_errors)
         return
 
-    # Stop the VM (leaves the domain defined but shut off)
+    # Stop the VM with a hard poweroff — ephemeral test VMs don't need a
+    # graceful ACPI shutdown (the overlay is discarded, the base disk is
+    # untouched). force=True calls dom.destroy() immediately and leaves the
+    # domain SHUTOFF so the undefine below still succeeds.
+    _update_message("Stopping VM…")
     try:
-        await context.vm.stop()
+        await context.vm.stop(force=True)
         log.info("Test VM stopped")
-    except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
-        log.warning(f"Error stopping test VM: {e}")
+    except Exception as e:
+        _surface_error("stop", "Stopping VM", e)
 
     if keep_vm:
         log.info("Keeping overlay and libvirt domain (--keep-vm specified)")
+        # Earlier steps (disconnect/stop) may have failed; surface them even
+        # when --keep-vm short-circuits the remaining teardown.
+        if cleanup_errors:
+            raise _CleanupFailed(cleanup_errors)
         return
 
     # Delete the experiment overlay, leaving the immutable base disk intact
+    _update_message("Cleaning up overlay disk…")
     if hasattr(context.vm, 'cleanup_overlay_disk'):
         experiment_id = context.experiment_run_ulid or 'default'
         try:
             await context.vm.cleanup_overlay_disk(experiment_id)
             log.info(f"Cleaned up QEMU overlay for test {experiment_id}")
-        except (OSError, RuntimeError) as e:
-            log.warning(f"Failed to cleanup overlay disk: {e}")
+        except Exception as e:
+            _surface_error("overlay", "Cleaning up overlay disk", e)
 
     # Undefine the transient libvirt domain to avoid stale disk references
+    _update_message("Undefining libvirt domain…")
     if hasattr(context.vm, '_libvirt_domain'):
         try:
             import libvirt
@@ -861,19 +916,26 @@ async def _cleanup_registered_test_vm(context, keep_vm: bool = False):
                             f"still running (state: {state})."
                         )
                 except libvirt.libvirtError as e:
-                    log.debug(f"Could not undefine domain: {e}")
+                    _surface_error("undefine", "Undefining libvirt domain", e)
                 finally:
                     context.vm._libvirt_domain = None
-        except (OSError, RuntimeError, ImportError) as e:
-            log.warning(f"Failed to cleanup libvirt domain: {e}")
+        except Exception as e:
+            _surface_error("undefine", "Undefining libvirt domain", e)
 
     # Remove the temporary SMB share directory staged for the test (if any)
+    _update_message("Removing temp SMB share…")
     smb_dir = getattr(context, '_test_smb_dir', None)
-    if smb_dir:
-        import shutil
-        shutil.rmtree(smb_dir, ignore_errors=True)
-        log.debug(f"Removed test SMB share directory: {smb_dir}")
+    try:
+        if smb_dir:
+            import shutil
+            shutil.rmtree(smb_dir, ignore_errors=True)
+            log.debug(f"Removed test SMB share directory: {smb_dir}")
+    except Exception as e:
+        _surface_error("smb", "Removing temp SMB share", e)
 
+    if cleanup_errors:
+        log.warning(f"VM test cleanup completed with {len(cleanup_errors)} error(s)")
+        raise _CleanupFailed(cleanup_errors)
     log.info("Cleanup completed")
 
 
@@ -975,14 +1037,29 @@ async def vm_test_registered(
     finally:
         # VM Test Cleanup Phase
         try:
-            async with StageCtxManagerLite(VMTestCleanupStage(), flow_console, level=1):
+            async with StageCtxManagerLite(VMTestCleanupStage(), flow_console, level=1) as cleanup_cm:
                 keep_vm = False
                 if context.vm and vm_cleanup_mode == 'keep':
                     keep_vm = True
                     log.info("Keeping VM for further testing (--keep-vm specified)")
-                await _cleanup_registered_test_vm(context, keep_vm=keep_vm)
+                await _cleanup_registered_test_vm(
+                    context,
+                    keep_vm=keep_vm,
+                    flow_console=flow_console,
+                    stage_id=cleanup_cm.stage_id,
+                )
+        except _CleanupFailed:
+            # Cleanup stage already marked ✖ by __aexit__; per-step ✖ children
+            # show the cause. Do NOT re-raise — a cleanup failure must not flip
+            # the compatibility verdict.
+            pass
         except (OSError, ConnectionError, TimeoutError, RuntimeError) as cleanup_error:
             log.error(f"Error during cleanup: {cleanup_error}")
+
+        # Let the render thread paint the final cleanup state (✖ + child lines)
+        # before stop, otherwise the persisted Live frame stays on the last
+        # spinning sub-step label.
+        await asyncio.sleep(0.3)
 
         # Stop the flow console
         try:
