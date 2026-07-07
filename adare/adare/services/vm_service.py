@@ -647,6 +647,8 @@ class VMService:
         """
         from pathlib import Path
 
+        from adare.hypervisor.exceptions import HypervisorException
+
         hypervisor = (request.hypervisor or '').lower()
 
         try:
@@ -706,4 +708,6 @@ class VMService:
             ))
 
         except VMError as e:
+            return Result.from_exception(e)
+        except HypervisorException as e:
             return Result.from_exception(e)
