@@ -313,10 +313,10 @@ def create(name, project, with_vm):
 @click.option('--from-file', type=click.Path(exists=True), help='YAML file with post-setup installations to add')
 @click.option('--shell', is_flag=True, help='Run --install commands through a shell')
 @click.option('--cwd', help='Working directory for --install commands')
-@click.option('--interactive', '--manual', 'interactive', is_flag=True, help='Interactive extend (not yet implemented)')
-@click.option('--ram', type=int, help='[interactive mode] RAM in MB for the extended VM')
-@click.option('--cpus', type=int, help='[interactive mode] CPU count for the extended VM')
-@click.option('--disk-name', help='[interactive mode] Name for the new overlay disk')
+@click.option('--interactive', '--manual', 'interactive', is_flag=True, help='Boot the base in a GUI window for manual customization (QEMU only)')
+@click.option('--ram', type=int, help='[interactive mode] RAM in MB for the boot window')
+@click.option('--cpus', type=int, help='[interactive mode] CPU count for the boot window')
+@click.option('--disk-name', help='[interactive mode] Name for the new flattened disk (defaults to --name)')
 @click.option('--description', '-d', help='Description for the new environment')
 @click.option('--tag', '-t', multiple=True, help='Tag to attach to the new environment (repeatable)')
 @click.option('--force', '-f', is_flag=True, help='Force overwrite if the new name already exists')
@@ -331,6 +331,11 @@ def extend(source, name, install, from_file, shell, cwd, interactive, ram, cpus,
     installations on top of the source's existing ones; the new environment
     is a strict superset and shares the same underlying VM disk (no new VM
     is created).
+
+    Interactive mode (--interactive, QEMU only): boots a throwaway overlay of
+    the base disk in a GUI window so you can install software by hand. On
+    shutdown the overlay is flattened into a new standalone disk and registered
+    as a NEW base VM + environment. May be combined with --install.
     """
     from adare.cli.environment_extend import exec_environment_extend
     args = SimpleNamespace(
