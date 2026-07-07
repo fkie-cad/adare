@@ -133,9 +133,20 @@ async def mount_shared_directories_in_test_vm(context):
 
 
 # VM Compatibility Test Functions
+#
+# NOTE: run_command executes the given string via the guest's native shell --
+# PowerShell on Windows guests, /bin/sh on Linux -- so every probe below must
+# be issued in the correct syntax for the guest OS. Windows PowerShell cmdlets
+# (e.g. Test-Path) do not set a process exit code, so those branches exit
+# explicitly to make returncode meaningful.
+def _is_windows(context) -> bool:
+    return 'windows' in context.guest_platform.lower()
+
+
 async def test_vm_response(context):
     """Test basic VM responsiveness."""
-    test_result = await context.vm.run_command("true", stop_event=context.user_interrupt_event)
+    cmd = "Write-Output ok" if _is_windows(context) else "true"
+    test_result = await context.vm.run_command(cmd, stop_event=context.user_interrupt_event)
     if test_result.returncode == 0:
         log.info("VM is responsive to commands")
         return True
@@ -144,9 +155,12 @@ async def test_vm_response(context):
 
 
 async def test_shared_folders(context):
-    """Test shared folder accessibility."""
-    # Check if vm runtime directory is accessible
-    ls_result = await context.vm.run_command("test -d /adare/vm", stop_event=context.user_interrupt_event)
+    """Test shared folder accessibility (adarevm source reachable in guest)."""
+    if _is_windows(context):
+        cmd = "if (Test-Path 'C:\\adare\\vm\\pyproject.toml') { exit 0 } else { exit 1 }"
+    else:
+        cmd = "test -f /adare/vm/pyproject.toml"
+    ls_result = await context.vm.run_command(cmd, stop_event=context.user_interrupt_event)
     if ls_result.returncode == 0:
         log.info("Shared folders are accessible")
         return True
@@ -156,7 +170,16 @@ async def test_shared_folders(context):
 
 async def test_python_availability(context):
     """Test Python availability in VM."""
-    python_result = await context.vm.run_command("python3 --version", stop_event=context.user_interrupt_event)
+    if _is_windows(context):
+        # Windows ships 'python'/'py', not 'python3'. The App Execution Alias
+        # stub returns non-zero, so accept either launcher.
+        cmd = (
+            "python --version; if ($LASTEXITCODE -eq 0) { exit 0 }; "
+            "py --version; exit $LASTEXITCODE"
+        )
+    else:
+        cmd = "python3 --version"
+    python_result = await context.vm.run_command(cmd, stop_event=context.user_interrupt_event)
     if python_result.returncode == 0:
         log.info("Python is available")
         return True
@@ -165,8 +188,14 @@ async def test_python_availability(context):
 
 
 async def test_uv_availability(context):
-    """Test uv availability in VM."""
-    uv_result = await context.vm.run_command("uv --version", stop_event=context.user_interrupt_event)
+    """Test uv availability in VM (needed to launch adarevm from source)."""
+    # 'uv --version' is identical on both shells; inject the user PATH on Windows
+    # so a per-user uv install (e.g. %USERPROFILE%\.local\bin) is discoverable.
+    uv_result = await context.vm.run_command(
+        "uv --version",
+        stop_event=context.user_interrupt_event,
+        inject_user_path=_is_windows(context),
+    )
     if uv_result.returncode == 0:
         log.info("uv is available")
         return True
@@ -175,31 +204,74 @@ async def test_uv_availability(context):
 
 
 async def test_adarevm_server_start(context, guest_bind_port: int | None = None):
-    """Test starting the adarevm WebSocket server.
+    """Test starting the adarevm WebSocket server from the shared source.
 
-    NOTE: This test requires uv-based VMs (does not support wheel-only installations).
-    The test uses 'uv run' to start the adarevm server from source.
+    Launches the ``adarevm`` console entry point (``adarevm.main:run``) via uv.
+    The server always binds ``0.0.0.0:18765`` (hardcoded in AdareVMServer); there
+    is no ``--port`` flag, so ``guest_bind_port`` is informational only -- for
+    QEMU the host reaches it over the 19000->18765 forward.
+
+    On Windows the launch mirrors the real experiment flow (agent_lifecycle):
+    a user-session scheduled task (``run_as_user``) is required for the GUI
+    automation the later screenshot/click tests exercise, and -- in SMB mode --
+    that task's session must re-establish the ``\\\\10.0.2.4\\qemu`` connection
+    before it can resolve the ``C:\\adare\\vm`` junction. The scheduled-task
+    runner waits and verifies port 18765 is LISTENING before returning.
+
+    NOTE: requires uv-based (editable) VMs; wheel-only images are not covered.
 
     Args:
         context: ExperimentRunCtx
-        guest_bind_port: In-guest bind port for the adarevm server. When None
-            (VirtualBox/OVA loopback) the server binds ``context.config.websocket_port``.
-            For QEMU the guest must bind 18765 while the host connects on the
-            forwarded ``websocket_port`` -- pass ``guest_bind_port=18765`` there.
+        guest_bind_port: In-guest bind port expected by the caller (18765 for QEMU).
     """
+    if guest_bind_port is not None and guest_bind_port != 18765:
+        log.warning(
+            f"adarevm binds 18765 unconditionally; requested guest_bind_port="
+            f"{guest_bind_port} cannot be honored."
+        )
     try:
-        # Start adarevm server in background
-        # NOTE: This requires uv - does not work with wheel-only installations
-        bind_port = guest_bind_port if guest_bind_port is not None else context.config.websocket_port
-        start_command = f"cd /adare/vm && uv run python -m adarevm.server --port {bind_port} &"
+        if _is_windows(context):
+            # Editable source is shared at C:\adare\vm (project root with
+            # pyproject.toml). Re-establish SMB in the task's user session so
+            # the junction resolves, then launch adarevm from that directory.
+            log_path = r'C:\Windows\Temp'
+            stderr_log = rf'{log_path}\adarevm_stderr.log'
+            run_cmd = 'uv run adarevm'
+            if getattr(context.vm.config, 'smb_share_path', None):
+                run_cmd = (
+                    'reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services'
+                    '\\LanmanWorkstation\\Parameters" '
+                    '/v AllowInsecureGuestAuth /t REG_DWORD /d 1 /f >$null 2>&1; '
+                    'Set-SmbClientConfiguration -RequireSecuritySignature $false '
+                    '-Force -ErrorAction SilentlyContinue; '
+                    f'net use \\\\10.0.2.4\\qemu /persistent:no 2>>"{stderr_log}"; '
+                    + run_cmd
+                )
+            start_result = await context.vm.run_command(
+                run_cmd,
+                cwd=r'C:\adare\vm',
+                admin=True,
+                run_as_user=True,
+                stop_event=context.user_interrupt_event,
+                redirect_stdout=rf'{log_path}\adarevm_stdout.log',
+                redirect_stderr=stderr_log,
+            )
+            if start_result.returncode == 0:
+                log.info("AdareVM server started successfully (port 18765 listening)")
+                return True
+            log.warning(
+                f"Failed to start adarevm server. Exit code: "
+                f"{start_result.returncode}. stderr: {start_result.stderr}"
+            )
+            return False
 
+        # Linux: launch editable adarevm in the background from the source dir.
+        start_command = "cd /adare/vm && uv run adarevm &"
         start_result = await context.vm.run_command(start_command, stop_event=context.user_interrupt_event)
-
         if start_result.returncode == 0:
-            log.info("AdareVM server started successfully")
-            # Give server time to initialize
+            log.info("AdareVM server launched; waiting for it to initialize")
             import asyncio
-            await asyncio.sleep(3.0)
+            await asyncio.sleep(5.0)
             return True
         log.warning(f"Failed to start adarevm server. Exit code: {start_result.returncode}")
         return False
@@ -290,7 +362,7 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
         'vm_responsive': False,
         'shared_folders_working': False,
         'python_available': False,
-        'poetry_available': False,
+        'uv_available': False,  # set by test_uv_availability below
         'adarevm_server_starts': False,
         'websocket_connection': False,
         'screenshot_command': False,
