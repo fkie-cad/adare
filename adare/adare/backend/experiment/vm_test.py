@@ -628,34 +628,87 @@ async def setup_qemu_networking_for_test(context):
 
 
 async def setup_qemu_share_for_test(context):
-    """Configure a single virtio-fs share (ADAREVM_DIR -> /adare/vm).
+    """Make the adarevm source available in the guest at /adare/vm.
 
     Bypasses the project-coupled build_share_list: the compat test only needs
-    the adarevm source available at /adare/vm so the guest can start the server.
+    the adarevm source at /adare/vm so the guest can start the server.
+
+    The mechanism follows the file-transfer strategy the QEMU lifecycle would
+    resolve on this host (``detect_file_transfer_mode``), because
+    ``start_qemu_test_vm`` delegates post-boot mounting to that same resolved
+    strategy:
+
+    - ``virtiofs`` (Linux, virtiofsd present): configure a single virtio-fs
+      share; VirtioFSStrategy mounts it post-boot.
+    - ``smb`` (macOS with smbd): stage the adarevm source in a temp directory
+      served via QEMU SLIRP SMB (``smb_share_path``); SMBStrategy.post_boot_transfer
+      mounts ``//10.0.2.4/qemu`` and junctions ``vm`` to ``C:\\adare\\vm`` (or
+      mounts it at ``/adare`` on Linux). No strategy-instance state is needed.
+
+    Other modes (qga, libguestfs) are not wired for the DB-free compat test.
     """
     from adare.config.configdirectory import ADAREVM_DIR
-
-    log.info("Configuring single virtio-fs share for test...")
+    from adare.hypervisor.exceptions import HypervisorException
+    from adare.hypervisor.qemu.file_transfer import detect_file_transfer_mode
 
     is_windows = 'windows' in context.guest_platform.lower()
     base_mount = 'C:\\adare' if is_windows else '/adare'
     guest_mount = f'{base_mount}\\vm' if is_windows else f'{base_mount}/vm'
 
-    shares = [{
-        'tag': 'vm',
-        'host_path': str(ADAREVM_DIR),
-        'guest_mount': guest_mount,
-        'readonly': True,
-    }]
+    mode = detect_file_transfer_mode()
+    log.info(f"Configuring test file share for adarevm ({mode} mode)...")
 
-    context.vm.config.virtiofs_enabled = True
-    context.vm.config.virtiofs_shares = shares
-    context.vm._save_vm_config()
+    if mode == 'virtiofs':
+        shares = [{
+            'tag': 'vm',
+            'host_path': str(ADAREVM_DIR),
+            'guest_mount': guest_mount,
+            'readonly': True,
+        }]
 
-    # Also expose on context for post-boot mounting (mirrors virtiofs strategy)
-    context.virtiofs_shares = shares
+        context.vm.config.virtiofs_enabled = True
+        context.vm.config.virtiofs_shares = shares
+        context.vm._save_vm_config()
 
-    log.info(f"Configured virtio-fs share: {ADAREVM_DIR} -> {guest_mount}")
+        # Also expose on context for post-boot mounting (mirrors virtiofs strategy)
+        context.virtiofs_shares = shares
+
+        log.info(f"Configured virtio-fs share: {ADAREVM_DIR} -> {guest_mount}")
+        return
+
+    if mode == 'smb':
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        # SMBStrategy.post_boot_transfer creates one junction per top-level
+        # directory in the share, so stage adarevm under a 'vm' subdir; it
+        # becomes //10.0.2.4/qemu/vm -> C:\adare\vm (or /adare/vm on Linux).
+        smb_dir = Path(tempfile.mkdtemp(prefix='adare_smb_test_'))
+        shutil.copytree(str(ADAREVM_DIR), str(smb_dir / 'vm'), dirs_exist_ok=True)
+
+        context.vm.config.smb_share_path = str(smb_dir)
+        context.vm.config.virtiofs_enabled = False
+        context.vm.config.virtiofs_shares = []
+        context.vm._save_vm_config()
+
+        # Track for teardown (SMBStrategy's own cleanup never runs for the test,
+        # since setup() was bypassed and post_boot uses a fresh strategy instance)
+        context._test_smb_dir = str(smb_dir)
+
+        log.info(
+            f"Configured QEMU SLIRP SMB share: {ADAREVM_DIR} -> "
+            f"{smb_dir / 'vm'} -> {guest_mount}"
+        )
+        return
+
+    raise HypervisorException(
+        f"vm test does not support '{mode}' file transfer mode. The compat "
+        f"test needs adarevm at {guest_mount}, which requires virtiofsd (Linux) "
+        f"or smbd for QEMU SLIRP SMB (macOS: brew install samba and symlink it "
+        f"to QEMU's compiled-in smbd path). See earlier logs for the exact "
+        f"symlink command."
+    )
 
 
 async def start_qemu_test_vm(context):
@@ -719,7 +772,16 @@ async def _cleanup_registered_test_vm(context, keep_vm: bool = False):
                 try:
                     state, _ = context.vm._libvirt_domain.state()
                     if state == libvirt.VIR_DOMAIN_SHUTOFF:
-                        context.vm._libvirt_domain.undefine()
+                        # UEFI guests (e.g. win11arm2) carry an NVRAM varstore;
+                        # a bare undefine() is rejected for those. Mirror the
+                        # flags used in QEMUVM.remove() (vm.py).
+                        flags = (libvirt.VIR_DOMAIN_UNDEFINE_MANAGED_SAVE |
+                                 libvirt.VIR_DOMAIN_UNDEFINE_SNAPSHOTS_METADATA |
+                                 libvirt.VIR_DOMAIN_UNDEFINE_NVRAM)
+                        try:
+                            context.vm._libvirt_domain.undefineFlags(flags)
+                        except AttributeError:
+                            context.vm._libvirt_domain.undefine()
                         log.info(f"Undefined libvirt domain '{context.vm.vm_name}'")
                     else:
                         log.warning(
@@ -732,6 +794,13 @@ async def _cleanup_registered_test_vm(context, keep_vm: bool = False):
                     context.vm._libvirt_domain = None
         except (OSError, RuntimeError, ImportError) as e:
             log.warning(f"Failed to cleanup libvirt domain: {e}")
+
+    # Remove the temporary SMB share directory staged for the test (if any)
+    smb_dir = getattr(context, '_test_smb_dir', None)
+    if smb_dir:
+        import shutil
+        shutil.rmtree(smb_dir, ignore_errors=True)
+        log.debug(f"Removed test SMB share directory: {smb_dir}")
 
     log.info("Cleanup completed")
 
