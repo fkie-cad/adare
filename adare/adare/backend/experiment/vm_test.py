@@ -174,16 +174,24 @@ async def test_uv_availability(context):
     return False
 
 
-async def test_adarevm_server_start(context):
+async def test_adarevm_server_start(context, guest_bind_port: int | None = None):
     """Test starting the adarevm WebSocket server.
 
     NOTE: This test requires uv-based VMs (does not support wheel-only installations).
     The test uses 'uv run' to start the adarevm server from source.
+
+    Args:
+        context: ExperimentRunCtx
+        guest_bind_port: In-guest bind port for the adarevm server. When None
+            (VirtualBox/OVA loopback) the server binds ``context.config.websocket_port``.
+            For QEMU the guest must bind 18765 while the host connects on the
+            forwarded ``websocket_port`` -- pass ``guest_bind_port=18765`` there.
     """
     try:
         # Start adarevm server in background
         # NOTE: This requires uv - does not work with wheel-only installations
-        start_command = f"cd /adare/vm && uv run python -m adarevm.server --port {context.config.websocket_port} &"
+        bind_port = guest_bind_port if guest_bind_port is not None else context.config.websocket_port
+        start_command = f"cd /adare/vm && uv run python -m adarevm.server --port {bind_port} &"
 
         start_result = await context.vm.run_command(start_command, stop_event=context.user_interrupt_event)
 
@@ -254,8 +262,16 @@ async def test_click_command(context):
         return False
 
 
-async def test_vm_compatibility(context, flow_console):
-    """Test VM compatibility with ADARE WebSocket server and execute simple experiment commands."""
+async def test_vm_compatibility(context, flow_console, guest_bind_port: int | None = None):
+    """Test VM compatibility with ADARE WebSocket server and execute simple experiment commands.
+
+    Args:
+        context: ExperimentRunCtx
+        flow_console: ExperimentFlowConsole for progress reporting
+        guest_bind_port: Optional in-guest bind port for the adarevm server. Threaded
+            through to ``test_adarevm_server_start``. None keeps the OVA/VirtualBox
+            loopback behavior; QEMU passes 18765 (host connects on the forwarded port).
+    """
     from adare.backend.events.stages import (
         VMAdareServerTestStage,
         VMClickTestStage,
@@ -266,7 +282,7 @@ async def test_vm_compatibility(context, flow_console):
         VMSharedFoldersTestStage,
         VMWebSocketTestStage,
     )
-    from adare.backend.experiment.stagectxmanager import StageCtxManagerLite
+    from adare.backend.experiment.commands.manage import StageCtxManagerLite
 
     log.info("Testing VM compatibility with ADARE WebSocket server...")
 
@@ -300,7 +316,7 @@ async def test_vm_compatibility(context, flow_console):
 
         # Test 5: Start adarevm WebSocket server with substage
         async with StageCtxManagerLite(VMAdareServerTestStage(), flow_console, level=2):
-            compatibility_results['adarevm_server_starts'] = await test_adarevm_server_start(context)
+            compatibility_results['adarevm_server_starts'] = await test_adarevm_server_start(context, guest_bind_port=guest_bind_port)
 
         # Test 6: WebSocket connection with substage
         async with StageCtxManagerLite(VMWebSocketTestStage(), flow_console, level=2):
@@ -380,7 +396,7 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
         True if VM is compatible with ADARE, False otherwise
     """
     from adare.backend.events.stages import VMCompatibilityTestStage, VMTestCleanupStage, VMTestSetupStage
-    from adare.backend.experiment.stagectxmanager import StageCtxManagerLite
+    from adare.backend.experiment.commands.manage import StageCtxManagerLite
     from adare.backend.experiment.step_runner import ExperimentStepRunner
 
     if not ova_file_path.exists():
@@ -395,7 +411,7 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
     log.info(f"Platform: {guest_platform}")
 
     # Create and start flow console for better visibility
-    from adare.backend.experiment.commands import __create_and_start_flow_console, __start_event_listeners
+    from adare.backend.experiment.diff_run import __create_and_start_flow_console, __start_event_listeners
     user_interrupt_event = threading.Event()
     flow_console = __create_and_start_flow_console("vm_test", disable_printing=False, external_stop_event=user_interrupt_event)
     flow_console.start_experiment_timer(f"VM Test: {ova_file_path.name}")
@@ -479,4 +495,359 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
             flow_console.stop()
         except (OSError, RuntimeError) as e:
             # Cleanup in finally must not mask the original error
+            log.error(f"Error stopping flow console: {e}")
+
+
+# =============================================================================
+# Registered QEMU VM compatibility test
+#
+# Mirrors the OVA flow above but for a VM already registered in the database.
+# It runs entirely DB-free (no VmInstance rows), boots the guest off an
+# overlay backed by the immutable base disk, and reuses the same compatibility
+# test functions and stage classes as ova_test.
+# =============================================================================
+
+def create_registered_test_context(vm_name: str, disk_path: str, guest_platform: str, architecture: str):
+    """Create minimal context for testing a registered QEMU VM.
+
+    Mirrors create_ova_test_context but targets QEMU: it sets hypervisor_type
+    so connect_websocket / cleanup branch correctly, records the guest
+    architecture for machine/accel selection, and stores the base disk path.
+
+    Args:
+        vm_name: Registered VM name (used only for logging / display)
+        disk_path: Path to the VM's immutable base disk (vm.file)
+        guest_platform: 'linux' or 'windows'
+        architecture: Guest CPU architecture (e.g. 'x86_64' or 'aarch64')
+    """
+    import ulid
+
+    from adare.backend.experiment.runctx import ExperimentConfig, ExperimentRunCtx
+    from adare.config.configdirectory import ADAREVM_DIR
+
+    # Minimal config for testing. websocket_port is the fixed test HOST port;
+    # setup_networking forwards it to the in-guest 18765.
+    config = ExperimentConfig(
+        project_path=Path("/tmp"),  # Dummy path
+        experiment_name="qemu_vm_test",
+        environment_name="qemu_vm_test_env",
+        test_mode=True,
+        preserve_snapshot=False,
+        vm_cpus=2,
+        vm_memory=2048,
+        websocket_port=19000,  # Test port outside production range
+        vm_resolution=(1920, 1080)
+    )
+
+    context = ExperimentRunCtx(config=config)
+    context.vm_name = f"adare_qemu_test_{int(time.time())}"
+    context.experiment_run_ulid = str(ulid.ULID())
+    context.guest_platform = guest_platform
+    context.guest_architecture = architecture
+    context.hypervisor_type = 'qemu'  # CRITICAL: connect_websocket + cleanup branch on this
+    context.adarevm = ADAREVM_DIR
+    context.vm = None
+    context.client = None
+
+    # Store immutable base disk path for overlay creation
+    context._registered_disk_path = disk_path
+    context._registered_vm_name = vm_name
+
+    return context
+
+
+async def create_qemu_vm_for_test(context):
+    """Build a QEMUVM for the test and back it with an overlay disk.
+
+    Mirrors QEMULifecycleStrategy.prepare_vm_for_experiment (arch/machine/accel
+    selection + Apple-Silicon guard) but without any DB/environment lookups.
+    The base disk stays immutable: all writes go to the experiment overlay.
+    """
+    import platform as _platform
+
+    from adare.config import get_vm_credentials
+    from adare.hypervisor.exceptions import HypervisorException
+    from adare.hypervisor.qemu.manager import QEMUManager
+    from adare.hypervisor.qemu.vm import QEMUVM
+
+    log.info("Phase 1 - Preparing QEMU VM for test...")
+
+    vm_architecture = context.guest_architecture or 'x86_64'
+
+    # Block x86_64 guests on Apple Silicon (no hardware acceleration)
+    if _platform.system() == 'Darwin' and _platform.machine() == 'arm64' and vm_architecture != 'aarch64':
+        raise HypervisorException(
+            f"QEMU cannot hardware-accelerate {vm_architecture} guests on Apple Silicon (ARM). "
+            "Only aarch64 guests are supported on Apple Silicon with HVF. "
+            "Use VirtualBox instead (supports x86 via Rosetta)."
+        )
+
+    # Compute architecture-appropriate machine type and accelerator
+    if vm_architecture == 'aarch64':
+        vm_machine = 'virt'
+        vm_accel = 'hvf' if _platform.system() == 'Darwin' else 'kvm'
+    else:
+        vm_machine = 'pc'
+        vm_accel = 'hvf' if _platform.system() == 'Darwin' else 'kvm'
+
+    qemu_manager = QEMUManager()
+    username, password = get_vm_credentials(context.guest_platform)
+
+    # Pass the base disk path explicitly so QEMUVM treats it as the (external)
+    # base and does not derive a managed path from the synthetic test vm_name.
+    context.vm = QEMUVM(
+        vm_name=context.vm_name,
+        guest_os=context.guest_platform,
+        manager=qemu_manager,
+        username=username,
+        password=password,
+        executables=qemu_manager.executables,
+        cpus=context.config.vm_cpus,
+        ram=context.config.vm_memory,
+        machine=vm_machine,
+        accel=vm_accel,
+        disk_path=context._registered_disk_path,
+        architecture=vm_architecture
+    )
+    log.debug(f"Created QEMU VM instance for test: {context.vm_name}")
+
+    # Create experiment overlay backed by the immutable base disk and point the
+    # VM at the overlay so all disk writes stay off the base (forensic integrity).
+    overlay_path = await context.vm.create_overlay_disk(context.experiment_run_ulid)
+    context.vm.config.disk_path = overlay_path
+    context.vm._save_vm_config()
+    log.info(f"Using overlay disk for test (base preserved): {overlay_path}")
+
+
+async def setup_qemu_networking_for_test(context):
+    """Set up host->guest port forwarding for the WebSocket server."""
+    from adare.hypervisor.qemu.lifecycle import QEMULifecycleStrategy
+
+    log.info("Setting up QEMU port forwarding...")
+    await QEMULifecycleStrategy().setup_networking(context)
+
+
+async def setup_qemu_share_for_test(context):
+    """Configure a single virtio-fs share (ADAREVM_DIR -> /adare/vm).
+
+    Bypasses the project-coupled build_share_list: the compat test only needs
+    the adarevm source available at /adare/vm so the guest can start the server.
+    """
+    from adare.config.configdirectory import ADAREVM_DIR
+
+    log.info("Configuring single virtio-fs share for test...")
+
+    is_windows = 'windows' in context.guest_platform.lower()
+    base_mount = 'C:\\adare' if is_windows else '/adare'
+    guest_mount = f'{base_mount}\\vm' if is_windows else f'{base_mount}/vm'
+
+    shares = [{
+        'tag': 'vm',
+        'host_path': str(ADAREVM_DIR),
+        'guest_mount': guest_mount,
+        'readonly': True,
+    }]
+
+    context.vm.config.virtiofs_enabled = True
+    context.vm.config.virtiofs_shares = shares
+    context.vm._save_vm_config()
+
+    # Also expose on context for post-boot mounting (mirrors virtiofs strategy)
+    context.virtiofs_shares = shares
+
+    log.info(f"Configured virtio-fs share: {ADAREVM_DIR} -> {guest_mount}")
+
+
+async def start_qemu_test_vm(context):
+    """Start the QEMU test VM and mount shares via the lifecycle strategy.
+
+    Uses QEMULifecycleStrategy.start_and_initialize_vm which tolerates
+    context.playbook being None and performs post-boot virtio-fs mounting.
+    """
+    from adare.hypervisor.qemu.lifecycle import QEMULifecycleStrategy
+
+    log.info("Starting QEMU test VM...")
+    await QEMULifecycleStrategy().start_and_initialize_vm(context)
+    log.info("QEMU test VM started and ready")
+
+
+async def _cleanup_registered_test_vm(context, keep_vm: bool = False):
+    """Stop the test VM and remove its transient overlay + libvirt domain.
+
+    Replicates the overlay + libvirt-undefine parts of the QEMU cleanup in
+    vm_lifecycle_manager (NOT _release_vm_instance, which touches the
+    VmInstance DB table). The immutable base disk is left untouched.
+    """
+    log.info("Cleaning up QEMU test resources...")
+
+    try:
+        if context.client:
+            await context.client.disconnect()
+            log.info("WebSocket client disconnected")
+    except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
+        log.warning(f"Error disconnecting WebSocket client: {e}")
+
+    if not context.vm:
+        return
+
+    # Stop the VM (leaves the domain defined but shut off)
+    try:
+        await context.vm.stop()
+        log.info("Test VM stopped")
+    except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
+        log.warning(f"Error stopping test VM: {e}")
+
+    if keep_vm:
+        log.info("Keeping overlay and libvirt domain (--keep-vm specified)")
+        return
+
+    # Delete the experiment overlay, leaving the immutable base disk intact
+    if hasattr(context.vm, 'cleanup_overlay_disk'):
+        experiment_id = context.experiment_run_ulid or 'default'
+        try:
+            await context.vm.cleanup_overlay_disk(experiment_id)
+            log.info(f"Cleaned up QEMU overlay for test {experiment_id}")
+        except (OSError, RuntimeError) as e:
+            log.warning(f"Failed to cleanup overlay disk: {e}")
+
+    # Undefine the transient libvirt domain to avoid stale disk references
+    if hasattr(context.vm, '_libvirt_domain'):
+        try:
+            import libvirt
+
+            if context.vm._libvirt_domain:
+                try:
+                    state, _ = context.vm._libvirt_domain.state()
+                    if state == libvirt.VIR_DOMAIN_SHUTOFF:
+                        context.vm._libvirt_domain.undefine()
+                        log.info(f"Undefined libvirt domain '{context.vm.vm_name}'")
+                    else:
+                        log.warning(
+                            f"Cannot undefine domain '{context.vm.vm_name}' - "
+                            f"still running (state: {state})."
+                        )
+                except libvirt.libvirtError as e:
+                    log.debug(f"Could not undefine domain: {e}")
+                finally:
+                    context.vm._libvirt_domain = None
+        except (OSError, RuntimeError, ImportError) as e:
+            log.warning(f"Failed to cleanup libvirt domain: {e}")
+
+    log.info("Cleanup completed")
+
+
+async def vm_test_registered(
+    vm_name: str,
+    disk_path: str,
+    guest_platform: str,
+    architecture: str = 'x86_64',
+    verbose: bool = False,
+    vm_cleanup_mode: str = 'prompt'
+) -> bool:
+    """Test a registered QEMU VM's compatibility with ADARE.
+
+    DB-free orchestrator mirroring ova_test stage-for-stage: it boots the guest
+    off an overlay, runs the shared compatibility tests, and cleans up the
+    overlay + transient libvirt domain afterwards.
+
+    Args:
+        vm_name: Registered VM name (display only)
+        disk_path: Path to the VM's immutable base disk (vm.file)
+        guest_platform: 'linux' or 'windows'
+        architecture: Guest CPU architecture
+        verbose: Enable verbose logging
+        vm_cleanup_mode: 'keep' skips overlay/domain removal; otherwise removed
+
+    Returns:
+        True if the VM is compatible with ADARE, False otherwise
+    """
+    from adare.backend.events.stages import VMCompatibilityTestStage, VMTestCleanupStage, VMTestSetupStage
+    from adare.backend.experiment.commands.manage import StageCtxManagerLite
+    from adare.backend.experiment.step_runner import ExperimentStepRunner
+    from adare.hypervisor.exceptions import HypervisorException
+
+    if guest_platform not in ['linux', 'windows']:
+        raise LoggedException(log, f"Invalid platform '{guest_platform}'. Must be 'linux' or 'windows'")
+
+    start_time = time.time()
+
+    log.info(f"vm_test_registered started - Testing registered VM: {vm_name}")
+    log.info(f"Platform: {guest_platform}, Architecture: {architecture}, Disk: {disk_path}")
+
+    # Create and start flow console for better visibility (use the fixed diff_run import)
+    from adare.backend.experiment.diff_run import __create_and_start_flow_console, __start_event_listeners
+    user_interrupt_event = threading.Event()
+    flow_console = __create_and_start_flow_console("vm_test", disable_printing=False, external_stop_event=user_interrupt_event)
+    flow_console.start_experiment_timer(f"VM Test: {vm_name}")
+
+    # Start stage event coordinator for stage management
+    from adare.backend.events.coordinator import start_stage_coordinator
+    start_stage_coordinator()
+    __start_event_listeners("vm_test")
+
+    # Create minimal DB-free context for the registered QEMU VM test
+    context = create_registered_test_context(vm_name, disk_path, guest_platform, architecture)
+    context.user_interrupt_event = user_interrupt_event
+
+    # Create step runner for consistent execution
+    stop_event = asyncio.Event()
+    context.stop_event = stop_event
+    step_runner = ExperimentStepRunner(stop_event, user_interrupt_event)
+
+    try:
+        # VM Test Setup Phase - build VM + overlay, network, share, start
+        if not stop_event.is_set():
+            log.info("Starting QEMU VM Test Setup Phase...")
+            async with StageCtxManagerLite(VMTestSetupStage(), flow_console, level=1):
+                setup_steps = [
+                    create_qemu_vm_for_test,
+                    setup_qemu_networking_for_test,
+                    setup_qemu_share_for_test,
+                    start_qemu_test_vm,
+                ]
+                for setup_step in setup_steps:
+                    await step_runner.run_async_step(setup_step, context)
+
+        # VM Compatibility Testing Phase (guest binds 18765, host connects forwarded 19000)
+        vm_compatibility_success = False
+        if not stop_event.is_set():
+            async with StageCtxManagerLite(VMCompatibilityTestStage(), flow_console, level=1):
+                vm_compatibility_success = await step_runner.run_async_step(
+                    lambda ctx: test_vm_compatibility(ctx, flow_console, guest_bind_port=18765), context
+                )
+
+        if not vm_compatibility_success:
+            log.error("VM compatibility tests failed - VM may not be fully compatible with ADARE")
+            flow_console.finish_experiment_timer(success=False)
+            return False
+
+        elapsed_time = time.time() - start_time
+        log.info(f"Registered VM test completed successfully! VM is compatible with ADARE. (took {elapsed_time:.1f} seconds)")
+        flow_console.finish_experiment_timer(success=True)
+        return True
+
+    except (OSError, ConnectionError, TimeoutError, RuntimeError, ValueError, HypervisorException) as e:
+        log.error(f"Registered VM test failed with unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
+        flow_console.finish_experiment_timer(success=False)
+        return False
+    finally:
+        # VM Test Cleanup Phase
+        try:
+            async with StageCtxManagerLite(VMTestCleanupStage(), flow_console, level=1):
+                keep_vm = False
+                if context.vm and vm_cleanup_mode == 'keep':
+                    keep_vm = True
+                    log.info("Keeping VM for further testing (--keep-vm specified)")
+                await _cleanup_registered_test_vm(context, keep_vm=keep_vm)
+        except (OSError, ConnectionError, TimeoutError, RuntimeError) as cleanup_error:
+            log.error(f"Error during cleanup: {cleanup_error}")
+
+        # Stop the flow console
+        try:
+            from adare.backend.events.coordinator import stop_stage_coordinator
+            stop_stage_coordinator()
+            flow_console.stop()
+        except (OSError, RuntimeError) as e:
             log.error(f"Error stopping flow console: {e}")

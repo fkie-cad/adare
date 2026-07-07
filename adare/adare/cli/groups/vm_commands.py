@@ -65,26 +65,35 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_vm_instance_usage, args)
 
     @vm.command()
-    @click.argument('ova_file', type=click.Path(exists=True))
-    @click.option('--platform', '-p', required=True, type=click.Choice(['linux', 'windows']), help='VM platform (required)')
+    @click.argument('target')
+    @click.option('--platform', '-p', required=False, type=click.Choice(['linux', 'windows']), help='VM platform (required for OVA files; auto-derived for registered VMs)')
     @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output with detailed error information')
     @click.option('--keep-vm', is_flag=True, help='Keep the test VM after completion (for further testing)')
     @click.option('--remove-vm', is_flag=True, help='Automatically remove the test VM after completion')
-    def test(ova_file, platform, verbose, keep_vm, remove_vm):
-        """Test OVA file compatibility with ADARE.
+    def test(target, platform, verbose, keep_vm, remove_vm):
+        """Test ADARE compatibility of a VM.
 
-        This command validates an .ova file by:
-        - Importing the VM temporarily
+        TARGET may be either:
+        - a path to an .ova/.ovf file (VirtualBox OVA import test), or
+        - the name of a registered VM (run 'adare vm list' to see names).
+
+        The command validates the VM by:
+        - Preparing the VM (OVA import, or a QEMU overlay off the base disk)
         - Setting up shared directories and mounting them
-        - Installing dependencies and starting adarevm
-        - Establishing WebSocket connection
+        - Starting adarevm and establishing a WebSocket connection
         - Taking a screenshot and performing a test click
         - Cleaning up all temporary resources
 
-        Example: adare vm test ubuntu22.ova --platform linux
-        Example: adare vm test windows11.ova --platform windows --verbose
-        Example: adare vm test ubuntu22.ova --platform linux --keep-vm
-        Example: adare vm test ubuntu22.ova --platform linux --remove-vm
+        The registered-VM (QEMU) test requires a uv-based guest: it runs
+        'uv run python -m adarevm.server' from source inside the guest.
+
+        \b
+        Examples:
+          adare vm test ubuntu22.ova --platform linux
+          adare vm test windows11.ova --platform windows --verbose
+          adare vm test my-registered-vm            # platform auto-derived
+          adare vm test my-registered-vm --platform windows   # override
+          adare vm test my-registered-vm --keep-vm
         """
         # Handle cleanup options
         if keep_vm and remove_vm:
@@ -99,7 +108,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         from adare.cli.vm import exec_vm_test
         args = SimpleNamespace(
-            ova_file=ova_file,
+            target=target,
             platform=platform,
             verbose=verbose,
             vm_cleanup_mode=vm_cleanup_mode
