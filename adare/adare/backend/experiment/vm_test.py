@@ -272,7 +272,7 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
             through to ``test_adarevm_server_start``. None keeps the OVA/VirtualBox
             loopback behavior; QEMU passes 18765 (host connects on the forwarded port).
     """
-    from adare.backend.events.stages import (
+    from adare.types.stages import (
         VMAdareServerTestStage,
         VMClickTestStage,
         VMPoetryTestStage,
@@ -395,7 +395,7 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
     Returns:
         True if VM is compatible with ADARE, False otherwise
     """
-    from adare.backend.events.stages import VMCompatibilityTestStage, VMTestCleanupStage, VMTestSetupStage
+    from adare.types.stages import VMCompatibilityTestStage, VMTestCleanupStage, VMTestSetupStage
     from adare.backend.experiment.commands.manage import StageCtxManagerLite
     from adare.backend.experiment.step_runner import ExperimentStepRunner
 
@@ -761,7 +761,7 @@ async def vm_test_registered(
     Returns:
         True if the VM is compatible with ADARE, False otherwise
     """
-    from adare.backend.events.stages import VMCompatibilityTestStage, VMTestCleanupStage, VMTestSetupStage
+    from adare.types.stages import VMCompatibilityTestStage, VMTestCleanupStage, VMTestSetupStage
     from adare.backend.experiment.commands.manage import StageCtxManagerLite
     from adare.backend.experiment.step_runner import ExperimentStepRunner
 
