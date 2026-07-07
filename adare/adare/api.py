@@ -429,6 +429,10 @@ class VMAPI:
         """Test an OVA file (async)."""
         return await self._service.test_ova(request)
 
+    async def test_registered_vm(self, request):
+        """Test a registered VM's compatibility with ADARE (async)."""
+        return await self._service.test_registered_vm(request)
+
 
 class WebAPI:
     """Web integration and sync API."""

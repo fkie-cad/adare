@@ -305,6 +305,37 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
     return await vm_ova_test(ova_file_path, guest_platform, verbose, vm_cleanup_mode)
 
 
+async def vm_test_registered(
+    vm_name: str,
+    disk_path: str,
+    guest_platform: str,
+    architecture: str = 'x86_64',
+    verbose: bool = False,
+    vm_cleanup_mode: str = 'prompt'
+) -> bool:
+    """
+    Test a registered QEMU VM's compatibility with ADARE.
+
+    Thin wrapper around the implementation in vm_test.py (kept there for code
+    organization, mirroring ova_test).
+
+    Args:
+        vm_name: Registered VM name (display only)
+        disk_path: Path to the VM's immutable base disk (vm.file)
+        guest_platform: Platform type ('windows' or 'linux')
+        architecture: Guest CPU architecture (e.g. 'x86_64', 'aarch64')
+        verbose: Enable verbose logging
+        vm_cleanup_mode: VM cleanup mode ('keep' or 'prompt')
+
+    Returns:
+        True if VM is compatible with ADARE, False otherwise
+    """
+    from adare.backend.experiment.vm_test import vm_test_registered as vm_test_registered_impl
+    return await vm_test_registered_impl(
+        vm_name, disk_path, guest_platform, architecture, verbose, vm_cleanup_mode
+    )
+
+
 def publish_run_command(project_directory: Path, run_ulid: str):
     """
     Publish an experiment run to the server with validation and progress tracking.

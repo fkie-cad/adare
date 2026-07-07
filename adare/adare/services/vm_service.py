@@ -26,6 +26,7 @@ from adare.core.dto.vm import (
     VmInstanceUsage,
     VmListItem,
     VmLoadRequest,
+    VmRegisteredTestRequest,
     VmSnapshotInfo,
     VmTestRequest,
     VmTestResult,
@@ -628,3 +629,85 @@ class VMService:
                     'Ensure the OVA file exists at the specified location',
                 ]
             )
+
+    async def test_registered_vm(self, request: VmRegisteredTestRequest) -> Result[VmTestResult]:
+        """
+        Test a registered VM's compatibility with ADARE.
+
+        Dispatches on the VM's hypervisor:
+        - 'qemu': DB-free QEMU compatibility test (boots off an overlay).
+        - 'virtualbox': reuse the OVA test if the VM is backed by an .ova/.ovf,
+          otherwise report unsupported.
+
+        Args:
+            request: VmRegisteredTestRequest with the registered VM's details.
+
+        Returns:
+            Result[VmTestResult] with test results.
+        """
+        from pathlib import Path
+
+        from adare.hypervisor.exceptions import HypervisorException
+
+        hypervisor = (request.hypervisor or '').lower()
+
+        try:
+            if hypervisor == 'qemu':
+                from adare.backend.experiment.commands import vm_test_registered
+
+                success = await vm_test_registered(
+                    vm_name=request.vm_name,
+                    disk_path=request.disk_path,
+                    guest_platform=request.guest_platform,
+                    architecture=request.architecture,
+                    verbose=request.verbose,
+                    vm_cleanup_mode=request.vm_cleanup_mode
+                )
+            elif hypervisor == 'virtualbox':
+                if Path(request.disk_path).suffix.lower() not in ('.ova', '.ovf'):
+                    return Result.fail(
+                        code="UnsupportedVMTest",
+                        message=(
+                            "VirtualBox registered VMs can only be tested if backed by "
+                            f"an OVA/OVF file (got: {request.disk_path})."
+                        ),
+                        solutions=[
+                            'Test an .ova/.ovf file directly: adare vm test <file.ova> --platform <platform>',
+                        ]
+                    )
+
+                from adare.backend.experiment.commands import ova_test
+
+                success = await ova_test(
+                    ova_file_path=Path(request.disk_path),
+                    guest_platform=request.guest_platform,
+                    verbose=request.verbose,
+                    vm_cleanup_mode=request.vm_cleanup_mode
+                )
+            else:
+                return Result.fail(
+                    code="UnknownHypervisor",
+                    message=f"Unknown hypervisor '{request.hypervisor}' for VM '{request.vm_name}'.",
+                    solutions=[
+                        "Supported hypervisors: 'qemu', 'virtualbox'",
+                    ]
+                )
+
+            if success:
+                return Result.ok(VmTestResult(
+                    success=True,
+                    ova_file=request.disk_path,
+                    guest_platform=request.guest_platform,
+                    message=f"VM test completed successfully! '{request.vm_name}' is compatible with ADARE."
+                ))
+            return Result.ok(VmTestResult(
+                success=False,
+                ova_file=request.disk_path,
+                guest_platform=request.guest_platform,
+                message=f"VM test failed! '{request.vm_name}' may not be compatible with ADARE."
+            ))
+
+        except VMError as e:
+            return Result.from_exception(e)
+        except HypervisorException as e:
+            return Result.from_exception(e)
