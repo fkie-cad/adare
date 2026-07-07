@@ -334,12 +334,13 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
             instances = api.get_vm_instances_by_vm_id(vm_id)
             if instances:
                 log.info(f"Found {len(instances)} VM instances to delete for '{vm.name}'")
-                from adare.backend.vm.instance_manager import delete_vm_instance
+                from adare.backend.vm.instance_manager import cleanup_vm_instance
+                from adare.hypervisor.exceptions import InstanceStateException
                 for instance in instances:
                     try:
-                        await delete_vm_instance(instance.id, force=force)
+                        await cleanup_vm_instance(instance.id)
                         log.info(f"Deleted VM instance: {instance.instance_name}")
-                    except (VMError, OSError) as inst_error:
+                    except (VMError, OSError, InstanceStateException) as inst_error:
                         log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
                         if not force:
                             raise VMError(log, f"Failed to delete VM instance: {inst_error}") from inst_error
