@@ -764,7 +764,6 @@ async def vm_test_registered(
     from adare.backend.events.stages import VMCompatibilityTestStage, VMTestCleanupStage, VMTestSetupStage
     from adare.backend.experiment.commands.manage import StageCtxManagerLite
     from adare.backend.experiment.step_runner import ExperimentStepRunner
-    from adare.hypervisor.exceptions import HypervisorException
 
     if guest_platform not in ['linux', 'windows']:
         raise LoggedException(log, f"Invalid platform '{guest_platform}'. Must be 'linux' or 'windows'")
@@ -826,7 +825,7 @@ async def vm_test_registered(
         flow_console.finish_experiment_timer(success=True)
         return True
 
-    except (OSError, ConnectionError, TimeoutError, RuntimeError, ValueError, HypervisorException) as e:
+    except (OSError, ConnectionError, TimeoutError, RuntimeError, ValueError) as e:
         log.error(f"Registered VM test failed with unexpected error: {e}")
         import traceback
         traceback.print_exc()

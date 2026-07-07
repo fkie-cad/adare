@@ -59,11 +59,17 @@ class ExperimentStepRunner:
 
                 log.info(f"Async step {step_func.__name__} completed")
 
+                if step_task in done:
+                    return step_task.result()
+                return None
+
             finally:
                 # Ensure cleanup
                 for task in [step_task, stop_task]:
                     if not task.done():
                         task.cancel()
+
+        return None
 
     async def run_cleanup_step(self, step_func: Callable, context: Any, post_interrupt: bool = False, **kwargs):
         """Run a cleanup step regardless of stop event status."""

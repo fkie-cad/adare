@@ -144,8 +144,16 @@ async def exec_vm_test(arguments):
             sys.exit(1)
 
         # Derive platform from osinfo unless overridden on the command line
+        if vm.osinfo is None and not arguments.platform:
+            print(
+                f"Error: cannot determine platform for VM '{vm.name}' - it has no OS info; "
+                "pass --platform",
+                file=sys.stderr
+            )
+            sys.exit(1)
+
         platform = arguments.platform or vm.osinfo.platform
-        architecture = vm.osinfo.architecture or 'x86_64'
+        architecture = (vm.osinfo.architecture or 'x86_64') if vm.osinfo is not None else 'x86_64'
 
         result = await api.vm.test_registered_vm(VmRegisteredTestRequest(
             vm_name=vm.name,
