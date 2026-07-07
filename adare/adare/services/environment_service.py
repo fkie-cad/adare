@@ -27,14 +27,19 @@ from adare.backend.environment.exceptions import (
     EnvironmentLoadFailed,
     EnvironmentUpdateError,
 )
+from adare.backend.environment.extend import (
+    environment_extend as backend_environment_extend,
+)
 from adare.core.dto.environment import (
     EnvironmentCreateRequest,
+    EnvironmentExtendRequest,
     EnvironmentInfo,
     EnvironmentListItem,
     EnvironmentLoadRequest,
 )
 from adare.core.result import Result
 from adare.database.api.environment import EnvironmentDbApi
+from adare.hypervisor.exceptions import HypervisorException
 
 log = logging.getLogger(__name__)
 
@@ -126,6 +131,79 @@ class EnvironmentService:
         except EnvironmentAlreadyExists as e:
             return Result.from_exception(e)
         except EnvironmentUpdateError as e:
+            return Result.from_exception(e)
+
+    def extend(self, request: EnvironmentExtendRequest) -> Result[EnvironmentInfo]:
+        """
+        Extend a source environment (or VM) into a new environment that
+        reuses the same base disk plus additional post-setup installations.
+
+        Args:
+            request: EnvironmentExtendRequest with source, new name, and
+                declarative install options.
+
+        Returns:
+            Result[EnvironmentInfo] with the new environment's data on
+            success, or error information on failure.
+        """
+        try:
+            environment_ulid, created = backend_environment_extend(request)
+            reused_existing = not created
+
+            env_data = environment_database.get_environment_data(environment_ulid)
+
+            if env_data:
+                stored_name = env_data.get('name', request.name)
+                next_steps = [
+                    f'Verify the VM is ready: adare env verify {stored_name}',
+                    f'Run experiments in this environment with: adare experiment run <experiment> -e {stored_name}',
+                    'List available environments with: adare environment list',
+                ]
+                tip = (
+                    f'No new environment was created — the generated file matches '
+                    f'an existing environment "{stored_name}".'
+                    if reused_existing else
+                    f'Environment "{stored_name}" reuses the same base VM as "{request.source}"'
+                )
+
+                return Result.ok(EnvironmentInfo(
+                    id=env_data.get('id', ''),
+                    name=stored_name,
+                    description=env_data.get('description', ''),
+                    vm_name=env_data.get('vm_name'),
+                    hypervisor=environment_database.get_environment_hypervisor(environment_ulid),
+                    os_platform=env_data.get('vm_os_type'),
+                    file_path=Path(env_data['file']) if env_data.get('file') else None,
+                    next_steps=next_steps,
+                    tip=tip,
+                    reused_existing=reused_existing,
+                ))
+
+            # True error path: the extend reported success but the row is missing.
+            log.error(f'environment {environment_ulid} not found after extend')
+            return Result.ok(EnvironmentInfo(
+                id=environment_ulid,
+                name=request.name,
+                description='',
+                vm_name=None,
+                hypervisor='virtualbox',
+                os_platform=None,
+                file_path=None,
+                next_steps=[f'Environment "{request.name}" extended'],
+                reused_existing=reused_existing,
+            ))
+
+        except EnvironmentLoadFailed as e:
+            return Result.from_exception(e)
+        except EnvironmentAlreadyExists as e:
+            return Result.from_exception(e)
+        except EnvironmentUpdateError as e:
+            return Result.from_exception(e)
+        except EnvironmentDoesNotExistInDatabase as e:
+            return Result.from_exception(e)
+        except HypervisorException as e:
+            # Interactive mode: QEMU-only guard, Apple-Silicon guard, and any
+            # overlay/boot/flatten failure surface as HypervisorException.
             return Result.from_exception(e)
 
     def create(self, request: EnvironmentCreateRequest) -> Result[EnvironmentInfo]:

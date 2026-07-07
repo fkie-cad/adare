@@ -307,6 +307,46 @@ def create(name, project, with_vm):
     exec_with_error_printing(exec_environment_create, args)
 
 @env.command()
+@click.argument('source')
+@click.option('--name', '-n', required=True, help='Name for the new environment (must be unique)')
+@click.option('--install', '-i', multiple=True, help='Post-setup install as "name:command" (repeatable)')
+@click.option('--from-file', type=click.Path(exists=True), help='YAML file with post-setup installations to add')
+@click.option('--shell', is_flag=True, help='Run --install commands through a shell')
+@click.option('--cwd', help='Working directory for --install commands')
+@click.option('--interactive', '--manual', 'interactive', is_flag=True, help='Boot the base in a GUI window for manual customization (QEMU only)')
+@click.option('--ram', type=int, help='[interactive mode] RAM in MB for the boot window')
+@click.option('--cpus', type=int, help='[interactive mode] CPU count for the boot window')
+@click.option('--disk-name', help='[interactive mode] Name for the new flattened disk (defaults to --name)')
+@click.option('--description', '-d', help='Description for the new environment')
+@click.option('--tag', '-t', multiple=True, help='Tag to attach to the new environment (repeatable)')
+@click.option('--force', '-f', is_flag=True, help='Force overwrite if the new name already exists')
+@click.option('--project', '-p', help='Name of the project')
+def extend(source, name, install, from_file, shell, cwd, interactive, ram, cpus,
+           disk_name, description, tag, force, project):
+    """Extend an environment (or VM) into a new environment that reuses the same base disk.
+
+    SOURCE can be an environment name, environment ULID, or VM name.
+
+    Declarative mode (default): pass --install/--from-file to add post-setup
+    installations on top of the source's existing ones; the new environment
+    is a strict superset and shares the same underlying VM disk (no new VM
+    is created).
+
+    Interactive mode (--interactive, QEMU only): boots a throwaway overlay of
+    the base disk in a GUI window so you can install software by hand. On
+    shutdown the overlay is flattened into a new standalone disk and registered
+    as a NEW base VM + environment. May be combined with --install.
+    """
+    from adare.cli.environment_extend import exec_environment_extend
+    args = SimpleNamespace(
+        source=source, name=name, install=install, from_file=from_file,
+        shell=shell, cwd=cwd, interactive=interactive, ram=ram, cpus=cpus,
+        disk_name=disk_name, description=description, tag=tag, force=force,
+        project=project,
+    )
+    exec_with_error_printing(exec_environment_extend, args)
+
+@env.command()
 @click.argument('name')
 @click.option('--project', '-p', help='Name of the project')
 def verify(name, project):
@@ -357,6 +397,7 @@ def info(environment_name):
 # Add aliases for environment commands
 env.add_alias('l', 'list')
 env.add_alias('rm', 'remove')
+env.add_alias('ext', 'extend')
 
 
 # ------------------------------
