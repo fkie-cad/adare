@@ -101,21 +101,61 @@ def exec_vm_clear_by_environment(arguments):
 
 
 async def exec_vm_test(arguments):
-    """Test OVA file compatibility with ADARE using AdareAPI."""
+    """Test ADARE compatibility of a VM: OVA file path OR registered VM name.
+
+    Auto-detects the target:
+    - existing file -> OVA compatibility test (--platform required)
+    - otherwise -> resolve as a registered VM name and run the hypervisor-
+      appropriate compatibility test (platform auto-derived from osinfo).
+    """
     import sys
     from pathlib import Path
 
-    from adare.core.dto.vm import VmTestRequest
+    from adare.core.dto.vm import VmRegisteredTestRequest, VmTestRequest
 
-    ova_path = Path(arguments.ova_file).resolve()
+    vm_cleanup_mode = getattr(arguments, 'vm_cleanup_mode', 'prompt')
+    target_path = Path(arguments.target)
 
     api = AdareAPI()
-    result = await api.vm.test_ova(VmTestRequest(
-        ova_file_path=ova_path,
-        guest_platform=arguments.platform,
-        verbose=arguments.verbose,
-        vm_cleanup_mode=getattr(arguments, 'vm_cleanup_mode', 'prompt')
-    ))
+
+    if target_path.is_file():
+        # OVA flow (existing behavior) - platform is required here
+        if not arguments.platform:
+            print("Error: --platform is required when testing an OVA file", file=sys.stderr)
+            sys.exit(1)
+
+        result = await api.vm.test_ova(VmTestRequest(
+            ova_file_path=target_path.resolve(),
+            guest_platform=arguments.platform,
+            verbose=arguments.verbose,
+            vm_cleanup_mode=vm_cleanup_mode
+        ))
+    else:
+        # Registered-VM flow - resolve by name
+        from adare.database.api.vm import VmApi
+
+        vm = VmApi().get_vm_by_name(arguments.target)
+        if vm is None:
+            print(
+                f"Error: '{arguments.target}' is neither an existing file nor a registered VM. "
+                "Run 'adare vm list'.",
+                file=sys.stderr
+            )
+            sys.exit(1)
+
+        # Derive platform from osinfo unless overridden on the command line
+        platform = arguments.platform or vm.osinfo.platform
+        architecture = vm.osinfo.architecture or 'x86_64'
+
+        result = await api.vm.test_registered_vm(VmRegisteredTestRequest(
+            vm_name=vm.name,
+            disk_path=vm.file,
+            guest_platform=platform,
+            hypervisor=vm.hypervisor,
+            architecture=architecture,
+            verbose=arguments.verbose,
+            vm_cleanup_mode=vm_cleanup_mode
+        ))
 
     if result.success:
         if result.data.success:
