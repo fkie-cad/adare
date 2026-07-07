@@ -116,11 +116,11 @@ class ConsoleState:
         with self._lock:
             return identifier in self.messages
 
-    def start_experiment_timer(self):
+    def start_experiment_timer(self, experiment_name=None):
         with self._lock:
             self.experiment_start_time = datetime.now(UTC)
             self.messages['EXPERIMENT_TIMER'] = self._get_default_message_structure(
-                message="",
+                message=experiment_name or "",
                 level=0,
                 status=StatusEnum.NONE,
                 start_time=self.experiment_start_time,

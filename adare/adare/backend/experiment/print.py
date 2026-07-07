@@ -60,8 +60,10 @@ class ExperimentFlowConsole:
                         message_identifiers.insert(0, 'EXPERIMENT_TIMER')
 
                     # Generate ALL messages (preserve full history)
+                    prefixes = self._compute_tree_prefixes(message_identifiers, messages_snapshot)
                     generated_messages = [
-                        self._generate_message(identifier, messages_snapshot[identifier], tick_count)
+                        self._generate_message(identifier, messages_snapshot[identifier], tick_count,
+                                               prefix=prefixes[identifier])
                         for identifier in message_identifiers
                     ]
                     non_empty_messages = [msg for msg in generated_messages if msg.strip()]
@@ -123,8 +125,10 @@ class ExperimentFlowConsole:
                 message_identifiers.insert(0, 'EXPERIMENT_TIMER')
 
             # Generate and print all messages
+            prefixes = self._compute_tree_prefixes(message_identifiers, messages_snapshot)
             generated_messages = [
-                self._generate_message(identifier, messages_snapshot[identifier], spinner_position=0)
+                self._generate_message(identifier, messages_snapshot[identifier], spinner_position=0,
+                                       prefix=prefixes[identifier])
                 for identifier in message_identifiers
             ]
             non_empty_messages = [msg for msg in generated_messages if msg.strip()]
@@ -151,7 +155,38 @@ class ExperimentFlowConsole:
             from adare.setup_logging import set_console_log_level
             set_console_log_level(self._original_log_level)
 
-    def _generate_message(self, identifier: str, message_object: dict, spinner_position: int = 0):
+    def _compute_tree_prefixes(self, ordered_ids, snapshot):
+        levels = [max(0, snapshot[i]['level'] - self.indent_offset) for i in ordered_ids]
+        prefixes = {}
+        for idx, ident in enumerate(ordered_ids):
+            L = levels[idx]
+            if L == 0:
+                prefixes[ident] = ""
+                continue
+            # last sibling at this level? scan forward until level drops below L
+            is_last = True
+            for j in range(idx + 1, len(ordered_ids)):
+                if levels[j] < L:
+                    break
+                if levels[j] == L:
+                    is_last = False
+                    break
+            # ancestor continuation columns for levels 1..L-1
+            segs = []
+            for a in range(1, L):
+                cont = False
+                for j in range(idx + 1, len(ordered_ids)):
+                    if levels[j] < a:
+                        break
+                    if levels[j] == a:
+                        cont = True
+                        break
+                segs.append("[dim]│[/dim]  " if cont else "   ")
+            branch = "[dim]└─[/dim] " if is_last else "[dim]├─[/dim] "
+            prefixes[ident] = "".join(segs) + branch
+        return prefixes
+
+    def _generate_message(self, identifier: str, message_object: dict, spinner_position: int = 0, prefix: str = ""):
         # NOTE: message_object comes from snapshot, so no lock needed here
         message = message_object['message']
 
@@ -159,6 +194,9 @@ class ExperimentFlowConsole:
         if message_object.get('is_experiment_timer'):
             if not message and not message_object.get('duration') and not message_object.get('start_time'):
                 return ""
+            if message:
+                icon = StatusEnum.get_icon(message_object['status'], color=True)
+                message = f'{icon} {message}'
         else:
             icon = StatusEnum.get_icon(message_object['status'], color=True)
             message = f'{icon} {message}'
@@ -172,9 +210,8 @@ class ExperimentFlowConsole:
             else:
                 message = f'{spinner[spinner_position]} {message}'
 
-        if message_object['level'] > 0:
-            effective_level = max(0, message_object['level'] - self.indent_offset)
-            message = ' ' * 2 * effective_level + message
+        if prefix:
+            message = prefix + message
 
         if message_object['result_status']:
             message = f'{message} {StatusEnum.get_icon(message_object["result_status"], color=True)}'
@@ -452,7 +489,7 @@ class ExperimentFlowConsole:
         return f"({time_str})"
 
     def start_experiment_timer(self, experiment_name: str = None):
-        self.state.start_experiment_timer()
+        self.state.start_experiment_timer(experiment_name)
 
     def finish_experiment_timer(self, success: bool = True):
         self.state.finish_experiment_timer(success)
