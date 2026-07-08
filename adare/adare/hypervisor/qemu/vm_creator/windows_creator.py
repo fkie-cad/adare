@@ -16,6 +16,7 @@ from adare.console import console, print_section, print_step
 from adare.helperfunctions.web.download import download
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
+from adare.hypervisor.qemu.vm_creator.disk_helpers import disk_device_args
 from adare.hypervisor.qemu.vm_creator.os_catalog import (
     UTM_GUEST_TOOLS_ISO_FILENAME,
     UTM_GUEST_TOOLS_ISO_URL,
@@ -567,17 +568,9 @@ def _run_qemu_install_phase(
     # Disk — ARM64 uses NVMe (native Windows driver, no viostor needed in WinPE).
     # x86_64 uses virtio-blk-pci (viostor loaded via Autounattend DriverPaths).
     # ARM64: cache=writethrough for stability (writeback causes random corruption with HVF)
-    disk_cache = 'writethrough' if os_def.architecture == 'aarch64' else 'writeback'
-    cmd.extend([
-        '-drive', f'file={disk_path},format=qcow2,if=none,id=hd0,cache={disk_cache}',
-    ])
-    if os_def.architecture == 'aarch64':
-        # Phase 1 (boot_from_disk=False): bootindex=1 (fallback)
-        # Phase 2 (boot_from_disk=True):  bootindex=0 (primary)
-        nvme_bootindex = 0 if boot_from_disk else 1
-        cmd.extend(['-device', f'nvme,drive=hd0,serial=boot,bootindex={nvme_bootindex}'])
-    else:
-        cmd.extend(['-device', 'virtio-blk-pci,drive=hd0'])
+    # Phase 1 (boot_from_disk=False): bootindex=1 (fallback, boot from ISO)
+    # Phase 2 (boot_from_disk=True):  bootindex=0 (primary, boot from disk)
+    cmd.extend(disk_device_args(disk_path, os_def, bootindex=0 if boot_from_disk else 1))
     cmd.extend([
         # Network
         '-nic', 'user,model=virtio-net-pci',

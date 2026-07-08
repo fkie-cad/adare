@@ -10,6 +10,7 @@ from pathlib import Path
 from adare.console import console, print_section, print_step
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.base_creator import VMCreationError
+from adare.hypervisor.qemu.vm_creator.disk_helpers import disk_device_args
 from adare.hypervisor.qemu.vm_creator.extend_console import run_extend_console
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 from adare.hypervisor.qemu.vm_creator.qmp_utils import (
@@ -97,11 +98,12 @@ def run_post_install_session(
         '-cpu', arch_params['cpu'],
         '-m', str(ram_mb),
         '-smp', str(cpus),
-        # Boot from installed disk
-        '-drive', f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
-        # QMP for ACPI shutdown
-        '-qmp', f'unix:{qmp_sock_path},server=on,wait=off',
     ]
+    # Boot from installed disk — per-arch controller matching installation
+    # (aarch64 NVMe / x86_64 virtio-blk) so Windows finds its boot driver.
+    cmd += disk_device_args(disk_path, os_def, bootindex=0)
+    # QMP for ACPI shutdown
+    cmd += ['-qmp', f'unix:{qmp_sock_path},server=on,wait=off']
 
     # QEMU guest agent channel (virtio-serial) for the interactive console.
     if console_mode:
