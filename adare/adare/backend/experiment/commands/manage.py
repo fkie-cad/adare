@@ -27,6 +27,13 @@ class StageCtxManagerLite:
         self.stage_id = f"{stage.name}_{int(__import__('time').time())}"
         self.start_time = None
         self.end_time = None
+        self.result: bool | None = None
+
+    def set_result(self, result: bool) -> None:
+        """Override the exit glyph: when False and no exception, finalize as ✖ FAILED.
+        Leave as None for phase-level stages (setup/compat/cleanup) that have no boolean result.
+        """
+        self.result = bool(result)
 
     async def __aenter__(self):
         from datetime import datetime
@@ -66,8 +73,11 @@ class StageCtxManagerLite:
         self.stage.end_time = self.end_time
         duration = (self.end_time - self.start_time).total_seconds()
 
-        # Determine status based on exception
+        # Determine status based on exception and explicit result
         if exc_type:
+            status = StatusEnum.FAILED
+            message = f"{self.stage.msg} (failed)"
+        elif self.result is False:
             status = StatusEnum.FAILED
             message = f"{self.stage.msg} (failed)"
         else:
