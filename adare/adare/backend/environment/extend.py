@@ -230,7 +230,17 @@ def _interactive_extend(request, source_view: dict, installations: list[dict],
 
     _warn_if_base_in_use(source_view.get('vm_id'))
 
-    run_interactive_extend(base_disk, dest, source_view['os'], request.ram, request.cpus)
+    recorded = run_interactive_extend(
+        base_disk, dest, source_view['os'], request.ram, request.cpus
+    )
+
+    # Fold the commands typed in the console into the recorded installs (dedup by
+    # name, later wins) so the new environment is reproducible declaratively.
+    if recorded:
+        merged = {inst['name']: inst for inst in installations}
+        for inst in recorded:
+            merged[inst['name']] = inst
+        installations = list(merged.values())
 
     return _finalize_environment(request, str(dest), source_view, installations, tags)
 
