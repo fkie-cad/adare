@@ -887,7 +887,7 @@ class VmInstanceManager:
                 log.warning(f"QEMU VM not found: {instance.instance_name}")
                 return
 
-            await vm.remove()
+            await vm.destroy()
             log.info(f"Cleaned up QEMU VM: {instance.instance_name}")
         except ImportError:
             log.warning("QEMU module not available for cleanup")
