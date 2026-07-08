@@ -21,6 +21,19 @@ from adare.types.environment import EnvironmentMetadata
 log = logging.getLogger(__name__)
 
 
+def _run_blocking(coro):
+    """Run an async coroutine to completion from sync code, whether or not an
+    event loop is already running (CLI vs. async web route)."""
+    import asyncio
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)          # no loop (CLI): run directly
+    import concurrent.futures            # loop present (web route): isolate in a thread
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
 def _cleanup_vm_file_if_unused(vm_file_path: Path, project_path: Path, db):
     """
     Clean up VM file if it's not used by any other environments in the project.
@@ -445,10 +458,13 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
             if not vm_still_in_use:
                 log.info(f'VM {vm_id} is not used by any other environment, cleaning up...')
 
-                # Delete VM database record
-                import adare.backend.vm.database as vm_database
-                vm_database.delete_vm(vm_id)
-                log.info(f'Deleted VM database record: {vm_id}')
+                # Tear down the hypervisor VM (libvirt/QEMU domain or VirtualBox
+                # VM + overlay disks) AND delete the VM database record. The async
+                # teardown ends by calling vm_database.delete_vm(vm_id), so it fully
+                # replaces the old DB-only call and no-ops cleanly with zero instances.
+                from adare.backend.vm import commands as vm_commands
+                _run_blocking(vm_commands.delete_vm(vm_id, force=force))
+                log.info(f'Deleted VM (hypervisor + database record): {vm_id}')
 
                 # Delete VM file from disk - ONLY if it's in managed storage
                 if vm_file_path and vm_file_path.exists():

@@ -8,7 +8,7 @@ to perform visual analysis of screenshots for text/icon detection.
 from pathlib import Path
 import logging
 
-from adarelib.testset import testfunction
+from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 

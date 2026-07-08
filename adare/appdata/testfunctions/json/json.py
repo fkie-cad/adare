@@ -4,7 +4,7 @@ import re
 from typing import Union
 
 # internal imports
-from adarelib.testset import testfunction
+from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 
