@@ -4,6 +4,7 @@ import logging
 import platform
 import subprocess
 import time
+import uuid
 from pathlib import Path
 
 from adare.console import console, print_section, print_step
@@ -23,6 +24,32 @@ class InteractiveSessionError(VMCreationError):
 
     def __init__(self, detail: str):
         super().__init__(f"Interactive: {detail}")
+
+
+# macOS AF_UNIX sun_path limit is 104 bytes; Linux allows 108. Use the stricter
+# bound so interactive-extend works on macOS long temp dirs ($TMPDIR ≈ 49 chars).
+_QMP_SOCK_LIMIT = 104
+
+
+def _interactive_qmp_socket(disk_path: Path) -> Path:
+    """QMP socket path for the interactive session.
+
+    Co-located with the disk when it fits the Unix socket limit; otherwise
+    falls back to ADARE's managed run dir so long temp-disk paths (e.g.
+    `env extend` under macOS's /var/folders/... TMPDIR) don't blow the limit.
+    """
+    preferred = disk_path.parent / f'.{disk_path.stem}-interactive-qmp.sock'
+    if len(str(preferred)) < _QMP_SOCK_LIMIT:
+        return preferred
+    run_dir = Path.home() / '.adare' / 'qemu' / 'run'
+    run_dir.mkdir(parents=True, exist_ok=True)
+    fallback = run_dir / f'.interactive-{uuid.uuid4().hex[:8]}.qmp'
+    if len(str(fallback)) >= _QMP_SOCK_LIMIT:
+        raise InteractiveSessionError(
+            f'QMP socket path too long ({len(str(fallback))} >= '
+            f'{_QMP_SOCK_LIMIT} chars): {fallback}'
+        )
+    return fallback
 
 
 def run_post_install_session(
@@ -47,7 +74,7 @@ def run_post_install_session(
     arch_params = qemu_params_for_arch(os_def)
 
     # QMP socket for ACPI shutdown
-    qmp_sock_path = disk_path.parent / f'.{disk_path.stem}-interactive-qmp.sock'
+    qmp_sock_path = _interactive_qmp_socket(disk_path)
 
     cmd = [
         arch_params['exe'],
