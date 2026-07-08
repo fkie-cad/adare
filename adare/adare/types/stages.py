@@ -585,10 +585,10 @@ class VMPythonTestStage(Stage):
 
 @register_stage
 @attrs.define
-class VMPoetryTestStage(Stage):
-    name: ClassVar[str] = 'vm_poetry_test'
-    msg: ClassVar[str] = 'Testing Poetry installation'
-    description: ClassVar[str] = 'Verify Poetry package manager is available'
+class VMUvTestStage(Stage):
+    name: ClassVar[str] = 'vm_uv_test'
+    msg: ClassVar[str] = 'Testing uv installation'
+    description: ClassVar[str] = 'Verify uv is available in VM'
     parent: ClassVar[str] = 'vm_compatibility_test'
 
 @register_stage
