@@ -38,8 +38,9 @@ class EnvironmentExtendRequest:
     that reuses the same base disk plus additional post-setup installations.
 
     Declarative mode (default) is driven by `installs`/`from_file`/`shell`/`cwd`.
-    `interactive` and the Mode-B-only fields (`ram`, `cpus`, `disk_name`) are
-    accepted for CLI/API surface stability but are not implemented yet.
+    Interactive mode (`interactive`, QEMU only) boots the base in a GUI window;
+    `console` additionally opens the recording REPL, and the Mode-B-only fields
+    (`ram`, `cpus`, `disk_name`) tune the boot window and flattened disk name.
     """
     source: str  # Environment name/ULID or VM name
     name: str  # Name for the new environment (must be unique)
@@ -48,6 +49,7 @@ class EnvironmentExtendRequest:
     shell: bool = False
     cwd: str | None = None
     interactive: bool = False
+    console: bool = False
     ram: int | None = None
     cpus: int | None = None
     disk_name: str | None = None

@@ -3,6 +3,7 @@
 import logging
 import platform
 import subprocess
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -11,7 +12,7 @@ from adare.console import console, print_section, print_step
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.base_creator import VMCreationError
 from adare.hypervisor.qemu.vm_creator.disk_helpers import disk_device_args
-from adare.hypervisor.qemu.vm_creator.extend_console import run_extend_console
+from adare.hypervisor.qemu.vm_creator.extend_console import _confirm, run_extend_console
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 from adare.hypervisor.qemu.vm_creator.qmp_utils import (
     qemu_params_for_arch,
@@ -61,17 +62,25 @@ def run_post_install_session(
     ram_mb: int,
     cpus: int,
     console_mode: bool = False,
+    ask_store: bool = False,
 ) -> tuple[bool, list[dict]]:
     """Boot a finished VM disk image for manual customization.
 
     Starts QEMU from the installed disk (no ISO, no kernel/initrd, no -no-reboot)
     so the user can install additional software on top of the automated setup.
 
-    With ``console_mode`` (used by `env extend --interactive`) a QEMU guest-agent
-    channel is added and an interactive console runs in the terminal alongside
-    the GUI window, recording the commands the user runs. Without it (the default,
-    used by `vm create --interactive`) the legacy press-Enter GUI wait is used and
-    no recording is produced.
+    With ``console_mode`` (used by `env extend --interactive --console`) a QEMU
+    guest-agent channel is added and an interactive console runs in the terminal
+    alongside the GUI window, recording the commands the user runs. Without it a
+    GUI-only press-Enter wait is used and no recording is produced.
+
+    ``ask_store`` marks this as an extend session, where a store/discard decision
+    is required. In the GUI-only branch (``console_mode`` False), once the VM is
+    down the user is prompted *"Create the new environment from this session?"* on
+    a TTY (non-TTY → discard). In ``console_mode`` the console already owns that
+    decision. When ``ask_store`` is False (the `vm create` path) the store flag is
+    irrelevant, the caller ignores the return value, and ``(True, [])`` is
+    returned — behaviour unchanged.
 
     Args:
         disk_path: Path to the qcow2 disk image.
@@ -80,13 +89,15 @@ def run_post_install_session(
         ram_mb: RAM allocation in MB.
         cpus: Number of CPU cores.
         console_mode: If True, attach the guest-agent console and record commands.
+        ask_store: If True, prompt for a store/discard decision in the GUI-only
+            branch (extend sessions); kept False for `vm create`.
 
     Returns:
         Tuple of ``(store, recorded)``. In ``console_mode`` these are passed
         through from the console: ``store`` is the user's explicit decision to
         create the new environment, ``recorded`` the commands to fold in. In the
-        non-console (``vm create``) path the store flag is irrelevant (the caller
-        ignores the return value) and ``(True, [])`` is returned.
+        GUI-only branch ``recorded`` is always ``[]`` and ``store`` is the
+        prompted decision when ``ask_store`` (else ``True``).
     """
     arch_params = qemu_params_for_arch(os_def)
 
@@ -179,6 +190,16 @@ def run_post_install_session(
             )
         else:
             wait_for_input_or_exit(process, qmp_sock_path)
+            if ask_store:
+                # Extend session, GUI-only: the VM is down; ask whether to keep
+                # the result. Non-TTY is ambiguous → discard (matches console).
+                if sys.stdin.isatty():
+                    store = _confirm(
+                        'Create the new environment from this session?',
+                        default_yes=True,
+                    )
+                else:
+                    store = False
     finally:
         for sock in (qmp_sock_path, qga_sock_path):
             if sock is not None and sock.exists():

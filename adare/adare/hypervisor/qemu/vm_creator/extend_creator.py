@@ -99,11 +99,17 @@ def run_interactive_extend(
     os_block: dict,
     ram: int | None,
     cpus: int | None,
+    console: bool = False,
 ) -> tuple[bool, list[dict]]:
     """Boot an overlay of *base_disk* interactively, then flatten to *dest_disk*.
 
     The base disk is opened read-only through the overlay's backing chain and
     is NEVER mutated. *dest_disk* is a standalone qcow2 with no backing file.
+
+    By default the session is GUI-only (a native QEMU window). With ``console``
+    a terminal REPL is also started that records the commands typed in the guest
+    as reproducible installs. Either way the user is asked at shutdown whether to
+    store or discard the session.
 
     Args:
         base_disk: Path to the immutable base qcow2 to extend from.
@@ -112,6 +118,8 @@ def run_interactive_extend(
             version/architecture) used to decide boot mode.
         ram: RAM in MB (falls back to a sensible default).
         cpus: vCPU count (falls back to a sensible default).
+        console: If True, also open the recording terminal REPL alongside the
+            GUI window.
 
     Returns:
         Tuple of ``(store, recorded)``. ``store`` is the user's decision from the
@@ -194,7 +202,7 @@ def run_interactive_extend(
         )
         store, recorded = run_post_install_session(
             work_overlay, work_nvram, os_def, ram_mb, cpu_count,
-            console_mode=True,
+            console_mode=console, ask_store=True,
         )
 
         # 4. Flatten the overlay into a standalone qcow2 (no backing file) ONLY
