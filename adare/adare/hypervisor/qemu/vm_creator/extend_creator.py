@@ -99,7 +99,7 @@ def run_interactive_extend(
     os_block: dict,
     ram: int | None,
     cpus: int | None,
-) -> None:
+) -> list[dict]:
     """Boot an overlay of *base_disk* interactively, then flatten to *dest_disk*.
 
     The base disk is opened read-only through the overlay's backing chain and
@@ -112,6 +112,10 @@ def run_interactive_extend(
             version/architecture) used to decide boot mode.
         ram: RAM in MB (falls back to a sensible default).
         cpus: vCPU count (falls back to a sensible default).
+
+    Returns:
+        The commands the user recorded in the interactive console, as install
+        dicts to fold into the new environment's post-setup installations.
 
     Raises:
         HypervisorException: On any validation, overlay, boot, or flatten
@@ -180,12 +184,16 @@ def run_interactive_extend(
                 create_nvram_for_vm(_WORK_NAME, work_dir, os_def.architecture)
             )
 
-        # 3. Boot the GUI window; blocks until the user shuts the VM down.
+        # 3. Boot the GUI window + interactive console; blocks until the user
+        #    stores/discards or shuts the VM down. Returns recorded installs.
         print_step(
             f'Booting base disk overlay ({boot_mode.upper()}) for interactive '
             f'customization...'
         )
-        run_post_install_session(work_overlay, work_nvram, os_def, ram_mb, cpu_count)
+        recorded = run_post_install_session(
+            work_overlay, work_nvram, os_def, ram_mb, cpu_count,
+            console_mode=True,
+        )
 
         # 4. Flatten the overlay into a standalone qcow2 (no backing file). The
         #    base is only read here, through the overlay's backing chain.
@@ -200,6 +208,7 @@ def run_interactive_extend(
                 f'{result.stderr.strip()}'
             )
         print_step(f'Flattened new standalone disk: [dim]{dest_disk}[/dim]')
+        return recorded
     finally:
         # 5. Delete the work overlay + NVRAM + temp dir. No guest state leaks.
         shutil.rmtree(work_dir, ignore_errors=True)
