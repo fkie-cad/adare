@@ -337,21 +337,128 @@ async def test_click_command(context):
         return False, f"Click command error: {e}"
 
 
-async def _run_compat_substage(stage_cls, flow_console, fn, *args, **kwargs) -> bool:
+def _decode_clixml_xml(xml_block: str) -> str:
+    """Decode one PowerShell CLIXML ``<Objs>...</Objs>`` block to readable text.
+
+    Drops ``<Obj S="progress">`` nodes (the "Preparing modules for first use"
+    progress-bar noise) and joins the remaining text. Falls back to tag-stripping
+    if the block is not well-formed XML.
+    """
+    import xml.etree.ElementTree as ET
+
+    try:
+        root = ET.fromstring(xml_block)
+    except ET.ParseError:
+        # Malformed CLIXML: strip tags and return the raw text.
+        import re
+        return re.sub(r'<[^>]+>', ' ', xml_block)
+
+    for progress in root.findall('.//Obj[@S="progress"]'):
+        # Remove the progress node in place from its parent.
+        parent = None
+        for candidate in root.iter():
+            if progress in list(candidate):
+                parent = candidate
+                break
+        if parent is not None:
+            parent.remove(progress)
+
+    return ' '.join(t for t in root.itertext() if t)
+
+
+def _decode_guest_stderr(stderr: str) -> str:
+    """Clean guest stderr into readable lines, decoding any CLIXML block.
+
+    PowerShell remoting wraps stderr in ``#< CLIXML`` followed by an ``<Objs>``
+    block. The plain-text lines outside it (``ERROR:`` / ``FATAL:`` /
+    ``Task_Status:`` from the scheduled-task wrapper) are kept; the CLIXML block
+    is decoded via ``_decode_clixml_xml``. Leftover tags are stripped, whitespace
+    collapsed, and consecutive duplicate lines deduped. Non-CLIXML stderr (Linux
+    guests, plain errors) passes through cleaned. The ``#< CLIXML`` marker never
+    appears in the output.
+    """
+    import re
+
+    if not stderr:
+        return ''
+
+    text = stderr
+    # Locate the <Objs>...</Objs> block (case-insensitive, dot-matches-newline).
+    # The opening tag carries a Version attribute (e.g. <Objs Version="1.1.0.1">).
+    objs_match = re.search(r'<Objs[^>]*>.*?</Objs>', text, re.IGNORECASE | re.DOTALL)
+    if objs_match:
+        decoded = _decode_clixml_xml(objs_match.group(0))
+        text = text[:objs_match.start()] + '\n' + decoded + '\n' + text[objs_match.end():]
+
+    # Strip any remaining tags (e.g. stray <S>, <AV>, <Props> fragments).
+    text = re.sub(r'<[^>]+>', ' ', text)
+    # Drop the CLIXML marker if it survived.
+    text = text.replace('#< CLIXML', ' ')
+
+    lines = []
+    for raw in text.splitlines():
+        line = re.sub(r'\s+', ' ', raw).strip()
+        if not line:
+            continue
+        if lines and lines[-1] == line:
+            continue  # dedupe consecutive identical lines
+        lines.append(line)
+    return '\n'.join(lines)
+
+
+def _split_reason(reason: str | None) -> tuple[str, str]:
+    """Split a failure reason into ``(summary, detail)``.
+
+    The adarevm-server failure embeds the raw guest stderr after ``. stderr: ``.
+    The summary is the text before that boundary (re-dotted); the detail is the
+    decoded stderr. Reasons without the boundary yield ``summary = reason`` and
+    an empty detail.
+    """
+    if not reason:
+        return '', ''
+    marker = '. stderr: '
+    idx = reason.find(marker)
+    if idx == -1:
+        return reason, ''
+    summary = reason[:idx].rstrip('.') + '.'
+    detail = _decode_guest_stderr(reason[idx + len(marker):])
+    return summary, detail
+
+
+def _print_compat_failures(context) -> None:
+    """Print a parsed "Failure details" block after the tree, before the verdict.
+
+    Uses bare ``print`` -- the flow console Live display is already stopped by the
+    caller, so this renders as plain text below the persisted tree. No-op when
+    ``context.compat_failures`` is empty (the fully-compatible case).
+    """
+    failures = getattr(context, 'compat_failures', None)
+    if not failures:
+        return
+    print()
+    print("Failure details:")
+    for stage_msg, summary, detail in failures:
+        print(f"  ✖ {stage_msg}: {summary}")
+        if detail:
+            for line in detail.splitlines():
+                print(f"       {line}")
+
+
+async def _run_compat_substage(stage_cls, flow_console, context, fn, **kwargs) -> bool:
     """Run one compatibility test under its stage and reflect the boolean result in the
-    stage glyph (✖ on False). Surface the failure reason as a ✖ child line (level 3) so
-    the reader sees what broke, not just which step. Returns the bool so compatibility_results
+    stage glyph (✖ on False). The failure reason is NOT emitted into the tree (a
+    multiline CLIXML stderr would explode it mid-run); instead the parsed
+    ``(summary, detail)`` is collected on ``context.compat_failures`` for the
+    end-of-run "Failure details" block. Returns the bool so compatibility_results
     stays a dict of bools (sum() in the verdict logic is unchanged)."""
     from adare.backend.experiment.commands.manage import StageCtxManagerLite
 
     async with StageCtxManagerLite(stage_cls(), flow_console, level=2) as cm:
-        ok, reason = await fn(*args, **kwargs)
+        ok, reason = await fn(context, **kwargs)
         cm.set_result(ok)
-        if not ok and reason:
-            try:
-                flow_console.log_failed(f"{cm.stage_id}:reason", reason, level=3)
-            except (AttributeError, KeyError, RuntimeError):
-                pass
+        if not ok:
+            summary, detail = _split_reason(reason)
+            context.compat_failures.append((cm.stage.msg, summary, detail))
         return ok
 
 
@@ -368,16 +475,21 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
     from adare.types.stages import (
         VMAdareServerTestStage,
         VMClickTestStage,
-        VMPoetryTestStage,
         VMPythonTestStage,
         VMResponseTestStage,
         VMScreenshotTestStage,
         VMSharedFoldersTestStage,
+        VMUvTestStage,
         VMWebSocketTestStage,
     )
     from adare.backend.experiment.commands.manage import StageCtxManagerLite
 
     log.info("Testing VM compatibility with ADARE WebSocket server...")
+
+    # Collected by _run_compat_substage: list of (stage_msg, summary, detail) for
+    # failing sub-stages, printed as a parsed "Failure details" block after the
+    # tree by the orchestrator's finally block.
+    context.compat_failures = []
 
     compatibility_results = {
         'vm_responsive': False,
@@ -392,30 +504,30 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
 
     try:
         # Test 1: Basic VM responsiveness with substage
-        compatibility_results['vm_responsive'] = await _run_compat_substage(VMResponseTestStage, flow_console, test_vm_response, context)
+        compatibility_results['vm_responsive'] = await _run_compat_substage(VMResponseTestStage, flow_console, context, test_vm_response)
 
         # Test 2: Shared folder access with substage
-        compatibility_results['shared_folders_working'] = await _run_compat_substage(VMSharedFoldersTestStage, flow_console, test_shared_folders, context)
+        compatibility_results['shared_folders_working'] = await _run_compat_substage(VMSharedFoldersTestStage, flow_console, context, test_shared_folders)
 
         # Test 3: Python availability with substage
-        compatibility_results['python_available'] = await _run_compat_substage(VMPythonTestStage, flow_console, test_python_availability, context)
+        compatibility_results['python_available'] = await _run_compat_substage(VMPythonTestStage, flow_console, context, test_python_availability)
 
-        # Test 4: Poetry availability with substage
-        compatibility_results['uv_available'] = await _run_compat_substage(VMPoetryTestStage, flow_console, test_uv_availability, context)
+        # Test 4: uv availability with substage
+        compatibility_results['uv_available'] = await _run_compat_substage(VMUvTestStage, flow_console, context, test_uv_availability)
 
         # Test 5: Start adarevm WebSocket server with substage
-        compatibility_results['adarevm_server_starts'] = await _run_compat_substage(VMAdareServerTestStage, flow_console, test_adarevm_server_start, context, guest_bind_port=guest_bind_port)
+        compatibility_results['adarevm_server_starts'] = await _run_compat_substage(VMAdareServerTestStage, flow_console, context, test_adarevm_server_start, guest_bind_port=guest_bind_port)
 
         # Test 6: WebSocket connection with substage
-        compatibility_results['websocket_connection'] = await _run_compat_substage(VMWebSocketTestStage, flow_console, test_websocket_connection, context)
+        compatibility_results['websocket_connection'] = await _run_compat_substage(VMWebSocketTestStage, flow_console, context, test_websocket_connection)
 
         # Only run WebSocket commands if connection was successful
         if compatibility_results['websocket_connection']:
             # Test 7: Screenshot command with substage
-            compatibility_results['screenshot_command'] = await _run_compat_substage(VMScreenshotTestStage, flow_console, test_screenshot_command, context)
+            compatibility_results['screenshot_command'] = await _run_compat_substage(VMScreenshotTestStage, flow_console, context, test_screenshot_command)
 
             # Test 8: Click command with substage
-            compatibility_results['click_command'] = await _run_compat_substage(VMClickTestStage, flow_console, test_click_command, context)
+            compatibility_results['click_command'] = await _run_compat_substage(VMClickTestStage, flow_console, context, test_click_command)
 
     except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.error(f"Compatibility test error: {e}")
@@ -578,6 +690,9 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
             from adare.backend.events.coordinator import stop_stage_coordinator
             stop_stage_coordinator()
             flow_console.stop()
+            # With the Live display stopped, print the parsed failure block below
+            # the persisted tree and before the CLI's ❌ verdict.
+            _print_compat_failures(context)
         except (OSError, RuntimeError) as e:
             # Cleanup in finally must not mask the original error
             log.error(f"Error stopping flow console: {e}")
@@ -1079,5 +1194,8 @@ async def vm_test_registered(
             from adare.backend.events.coordinator import stop_stage_coordinator
             stop_stage_coordinator()
             flow_console.stop()
+            # With the Live display stopped, print the parsed failure block below
+            # the persisted tree and before the CLI's ❌ verdict.
+            _print_compat_failures(context)
         except (OSError, RuntimeError) as e:
             log.error(f"Error stopping flow console: {e}")
