@@ -74,6 +74,7 @@ class EnvironmentInfo:
     next_steps: list[str] = field(default_factory=list)
     tip: str | None = None
     reused_existing: bool = False
+    discarded: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -88,6 +89,7 @@ class EnvironmentInfo:
             'next_steps': self.next_steps,
             'tip': self.tip,
             'reused_existing': self.reused_existing,
+            'discarded': self.discarded,
         }
 
 

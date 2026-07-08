@@ -204,13 +204,19 @@ def _warn_if_base_in_use(vm_id: str | None) -> None:
 
 
 def _interactive_extend(request, source_view: dict, installations: list[dict],
-                        tags: list[str]) -> tuple[str, bool]:
+                        tags: list[str]) -> tuple[str | None, bool]:
     """
     Interactive/manual extend (Mode B), QEMU only.
 
-    Boots a throwaway overlay of the base disk in a GUI window, flattens the
-    result into a new standalone qcow2, then registers that disk as a NEW base
-    VM + environment. See `hypervisor/qemu/vm_creator/extend_creator.py`.
+    Boots a throwaway overlay of the base disk in a GUI window. If the user
+    chooses to store, flattens the result into a new standalone qcow2 and
+    registers that disk as a NEW base VM + environment. If the user discards,
+    nothing is created and `(None, False)` is returned. See
+    `hypervisor/qemu/vm_creator/extend_creator.py`.
+
+    Returns:
+        Tuple of (environment_ulid, created), or `(None, False)` when the user
+        discarded the session (no environment created).
 
     Raises:
         HypervisorException: If the source is not a QEMU environment, or the
@@ -230,9 +236,14 @@ def _interactive_extend(request, source_view: dict, installations: list[dict],
 
     _warn_if_base_in_use(source_view.get('vm_id'))
 
-    recorded = run_interactive_extend(
+    store, recorded = run_interactive_extend(
         base_disk, dest, source_view['os'], request.ram, request.cpus
     )
+
+    # User discarded the session: nothing was flattened or written. Signal "no
+    # environment created" with the (None, False) sentinel.
+    if not store:
+        return None, False
 
     # Fold the commands typed in the console into the recorded installs (dedup by
     # name, later wins) so the new environment is reproducible declaratively.
@@ -245,21 +256,23 @@ def _interactive_extend(request, source_view: dict, installations: list[dict],
     return _finalize_environment(request, str(dest), source_view, installations, tags)
 
 
-def environment_extend(request) -> tuple[str, bool]:
+def environment_extend(request) -> tuple[str | None, bool]:
     """
     Extend `request.source` into a new environment `request.name`.
 
     Declarative mode reuses the SAME base disk plus merged post-setup installs.
     Interactive mode (`request.interactive`, QEMU only) boots an overlay of the
-    base for manual customization, flattens it into a NEW standalone disk, and
-    registers that as a new base VM. Both modes may also carry `--install`
-    entries. Return shape mirrors `environment_load`.
+    base for manual customization; on store it flattens into a NEW standalone
+    disk and registers that as a new base VM, on discard it creates nothing.
+    Both modes may also carry `--install` entries. Return shape mirrors
+    `environment_load`.
 
     Args:
         request: EnvironmentExtendRequest
 
     Returns:
-        Tuple of (environment_ulid, created).
+        Tuple of (environment_ulid, created). Interactive mode returns
+        `(None, False)` when the user discarded the session (nothing created).
 
     Raises:
         EnvironmentDoesNotExistInDatabase: If the source cannot be resolved.

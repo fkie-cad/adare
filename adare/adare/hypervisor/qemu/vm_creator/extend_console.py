@@ -38,8 +38,9 @@ def _print_banner(windows: bool) -> None:
     print_section('Interactive Extend Console')
     console.print('  Commands you type run [bold]inside the guest[/bold]; output is shown here.')
     console.print('  Successful commands are [bold]recorded[/bold] as the new environment\'s installs.')
-    console.print('  Type [cyan]:help[/cyan] for meta-commands, [cyan]:store[/cyan] to save, '
-                  '[cyan]:discard[/cyan] to abandon recording.')
+    console.print('  Type [cyan]:help[/cyan] for meta-commands, [cyan]:store[/cyan] to create the '
+                  'environment,')
+    console.print('  [cyan]:discard[/cyan] to shut down and [bold]create nothing[/bold].')
     if windows:
         console.print('  [dim]Guest shell: PowerShell.[/dim]')
     console.print()
@@ -54,13 +55,47 @@ def _print_help(windows: bool) -> None:
     console.print('    [cyan]:push <local> <remote>[/cyan]  copy a host file into the guest')
     console.print('    [cyan]:pull <remote> <local>[/cyan]  copy a guest file out to the host')
     console.print('    [cyan]:record on|off[/cyan]        toggle recording (default: on)')
-    console.print('    [cyan]:store[/cyan]                shut the guest down, flatten, and keep the recorded installs')
-    console.print('    [cyan]:discard[/cyan] / [cyan]:quit[/cyan]      shut down and flatten WITHOUT recording')
+    console.print('    [cyan]:store[/cyan]                shut the guest down and [bold]create[/bold] the new environment')
+    console.print('    [cyan]:discard[/cyan] / [cyan]:quit[/cyan]      shut down and exit WITHOUT creating an environment')
+    console.print('    [cyan]:q[/cyan]                    quick exit -- choose store / discard / cancel')
     console.print()
     console.print(f'  Anything else runs in the guest via {shell}.')
     console.print('  [dim]Note: env vars do not persist across commands (each is a fresh process);[/dim]')
     console.print('  [dim]the working directory is tracked manually via :cd / cd.[/dim]')
     console.print()
+
+
+def _confirm(question: str, default_yes: bool) -> bool:
+    """Prompt for a yes/no answer; empty input takes the default.
+
+    Guards EOF / Ctrl-C by returning False ("not confirmed"), mirroring
+    ``cli/vm.py:_confirm_removal``.
+    """
+    suffix = '[Y/n]' if default_yes else '[y/N]'
+    try:
+        response = input(f'  {question} {suffix} ').strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return False
+    if not response:
+        return default_yes
+    return response in ('y', 'yes')
+
+
+def _prompt_quit_choice() -> str:
+    """Ask what a quick ``:q`` should do; return 'store' / 'discard' / 'cancel'.
+
+    Cancel returns to the shell. EOF / Ctrl-C default to 'discard' (create
+    nothing) since stdin can no longer be prompted.
+    """
+    try:
+        response = input('  Quit: [s]tore, [d]iscard, or [c]ancel? [s/d/c] ').strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return 'discard'
+    if response in ('s', 'store'):
+        return 'store'
+    if response in ('d', 'discard'):
+        return 'discard'
+    return 'cancel'
 
 
 def _prompt(cwd: str) -> str:
@@ -154,26 +189,33 @@ def run_extend_console(
     qmp_sock: Path,
     process: subprocess.Popen,
     windows: bool = False,
-) -> list[dict]:
-    """Drive the running guest from a terminal REPL; return recorded installs.
+) -> tuple[bool, list[dict]]:
+    """Drive the running guest from a terminal REPL; return the store decision.
 
     Waits for the guest agent to come up, then loops a prompt. Each non-meta line
     runs in the guest; successful commands (exit 0) are recorded while recording
-    is on. ``:store`` finalizes (ACPI shutdown -> caller flattens); ``:discard`` /
-    ``:quit`` shut down without keeping the recording.
+    is on. ``:store`` (after confirmation) shuts the guest down and requests that
+    the caller flatten + register the new environment; ``:discard`` / ``:quit``
+    shut down and create nothing.
+
+    Ambiguous exits default to DISCARD (create nothing): EOF / Ctrl-D, and any
+    fallback path where no console is available. A guest shut down from inside the
+    QEMU window prompts on a TTY, otherwise discards.
 
     Falls back to the legacy press-Enter wait when stdin is not a TTY or the guest
     agent never responds (e.g. a GUI-only base without a usable agent).
 
     Returns:
-        The recorded installs as a list of install dicts (empty if none / discarded).
+        Tuple of ``(store, recorded)``: ``store`` True means the caller should
+        flatten the overlay and register the environment; ``recorded`` is the list
+        of install dicts to fold in (empty when discarded).
     """
     recorded: list[dict] = []
 
     if not sys.stdin.isatty():
         console.print('  [dim]Non-interactive mode: no console. Waiting for VM to shut down.[/dim]\n')
         wait_for_input_or_exit(process, qmp_sock)
-        return recorded
+        return False, []
 
     print_step('Waiting for the guest agent to come up...')
     if not qga_wait_ready(qga_sock):
@@ -182,7 +224,7 @@ def run_extend_console(
         console.print('  [dim](The base may lack qemu-guest-agent, or the guest is still '
                       'booting.)[/dim]')
         wait_for_input_or_exit(process, qmp_sock)
-        return recorded
+        return False, []
 
     _print_banner(windows)
 
@@ -192,15 +234,21 @@ def run_extend_console(
 
     while True:
         if process.poll() is not None:
-            console.print('  [dim]VM process exited.[/dim]')
-            break
+            # Guest was shut down from inside the QEMU window. Ask on a TTY
+            # whether to keep the result; default to discard when we can't.
+            console.print('  [dim]VM process exited (guest shut down).[/dim]')
+            if sys.stdin.isatty() and _confirm(
+                    'Create the new environment from this session?', default_yes=True):
+                return True, recorded
+            return False, []
 
         try:
             line = input(_prompt(cwd))
         except EOFError:
-            console.print('\n  [dim]EOF -- storing recorded commands and shutting down.[/dim]')
+            console.print('\n  [dim]EOF -- discarding session and shutting down '
+                          '(no environment created).[/dim]')
             _shutdown(qmp_sock, process)
-            break
+            return False, []
         except KeyboardInterrupt:
             console.print('\n  [yellow]Terminating QEMU...[/yellow]')
             process.terminate()
@@ -218,16 +266,32 @@ def run_extend_console(
         if line == ':help':
             _print_help(windows)
             continue
-        if line in (':store',):
+        if line == ':store':
+            if not _confirm('Shut down the VM and create the new environment?',
+                            default_yes=True):
+                continue
+            if recorded:
+                print_step(f'Recorded [bold]{len(recorded)}[/bold] command(s) as '
+                           'post-setup installations.')
             print_step('Storing: sending ACPI shutdown...')
             _shutdown(qmp_sock, process)
-            break
+            return True, recorded
         if line in (':discard', ':quit'):
-            console.print('  [yellow]Discarding recorded commands; shutting down to flatten '
-                          'current disk state.[/yellow]')
+            if not _confirm('Discard this session and shut down WITHOUT creating an '
+                            'environment?', default_yes=False):
+                continue
+            console.print('  [yellow]Discarding session; shutting down. No environment '
+                          'will be created.[/yellow]')
             _shutdown(qmp_sock, process)
-            recorded = []
-            break
+            return False, []
+        if line == ':q':
+            choice = _prompt_quit_choice()
+            if choice == 'cancel':
+                continue
+            _shutdown(qmp_sock, process)
+            if choice == 'store':
+                return True, recorded
+            return False, []
         if line == ':record' or line.startswith(':record '):
             arg = line[len(':record'):].strip().lower()
             if arg == 'on':
@@ -271,7 +335,3 @@ def run_extend_console(
                 'cwd': cwd,
                 'shell': True,
             })
-
-    if recorded:
-        print_step(f'Recorded [bold]{len(recorded)}[/bold] command(s) as post-setup installations.')
-    return recorded
