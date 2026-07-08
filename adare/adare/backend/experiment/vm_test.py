@@ -149,9 +149,9 @@ async def test_vm_response(context):
     test_result = await context.vm.run_command(cmd, stop_event=context.user_interrupt_event)
     if test_result.returncode == 0:
         log.info("VM is responsive to commands")
-        return True
+        return True, None
     log.warning(f"VM not responding to commands. Exit code: {test_result.returncode}")
-    return False
+    return False, f"VM not responding to commands. Exit code: {test_result.returncode}"
 
 
 async def test_shared_folders(context):
@@ -163,9 +163,9 @@ async def test_shared_folders(context):
     ls_result = await context.vm.run_command(cmd, stop_event=context.user_interrupt_event)
     if ls_result.returncode == 0:
         log.info("Shared folders are accessible")
-        return True
+        return True, None
     log.warning(f"Shared folders not accessible. Exit code: {ls_result.returncode}")
-    return False
+    return False, f"Shared folders not accessible. Exit code: {ls_result.returncode}"
 
 
 async def test_python_availability(context):
@@ -182,9 +182,9 @@ async def test_python_availability(context):
     python_result = await context.vm.run_command(cmd, stop_event=context.user_interrupt_event)
     if python_result.returncode == 0:
         log.info("Python is available")
-        return True
+        return True, None
     log.warning(f"Python not available. Exit code: {python_result.returncode}")
-    return False
+    return False, f"Python not available. Exit code: {python_result.returncode}"
 
 
 async def test_uv_availability(context):
@@ -198,9 +198,9 @@ async def test_uv_availability(context):
     )
     if uv_result.returncode == 0:
         log.info("uv is available")
-        return True
+        return True, None
     log.warning(f"uv not available. Exit code: {uv_result.returncode}")
-    return False
+    return False, f"uv not available. Exit code: {uv_result.returncode}"
 
 
 async def test_adarevm_server_start(context, guest_bind_port: int | None = None):
@@ -258,12 +258,15 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
             )
             if start_result.returncode == 0:
                 log.info("AdareVM server started successfully (port 18765 listening)")
-                return True
+                return True, None
             log.warning(
                 f"Failed to start adarevm server. Exit code: "
                 f"{start_result.returncode}. stderr: {start_result.stderr}"
             )
-            return False
+            return False, (
+                f"Failed to start adarevm server. Exit code: "
+                f"{start_result.returncode}. stderr: {start_result.stderr}"
+            )
 
         # Linux: launch editable adarevm in the background from the source dir.
         start_command = "cd /adare/vm && uv run adarevm &"
@@ -272,13 +275,13 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
             log.info("AdareVM server launched; waiting for it to initialize")
             import asyncio
             await asyncio.sleep(5.0)
-            return True
+            return True, None
         log.warning(f"Failed to start adarevm server. Exit code: {start_result.returncode}")
-        return False
+        return False, f"Failed to start adarevm server. Exit code: {start_result.returncode}"
 
     except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.warning(f"Exception starting adarevm server: {e}")
-        return False
+        return False, f"Exception starting adarevm server: {e}"
 
 
 async def test_websocket_connection(context):
@@ -294,13 +297,13 @@ async def test_websocket_connection(context):
         connected = await client.connect(timeout=30.0)
         if connected:
             log.info("WebSocket connection established")
-            return True
+            return True, None
         log.warning("Could not establish WebSocket connection")
-        return False
+        return False, "Could not establish WebSocket connection"
 
     except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.warning(f"WebSocket test error: {e}")
-        return False
+        return False, f"WebSocket test error: {e}"
 
 
 async def test_screenshot_command(context):
@@ -309,12 +312,12 @@ async def test_screenshot_command(context):
         result = await context.client.call_tool("take_screenshot", timeout=10.0)
         if result and not result.get('error'):
             log.info("Screenshot command successful")
-            return True
+            return True, None
         log.warning(f"Screenshot command failed: {result}")
-        return False
+        return False, f"Screenshot command failed: {result}"
     except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.warning(f"Screenshot command error: {e}")
-        return False
+        return False, f"Screenshot command error: {e}"
 
 
 async def test_click_command(context):
@@ -326,12 +329,30 @@ async def test_click_command(context):
         result = await context.client.call_tool("click", {"x": click_x, "y": click_y}, timeout=10.0)
         if result and not result.get('error'):
             log.info(f"Click command successful (clicked at {click_x}, {click_y})")
-            return True
+            return True, None
         log.warning(f"Click command failed: {result}")
-        return False
+        return False, f"Click command failed: {result}"
     except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.warning(f"Click command error: {e}")
-        return False
+        return False, f"Click command error: {e}"
+
+
+async def _run_compat_substage(stage_cls, flow_console, fn, *args, **kwargs) -> bool:
+    """Run one compatibility test under its stage and reflect the boolean result in the
+    stage glyph (✖ on False). Surface the failure reason as a ✖ child line (level 3) so
+    the reader sees what broke, not just which step. Returns the bool so compatibility_results
+    stays a dict of bools (sum() in the verdict logic is unchanged)."""
+    from adare.backend.experiment.commands.manage import StageCtxManagerLite
+
+    async with StageCtxManagerLite(stage_cls(), flow_console, level=2) as cm:
+        ok, reason = await fn(*args, **kwargs)
+        cm.set_result(ok)
+        if not ok and reason:
+            try:
+                flow_console.log_failed(f"{cm.stage_id}:reason", reason, level=3)
+            except (AttributeError, KeyError, RuntimeError):
+                pass
+        return ok
 
 
 async def test_vm_compatibility(context, flow_console, guest_bind_port: int | None = None):
@@ -371,38 +392,30 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
 
     try:
         # Test 1: Basic VM responsiveness with substage
-        async with StageCtxManagerLite(VMResponseTestStage(), flow_console, level=2):
-            compatibility_results['vm_responsive'] = await test_vm_response(context)
+        compatibility_results['vm_responsive'] = await _run_compat_substage(VMResponseTestStage, flow_console, test_vm_response, context)
 
         # Test 2: Shared folder access with substage
-        async with StageCtxManagerLite(VMSharedFoldersTestStage(), flow_console, level=2):
-            compatibility_results['shared_folders_working'] = await test_shared_folders(context)
+        compatibility_results['shared_folders_working'] = await _run_compat_substage(VMSharedFoldersTestStage, flow_console, test_shared_folders, context)
 
         # Test 3: Python availability with substage
-        async with StageCtxManagerLite(VMPythonTestStage(), flow_console, level=2):
-            compatibility_results['python_available'] = await test_python_availability(context)
+        compatibility_results['python_available'] = await _run_compat_substage(VMPythonTestStage, flow_console, test_python_availability, context)
 
         # Test 4: Poetry availability with substage
-        async with StageCtxManagerLite(VMPoetryTestStage(), flow_console, level=2):
-            compatibility_results['uv_available'] = await test_uv_availability(context)
+        compatibility_results['uv_available'] = await _run_compat_substage(VMPoetryTestStage, flow_console, test_uv_availability, context)
 
         # Test 5: Start adarevm WebSocket server with substage
-        async with StageCtxManagerLite(VMAdareServerTestStage(), flow_console, level=2):
-            compatibility_results['adarevm_server_starts'] = await test_adarevm_server_start(context, guest_bind_port=guest_bind_port)
+        compatibility_results['adarevm_server_starts'] = await _run_compat_substage(VMAdareServerTestStage, flow_console, test_adarevm_server_start, context, guest_bind_port=guest_bind_port)
 
         # Test 6: WebSocket connection with substage
-        async with StageCtxManagerLite(VMWebSocketTestStage(), flow_console, level=2):
-            compatibility_results['websocket_connection'] = await test_websocket_connection(context)
+        compatibility_results['websocket_connection'] = await _run_compat_substage(VMWebSocketTestStage, flow_console, test_websocket_connection, context)
 
         # Only run WebSocket commands if connection was successful
         if compatibility_results['websocket_connection']:
             # Test 7: Screenshot command with substage
-            async with StageCtxManagerLite(VMScreenshotTestStage(), flow_console, level=2):
-                compatibility_results['screenshot_command'] = await test_screenshot_command(context)
+            compatibility_results['screenshot_command'] = await _run_compat_substage(VMScreenshotTestStage, flow_console, test_screenshot_command, context)
 
             # Test 8: Click command with substage
-            async with StageCtxManagerLite(VMClickTestStage(), flow_console, level=2):
-                compatibility_results['click_command'] = await test_click_command(context)
+            compatibility_results['click_command'] = await _run_compat_substage(VMClickTestStage, flow_console, test_click_command, context)
 
     except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.error(f"Compatibility test error: {e}")
