@@ -5,7 +5,7 @@ from pathlib import Path
 
 from adare.api import AdareAPI
 from adare.cli.utils import handle_api_error
-from adare.console import print_error_message, print_success_message
+from adare.console import console, print_error_message, print_success_message
 from adare.core.dto.environment import EnvironmentExtendRequest
 
 log = logging.getLogger(__name__)
@@ -34,6 +34,12 @@ def exec_environment_extend(arguments):
 
     from_file = Path(arguments.from_file) if arguments.from_file else None
 
+    if arguments.console and not arguments.interactive:
+        console.print(
+            '  [yellow]Note:[/yellow] --console has no effect without '
+            '--interactive; ignoring it.'
+        )
+
     api = AdareAPI()
     result = api.environment.extend(EnvironmentExtendRequest(
         source=arguments.source,
@@ -43,6 +49,7 @@ def exec_environment_extend(arguments):
         shell=arguments.shell,
         cwd=arguments.cwd,
         interactive=arguments.interactive,
+        console=arguments.console,
         ram=arguments.ram,
         cpus=arguments.cpus,
         disk_name=arguments.disk_name,

@@ -237,7 +237,8 @@ def _interactive_extend(request, source_view: dict, installations: list[dict],
     _warn_if_base_in_use(source_view.get('vm_id'))
 
     store, recorded = run_interactive_extend(
-        base_disk, dest, source_view['os'], request.ram, request.cpus
+        base_disk, dest, source_view['os'], request.ram, request.cpus,
+        console=request.console,
     )
 
     # User discarded the session: nothing was flattened or written. Signal "no

@@ -313,7 +313,8 @@ def create(name, project, with_vm):
 @click.option('--from-file', type=click.Path(exists=True), help='YAML file with post-setup installations to add')
 @click.option('--shell', is_flag=True, help='Run --install commands through a shell')
 @click.option('--cwd', help='Working directory for --install commands')
-@click.option('--interactive', '--manual', 'interactive', is_flag=True, help='Boot the base in a GUI window for manual customization (QEMU only)')
+@click.option('--interactive', '--manual', 'interactive', is_flag=True, help='Boot the base in a GUI window for manual, GUI-only customization (QEMU only)')
+@click.option('--console', is_flag=True, help='[interactive mode] Also open a terminal REPL that records typed commands as installs (requires --interactive)')
 @click.option('--ram', type=int, help='[interactive mode] RAM in MB for the boot window')
 @click.option('--cpus', type=int, help='[interactive mode] CPU count for the boot window')
 @click.option('--disk-name', help='[interactive mode] Name for the new flattened disk (defaults to --name)')
@@ -321,8 +322,8 @@ def create(name, project, with_vm):
 @click.option('--tag', '-t', multiple=True, help='Tag to attach to the new environment (repeatable)')
 @click.option('--force', '-f', is_flag=True, help='Force overwrite if the new name already exists')
 @click.option('--project', '-p', help='Name of the project')
-def extend(source, name, install, from_file, shell, cwd, interactive, ram, cpus,
-           disk_name, description, tag, force, project):
+def extend(source, name, install, from_file, shell, cwd, interactive, console,
+           ram, cpus, disk_name, description, tag, force, project):
     """Extend an environment (or VM) into a new environment that reuses the same base disk.
 
     SOURCE can be an environment name, environment ULID, or VM name.
@@ -333,16 +334,19 @@ def extend(source, name, install, from_file, shell, cwd, interactive, ram, cpus,
     is created).
 
     Interactive mode (--interactive, QEMU only): boots a throwaway overlay of
-    the base disk in a GUI window so you can install software by hand. On
-    shutdown the overlay is flattened into a new standalone disk and registered
-    as a NEW base VM + environment. May be combined with --install.
+    the base disk in a GUI window so you can install software by hand. By
+    default this is a GUI-only window; add --console to also open a terminal
+    REPL that records the commands you type as reproducible installs. On
+    shutdown you choose whether to store or discard the session; when stored,
+    the overlay is flattened into a new standalone disk and registered as a
+    NEW base VM + environment. May be combined with --install.
     """
     from adare.cli.environment_extend import exec_environment_extend
     args = SimpleNamespace(
         source=source, name=name, install=install, from_file=from_file,
-        shell=shell, cwd=cwd, interactive=interactive, ram=ram, cpus=cpus,
-        disk_name=disk_name, description=description, tag=tag, force=force,
-        project=project,
+        shell=shell, cwd=cwd, interactive=interactive, console=console,
+        ram=ram, cpus=cpus, disk_name=disk_name, description=description,
+        tag=tag, force=force, project=project,
     )
     exec_with_error_printing(exec_environment_extend, args)
 
