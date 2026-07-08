@@ -148,6 +148,27 @@ class EnvironmentService:
         """
         try:
             environment_ulid, created = backend_environment_extend(request)
+
+            # Interactive mode: the user discarded the session, so nothing was
+            # flattened or registered. Report a neutral "discarded" result.
+            if environment_ulid is None:
+                return Result.ok(EnvironmentInfo(
+                    id='',
+                    name=request.name,
+                    description='',
+                    vm_name=None,
+                    hypervisor='qemu',
+                    os_platform=None,
+                    file_path=None,
+                    discarded=True,
+                    next_steps=[
+                        'Nothing was created. Re-run the extend to try again: '
+                        f'adare env extend {request.source} {request.name} --interactive',
+                        'List available environments with: adare environment list',
+                    ],
+                    tip='Session discarded — no environment was created.',
+                ))
+
             reused_existing = not created
 
             env_data = environment_database.get_environment_data(environment_ulid)

@@ -99,7 +99,7 @@ def run_interactive_extend(
     os_block: dict,
     ram: int | None,
     cpus: int | None,
-) -> list[dict]:
+) -> tuple[bool, list[dict]]:
     """Boot an overlay of *base_disk* interactively, then flatten to *dest_disk*.
 
     The base disk is opened read-only through the overlay's backing chain and
@@ -114,8 +114,10 @@ def run_interactive_extend(
         cpus: vCPU count (falls back to a sensible default).
 
     Returns:
-        The commands the user recorded in the interactive console, as install
-        dicts to fold into the new environment's post-setup installations.
+        Tuple of ``(store, recorded)``. ``store`` is the user's decision from the
+        console: only when True is the overlay flattened into *dest_disk* and the
+        recorded install dicts returned for folding into the new environment. On
+        discard, ``(False, [])`` is returned and *dest_disk* is never created.
 
     Raises:
         HypervisorException: On any validation, overlay, boot, or flatten
@@ -190,13 +192,19 @@ def run_interactive_extend(
             f'Booting base disk overlay ({boot_mode.upper()}) for interactive '
             f'customization...'
         )
-        recorded = run_post_install_session(
+        store, recorded = run_post_install_session(
             work_overlay, work_nvram, os_def, ram_mb, cpu_count,
             console_mode=True,
         )
 
-        # 4. Flatten the overlay into a standalone qcow2 (no backing file). The
-        #    base is only read here, through the overlay's backing chain.
+        # 4. Flatten the overlay into a standalone qcow2 (no backing file) ONLY
+        #    when the user chose to store. On discard nothing is created; the
+        #    work overlay is cleaned up by the `finally` below. The base is only
+        #    read here, through the overlay's backing chain.
+        if not store:
+            print_step('Session discarded -- no environment will be created.')
+            return False, []
+
         convert_cmd = [
             qemu_img, 'convert', '-O', 'qcow2', str(work_overlay), str(dest_disk),
         ]
@@ -208,7 +216,7 @@ def run_interactive_extend(
                 f'{result.stderr.strip()}'
             )
         print_step(f'Flattened new standalone disk: [dim]{dest_disk}[/dim]')
-        return recorded
+        return True, recorded
     finally:
         # 5. Delete the work overlay + NVRAM + temp dir. No guest state leaks.
         shutil.rmtree(work_dir, ignore_errors=True)

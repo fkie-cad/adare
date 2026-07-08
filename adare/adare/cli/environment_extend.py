@@ -53,11 +53,18 @@ def exec_environment_extend(arguments):
     ))
 
     if result.success:
-        print_success_message(
-            title=f'Environment "{result.data.name}" created successfully!',
-            location=str(result.data.file_path) if result.data.file_path else None,
-            next_steps=result.data.next_steps,
-            tip=result.data.tip
-        )
+        if result.data.discarded:
+            print_success_message(
+                title='Session discarded — no environment created.',
+                next_steps=result.data.next_steps,
+                tip=result.data.tip
+            )
+        else:
+            print_success_message(
+                title=f'Environment "{result.data.name}" created successfully!',
+                location=str(result.data.file_path) if result.data.file_path else None,
+                next_steps=result.data.next_steps,
+                tip=result.data.tip
+            )
     else:
         handle_api_error(result)

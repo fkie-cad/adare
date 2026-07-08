@@ -61,7 +61,7 @@ def run_post_install_session(
     ram_mb: int,
     cpus: int,
     console_mode: bool = False,
-) -> list[dict]:
+) -> tuple[bool, list[dict]]:
     """Boot a finished VM disk image for manual customization.
 
     Starts QEMU from the installed disk (no ISO, no kernel/initrd, no -no-reboot)
@@ -82,9 +82,11 @@ def run_post_install_session(
         console_mode: If True, attach the guest-agent console and record commands.
 
     Returns:
-        The commands the user ran in the console, as install dicts to record as
-        the new environment's post-setup installations. Always empty when
-        ``console_mode`` is False.
+        Tuple of ``(store, recorded)``. In ``console_mode`` these are passed
+        through from the console: ``store`` is the user's explicit decision to
+        create the new environment, ``recorded`` the commands to fold in. In the
+        non-console (``vm create``) path the store flag is irrelevant (the caller
+        ignores the return value) and ``(True, [])`` is returned.
     """
     arch_params = qemu_params_for_arch(os_def)
 
@@ -167,11 +169,12 @@ def run_post_install_session(
     else:
         console.print('  Install additional software or configure the VM as needed.')
 
+    store = True
     recorded: list[dict] = []
     windows = 'windows' in (os_def.platform or '').lower()
     try:
         if console_mode:
-            recorded = run_extend_console(
+            store, recorded = run_extend_console(
                 qga_sock_path, qmp_sock_path, process, windows=windows
             )
         else:
@@ -188,4 +191,4 @@ def run_post_install_session(
         )
 
     print_step('[green]Interactive session completed.[/green]')
-    return recorded
+    return store, recorded
