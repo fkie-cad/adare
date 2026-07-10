@@ -244,8 +244,12 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 ]
                 await step_runner.run_steps_sequence(initial_steps, experiment_run_context)
 
-                # Start MCP server early (independent of VM)
-                await step_runner.run_async_step(step_start_mcp_server, experiment_run_context)
+        # Start computer vision (MCP) server as its own top-level step after prep
+        # completes, so it renders as a clean sibling of "Preparing experiment"
+        # rather than nested inside it. MCPServerManager is created earlier in
+        # step_prepare_run_environment, so this ordering is safe.
+        if not stop_event.is_set():
+            await step_runner.run_async_step(step_start_mcp_server, experiment_run_context)
 
         # Create VM lifecycle manager with hypervisor from environment
         # (Must be created after step_setup_experiment_environment sets hypervisor_type)
