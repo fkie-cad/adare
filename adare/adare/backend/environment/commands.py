@@ -231,7 +231,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                 f"Environment with name '{environment_name}' already exists in the database.",
                 possible_solutions=[
                     "Use a different filename for your environment",
-                    f"Delete the existing environment: adare env delete {environment_name}",
+                    f"Delete the existing environment: adare env remove {environment_name}",
                     f"Update the existing environment safely with: adare env load --force {environment_file}"
                 ]
             )

@@ -427,7 +427,7 @@ def delete_all_vms(force: bool = False) -> dict:
                 # VmInstances track actual VirtualBox VMs, not the abstract Vm model
                 from adare.database.api.vm import VmApi
                 with VmApi() as api:
-                    instances = api.get_vm_instances_by_vm_id(vm.id)
+                    instances = api.get_vm_instances_for_vm(vm.id)
                     if instances:
                         log.info(f"Found {len(instances)} instances for VM '{vm.name}'")
                         from adare.backend.vm.instance_manager import delete_vm_instance
@@ -492,7 +492,7 @@ def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dic
                 # Delete associated VmInstance records - they will handle VirtualBox cleanup
                 from adare.database.api.vm import VmApi
                 with VmApi() as api:
-                    instances = api.get_vm_instances_by_vm_id(vm.id)
+                    instances = api.get_vm_instances_for_vm(vm.id)
                     if instances:
                         log.info(f"Found {len(instances)} instances for VM '{vm.name}'")
                         from adare.backend.vm.instance_manager import delete_vm_instance
