@@ -46,14 +46,6 @@ class QEMUManager(AbstractHypervisorManager):
         self.default_accel = qemu_config.get('default_accel', 'kvm')
         self.default_drive_format = qemu_config.get('default_drive_format', 'qcow2')
 
-        # Check for guestfish CLI tool
-        if shutil.which('guestfish'):
-            log.debug("guestfish CLI tool available.")
-        else:
-            log.warning("guestfish command not found. "
-                       "File operations when VM is stopped will not work. "
-                       "Install with: sudo apt install libguestfs-tools")
-
         # Initialize libvirt connection
         self.libvirt_conn = None
         use_libvirt = qemu_config.get('use_libvirt', True)
