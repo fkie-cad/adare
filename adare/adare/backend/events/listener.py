@@ -12,6 +12,16 @@ from adarelib.constants import StatusEnum
 
 log = logging.getLogger(__name__)
 
+# Terminal states that reveal an otherwise-collapsed stage as a top-level row.
+# INTERRUPTED is intentionally omitted (Ctrl-C shows on the visible parent phase).
+_COLLAPSE_REVEAL_STATUSES = frozenset({
+    StatusEnum.FAILED,
+    StatusEnum.WARNING,
+    StatusEnum.ERROR,
+    StatusEnum.TEST_MISSING,
+    StatusEnum.TEST_FAILED,
+})
+
 # Cache for stage hierarchy levels to avoid repeated calculations
 _stage_level_cache = {}
 
@@ -260,22 +270,27 @@ def _get_stage_level(stage_name: str) -> int:
 def _compute_display_level(action_data):
     """
     Compute display level based on parent relationships.
-    Root level events have display_level = 2 (main playbook actions), each nested level adds 1.
+    Root level events have display_level = 1 (main playbook actions), each nested level adds 1.
+
+    Now that `experiment_run` is a top-level (level-0) stage row ("Running the
+    playbook"), its playbook actions sit at level 1 and sub-actions at level 2,
+    lining up with the stage-based level from `_get_stage_level` so the tree
+    prefixes (├─/└─) render correctly.
 
     This handles the common cases:
-    - Level 2: Main playbook actions (no parent_event_id)
-    - Level 3: Sub-actions like block actions, find/execute substages (has parent_event_id)
+    - Level 1: Main playbook actions (no parent_event_id)
+    - Level 2: Sub-actions like block actions, find/execute substages (has parent_event_id)
 
     For deeper nesting (parent->parent->parent chains), a per-experiment session cache
     or database traversal would be needed, but the current pattern handles the main use cases.
     """
-    base_level = 2  # Flow console expects main playbook actions at level 2
+    base_level = 1  # Flow console expects main playbook actions one level under "Running the playbook"
 
     if not action_data.get('parent_event_id'):
-        return base_level  # Main playbook actions (level 2)
+        return base_level  # Main playbook actions (level 1)
     # For sub-actions (with parent), add 1 to base level
     # This covers block sub-actions, find/execute substages, etc.
-    return base_level + 1  # Sub-actions (level 3)
+    return base_level + 1  # Sub-actions (level 2)
 
 def event_listener_cli(ulid):
     console = flowconsolemanager.get_handler(ulid)
@@ -317,6 +332,12 @@ def _handle_stage_event(event, console, ulid):
         log.debug(f"[EventListener CLI] Skipping hidden stage: {stage.name}")
         return
 
+    # Collapsed stages never show a spinner during a clean run; they only surface
+    # as a row if they finish in a problem state (see _COLLAPSE_REVEAL_STATUSES).
+    # INTERRUPTED is deliberately excluded — on Ctrl-C the visible parent phase
+    # already shows the interruption; we don't want a burst of collapsed rows.
+    collapse = getattr(stage, "collapse", False)
+
     # Debug logging for duplicate stage investigation
     log.info(f"[EventListener CLI] Stage: {stage.name}, ID: {stage_id}, Start: {stage.start_time}, End: {stage.end_time}, Status: {stage.status}")
 
@@ -334,6 +355,13 @@ def _handle_stage_event(event, console, ulid):
     message = f"{stage.msg}: {stage.sub_msg}" if stage.sub_msg else stage.msg
 
     if finished:
+        # Collapsed stage that finished cleanly: no spinner was ever created and
+        # the outcome isn't a problem state, so leave the row hidden entirely.
+        if collapse and (stage.status not in _COLLAPSE_REVEAL_STATUSES
+                         and stage.result_status not in _COLLAPSE_REVEAL_STATUSES):
+            log.debug(f"[EventListener CLI] Skipping collapsed stage (clean finish): {stage.name}")
+            return
+
         # Calculate stage duration if both start and end times are available
         stage_duration = None
         if stage.start_time and stage.end_time:
@@ -386,6 +414,11 @@ def _handle_stage_event(event, console, ulid):
         else:
             complete_stage()  # Complete immediately if already visible long enough
     elif in_progress:
+        # Collapsed stages never show a spinner while running; a row is only drawn
+        # later (in the finished branch) if the stage ends in a problem state.
+        if collapse:
+            log.debug(f"[EventListener CLI] Suppressing spinner for collapsed stage: {stage.name}")
+            return
         # Only add the stage if it doesn't already exist
         if not console.exists(stage_id):
             log.info(f"[EventListener CLI] Creating new console spinner for stage: {stage.name}, ID: {stage_id}, Level: {level}")
