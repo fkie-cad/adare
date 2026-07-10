@@ -354,6 +354,12 @@ def _resolve_and_store_test_execution_mode(context: ExperimentRunCtx):
 async def step_execute_installations_via_qga(context: ExperimentRunCtx):
     """Execute environment installations via QGA guest-exec (no WebSocket needed)."""
     from adare.backend.experiment.agent_lifecycle import execute_installations_via_qga
+    # Skip the stage entirely when there is nothing to install, so the
+    # "Installing environment software" row never appears for empty environments.
+    installations = environment_database.get_environment_installations(context.environment_ulid)
+    if not installations:
+        log.info("No environment installations to execute; skipping stage")
+        return
     with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
         await execute_installations_via_qga(context, stage_ctx)
 
@@ -371,6 +377,12 @@ async def step_connect_websocket(context: ExperimentRunCtx):
 
 async def step_execute_installations(context: ExperimentRunCtx):
     from adare.backend.experiment.agent_lifecycle import execute_installations_via_websocket
+    # Skip the stage entirely when there is nothing to install, so the
+    # "Installing environment software" row never appears for empty environments.
+    installations = environment_database.get_environment_installations(context.environment_ulid)
+    if not installations:
+        log.info("No environment installations to execute; skipping stage")
+        return
     with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
         await execute_installations_via_websocket(context, stage_ctx)
 
