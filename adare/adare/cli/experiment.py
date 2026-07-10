@@ -464,6 +464,19 @@ def exec_experiment_run(arguments):
             return
 
         # Single environment run (existing logic)
+        # When the flow console will own the terminal (not --verbose/--very-verbose),
+        # suppress console logging for the whole run so early validation and
+        # testfunction-load diagnostics ([!]/[-] lines) go to the run log file(s)
+        # only and cannot corrupt the live UI. Restored in the finally below.
+        from adare.setup_logging import set_console_log_level
+        original_console_level = None
+        if not disable_printing:
+            root_logger = logging.getLogger()
+            for handler in root_logger.handlers:
+                if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+                    original_console_level = handler.level
+                    break
+            set_console_log_level(logging.CRITICAL)
         try:
             # In production mode, use strict loading; in test mode, allow modifications
             if not arguments.test:  # Production mode
@@ -585,6 +598,10 @@ def exec_experiment_run(arguments):
                 sys.exit(0)
         except KeyboardInterrupt:
             log.info("Keyboard interrupt received, shutting down gracefully...")
+        finally:
+            # Restore console logging level suppressed above for the flow-console run.
+            if original_console_level is not None:
+                set_console_log_level(original_console_level)
     else:
         raise NoProjectFoundError(log, message='no project directory found')
 

@@ -28,8 +28,10 @@ class ExperimentFlowConsole:
 
     indent_offset: int
     layout: Text
+    transient: bool  # If True, the live display is erased on stop (final output printed separately)
 
-    def __init__(self, disable: bool = False, external_stop_event: threading.Event = None, indent_offset: int = 0):
+    def __init__(self, disable: bool = False, external_stop_event: threading.Event = None, indent_offset: int = 0,
+                 transient: bool = False):
         self.console = Console()
         self.stop_event = threading.Event()
         self.external_stop_event = external_stop_event
@@ -38,6 +40,7 @@ class ExperimentFlowConsole:
         self.disable = disable
         self._original_log_level = None
         self.indent_offset = indent_offset
+        self.transient = transient
 
         # No need to re-initialize console with fixed height
         # Console will use full terminal and scroll naturally
@@ -47,7 +50,7 @@ class ExperimentFlowConsole:
     def _start_live_in_thread(self):
         tick_count = 0
         with Live(self.layout, console=self.console, refresh_per_second=self.ticks_per_second,
-                  auto_refresh=False, transient=False) as live:
+                  auto_refresh=False, transient=self.transient) as live:
             while not self.stop_event.is_set():
                 try:
                     # Use snapshot to avoid holding lock during render
