@@ -331,7 +331,7 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
         # Delete associated VmInstance records - they handle VirtualBox VM cleanup
         from adare.database.api.vm import VmApi
         with VmApi() as api:
-            instances = api.get_vm_instances_by_vm_id(vm_id)
+            instances = api.get_vm_instances_for_vm(vm_id)
             if instances:
                 log.info(f"Found {len(instances)} VM instances to delete for '{vm.name}'")
                 from adare.backend.vm.instance_manager import cleanup_vm_instance
