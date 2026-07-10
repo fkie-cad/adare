@@ -66,7 +66,10 @@ def create_and_start_flow_console(
         log.info(f"Reusing existing flow console handler for {experiment_run_ulid}")
         return existing_handler
 
-    flow_console = ExperimentFlowConsole(disable_printing, external_stop_event)
+    # transient=True: the live tree is erased on stop() so that
+    # print_final_output() (called by run.py) renders the full tree + summary
+    # exactly once, in both a TTY and a redirected file.
+    flow_console = ExperimentFlowConsole(disable_printing, external_stop_event, transient=True)
     flowconsolemanager.add_handler(experiment_run_ulid, flow_console)
     flow_console.start()
     return flow_console

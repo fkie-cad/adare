@@ -210,6 +210,8 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 # Create new connection for this QEMUVM instance (thread-safe)
                 # Don't use self.manager.libvirt_conn to avoid shared connection issues
                 self._libvirt_conn = libvirt.open(libvirt_uri)
+                from adare.hypervisor.qemu.libvirt_errors import install_libvirt_error_logger
+                install_libvirt_error_logger()
                 log.debug(f"Created thread-local libvirt connection for {self.vm_name}")
             except libvirt.libvirtError as e:
                 log.warning(f"Failed to create libvirt connection: {e}")

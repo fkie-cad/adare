@@ -66,6 +66,8 @@ class QEMUManager(AbstractHypervisorManager):
                 # LibvirtStderrRedirect requires an experiment log file, which doesn't exist during manager init.
                 # If libvirtd is not running, we want the error to fail loudly.
                 self.libvirt_conn = libvirt.open(libvirt_uri)
+                from adare.hypervisor.qemu.libvirt_errors import install_libvirt_error_logger
+                install_libvirt_error_logger()
 
                 if not self.libvirt_conn:
                     from adare.hypervisor.exceptions import HypervisorException
