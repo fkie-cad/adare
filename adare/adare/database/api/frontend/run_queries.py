@@ -6,6 +6,7 @@ import pandas as pd
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
+from adare.database.api.base import experiment_name_from_run_path
 from adare.database.models.global_models import (
     Environment,
     Vm,
@@ -51,13 +52,21 @@ class RunQueryMixin:
         project_names = []
         object_runs = []
         object_environments = []
+        dotnotations = []
 
         for _index, row in data.iterrows():
             experiment = experiments_dict.get(row['experiment_id'])
             environment = environments_dict.get(row['environment_id'])
             run = runs_dict.get(row['id'])
 
-            experiment_names.append(experiment.name if experiment else '')
+            if experiment:
+                experiment_names.append(experiment.name)
+                dotnotations.append(run.experiment_dotnotation if run else experiment.name)
+            else:
+                # Unlinked run: derive a label from the run path so it stays visible.
+                derived = experiment_name_from_run_path(run.path if run else None) or '(unlinked)'
+                experiment_names.append(derived)
+                dotnotations.append(derived)
             environment_names.append(environment.name if environment else '')
             project_names.append(self.project_path.name if self.project_path else '')
             object_runs.append(run)
@@ -68,12 +77,13 @@ class RunQueryMixin:
         data['project_name'] = project_names
         data['object_run'] = object_runs
         data['object_environment'] = object_environments
+        data['experiment_dotnotation'] = dotnotations
 
         # access hybrid properties with null checks
         data['duration'] = data['object_run'].apply(lambda obj: obj.duration if obj else None)
         data['result_status'] = data['object_run'].apply(lambda obj: int(obj.result_status) if obj else 0)
         data['status'] = data['object_run'].apply(lambda obj: obj.status if obj else '')
-        data['experiment_dotnotation'] = data['object_run'].apply(lambda obj: obj.experiment_dotnotation if obj else 'unknown.unknown.unknown')
+        # experiment_dotnotation is set during the enrichment loop above (handles unlinked runs)
         data['vm'] = data['object_environment'].apply(lambda obj: obj.vm if obj else None)
         data['vm_name'] = data['object_environment'].apply(lambda obj: obj.vm.name if obj and obj.vm else '')
         data['osinfo'] = data['object_environment'].apply(lambda obj: str(obj.vm.osinfo) if obj and obj.vm and hasattr(obj.vm, 'osinfo') and obj.vm.osinfo else '')

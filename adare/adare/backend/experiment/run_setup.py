@@ -598,6 +598,16 @@ def step_finalize(context: ExperimentRunCtx, post_interrupt: bool = False):
     with StageCtxManager(FinalizeStage(), context.experiment_run_ulid, event=event):
         timestamp_end = datetime.now(UTC)
         experiment_database.update_experiment_run_end(context.project_directory.path, context.experiment_run_ulid, timestamp_end)
+
+        # The run actually executed against this environment: register it as a
+        # "can run here" indicator on the experiment (DB + metadata.yml). This is
+        # best-effort and never breaks a completed run.
+        experiment_database.register_experiment_environment(
+            context.project_directory.path,
+            context.config.experiment_name,
+            context.config.environment_name,
+        )
+
         duration_total = timestamp_end - context.timestamp_start
         duration_vm = timestamp_end - context.timestamp_before_vm_start
         log.info(f"Experiment run {context.experiment_run_ulid} finished after {duration_total} seconds (vm run time: {duration_vm})")
