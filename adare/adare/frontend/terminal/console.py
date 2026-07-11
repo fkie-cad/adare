@@ -35,7 +35,13 @@ def pad_string_to_length(string: str, length: int, right: bool = True) -> str:
     return ' ' * (length - len(string)) + string
 
 
-def timedelta_to_str(delta: pd.Timedelta) -> str:
+def timedelta_to_str(delta: "pd.Timedelta | float | int | None") -> str:
+    if not delta:
+        return '...'
+    # Structured views pass a duration in seconds (float); Rich DataFrame views
+    # pass a pandas Timedelta. Normalize numbers to a Timedelta before formatting.
+    if isinstance(delta, (int, float)):
+        delta = pd.Timedelta(seconds=delta)
     return str(delta.as_unit('s')) if delta else '...'
 
 
