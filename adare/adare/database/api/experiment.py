@@ -252,6 +252,51 @@ class ExperimentApi(ProjectDatabaseApi):
 
         log.debug(f"Updated experiment {experiment_ulid} environments to: {new_env_names}")
 
+    def add_experiment_environment(self, experiment_ulid: str, environment_id: str, auto_commit: bool = True) -> bool:
+        """Register an environment id into the experiment's indicator list.
+
+        ``environment_ids`` is a *discovery indicator* of where an experiment can
+        run, not a hard gate. Appends ``environment_id`` if not already present and
+        returns ``True`` when a change was made, ``False`` otherwise.
+        """
+        experiment = self.get_experiment_by_ulid(experiment_ulid)
+        if not experiment:
+            raise ValueError(f"Experiment {experiment_ulid} not found")
+
+        current_ids = list(experiment.environment_ids or [])
+        if environment_id in current_ids:
+            return False
+
+        current_ids.append(environment_id)
+        # Reassign a new list so SQLAlchemy detects the change on the JSON column
+        experiment.environment_ids = current_ids
+
+        if auto_commit:
+            self._session.commit()
+
+        log.debug(f"Registered environment {environment_id} into experiment {experiment_ulid}")
+        return True
+
+    def update_experiment_metadata_hash(self, experiment_ulid: str, sha256_metadata: str, auto_commit: bool = True) -> None:
+        """Refresh the stored metadata hash after metadata.yml was rewritten (bookkeeping)."""
+        experiment = self.get_experiment_by_ulid(experiment_ulid)
+        if experiment:
+            experiment.sha256_metadata = sha256_metadata
+            if auto_commit:
+                self._session.commit()
+
+    def get_unlinked_runs(self) -> list[ExperimentRun]:
+        """Return experiment runs that are not linked to any experiment (experiment_id IS NULL)."""
+        return self._session.query(ExperimentRun).filter(ExperimentRun.experiment_id.is_(None)).all()
+
+    def link_run_to_experiment(self, run_ulid: str, experiment_ulid: str, auto_commit: bool = True) -> None:
+        """Attach an existing run to an experiment by ulid."""
+        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == run_ulid).first()
+        if experiment_run:
+            experiment_run.experiment_id = experiment_ulid
+            if auto_commit:
+                self._session.commit()
+
     def __create_logfile(self, path: Path) -> LogFile:
         logfile = LogFile(
             name=path.name,

@@ -28,6 +28,24 @@ log = logging.getLogger(__name__)
 T = TypeVar('T')
 
 
+def experiment_name_from_run_path(run_path: str | Path | None) -> str | None:
+    """Derive the experiment name from a run directory path.
+
+    Run directories follow the structure ``<project>/run/<experiment_name>/<timestamp>``,
+    so the experiment name is the parent directory of the timestamp directory.
+    Returns ``None`` when the path is empty or does not match that structure
+    (e.g. runs interrupted before their ``path`` was set).
+    """
+    if not run_path:
+        return None
+    parts = Path(str(run_path)).parts
+    # Find the 'run' segment and take the directory immediately after it.
+    for idx, part in enumerate(parts):
+        if part == 'run' and idx + 1 < len(parts):
+            return parts[idx + 1]
+    return None
+
+
 def validate_input(func):
     """Decorator for input validation of API methods."""
     @functools.wraps(func)
