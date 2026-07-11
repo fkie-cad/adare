@@ -4,11 +4,15 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 from adare.backend.experiment.exceptions import MultipleEnvironmentsError, NoEnvironmentError
 from adare.database.api.environment import EnvironmentDbApi
+from adare.database.api.base import experiment_name_from_run_path
 from adare.database.api.experiment import ExperimentApi
 from adare.database.api.stage import StageDbApi
+from adare.database.exceptions import EnvironmentMissingError
 
 # internal imports
 from adare.database.models.project_models import Experiment
@@ -250,16 +254,145 @@ def set_experiment_run_base_info(experiment_run_ulid: str, experiment_name: str,
     """
     Set the basic experiment and environment information early in the process.
     This prevents orphaned experiment runs if the process is interrupted early.
+
+    The run is linked to its experiment purely by name. Environment membership
+    (``experiment.environment_ids``) is a discovery *indicator* of where an
+    experiment can run, not a gate: a run must always be recorded against its
+    experiment regardless of whether the chosen environment is listed there.
     """
     with ExperimentApi(project_path) as api:
         environment = api.get_environment(environment_name, project_path.name)
-        experiment = api.get_experiment(experiment_name, environment.id)
+        if environment is None:
+            raise EnvironmentMissingError(
+                log,
+                message=f'environment [b]{environment_name}[/b] not found',
+                possible_solutions=[
+                    'Load the environment with [i]adare environment load[/i]',
+                    'Create a new environment with [i]adare environment create[/i]',
+                ],
+            )
+        # Link by name so the run always attaches to its experiment, irrespective
+        # of environment membership. Falls back to None only for untracked experiments.
+        experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
         experiment_run = api.set_experiment_run_base_info(
             run_ulid=experiment_run_ulid,
             experiment=experiment,
             environment_id=environment.id
         )
         return experiment_run.id
+
+
+def register_experiment_environment(project_path: Path, experiment_name: str, environment_name: str) -> None:
+    """Register an environment as a "can run here" indicator on the experiment.
+
+    Called after a run actually executed against ``environment_name``. Updates
+    both the database (``experiment.environment_ids``) and ``metadata.yml`` so the
+    indicator reflects environments a run has genuinely completed in. Writing
+    ``metadata.yml`` is safe: experiment-change detection only hashes the playbook,
+    so a metadata edit will not trigger a force-delete of existing runs.
+
+    Failures here must never break a completed run, so errors are logged and swallowed.
+    """
+    from adare.backend.experiment.directory import ExperimentDirectory
+    from adare.backend.experiment.exceptions import ExperimentFileCreationError
+
+    try:
+        with ExperimentApi(project_path) as api:
+            environment = api.get_environment(environment_name, project_path.name)
+            if environment is None:
+                log.warning(f'cannot register environment "{environment_name}": not found in database')
+                return
+            experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+            if experiment is None:
+                log.warning(f'cannot register environment for experiment "{experiment_name}": experiment not found')
+                return
+
+            added = api.add_experiment_environment(experiment.id, environment.id)
+            if not added:
+                return  # already registered - nothing to persist
+
+            # Mirror the indicator into metadata.yml (env NAME, not id)
+            experiment_directory = ExperimentDirectory(project_path, experiment_name)
+            try:
+                metadata = experiment_directory.load_metadata()
+                if environment_name not in metadata.environments:
+                    metadata.environments.append(environment_name)
+                    experiment_directory.save_metadata(metadata)
+                    # Keep the stored metadata hash consistent with the file on disk
+                    api.update_experiment_metadata_hash(experiment.id, experiment_directory.sha256_metadata)
+                    log.info(f'registered environment "{environment_name}" for experiment "{experiment_name}"')
+            except (OSError, ExperimentFileCreationError) as e:
+                log.warning(f'registered environment "{environment_name}" in database but failed to update metadata.yml: {e}')
+    except (SQLAlchemyError, OSError, ValueError) as e:
+        log.warning(f'failed to register environment "{environment_name}" for experiment "{experiment_name}": {e}')
+
+
+def relink_unlinked_runs(project_path: Path) -> dict:
+    """Maintenance: attach runs with a NULL experiment_id back to their experiment.
+
+    Derives the experiment name from each run's path (``run/<name>/<timestamp>``),
+    links the run, and registers the run's environment as an indicator. Returns a
+    summary dict with counts. Runs whose path was never set (interrupted early)
+    cannot be recovered and are reported under ``skipped_no_path``.
+    """
+    summary = {'relinked': 0, 'skipped_no_path': 0, 'skipped_no_experiment': 0, 'total': 0}
+    with ExperimentApi(project_path) as api:
+        unlinked = api.get_unlinked_runs()
+        summary['total'] = len(unlinked)
+        # Cache experiment lookups + which (experiment, env) indicators we've registered
+        registered_indicators: set = set()
+        for run in unlinked:
+            experiment_name = experiment_name_from_run_path(run.path)
+            if not experiment_name:
+                summary['skipped_no_path'] += 1
+                continue
+            experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+            if experiment is None:
+                summary['skipped_no_experiment'] += 1
+                continue
+
+            api.link_run_to_experiment(run.id, experiment.id, auto_commit=False)
+            summary['relinked'] += 1
+
+            # Register this run's environment as an indicator (once per experiment/env)
+            if run.environment_id:
+                key = (experiment.id, run.environment_id)
+                if key not in registered_indicators:
+                    registered_indicators.add(key)
+                    api.add_experiment_environment(experiment.id, run.environment_id, auto_commit=False)
+
+        api._session.commit()
+
+    # Mirror newly-registered indicators into each experiment's metadata.yml
+    for experiment_ulid, _environment_id in registered_indicators:
+        _sync_experiment_metadata_environments(project_path, experiment_ulid)
+
+    return summary
+
+
+def _sync_experiment_metadata_environments(project_path: Path, experiment_ulid: str) -> None:
+    """Rewrite an experiment's metadata.yml environments to match its DB indicator list."""
+    from adare.backend.experiment.directory import ExperimentDirectory
+    from adare.backend.experiment.exceptions import ExperimentFileCreationError
+
+    try:
+        with ExperimentApi(project_path) as api:
+            experiment = api.get_experiment_by_ulid(experiment_ulid)
+            if experiment is None:
+                return
+            env_names = api.get_experiment_environment_names(experiment_ulid)
+            experiment_directory = ExperimentDirectory(project_path, experiment.name)
+            metadata = experiment_directory.load_metadata()
+            changed = False
+            for name in env_names:
+                if name not in metadata.environments:
+                    metadata.environments.append(name)
+                    changed = True
+            if changed:
+                experiment_directory.save_metadata(metadata)
+                api.update_experiment_metadata_hash(experiment.id, experiment_directory.sha256_metadata)
+    except (SQLAlchemyError, OSError, ExperimentFileCreationError) as e:
+        log.warning(f'failed to sync metadata.yml environments for experiment {experiment_ulid}: {e}')
 
 def remove_fake_experiment_run(project_path: Path, experiment_run_ulid: str):
     with ExperimentApi(project_path) as api:
