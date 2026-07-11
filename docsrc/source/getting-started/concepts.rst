@@ -41,6 +41,11 @@ An environment definition specifies:
 
 Environments are the "where" of an experiment -- they define the system under test. The same experiment can target multiple environments to compare forensic behavior across OS versions or configurations.
 
+An environment can be anchored in one of two ways:
+
+- **Baked disk** -- the YAML points at a pre-built disk image and integrity is anchored on that disk's hash. This is the default for Linux.
+- **Recipe** -- the YAML declares the *build inputs* (OS profile, installer ISO + its expected SHA256, and build params) and the disk is built on load. Integrity is anchored on the inputs, which makes the environment rebuildable -- the default for Windows, where evaluation editions and activation expire. See :ref:`recipe-environments`.
+
 See :doc:`/guide/environments` for VM configuration and setup.
 
 Experiments

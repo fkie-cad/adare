@@ -30,3 +30,35 @@ def combine_hashes(hashes: list):
     for single_hash in hashes:
         h.update(single_hash.encode())
     return h.hexdigest()
+
+
+def hash_recipe(iso_sha256: str, answer_file_hash: str, identity: dict) -> str:
+    """Compute the integrity anchor for a recipe environment.
+
+    In recipe mode an environment's identity is its *build inputs*, not the
+    byte-identical disk output (OS installs are never bit-reproducible). This
+    combines the three inputs that determine a forensically equivalent build:
+
+    * ``iso_sha256`` — expected SHA256 of the installer ISO.
+    * ``answer_file_hash`` — SHA256 of the rendered unattended-install answer
+      file (Autounattend.xml / autoinstall / preseed / kickstart / ...).
+    * ``identity`` — a dict of the remaining inputs (OS profile identity, build
+      params, and post-install steps), hashed order-insensitively via
+      :func:`hash_dict_sha256`.
+
+    Any change to any input yields a different recipe hash, which the caller
+    treats as a new environment (never a silent in-place refresh).
+
+    Args:
+        iso_sha256: Expected SHA256 hex digest of the installer ISO.
+        answer_file_hash: SHA256 hex digest of the rendered answer file.
+        identity: Remaining recipe inputs to fold into the hash.
+
+    Returns:
+        SHA256 hex digest anchoring the recipe's integrity.
+    """
+    return combine_hashes([
+        iso_sha256,
+        answer_file_hash,
+        hash_dict_sha256(identity),
+    ])

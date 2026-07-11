@@ -109,6 +109,8 @@ Options
      - Override CPU architecture: ``x86_64`` or ``aarch64`` (default from OS profile)
    * - ``--env-name NAME``
      - Environment file name (defaults to VM name)
+   * - ``--recipe`` / ``--no-recipe``
+     - Emit a declarative *recipe* environment (built on load) instead of a baked disk. Default: recipe for Windows, baked for Linux. See :ref:`recipe-environments`.
 
 
 Setup Levels
@@ -141,6 +143,91 @@ Each level is cumulative -- it includes everything from the levels below it.
 - **Linux** -- ``qemu-guest-agent``
 - **Windows x86_64** -- ``virtio-win-guest-tools.exe`` (VirtIO drivers, QGA, SPICE) + firewall rule for port 18765
 - **Windows ARM64 (UTM)** -- UTM guest tools + firewall rule for port 18765
+
+
+.. _recipe-environments:
+
+Recipe Environments
+===================
+
+An ADARE environment can be defined in one of two ways:
+
+- **Baked disk** (Linux default) -- ``adare vm create`` builds a ``qcow2`` disk
+  now and the environment references that frozen artifact. Integrity is anchored
+  on the disk's SHA256 (``Vm.hash``). This is the historical model and is
+  unchanged.
+- **Recipe** (Windows default) -- the environment is defined *declaratively* by
+  its build inputs: an OS profile, a user-supplied ISO plus its expected
+  ``iso_sha256``, an optional unattended-install template, and build params. The
+  disk is built **on load** and cached. Integrity is anchored on the *inputs*
+  ("same inputs -> forensically equivalent system"), because OS installs are
+  never bit-reproducible.
+
+Why recipes for Windows
+-----------------------
+
+Windows evaluation editions and activation expire. A baked Windows disk cannot
+be refreshed without becoming a different artifact. With a recipe you simply
+drop in a fresh ISO and rebuild -- the environment definition (profile + params)
+is unchanged, only the ISO and its ``iso_sha256`` move forward. Because the ISO
+is part of the integrity identity, a new ISO is always a **new environment**,
+never a silent in-place refresh, so historical results stay reproducible.
+
+Recipe environment file
+-----------------------
+
+``adare vm create windows11 --iso /path/to/Win11.iso`` emits a recipe
+environment instead of building immediately:
+
+.. code-block:: yaml
+
+   vm_type: recipe
+   hypervisor: qemu
+   recipe:
+     profile: windows11          # resolves via the OS profile catalog
+     iso: /path/to/Win11.iso     # user-supplied installer ISO
+     iso_sha256: "abc123..."     # expected SHA256 of the ISO (hard-checked)
+     params:
+       setup_level: 2            # 0=bare, 1=base, 2=full
+       disk_size: 80G
+       ram_mb: 16384
+   # Post-install steps reuse the existing environment field; they are folded
+   # into the recipe integrity hash and applied at experiment time as usual:
+   # postsetupinstallations:
+   #   - {name: my-tool, command: "...", description: "..."}
+
+Build lifecycle
+---------------
+
+On ``adare environment load`` the recipe flow:
+
+1. Verifies the ISO exists and ``hash(iso) == iso_sha256`` -- **hard-fails** on
+   mismatch.
+2. Computes the *recipe hash* from ``iso_sha256`` + the install template + the
+   params/profile/post-install identity.
+3. If a VM with that recipe hash already exists (and its cached disk is
+   present), reuses it -- **no rebuild** (build once, cache).
+4. Otherwise builds the disk with the normal creator machinery and registers it
+   with ``build_source='recipe'`` plus the recipe hash, ISO hash, and profile
+   name for provenance.
+
+Because the built disk is still hashed into ``Vm.hash``, it remains
+tamper-checked exactly like a baked disk. A recipe environment gains one
+recovery advantage a baked disk lacks: if the cached disk goes missing, integrity
+verification rebuilds it from the recipe instead of hard-failing.
+
+Choosing the mode
+-----------------
+
+Use ``--recipe`` / ``--no-recipe`` to override the platform default:
+
+.. code-block:: bash
+
+   # Linux, opt into a recipe environment (needs an ISO)
+   adare vm create ubuntu2404 --iso /path/to/ubuntu.iso --recipe
+
+   # Windows, force a baked disk instead of a recipe
+   adare vm create windows11 --iso /path/to/Win11.iso --no-recipe
 
 
 Profile System
