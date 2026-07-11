@@ -226,7 +226,15 @@ def detect_file_transfer_mode() -> str:
         return 'qga'
 
     # Linux without virtiofsd
-    return 'libguestfs'
+    if _guestfish_appliance_available():
+        return 'libguestfs'
+    log.warning(
+        "virtiofsd not found and guestfish/libguestfs is not usable on this "
+        "host -- falling back to QGA file transfer (via QEMU Guest Agent). "
+        "For offline disk file operations, install libguestfs-tools "
+        "(Debian/Ubuntu: sudo apt install libguestfs-tools)."
+    )
+    return 'qga'
 
 
 def get_file_transfer_strategy(
