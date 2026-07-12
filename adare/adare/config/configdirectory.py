@@ -39,6 +39,7 @@ def __get_default_appdata_directory(create_if_missing: bool = False, program_nam
         (state_dir / 'testfunctions').mkdir(exist_ok=True, parents=True)
         (appdata_path / 'os-profiles').mkdir(exist_ok=True, parents=True)
         (appdata_path / 'vm-templates').mkdir(exist_ok=True, parents=True)
+        (appdata_path / 'icons').mkdir(exist_ok=True, parents=True)
     if not appdata_path.is_dir():
         print(f'the appdata directory ({appdata_path}) of the tool is missing')
         return None
@@ -74,6 +75,14 @@ OS_PROFILES_DIR: Path = APPDATA_DIR/'os-profiles'
 
 # User-supplied Jinja2 templates for VM creation (autoinstall, autounattend)
 VM_TEMPLATES_DIR: Path = APPDATA_DIR/'vm-templates'
+
+# Windows icon library: cached PNGs extracted from targets at runtime.
+# Per-OS-profile subdirectories keep icons from different Windows builds
+# separate, so an OS upgrade re-extracts rather than reusing stale bitmaps.
+ICONS_DIR: Path = APPDATA_DIR/'icons'
+
+# Version-independent name -> resolver-spec map (shipped in appdata/).
+ICON_LIBRARY_FILE: Path = APPDATA_DIR/'icon-library.yml'
 
 
 def ensure_directories() -> None:

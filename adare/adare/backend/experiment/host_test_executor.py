@@ -30,7 +30,8 @@ class HostTestExecutor:
         action_executor,
         mcp_client,
         playbook_dir: Path,
-        experiment_dir: Path
+        experiment_dir: Path,
+        os_key: str = "windows"
     ):
         """
         Initialize host test executor.
@@ -40,11 +41,13 @@ class HostTestExecutor:
             mcp_client: MCP client for CV server
             playbook_dir: Path to playbook directory
             experiment_dir: Path to experiment directory
+            os_key: OS profile / build identifier keying the icon cache
         """
         self.action_executor = action_executor
         self.mcp_client = mcp_client
         self.playbook_dir = playbook_dir
         self.experiment_dir = experiment_dir
+        self.os_key = os_key
 
         # Context is created lazily when needed
         self._context: HostTestContext | None = None
@@ -62,7 +65,8 @@ class HostTestExecutor:
                 websocket_client=self.action_executor.client,
                 action_executor=self.action_executor,
                 playbook_dir=self.playbook_dir,
-                experiment_dir=self.experiment_dir
+                experiment_dir=self.experiment_dir,
+                os_key=self.os_key
             )
             log.debug("Host Test Executor: Created HostTestContext")
 

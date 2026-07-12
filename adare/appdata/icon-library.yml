@@ -1,0 +1,143 @@
+# ADARE Windows Icon Library -- version-independent name -> resolver-spec map.
+#
+# This file ships with ADARE. It contains NO Microsoft bitmaps: only friendly
+# names and the *strategy* used to resolve each icon on the target at runtime.
+# The target's own Windows APIs pick the version-correct DLL/index, so the same
+# name resolves to the right icon across Windows 10/11 with no changes here.
+#
+# Resolver spec forms (each entry uses exactly one strategy):
+#   stock:     <SHSTOCKICONID name>  -> SHGetStockIconInfo (version-stable enum)
+#   exe:       <path>                -> icon 0 of an executable (env vars ok)
+#   app:       <name.exe>            -> App Paths registry -> exe -> icon 0
+#   fileassoc: <.ext>               -> SHGetFileInfo(SHGFI_USEFILEATTRIBUTES)
+#   dll:       <path> + index: <n>   -> explicit fallback (rare: no stock id
+#                                       and no owning exe)
+#
+# Add new names freely; keep them lowercase snake_case.
+
+version: 1
+
+icons:
+
+  # --- Shell / folders (stock icons) ---
+  document: {stock: SIID_DOCASSOC}
+  document_blank: {stock: SIID_DOCNOASSOC}
+  application: {stock: SIID_APPLICATION}
+  folder: {stock: SIID_FOLDER}
+  folder_open: {stock: SIID_FOLDEROPEN}
+  folder_back: {stock: SIID_FOLDERBACK}
+  folder_front: {stock: SIID_FOLDERFRONT}
+  stuffed_folder: {stock: SIID_STUFFEDFOLDER}
+  recycle_bin: {stock: SIID_RECYCLER}
+  recycle_bin_full: {stock: SIID_RECYCLERFULL}
+  link_overlay: {stock: SIID_LINK}
+  share_overlay: {stock: SIID_SHARE}
+  slow_file: {stock: SIID_SLOWFILE}
+  lock: {stock: SIID_LOCK}
+  key: {stock: SIID_KEY}
+  software: {stock: SIID_SOFTWARE}
+  zip_file: {stock: SIID_ZIPFILE}
+  settings: {stock: SIID_SETTINGS}
+  find: {stock: SIID_FIND}
+  help: {stock: SIID_HELP}
+  rename: {stock: SIID_RENAME}
+  delete: {stock: SIID_DELETE}
+  users: {stock: SIID_USERS}
+  internet: {stock: SIID_INTERNET}
+  world: {stock: SIID_WORLD}
+
+  # --- Drives (stock icons) ---
+  drive_fixed: {stock: SIID_DRIVEFIXED}
+  drive_removable: {stock: SIID_DRIVEREMOVE}
+  drive_35: {stock: SIID_DRIVE35}
+  drive_525: {stock: SIID_DRIVE525}
+  drive_cd: {stock: SIID_DRIVECD}
+  drive_dvd: {stock: SIID_DRIVEDVD}
+  drive_ram: {stock: SIID_DRIVERAM}
+  drive_network: {stock: SIID_DRIVENET}
+  drive_network_disabled: {stock: SIID_DRIVENETDISABLED}
+  drive_unknown: {stock: SIID_DRIVEUNKNOWN}
+  drive_bluray: {stock: SIID_DRIVEBD}
+  clustered_drive: {stock: SIID_CLUSTEREDDRIVE}
+
+  # --- Network / server / printers (stock icons) ---
+  my_network: {stock: SIID_MYNETWORK}
+  server: {stock: SIID_SERVER}
+  server_share: {stock: SIID_SERVERSHARE}
+  network_connect: {stock: SIID_DEVICENETWORKCONNECT}
+  printer: {stock: SIID_PRINTER}
+  printer_network: {stock: SIID_PRINTERNET}
+  printer_fax: {stock: SIID_PRINTERFAX}
+  printer_fax_network: {stock: SIID_PRINTERFAXNET}
+  printer_file: {stock: SIID_PRINTERFILE}
+
+  # --- Dialog badges (stock icons) ---
+  shield: {stock: SIID_SHIELD}
+  warning: {stock: SIID_WARNING}
+  info: {stock: SIID_INFO}
+  error: {stock: SIID_ERROR}
+
+  # --- File-type groupings (stock icons) ---
+  audio_files: {stock: SIID_AUDIOFILES}
+  image_files: {stock: SIID_IMAGEFILES}
+  video_files: {stock: SIID_VIDEOFILES}
+  mixed_files: {stock: SIID_MIXEDFILES}
+
+  # --- Media (stock icons) ---
+  media_cd_audio: {stock: SIID_MEDIACDAUDIO}
+  media_cdrom: {stock: SIID_MEDIACDROM}
+  media_cdr: {stock: SIID_MEDIACDR}
+  media_cdrw: {stock: SIID_MEDIACDRW}
+  media_dvd: {stock: SIID_MEDIADVD}
+  media_dvdrom: {stock: SIID_MEDIADVDROM}
+  media_dvdr: {stock: SIID_MEDIADVDR}
+  media_dvdrw: {stock: SIID_MEDIADVDRW}
+  media_bluray_rom: {stock: SIID_MEDIABDROM}
+  media_blank_cd: {stock: SIID_MEDIABLANKCD}
+
+  # --- Devices (stock icons) ---
+  desktop_pc: {stock: SIID_DESKTOPPC}
+  mobile_pc: {stock: SIID_MOBILEPC}
+  device_cellphone: {stock: SIID_DEVICECELLPHONE}
+  device_camera: {stock: SIID_DEVICECAMERA}
+  device_video_camera: {stock: SIID_DEVICEVIDEOCAMERA}
+  device_audio_player: {stock: SIID_DEVICEAUDIOPLAYER}
+  media_smartmedia: {stock: SIID_MEDIASMARTMEDIA}
+  media_compactflash: {stock: SIID_MEDIACOMPACTFLASH}
+
+  # --- Windows apps / executables (resolved without an index) ---
+  windows_explorer: {exe: "%SystemRoot%\\explorer.exe"}
+  notepad: {exe: "%SystemRoot%\\system32\\notepad.exe"}
+  cmd: {exe: "%SystemRoot%\\system32\\cmd.exe"}
+  powershell: {exe: "%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe"}
+  task_manager: {exe: "%SystemRoot%\\system32\\Taskmgr.exe"}
+  control_panel: {exe: "%SystemRoot%\\system32\\control.exe"}
+  registry_editor: {exe: "%SystemRoot%\\regedit.exe"}
+  calculator: {exe: "%SystemRoot%\\system32\\calc.exe"}
+  mspaint: {exe: "%SystemRoot%\\system32\\mspaint.exe"}
+  wordpad: {exe: "%ProgramFiles%\\Windows NT\\Accessories\\wordpad.exe"}
+
+  # --- Third-party apps (resolved via App Paths registry) ---
+  chrome: {app: chrome.exe}
+  firefox: {app: firefox.exe}
+  msedge: {app: msedge.exe}
+  winword: {app: winword.exe}
+  excel: {app: excel.exe}
+  powerpnt: {app: powerpnt.exe}
+  outlook: {app: outlook.exe}
+  acrobat: {app: acrobat.exe}
+  vlc: {app: vlc.exe}
+
+  # --- File associations (icon of the registered handler) ---
+  pdf_file: {fileassoc: .pdf}
+  txt_file: {fileassoc: .txt}
+  docx_file: {fileassoc: .docx}
+  xlsx_file: {fileassoc: .xlsx}
+  pptx_file: {fileassoc: .pptx}
+  zip_archive: {fileassoc: .zip}
+  html_file: {fileassoc: .html}
+  jpg_file: {fileassoc: .jpg}
+  png_file: {fileassoc: .png}
+  mp3_file: {fileassoc: .mp3}
+  mp4_file: {fileassoc: .mp4}
+  exe_file: {fileassoc: .exe}

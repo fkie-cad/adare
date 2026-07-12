@@ -203,6 +203,38 @@ os_profile.add_alias('rm', 'remove')
 
 
 # ------------------------------
+# Windows icon library commands
+# ------------------------------
+@cli.group(cls=AliasedGroup)
+def icons():
+    """Windows icon library: inspect the registry and dump icons from a target."""
+    pass
+
+@icons.command(name='list')
+@click.option('--os-key', default='windows', help='OS profile / build key (cache separation)')
+def icons_list(os_key):
+    """List every icon term in the registry with its resolver spec."""
+    from adare.cli.icons import exec_icons_list
+    exec_with_error_printing(exec_icons_list, SimpleNamespace(os_key=os_key))
+
+@icons.command(name='dump-all')
+@click.option('--host', default='localhost', help='adarevm host')
+@click.option('--port', default=18765, type=int, help='adarevm WebSocket port')
+@click.option('--os-key', default='windows', help='OS profile / build key (cache separation)')
+@click.option('--force', is_flag=True, help='Re-extract even if a cached PNG exists')
+def icons_dump_all(host, port, os_key, force):
+    """Resolve every registry term on a connected target; write PNGs + contact sheet."""
+    from adare.cli.icons import exec_icons_dump_all
+    exec_with_error_printing(
+        exec_icons_dump_all,
+        SimpleNamespace(host=host, port=port, os_key=os_key, force=force),
+    )
+
+icons.add_alias('l', 'list')
+icons.add_alias('dump', 'dump-all')
+
+
+# ------------------------------
 # Runtime commands (was: manage vm-runtime)
 # ------------------------------
 @cli.group(cls=AliasedGroup)
