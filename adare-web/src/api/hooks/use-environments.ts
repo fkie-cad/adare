@@ -3,10 +3,25 @@ import { api } from '@/api/client'
 import { endpoints } from '@/api/endpoints'
 import type { ApiResponse } from '@/types/api'
 
+export interface RecipeInfo {
+  profile: string
+  iso: string
+  iso_sha256: string
+  template?: string
+  setup_level: number
+  disk_size?: string
+  ram_mb?: number
+  cpus?: number
+  arch?: string
+}
+
 export interface Environment {
   name: string
   project_path?: string
   vm_path?: string
+  vm_type?: string
+  vm_sha256?: string
+  recipe?: RecipeInfo | null
   [key: string]: unknown
 }
 
@@ -14,6 +29,25 @@ export interface CreateEnvironmentRequest {
   project_path: string
   name: string
   vm_path?: string
+  os_profile?: string
+  iso_path?: string
+  disk_size?: string
+  ram_mb?: number
+  cpus?: number
+  arch?: string
+  setup_level?: number
+}
+
+export interface OsProfile {
+  name: string
+  display_name: string
+  platform: string
+  distribution: string
+  version: string
+  architecture: string
+  default_disk_size: string
+  default_ram_mb: number
+  default_cpus: number
 }
 
 export interface VerifyEnvironmentRequest {
@@ -44,6 +78,16 @@ export function useEnvironment(name: string) {
       return data.data!
     },
     enabled: !!name,
+  })
+}
+
+export function useOsProfiles() {
+  return useQuery({
+    queryKey: ['os-profiles'],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<OsProfile[]>>(endpoints.osProfiles)
+      return data.data ?? []
+    },
   })
 }
 

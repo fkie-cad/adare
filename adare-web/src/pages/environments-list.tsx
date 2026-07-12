@@ -13,7 +13,7 @@ import { useEnvironments, useDeleteEnvironment, type Environment } from '@/api/h
 import { toast } from '@/components/ui/toast'
 
 const SKELETON_ROWS = 5
-const COLUMNS = 6
+const COLUMNS = 7
 
 function LoadingTable() {
   return (
@@ -21,6 +21,7 @@ function LoadingTable() {
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
+          <TableHead>Type</TableHead>
           <TableHead>OS</TableHead>
           <TableHead>VM</TableHead>
           <TableHead>Project</TableHead>
@@ -47,6 +48,14 @@ function SyncBadge({ synced }: { synced: unknown }) {
   if (synced === true) return <Badge variant="success">Synced</Badge>
   if (synced === false) return <Badge variant="warning">Unsynced</Badge>
   return <>—</>
+}
+
+function EnvironmentTypeBadge({ env }: { env: Environment }) {
+  if (env.recipe) return <Badge variant="secondary">Recipe</Badge>
+  if (env.vm_type === 'path' || env.vm_type === 'url' || env.vm_path) {
+    return <Badge variant="outline">Baked</Badge>
+  }
+  return <Badge variant="outline">Legacy</Badge>
 }
 
 export default function EnvironmentsListPage() {
@@ -113,6 +122,7 @@ export default function EnvironmentsListPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead>OS</TableHead>
               <TableHead>VM</TableHead>
               <TableHead>Project</TableHead>
@@ -124,6 +134,9 @@ export default function EnvironmentsListPage() {
             {data.map((env) => (
               <TableRow key={env.name} className="hover:bg-muted/50">
                 <TableCell className="font-medium">{env.name}</TableCell>
+                <TableCell>
+                  <EnvironmentTypeBadge env={env} />
+                </TableCell>
                 <TableCell>{(env as any).os || '—'}</TableCell>
                 <TableCell>
                   {env.vm_path ? (
