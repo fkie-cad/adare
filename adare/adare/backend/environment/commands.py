@@ -331,6 +331,27 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                 except (OSError, ConnectionError, TimeoutError, ValueError, EnvironmentLoadFailed) as e:
                     log.error(f'Failed to download VM from URL {environment_metadata.vm}: {e}')
                     raise
+
+                if environment_metadata.vm_sha256:
+                    log.info('Verifying downloaded VM against declared vm_sha256...')
+                    actual_sha256 = file_sha256_with_progress(
+                        vm_path,
+                        description=f"Verifying {vm_path.name}",
+                        silent=False
+                    )
+                    expected_sha256 = environment_metadata.vm_sha256.lower()
+                    if actual_sha256.lower() != expected_sha256:
+                        raise EnvironmentLoadFailed(
+                            log,
+                            f'VM integrity check failed for {environment_metadata.vm}: '
+                            f'expected vm_sha256 {expected_sha256} but downloaded file hashes to {actual_sha256}',
+                            possible_solutions=[
+                                'The downloaded file may be corrupted or tampered with — re-download and retry',
+                                'Verify the "vm_sha256" in the environment file matches the published disk',
+                                'Contact the environment author if the mismatch persists',
+                            ]
+                        )
+                    log.info('VM integrity check passed')
             else:
                 # Handle local file path - support both relative and absolute paths
                 vm_path = Path(environment_metadata.vm)
