@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlalchemy.exc import SQLAlchemyError
 
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
-from adare.backend.experiment.exceptions import MultipleEnvironmentsError, NoEnvironmentError
+from adare.backend.experiment.exceptions import ExperimentNotFoundError, MultipleEnvironmentsError, NoEnvironmentError
 from adare.database.api.environment import EnvironmentDbApi
 from adare.database.api.base import experiment_name_from_run_path
 from adare.database.api.experiment import ExperimentApi
@@ -503,7 +503,10 @@ def sync_experiment(project_path: Path, ulid: str, remote_ulid: str, abstract_te
 
 def get_experiment_hash(project_path: Path, ulid: str):
     with ExperimentApi(project_path) as api:
-        return api.get_experiment_by_ulid(ulid).sha256
+        experiment = api.get_experiment_by_ulid(ulid)
+        if experiment is None:
+            raise ExperimentNotFoundError(log, f'experiment [i]{ulid}[/i] not found in database')
+        return experiment.sha256
 
 
 def get_experiments_ulids(project_path: Path):
