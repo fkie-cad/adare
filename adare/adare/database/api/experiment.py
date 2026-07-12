@@ -4,6 +4,8 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from adare.backend.experiment.directory import ExperimentDirectory
 
 # internal imports
@@ -90,8 +92,6 @@ class ExperimentApi(ProjectDatabaseApi):
         Get environment IDs for the given environment names from the global database.
         Returns environment IDs that can be stored in experiment.environment_ids
         """
-        from sqlalchemy.exc import SQLAlchemyError
-
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
 
@@ -116,8 +116,6 @@ class ExperimentApi(ProjectDatabaseApi):
         Get environment by name from the global database.
         project_name is ignored since environments are now global.
         """
-        from sqlalchemy.exc import SQLAlchemyError
-
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
 
@@ -201,8 +199,6 @@ class ExperimentApi(ProjectDatabaseApi):
 
     def get_experiment_environment_names(self, experiment_ulid: str) -> list[str]:
         """Get current environment names from experiment's environment_ids."""
-        from sqlalchemy.exc import SQLAlchemyError
-
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
 
