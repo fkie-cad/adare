@@ -244,6 +244,8 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
                   <Input
                     id="env-setup-level"
                     type="number"
+                    min={0}
+                    max={3}
                     value={setupLevel}
                     onChange={(e) => setSetupLevel(e.target.value)}
                     placeholder="2"
