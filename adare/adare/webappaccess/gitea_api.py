@@ -80,6 +80,25 @@ class GiteaApiClient:
         log.error(f'Failed to delete {filepath}: {response.status_code} {response.text}')
         return False
 
+    def find_open_pull_request(self, owner: str, repo: str,
+                                title: str = None, head_prefix: str = None) -> dict | None:
+        """Return the first open PR matching by exact title or head-branch prefix.
+
+        The submit branch carries a timestamp suffix, so we match on the stable
+        title (``[<entity> create] <name>``) or the ``submit/<entity>/<name>-``
+        head prefix rather than an exact branch name. Returns ``None`` if none match.
+        """
+        url = f'{self.api_url}repos/{owner}/{repo}/pulls'
+        response = self.session.get(url, params={'state': 'open', 'limit': 50})
+        response.raise_for_status()
+        for pr in response.json():
+            if title is not None and pr.get('title') == title:
+                return pr
+            head_ref = (pr.get('head') or {}).get('ref', '')
+            if head_prefix is not None and head_ref.startswith(head_prefix):
+                return pr
+        return None
+
     def create_pull_request(self, owner: str, repo: str, title: str,
                              head: str, base: str = 'main', body: str = '') -> dict:
         url = f'{self.api_url}repos/{owner}/{repo}/pulls'
