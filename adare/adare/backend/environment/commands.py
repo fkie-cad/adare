@@ -289,7 +289,23 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
     is_url = False  # Track if VM was loaded from URL
 
     try:
-        if environment_metadata.vm:
+        if environment_metadata.is_recipe_environment:
+            # Recipe environment: build (or reuse a cached) disk from the
+            # declarative recipe inputs. Integrity is anchored on the inputs
+            # (recipe_hash); the produced disk is still hashed into Vm.hash.
+            from adare.backend.vm.recipe import build_or_reuse_recipe_vm
+            log.info('Recipe environment detected; resolving disk from recipe inputs...')
+            recipe_result = build_or_reuse_recipe_vm(
+                environment_metadata,
+                project_path=None,  # VMs are global
+                base_dir=environment_file.parent,
+                force=force,
+            )
+            vm_id = recipe_result['vm_id']
+            if not recipe_result['was_existing']:
+                created_vm_id = vm_id
+            log.info(f'Recipe disk resolved to VM ID: {vm_id}')
+        elif environment_metadata.vm:
             # Determine how to handle the VM specification
             is_url = False
 

@@ -11,6 +11,58 @@ from adarelib.helper.yaml import dict_to_yaml
 log = logging.getLogger(__name__)
 
 
+def _use_recipe(os_def: OsDefinition, recipe_flag: bool | None) -> bool:
+    """Decide recipe vs baked. Explicit flag wins; else Windows defaults to
+    recipe (rebuildable on eval/login expiry), Linux defaults to baked."""
+    if recipe_flag is not None:
+        return recipe_flag
+    return os_def.platform == 'windows'
+
+
+def _generate_recipe_environment_file(
+    os_name: str,
+    iso_path: Path,
+    iso_sha256: str,
+    setup_level: SetupLevel,
+    disk_size: str | None,
+    ram: int | None,
+    cpus: int | None,
+    arch: str | None,
+    env_name: str,
+) -> Path:
+    """Generate a declarative recipe environment YAML.
+
+    The disk is NOT built here — `adare environment load` builds it once from
+    these inputs and caches it (keyed on the recipe hash). Only user-specified
+    params are written so profile defaults keep flowing and the recipe identity
+    stays host-independent.
+    """
+    params: dict = {'setup_level': int(setup_level)}
+    if disk_size:
+        params['disk_size'] = disk_size
+    if ram:
+        params['ram_mb'] = ram
+    if cpus:
+        params['cpus'] = cpus
+    if arch:
+        params['arch'] = arch
+
+    env_content = {
+        'vm_type': 'recipe',
+        'hypervisor': 'qemu',
+        'recipe': {
+            'profile': os_name,
+            'iso': str(iso_path),
+            'iso_sha256': iso_sha256,
+            'params': params,
+        },
+    }
+
+    env_path = Path.cwd() / f'{env_name}.yml'
+    dict_to_yaml(env_path, env_content)
+    return env_path
+
+
 def _generate_environment_file(
     disk_path: Path,
     os_def: OsDefinition,
@@ -20,6 +72,7 @@ def _generate_environment_file(
     """Generate an environment YAML file for the newly created VM."""
     env_content = {
         'vm': str(disk_path),
+        'vm_type': 'path',
         'os': {
             'os': os_def.display_name,
             'platform': os_def.platform,
@@ -56,6 +109,8 @@ def exec_vm_create(arguments):
     env_name = getattr(arguments, 'env_name', None)
     interactive = getattr(arguments, 'interactive', False)
     arch = getattr(arguments, 'arch', None)
+    recipe_flag = getattr(arguments, 'recipe', None)
+    bare = getattr(arguments, 'bare', False)
 
     # Look up OS definition
     try:
@@ -75,6 +130,55 @@ def exec_vm_create(arguments):
         os_def = replace(os_def, architecture=arch)
 
     iso_path = Path(iso).resolve() if iso else None
+
+    # Recipe mode: emit a declarative recipe environment and defer the build to
+    # `environment load` (build once, cached + hashed by recipe inputs). This is
+    # the default for Windows so an expired eval/login can be rebuilt by dropping
+    # in a fresh ISO. A recipe always needs an ISO with a known SHA256.
+    if _use_recipe(os_def, recipe_flag):
+        if iso_path is None:
+            print_error_message(
+                title=f'ISO required to create a recipe environment for {os_def.display_name}',
+                next_steps=[
+                    f'Provide the ISO: adare vm create {os_name} --iso /path/to/installer.iso',
+                    'Or build a baked disk instead: add --no-recipe',
+                ],
+            )
+            return
+        if interactive:
+            log.warning('--interactive is ignored for recipe environments (build is declarative)')
+        if vm_dir is not None:
+            log.warning('--vm-dir is ignored for recipe environments (built disks live in managed storage)')
+
+        from adare.helperfunctions.hash import hash_file_sha256
+        from adare.console import print_step
+        print_step(f'Hashing ISO for recipe integrity: [dim]{iso_path}[/dim]')
+        iso_sha256 = hash_file_sha256(iso_path)
+        setup_level = SetupLevel.BARE if bare else SetupLevel.FULL
+        final_name = env_name or vm_name or f'{os_name}-recipe'
+
+        env_file_path = _generate_recipe_environment_file(
+            os_name=os_name,
+            iso_path=iso_path,
+            iso_sha256=iso_sha256,
+            setup_level=setup_level,
+            disk_size=disk_size,
+            ram=ram,
+            cpus=cpus,
+            arch=arch,
+            env_name=final_name,
+        )
+        print_success_message(
+            title=f'Recipe environment "{final_name}" created!',
+            location=str(env_file_path),
+            next_steps=[
+                f'Build the disk on load: adare environment load {env_file_path}',
+                'Then: adare experiment load <playbook> && adare experiment run',
+            ],
+            tip='The disk is built once from the ISO on first load and cached by its recipe hash. '
+                'Drop in a fresh ISO (new iso_sha256) to rebuild as a new environment.',
+        )
+        return
 
     # Dispatch to the right creator — check install_mode before platform
     if os_def.install_mode == 'manual':

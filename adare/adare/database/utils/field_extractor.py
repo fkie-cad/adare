@@ -69,6 +69,10 @@ VM_FIELD_MAP = {
     'hypervisor': 'hypervisor',
     'use_snapshots': 'use_snapshots',
     'osinfo_id': 'osinfo_id',
+    'build_source': 'build_source',
+    'recipe_hash': 'recipe_hash',
+    'iso_sha256': 'iso_sha256',
+    'profile_name': 'profile_name',
 }
 
 EXPERIMENT_FIELD_MAP = {

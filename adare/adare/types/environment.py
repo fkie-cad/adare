@@ -40,6 +40,46 @@ class OsInfo:
 
 
 @attrs.define
+class RecipeParams:
+    """
+    Optional build parameters for a recipe environment.
+
+    Any field left as ``None`` falls back to the OS profile default at build
+    time. These values participate in the recipe integrity hash, so changing
+    any of them yields a new environment identity (a fresh build).
+    """
+    disk_size: str | None = None
+    ram_mb: int | None = None
+    cpus: int | None = None
+    arch: str | None = None
+    setup_level: int | None = None
+
+
+@attrs.define
+class Recipe:
+    """
+    Declarative build recipe for an environment.
+
+    Instead of anchoring integrity on a frozen baked disk (``Vm.hash``), a
+    recipe environment is defined by its *build inputs*: an OS profile, a
+    user-supplied installer ISO plus its expected SHA256, an optional
+    unattended-install template override, and build parameters. "Same inputs →
+    forensically equivalent system"; the produced disk is still hashed per run
+    into ``Vm.hash`` for tamper detection, but the reproducible identity is the
+    recipe hash (see :func:`adare.helperfunctions.hash.hash_recipe`).
+
+    Post-install steps reuse the existing ``postsetupinstallations`` field on
+    :class:`EnvironmentMetadata`; those are folded into the recipe hash so a
+    change to them also produces a new environment identity.
+    """
+    profile: str            # resolves via os_catalog.get_os_definition
+    iso: str                # path to the user-supplied installer ISO
+    iso_sha256: str         # expected SHA256 of the ISO (hard-checked at build)
+    template: str | None = None   # optional Autounattend/autoinstall override
+    params: RecipeParams = attrs.Factory(RecipeParams)
+
+
+@attrs.define
 class EnvironmentMetadata:
     """
     Consolidated class to store the configuration of an environment.
@@ -64,15 +104,20 @@ class EnvironmentMetadata:
             hypervisor_config:
               boot_mode: uefi  # Optional: override auto-detection
     """
-    vm: str
-    os: OsInfo
+    vm: str | None = None
+    os: OsInfo | None = None
 
     name: str | None = None
     postsetupinstallations: list[PostsetupInstallations] = attrs.Factory(list)
     tags: list[str] = attrs.Factory(list)
     description: str = attrs.Factory(str)
 
-    vm_type: Literal["auto", "path", "url"] = "auto"
+    vm_type: Literal["auto", "path", "url", "recipe"] = "auto"
+
+    # Declarative build recipe (recipe environments only). When set, the disk
+    # is built on load from these inputs instead of referencing a baked disk.
+    # In recipe mode ``os`` is optional and derived from ``recipe.profile``.
+    recipe: Recipe | None = None
 
     # Hypervisor configuration
     hypervisor: str = "virtualbox"  # Default hypervisor
@@ -82,9 +127,11 @@ class EnvironmentMetadata:
     vagrantbox: str | None = None
 
     def __attrs_post_init__(self):
-        """Validate that either vm or vagrantbox is specified."""
-        if not self.vm and not self.vagrantbox:
-            raise ValueError("Either 'vm' or 'vagrantbox' must be specified")
+        """Validate that a VM source (baked disk, recipe, or vagrantbox) is specified."""
+        if self.vm_type == "recipe" and self.recipe is None:
+            raise ValueError("vm_type 'recipe' requires a 'recipe' block")
+        if not self.vm and not self.vagrantbox and self.recipe is None:
+            raise ValueError("One of 'vm', 'recipe', or 'vagrantbox' must be specified")
 
     @property
     def is_vagrant_environment(self) -> bool:
@@ -92,9 +139,14 @@ class EnvironmentMetadata:
         return self.vagrantbox is not None
 
     @property
+    def is_recipe_environment(self) -> bool:
+        """Check if this environment is built from a declarative recipe."""
+        return self.recipe is not None
+
+    @property
     def is_vm_environment(self) -> bool:
-        """Check if this is a modern VM-based environment."""
-        return self.vm is not None
+        """Check if this is a modern VM-based environment (baked disk or recipe)."""
+        return self.vm is not None or self.recipe is not None
 
 
 def parse_environment_file(environment_file: Path) -> EnvironmentMetadata|None:

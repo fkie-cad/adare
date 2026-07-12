@@ -60,6 +60,22 @@ def get_vm_by_hash(file_hash: str, fields: list[str] = None) -> Vm | None | dict
     return _get_vm('get_vm_by_hash', file_hash, fields)
 
 
+def get_vm_by_recipe_hash(recipe_hash: str, fields: list[str] = None) -> Vm | None | dict | None:
+    """
+    Get a recipe-built VM by its recipe integrity hash from the global database.
+
+    Args:
+        recipe_hash: Recipe integrity anchor (see helperfunctions.hash.hash_recipe)
+        fields: Optional list of fields to extract. If None, returns full object.
+
+    Returns:
+        VM: Full object if fields=None
+        dict: VM data if fields specified
+        None: If no recipe-built VM with this hash exists
+    """
+    return _get_vm('get_vm_by_recipe_hash', recipe_hash, fields)
+
+
 def get_vm_by_name(name: str, fields: list[str] = None) -> Vm | None | dict | None:
     """
     Get VM by name from global database.
@@ -80,7 +96,9 @@ def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, de
               os_platform: str = '', os_type: str = '', os_distribution: str = '',
               os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
               silent: bool = False, no_copy: bool = False, fields: list[str] = None,
-              hypervisor: str = 'virtualbox', force: bool = False) -> Vm | dict:
+              hypervisor: str = 'virtualbox', force: bool = False,
+              build_source: str = 'baked', recipe_hash: str | None = None,
+              iso_sha256: str | None = None, profile_name: str | None = None) -> Vm | dict:
     """
     Create a new VM entry in the database with file operations.
 
@@ -124,7 +142,11 @@ def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, de
             silent=silent,
             no_copy=no_copy,
             hypervisor=hypervisor,
-            force=force
+            force=force,
+            build_source=build_source,
+            recipe_hash=recipe_hash,
+            iso_sha256=iso_sha256,
+            profile_name=profile_name
         )
 
 
