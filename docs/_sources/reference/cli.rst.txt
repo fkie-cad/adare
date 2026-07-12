@@ -538,6 +538,28 @@ Commands for testing MCP (Model Control Protocol) server functionality used for 
     * ``--host TEXT`` - MCP server host (default: localhost)
     * ``--port INTEGER`` - MCP server port (default: 13109)
 
+Icon Library
+============
+
+Inspect the Windows icon library and extract icons from a connected target. See
+:doc:`../guide/icon-library` for the full guide.
+
+``adare icons list``
+  List every icon term in the registry with its resolver spec. Aliases: ``l``.
+
+  Options:
+    * ``--os-key TEXT`` - OS profile / build key for cache separation (default: windows)
+
+``adare icons dump-all``
+  Resolve every registry term on a connected target, writing the PNGs plus an
+  HTML contact sheet to the per-OS icon cache directory. Aliases: ``dump``.
+
+  Options:
+    * ``--host TEXT`` - adarevm host (default: localhost)
+    * ``--port INTEGER`` - adarevm WebSocket port (default: 18765)
+    * ``--os-key TEXT`` - OS profile / build key for cache separation (default: windows)
+    * ``--force`` - Re-extract even if a cached PNG already exists
+
 System Management
 =================
 

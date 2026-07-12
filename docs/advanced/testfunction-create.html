@@ -7,11 +7,12 @@
         <link rel="prefetch" href="../_static/logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.12.19 -->
-        <title>Create your own testfunction set (in development) - ADARE documentation</title>
+        <title>Create your own testfunction set - ADARE documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d5f4d14b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
     
     
@@ -211,6 +212,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../guide/experiments.html">Experiments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/test-driven-analysis.html">Test-Driven Analysis</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/diff-analysis.html">Diff Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../guide/icon-library.html">Windows Icon Library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/vm-image-creation.html">VM Image Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/dev-mode.html">Dev Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/sharing.html">Sharing</a></li>
@@ -321,7 +323,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="playbook-patterns.html">Advanced Playbook Patterns</a></li>
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Create your own testfunction set (in development)</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Create your own testfunction set</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
 <ul>
@@ -378,20 +380,230 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="create-your-own-testfunction-set-in-development">
-<h1>Create your own testfunction set (in development)<a class="headerlink" href="#create-your-own-testfunction-set-in-development" title="Link to this heading">¶</a></h1>
+          <section id="create-your-own-testfunction-set">
+<h1>Create your own testfunction set<a class="headerlink" href="#create-your-own-testfunction-set" title="Link to this heading">¶</a></h1>
 <p>This guide explains how to create custom test functions for ADARE to extend its testing capabilities beyond the built-in test function collections.</p>
-<section id="architecture-overview">
-<h2>Architecture Overview<a class="headerlink" href="#architecture-overview" title="Link to this heading">¶</a></h2>
-<section id="test-function-structure">
-<h3>Test Function Structure<a class="headerlink" href="#test-function-structure" title="Link to this heading">¶</a></h3>
-<p>Every test function consists of:</p>
-<ol class="arabic simple">
-<li><p><strong>Parameter Class</strong>: Defines input fields using attrs</p></li>
-<li><p><strong>Test Class</strong>: Inherits from BasicTest, implements the test logic</p></li>
-<li><p><strong>Class Variables</strong>: <code class="docutils literal notranslate"><span class="pre">testname</span></code> and <code class="docutils literal notranslate"><span class="pre">testdescription</span></code> for identification</p></li>
-<li><p><strong>test() Method</strong>: Core logic returning a TestResult</p></li>
-</ol>
+<section id="quick-start">
+<h2>Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading">¶</a></h2>
+<p>The fastest way to create a test function is with the <code class="docutils literal notranslate"><span class="pre">&#64;testfunction</span></code> decorator:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># /path/to/your/testfunctions/mycollection/mycollection.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset</span><span class="w"> </span><span class="kn">import</span> <span class="n">testfunction</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset.basictest</span><span class="w"> </span><span class="kn">import</span> <span class="n">HostModeCategory</span>
+
+<span class="nd">@testfunction</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s1">&#39;file_contains_word&#39;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s1">&#39;tests if file content contains specified word&#39;</span><span class="p">,</span>
+    <span class="n">category</span><span class="o">=</span><span class="n">HostModeCategory</span><span class="o">.</span><span class="n">FILE_BASED</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">file_contains_word</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">word</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">case_sensitive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+    <span class="n">dst_path</span><span class="p">,</span> <span class="n">status</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">resolve_globfilepath</span><span class="p">(</span><span class="n">dst</span><span class="p">)</span>
+    <span class="n">ctx</span><span class="o">.</span><span class="n">error_if</span><span class="p">(</span><span class="ow">not</span> <span class="n">dst_path</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;File </span><span class="si">{</span><span class="n">dst</span><span class="si">}</span><span class="s1"> not found (</span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">dst_path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+
+    <span class="n">search_word</span> <span class="o">=</span> <span class="n">word</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">case_sensitive</span><span class="p">:</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="n">search_word</span> <span class="o">=</span> <span class="n">word</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+    <span class="n">ctx</span><span class="o">.</span><span class="n">fail_if</span><span class="p">(</span><span class="n">search_word</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">content</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;Word &quot;</span><span class="si">{</span><span class="n">word</span><span class="si">}</span><span class="s1">&quot; not found in file&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;Word &quot;</span><span class="si">{</span><span class="n">word</span><span class="si">}</span><span class="s1">&quot; found in file&#39;</span>
+</pre></div>
+</div>
+<p>That’s it. The decorator automatically generates the Parameter class and BasicTest subclass from the function signature. Parameters are extracted from the function arguments (excluding <code class="docutils literal notranslate"><span class="pre">ctx</span></code>), with type annotations used for validation.</p>
+<section id="loading-and-using-custom-test-functions">
+<h3>Loading and Using Custom Test Functions<a class="headerlink" href="#loading-and-using-custom-test-functions" title="Link to this heading">¶</a></h3>
+<p>Create your test function collection in a directory:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>/path/to/your/testfunctions/mycollection
+touch<span class="w"> </span>/path/to/your/testfunctions/mycollection/mycollection.py
+touch<span class="w"> </span>/path/to/your/testfunctions/mycollection/requirements.txt
+</pre></div>
+</div>
+<p>Load into ADARE:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>testfunction<span class="w"> </span>load<span class="w"> </span>/path/to/your/testfunctions
+</pre></div>
+</div>
+<p>Use in a playbook:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check_for_keyword</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mycollection.file_contains_word</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/logfile.txt&quot;</span>
+<span class="w">      </span><span class="nt">word</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ERROR&quot;</span>
+<span class="w">      </span><span class="nt">case_sensitive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="core-concepts">
+<h2>Core Concepts<a class="headerlink" href="#core-concepts" title="Link to this heading">¶</a></h2>
+<section id="testcontext-ctx">
+<h3>TestContext (ctx)<a class="headerlink" href="#testcontext-ctx" title="Link to this heading">¶</a></h3>
+<p>Every decorated test function receives <code class="docutils literal notranslate"><span class="pre">ctx</span></code> as its first argument. This is a <code class="docutils literal notranslate"><span class="pre">TestContext</span></code> instance that provides:</p>
+<p><strong>Assertion methods:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ctx.fail_if(condition,</span> <span class="pre">message)</span></code> — Fail the test if condition is truthy</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ctx.error_if(condition,</span> <span class="pre">message)</span></code> — Error the test if a precondition/setup fails</p></li>
+</ul>
+<p><strong>File resolution:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ctx.resolve_globfilepath(path,</span> <span class="pre">match_mode=&quot;single&quot;,</span> <span class="pre">return_list=False)</span></code> — Resolve glob patterns to file paths</p></li>
+</ul>
+<p><strong>Placeholder/variable support:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ctx.has_placeholders(text)</span></code> — Check if text contains <code class="docutils literal notranslate"><span class="pre">{{PLACEHOLDER}}</span></code> variables</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ctx.get_placeholders(text)</span></code> — Extract placeholder names from text</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ctx.resolve_variables(text)</span></code> — Resolve placeholder variables in text</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ctx.compare_with_placeholder(name,</span> <span class="pre">actual)</span></code> — Compare actual value against placeholder (supports regex, timestamp tolerance)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ctx.handle_placeholders_comparison(actual,</span> <span class="pre">template)</span></code> — Full template comparison with multiple placeholders</p></li>
+</ul>
+<p><strong>Metadata:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ctx.variable_metadata</span></code> — Access the variable metadata dict</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ctx.get_placeholder_metadata(name)</span></code> — Get metadata for a specific placeholder</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ctx.has_tolerance_metadata(name)</span></code> — Check if placeholder has tolerance settings</p></li>
+</ul>
+</section>
+<section id="return-values">
+<h3>Return Values<a class="headerlink" href="#return-values" title="Link to this heading">¶</a></h3>
+<p>Test functions can return values in several ways:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Return None → TestResult.success([])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">my_test</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="c1"># Return a string → TestResult.success([string])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">my_test</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">return</span> <span class="s1">&#39;file found&#39;</span>
+
+<span class="c1"># Return a list → TestResult.success(list)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">my_test</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">[</span><span class="s1">&#39;found 3 files&#39;</span><span class="p">,</span> <span class="s1">&#39;all valid&#39;</span><span class="p">]</span>
+
+<span class="c1"># Return TestResult directly → passed through</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">my_test</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">success</span><span class="p">([</span><span class="s1">&#39;custom result&#39;</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Use <code class="docutils literal notranslate"><span class="pre">ctx.fail_if()</span></code> and <code class="docutils literal notranslate"><span class="pre">ctx.error_if()</span></code> for failure/error conditions — they raise exceptions that the decorator catches and converts to the appropriate <code class="docutils literal notranslate"><span class="pre">TestResult</span></code>.</p>
+<p>Uncaught exceptions are automatically converted to <code class="docutils literal notranslate"><span class="pre">TestResult.execution_error()</span></code>.</p>
+</section>
+<section id="parameters">
+<h3>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h3>
+<p>Parameters are derived from the function signature:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@testfunction</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;my_test&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;example&#39;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">my_test</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">regex</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+    <span class="o">...</span>
+</pre></div>
+</div>
+<p>This generates a parameter class with fields: <code class="docutils literal notranslate"><span class="pre">path</span></code> (required str), <code class="docutils literal notranslate"><span class="pre">count</span></code> (optional int, default 5), <code class="docutils literal notranslate"><span class="pre">regex</span></code> (optional bool, default False).</p>
+<p>Type annotations are used for cattrs structuring from YAML playbooks. Always annotate your parameters.</p>
+</section>
+<section id="category">
+<h3>Category<a class="headerlink" href="#category" title="Link to this heading">¶</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">category</span></code> argument to <code class="docutils literal notranslate"><span class="pre">&#64;testfunction</span></code> indicates where the test executes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">HostModeCategory.FILE_BASED</span></code> — Tests files on the analyzed system</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">HostModeCategory.FILE_CONTENT</span></code> — Tests file contents</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">HostModeCategory.QGA_PROBE</span></code> — Tests via QEMU Guest Agent</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">HostModeCategory.AGENT_ONLY</span></code> — Tests that run only in the agent (default)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">HostModeCategory.HOST_NATIVE</span></code> — Tests that execute on the host machine</p></li>
+</ul>
+</section>
+</section>
+<section id="host-based-tests">
+<h2>Host-Based Tests<a class="headerlink" href="#host-based-tests" title="Link to this heading">¶</a></h2>
+<p>Some tests execute on the host machine rather than the analyzed system — for example, visual tests that take screenshots and perform image recognition. These use <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">def</span></code> and access host services through <code class="docutils literal notranslate"><span class="pre">ctx.host</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset</span><span class="w"> </span><span class="kn">import</span> <span class="n">testfunction</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset.basictest</span><span class="w"> </span><span class="kn">import</span> <span class="n">HostModeCategory</span>
+
+<span class="nd">@testfunction</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s1">&#39;visual.exists&#39;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Check if text or image is visible on screen&#39;</span><span class="p">,</span>
+    <span class="n">category</span><span class="o">=</span><span class="n">HostModeCategory</span><span class="o">.</span><span class="n">HOST_NATIVE</span><span class="p">,</span>
+    <span class="n">execute_on_host</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">visual_exists</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">image</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">window</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="n">ctx</span><span class="o">.</span><span class="n">error_if</span><span class="p">(</span><span class="ow">not</span> <span class="n">text</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">image</span><span class="p">,</span> <span class="s2">&quot;Either text or image parameter required&quot;</span><span class="p">)</span>
+
+    <span class="n">screenshot</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">screenshot</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">window</span><span class="o">=</span><span class="n">window</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">text</span><span class="p">:</span>
+        <span class="n">locations</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">cv</span><span class="o">.</span><span class="n">find_text</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">screenshot</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">image_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
+        <span class="n">locations</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">cv</span><span class="o">.</span><span class="n">find_icon</span><span class="p">(</span><span class="n">image_path</span><span class="p">,</span> <span class="n">screenshot</span><span class="p">)</span>
+
+    <span class="n">ctx</span><span class="o">.</span><span class="n">fail_if</span><span class="p">(</span><span class="ow">not</span> <span class="n">locations</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;target not found on screen&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Key differences from regular tests:</p>
+<ul class="simple">
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">def</span></code> for the test function</p></li>
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">execute_on_host=True</span></code> in the decorator</p></li>
+<li><p>Access host services via <code class="docutils literal notranslate"><span class="pre">ctx.host</span></code> (provides <code class="docutils literal notranslate"><span class="pre">screenshot</span></code>, <code class="docutils literal notranslate"><span class="pre">cv</span></code>, <code class="docutils literal notranslate"><span class="pre">playbook_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">vm_file</span></code>)</p></li>
+<li><p>The decorator auto-detects async functions and generates the appropriate <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">def</span> <span class="pre">test()</span></code> method</p></li>
+</ul>
+</section>
+<section id="advanced">
+<h2>Advanced<a class="headerlink" href="#advanced" title="Link to this heading">¶</a></h2>
+<section id="module-level-helper-functions">
+<h3>Module-Level Helper Functions<a class="headerlink" href="#module-level-helper-functions" title="Link to this heading">¶</a></h3>
+<p>For shared logic across multiple test functions, extract helpers as module-level functions:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">_parse_xml</span><span class="p">(</span><span class="n">filepath</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse XML file and return root element.&quot;&quot;&quot;</span>
+    <span class="n">tree</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">tree</span><span class="o">.</span><span class="n">getroot</span><span class="p">()</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compare_values</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">actual</span><span class="p">,</span> <span class="n">expected</span><span class="p">,</span> <span class="n">regex_match</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compare values with placeholder/regex support.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">has_placeholders</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">expected</span><span class="p">)):</span>
+        <span class="n">placeholders</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">get_placeholders</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">expected</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">ctx</span><span class="o">.</span><span class="n">compare_with_placeholder</span><span class="p">(</span><span class="n">placeholders</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">str</span><span class="p">(</span><span class="n">actual</span><span class="p">))</span>
+    <span class="k">elif</span> <span class="n">regex_match</span><span class="p">:</span>
+        <span class="n">pattern</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">expected</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pattern</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">actual</span><span class="p">))</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;regex </span><span class="si">{</span><span class="s2">&quot;matched&quot;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">match</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s2">&quot;no match&quot;</span><span class="si">}</span><span class="s1">&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">actual</span> <span class="o">==</span> <span class="n">expected</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="s2">&quot;matched&quot;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">actual</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">expected</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s2">&quot;mismatch&quot;</span><span class="si">}</span><span class="s1">&#39;</span>
+
+<span class="nd">@testfunction</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;element_exists&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="n">HostModeCategory</span><span class="o">.</span><span class="n">FILE_CONTENT</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">element_exists</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">xpath</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="n">_parse_xml</span><span class="p">(</span><span class="n">dst</span><span class="p">)</span>
+    <span class="o">...</span>
+
+<span class="nd">@testfunction</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;element_text&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="n">HostModeCategory</span><span class="o">.</span><span class="n">FILE_CONTENT</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">element_text</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">xpath</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">expected</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">regex_match</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="n">_parse_xml</span><span class="p">(</span><span class="n">dst</span><span class="p">)</span>
+    <span class="o">...</span>
+    <span class="n">is_match</span><span class="p">,</span> <span class="n">message</span> <span class="o">=</span> <span class="n">_compare_values</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">actual_text</span><span class="p">,</span> <span class="n">expected</span><span class="p">,</span> <span class="n">regex_match</span><span class="p">)</span>
+    <span class="o">...</span>
+</pre></div>
+</div>
+<p>Helpers that need placeholder/variable support receive <code class="docutils literal notranslate"><span class="pre">ctx</span></code> as their first argument. Pure computation helpers (parsing, formatting) don’t need <code class="docutils literal notranslate"><span class="pre">ctx</span></code>.</p>
+</section>
+<section id="placeholder-and-variable-support">
+<h3>Placeholder and Variable Support<a class="headerlink" href="#placeholder-and-variable-support" title="Link to this heading">¶</a></h3>
+<p>ADARE supports dynamic values through the placeholder system. Placeholders like <code class="docutils literal notranslate"><span class="pre">{{TIMESTAMP}}</span></code> in expected values are resolved using variable metadata:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@testfunction</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;check_value&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="n">HostModeCategory</span><span class="o">.</span><span class="n">FILE_CONTENT</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">check_value</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">expected</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="n">actual</span> <span class="o">=</span> <span class="n">read_value_from_file</span><span class="p">(</span><span class="n">dst</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">has_placeholders</span><span class="p">(</span><span class="n">expected</span><span class="p">):</span>
+        <span class="n">placeholders</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">get_placeholders</span><span class="p">(</span><span class="n">expected</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">placeholders</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">success</span><span class="p">,</span> <span class="n">message</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">compare_with_placeholder</span><span class="p">(</span><span class="n">placeholders</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">actual</span><span class="p">)</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">fail_if</span><span class="p">(</span><span class="ow">not</span> <span class="n">success</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">success</span><span class="p">,</span> <span class="n">message</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">handle_placeholders_comparison</span><span class="p">(</span><span class="n">actual</span><span class="p">,</span> <span class="n">expected</span><span class="p">)</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">fail_if</span><span class="p">(</span><span class="ow">not</span> <span class="n">success</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">fail_if</span><span class="p">(</span><span class="n">actual</span> <span class="o">!=</span> <span class="n">expected</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;Expected &quot;</span><span class="si">{</span><span class="n">expected</span><span class="si">}</span><span class="s1">&quot;, got &quot;</span><span class="si">{</span><span class="n">actual</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="legacy-class-based-approach">
+<h3>Legacy Class-Based Approach<a class="headerlink" href="#legacy-class-based-approach" title="Link to this heading">¶</a></h3>
+<p>For advanced use cases, you can still create test functions using the traditional class-based pattern:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">attrs</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClassVar</span><span class="p">,</span> <span class="n">Optional</span>
 
@@ -414,225 +626,20 @@
     <span class="n">variable_metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">test</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># Implementation here</span>
+        <span class="c1"># self.parameter.input_field, self.resolve_globfilepath(), etc.</span>
         <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">success</span><span class="p">()</span>
 </pre></div>
 </div>
-</section>
-<section id="core-concepts">
-<h3>Core Concepts<a class="headerlink" href="#core-concepts" title="Link to this heading">¶</a></h3>
-<dl class="simple">
-<dt><strong>BasicTest Class</strong></dt><dd><p>Base class providing file resolution, variable handling, and placeholder comparison</p>
-</dd>
-<dt><strong>Parameter Classes</strong></dt><dd><p>Attrs-decorated classes defining input parameters for test functions</p>
-</dd>
-<dt><strong>TestResult System</strong></dt><dd><p>Standardized result objects: <code class="docutils literal notranslate"><span class="pre">success()</span></code>, <code class="docutils literal notranslate"><span class="pre">failed()</span></code>, <code class="docutils literal notranslate"><span class="pre">execution_error()</span></code></p>
-</dd>
-<dt><strong>Module Organization</strong></dt><dd><p>Test functions grouped in collections (standard, json, xml, windows, etc.)</p>
-</dd>
-</dl>
-</section>
-</section>
-<section id="step-by-step-development">
-<h2>Step-by-Step Development<a class="headerlink" href="#step-by-step-development" title="Link to this heading">¶</a></h2>
-<section id="create-the-module-structure">
-<h3>1. Create the Module Structure<a class="headerlink" href="#create-the-module-structure" title="Link to this heading">¶</a></h3>
-<p>Create a new directory anywhere on your system for your test collection. You can organize it as follows:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>/path/to/your/testfunctions/mycollection
-touch<span class="w"> </span>/path/to/your/testfunctions/mycollection/mycollection.py
-touch<span class="w"> </span>/path/to/your/testfunctions/mycollection/requirements.txt
-</pre></div>
-</div>
-<p>Then load your custom test functions using:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>testfunction<span class="w"> </span>load<span class="w"> </span>/path/to/your/testfunctions
-</pre></div>
-</div>
-</section>
-<section id="define-parameter-classes">
-<h3>2. Define Parameter Classes<a class="headerlink" href="#define-parameter-classes" title="Link to this heading">¶</a></h3>
-<p>Start with simple parameter definitions using attrs:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># /path/to/your/testfunctions/mycollection/mycollection.py</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">attrs</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClassVar</span><span class="p">,</span> <span class="n">Optional</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset.basictest</span><span class="w"> </span><span class="kn">import</span> <span class="n">BasicTest</span><span class="p">,</span> <span class="n">Parameter</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.event.event</span><span class="w"> </span><span class="kn">import</span> <span class="n">TestResult</span>
-
-<span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">FileContentContainsWordParameter</span><span class="p">(</span><span class="n">Parameter</span><span class="p">):</span>
-    <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span>               <span class="c1"># File path (supports glob patterns)</span>
-    <span class="n">word</span><span class="p">:</span> <span class="nb">str</span>             <span class="c1"># Word to search for</span>
-    <span class="n">case_sensitive</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-</pre></div>
-</div>
-</section>
-<section id="implement-the-test-class">
-<h3>3. Implement the Test Class<a class="headerlink" href="#implement-the-test-class" title="Link to this heading">¶</a></h3>
-<p>Create the test class with proper error handling:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">FileContentContainsWord</span><span class="p">(</span><span class="n">BasicTest</span><span class="p">):</span>
-    <span class="n">testname</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;file_content_contains_word&#39;</span>
-    <span class="n">testdescription</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;tests if file content contains specified word&#39;</span>
-
-    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">parameter</span><span class="p">:</span> <span class="n">FileContentContainsWordParameter</span>
-    <span class="n">description</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
-    <span class="n">variable_metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">test</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="c1"># Use resolve_globfilepath for file resolution</span>
-            <span class="n">dst</span><span class="p">,</span> <span class="n">status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">resolve_globfilepath</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">dst</span><span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">dst</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">error</span><span class="p">([</span><span class="sa">f</span><span class="s1">&#39;File </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">dst</span><span class="si">}</span><span class="s1"> not found (</span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">])</span>
-
-            <span class="c1"># Read file with proper error handling</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">dst</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-                    <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
-            <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">failed</span><span class="p">([</span><span class="sa">f</span><span class="s1">&#39;File </span><span class="si">{</span><span class="n">dst</span><span class="si">}</span><span class="s1"> does not exist&#39;</span><span class="p">])</span>
-            <span class="k">except</span> <span class="p">(</span><span class="ne">PermissionError</span><span class="p">,</span> <span class="ne">OSError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">execution_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Cannot read file </span><span class="si">{</span><span class="n">dst</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-            <span class="c1"># Perform the test logic</span>
-            <span class="n">word</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">word</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">case_sensitive</span><span class="p">:</span>
-                <span class="n">content</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
-                <span class="n">word</span> <span class="o">=</span> <span class="n">word</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
-
-            <span class="k">if</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">content</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">success</span><span class="p">([</span><span class="sa">f</span><span class="s1">&#39;Word &quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">word</span><span class="si">}</span><span class="s1">&quot; found in file&#39;</span><span class="p">])</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">failed</span><span class="p">([</span><span class="sa">f</span><span class="s1">&#39;Word &quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">word</span><span class="si">}</span><span class="s1">&quot; not found in file&#39;</span><span class="p">])</span>
-
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">execution_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="s2">&quot;Unexpected error in word search test&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="core-basictest-methods">
-<h2>Core BasicTest Methods<a class="headerlink" href="#core-basictest-methods" title="Link to this heading">¶</a></h2>
-<section id="file-resolution">
-<h3>File Resolution<a class="headerlink" href="#file-resolution" title="Link to this heading">¶</a></h3>
-<p>Use <code class="docutils literal notranslate"><span class="pre">resolve_globfilepath()</span></code> for all file operations:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Handles both exact paths and glob patterns</span>
-<span class="n">dst</span><span class="p">,</span> <span class="n">status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">resolve_globfilepath</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">dst</span><span class="p">)</span>
-<span class="k">if</span> <span class="ow">not</span> <span class="n">dst</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">error</span><span class="p">([</span><span class="sa">f</span><span class="s1">&#39;File resolution failed: </span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
-</pre></div>
-</div>
-</section>
-<section id="variable-and-placeholder-handling">
-<h3>Variable and Placeholder Handling<a class="headerlink" href="#variable-and-placeholder-handling" title="Link to this heading">¶</a></h3>
-<p>For advanced template support with variables:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">expected_content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">expected_content</span>
-
-<span class="c1"># Check if content has placeholder variables</span>
-<span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_placeholders</span><span class="p">(</span><span class="n">expected_content</span><span class="p">):</span>
-    <span class="c1"># Use placeholder comparison system</span>
-    <span class="n">success</span><span class="p">,</span> <span class="n">message</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_placeholders_comparison</span><span class="p">(</span><span class="n">actual_content</span><span class="p">,</span> <span class="n">expected_content</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">success</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">success</span><span class="p">([</span><span class="n">message</span><span class="p">])</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">failed</span><span class="p">([</span><span class="n">message</span><span class="p">])</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="c1"># Direct comparison</span>
-    <span class="k">if</span> <span class="n">actual_content</span> <span class="o">==</span> <span class="n">expected_content</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">success</span><span class="p">([</span><span class="s1">&#39;Content matches&#39;</span><span class="p">])</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">failed</span><span class="p">([</span><span class="s1">&#39;Content does not match&#39;</span><span class="p">])</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="advanced-features">
-<h2>Advanced Features<a class="headerlink" href="#advanced-features" title="Link to this heading">¶</a></h2>
-<section id="timestamp-tolerance">
-<h3>Timestamp Tolerance<a class="headerlink" href="#timestamp-tolerance" title="Link to this heading">¶</a></h3>
-<p>For timestamp validation with tolerance ranges:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># In your parameter class</span>
-<span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">TimestampTestParameter</span><span class="p">(</span><span class="n">Parameter</span><span class="p">):</span>
-    <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">expected_timestamp</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">tolerance_seconds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">5</span>
-
-<span class="c1"># In your test method</span>
-<span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_placeholders</span><span class="p">(</span><span class="n">expected_timestamp</span><span class="p">):</span>
-    <span class="c1"># Extract placeholder name and use tolerance comparison</span>
-    <span class="n">placeholders</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_placeholders</span><span class="p">(</span><span class="n">expected_timestamp</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">placeholders</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="n">success</span><span class="p">,</span> <span class="n">message</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compare_with_placeholder</span><span class="p">(</span><span class="n">placeholders</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">actual_timestamp</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">success</span><span class="p">([</span><span class="n">message</span><span class="p">])</span> <span class="k">if</span> <span class="n">success</span> <span class="k">else</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">failed</span><span class="p">([</span><span class="n">message</span><span class="p">])</span>
-</pre></div>
-</div>
-</section>
-<section id="regex-pattern-matching">
-<h3>Regex Pattern Matching<a class="headerlink" href="#regex-pattern-matching" title="Link to this heading">¶</a></h3>
-<p>For regex-based validation:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_validate_pattern</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">actual_value</span><span class="p">,</span> <span class="n">pattern</span><span class="p">):</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">compiled_pattern</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">pattern</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">compiled_pattern</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">actual_value</span><span class="p">):</span>
-            <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;Value matches pattern: </span><span class="si">{</span><span class="n">pattern</span><span class="si">}</span><span class="s1">&#39;</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;Value does not match pattern: </span><span class="si">{</span><span class="n">pattern</span><span class="si">}</span><span class="s1">&#39;</span>
-    <span class="k">except</span> <span class="n">re</span><span class="o">.</span><span class="n">error</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;Invalid regex pattern: </span><span class="si">{</span><span class="n">pattern</span><span class="si">}</span><span class="s1"> - </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s1">&#39;</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="error-handling-patterns">
-<h2>Error Handling Patterns<a class="headerlink" href="#error-handling-patterns" title="Link to this heading">¶</a></h2>
-<section id="standard-error-types">
-<h3>Standard Error Types<a class="headerlink" href="#standard-error-types" title="Link to this heading">¶</a></h3>
-<p>Use consistent error handling for common scenarios:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">try</span><span class="p">:</span>
-    <span class="c1"># File operations</span>
-    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
-<span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">failed</span><span class="p">([</span><span class="sa">f</span><span class="s1">&#39;File </span><span class="si">{</span><span class="n">file_path</span><span class="si">}</span><span class="s1"> does not exist&#39;</span><span class="p">])</span>
-<span class="k">except</span> <span class="p">(</span><span class="ne">PermissionError</span><span class="p">,</span> <span class="ne">OSError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">execution_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Cannot access file </span><span class="si">{</span><span class="n">file_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<span class="k">except</span> <span class="ne">UnicodeDecodeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">execution_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Cannot decode file </span><span class="si">{</span><span class="n">file_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="test-result-guidelines">
-<h3>Test Result Guidelines<a class="headerlink" href="#test-result-guidelines" title="Link to this heading">¶</a></h3>
-<ul class="simple">
-<li><p><strong>TestResult.success()</strong>: Test passed, condition met</p></li>
-<li><p><strong>TestResult.failed()</strong>: Test ran but condition not met (expected behavior)</p></li>
-<li><p><strong>TestResult.execution_error()</strong>: Test couldn’t run due to errors (unexpected)</p></li>
-</ul>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Success with details</span>
-<span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">success</span><span class="p">([</span><span class="sa">f</span><span class="s1">&#39;Found </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s1"> matching entries&#39;</span><span class="p">])</span>
-
-<span class="c1"># Failure with explanation</span>
-<span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">failed</span><span class="p">([</span><span class="sa">f</span><span class="s1">&#39;Expected value </span><span class="si">{</span><span class="n">expected</span><span class="si">}</span><span class="s1">, got </span><span class="si">{</span><span class="n">actual</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
-
-<span class="c1"># Error with context</span>
-<span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">execution_error</span><span class="p">(</span><span class="n">exception</span><span class="p">,</span> <span class="s2">&quot;Database connection failed&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
+<p>The decorator approach is preferred for new test functions as it eliminates boilerplate while providing the same capabilities.</p>
 </section>
 </section>
 <section id="module-organization">
 <h2>Module Organization<a class="headerlink" href="#module-organization" title="Link to this heading">¶</a></h2>
 <section id="directory-structure">
 <h3>Directory Structure<a class="headerlink" href="#directory-structure" title="Link to this heading">¶</a></h3>
-<p>Organize your test functions in logical collections anywhere on your system:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>/path/to/your/testfunctions/
 ├── mycollection/
-│   ├── mycollection.py      # Main test functions
+│   ├── mycollection.py      # Test functions
 │   └── requirements.txt     # Python dependencies
 └── anothercollection/
     ├── anothercollection.py
@@ -642,119 +649,68 @@ touch<span class="w"> </span>/path/to/your/testfunctions/mycollection/requiremen
 </section>
 <section id="dependencies">
 <h3>Dependencies<a class="headerlink" href="#dependencies" title="Link to this heading">¶</a></h3>
-<p>List any additional Python packages in <code class="docutils literal notranslate"><span class="pre">requirements.txt</span></code>:</p>
+<p>List additional Python packages in <code class="docutils literal notranslate"><span class="pre">requirements.txt</span></code>:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span># requirements.txt
 lxml&gt;=4.9.0
 requests&gt;=2.28.0
 </pre></div>
 </div>
 </section>
-<section id="loading-custom-test-functions">
-<h3>Loading Custom Test Functions<a class="headerlink" href="#loading-custom-test-functions" title="Link to this heading">¶</a></h3>
-<p>Load your custom test functions into ADARE:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load from any directory</span>
-adare<span class="w"> </span>testfunction<span class="w"> </span>load<span class="w"> </span>/path/to/your/testfunctions
-
-<span class="c1"># Verify loaded functions</span>
-adare<span class="w"> </span>testfunction<span class="w"> </span>list
-</pre></div>
-</div>
-</section>
 </section>
 <section id="real-world-example">
 <h2>Real-World Example<a class="headerlink" href="#real-world-example" title="Link to this heading">¶</a></h2>
-<section id="complete-custom-test-function">
-<h3>Complete Custom Test Function<a class="headerlink" href="#complete-custom-test-function" title="Link to this heading">¶</a></h3>
-<p>Here’s a complete example testing JSON API responses:</p>
+<p>Here’s a complete example testing a JSON API response:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># /path/to/your/testfunctions/api/api.py</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">attrs</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClassVar</span><span class="p">,</span> <span class="n">Optional</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset.basictest</span><span class="w"> </span><span class="kn">import</span> <span class="n">BasicTest</span><span class="p">,</span> <span class="n">Parameter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset</span><span class="w"> </span><span class="kn">import</span> <span class="n">testfunction</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset.basictest</span><span class="w"> </span><span class="kn">import</span> <span class="n">HostModeCategory</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.event.event</span><span class="w"> </span><span class="kn">import</span> <span class="n">TestResult</span>
 
-<span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">ApiResponseParameter</span><span class="p">(</span><span class="n">Parameter</span><span class="p">):</span>
-    <span class="n">url</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">expected_status</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span>
-    <span class="n">expected_json_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">expected_json_value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">timeout_seconds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">30</span>
+<span class="nd">@testfunction</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s1">&#39;api_response&#39;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s1">&#39;tests API endpoint response and JSON content&#39;</span><span class="p">,</span>
+    <span class="n">category</span><span class="o">=</span><span class="n">HostModeCategory</span><span class="o">.</span><span class="n">AGENT_ONLY</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">api_response</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">expected_status</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span>
+                 <span class="n">expected_json_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">expected_json_value</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                 <span class="n">timeout_seconds</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">30</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout_seconds</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">RequestException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">execution_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;HTTP request failed for </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-<span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">ApiResponse</span><span class="p">(</span><span class="n">BasicTest</span><span class="p">):</span>
-    <span class="n">testname</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;api_response&#39;</span>
-    <span class="n">testdescription</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;tests API endpoint response and JSON content&#39;</span>
+    <span class="n">ctx</span><span class="o">.</span><span class="n">fail_if</span><span class="p">(</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="n">expected_status</span><span class="p">,</span>
+        <span class="sa">f</span><span class="s1">&#39;HTTP status mismatch. Expected: </span><span class="si">{</span><span class="n">expected_status</span><span class="si">}</span><span class="s1">, Got: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s1">&#39;</span>
+    <span class="p">)</span>
 
-    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">parameter</span><span class="p">:</span> <span class="n">ApiResponseParameter</span>
-    <span class="n">description</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
-    <span class="n">variable_metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">test</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">expected_json_key</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">url</span>
-            <span class="n">expected_status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">expected_status</span>
-            <span class="n">timeout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">timeout_seconds</span>
+            <span class="n">json_data</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">execution_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="s2">&quot;Response is not valid JSON&quot;</span><span class="p">)</span>
 
-            <span class="c1"># Make HTTP request</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
-            <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">RequestException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">execution_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;HTTP request failed for </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">fail_if</span><span class="p">(</span>
+            <span class="n">expected_json_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">json_data</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s1">&#39;JSON key &quot;</span><span class="si">{</span><span class="n">expected_json_key</span><span class="si">}</span><span class="s1">&quot; not found&#39;</span>
+        <span class="p">)</span>
 
-            <span class="c1"># Check status code</span>
-            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="n">expected_status</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">failed</span><span class="p">([</span>
-                    <span class="sa">f</span><span class="s1">&#39;HTTP status mismatch. Expected: </span><span class="si">{</span><span class="n">expected_status</span><span class="si">}</span><span class="s1">, Got: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s1">&#39;</span>
-                <span class="p">])</span>
+        <span class="k">if</span> <span class="n">expected_json_value</span><span class="p">:</span>
+            <span class="n">actual</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">json_data</span><span class="p">[</span><span class="n">expected_json_key</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">has_placeholders</span><span class="p">(</span><span class="n">expected_json_value</span><span class="p">):</span>
+                <span class="n">success</span><span class="p">,</span> <span class="n">message</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">handle_placeholders_comparison</span><span class="p">(</span><span class="n">actual</span><span class="p">,</span> <span class="n">expected_json_value</span><span class="p">)</span>
+                <span class="n">ctx</span><span class="o">.</span><span class="n">fail_if</span><span class="p">(</span><span class="ow">not</span> <span class="n">success</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;JSON value comparison failed: </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">ctx</span><span class="o">.</span><span class="n">fail_if</span><span class="p">(</span><span class="n">actual</span> <span class="o">!=</span> <span class="n">expected_json_value</span><span class="p">,</span>
+                            <span class="sa">f</span><span class="s1">&#39;JSON value mismatch. Expected: </span><span class="si">{</span><span class="n">expected_json_value</span><span class="si">}</span><span class="s1">, Got: </span><span class="si">{</span><span class="n">actual</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
 
-            <span class="c1"># Check JSON content if specified</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">expected_json_key</span><span class="p">:</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">json_data</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
-                <span class="k">except</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">execution_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="s2">&quot;Response is not valid JSON&quot;</span><span class="p">)</span>
-
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">expected_json_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">json_data</span><span class="p">:</span>
-                    <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">failed</span><span class="p">([</span>
-                        <span class="sa">f</span><span class="s1">&#39;JSON key &quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">expected_json_key</span><span class="si">}</span><span class="s1">&quot; not found&#39;</span>
-                    <span class="p">])</span>
-
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">expected_json_value</span><span class="p">:</span>
-                    <span class="n">actual_value</span> <span class="o">=</span> <span class="n">json_data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">expected_json_key</span><span class="p">]</span>
-                    <span class="n">expected_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">expected_json_value</span>
-
-                    <span class="c1"># Support placeholder comparison for dynamic values</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_placeholders</span><span class="p">(</span><span class="n">expected_value</span><span class="p">):</span>
-                        <span class="n">success</span><span class="p">,</span> <span class="n">message</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_placeholders_comparison</span><span class="p">(</span>
-                            <span class="nb">str</span><span class="p">(</span><span class="n">actual_value</span><span class="p">),</span> <span class="n">expected_value</span>
-                        <span class="p">)</span>
-                        <span class="k">if</span> <span class="ow">not</span> <span class="n">success</span><span class="p">:</span>
-                            <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">failed</span><span class="p">([</span><span class="sa">f</span><span class="s1">&#39;JSON value comparison failed: </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">actual_value</span><span class="p">)</span> <span class="o">!=</span> <span class="n">expected_value</span><span class="p">:</span>
-                            <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">failed</span><span class="p">([</span>
-                                <span class="sa">f</span><span class="s1">&#39;JSON value mismatch. Expected: </span><span class="si">{</span><span class="n">expected_value</span><span class="si">}</span><span class="s1">, Got: </span><span class="si">{</span><span class="n">actual_value</span><span class="si">}</span><span class="s1">&#39;</span>
-                            <span class="p">])</span>
-
-            <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">success</span><span class="p">([</span>
-                <span class="sa">f</span><span class="s1">&#39;API response valid: HTTP </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
-                <span class="sa">f</span><span class="s1">&#39;Response size: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span><span class="si">}</span><span class="s1"> bytes&#39;</span>
-            <span class="p">])</span>
-
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">execution_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="s2">&quot;Unexpected error in API response test&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span><span class="sa">f</span><span class="s1">&#39;API response valid: HTTP </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s1">&#39;Response size: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span><span class="si">}</span><span class="s1"> bytes&#39;</span><span class="p">]</span>
 </pre></div>
 </div>
-</section>
-<section id="usage-in-playbooks">
-<h3>Usage in Playbooks<a class="headerlink" href="#usage-in-playbooks" title="Link to this heading">¶</a></h3>
-<p>Use your custom test function in experiment playbooks:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># experiment/playbook.yml</span>
-<span class="nt">tests</span><span class="p">:</span>
+<p>Usage in playbook:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check_api_status</span>
 <span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">api.api_response</span>
 <span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
@@ -766,121 +722,18 @@ adare<span class="w"> </span>testfunction<span class="w"> </span>list
 </pre></div>
 </div>
 </section>
-</section>
 <section id="best-practices">
 <h2>Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading">¶</a></h2>
-<section id="performance-considerations">
-<h3>Performance Considerations<a class="headerlink" href="#performance-considerations" title="Link to this heading">¶</a></h3>
 <ul class="simple">
-<li><p><strong>Minimize file I/O</strong>: Cache file contents when testing multiple aspects</p></li>
-<li><p><strong>Efficient patterns</strong>: Use appropriate data structures for large datasets</p></li>
-<li><p><strong>Resource cleanup</strong>: Close files and connections properly</p></li>
-<li><p><strong>Timeout handling</strong>: Set reasonable timeouts for network operations</p></li>
+<li><p><strong>Use</strong> <code class="docutils literal notranslate"><span class="pre">ctx.fail_if()</span></code> <strong>and</strong> <code class="docutils literal notranslate"><span class="pre">ctx.error_if()</span></code> for clean assertion-style logic</p></li>
+<li><p><strong>Always use</strong> <code class="docutils literal notranslate"><span class="pre">ctx.resolve_globfilepath()</span></code> for file paths</p></li>
+<li><p><strong>Consider placeholder support</strong> for values that may be dynamic</p></li>
+<li><p><strong>Keep test functions focused</strong> — one test, one purpose</p></li>
+<li><p><strong>Use module-level helpers</strong> for shared logic across tests</p></li>
+<li><p><strong>Handle platform differences</strong> gracefully with <code class="docutils literal notranslate"><span class="pre">platform.system()</span></code> checks</p></li>
+<li><p><strong>Set reasonable timeouts</strong> for network operations</p></li>
+<li><p><strong>Use structured logging</strong> via <code class="docutils literal notranslate"><span class="pre">logging.getLogger(__name__)</span></code></p></li>
 </ul>
-</section>
-<section id="logging-guidelines">
-<h3>Logging Guidelines<a class="headerlink" href="#logging-guidelines" title="Link to this heading">¶</a></h3>
-<p>Use structured logging for debugging:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
-<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
-
-<span class="k">def</span><span class="w"> </span><span class="nf">test</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-    <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Starting test </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> with parameter: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">dst</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
-
-    <span class="c1"># Test implementation</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_perform_test</span><span class="p">()</span>
-
-    <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Test </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> completed with status: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">result</span>
-</pre></div>
-</div>
-</section>
-<section id="cross-platform-considerations">
-<h3>Cross-Platform Considerations<a class="headerlink" href="#cross-platform-considerations" title="Link to this heading">¶</a></h3>
-<p>Handle platform differences gracefully:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">platform</span>
-
-<span class="k">def</span><span class="w"> </span><span class="nf">test</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-    <span class="k">if</span> <span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span> <span class="o">==</span> <span class="s1">&#39;Windows&#39;</span><span class="p">:</span>
-        <span class="c1"># Windows-specific logic</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_test_windows</span><span class="p">()</span>
-    <span class="k">elif</span> <span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span> <span class="o">==</span> <span class="s1">&#39;Linux&#39;</span><span class="p">:</span>
-        <span class="c1"># Linux-specific logic</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_test_linux</span><span class="p">()</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">execution_error</span><span class="p">(</span>
-            <span class="kc">None</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Unsupported platform: </span><span class="si">{</span><span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="testing-your-test-functions">
-<h2>Testing Your Test Functions<a class="headerlink" href="#testing-your-test-functions" title="Link to this heading">¶</a></h2>
-<section id="unit-testing">
-<h3>Unit Testing<a class="headerlink" href="#unit-testing" title="Link to this heading">¶</a></h3>
-<p>Create unit tests for your test functions:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># tests/test_mycollection.py</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">unittest</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset.basictest</span><span class="w"> </span><span class="kn">import</span> <span class="n">TestResult</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mycollection.mycollection</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">FileContentContainsWord</span><span class="p">,</span> <span class="n">FileContentContainsWordParameter</span>
-<span class="p">)</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">TestFileContentContainsWord</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">test_word_found</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># Create test instance</span>
-        <span class="n">test_instance</span> <span class="o">=</span> <span class="n">FileContentContainsWord</span><span class="p">(</span>
-            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_word_search&quot;</span><span class="p">,</span>
-            <span class="n">parameter</span><span class="o">=</span><span class="n">FileContentContainsWordParameter</span><span class="p">(</span>
-                <span class="n">dst</span><span class="o">=</span><span class="s2">&quot;/path/to/test/file.txt&quot;</span><span class="p">,</span>
-                <span class="n">word</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">,</span>
-                <span class="n">case_sensitive</span><span class="o">=</span><span class="kc">True</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
-
-        <span class="c1"># Mock file content and test</span>
-        <span class="c1"># ... test implementation</span>
-</pre></div>
-</div>
-</section>
-<section id="integration-testing">
-<h3>Integration Testing<a class="headerlink" href="#integration-testing" title="Link to this heading">¶</a></h3>
-<p>Test with actual playbooks in controlled environments:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">test_custom_function</span>
-<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mycollection.file_content_contains_word</span>
-<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/tmp/test_file.txt&quot;</span>
-<span class="w">      </span><span class="nt">word</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;test_content&quot;</span>
-<span class="w">      </span><span class="nt">case_sensitive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="common-pitfalls">
-<h2>Common Pitfalls<a class="headerlink" href="#common-pitfalls" title="Link to this heading">¶</a></h2>
-<ul class="simple">
-<li><p><strong>Forgetting glob resolution</strong>: Always use <code class="docutils literal notranslate"><span class="pre">resolve_globfilepath()</span></code> for file paths</p></li>
-<li><p><strong>Inconsistent error handling</strong>: Use the three-tier result system consistently</p></li>
-<li><p><strong>Missing variable support</strong>: Consider placeholder integration for dynamic content</p></li>
-<li><p><strong>Platform assumptions</strong>: Test on target operating systems</p></li>
-<li><p><strong>Resource leaks</strong>: Properly close files and network connections</p></li>
-<li><p><strong>Overly complex tests</strong>: Keep test functions focused and single-purpose</p></li>
-</ul>
-</section>
-<section id="sharing-your-test-functions">
-<h2>Sharing Your Test Functions<a class="headerlink" href="#sharing-your-test-functions" title="Link to this heading">¶</a></h2>
-<p>Once you’ve created useful test functions that could benefit the ADARE community, consider sharing them!</p>
-<p>Create a pull request to the <a class="reference external" href="https://github.com/adareweb/adareweb">ADARE Web repository</a> to make your test functions available to other users. This helps build a comprehensive library of test functions for various forensic analysis scenarios.</p>
-<p>When submitting your test functions:</p>
-<ul class="simple">
-<li><p>Include comprehensive documentation</p></li>
-<li><p>Provide example usage in playbooks</p></li>
-<li><p>Test across multiple platforms if applicable</p></li>
-<li><p>Follow the coding standards outlined in this guide</p></li>
-</ul>
-<p>This comprehensive guide provides the foundation for creating robust, maintainable test functions that integrate seamlessly with the ADARE framework. Start with simple examples and gradually incorporate advanced features as needed.</p>
 </section>
 </section>
 
@@ -939,57 +792,32 @@ adare<span class="w"> </span>testfunction<span class="w"> </span>list
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Create your own testfunction set (in development)</a><ul>
-<li><a class="reference internal" href="#architecture-overview">Architecture Overview</a><ul>
-<li><a class="reference internal" href="#test-function-structure">Test Function Structure</a></li>
-<li><a class="reference internal" href="#core-concepts">Core Concepts</a></li>
+<li><a class="reference internal" href="#">Create your own testfunction set</a><ul>
+<li><a class="reference internal" href="#quick-start">Quick Start</a><ul>
+<li><a class="reference internal" href="#loading-and-using-custom-test-functions">Loading and Using Custom Test Functions</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#step-by-step-development">Step-by-Step Development</a><ul>
-<li><a class="reference internal" href="#create-the-module-structure">1. Create the Module Structure</a></li>
-<li><a class="reference internal" href="#define-parameter-classes">2. Define Parameter Classes</a></li>
-<li><a class="reference internal" href="#implement-the-test-class">3. Implement the Test Class</a></li>
+<li><a class="reference internal" href="#core-concepts">Core Concepts</a><ul>
+<li><a class="reference internal" href="#testcontext-ctx">TestContext (ctx)</a></li>
+<li><a class="reference internal" href="#return-values">Return Values</a></li>
+<li><a class="reference internal" href="#parameters">Parameters</a></li>
+<li><a class="reference internal" href="#category">Category</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#core-basictest-methods">Core BasicTest Methods</a><ul>
-<li><a class="reference internal" href="#file-resolution">File Resolution</a></li>
-<li><a class="reference internal" href="#variable-and-placeholder-handling">Variable and Placeholder Handling</a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#advanced-features">Advanced Features</a><ul>
-<li><a class="reference internal" href="#timestamp-tolerance">Timestamp Tolerance</a></li>
-<li><a class="reference internal" href="#regex-pattern-matching">Regex Pattern Matching</a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#error-handling-patterns">Error Handling Patterns</a><ul>
-<li><a class="reference internal" href="#standard-error-types">Standard Error Types</a></li>
-<li><a class="reference internal" href="#test-result-guidelines">Test Result Guidelines</a></li>
+<li><a class="reference internal" href="#host-based-tests">Host-Based Tests</a></li>
+<li><a class="reference internal" href="#advanced">Advanced</a><ul>
+<li><a class="reference internal" href="#module-level-helper-functions">Module-Level Helper Functions</a></li>
+<li><a class="reference internal" href="#placeholder-and-variable-support">Placeholder and Variable Support</a></li>
+<li><a class="reference internal" href="#legacy-class-based-approach">Legacy Class-Based Approach</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#module-organization">Module Organization</a><ul>
 <li><a class="reference internal" href="#directory-structure">Directory Structure</a></li>
 <li><a class="reference internal" href="#dependencies">Dependencies</a></li>
-<li><a class="reference internal" href="#loading-custom-test-functions">Loading Custom Test Functions</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#real-world-example">Real-World Example</a><ul>
-<li><a class="reference internal" href="#complete-custom-test-function">Complete Custom Test Function</a></li>
-<li><a class="reference internal" href="#usage-in-playbooks">Usage in Playbooks</a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#best-practices">Best Practices</a><ul>
-<li><a class="reference internal" href="#performance-considerations">Performance Considerations</a></li>
-<li><a class="reference internal" href="#logging-guidelines">Logging Guidelines</a></li>
-<li><a class="reference internal" href="#cross-platform-considerations">Cross-Platform Considerations</a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#testing-your-test-functions">Testing Your Test Functions</a><ul>
-<li><a class="reference internal" href="#unit-testing">Unit Testing</a></li>
-<li><a class="reference internal" href="#integration-testing">Integration Testing</a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#common-pitfalls">Common Pitfalls</a></li>
-<li><a class="reference internal" href="#sharing-your-test-functions">Sharing Your Test Functions</a></li>
+<li><a class="reference internal" href="#real-world-example">Real-World Example</a></li>
+<li><a class="reference internal" href="#best-practices">Best Practices</a></li>
 </ul>
 </li>
 </ul>
@@ -1006,6 +834,7 @@ adare<span class="w"> </span>testfunction<span class="w"> </span>list
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>
 document.addEventListener('DOMContentLoaded', function() {
   if (!window.simpleDatatables) {

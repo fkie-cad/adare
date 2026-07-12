@@ -417,6 +417,18 @@ class AdareVMClient:
         """Take screenshot of specific window."""
         return await self.call_tool(ToolRegistry.SCREENSHOT_WINDOW, {"window": window})
 
+    async def extract_icon(self, spec: dict, size: int = 256, timeout: float = 30.0) -> dict[str, Any]:
+        """Extract a Windows icon (by resolver spec) from the target as a base64 PNG.
+
+        Args:
+            spec: Version-independent resolver spec (stock/exe/app/fileassoc/dll).
+            size: Desired icon edge in pixels (default 256).
+
+        Returns:
+            Result dict with keys 'format', 'encoding', 'size', 'data' (base64 PNG), 'spec'.
+        """
+        return await self.call_tool("extract_icon", {"spec": spec, "size": size}, timeout=timeout)
+
     # Test Management Methods
 
     async def upload_testfunctions(self, testfunctions_path: Path, specific_files: set[Path] = None) -> dict[str, Any]:
