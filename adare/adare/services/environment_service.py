@@ -297,8 +297,19 @@ class EnvironmentService:
                 ]
             )
 
+        if request.setup_level is not None:
+            try:
+                setup_level = SetupLevel(request.setup_level)
+            except ValueError:
+                return Result.fail(
+                    code='InvalidSetupLevelError',
+                    message=f'Invalid setup_level: {request.setup_level}',
+                    solutions=['setup_level must be one of 0 (bare), 1 (base), 2 (full), 3 (agent)'],
+                )
+        else:
+            setup_level = SetupLevel.FULL
+
         iso_sha256 = hash_file_sha256(request.iso_path)
-        setup_level = SetupLevel(request.setup_level) if request.setup_level is not None else SetupLevel.FULL
 
         env_file_path = build_recipe_environment_file(
             os_name=request.os_profile,
