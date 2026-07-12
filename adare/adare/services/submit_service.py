@@ -134,11 +134,21 @@ class SubmitService:
         owner = config_server.GITEA_EXPERIMENTS_REPO_OWNER
         repo = config_server.GITEA_EXPERIMENTS_REPO
 
-        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        branch_name = f'submit/{entity_type}/{name}-{timestamp}'
+        title = f'[{entity_type} create] {name}'
+        head_prefix = f'submit/{entity_type}/{name}-'
 
-        if not client.create_branch(owner, repo, branch_name):
-            raise RuntimeError(f'Failed to create branch {branch_name}')
+        # Reuse an already-open PR for this entity instead of opening a duplicate.
+        # Re-uploading then pushes to the same branch/PR, so the server sees the
+        # same gitea_pr_number and idempotently upserts its draft (no name clash).
+        existing_pr = client.find_open_pull_request(owner, repo, title=title, head_prefix=head_prefix)
+        if existing_pr:
+            branch_name = existing_pr['head']['ref']
+            log.info(f'Reusing open PR #{existing_pr["number"]} on branch {branch_name}')
+        else:
+            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            branch_name = f'submit/{entity_type}/{name}-{timestamp}'
+            if not client.create_branch(owner, repo, branch_name):
+                raise RuntimeError(f'Failed to create branch {branch_name}')
 
         for filepath, content in files.items():
             success = client.create_or_update_file(
@@ -148,9 +158,12 @@ class SubmitService:
             if not success:
                 raise RuntimeError(f'Failed to upload {filepath}')
 
+        if existing_pr:
+            return existing_pr
+
         return client.create_pull_request(
             owner, repo,
-            title=f'[{entity_type} create] {name}',
+            title=title,
             head=branch_name,
             body=f'Automated submission of {entity_type} `{name}` via ADARE CLI.',
         )
