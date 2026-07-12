@@ -69,6 +69,39 @@ class UserSessionApi(DatabaseApi):
                 log.info(f'deleted django token for user session ({user_session.username}), because it expired')
         self._session.commit()
 
+    def get_session_for_refresh(self, username: str = None):
+        """Get a user session WITHOUT pruning expired ones.
+
+        Used by the token-refresh path, which must inspect a (possibly expired) session
+        and renew its tokens before the time-based pruning would otherwise delete it.
+        """
+        query = self._session.query(UserSession)
+        if username:
+            query = query.filter_by(username=username)
+        return query.first()
+
+    def update_session_tokens(self, username: str, gitea_token: str, gitea_token_expiration: datetime, gitea_refresh_token: str, django_token: str, django_token_expiration: datetime):
+        """Update the tokens of an existing session in place (used after a token refresh).
+
+        Advancing the stored expirations here means the subsequent time-based pruning no
+        longer fires for this session. Does nothing if the session no longer exists.
+        """
+        user_session = self._session.query(UserSession).filter_by(username=username).first()
+        if not user_session:
+            return
+        user_session.gitea_token.token = gitea_token
+        user_session.gitea_token.expiration = gitea_token_expiration
+        user_session.django_token.token = django_token
+        user_session.django_token.expiration = django_token_expiration
+        if user_session.gitea_refresh_token:
+            user_session.gitea_refresh_token.token = gitea_refresh_token
+        elif gitea_refresh_token:
+            refresh = Token(token=gitea_refresh_token)
+            self._session.add(refresh)
+            user_session.gitea_refresh_token = refresh
+        self._session.commit()
+        log.info(f'refreshed tokens for user session ({username})')
+
     def get_user_session(self, username: str):
         """Get an active user session by username after pruning expired sessions.
 

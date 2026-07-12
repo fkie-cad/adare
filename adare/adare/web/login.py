@@ -114,26 +114,8 @@ def start_oauth_flow(redirect_uri, port):
         gitea_access_token_expiry = httpd.gitea_access_token_expiry
         gitea_refresh_token = httpd.gitea_refresh_token
 
-        # gitea_access_token_expiry has the wrong timezone since its data is timezone aware for Berlin and we want it to be UTC
-
-
     # access django api to retrieve django knox token
-    try:
-        response = requests.post(f'{WEBSERVER_URL}api/auth/gitea/', data={'access_token': gitea_access_token})
-        if response.status_code != 200:
-            raise LoginFailedError(log,
-                                   f"Failed to retrieve Django token ({response.status_code}): {response.text}")
-    except requests.exceptions.RequestException as e:
-        raise LoginFailedError(
-            log, "Failed to retrieve Django token"
-        ) from e
-
-    log.info("Received Django token")
-
-    django_username = response.json()['user']
-    django_token = response.json()['token']
-    django_expiry = datetime.datetime.strptime(response.json()['expiry'], '%Y-%m-%dT%H:%M:%S.%fZ')
-
+    django_username, django_token, django_expiry = exchange_gitea_for_django(gitea_access_token)
 
     # Save the tokens to the database
     with UserSessionApi() as db:
@@ -161,6 +143,108 @@ def exchange_code_for_token(client_id, code, code_verifier, redirect_uri):
     }
     response = requests.post(token_url, headers=headers, data=payload)
     return response.json()
+
+
+def refresh_gitea_token(refresh_token):
+    """Exchange a Gitea refresh token for a fresh access token.
+
+    Mirrors ``exchange_code_for_token``: the OAuth2 client is a public/PKCE client, so
+    the ``authorization_code`` grant works without a ``client_secret`` and the
+    ``refresh_token`` grant behaves the same way. If a future Gitea configuration requires
+    a secret for this grant, source it from ``adare.config.server`` alongside
+    ``GITEA_CLIENT_ID`` and add it to the payload.
+
+    Returns the parsed JSON response, which contains a new ``access_token``, ``expires_in``
+    and a (rotated) ``refresh_token``.
+    """
+    token_url = f"{GITEA_URL}login/oauth/access_token"
+    headers = {'Accept': 'application/json'}
+    payload = {
+        'client_id': GITEA_CLIENT_ID,
+        'grant_type': 'refresh_token',
+        'refresh_token': refresh_token,
+    }
+    response = requests.post(token_url, headers=headers, data=payload)
+    return response.json()
+
+
+def exchange_gitea_for_django(gitea_access_token):
+    """Exchange a Gitea access token for a Django Knox token.
+
+    Returns a ``(username, token, expiry)`` tuple. Shared by the initial login and the
+    token-refresh path so both mint the Knox token the same way.
+    """
+    try:
+        response = requests.post(f'{WEBSERVER_URL}api/auth/gitea/', data={'access_token': gitea_access_token})
+        if response.status_code != 200:
+            raise LoginFailedError(log,
+                                   f"Failed to retrieve Django token ({response.status_code}): {response.text}")
+    except requests.exceptions.RequestException as e:
+        raise LoginFailedError(
+            log, "Failed to retrieve Django token"
+        ) from e
+
+    log.info("Received Django token")
+
+    django_username = response.json()['user']
+    django_token = response.json()['token']
+    django_expiry = datetime.datetime.strptime(response.json()['expiry'], '%Y-%m-%dT%H:%M:%S.%fZ')
+    return django_username, django_token, django_expiry
+
+
+def refresh_session_if_needed(username: str = None, skew_seconds: int = 60):
+    """Renew a session's tokens using the stored Gitea refresh token, before pruning.
+
+    Loads the session without pruning it. If the Gitea access token is expired (or within
+    ``skew_seconds`` of expiring) and a refresh token is present, exchanges the refresh
+    token for a fresh Gitea access token, re-exchanges that for a new Django Knox token,
+    and persists both with advanced expirations so the subsequent time-based pruning does
+    not delete the session.
+
+    On any refresh failure it does nothing and returns, letting the normal pruning run
+    (i.e. a genuine logout). All HTTP work happens here in the auth layer, never in the DB
+    layer.
+    """
+    with UserSessionApi() as db:
+        user_session = db.get_session_for_refresh(username)
+        if not user_session or not user_session.gitea_token:
+            return
+        refresh_token_obj = user_session.gitea_refresh_token
+        if not refresh_token_obj or not refresh_token_obj.token:
+            # No refresh token stored -> cannot renew, let pruning handle it.
+            return
+        expiration = user_session.gitea_token.expiration.replace(tzinfo=datetime.UTC)
+        if expiration > datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=skew_seconds):
+            # Access token still valid -> nothing to do.
+            return
+        session_username = user_session.username
+        refresh_token = refresh_token_obj.token
+
+    try:
+        gitea_response = refresh_gitea_token(refresh_token)
+        new_access_token = gitea_response['access_token']
+        new_expiry = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=gitea_response['expires_in'])
+        new_refresh_token = gitea_response.get('refresh_token', refresh_token)
+    except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+        log.warning(f"Failed to refresh Gitea token for user {session_username}: {e}")
+        return
+
+    try:
+        _, django_token, django_expiry = exchange_gitea_for_django(new_access_token)
+    except LoginFailedError as e:
+        log.warning(f"Failed to re-exchange Django token for user {session_username}: {e}")
+        return
+
+    with UserSessionApi() as db:
+        db.update_session_tokens(
+            username=session_username,
+            gitea_token=new_access_token,
+            gitea_token_expiration=new_expiry,
+            gitea_refresh_token=new_refresh_token,
+            django_token=django_token,
+            django_token_expiration=django_expiry,
+        )
+    log.info(f"refreshed session tokens for user {session_username}")
 
 
 def login():
@@ -196,6 +280,7 @@ def login():
 
 
 def is_logged_in(username: str = None, silent:bool = False):
+    refresh_session_if_needed(username)
     with UserSessionApi() as db:
         db.remove_expired_user_sessions()
         if not username and (user_session := db.get_first_user_session()):
