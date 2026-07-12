@@ -151,7 +151,8 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--env-name', default=None, help='Environment file name (defaults to VM name)')
     @click.option('--interactive', is_flag=True, default=False, help='Boot VM after install for manual software installation')
     @click.option('--arch', type=click.Choice(['x86_64', 'aarch64']), default=None, help='Override CPU architecture (default: from OS profile)')
-    def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, bare, env_name, interactive, arch):
+    @click.option('--recipe/--no-recipe', 'recipe', default=None, help='Emit a declarative recipe environment (build on load) instead of a baked disk. Default: recipe for Windows, baked for Linux.')
+    def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, bare, env_name, interactive, arch, recipe):
         """Create a new ADARE-ready VM from scratch.
 
         OS_NAME is the target OS. Run `adare manage os-profile list` to see all entries.
@@ -175,10 +176,11 @@ def register(cli, AliasedGroup, exec_with_error_printing):
           adare vm create ubuntu2404 --bare
           adare vm create ubuntu2404 --interactive
           adare vm create windows11 --iso /path/to/Win11.iso
+          adare vm create ubuntu2404 --iso /path/to/ubuntu.iso --recipe
           adare vm create ubuntu2204 --name my-ubuntu --disk-size 100G --ram 8192
         """
         from adare.cli.vm_create import exec_vm_create
-        args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, bare=bare, env_name=env_name, interactive=interactive, arch=arch)
+        args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, bare=bare, env_name=env_name, interactive=interactive, arch=arch, recipe=recipe)
         exec_with_error_printing(exec_vm_create, args)
 
     @vm.command(name='reset')

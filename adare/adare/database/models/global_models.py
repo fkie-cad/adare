@@ -261,6 +261,16 @@ class Vm(SerializerMixin, GlobalBase):
     # Hypervisor configuration
     hypervisor = Column(String, nullable=False, default='virtualbox', server_default='virtualbox')
 
+    # Build provenance. 'baked' = disk was loaded as a frozen artifact (default,
+    # unchanged behaviour). 'recipe' = disk was built from a declarative recipe;
+    # recipe_hash anchors the reproducible integrity identity while `hash` stays
+    # the per-run forensic record of the produced disk. iso_sha256/profile_name
+    # make a recipe-built disk traceable to its build inputs.
+    build_source = Column(String, nullable=False, default='baked', server_default='baked')
+    recipe_hash = Column(String, nullable=True, index=True)
+    iso_sha256 = Column(String, nullable=True)
+    profile_name = Column(String, nullable=True)
+
     # Snapshot configuration
     use_snapshots = Column(Boolean, default=True)
 
