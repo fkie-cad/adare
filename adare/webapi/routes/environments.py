@@ -2,7 +2,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from adare.webapi.adapters import result_to_response
@@ -15,10 +15,22 @@ router = APIRouter(prefix="/api/environments", tags=["environments"])
 # ---- Pydantic request models ----
 
 class EnvironmentCreateBody(BaseModel):
-    """Request body for creating an environment."""
+    """Request body for creating an environment.
+
+    Two shapes: a baked template (`vm_path`) or a declarative recipe
+    (`os_profile` + `iso_path`, plus optional build params) — see
+    `EnvironmentCreateRequest.is_recipe`.
+    """
     project_path: str
     name: str
     vm_path: str | None = None
+    os_profile: str | None = None
+    iso_path: str | None = None
+    disk_size: str | None = None
+    ram_mb: int | None = None
+    cpus: int | None = None
+    arch: str | None = None
+    setup_level: int | None = None
 
 
 class EnvironmentLoadBody(BaseModel):
@@ -50,6 +62,17 @@ async def list_environments():
     return result_to_response(result)
 
 
+@router.get("/os-profiles")
+async def list_os_profiles():
+    """List available OS profiles for building recipe environments.
+
+    Registered ahead of `/{name}` so the literal "os-profiles" path segment
+    isn't swallowed by that catch-all route.
+    """
+    result = _api().environment.list_os_profiles()
+    return result_to_response(result)
+
+
 @router.get("/{name}")
 async def get_environment(name: str):
     """Get environment details by name."""
@@ -62,10 +85,27 @@ async def create_environment(body: EnvironmentCreateBody):
     """Create a new environment template."""
     from adare.core.dto.environment import EnvironmentCreateRequest
 
+    iso_path = Path(body.iso_path) if body.iso_path else None
+    if iso_path is not None and not iso_path.is_file():
+        # EnvironmentService._create_recipe() hashes the ISO without an
+        # existence check, so a bad path would otherwise surface as an
+        # unhandled FileNotFoundError (500) instead of a clean 4xx here.
+        raise HTTPException(
+            status_code=400,
+            detail=f"ISO path does not exist or is not a file: {iso_path}",
+        )
+
     dto = EnvironmentCreateRequest(
         project_path=Path(body.project_path),
         name=body.name,
         vm_path=Path(body.vm_path) if body.vm_path else None,
+        os_profile=body.os_profile,
+        iso_path=iso_path,
+        disk_size=body.disk_size,
+        ram_mb=body.ram_mb,
+        cpus=body.cpus,
+        arch=body.arch,
+        setup_level=body.setup_level,
     )
     result = _api().environment.create(dto)
     return result_to_response(result)
