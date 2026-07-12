@@ -46,18 +46,19 @@ class GiteaApiClient:
         url = f'{self.api_url}repos/{owner}/{repo}/contents/{filepath}'
         content_b64 = base64.b64encode(content_bytes).decode('ascii')
 
-        # Check if file already exists to get its SHA (needed for update)
-        response = self.session.get(url, params={'ref': branch})
-        data = {
-            'message': message,
-            'content': content_b64,
-            'branch': branch,
-        }
-        if response.status_code == 200:
-            existing = response.json()
-            data['sha'] = existing['sha']
+        # Gitea's PUT /contents is update-only (sha required); POST creates.
+        # Probe the target branch to decide which to use.
+        probe = self.session.get(url, params={'ref': branch})
+        data = {'message': message, 'content': content_b64, 'branch': branch}
+        if probe.status_code == 200:
+            data['sha'] = probe.json()['sha']
+            response = self.session.put(url, json=data)
+        else:
+            if probe.status_code != 404:
+                log.warning(f'Unexpected status probing {filepath} on {branch}: '
+                            f'{probe.status_code} {probe.text}')
+            response = self.session.post(url, json=data)
 
-        response = self.session.put(url, json=data)
         if response.status_code in (200, 201):
             log.info(f'Uploaded {filepath} to {branch}')
             return True
