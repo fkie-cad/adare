@@ -6,7 +6,7 @@ from pathlib import Path
 
 from adare.console import print_error_message, print_success_message
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel, default_host_cpus, get_os_definition
-from adarelib.helper.yaml import dict_to_yaml
+from adare.services.environment_recipe import build_baked_environment_file, build_recipe_environment_file
 
 log = logging.getLogger(__name__)
 
@@ -17,77 +17,6 @@ def _use_recipe(os_def: OsDefinition, recipe_flag: bool | None) -> bool:
     if recipe_flag is not None:
         return recipe_flag
     return os_def.platform == 'windows'
-
-
-def _generate_recipe_environment_file(
-    os_name: str,
-    iso_path: Path,
-    iso_sha256: str,
-    setup_level: SetupLevel,
-    disk_size: str | None,
-    ram: int | None,
-    cpus: int | None,
-    arch: str | None,
-    env_name: str,
-) -> Path:
-    """Generate a declarative recipe environment YAML.
-
-    The disk is NOT built here — `adare environment load` builds it once from
-    these inputs and caches it (keyed on the recipe hash). Only user-specified
-    params are written so profile defaults keep flowing and the recipe identity
-    stays host-independent.
-    """
-    params: dict = {'setup_level': int(setup_level)}
-    if disk_size:
-        params['disk_size'] = disk_size
-    if ram:
-        params['ram_mb'] = ram
-    if cpus:
-        params['cpus'] = cpus
-    if arch:
-        params['arch'] = arch
-
-    env_content = {
-        'vm_type': 'recipe',
-        'hypervisor': 'qemu',
-        'recipe': {
-            'profile': os_name,
-            'iso': str(iso_path),
-            'iso_sha256': iso_sha256,
-            'params': params,
-        },
-    }
-
-    env_path = Path.cwd() / f'{env_name}.yml'
-    dict_to_yaml(env_path, env_content)
-    return env_path
-
-
-def _generate_environment_file(
-    disk_path: Path,
-    os_def: OsDefinition,
-    vm_name: str,
-    env_name: str | None = None,
-) -> Path:
-    """Generate an environment YAML file for the newly created VM."""
-    env_content = {
-        'vm': str(disk_path),
-        'vm_type': 'path',
-        'os': {
-            'os': os_def.display_name,
-            'platform': os_def.platform,
-            'distribution': os_def.distribution_label or os_def.distribution,
-            'version': os_def.version,
-            'language': 'English',
-            'architecture': os_def.architecture,
-        },
-        'hypervisor': 'qemu',
-    }
-
-    filename = env_name or vm_name
-    env_path = Path.cwd() / f'{filename}.yml'
-    dict_to_yaml(env_path, env_content)
-    return env_path
 
 
 def exec_vm_create(arguments):
@@ -157,8 +86,9 @@ def exec_vm_create(arguments):
         setup_level = SetupLevel.BARE if bare else SetupLevel.FULL
         final_name = env_name or vm_name or f'{os_name}-recipe'
 
-        env_file_path = _generate_recipe_environment_file(
+        env_file_path = build_recipe_environment_file(
             os_name=os_name,
+            os_def=os_def,
             iso_path=iso_path,
             iso_sha256=iso_sha256,
             setup_level=setup_level,
@@ -265,7 +195,7 @@ def exec_vm_create(arguments):
     final_name = vm_name or disk_path.stem
 
     try:
-        env_file_path = _generate_environment_file(disk_path, os_def, final_name, env_name=env_name)
+        env_file_path = build_baked_environment_file(disk_path=disk_path, os_def=os_def, vm_name=final_name, env_name=env_name)
         env_next_steps = [
             f'Load environment: adare environment load {env_file_path} --no-copy',
             'Then: adare experiment load <playbook> && adare experiment run',
