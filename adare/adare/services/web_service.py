@@ -104,8 +104,10 @@ class WebService:
             Result[WebStatusResult] with login status.
         """
         from adare.database.api.usersession import UserSessionApi
+        from adare.web.login import refresh_session_if_needed
 
         try:
+            refresh_session_if_needed()
             with UserSessionApi() as db:
                 db.remove_expired_user_sessions()
                 user_session = db.get_first_user_session()
