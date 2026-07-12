@@ -41,7 +41,11 @@ from adare.core.result import Result
 from adare.database.api.environment import EnvironmentDbApi
 from adare.helperfunctions.hash import hash_file_sha256
 from adare.hypervisor.exceptions import HypervisorException
-from adare.hypervisor.qemu.vm_creator.os_catalog import SetupLevel, get_os_definition
+from adare.hypervisor.qemu.vm_creator.os_catalog import (
+    SetupLevel,
+    get_os_definition,
+    list_os_definitions,
+)
 from adare.services.environment_recipe import build_recipe_environment_file
 
 log = logging.getLogger(__name__)
@@ -443,3 +447,26 @@ class EnvironmentService:
             return self.get_by_id(ulid)
         except EnvironmentDoesNotExistInDatabase as e:
             return Result.from_exception(e)
+
+    def list_os_profiles(self) -> Result[list[dict]]:
+        """
+        List available OS profiles for building recipe environments.
+
+        Returns:
+            Result[list[dict]] with one summary dict per catalog entry.
+        """
+        profiles = [
+            {
+                'name': os_def.name,
+                'display_name': os_def.display_name,
+                'platform': os_def.platform,
+                'distribution': os_def.distribution,
+                'version': os_def.version,
+                'architecture': os_def.architecture,
+                'default_disk_size': os_def.default_disk_size,
+                'default_ram_mb': os_def.default_ram_mb,
+                'default_cpus': os_def.default_cpus,
+            }
+            for os_def in list_os_definitions()
+        ]
+        return Result.ok(profiles)

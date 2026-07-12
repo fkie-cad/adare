@@ -827,3 +827,12 @@ def get_os_definition(os_name: str) -> OsDefinition:
             f"Run 'adare manage os-profile list' to see all profiles."
         )
     return OS_CATALOG[os_name]
+
+
+def list_os_definitions() -> list[OsDefinition]:
+    """Return every OS definition in the catalog, sorted by profile name.
+
+    Read-only convenience for callers (e.g. the webapi) that need to list
+    all available profiles rather than look one up.
+    """
+    return [OS_CATALOG[name] for name in sorted(OS_CATALOG)]
