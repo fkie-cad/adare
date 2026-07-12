@@ -182,8 +182,12 @@ class PlaybookController:
         if self.experiment_id:
             self._initialize_playbook_items_mapping()
 
-        # Target resolution using MCP GUI server
-        self.target_resolver = MCPTargetResolver(cfg.experiment_dir, cfg.mcp_gui_url, cfg.experiment_run_id)
+        # Target resolution using MCP GUI server. The WebSocket client and OS
+        # key let the resolver extract-and-cache icons for `target.icon`.
+        self.target_resolver = MCPTargetResolver(
+            cfg.experiment_dir, cfg.mcp_gui_url, cfg.experiment_run_id,
+            vm_client=self.client, os_key=self.vm_os or "windows",
+        )
         self.condition_checker = MCPConditionChecker(self.target_resolver)
 
         # Initialize specialized modules
@@ -307,6 +311,9 @@ class PlaybookController:
         if hasattr(self.action_executor.simple_actions, 'gui_executor') and \
            hasattr(self.action_executor.simple_actions.gui_executor, 'client'):
             self.action_executor.simple_actions.gui_executor.client = new_client
+
+        # Keep the icon library's extraction transport in sync after reconnect
+        self.target_resolver.set_vm_client(new_client)
 
     def _create_jinja_environment(self):
         """Create Jinja environment with all necessary filters."""

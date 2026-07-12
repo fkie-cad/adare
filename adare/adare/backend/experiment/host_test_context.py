@@ -16,6 +16,7 @@ from adare.backend.experiment.host_services import (
     ScreenshotService,
     VMFileService,
 )
+from adare.backend.experiment.icon_library import IconLibrary
 
 
 @attrs.define
@@ -52,6 +53,9 @@ class HostTestContext:
     guest_file: GuestFileProxy | None = None
     guest_command: GuestCommandProxy | None = None
 
+    # Windows icon library (optional - only wired when a VM client is available)
+    icons: IconLibrary | None = None
+
     # Context paths
     playbook_dir: Path = attrs.field(default=Path('.'))
     experiment_dir: Path = attrs.field(default=Path('.'))
@@ -63,7 +67,8 @@ class HostTestContext:
         websocket_client,
         action_executor,
         playbook_dir: Path,
-        experiment_dir: Path
+        experiment_dir: Path,
+        os_key: str = "windows",
     ) -> "HostTestContext":
         """
         Factory method to create HostTestContext with all services (agent mode).
@@ -74,6 +79,7 @@ class HostTestContext:
             action_executor: ActionExecutor for file pulls
             playbook_dir: Path to playbook directory
             experiment_dir: Path to experiment directory
+            os_key: OS profile / build identifier keying the icon cache
 
         Returns:
             HostTestContext instance with all services initialized
@@ -82,11 +88,14 @@ class HostTestContext:
         cv_service = CVService(mcp_client)
         screenshot_service = ScreenshotService(websocket_client)
         vm_file_service = VMFileService(action_executor)
+        # Icon library uses the same WebSocket client to extract icons on demand.
+        icon_library = IconLibrary(os_key=os_key, vm_client=websocket_client)
 
         return cls(
             cv=cv_service,
             screenshot=screenshot_service,
             vm_file=vm_file_service,
+            icons=icon_library,
             playbook_dir=playbook_dir,
             experiment_dir=experiment_dir
         )

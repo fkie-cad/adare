@@ -28,9 +28,10 @@ from adarevm.core.tools.gui_tools import GUIToolsMixin
 from adarevm.core.tools.test_tools import TestToolsMixin
 from adarevm.core.tools.system_tools import SystemToolsMixin
 from adarevm.core.tools.file_tools import FileToolsMixin
+from adarevm.core.tools.icon_tools import IconToolsMixin
 
 
-class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMixin):
+class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMixin, IconToolsMixin):
     """WebSocket server for adarevm GUI automation and test execution."""
 
     def _split_command_line(self, command: str) -> List[str]:
@@ -116,6 +117,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             "get_filesystem_snapshot": self._get_filesystem_snapshot,
             "get_timestamp": self._get_timestamp,
             "chain_commands": self._chain_commands,
+            "extract_icon": self._extract_icon,
         }
 
     async def start_server(self):

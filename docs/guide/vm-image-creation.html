@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Dev Mode" href="dev-mode.html"><link rel="prev" title="Diff Analysis" href="diff-analysis.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Dev Mode" href="dev-mode.html"><link rel="prev" title="Windows Icon Library" href="icon-library.html">
         <link rel="prefetch" href="../_static/logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.12.19 -->
@@ -12,6 +12,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d5f4d14b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
     
     
@@ -211,6 +212,7 @@
 <li class="toctree-l1"><a class="reference internal" href="experiments.html">Experiments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="test-driven-analysis.html">Test-Driven Analysis</a></li>
 <li class="toctree-l1"><a class="reference internal" href="diff-analysis.html">Diff Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="icon-library.html">Windows Icon Library</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">VM Image Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="dev-mode.html">Dev Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sharing.html">Sharing</a></li>
@@ -321,7 +323,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
 <ul>
@@ -737,11 +739,50 @@ precedence, allowing you to override defaults without modifying ADARE source.</p
 <li><p><code class="docutils literal notranslate"><span class="pre">miniforge_arch</span></code> – <code class="docutils literal notranslate"><span class="pre">x86_64</span></code> or <code class="docutils literal notranslate"><span class="pre">aarch64</span></code> (for Miniforge download URL)</p></li>
 </ul>
 </section>
+<section id="template-metadata">
+<h3>Template metadata<a class="headerlink" href="#template-metadata" title="Link to this heading">¶</a></h3>
+<p>Each Linux autoinstall template carries a self-describing metadata block as a
+Jinja comment at the top of the file. The block declares which OS profiles the
+template covers, so dropping a template into <code class="docutils literal notranslate"><span class="pre">~/.adare/vm-templates/</span></code> is
+enough to register it – no Python edits required.</p>
+<div class="highlight-jinja notranslate"><div class="highlight"><pre><span></span><span class="c">{# adare-template</span>
+<span class="c">schema: 1</span>
+<span class="c">id: my-ubuntu</span>
+<span class="c">description: Custom Ubuntu 24.04 with extra tooling</span>
+<span class="c">maintainer: yourname</span>
+<span class="c">revision: 2026-05-06</span>
+<span class="c">supports:</span>
+<span class="c">  - ubuntu2404</span>
+<span class="c">  - ubuntu2404arm64</span>
+<span class="c">#}</span>
+<span class="x">#cloud-config</span>
+<span class="x">autoinstall:</span>
+<span class="x">  ...</span>
+</pre></div>
+</div>
+<p>Field reference:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">schema</span></code> (required, integer) – Metadata schema version. Currently <code class="docutils literal notranslate"><span class="pre">1</span></code>.
+Loading a template with an unknown schema raises an explicit error.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">id</span></code> (required, string) – Stable identifier surfaced in
+<code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">manage</span> <span class="pre">os-profile</span> <span class="pre">show</span></code>. Independent of filename.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">description</span></code> (string) – Human-readable summary.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">maintainer</span></code> (string) – Name or handle responsible for the template.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">revision</span></code> (string) – Free-form revision marker (date, version, etc.).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">supports</span></code> (list of strings) – OS profile names this template applies to.
+Order does not matter. Within a single template directory, two templates
+cannot claim the same OS name; across directories, user templates override
+built-ins.</p></li>
+</ul>
+<p>Because the block is a Jinja <code class="docutils literal notranslate"><span class="pre">{#</span> <span class="pre">...</span> <span class="pre">#}</span></code> comment, it is stripped at render
+time and never reaches cloud-init. The line <code class="docutils literal notranslate"><span class="pre">#cloud-config</span></code> remains the first
+line of the rendered output.</p>
+</section>
 <section id="writing-a-custom-template">
 <h3>Writing a custom template<a class="headerlink" href="#writing-a-custom-template" title="Link to this heading">¶</a></h3>
 <ol class="arabic">
 <li><p>Copy an existing template from the built-in directory as a starting point:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span><span class="k">$(</span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import adare.hypervisor.qemu.vm_creator.autoinstall as a; print(a.TEMPLATES_DIR)&quot;</span><span class="k">)</span>/autoinstall_ubuntu_2404.yaml<span class="w"> </span><span class="se">\</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span><span class="k">$(</span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import adare.hypervisor.qemu.vm_creator.autoinstall as a; print(a.TEMPLATES_DIR)&quot;</span><span class="k">)</span>/autoinstall_ubuntu_lts.yaml<span class="w"> </span><span class="se">\</span>
 <span class="w">   </span>~/.adare/vm-templates/my_autoinstall.yaml
 </pre></div>
 </div>
@@ -962,14 +1003,14 @@ environment file was already generated automatically. Check with
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="diff-analysis.html">
+          <a class="prev-page" href="icon-library.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Diff Analysis</div>
+                <div class="title">Windows Icon Library</div>
                 
               </div>
             </a>
@@ -1024,6 +1065,7 @@ environment file was already generated automatically. Check with
 <li><a class="reference internal" href="#custom-templates">Custom Templates</a><ul>
 <li><a class="reference internal" href="#template-search-order">Template search order</a></li>
 <li><a class="reference internal" href="#available-template-variables">Available template variables</a></li>
+<li><a class="reference internal" href="#template-metadata">Template metadata</a></li>
 <li><a class="reference internal" href="#writing-a-custom-template">Writing a custom template</a></li>
 </ul>
 </li>
@@ -1058,6 +1100,7 @@ environment file was already generated automatically. Check with
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>
 document.addEventListener('DOMContentLoaded', function() {
   if (!window.simpleDatatables) {
