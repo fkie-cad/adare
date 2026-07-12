@@ -12,6 +12,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d5f4d14b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
     
     
@@ -211,6 +212,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../guide/experiments.html">Experiments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/test-driven-analysis.html">Test-Driven Analysis</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/diff-analysis.html">Diff Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../guide/icon-library.html">Windows Icon Library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/vm-image-creation.html">VM Image Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/dev-mode.html">Dev Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/sharing.html">Sharing</a></li>
@@ -321,7 +323,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
 <ul>
@@ -380,51 +382,62 @@
         <article role="main" id="furo-main-content">
           <section id="installation">
 <h1>Installation<a class="headerlink" href="#installation" title="Link to this heading">¶</a></h1>
-<p>This guide will walk you through installing ADARE on your system. ADARE supports Linux, macOS, and Windows platforms.</p>
-<section id="prerequisites">
-<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading">¶</a></h2>
-<p>Before installing ADARE, ensure you have the following prerequisites:</p>
-<section id="system-requirements">
-<h3>System Requirements<a class="headerlink" href="#system-requirements" title="Link to this heading">¶</a></h3>
-<div class="table-wrapper colwidths-given docutils container">
-<table class="docutils align-default">
-<colgroup>
-<col style="width: 33.3%" />
-<col style="width: 66.7%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>Component</p></th>
-<th class="head"><p>Minimum</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><strong>RAM</strong></p></td>
-<td><p>16 GB or more</p></td>
-</tr>
-<tr class="row-odd"><td><p><strong>Storage</strong></p></td>
-<td><p>50 GB (for windows VM more)</p></td>
-</tr>
-<tr class="row-even"><td><p><strong>CPU</strong></p></td>
-<td><p>6+ cores with virtualization support</p></td>
-</tr>
-<tr class="row-odd"><td><p><strong>OS</strong></p></td>
-<td><p>Ubuntu, Windows 10+, macOS 13+</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="required-software">
-<h3>Required Software<a class="headerlink" href="#required-software" title="Link to this heading">¶</a></h3>
-<ol class="arabic">
-<li><p><strong>Python 3.10 or higher</strong></p>
-<p>Check your Python version:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>--version
+<p>ADARE uses <strong>QEMU</strong> as its hypervisor on Linux and macOS hosts — that’s the
+recommended path and the rest of this page walks through it top-to-bottom.
+<strong>VirtualBox</strong> is also supported and is the only option for Windows hosts; if
+that’s you, jump to <a class="reference internal" href="#hypervisor-virtualbox"><span class="std std-ref">Alternative: VirtualBox</span></a> below.</p>
+<section id="step-1-install-prerequisites">
+<span id="common-prereqs"></span><h2>Step 1: Install Prerequisites<a class="headerlink" href="#step-1-install-prerequisites" title="Link to this heading">¶</a></h2>
+<p>These are required regardless of which hypervisor you use: <strong>Python 3.10+</strong>,
+<strong>uv</strong>, <strong>make</strong>, and <strong>git</strong>.</p>
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-0" name="sd-tab-set-0" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-0">
+Linux</label><div class="sd-tab-content docutils">
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-3" name="sd-tab-set-1" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-3">
+Ubuntu/Debian</label><div class="sd-tab-content docutils">
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>apt<span class="w"> </span>update
+sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>python3<span class="w"> </span>python3-venv<span class="w"> </span>make<span class="w"> </span>git
+curl<span class="w"> </span>-LsSf<span class="w"> </span>https://astral.sh/uv/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 </pre></div>
 </div>
-<p>If below 3.10 or not installed, download and install from <a class="reference external" href="https://www.python.org/downloads/">python.org</a> or use your package manager.</p>
-<p><strong>Windows Installation</strong></p>
-<p>For Windows users, you can install Python using PowerShell:</p>
+</div>
+<input id="sd-tab-item-4" name="sd-tab-set-1" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-4">
+Fedora/RHEL</label><div class="sd-tab-content docutils">
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>dnf<span class="w"> </span>install<span class="w"> </span>python3<span class="w"> </span>make<span class="w"> </span>git
+curl<span class="w"> </span>-LsSf<span class="w"> </span>https://astral.sh/uv/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-5" name="sd-tab-set-1" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-5">
+Arch</label><div class="sd-tab-content docutils">
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>pacman<span class="w"> </span>-S<span class="w"> </span>python<span class="w"> </span>make<span class="w"> </span>git
+curl<span class="w"> </span>-LsSf<span class="w"> </span>https://astral.sh/uv/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
+</pre></div>
+</div>
+</div>
+</div>
+<p>After installing <code class="docutils literal notranslate"><span class="pre">uv</span></code>, restart your shell so it appears on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.</p>
+</div>
+<input id="sd-tab-item-1" name="sd-tab-set-0" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-1">
+macOS</label><div class="sd-tab-content docutils">
+<p>Install Python via <a class="reference external" href="https://www.python.org/downloads/">python.org</a> or
+Homebrew, then install <code class="docutils literal notranslate"><span class="pre">uv</span></code> and the build tools:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>brew<span class="w"> </span>install<span class="w"> </span>python<span class="w"> </span>make<span class="w"> </span>git
+curl<span class="w"> </span>-LsSf<span class="w"> </span>https://astral.sh/uv/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
+</pre></div>
+</div>
+<p>After installing <code class="docutils literal notranslate"><span class="pre">uv</span></code>, restart your shell so it appears on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.</p>
+</div>
+<input id="sd-tab-item-2" name="sd-tab-set-0" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-2">
+Windows</label><div class="sd-tab-content docutils">
+<p>Install Python from PowerShell:</p>
 <div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># Download Python installer</span>
 <span class="nv">$pythonInstaller</span> <span class="p">=</span> <span class="s2">&quot;https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe&quot;</span>
 <span class="nv">$installerPath</span> <span class="p">=</span> <span class="s2">&quot;$env:TEMP\python-installer.exe&quot;</span>
@@ -434,123 +447,237 @@
 <span class="nb">Start-Process</span> <span class="n">-FilePath</span> <span class="nv">$installerPath</span> <span class="n">-ArgumentList</span> <span class="s2">&quot;/quiet&quot;</span><span class="p">,</span> <span class="s2">&quot;InstallAllUsers=1&quot;</span><span class="p">,</span> <span class="s2">&quot;PrependPath=1&quot;</span> <span class="n">-Wait</span>
 </pre></div>
 </div>
-<p>After installation, restart your PowerShell session and verify:</p>
-<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="p">-</span><span class="n">-version</span>
-</pre></div>
-</div>
-</li>
-<li><p><strong>uv</strong> (Python package manager)</p>
-<p>Install using the official installer:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-LsSf<span class="w"> </span>https://astral.sh/uv/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
-</pre></div>
-</div>
-<p><strong>Windows:</strong></p>
+<p>Install <code class="docutils literal notranslate"><span class="pre">uv</span></code>:</p>
 <div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">powershell</span> <span class="n">-ExecutionPolicy</span> <span class="n">ByPass</span> <span class="n">-c</span> <span class="s2">&quot;irm https://astral.sh/uv/install.ps1 | iex&quot;</span>
 </pre></div>
 </div>
-<p>After installation, restart your shell and verify:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--version
+<p>Install <code class="docutils literal notranslate"><span class="pre">make</span></code> and <code class="docutils literal notranslate"><span class="pre">git</span></code> via your preferred method (Git for Windows,
+Chocolatey, or Scoop). Restart your shell, then verify:</p>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="p">-</span><span class="n">-version</span>
+<span class="n">uv</span> <span class="p">-</span><span class="n">-version</span>
 </pre></div>
 </div>
-</li>
-<li><p><strong>VirtualBox</strong></p>
-<p>Download and install from <a class="reference external" href="https://www.virtualbox.org/">virtualbox.org</a></p>
+</div>
+</div>
+</section>
+<section id="step-2-install-qemu">
+<span id="hypervisor-qemu"></span><h2>Step 2: Install QEMU<a class="headerlink" href="#step-2-install-qemu" title="Link to this heading">¶</a></h2>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>On Windows, ensure <strong>Hyper-V is disabled</strong> as it conflicts with VirtualBox:</p>
+<p>QEMU is not supported on Windows hosts. If you’re on Windows, skip ahead
+to <a class="reference internal" href="#hypervisor-virtualbox"><span class="std std-ref">Alternative: VirtualBox</span></a>.</p>
+</div>
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-6" name="sd-tab-set-2" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-6">
+Linux</label><div class="sd-tab-content docutils">
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-8" name="sd-tab-set-3" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-8">
+Ubuntu/Debian</label><div class="sd-tab-content docutils">
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>apt<span class="w"> </span>update
+sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>qemu-system-x86<span class="w"> </span>qemu-utils<span class="w"> </span>python3-guestfs<span class="w"> </span>libguestfs-tools<span class="w"> </span>libvirt-dev
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-9" name="sd-tab-set-3" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-9">
+Fedora/RHEL</label><div class="sd-tab-content docutils">
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>dnf<span class="w"> </span>install<span class="w"> </span>qemu-kvm<span class="w"> </span>qemu-img<span class="w"> </span>python3-libguestfs<span class="w"> </span>libguestfs-tools<span class="w"> </span>libvirt-devel
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-10" name="sd-tab-set-3" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-10">
+Arch</label><div class="sd-tab-content docutils">
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>pacman<span class="w"> </span>-S<span class="w"> </span>qemu<span class="w"> </span>python-guestfs<span class="w"> </span>libguestfs<span class="w"> </span>libvirt
+</pre></div>
+</div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>ADARE supports <strong>Ubuntu and Windows guest VMs only</strong> under QEMU.
+macOS guest VMs are not supported.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">libvirt-dev</span></code> / <code class="docutils literal notranslate"><span class="pre">libvirt-devel</span></code> / <code class="docutils literal notranslate"><span class="pre">libvirt</span></code> provide the headers
+required to build the <code class="docutils literal notranslate"><span class="pre">libvirt-python</span></code> wheel that <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">install</span></code>
+pulls in by default. Install the system package before running
+<code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">install</span></code> in Step 3.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The libguestfs tools are required for file operations with stopped
+QEMU VMs.</p>
+</div>
+</div>
+<input id="sd-tab-item-7" name="sd-tab-set-2" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-7">
+macOS</label><div class="sd-tab-content docutils">
+<p>On macOS, QEMU must be installed via <strong>MacPorts</strong>. The Homebrew build of
+QEMU has the <code class="docutils literal notranslate"><span class="pre">smbd</span></code> path hardcoded to <code class="docutils literal notranslate"><span class="pre">/opt/local/sbin/smbd</span></code> (a
+MacPorts path), so the MacPorts build is the supported way to get
+working SMB host-to-guest sharing out of the box.</p>
+<p>First, install MacPorts itself by following the official installer for
+your macOS version: <a class="reference external" href="https://www.macports.org/install.php">macports.org/install.php</a>. After installation, restart
+your shell so <code class="docutils literal notranslate"><span class="pre">/opt/local/bin</span></code> is on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>, then verify:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>port<span class="w"> </span>version
+</pre></div>
+</div>
+<p>Install QEMU and its samba/libvirt dependencies via MacPorts:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>port<span class="w"> </span>install<span class="w"> </span>qemu<span class="w"> </span>samba4<span class="w"> </span>libvirt
+</pre></div>
+</div>
+<p>MacPorts installs samba’s <code class="docutils literal notranslate"><span class="pre">smbd</span></code> at <code class="docutils literal notranslate"><span class="pre">/opt/local/sbin/smbd</span></code>, which is
+exactly the path QEMU expects — no symlink needed.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>ADARE supports <strong>Ubuntu and Windows guest VMs only</strong> under QEMU.
+macOS guest VMs are not supported.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>On macOS, virtiofsd is not available. ADARE uses QEMU’s built-in SMB
+sharing (via <code class="docutils literal notranslate"><span class="pre">samba</span></code>) to mount host directories in the guest VM.
+This provides the same shared-directory experience as virtiofs on
+Linux. If <code class="docutils literal notranslate"><span class="pre">samba</span></code> is not installed at <code class="docutils literal notranslate"><span class="pre">/opt/local/sbin/smbd</span></code>,
+ADARE falls back to QGA file transfer (slower, but functional).
+ADARE will detect the mismatch and print the exact command needed.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="step-3-install-adare">
+<h2>Step 3: Install ADARE<a class="headerlink" href="#step-3-install-adare" title="Link to this heading">¶</a></h2>
+<p>With prerequisites and QEMU in place, clone and install ADARE.</p>
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-11" name="sd-tab-set-4" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-11">
+Linux</label><div class="sd-tab-content docutils">
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/fkie-cad/adare.git
+<span class="nb">cd</span><span class="w"> </span>adare
+make<span class="w"> </span>install
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">install</span></code> sets up a Python virtual environment, installs
+dependencies via uv, and installs the ADARE command-line tools. It
+includes QEMU support by default (it pulls in the <code class="docutils literal notranslate"><span class="pre">libvirt-python</span></code>
+extra), so make sure the libvirt development headers from Step 2 are
+installed first or the wheel build will fail.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">install-qemu</span></code> is kept as a backwards-compatible alias for
+<code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">install</span></code> on Linux/macOS.</p>
+</div>
+</div>
+<input id="sd-tab-item-12" name="sd-tab-set-4" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-12">
+macOS</label><div class="sd-tab-content docutils">
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/fkie-cad/adare.git
+<span class="nb">cd</span><span class="w"> </span>adare
+make<span class="w"> </span>install
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">install</span></code> sets up a Python virtual environment, installs
+dependencies via uv, and installs the ADARE command-line tools. It
+includes QEMU support by default (it pulls in the <code class="docutils literal notranslate"><span class="pre">libvirt-python</span></code>
+extra), so make sure <code class="docutils literal notranslate"><span class="pre">libvirt</span></code> is installed via MacPorts (Step 2) or
+the wheel build will fail.</p>
+</div>
+</div>
+</section>
+<section id="verify-installation">
+<h2>Verify Installation<a class="headerlink" href="#verify-installation" title="Link to this heading">¶</a></h2>
+<p>Check that ADARE is on your <code class="docutils literal notranslate"><span class="pre">PATH</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>--version
+</pre></div>
+</div>
+<p>You should see output similar to <code class="docutils literal notranslate"><span class="pre">ADARE</span> <span class="pre">version</span> <span class="pre">0.1.0</span></code>. Then test the help
+menu:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>--help
+</pre></div>
+</div>
+<p>This should display the main help menu without errors.</p>
+</section>
+<section id="alternative-virtualbox">
+<span id="hypervisor-virtualbox"></span><span id="choose-hypervisor"></span><h2>Alternative: VirtualBox<a class="headerlink" href="#alternative-virtualbox" title="Link to this heading">¶</a></h2>
+<p>VirtualBox is a supported alternative to QEMU. Pick it if:</p>
+<ul class="simple">
+<li><p>You’re on a <strong>Windows host</strong> — VirtualBox is the only supported backend
+there.</p></li>
+<li><p>You want a <strong>GUI-managed VM</strong> you can also poke at outside ADARE.</p></li>
+<li><p>You <strong>already have VirtualBox installed</strong> and don’t need QEMU’s extras
+(VirtioFS on Linux, HVF acceleration, SMB sharing on macOS).</p></li>
+</ul>
+<p>The choice is per-environment: set <code class="docutils literal notranslate"><span class="pre">hypervisor:</span> <span class="pre">virtualbox</span></code> in the
+environment YAML to override the project default. You can switch later
+without reinstalling ADARE.</p>
+<section id="install-virtualbox">
+<h3>Install VirtualBox<a class="headerlink" href="#install-virtualbox" title="Link to this heading">¶</a></h3>
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-13" name="sd-tab-set-5" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-13">
+Linux</label><div class="sd-tab-content docutils">
+<p>Download and install from
+<a class="reference external" href="https://www.virtualbox.org/">virtualbox.org</a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>ADARE supports <strong>Windows and Ubuntu guest VMs only</strong> under
+VirtualBox. macOS guest VMs are not supported.</p>
+</div>
+</div>
+<input id="sd-tab-item-14" name="sd-tab-set-5" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-14">
+Windows</label><div class="sd-tab-content docutils">
+<p>Download and install from
+<a class="reference external" href="https://www.virtualbox.org/">virtualbox.org</a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>On Windows, ensure <strong>Hyper-V is disabled</strong> as it conflicts with
+VirtualBox:</p>
 <ul class="simple">
 <li><p>Open “Turn Windows features on or off”</p></li>
 <li><p>Uncheck “Hyper-V”</p></li>
 <li><p>Restart your computer</p></li>
 </ul>
 </div>
-</li>
-<li><p><strong>QEMU</strong> (optional - for QEMU hypervisor support)</p>
-<p>If you plan to use the QEMU hypervisor instead of VirtualBox, you need to install QEMU and libguestfs:</p>
-<p><strong>Ubuntu/Debian:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>apt<span class="w"> </span>update
-sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>qemu-system-x86<span class="w"> </span>qemu-utils<span class="w"> </span>python3-guestfs<span class="w"> </span>libguestfs-tools
-</pre></div>
-</div>
-<p><strong>Fedora/RHEL/CentOS:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>dnf<span class="w"> </span>install<span class="w"> </span>qemu-kvm<span class="w"> </span>qemu-img<span class="w"> </span>python3-libguestfs<span class="w"> </span>libguestfs-tools
-</pre></div>
-</div>
-<p><strong>Arch Linux:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>pacman<span class="w"> </span>-S<span class="w"> </span>qemu<span class="w"> </span>python-guestfs<span class="w"> </span>libguestfs
-</pre></div>
-</div>
-<p><strong>macOS (Apple Silicon / ARM):</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>brew<span class="w"> </span>install<span class="w"> </span>qemu<span class="w"> </span>samba
-</pre></div>
-</div>
-<p>QEMU on macOS (Homebrew) has the smbd path hardcoded to <code class="docutils literal notranslate"><span class="pre">/opt/local/sbin/smbd</span></code>
-(a MacPorts path). You must create a symlink so QEMU can find Homebrew’s samba:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>/opt/local/sbin
-sudo<span class="w"> </span>ln<span class="w"> </span>-s<span class="w"> </span>/opt/homebrew/opt/samba/sbin/samba-dot-org-smbd<span class="w"> </span>/opt/local/sbin/smbd
-</pre></div>
-</div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>On macOS, virtiofsd is not available. ADARE uses QEMU’s built-in SMB sharing
-(via <code class="docutils literal notranslate"><span class="pre">samba</span></code>) to mount host directories in the guest VM. This provides the
-same shared-directory experience as virtiofs on Linux. If <code class="docutils literal notranslate"><span class="pre">samba</span></code> is not
-installed or the symlink above is missing, ADARE falls back to QGA file
-transfer (slower, but functional). ADARE will detect the mismatch and print
-the exact symlink command needed.</p>
+<p>ADARE supports <strong>Windows and Ubuntu guest VMs only</strong> under
+VirtualBox. macOS guest VMs are not supported.</p>
 </div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>The libguestfs tools are required for file operations with stopped QEMU VMs.</p>
 </div>
-</li>
-<li><p><strong>Make</strong> (build tool)</p>
-<p>Make sure to have <cite>make</cite> installed.</p>
-</li>
-</ol>
+</div>
 </section>
-</section>
-<section id="installation-steps">
-<h2>Installation Steps<a class="headerlink" href="#installation-steps" title="Link to this heading">¶</a></h2>
-<section id="clone-the-repository">
-<h3>1. Clone the Repository<a class="headerlink" href="#clone-the-repository" title="Link to this heading">¶</a></h3>
+<section id="install-adare-virtualbox-only">
+<h3>Install ADARE (VirtualBox-only)<a class="headerlink" href="#install-adare-virtualbox-only" title="Link to this heading">¶</a></h3>
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-15" name="sd-tab-set-6" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-15">
+Linux</label><div class="sd-tab-content docutils">
+<p>If you only need VirtualBox and want to skip QEMU extras, run the
+installer directly instead of <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">install</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/fkie-cad/adare.git
 <span class="nb">cd</span><span class="w"> </span>adare
+./adare/install/install.sh
 </pre></div>
 </div>
-</section>
-<section id="install-adare">
-<h3>2. Install ADARE<a class="headerlink" href="#install-adare" title="Link to this heading">¶</a></h3>
-<p>Run the installation script:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>make<span class="w"> </span>install
+</div>
+<input id="sd-tab-item-16" name="sd-tab-set-6" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-16">
+Windows</label><div class="sd-tab-content docutils">
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">https</span><span class="p">://</span><span class="n">github</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">fkie-cad</span><span class="p">/</span><span class="n">adare</span><span class="p">.</span><span class="n">git</span>
+<span class="nb">cd </span><span class="n">adare</span>
+<span class="n">make</span> <span class="n">install</span>
 </pre></div>
 </div>
-<p>This will:</p>
-<ul class="simple">
-<li><p>Set up a Python virtual environment</p></li>
-<li><p>Install all dependencies via uv</p></li>
-<li><p>Install ADARE command-line tools</p></li>
-<li><p>Configure the development environment</p></li>
-</ul>
-</section>
-<section id="verify-installation">
-<h3>3. Verify Installation<a class="headerlink" href="#verify-installation" title="Link to this heading">¶</a></h3>
-<p>Check that ADARE is installed correctly:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>--version
-</pre></div>
+<p>On Windows, <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">install</span></code> runs the PowerShell installer and does
+<strong>not</strong> install QEMU extras (Windows host support is experimental and
+VirtualBox is the supported backend there).</p>
 </div>
-<p>You should see output similar to:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>ADARE version 0.1.0
-</pre></div>
 </div>
-</section>
-<section id="test-your-setup">
-<h3>4. Test Your Setup<a class="headerlink" href="#test-your-setup" title="Link to this heading">¶</a></h3>
-<p>Run a quick system check:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>--help
-</pre></div>
-</div>
-<p>This should display the main help menu without errors.</p>
 </section>
 </section>
 <section id="tested-configurations">
@@ -582,9 +709,17 @@ the exact symlink command needed.</p>
 <td><p>7.0.26+</p></td>
 <td><p>All platforms</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>Ubuntu</strong></p></td>
+<tr class="row-odd"><td><p><strong>Ubuntu host</strong></p></td>
 <td><p>22.04</p></td>
 <td><p>Recommended</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>macOS host</strong></p></td>
+<td><p>13+</p></td>
+<td><p>Tested</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Windows host</strong></p></td>
+<td><p>10+</p></td>
+<td><p>Experimental</p></td>
 </tr>
 </tbody>
 </table>
@@ -592,6 +727,36 @@ the exact symlink command needed.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>While later versions should work, earlier versions (especially Python &lt; 3.10) are not supported due to language features used by ADARE.</p>
+</div>
+</section>
+<section id="system-requirements">
+<h2>System Requirements<a class="headerlink" href="#system-requirements" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 66.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Component</p></th>
+<th class="head"><p>Minimum</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>RAM</strong></p></td>
+<td><p>16 GB or more</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Storage</strong></p></td>
+<td><p>50 GB (for windows VM more)</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>CPU</strong></p></td>
+<td><p>6+ cores with virtualization support</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>OS</strong></p></td>
+<td><p>Linux (tested on Ubuntu 22.04) or macOS 13+; Windows 10+ is experimental</p></td>
+</tr>
+</tbody>
+</table>
 </div>
 </section>
 <section id="next-steps">
@@ -660,19 +825,17 @@ the exact symlink command needed.</p>
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">Installation</a><ul>
-<li><a class="reference internal" href="#prerequisites">Prerequisites</a><ul>
-<li><a class="reference internal" href="#system-requirements">System Requirements</a></li>
-<li><a class="reference internal" href="#required-software">Required Software</a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#installation-steps">Installation Steps</a><ul>
-<li><a class="reference internal" href="#clone-the-repository">1. Clone the Repository</a></li>
-<li><a class="reference internal" href="#install-adare">2. Install ADARE</a></li>
-<li><a class="reference internal" href="#verify-installation">3. Verify Installation</a></li>
-<li><a class="reference internal" href="#test-your-setup">4. Test Your Setup</a></li>
+<li><a class="reference internal" href="#step-1-install-prerequisites">Step 1: Install Prerequisites</a></li>
+<li><a class="reference internal" href="#step-2-install-qemu">Step 2: Install QEMU</a></li>
+<li><a class="reference internal" href="#step-3-install-adare">Step 3: Install ADARE</a></li>
+<li><a class="reference internal" href="#verify-installation">Verify Installation</a></li>
+<li><a class="reference internal" href="#alternative-virtualbox">Alternative: VirtualBox</a><ul>
+<li><a class="reference internal" href="#install-virtualbox">Install VirtualBox</a></li>
+<li><a class="reference internal" href="#install-adare-virtualbox-only">Install ADARE (VirtualBox-only)</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#tested-configurations">Tested Configurations</a></li>
+<li><a class="reference internal" href="#system-requirements">System Requirements</a></li>
 <li><a class="reference internal" href="#next-steps">Next Steps</a></li>
 </ul>
 </li>
@@ -690,6 +853,7 @@ the exact symlink command needed.</p>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>
 document.addEventListener('DOMContentLoaded', function() {
   if (!window.simpleDatatables) {

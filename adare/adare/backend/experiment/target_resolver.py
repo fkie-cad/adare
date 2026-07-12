@@ -50,7 +50,10 @@ class MCPTargetResolver:
     image recognition and text detection for target resolution.
     """
 
-    def __init__(self, experiment_dir: Path, mcp_gui_url: str = "http://localhost:13109/mcp", experiment_run_ulid: str | None = None):
+    def __init__(
+        self, experiment_dir: Path, mcp_gui_url: str = "http://localhost:13109/mcp",
+        experiment_run_ulid: str | None = None, vm_client=None, os_key: str = "windows",
+    ):
         """
         Initialize MCP target resolver.
 
@@ -58,6 +61,9 @@ class MCPTargetResolver:
             experiment_dir: Path to experiment directory (contains images/)
             mcp_gui_url: URL of the MCP GUI server
             experiment_run_ulid: ULID for experiment run (for stage logging)
+            vm_client: Connected AdareVMClient used to extract icons for
+                `target.icon` (None disables icon-library resolution).
+            os_key: OS profile / build identifier keying the icon cache.
         """
         self.experiment_dir = experiment_dir
         self.images_dir = experiment_dir / "img" if experiment_dir else None
@@ -65,6 +71,22 @@ class MCPTargetResolver:
         self.experiment_run_ulid = experiment_run_ulid
         self._connection_tested = False
         self._connection_available = False
+        self._vm_client = vm_client
+        self._os_key = os_key
+        self._icon_library = None  # lazily constructed IconLibrary
+
+    def set_vm_client(self, vm_client) -> None:
+        """Update the WebSocket client used for icon extraction (reconnect)."""
+        self._vm_client = vm_client
+        if self._icon_library is not None:
+            self._icon_library.vm_client = vm_client
+
+    def _get_icon_library(self):
+        """Lazily build the IconLibrary bound to this resolver's VM client."""
+        if self._icon_library is None:
+            from adare.backend.experiment.icon_library import IconLibrary
+            self._icon_library = IconLibrary(os_key=self._os_key, vm_client=self._vm_client)
+        return self._icon_library
 
     def _select_match_by_strategy(self, matches: list[TargetMatch], strategy, reference_coords: tuple[int, int] | None = None) -> TargetMatch | None:
         """
@@ -278,16 +300,20 @@ class MCPTargetResolver:
             if target.position:
                 return TargetMatch(coordinates=tuple(target.position), confidence=1.0, method='position')
 
-            # Require screenshot data for image/text targets
-            if (target.image or target.text) and not screenshot_base64:
-                log.error("Screenshot data required for image/text targets")
+            # Require screenshot data for image/icon/text targets
+            if (target.image or target.text or target.icon) and not screenshot_base64:
+                log.error("Screenshot data required for image/icon/text targets")
                 return None
 
-            # Connect to MCP GUI server and resolve image or text target
+            # Connect to MCP GUI server and resolve image, icon, or text target
             try:
                 log.debug(f"Connecting to MCP GUI server at {self.mcp_gui_url}")
                 timeout = 120.0  # 2 minute timeout for PaddleOCR operations
                 async with Client(self.mcp_gui_url, timeout=timeout) as client:
+                    if target.icon:
+                        return await self._resolve_icon_target(
+                            client, target, screenshot_base64, offset_x, offset_y, reference_coords
+                        )
                     if target.image:
                         return await self._resolve_image_target(
                             client, target, screenshot_base64, offset_x, offset_y, reference_coords
@@ -341,6 +367,56 @@ class MCPTargetResolver:
             log.debug(f"Cropped screenshot to region around {reference_coords} +/-{strategy.max_distance}px")
 
         return reference_coords, screenshot_base64, offset_x, offset_y
+
+    async def _resolve_icon_target(self, client, target, screenshot_base64, offset_x, offset_y, reference_coords):
+        """Resolve a Windows icon-library term via extract-and-cache, then MCP find_icon.
+
+        The term (e.g. `windows_explorer`) is resolved to a cached PNG that was
+        extracted from the target at runtime; that PNG then flows through the
+        same find_icon matcher used for `target.image`.
+        """
+        from adare.backend.experiment.icon_library import IconLibraryError
+
+        log.debug(f"Using icon library for icon term: {target.icon}")
+        try:
+            icon_path = await self._get_icon_library().resolve(target.icon)
+        except IconLibraryError as exc:
+            log.error(f"Icon term '{target.icon}' could not be resolved: {exc}")
+            return None
+
+        icon_base64 = self._read_icon_file(icon_path)
+        if icon_base64 is None:
+            return None
+
+        result = await client.call_tool("find_icon", {
+            "icon_base64": icon_base64,
+            "screenshot_base64": screenshot_base64,
+            "offset_x": offset_x,
+            "offset_y": offset_y
+        })
+
+        locations_data = self._parse_mcp_result(result)
+        if locations_data is None:
+            return None
+
+        locations = locations_data.get("locations", [])
+        similarities = locations_data.get("similarities", [])
+
+        if not locations:
+            log.warning(f"Icon '{target.icon}' not found via MCP")
+            return None
+
+        matches = []
+        for i, (x, y) in enumerate(locations):
+            confidence = similarities[i] if i < len(similarities) else 0.8
+            matches.append(TargetMatch(coordinates=(x, y), confidence=confidence, method='image'))
+
+        if target.strategy is None:
+            target.strategy = BestConfidenceStrategy()
+            log.info("No strategy specified for icon target, using default BestConfidenceStrategy")
+
+        target_desc = f"icon '{target.icon}'"
+        return self._apply_strategy_and_select(matches, target, reference_coords, target_desc)
 
     async def _resolve_image_target(self, client, target, screenshot_base64, offset_x, offset_y, reference_coords):
         """Resolve an image-based target using MCP find_icon."""

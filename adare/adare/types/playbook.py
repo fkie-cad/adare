@@ -201,6 +201,7 @@ class TextMatchConfig:
 class Target:
     image: str | None = None
     text: str | None = None
+    icon: str | None = None  # Windows icon-library term (extracted from target at runtime)
     text_match: TextMatchConfig | None = None  # Text matching configuration
     position: list[int] | None = None
     strategy: TargetStrategyType | None = None

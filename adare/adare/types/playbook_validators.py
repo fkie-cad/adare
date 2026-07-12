@@ -255,6 +255,9 @@ class VariableUsageValidator(PlaybookValidator):
         if target.image:
             self._extract_from_string(target.image, f'{field_prefix}.image',
                                      action_index, action_type, references)
+        if target.icon:
+            self._extract_from_string(target.icon, f'{field_prefix}.icon',
+                                     action_index, action_type, references)
 
     def _extract_from_wait_condition(self, condition, field_prefix: str,
                                     action_index: int, action_type: str,
