@@ -5,7 +5,6 @@ import logging
 from pathlib import Path
 
 from adare.backend.project.directory import ProjectDirectory
-from adare.config.configdirectory import ENVIRONMENTS_DIR
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +30,15 @@ def export_experiment_for_submission(project_path: Path, experiment_name: str) -
     if not metadata_file.is_file():
         raise FileNotFoundError(f'metadata.yml not found in {experiment_dir}')
     files[f'experiments/{experiment_name}/metadata.yml'] = metadata_file.read_bytes()
+
+    img_dir = experiment_dir / 'img'
+    if img_dir.is_dir():
+        image_count = 0
+        for entry in img_dir.iterdir():
+            if entry.is_file():
+                files[f'experiments/{experiment_name}/img/{entry.name}'] = entry.read_bytes()
+                image_count += 1
+        log.info(f'Collected {image_count} image(s) from {img_dir}')
 
     return files
 
@@ -66,7 +74,11 @@ def export_environment_for_submission(project_path: Path, environment_name: str)
 
     Returns dict mapping repo-relative filepaths to file content bytes.
     """
-    env_file = ENVIRONMENTS_DIR / f'{environment_name}.yml'
+    # Local import mirrors the codebase's lazy-import pattern and avoids any
+    # backend<->webappaccess import cycle.
+    from adare.backend.environment.database import get_environment_path_by_project_and_name
+
+    env_file = get_environment_path_by_project_and_name(project_path, environment_name)
     if not env_file.is_file():
         raise FileNotFoundError(f'Environment file not found: {env_file}')
 
