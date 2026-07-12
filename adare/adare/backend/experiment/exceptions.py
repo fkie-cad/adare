@@ -154,6 +154,11 @@ class ExperimentAlreadyExistsError(ExperimentException):
     pass
 
 
+class ExperimentNotFoundError(ExperimentException):
+    """Raised when an experiment with the given ULID does not exist in the database."""
+    pass
+
+
 class ExperimentCommandError(ExperimentException):
     def __init__(self, log: logging.Logger, command: str, exit_code: int,
                  stdout: str = '', stderr: str = ''):

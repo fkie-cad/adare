@@ -100,6 +100,8 @@ def __experiment_update(project_path: Path, experiment_ulid, experiment_name, ex
     else:
         log.info(f'Experiment {experiment_name} (ulid: {ulid}) was loaded successfully')
 
+    return ulid
+
 
 def experiment_load(project_path: Path, experiment_name: str, force: bool = False, silent: bool = False):
     from adare.console import print_success_message
@@ -124,7 +126,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
             project_path, experiment_name, trigger_error=False
     ):
         try:
-            __experiment_update(
+            experiment_ulid = __experiment_update(
                 project_path, experiment_ulid, experiment_name, experiment_directory, force
             )
             was_updated = True
