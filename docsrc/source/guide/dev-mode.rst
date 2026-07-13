@@ -444,6 +444,9 @@ When only one dev session is running, all commands auto-detect it. You only need
    :doc:`/guide/experiments`
       Experiment structure and configuration
 
+   :doc:`/guide/mcp-authoring`
+      Author playbooks by natural language with an external harness (``adare dev mcp``)
+
    :doc:`/reference/actions`
       Available playbook actions
 

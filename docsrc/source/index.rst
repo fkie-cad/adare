@@ -142,6 +142,7 @@ Documentation Structure
    guide/icon-library
    guide/vm-image-creation
    guide/dev-mode
+   guide/mcp-authoring
    guide/sharing
 
 .. toctree::
