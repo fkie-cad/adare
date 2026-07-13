@@ -22,7 +22,7 @@ class SubmitService:
 
         try:
             files = export_experiment_for_submission(request.project_path, request.name)
-            pr = self._create_pr('experiment', request.name, files)
+            pr = self._create_pr('experiment', request.name, files, action=request.action)
             return Result.ok(SubmitResult(
                 pr_url=pr['html_url'],
                 pr_number=pr['number'],
@@ -56,7 +56,7 @@ class SubmitService:
 
         try:
             files = export_testfunction_for_submission(request.project_path, request.name)
-            pr = self._create_pr('testfunction', request.name, files)
+            pr = self._create_pr('testfunction', request.name, files, action=request.action)
             return Result.ok(SubmitResult(
                 pr_url=pr['html_url'],
                 pr_number=pr['number'],
@@ -90,7 +90,7 @@ class SubmitService:
 
         try:
             files = export_environment_for_submission(request.project_path, request.name)
-            pr = self._create_pr('environment', request.name, files)
+            pr = self._create_pr('environment', request.name, files, action=request.action)
             return Result.ok(SubmitResult(
                 pr_url=pr['html_url'],
                 pr_number=pr['number'],
@@ -116,8 +116,46 @@ class SubmitService:
                 solutions=['Check your internet connection', 'Verify you are logged in']
             )
 
-    def _create_pr(self, entity_type: str, name: str, files: dict[str, bytes]) -> dict:
-        """Create a branch, upload files, and open a PR in the shared Gitea repo."""
+    def precheck_submission(self, entity_type: str, name: str) -> "Result[dict]":
+        """Ask the server to classify a *create* submission by name, before any PR.
+
+        Lets the CLI warn/guide up front (already-published -> offer a modify PR;
+        open-duplicate -> point at the existing PR) instead of opening a PR the
+        server would only reject/auto-close. Uses the Django token (this endpoint
+        is ``IsAuthenticated``). Returns the raw ``{code, message, pr_number?}``.
+        """
+        import requests
+
+        import adare.config.server as config_server
+        from adare.webappaccess.exceptions import NotLoggedInError
+        from adare.webappaccess.login import WebappLogin
+
+        try:
+            header = WebappLogin().get_django_authenticated_request_header()
+            url = f'{config_server.API_URL}submit/precheck/'
+            response = requests.post(
+                url, json={'entity_type': entity_type, 'name': name},
+                headers=header, timeout=config_server.TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            return Result.ok(response.json())
+        except NotLoggedInError as e:
+            return Result.fail(
+                code="NotLoggedIn",
+                message=str(e),
+                solutions=['Run "adare web login" first'],
+            )
+        except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as e:
+            log.error(f"Submission pre-check failed: {e}")
+            return Result.fail(
+                code="PrecheckError",
+                message=f"Could not pre-check the submission: {e}",
+                solutions=['Check your internet connection', 'Verify you are logged in'],
+            )
+
+    def _create_pr(self, entity_type: str, name: str, files: dict[str, bytes],
+                   action: str = 'create') -> dict:
+        """Create a branch, upload files, and open a ``action`` PR in the shared repo."""
         import adare.config.server as config_server
         from adare.webappaccess.exceptions import NotLoggedInError
         from adare.webappaccess.gitea_api import GiteaApiClient
@@ -134,13 +172,19 @@ class SubmitService:
         owner = config_server.GITEA_EXPERIMENTS_REPO_OWNER
         repo = config_server.GITEA_EXPERIMENTS_REPO
 
-        title = f'[{entity_type} create] {name}'
+        title = f'[{entity_type} {action}] {name}'
         head_prefix = f'submit/{entity_type}/{name}-'
 
-        # Reuse an already-open PR for this entity instead of opening a duplicate.
-        # Re-uploading then pushes to the same branch/PR, so the server sees the
-        # same gitea_pr_number and idempotently upserts its draft (no name clash).
-        existing_pr = client.find_open_pull_request(owner, repo, title=title, head_prefix=head_prefix)
+        # Reuse an already-open PR for this entity+action instead of opening a
+        # duplicate. Re-uploading then pushes to the same branch/PR, so the server
+        # sees the same gitea_pr_number and idempotently upserts its draft (no name
+        # clash). Match on the exact title; for create also match the head-branch
+        # prefix (branch names carry no action, so prefix-matching only a create
+        # avoids mistaking a create branch for a modify).
+        existing_pr = client.find_open_pull_request(
+            owner, repo, title=title,
+            head_prefix=head_prefix if action == 'create' else None,
+        )
         if existing_pr:
             branch_name = existing_pr['head']['ref']
             log.info(f'Reusing open PR #{existing_pr["number"]} on branch {branch_name}')
@@ -153,7 +197,7 @@ class SubmitService:
         for filepath, content in files.items():
             success = client.create_or_update_file(
                 owner, repo, filepath, content, branch_name,
-                message=f'[{entity_type} create] Add {filepath}'
+                message=f'[{entity_type} {action}] Add {filepath}'
             )
             if not success:
                 raise RuntimeError(f'Failed to upload {filepath}')
@@ -165,5 +209,5 @@ class SubmitService:
             owner, repo,
             title=title,
             head=branch_name,
-            body=f'Automated submission of {entity_type} `{name}` via ADARE CLI.',
+            body=f'Automated submission ({action}) of {entity_type} `{name}` via ADARE CLI.',
         )
