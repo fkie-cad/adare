@@ -26,6 +26,10 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+# FastMCP's ``Image`` return value serializes to an ``image`` content block (a
+# vision data-URL the harness forwards to the model); a plain dict would arrive
+# as a base64 text blob instead. Aliased so the module-level ``Image`` stays PIL's.
+from fastmcp.utilities.types import Image as FastMCPImage
 from PIL import Image
 
 log = logging.getLogger(__name__)
@@ -93,13 +97,15 @@ class GuiMcpServer:
         mcp = FastMCP(name=self._server_name)
 
         @mcp.tool()
-        async def screenshot() -> dict[str, Any]:
-            """Capture the VM screen. Returns base64 PNG + pixel dimensions.
+        async def screenshot() -> FastMCPImage:
+            """Capture the VM screen and return it as an image to look at.
 
-            Read this to decide where to click/type. The image is cached so the
-            next ``click`` can crop a robust image target around your point.
+            Read this to decide where to click/type. The screenshot is cached so
+            the next ``click`` can crop a robust image target around your point.
+            Use ``find_text`` / ``find_icon`` for pixel-exact coordinates.
             """
-            return await self.screenshot()
+            png = await self._capture()
+            return FastMCPImage(data=png, format='png')
 
         @mcp.tool()
         async def click(x: int, y: int, button: str = 'left', describe: str = '') -> dict[str, Any]:

@@ -109,19 +109,19 @@ class McpServingMixin:
         await server.serve_async(host, port)
 
     def _load_testfunction_catalog(self, project_path: Path | None) -> list[dict[str, Any]]:
-        """Shape the project's testfunctions into ``list_testfunctions`` entries."""
-        from adare.config.database import get_project_database_location
+        """Shape the testfunction library into ``list_testfunctions`` entries.
+
+        Testfunctions live in the **global** adare DB (the ~40 built-ins incl.
+        ``standard.file_does_not_exist``), not the project DB — the project DB has
+        no ``test_function`` table. Read the global catalog. ``project_path`` is
+        kept for signature stability (callers pass it) but is not the source.
+        """
         from adare.database.api.structured_data import StructuredDataApi
 
-        if not project_path:
-            log.warning('No project path for MCP catalog — list_testfunctions will be empty')
-            return []
-        db_path = get_project_database_location(Path(project_path))
-        if not db_path.exists():
-            log.warning('Project database not found (%s) — empty testfunction catalog', db_path)
-            return []
-
-        with StructuredDataApi(db_path=db_path) as api:
-            return shape_testfunction_catalog(
+        with StructuredDataApi() as api:
+            catalog = shape_testfunction_catalog(
                 api.get_testfunctions_structured(include_parameters=True)
             )
+        if not catalog:
+            log.warning('Global testfunction library is empty — list_testfunctions will be empty')
+        return catalog
