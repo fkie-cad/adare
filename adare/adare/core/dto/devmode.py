@@ -146,6 +146,16 @@ class DevGuiAgentRequest:
     stall_limit: int | None = None
 
 
+@dataclass
+class DevServeMcpRequest:
+    """Request to serve a dev session's VM as a GUI-automation MCP server."""
+    session_id: str
+    host: str | None = None            # default: config.server.GUI_MCP_HOST
+    port: int | None = None            # default: config.server.GUI_MCP_PORT
+    project_path: Path | None = None   # for the testfunction catalog
+    output_dir: Path | None = None     # where recordings land (default: project dir)
+
+
 
 # =============================================================================
 # Response DTOs

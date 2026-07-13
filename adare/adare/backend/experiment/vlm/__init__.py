@@ -12,6 +12,7 @@ from __future__ import annotations
 from .agent import AgentRunResult, GuiAgent
 from .client import VLMClient
 from .exceptions import AgentError, PlaybookRecordingError, VLMError
+from .mcp_server import GuiMcpServer
 from .recorder import PlaybookRecorder
 from .replay import ReplayResult, run_playbook
 from .verify import CheckResult, run_acceptance_checks
@@ -21,6 +22,7 @@ __all__ = [
     'AgentRunResult',
     'CheckResult',
     'GuiAgent',
+    'GuiMcpServer',
     'PlaybookRecorder',
     'PlaybookRecordingError',
     'ReplayResult',
