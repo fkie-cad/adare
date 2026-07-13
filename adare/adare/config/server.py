@@ -1,4 +1,5 @@
 import logging
+import os
 
 from .configdirectory import APPDATA_DIR
 from .exceptions import ConfigDirectoryError
@@ -28,6 +29,24 @@ ADD_EXPERIMENT_REQUEST_URL = f'{WEBSERVER_URL}api/request/experiment/create/'
 PUBLISH_RUN_URL = f'{WEBSERVER_URL}api/run/publish/'
 
 TIMEOUT_SECONDS = 10
+
+# ── GUI-automation vision-LLM (vLLM) configuration ───────────────────────────
+# A grounding-capable vision model served over an OpenAI-compatible endpoint
+# (Qwen2-VL / UI-TARS / Molmo-class). Used ONLY during a GUI-automation *record*
+# run and for *self-heal* on a replay miss — deterministic replay needs no LLM.
+VLLM_BASE_URL = os.environ.get('ADARE_VLLM_BASE_URL', 'http://localhost:8000/v1')
+VLLM_MODEL = os.environ.get('ADARE_VLLM_MODEL', 'Qwen/Qwen2-VL-7B-Instruct')
+VLLM_API_KEY = os.environ.get('ADARE_VLLM_API_KEY', 'EMPTY')
+
+# Coordinate convention the model returns clicks in:
+#   'absolute'        — raw pixel coordinates of the image it was shown (default)
+#   'normalized_1000' — 0..1000 on both axes (rescaled to pixels by the client)
+VLLM_COORD_SPACE = os.environ.get('ADARE_VLLM_COORD_SPACE', 'absolute')
+
+# Bounded-autonomy budgets for the record run.
+GUI_AGENT_MAX_STEPS = int(os.environ.get('ADARE_GUI_AGENT_MAX_STEPS', '80'))
+GUI_AGENT_STALL_LIMIT = int(os.environ.get('ADARE_GUI_AGENT_STALL_LIMIT', '6'))
+GUI_AGENT_WALL_CLOCK_SECONDS = int(os.environ.get('ADARE_GUI_AGENT_WALL_CLOCK_SECONDS', '3600'))
 
 # PORTS FOR OAuth2 Redirects
 PORT_OAUTH2_REDIRECT = [
