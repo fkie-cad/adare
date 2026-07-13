@@ -142,6 +142,17 @@ class ConfigurationMixin:
                 config.boot_mode = expected_boot_mode
                 config_updated = True
 
+            # Apply live-installer boot settings passed to the constructor
+            # (e.g. a GUI-automated install re-attaching its ISO).
+            requested_iso = getattr(self, '_iso_path', '')
+            requested_cdrom = getattr(self, '_boot_from_cdrom', False)
+            if requested_iso and config.iso_path != requested_iso:
+                config.iso_path = requested_iso
+                config_updated = True
+            if config.boot_from_cdrom != requested_cdrom:
+                config.boot_from_cdrom = requested_cdrom
+                config_updated = True
+
             # Sync Windows resource defaults
             # Windows VMs need more resources (4 vCPU, 8GB RAM) for proper operation
             if 'windows' in self.guest_os.lower():
@@ -218,7 +229,9 @@ class ConfigurationMixin:
             network='user',
             qmp_socket_path=qmp_socket,
             guest_agent_socket_path=qga_socket,
-            pid_file_path=pid_file
+            pid_file_path=pid_file,
+            iso_path=getattr(self, '_iso_path', ''),
+            boot_from_cdrom=getattr(self, '_boot_from_cdrom', False),
         )
 
         self._save_vm_config_obj(config)

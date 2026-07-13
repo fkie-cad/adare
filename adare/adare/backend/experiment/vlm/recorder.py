@@ -1,0 +1,205 @@
+"""Record agent actions into a replayable ADARE ``Playbook``.
+
+Each executed agent action is converted into a playbook action and appended
+to an in-memory list; :meth:`PlaybookRecorder.finalize` writes it out as
+``parse_playbook``-compatible YAML. Per click we build a robust ``image:``
+target (a crop of the pre-click screenshot, saved under ``img/``) so the
+deterministic CV/OCR replay engine can re-find it with no LLM. The model's
+natural-language ``describe`` lands in the action ``description`` and in a
+sidecar ``*.meta.json`` used by the self-heal path to re-plan and re-crop.
+"""
+
+from __future__ import annotations
+
+import base64
+import io
+import json
+import logging
+import re
+from pathlib import Path
+from typing import Any
+
+import yaml
+from PIL import Image
+
+from .exceptions import PlaybookRecordingError
+
+log = logging.getLogger(__name__)
+
+# Default crop box (pixels) captured around a click point for the image target.
+_CROP_W = 220
+_CROP_H = 90
+
+
+def _slugify(text: str, *, max_len: int = 32) -> str:
+    slug = re.sub(r'[^a-z0-9]+', '_', (text or '').lower()).strip('_')
+    return (slug[:max_len] or 'target')
+
+
+def crop_around(
+    screenshot_png_bytes: bytes,
+    x: int,
+    y: int,
+    *,
+    crop_w: int = _CROP_W,
+    crop_h: int = _CROP_H,
+) -> tuple[Image.Image, list[int]]:
+    """Crop a box centred on (x, y), clamped to the image; return (image, box).
+
+    Shared by the recorder (initial capture) and the self-heal path (re-crop
+    the same image target in place). Box is ``[left, top, right, bottom]``.
+    """
+    try:
+        img = Image.open(io.BytesIO(screenshot_png_bytes)).convert('RGB')
+    except (OSError, ValueError) as exc:
+        raise PlaybookRecordingError(f'Could not decode screenshot for crop: {exc}') from exc
+    w, h = img.size
+    left = max(0, min(w - 1, x - crop_w // 2))
+    top = max(0, min(h - 1, y - crop_h // 2))
+    right = min(w, left + crop_w)
+    bottom = min(h, top + crop_h)
+    box = [left, top, right, bottom]
+    return img.crop(box), box
+
+
+class PlaybookRecorder:
+    """Accumulates playbook actions and writes YAML + a sidecar + image crops."""
+
+    def __init__(
+        self,
+        playbook_path: str | Path,
+        *,
+        settings: dict[str, Any] | None = None,
+        goal: str = '',
+    ):
+        self.playbook_path = Path(playbook_path)
+        self.img_dir = self.playbook_path.parent / 'img'
+        self.img_dir.mkdir(parents=True, exist_ok=True)
+        self.meta_path = self.playbook_path.with_suffix('.meta.json')
+
+        self._settings = settings or {'idle': 1.0, 'timeout': 1800}
+        self._goal = goal
+        self._actions: list[dict[str, Any]] = []
+        self._meta: list[dict[str, Any]] = []
+        self._step = 0
+
+    # -- helpers ------------------------------------------------------------
+
+    def _next_index(self) -> int:
+        self._step += 1
+        return self._step
+
+    def _save_crop(
+        self,
+        screenshot_png_bytes: bytes,
+        x: int,
+        y: int,
+        slug: str,
+        crop_w: int = _CROP_W,
+        crop_h: int = _CROP_H,
+    ) -> tuple[str, list[int]]:
+        """Crop a box centred on (x, y) and save it under ``img/``.
+
+        Returns the bare filename (as referenced by the playbook) and the
+        crop bounding box ``[left, top, right, bottom]`` for the sidecar.
+        """
+        cropped, box = crop_around(screenshot_png_bytes, x, y, crop_w=crop_w, crop_h=crop_h)
+        filename = f'step_{self._step:03d}_{slug}.png'
+        cropped.save(self.img_dir / filename)
+        return filename, box
+
+    # -- recording API ------------------------------------------------------
+
+    def record_click(
+        self,
+        screenshot_png_bytes: bytes,
+        x: int,
+        y: int,
+        describe: str,
+        *,
+        button: str = 'left',
+        double: bool = False,
+    ) -> None:
+        """Record a click as an image-targeted ``ClickAction``."""
+        idx = self._next_index()
+        slug = _slugify(describe)
+        filename, box = self._save_crop(screenshot_png_bytes, x, y, slug)
+
+        click_type = 'double' if double else button
+        self._actions.append({
+            'click': {
+                'target': {'image': filename},
+                'type': click_type,
+                'description': describe,
+            }
+        })
+        self._meta.append({
+            'step': idx, 'kind': 'click', 'image': filename,
+            'coords': [x, y], 'crop_box': box, 'describe': describe,
+            'click_type': click_type,
+        })
+
+    def record_type(self, text: str, describe: str = '') -> None:
+        idx = self._next_index()
+        self._actions.append({'keyboard': {'text': text, 'description': describe}})
+        self._meta.append({'step': idx, 'kind': 'type', 'text': text, 'describe': describe})
+
+    def record_key(self, combo: str, describe: str = '') -> None:
+        idx = self._next_index()
+        combo = combo.strip()
+        if '+' in combo:
+            keyboard: dict[str, Any] = {'combination': [k.strip() for k in combo.split('+')]}
+        else:
+            keyboard = {'key': combo}
+        keyboard['description'] = describe
+        self._actions.append({'keyboard': keyboard})
+        self._meta.append({'step': idx, 'kind': 'key', 'combo': combo, 'describe': describe})
+
+    def record_scroll(self, direction: str, amount: int, describe: str = '') -> None:
+        idx = self._next_index()
+        self._actions.append({
+            'scroll': {'direction': direction, 'amount': int(amount), 'description': describe}
+        })
+        self._meta.append({'step': idx, 'kind': 'scroll', 'direction': direction,
+                           'amount': int(amount), 'describe': describe})
+
+    def record_wait(self, until_describe: str, *, timeout: float = 120.0) -> None:
+        """Record a screen transition as a ``WaitUntilAction`` (OCR-text exists)."""
+        idx = self._next_index()
+        self._actions.append({
+            'wait_until': {
+                'condition': {'exists': {'text': until_describe}},
+                'timeout': timeout,
+                'description': f'wait until: {until_describe}',
+            }
+        })
+        self._meta.append({'step': idx, 'kind': 'wait', 'until_describe': until_describe})
+
+    def record_idle(self, duration: float, describe: str = '') -> None:
+        idx = self._next_index()
+        self._actions.append({'idle': {'duration': float(duration), 'description': describe}})
+        self._meta.append({'step': idx, 'kind': 'idle', 'duration': float(duration)})
+
+    # -- output -------------------------------------------------------------
+
+    @property
+    def action_count(self) -> int:
+        return len(self._actions)
+
+    def to_yaml(self) -> str:
+        """Render the accumulated actions as playbook YAML text."""
+        doc: dict[str, Any] = {'settings': self._settings, 'actions': self._actions}
+        header = ''
+        if self._goal:
+            header = f'# Generated by the ADARE GUI agent.\n# Goal: {self._goal}\n'
+        return header + yaml.safe_dump(doc, sort_keys=False, default_flow_style=False)
+
+    def finalize(self) -> Path:
+        """Write the playbook YAML and the sidecar metadata; return the path."""
+        if not self._actions:
+            raise PlaybookRecordingError('Refusing to write an empty playbook')
+        self.playbook_path.write_text(self.to_yaml())
+        self.meta_path.write_text(json.dumps(
+            {'goal': self._goal, 'steps': self._meta}, indent=2))
+        log.info('Wrote playbook (%d actions) to %s', len(self._actions), self.playbook_path)
+        return self.playbook_path

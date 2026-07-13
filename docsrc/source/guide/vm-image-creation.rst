@@ -77,6 +77,93 @@ For OSes without a built-in unattended template, use a custom profile with
 
    adare vm create my-custom-os --iso /path/to/installer.iso
 
+The VM boots the live ISO in a window and waits for you to click through the
+graphical installer. (Manual mode drives QEMU directly and writes no seed file.)
+
+
+GUI-automated installation (record once, replay deterministically)
+------------------------------------------------------------------
+
+Some distributions ship the **Calamares** GUI installer — most notably
+**Kubuntu 24.04+**, plus Mint, Pop!_OS and elementary — which has *no*
+answer-file mechanism (no Subiquity/preseed/kickstart/AutoYaST). Instead of
+clicking through it by hand, ``install_mode: gui-auto`` drives the installer's
+screen directly:
+
+.. code-block:: bash
+
+   adare vm create kubuntu2404 --iso kubuntu-24.04-desktop-amd64.iso
+
+**How it works — record once, then replay.**
+
+- **First run (record, needs a vLLM endpoint).** A vision-LLM agent runs a
+  ``perceive → decide → act`` loop: it screenshots the installer, the model
+  decides the next action (click / type / key / scroll / wait / done), and the
+  action is executed over QEMU's host-side QMP engine (no guest agent). As it
+  acts it **records a reusable ADARE playbook** — per click it saves an image
+  crop (an ``image:`` target the CV engine can re-find) plus the model's
+  natural-language description. Output: the installed ``qcow2``, a baked
+  environment YAML, the generated ``gui_<distro>.play.yaml`` (+ crop images),
+  and a screenshot-illustrated ``install_report.md``.
+- **Later runs (replay, no LLM).** The generated playbook replays through
+  ADARE's ordinary CV/OCR engine (:class:`ActionExecutor` +
+  ``MCPTargetResolver``) — deterministic and LLM-free. If a step's target no
+  longer matches (e.g. a new point release moved a button), replay falls back
+  to the vision model to re-locate it, clicks it, and re-crops the target so
+  the playbook stays current (**self-heal**).
+
+The generated ``.play.yaml`` is a first-class ADARE playbook: hand-editable,
+shareable, and usable in experiments. A validated playbook can be shipped in
+the package templates so most users never trigger a record run.
+
+**When to use which route.** Prefer ``gui-auto`` when you want a *faithful*
+native Calamares install automated end-to-end. Alternatives: build an Ubuntu
+Server autoinstall + ``kubuntu-desktop`` (robust, but not a native Calamares
+install), or install once by hand and capture a disk image (faithful, but
+semi-manual and needs BYO hosting).
+
+**vLLM setup (record / self-heal only).** Serve a *grounding-capable* vision
+model (Qwen2-VL / UI-TARS / Molmo-class) over an OpenAI-compatible endpoint and
+point ADARE at it:
+
+.. code-block:: bash
+
+   export ADARE_VLLM_BASE_URL=http://localhost:8000/v1
+   export ADARE_VLLM_MODEL=Qwen/Qwen2-VL-7B-Instruct
+   # If your model returns 0..1000 normalized coordinates instead of pixels:
+   export ADARE_VLLM_COORD_SPACE=normalized_1000
+
+Pure replay needs **no** endpoint. Budgets bound the record run
+(``ADARE_GUI_AGENT_MAX_STEPS``, ``ADARE_GUI_AGENT_STALL_LIMIT``,
+``ADARE_GUI_AGENT_WALL_CLOCK_SECONDS``).
+
+**Goal / acceptance spec.** The record-run *input* is a high-level goal, not a
+per-screen script, in ``gui_<distro>.yaml`` (bundled, or overridden in
+``~/.adare/vm-templates/``):
+
+.. code-block:: yaml
+
+   goal: >
+     Install Kubuntu to the whole disk (erase it). Create user adare /
+     password adare. Accept sensible defaults and reboot when finished.
+   hints:
+     - "Choose 'Erase disk' — not 'Install alongside'."
+   acceptance:
+     min_disk_bytes: 5000000000
+     visual:
+       - "a Kubuntu/KDE SDDM login or desktop for user adare is shown"
+
+The ``acceptance`` block is the single place "what success looks like" lives:
+after the installed disk reboots, ADARE runs **acceptance checks** (a visual
+check via the model plus structural checks — domain running, disk grew) and
+fails the build (non-zero exit) if they do not pass.
+
+**Limitations & safety.** The record run is non-deterministic and needs a
+capable grounding model; step / stall / wall-clock budgets bound it. Disk
+partitioning during install is destructive but sandboxed — the blast radius is
+only the throwaway VM disk. Replay is deterministic; self-heal recovers from
+minor drift but a heavily redesigned installer may need ``--relearn``.
+
 
 Options
 =======
@@ -111,6 +198,14 @@ Options
      - Environment file name (defaults to VM name)
    * - ``--recipe`` / ``--no-recipe``
      - Emit a declarative *recipe* environment (built on load) instead of a baked disk. Default: recipe for Windows, baked for Linux. See :ref:`recipe-environments`.
+   * - ``--record``
+     - GUI-auto only: record a fresh playbook with the vision agent even if a cached one exists.
+   * - ``--relearn``
+     - GUI-auto only: discard the cached playbook and re-record from scratch.
+   * - ``--display``
+     - GUI-auto only: show the VM window while the agent drives the installer (and leave it up on failure for inspection).
+   * - ``--template NAME``
+     - GUI-auto only: explicit goal/spec template name (default: ``gui_<distribution>``).
 
 
 Setup Levels
@@ -264,7 +359,7 @@ Create a YAML file (e.g. ``my-distro.yml``):
    distribution: ubuntu         # distribution family
    version: '1.0'
    architecture: x86_64         # 'x86_64' or 'aarch64'
-   install_mode: auto           # 'auto' or 'manual'
+   install_mode: auto           # 'auto', 'manual', or 'gui-auto'
 
    # Optional -- omit for manual installs or when using --iso
    iso_url: https://example.com/my-distro.iso
@@ -335,7 +430,7 @@ YAML field reference
      - ``x86_64`` (default) or ``aarch64``
    * - ``install_mode``
      - No
-     - ``auto`` (default) or ``manual``
+     - ``auto`` (default), ``manual``, or ``gui-auto`` (vision-LLM-driven GUI automation)
    * - ``template``
      - No
      - Jinja2 template filename for unattended install (empty = default lookup)
