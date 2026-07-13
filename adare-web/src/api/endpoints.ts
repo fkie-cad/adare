@@ -55,6 +55,7 @@ export const endpoints = {
   environmentDelete: (name: string, force = false) =>
     `/environments/${name}?force=${force}`,
   verifyEnvironment: (name: string) => `/environments/${name}/verify`,
+  osProfiles: '/environments/os-profiles',
 
   // Runs
   runs: '/runs',

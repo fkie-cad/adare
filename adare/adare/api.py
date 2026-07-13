@@ -287,6 +287,10 @@ class EnvironmentAPI:
         """Get environment by name."""
         return self._service.get_by_name(name)
 
+    def list_os_profiles(self):
+        """List available OS profiles for building recipe environments."""
+        return self._service.list_os_profiles()
+
 
 class ProjectAPI:
     """Project management API."""

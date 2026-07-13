@@ -39,7 +39,14 @@ from adare.core.dto.environment import (
 )
 from adare.core.result import Result
 from adare.database.api.environment import EnvironmentDbApi
+from adare.helperfunctions.hash import hash_file_sha256
 from adare.hypervisor.exceptions import HypervisorException
+from adare.hypervisor.qemu.vm_creator.os_catalog import (
+    SetupLevel,
+    get_os_definition,
+    list_os_definitions,
+)
+from adare.services.environment_recipe import build_recipe_environment_file
 
 log = logging.getLogger(__name__)
 
@@ -238,6 +245,9 @@ class EnvironmentService:
             Result[EnvironmentInfo] with created environment info on success,
             or error information on failure.
         """
+        if request.is_recipe:
+            return self._create_recipe(request)
+
         try:
             # Call existing backend command
             backend_environment_create(
@@ -266,6 +276,71 @@ class EnvironmentService:
 
         except EnvironmentFileAlreadyExists as e:
             return Result.from_exception(e)
+
+    def _create_recipe(self, request: EnvironmentCreateRequest) -> Result[EnvironmentInfo]:
+        """
+        Write a declarative recipe environment descriptor (no VM build).
+
+        The heavy QEMU disk build happens later, once, on `environment load`;
+        this only resolves the OS profile, hashes the ISO, and writes the
+        recipe YAML into the project's environments directory.
+        """
+        try:
+            os_def = get_os_definition(request.os_profile)
+        except KeyError:
+            return Result.fail(
+                code='UnknownOsProfileError',
+                message=f'Unknown OS profile: {request.os_profile}',
+                solutions=[
+                    'Run: adare manage os-profile list',
+                    'Check the os_profile value for typos',
+                ]
+            )
+
+        if request.setup_level is not None:
+            try:
+                setup_level = SetupLevel(request.setup_level)
+            except ValueError:
+                return Result.fail(
+                    code='InvalidSetupLevelError',
+                    message=f'Invalid setup_level: {request.setup_level}',
+                    solutions=['setup_level must be one of 0 (bare), 1 (base), 2 (full), 3 (agent)'],
+                )
+        else:
+            setup_level = SetupLevel.FULL
+
+        iso_sha256 = hash_file_sha256(request.iso_path)
+
+        env_file_path = build_recipe_environment_file(
+            os_name=request.os_profile,
+            os_def=os_def,
+            iso_path=request.iso_path,
+            iso_sha256=iso_sha256,
+            setup_level=setup_level,
+            disk_size=request.disk_size,
+            ram=request.ram_mb,
+            cpus=request.cpus,
+            arch=request.arch,
+            env_name=request.name,
+            project_path=request.project_path,
+        )
+
+        next_steps = [
+            f'Build the disk on load: adare environment load {env_file_path}',
+            f'Verify the VM is ready: adare env verify {request.name}',
+        ]
+
+        return Result.ok(EnvironmentInfo(
+            id='',  # Not yet in database (just a recipe descriptor file)
+            name=request.name,
+            description='',
+            vm_name=None,
+            hypervisor='qemu',
+            os_platform=os_def.platform,
+            file_path=env_file_path,
+            next_steps=next_steps,
+            tip='Recipe environment created. The disk is built once from the ISO on first load.',
+        ))
 
     def delete(self, identifier: str, force: bool = False) -> Result[None]:
         """
@@ -383,3 +458,26 @@ class EnvironmentService:
             return self.get_by_id(ulid)
         except EnvironmentDoesNotExistInDatabase as e:
             return Result.from_exception(e)
+
+    def list_os_profiles(self) -> Result[list[dict]]:
+        """
+        List available OS profiles for building recipe environments.
+
+        Returns:
+            Result[list[dict]] with one summary dict per catalog entry.
+        """
+        profiles = [
+            {
+                'name': os_def.name,
+                'display_name': os_def.display_name,
+                'platform': os_def.platform,
+                'distribution': os_def.distribution,
+                'version': os_def.version,
+                'architecture': os_def.architecture,
+                'default_disk_size': os_def.default_disk_size,
+                'default_ram_mb': os_def.default_ram_mb,
+                'default_cpus': os_def.default_cpus,
+            }
+            for os_def in list_os_definitions()
+        ]
+        return Result.ok(profiles)

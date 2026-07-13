@@ -107,6 +107,11 @@ class EnvironmentMetadata:
     vm: str | None = None
     os: OsInfo | None = None
 
+    # Expected SHA256 of the disk referenced by `vm` (baked envs only). When
+    # `vm` resolves to a URL, this is checked against the downloaded file's
+    # actual hash on load; absent/empty skips the check (back-compat).
+    vm_sha256: str | None = None
+
     name: str | None = None
     postsetupinstallations: list[PostsetupInstallations] = attrs.Factory(list)
     tags: list[str] = attrs.Factory(list)
