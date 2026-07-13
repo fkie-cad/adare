@@ -136,6 +136,16 @@ class DevCVStopRequest:
     session_id: str
 
 
+@dataclass
+class DevGuiAgentRequest:
+    """Request to drive a dev session's VM with the vision-LLM GUI agent."""
+    session_id: str
+    goal: str
+    output_file: Path | None = None  # when set, record a replayable playbook
+    max_steps: int | None = None
+    stall_limit: int | None = None
+
+
 
 # =============================================================================
 # Response DTOs
@@ -165,6 +175,17 @@ class DevActionResult:
     execution_time: float
     coordinates: tuple[int, int] | None = None
     data: Any | None = None
+
+
+@dataclass
+class DevGuiAgentResult:
+    """Result of a vision-LLM GUI agent run against a dev session."""
+    success: bool
+    reason: str
+    steps: int
+    summary: str = ''
+    playbook_path: str | None = None
+    report_path: str | None = None
 
 
 @dataclass
