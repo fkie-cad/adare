@@ -317,3 +317,23 @@ async def test_in_memory_mcp_client_records_and_parses(tmp_path):
     assert any(isinstance(a, ClickAction) for a in playbook.actions)
     assert any(isinstance(a, ActionTestAction) for a in playbook.actions)
     assert playbook.tests and playbook.tests[0].function == 'filesystem.file_does_not_exist'
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_screenshot_tool_yields_image_block(tmp_path):
+    """The ``screenshot`` *tool* returns a real image block (not a base64 text
+    blob), so a vision harness actually sees the screen.
+    """
+    from fastmcp import Client
+    from mcp.types import ImageContent
+
+    server = _server(tmp_path)
+    async with Client(server.mcp) as client:
+        result = await client.call_tool('screenshot', {})
+
+    image_blocks = [b for b in result.content if isinstance(b, ImageContent)]
+    assert image_blocks, f'expected an image content block, got {[type(b).__name__ for b in result.content]}'
+    assert image_blocks[0].mimeType == 'image/png'
+    # the internal dict method still caches the PNG for the crop-on-click path
+    assert server._last_png is not None
