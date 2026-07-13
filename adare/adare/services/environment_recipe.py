@@ -30,6 +30,23 @@ def _os_block(os_def: OsDefinition) -> dict:
     }
 
 
+def _placeholder_os_block() -> dict:
+    """A stand-in ``os:`` block for baked-URL envs created without a profile.
+
+    Baked create has never asked for OS details (the disk is opaque), but the
+    publishing server still needs an ``os:`` block to store the environment.
+    Mirrors the values in the ``environment.yml`` create template so the analyst
+    edits the same placeholder afterwards.
+    """
+    return {
+        'os': 'Windows 10',
+        'platform': 'windows',
+        'distribution': 'Home',
+        'version': '21H1',
+        'language': 'English',
+    }
+
+
 def _target_env_path(env_name: str, project_path: Path | None) -> Path:
     """Resolve the environment YAML's target path.
 
@@ -49,7 +66,7 @@ def build_recipe_environment_file(
     *,
     os_name: str,
     os_def: OsDefinition,
-    iso_path: Path,
+    iso_path: Path | str,
     iso_sha256: str,
     setup_level: SetupLevel,
     disk_size: str | None,
@@ -123,5 +140,37 @@ def build_baked_environment_file(
 
     filename = env_name or vm_name
     env_path = _target_env_path(filename, project_path)
+    dict_to_yaml(env_path, env_content)
+    return env_path
+
+
+def build_baked_url_environment_file(
+    *,
+    vm_url: str,
+    vm_sha256: str,
+    env_name: str,
+    project_path: Path | None = None,
+    os_def: OsDefinition | None = None,
+) -> Path:
+    """Generate an environment YAML for a baked VM hosted at a published URL.
+
+    Unlike :func:`build_baked_environment_file`, nothing is hashed here — the
+    disk lives remotely and the analyst supplies its expected ``vm_sha256`` (the
+    BYO-URL model). The result is publish-ready: ``vm`` is an ``http(s)`` URL,
+    ``vm_type`` is ``url``, and ``vm_sha256`` is carried through for the
+    download-time integrity check on ``environment load``.
+
+    When no ``os_def`` is given a placeholder ``os:`` block is emitted (baked
+    create has never collected OS details), which the analyst edits afterwards.
+    """
+    env_content = {
+        'vm': vm_url,
+        'vm_type': 'url',
+        'vm_sha256': vm_sha256,
+        'os': _os_block(os_def) if os_def is not None else _placeholder_os_block(),
+        'hypervisor': 'qemu',
+    }
+
+    env_path = _target_env_path(env_name, project_path)
     dict_to_yaml(env_path, env_content)
     return env_path

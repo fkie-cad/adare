@@ -25,16 +25,19 @@ anchored on the *inputs*. The produced disk is still hashed per run into
 folded into the recipe hash, so changing them yields a new environment identity.
 """
 
+import hashlib
 import logging
 from dataclasses import replace
 from pathlib import Path
+from urllib.parse import urlparse
 
 import attrs
 
 from adare.backend.environment.exceptions import EnvironmentLoadFailed
 from adare.backend.vm import database as vm_database
-from adare.config.configdirectory import VM_TEMPLATES_DIR
+from adare.config.configdirectory import QEMU_CACHE_DIR, VM_TEMPLATES_DIR
 from adare.helperfunctions.hash import hash_file_sha256, hash_recipe, hash_string_sha256
+from adare.helperfunctions.web.download import download
 from adare.hypervisor.qemu.vm_creator.iso_utils import verify_iso_hash
 from adare.hypervisor.qemu.vm_creator.os_catalog import (
     OsDefinition,
@@ -172,8 +175,73 @@ def compute_recipe_hash(environment_metadata: EnvironmentMetadata) -> str:
     )
 
 
+def resolve_iso_from_url(url: str) -> Path:
+    """Download and cache an installer ISO from a URL into the QEMU cache dir.
+
+    Mirrors :func:`adare.backend.environment.commands.resolve_vm_from_url` for
+    recipe ISOs: caches by a URL-derived filename so repeated loads reuse the
+    same download. Integrity is checked separately by :func:`_verify_iso`
+    against ``recipe.iso_sha256`` after this returns.
+
+    Raises:
+        EnvironmentLoadFailed: If the download fails or produces an empty file.
+    """
+    iso_dir = QEMU_CACHE_DIR
+    iso_dir.mkdir(parents=True, exist_ok=True)
+
+    parsed_url = urlparse(url)
+    original_filename = Path(parsed_url.path).name
+    url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+
+    if original_filename and original_filename.lower().endswith('.iso'):
+        filename = f"{url_hash}_{original_filename}"
+    else:
+        filename = f"{url_hash}_downloaded.iso"
+
+    cached_file_path = iso_dir / filename
+
+    if cached_file_path.exists() and cached_file_path.stat().st_size > 0:
+        log.info(f"Using cached ISO file: {cached_file_path}")
+        return cached_file_path
+
+    try:
+        log.info(f"Downloading ISO from URL: {url}")
+        download(url, cached_file_path, quiet=False)
+
+        if not cached_file_path.exists() or cached_file_path.stat().st_size == 0:
+            raise EnvironmentLoadFailed(
+                log,
+                f'Downloaded ISO file {cached_file_path} is empty or missing',
+                possible_solutions=['Check if the URL is valid', 'Check network connectivity'],
+            )
+
+        log.info(f"Successfully downloaded ISO to: {cached_file_path}")
+        return cached_file_path
+
+    except (OSError, ConnectionError, TimeoutError, ValueError) as e:
+        if cached_file_path.exists():
+            cached_file_path.unlink()
+        raise EnvironmentLoadFailed(
+            log,
+            f'Failed to download ISO from URL {url}: {e}',
+            possible_solutions=[
+                'Check if the URL is accessible',
+                'Check network connectivity',
+                'Ensure the URL points to a valid ISO file',
+            ],
+        ) from e
+
+
 def _resolve_iso_path(recipe: Recipe, base_dir: Path | None) -> Path:
-    """Resolve the ISO path (absolute, or relative to the environment file)."""
+    """Resolve the ISO to a local path.
+
+    An ``http(s)`` ``recipe.iso`` is downloaded and cached (the web variant's
+    published-URL model); otherwise it is treated as a local path (absolute, or
+    relative to the environment file). Either way the returned path is a local
+    file whose hash :func:`_verify_iso` checks against ``recipe.iso_sha256``.
+    """
+    if recipe.iso.startswith(('http://', 'https://')):
+        return resolve_iso_from_url(recipe.iso)
     iso_path = Path(recipe.iso)
     if not iso_path.is_absolute() and base_dir is not None:
         iso_path = (base_dir / recipe.iso)
