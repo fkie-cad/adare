@@ -15,6 +15,7 @@ from adare.database.api.devmode import DevModeApi
 from adare.services.devmode.action_execution import ActionExecutionMixin
 from adare.services.devmode.checkpoint_management import CheckpointManagementMixin
 from adare.services.devmode.gui_agent import GuiAgentMixin
+from adare.services.devmode.mcp_serving import McpServingMixin
 from adare.services.devmode.session_management import SessionManagementMixin
 
 
@@ -23,6 +24,7 @@ class DevModeService(
     ActionExecutionMixin,
     CheckpointManagementMixin,
     GuiAgentMixin,
+    McpServingMixin,
 ):
     """
     Service for development mode operations.

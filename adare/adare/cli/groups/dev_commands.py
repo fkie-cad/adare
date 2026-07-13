@@ -262,6 +262,32 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         )
         exec_with_error_printing(exec_dev_agent, args)
 
+    @dev.command()
+    @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
+    @click.option('--host', default=None, help='Bind host (default: ADARE_GUI_MCP_HOST or 127.0.0.1)')
+    @click.option('--port', type=int, default=None, help='Bind port (default: ADARE_GUI_MCP_PORT or 13110)')
+    @click.option('-o', '--out-dir', 'output_dir', type=click.Path(), help='Directory for recorded playbooks (default: project dir)')
+    def mcp(session_id, host, port, output_dir):
+        """Serve the session VM as a GUI-automation MCP server (blocking).
+
+        An external harness (OpenCode / Claude Code / any MCP client — including
+        one driving a local Ollama model) connects and authors playbooks by
+        natural language. ADARE grounds via CV/OCR and records crops + tests;
+        replay is deterministic with no LLM. See the MCP authoring guide for
+        harness connection snippets.
+
+        Example:
+            adare dev mcp -s <id> --port 13110
+        """
+        from adare.cli.dev import exec_dev_mcp
+        args = SimpleNamespace(
+            session_id=session_id,
+            host=host,
+            port=port,
+            output_dir=output_dir,
+        )
+        exec_with_error_printing(exec_dev_mcp, args)
+
     # Add dev command aliases
     dev.add_alias('l', 'list')
     dev.add_alias('res', 'reset')
