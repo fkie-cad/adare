@@ -56,12 +56,14 @@ class OsDefinition:
     kernel_path_in_iso: str = ''    # Path to vmlinuz inside ISO (Linux only)
     initrd_path_in_iso: str = ''    # Path to initrd inside ISO (Linux only)
     extra_packages: list[str] = field(default_factory=list)
-    install_mode: str = 'auto'  # 'auto' (unattended) or 'manual' (interactive VNC)
+    install_mode: str = 'auto'  # 'auto' (unattended), 'manual' (interactive VNC),
+    #                            or 'gui-auto' (vision-LLM-driven GUI automation)
     architecture: str = 'x86_64'  # 'x86_64' or 'aarch64'
     template: str = ''  # Custom template filename (empty = use default lookup)
     # Installer family — selects how the rendered template is laid out on the
     # seed medium. One of: 'subiquity' | 'preseed' | 'kickstart' | 'autoyast'
-    # | 'archinstall-cloudinit' | 'manual'. The default keeps Ubuntu working.
+    # | 'archinstall-cloudinit' | 'manual' | 'gui'. 'gui' writes no seed file;
+    # the installer is driven through its own GUI. The default keeps Ubuntu working.
     installer: str = 'subiquity'
     # Kernel command line passed via QEMU `-append`. Supports {console}
     # substitution (ttyS0/ttyAMA0). Distros like Anaconda or AutoYaST need
@@ -561,12 +563,14 @@ OPENSUSE_TUMBLEWEED = OsDefinition(
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Manual-mode GUI distros (Phase 6 — Calamares / distinst / nixos installers
-# with no documented unattended path)
+# GUI-only distros (Calamares / distinst / nixos installers with no documented
+# unattended path)
 # ─────────────────────────────────────────────────────────────────────────────
-# These boot the live ISO normally; the user clicks through the graphical
-# installer. linux_creator skips kernel/seed plumbing for install_mode='manual'
-# and writes INSTALL_INSTRUCTIONS.md alongside the qcow2.
+# install_mode='manual' boots the live ISO and waits for a human to click
+# through the graphical installer (manual_creator drives QEMU directly; it does
+# not write a seed file). install_mode='gui-auto' instead lets a vision-LLM
+# agent drive the same installer and record a reusable playbook — see
+# gui_creator and the "GUI-automated installation" guide.
 
 LINUX_MINT = OsDefinition(
     name='mint',
@@ -743,8 +747,11 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     continue
 
                 install_mode = data.get('install_mode', 'auto')
-                if install_mode not in ('auto', 'manual'):
-                    log.warning('Skipping %s: install_mode must be "auto" or "manual", got "%s"', yml_file, install_mode)
+                if install_mode not in ('auto', 'manual', 'gui-auto'):
+                    log.warning(
+                        'Skipping %s: install_mode must be "auto", "manual" or "gui-auto", got "%s"',
+                        yml_file, install_mode,
+                    )
                     continue
 
                 architecture = data.get('architecture', 'x86_64')

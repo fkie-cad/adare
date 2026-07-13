@@ -131,6 +131,11 @@ class DomainXMLBuilder:
 
         self._guest_arch = 'aarch64' if self._is_aarch64 else 'x86_64'
 
+        # Live-installer CDROM boot (GUI-automated / manual installs). Read
+        # defensively so configs persisted before these fields existed still load.
+        self._iso_path = getattr(vm_config, 'iso_path', '') or ''
+        self._boot_from_cdrom = bool(getattr(vm_config, 'boot_from_cdrom', False))
+
         self._pci = PCIBusAllocator(self._is_q35)
 
         self._domain: ET.Element | None = None
@@ -212,12 +217,17 @@ class DomainXMLBuilder:
             nvram_elem = ET.SubElement(os_elem, 'nvram')
             nvram_elem.text = nvram_path
 
-            ET.SubElement(os_elem, 'boot', dev='hd')
+            # Per-device <boot order> (set in _add_disk/_add_cdrom) is mutually
+            # exclusive with a global <boot dev>. Only emit the global element
+            # when we are NOT booting from CDROM.
+            if not self._boot_from_cdrom:
+                ET.SubElement(os_elem, 'boot', dev='hd')
         else:
             log.info(f"Using BIOS boot for VM {self._config.vm_name} (guest_os={self._config.guest_os})")
             os_type = ET.SubElement(os_elem, 'type', arch='x86_64', machine=self._config.machine)
             os_type.text = 'hvm'
-            ET.SubElement(os_elem, 'boot', dev='hd')
+            if not self._boot_from_cdrom:
+                ET.SubElement(os_elem, 'boot', dev='hd')
 
     def _add_features(self) -> None:
         """Add CPU features: ACPI, APIC, SMM, Hyper-V enlightenments."""
@@ -274,7 +284,11 @@ class DomainXMLBuilder:
     def _add_power_management(self) -> None:
         """Add power management actions."""
         ET.SubElement(self._domain, 'on_poweroff').text = 'destroy'
-        ET.SubElement(self._domain, 'on_reboot').text = 'restart'
+        # GUI installers reboot when finished. Booting from CDROM with
+        # on_reboot=restart would re-enter the installer, so power off instead;
+        # the creator then boots the installed disk (boot_from_cdrom=False).
+        on_reboot = 'destroy' if self._boot_from_cdrom else 'restart'
+        ET.SubElement(self._domain, 'on_reboot').text = on_reboot
         ET.SubElement(self._domain, 'on_crash').text = 'destroy'
 
     def _add_security(self) -> None:
@@ -287,6 +301,7 @@ class DomainXMLBuilder:
 
         self._add_emulator()
         self._add_disk()
+        self._add_cdrom()
         self._add_network()
         self._add_guest_agent_channel()
         self._add_spice_channel()
@@ -342,12 +357,40 @@ class DomainXMLBuilder:
         ET.SubElement(disk, 'source', file=self._config.disk_path)
         ET.SubElement(disk, 'target', dev='vda', bus='virtio')
 
+        # When booting an installer from CDROM, the hard disk is the second boot
+        # device (per-device order; the CDROM gets order 1 in _add_cdrom).
+        if self._boot_from_cdrom:
+            ET.SubElement(disk, 'boot', order='2')
+
         if self._is_virt:
             pass  # libvirt auto-assigns addresses on virt machine
         elif self._is_q35:
             ET.SubElement(disk, 'address', **self._pci.address_for('disk'))
         else:
             ET.SubElement(disk, 'address', **self._pci.address_for('disk'))
+
+    def _add_cdrom(self) -> None:
+        """Attach an installer ISO as a read-only CDROM device.
+
+        Emitted only when the config carries an ``iso_path``. On q35 the CDROM
+        rides the built-in SATA controller (added by _add_q35_pcie_topology);
+        on plain i440FX ``pc`` it falls back to the IDE bus. aarch64 has no
+        <disk>-based path (NVMe/virtio via commandline) so the ISO is attached
+        in _add_qemu_commandline() instead — skip here.
+        """
+        if not self._iso_path or self._is_aarch64:
+            return
+
+        cdrom = ET.SubElement(self._devices, 'disk', type='file', device='cdrom')
+        ET.SubElement(cdrom, 'driver', name='qemu', type='raw')
+        ET.SubElement(cdrom, 'source', file=self._iso_path)
+        bus = 'sata' if self._is_q35 else 'ide'
+        ET.SubElement(cdrom, 'target', dev='sda', bus=bus)
+        ET.SubElement(cdrom, 'readonly')
+
+        # Boot the installer first; the disk (order 2) is the post-install target.
+        if self._boot_from_cdrom:
+            ET.SubElement(cdrom, 'boot', order='1')
 
     def _add_network(self) -> None:
         """Add network interface (unless port forwarding or SMB is via qemu:commandline)."""
@@ -586,7 +629,25 @@ class DomainXMLBuilder:
                 f'if=none,id=hd0,cache={disk_cache},discard=unmap',
             )
             _add_qemu_arg(qemu_commandline, '-device')
-            _add_qemu_arg(qemu_commandline, 'nvme,drive=hd0,serial=disk0,bootindex=0,bus=pcie.0,addr=0x1e')
+            # When installing from an ISO the CDROM boots first (bootindex 0) and
+            # the target disk is bootindex 1; otherwise the disk boots first.
+            disk_bootindex = 1 if (self._iso_path and self._boot_from_cdrom) else 0
+            _add_qemu_arg(
+                qemu_commandline,
+                f'nvme,drive=hd0,serial=disk0,bootindex={disk_bootindex},bus=pcie.0,addr=0x1e',
+            )
+
+        # aarch64 installer CDROM (libvirt <disk device='cdrom'> is skipped for
+        # aarch64 in _add_cdrom, so attach the ISO via raw QEMU args here).
+        if self._is_aarch64 and self._iso_path:
+            _add_qemu_arg(qemu_commandline, '-drive')
+            _add_qemu_arg(
+                qemu_commandline,
+                f'file={self._iso_path},format=raw,if=none,id=cd0,media=cdrom,readonly=on',
+            )
+            _add_qemu_arg(qemu_commandline, '-device')
+            cd_bootindex = 0 if self._boot_from_cdrom else 2
+            _add_qemu_arg(qemu_commandline, f'usb-storage,drive=cd0,bootindex={cd_bootindex}')
 
         # ramfb: firmware/boot framebuffer (no SPICE channels, no conflict).
         # virtio-gpu-device (MMIO variant): auto-outputs to SPICE display channels;
