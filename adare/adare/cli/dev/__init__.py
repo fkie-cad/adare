@@ -28,6 +28,7 @@ from adare.cli.dev.checkpoints import (
     exec_dev_reset_hard,
     exec_dev_reset_soft,
 )
+from adare.cli.dev.agent import exec_dev_agent
 from adare.cli.dev.recording import exec_dev_record
 from adare.cli.dev.session import (
     exec_dev_cleanup,
@@ -62,5 +63,6 @@ __all__ = [
     "exec_dev_reset_soft",
     "exec_dev_reset_hard",
     # Recording
+    "exec_dev_agent",
     "exec_dev_record",
 ]

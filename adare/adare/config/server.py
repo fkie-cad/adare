@@ -32,8 +32,16 @@ TIMEOUT_SECONDS = 10
 
 # ── GUI-automation vision-LLM (vLLM) configuration ───────────────────────────
 # A grounding-capable vision model served over an OpenAI-compatible endpoint
-# (Qwen2-VL / UI-TARS / Molmo-class). Used ONLY during a GUI-automation *record*
-# run and for *self-heal* on a replay miss — deterministic replay needs no LLM.
+# (Qwen3-VL / Qwen2-VL / UI-TARS / Molmo-class). Used ONLY during a GUI-automation
+# *record* run, the *agent* (`adare dev agent`), and *self-heal* on a replay miss —
+# deterministic replay needs no LLM.
+#
+# Works with any OpenAI-compatible server, e.g. Ollama Cloud:
+#   ADARE_VLLM_BASE_URL=https://ollama.com/v1
+#   ADARE_VLLM_API_KEY=<key from ollama.com/settings/keys>
+#   ADARE_VLLM_MODEL=qwen3-vl:235b-cloud        # GUI-grounding / computer-use
+#   ADARE_VLLM_COORD_SPACE=normalized_1000       # Qwen3-VL returns 0..1000 coords
+# Run `adare vm gui-doctor` to verify the endpoint and auto-detect the coord space.
 VLLM_BASE_URL = os.environ.get('ADARE_VLLM_BASE_URL', 'http://localhost:8000/v1')
 VLLM_MODEL = os.environ.get('ADARE_VLLM_MODEL', 'Qwen/Qwen2-VL-7B-Instruct')
 VLLM_API_KEY = os.environ.get('ADARE_VLLM_API_KEY', 'EMPTY')
