@@ -99,6 +99,10 @@ class DevModeAPI:
         """Resume the most recently stopped dev mode session."""
         return self._service.resume_most_recent(project_path, console_ulid=console_ulid)
 
+    def run_gui_agent(self, request):
+        """Drive the session VM toward a goal with the vision-LLM GUI agent."""
+        return self._service.run_gui_agent(request)
+
 
 class TestFunctionAPI:
     """Testfunction operations API."""

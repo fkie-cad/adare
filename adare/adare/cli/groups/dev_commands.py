@@ -234,6 +234,34 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         args = SimpleNamespace(project=project)
         exec_with_error_printing(exec_dev_cleanup, args)
 
+    @dev.command()
+    @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
+    @click.option('--goal', help='Natural-language goal for the agent to accomplish')
+    @click.option('--goal-file', type=click.Path(exists=True), help='Read the goal from a file')
+    @click.option('-o', '--out', 'output', type=click.Path(), help='Record a replayable playbook to this path')
+    @click.option('--max-steps', type=int, default=None, help='Override the agent step budget')
+    @click.option('--stall-limit', type=int, default=None, help='Override the agent stall budget')
+    def agent(session_id, goal, goal_file, output, max_steps, stall_limit):
+        """Drive the session VM toward a goal with the vision-LLM GUI agent.
+
+        Uses the configured vLLM endpoint (ADARE_VLLM_*; works with Ollama Cloud).
+        With --out, records a reusable playbook you can replay with `dev playbook`.
+
+        Examples:
+            adare dev agent --goal "open the Files app and go to Documents"
+            adare dev agent -s <id> --goal "..." -o experiments/files.play.yaml
+        """
+        from adare.cli.dev import exec_dev_agent
+        args = SimpleNamespace(
+            session_id=session_id,
+            goal=goal,
+            goal_file=goal_file,
+            output=output,
+            max_steps=max_steps,
+            stall_limit=stall_limit,
+        )
+        exec_with_error_printing(exec_dev_agent, args)
+
     # Add dev command aliases
     dev.add_alias('l', 'list')
     dev.add_alias('res', 'reset')

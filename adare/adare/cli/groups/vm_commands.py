@@ -188,6 +188,17 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, bare=bare, env_name=env_name, interactive=interactive, arch=arch, recipe=recipe, record=record, relearn=relearn, display=display, template=template)
         exec_with_error_printing(exec_vm_create, args)
 
+    @vm.command(name='gui-doctor')
+    def vm_gui_doctor():
+        """Preflight the vision-LLM used for GUI automation (ADARE_VLLM_*).
+
+        Confirms the endpoint (e.g. Ollama Cloud) is reachable and detects which
+        coordinate convention the model returns, recommending ADARE_VLLM_COORD_SPACE.
+        """
+        from adare.cli.vm_gui_doctor import exec_vm_gui_doctor
+        args = SimpleNamespace()
+        exec_with_error_printing(exec_vm_gui_doctor, args)
+
     @vm.command(name='reset')
     @click.option('--force', '-f', is_flag=True, help='Force reset of all VMs (required for confirmation)')
     def vm_reset(force):

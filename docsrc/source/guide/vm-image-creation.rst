@@ -137,6 +137,43 @@ Pure replay needs **no** endpoint. Budgets bound the record run
 (``ADARE_GUI_AGENT_MAX_STEPS``, ``ADARE_GUI_AGENT_STALL_LIMIT``,
 ``ADARE_GUI_AGENT_WALL_CLOCK_SECONDS``).
 
+**Using Ollama Cloud.** The client is a plain OpenAI-compatible caller, so an
+Ollama Cloud model works with no code change — point it at the cloud endpoint
+and use a grounding model:
+
+.. code-block:: bash
+
+   export ADARE_VLLM_BASE_URL=https://ollama.com/v1
+   export ADARE_VLLM_API_KEY=<key from ollama.com/settings/keys>
+   export ADARE_VLLM_MODEL=qwen3-vl:235b-cloud
+   export ADARE_VLLM_COORD_SPACE=normalized_1000   # Qwen3-VL returns 0..1000 coords
+
+``qwen3-vl:235b-cloud`` is trained to operate GUIs (tops the OS-World benchmark).
+It returns **normalized 0–1000** coordinates, so ``normalized_1000`` is required.
+Verify everything up front with the preflight, which pings the endpoint and
+auto-detects the coordinate convention:
+
+.. code-block:: bash
+
+   adare vm gui-doctor
+
+**Driving an existing environment / authoring experiments.** The same agent can
+drive an *already-installed* environment to author reusable automation. Bring the
+environment up once, then hand the agent a goal (add ``--out`` to record a
+playbook):
+
+.. code-block:: bash
+
+   adare dev start -e <environment>          # boots the VM + CV server, keeps them alive
+   adare dev agent --goal "open the Files app and navigate to Documents" \
+       --out experiments/files.play.yaml     # drives the VM; records a playbook
+
+The recorded ``.play.yaml`` is an ordinary ADARE playbook. Replay it
+deterministically (no LLM) via ``adare dev playbook <session> -f files.play.yaml``
+or the normal engine with ``adare experiment run <exp> -e <env> --gui-mode host``.
+A raw drive (no ``--out``) needs only the VLM; recording a playbook whose steps
+use image/text targets also relies on the CV server (already up in a dev session).
+
 **Goal / acceptance spec.** The record-run *input* is a high-level goal, not a
 per-screen script, in ``gui_<distro>.yaml`` (bundled, or overridden in
 ``~/.adare/vm-templates/``):
