@@ -18,10 +18,27 @@ class EnvironmentLoadRequest:
 
 @dataclass
 class EnvironmentCreateRequest:
-    """Request DTO for creating a new environment template."""
+    """Request DTO for creating a new environment template.
+
+    Two shapes: a baked template (`vm_path`, unchanged) or a declarative
+    recipe (`os_profile` + `iso_path`, plus optional build params) that defers
+    the actual VM build to `environment load`. See `is_recipe`.
+    """
     project_path: Path
     name: str
     vm_path: Path | None = None
+    os_profile: str | None = None
+    iso_path: Path | None = None
+    disk_size: str | None = None
+    ram_mb: int | None = None
+    cpus: int | None = None
+    arch: str | None = None
+    setup_level: int | None = None
+
+    @property
+    def is_recipe(self) -> bool:
+        """True when enough recipe inputs were given to build a recipe env."""
+        return bool(self.os_profile and self.iso_path)
 
 
 @dataclass
