@@ -52,10 +52,33 @@ function SyncBadge({ synced }: { synced: unknown }) {
 
 function EnvironmentTypeBadge({ env }: { env: Environment }) {
   if (env.recipe) return <Badge variant="secondary">Recipe</Badge>
-  if (env.vm_type === 'path' || env.vm_type === 'url' || env.vm_path) {
+  if (env.vm_type === 'path' || env.vm_type === 'url' || env.vm) {
     return <Badge variant="outline">Baked</Badge>
   }
   return <Badge variant="outline">Legacy</Badge>
+}
+
+function isUrl(value?: string): value is string {
+  return !!value && /^https?:\/\//i.test(value)
+}
+
+function VmCell({ env }: { env: Environment }) {
+  if (isUrl(env.vm) || (env.vm_type === 'url' && env.vm)) {
+    return (
+      <a
+        href={env.vm}
+        target="_blank"
+        rel="noreferrer"
+        className="font-mono text-xs text-primary underline underline-offset-2 hover:no-underline break-all"
+      >
+        {env.vm}
+      </a>
+    )
+  }
+  if (env.vm) {
+    return <span className="font-mono text-xs break-all">{env.vm}</span>
+  }
+  return <>—</>
 }
 
 export default function EnvironmentsListPage() {
@@ -138,12 +161,8 @@ export default function EnvironmentsListPage() {
                   <EnvironmentTypeBadge env={env} />
                 </TableCell>
                 <TableCell>{(env as any).os || '—'}</TableCell>
-                <TableCell>
-                  {env.vm_path ? (
-                    <span className="font-mono text-xs">{env.vm_path}</span>
-                  ) : (
-                    '—'
-                  )}
+                <TableCell className="max-w-xs">
+                  <VmCell env={env} />
                 </TableCell>
                 <TableCell>
                   {env.project_path ? (

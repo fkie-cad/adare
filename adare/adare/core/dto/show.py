@@ -145,6 +145,13 @@ class EnvironmentListItem:
     in_request: bool = False
     created_at: datetime | None = None
     file: str = ""
+    # Source spec parsed from the environment file: `vm` is the disk reference
+    # (a published URL for URL-baked envs), `vm_type` is auto/path/url/recipe,
+    # `vm_sha256` the expected disk hash. Surfaced so the web list can render a
+    # URL-baked VM as a clickable link.
+    vm: str = ""
+    vm_type: str = ""
+    vm_sha256: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
@@ -160,6 +167,9 @@ class EnvironmentListItem:
                 'name': self.vm_name,
                 'os_info': self.os_info,
             },
+            'vm_source': self.vm,
+            'vm_type': self.vm_type,
+            'vm_sha256': self.vm_sha256,
             'os_details': {
                 'os': self.osinfo_os,
                 'distribution': self.osinfo_distribution,
@@ -198,6 +208,10 @@ class EnvironmentDetail:
     created_at: datetime | None = None
     file: str = ""
     experiment_count: int = 0
+    # Source spec parsed from the environment file (see EnvironmentListItem).
+    vm: str = ""
+    vm_type: str = ""
+    vm_sha256: str = ""
 
 
 @dataclass

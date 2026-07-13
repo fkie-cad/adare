@@ -30,6 +30,30 @@ from adare.core.result import Result
 log = logging.getLogger(__name__)
 
 
+def _parse_env_source(file: str | None) -> tuple[str, str, str]:
+    """Read (vm, vm_type, vm_sha256) from an environment YAML file.
+
+    Best-effort: a missing/unparseable file yields empty strings so the list
+    still renders. Recipe environments have no baked ``vm`` and return empties.
+    """
+    if not file:
+        return "", "", ""
+    env_path = Path(file)
+    if not env_path.exists():
+        return "", "", ""
+    try:
+        from adare.exceptions import DataStructuringError
+        from adare.types.environment import parse_environment_file
+        metadata = parse_environment_file(env_path)
+    except (OSError, ValueError, DataStructuringError) as e:
+        # A single malformed file must never break the whole list.
+        log.warning(f"Could not parse environment source from {env_path}: {e}")
+        return "", "", ""
+    if metadata is None:
+        return "", "", ""
+    return (metadata.vm or "", metadata.vm_type or "", metadata.vm_sha256 or "")
+
+
 class ShowService:
     """
     Service for data display operations.
@@ -328,8 +352,10 @@ class ShowService:
             with StructuredDataApi() as api:
                 environments = api.get_environments_structured()
 
-            items = [
-                EnvironmentListItem(
+            items = []
+            for env in environments:
+                vm, vm_type, vm_sha256 = _parse_env_source(env.file)
+                items.append(EnvironmentListItem(
                     ulid=env.ulid,
                     name=env.name,
                     display_name=env.display_name,
@@ -347,9 +373,10 @@ class ShowService:
                     in_request=env.in_request,
                     created_at=env.created_at,
                     file=env.file,
-                )
-                for env in environments
-            ]
+                    vm=vm,
+                    vm_type=vm_type,
+                    vm_sha256=vm_sha256,
+                ))
 
             return Result.ok(items)
 
@@ -386,6 +413,7 @@ class ShowService:
                     solutions=['Use `adare show environments` to list available environments']
                 )
 
+            vm, vm_type, vm_sha256 = _parse_env_source(env.file)
             detail = EnvironmentDetail(
                 ulid=env.ulid,
                 name=env.name,
@@ -404,6 +432,9 @@ class ShowService:
                 in_request=env.in_request,
                 created_at=env.created_at,
                 file=env.file,
+                vm=vm,
+                vm_type=vm_type,
+                vm_sha256=vm_sha256,
             )
 
             return Result.ok(detail)

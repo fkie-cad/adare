@@ -20,15 +20,21 @@ class EnvironmentLoadRequest:
 class EnvironmentCreateRequest:
     """Request DTO for creating a new environment template.
 
-    Two shapes: a baked template (`vm_path`, unchanged) or a declarative
-    recipe (`os_profile` + `iso_path`, plus optional build params) that defers
-    the actual VM build to `environment load`. See `is_recipe`.
+    Two shapes: a baked template or a declarative recipe (`os_profile` plus an
+    ISO source) that defers the actual VM build to `environment load`. Each
+    source can be given as a local path (CLI, offline use) or a published
+    `http(s)` URL + sha256 (the web variant's publish-ready BYO-URL model). See
+    `is_recipe`.
     """
     project_path: Path
     name: str
     vm_path: Path | None = None
+    vm_url: str | None = None
+    vm_sha256: str | None = None
     os_profile: str | None = None
     iso_path: Path | None = None
+    iso_url: str | None = None
+    iso_sha256: str | None = None
     disk_size: str | None = None
     ram_mb: int | None = None
     cpus: int | None = None
@@ -37,8 +43,12 @@ class EnvironmentCreateRequest:
 
     @property
     def is_recipe(self) -> bool:
-        """True when enough recipe inputs were given to build a recipe env."""
-        return bool(self.os_profile and self.iso_path)
+        """True when enough recipe inputs were given to build a recipe env.
+
+        A recipe needs an OS profile plus an ISO source — either a local path
+        (CLI) or a published URL (web).
+        """
+        return bool(self.os_profile and (self.iso_path or self.iso_url))
 
 
 @dataclass

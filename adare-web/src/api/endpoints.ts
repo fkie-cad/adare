@@ -56,6 +56,7 @@ export const endpoints = {
     `/environments/${name}?force=${force}`,
   verifyEnvironment: (name: string) => `/environments/${name}/verify`,
   osProfiles: '/environments/os-profiles',
+  environmentCheckUrl: '/environments/check-url',
 
   // Runs
   runs: '/runs',

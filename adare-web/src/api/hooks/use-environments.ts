@@ -18,7 +18,7 @@ export interface RecipeInfo {
 export interface Environment {
   name: string
   project_path?: string
-  vm_path?: string
+  vm?: string
   vm_type?: string
   vm_sha256?: string
   recipe?: RecipeInfo | null
@@ -28,14 +28,31 @@ export interface Environment {
 export interface CreateEnvironmentRequest {
   project_path: string
   name: string
-  vm_path?: string
+  // Baked source: a published disk-image URL + its sha256 (web = remote-only).
+  vm_url?: string
+  vm_sha256?: string
+  // Recipe source: OS profile + a published ISO URL + its sha256, plus params.
   os_profile?: string
-  iso_path?: string
+  iso_url?: string
+  iso_sha256?: string
   disk_size?: string
   ram_mb?: number
   cpus?: number
   arch?: string
   setup_level?: number
+}
+
+export interface CheckUrlRequest {
+  url: string
+  sha256?: string
+  kind: 'vm' | 'iso'
+}
+
+export interface CheckUrlResult {
+  valid: boolean
+  reachable: boolean
+  status: number | null
+  reason: string | null
 }
 
 export interface OsProfile {
@@ -99,6 +116,18 @@ export function useCreateEnvironment() {
       return data.data!
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['environments'] }),
+  })
+}
+
+export function useCheckEnvironmentUrl() {
+  return useMutation({
+    mutationFn: async (request: CheckUrlRequest) => {
+      const { data } = await api.post<ApiResponse<CheckUrlResult>>(
+        endpoints.environmentCheckUrl,
+        request,
+      )
+      return data.data!
+    },
   })
 }
 

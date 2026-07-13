@@ -46,7 +46,10 @@ from adare.hypervisor.qemu.vm_creator.os_catalog import (
     get_os_definition,
     list_os_definitions,
 )
-from adare.services.environment_recipe import build_recipe_environment_file
+from adare.services.environment_recipe import (
+    build_baked_url_environment_file,
+    build_recipe_environment_file,
+)
 
 log = logging.getLogger(__name__)
 
@@ -248,6 +251,9 @@ class EnvironmentService:
         if request.is_recipe:
             return self._create_recipe(request)
 
+        if request.vm_url:
+            return self._create_baked_url(request)
+
         try:
             # Call existing backend command
             backend_environment_create(
@@ -277,13 +283,62 @@ class EnvironmentService:
         except EnvironmentFileAlreadyExists as e:
             return Result.from_exception(e)
 
+    def _create_baked_url(self, request: EnvironmentCreateRequest) -> Result[EnvironmentInfo]:
+        """
+        Write a publish-ready baked environment descriptor for a hosted VM URL.
+
+        No VM is loaded into the database here (that would require a local disk):
+        we only emit a baked-URL YAML (``vm: <url>``, ``vm_type: url``,
+        ``vm_sha256``). The disk is downloaded, cached, and verified against
+        ``vm_sha256`` later, on ``environment load`` (see
+        ``backend.environment.commands.resolve_vm_from_url``).
+        """
+        if not request.vm_sha256:
+            return Result.fail(
+                code='MissingVmSha256Error',
+                message='A baked VM URL requires an explicit vm_sha256.',
+                solutions=[
+                    'Provide the SHA256 of the hosted disk image',
+                    'Compute it with: shasum -a 256 <disk-image>',
+                ],
+            )
+
+        env_file_path = build_baked_url_environment_file(
+            vm_url=request.vm_url,
+            vm_sha256=request.vm_sha256,
+            env_name=request.name,
+            project_path=request.project_path,
+        )
+
+        next_steps = [
+            f'Load the environment with: adare environment load {env_file_path}',
+            f'Verify the VM is ready: adare env verify {request.name}',
+        ]
+
+        return Result.ok(EnvironmentInfo(
+            id='',  # Not yet in database (just a descriptor file)
+            name=request.name,
+            description='',
+            vm_name=None,
+            hypervisor='qemu',
+            os_platform=None,
+            file_path=env_file_path,
+            next_steps=next_steps,
+            tip='Baked-URL environment created. The disk is downloaded and '
+                'verified against vm_sha256 on first load.',
+        ))
+
     def _create_recipe(self, request: EnvironmentCreateRequest) -> Result[EnvironmentInfo]:
         """
         Write a declarative recipe environment descriptor (no VM build).
 
         The heavy QEMU disk build happens later, once, on `environment load`;
-        this only resolves the OS profile, hashes the ISO, and writes the
-        recipe YAML into the project's environments directory.
+        this only resolves the OS profile, determines the ISO's sha256, and
+        writes the recipe YAML into the project's environments directory.
+
+        The ISO source is either a local path (CLI — hashed here) or a published
+        URL + provided sha256 (web — nothing local to hash; the ISO is
+        downloaded and verified on load).
         """
         try:
             os_def = get_os_definition(request.os_profile)
@@ -309,12 +364,29 @@ class EnvironmentService:
         else:
             setup_level = SetupLevel.FULL
 
-        iso_sha256 = hash_file_sha256(request.iso_path)
+        # Determine the ISO source + its sha256. A URL is the web variant's
+        # publish-ready model: nothing local to hash, so the analyst-supplied
+        # sha256 is required and the ISO is verified after download on load.
+        if request.iso_url:
+            if not request.iso_sha256:
+                return Result.fail(
+                    code='MissingIsoSha256Error',
+                    message='A recipe ISO URL requires an explicit iso_sha256.',
+                    solutions=[
+                        'Provide the SHA256 of the hosted ISO',
+                        'Compute it with: shasum -a 256 <iso>',
+                    ],
+                )
+            iso_source: str | Path = request.iso_url
+            iso_sha256 = request.iso_sha256
+        else:
+            iso_source = request.iso_path
+            iso_sha256 = hash_file_sha256(request.iso_path)
 
         env_file_path = build_recipe_environment_file(
             os_name=request.os_profile,
             os_def=os_def,
-            iso_path=request.iso_path,
+            iso_path=iso_source,
             iso_sha256=iso_sha256,
             setup_level=setup_level,
             disk_size=request.disk_size,
