@@ -40,6 +40,11 @@ def exec_vm_create(arguments):
     arch = getattr(arguments, 'arch', None)
     recipe_flag = getattr(arguments, 'recipe', None)
     bare = getattr(arguments, 'bare', False)
+    # GUI-automation (gui-auto install mode) options.
+    gui_record = getattr(arguments, 'record', False)
+    gui_relearn = getattr(arguments, 'relearn', False)
+    gui_display = getattr(arguments, 'display', False)
+    gui_template = getattr(arguments, 'template', None)
 
     # Look up OS definition
     try:
@@ -134,6 +139,33 @@ def exec_vm_create(arguments):
             vm_dir=vm_dir,
             setup_level=setup_level,
         )
+    elif os_def.install_mode == 'gui-auto':
+        if iso_path is None:
+            print_error_message(
+                title=f'ISO required for GUI-automated install of {os_def.display_name}',
+                next_steps=[
+                    f'Provide the ISO: adare vm create {os_name} --iso /path/to/installer.iso',
+                ],
+            )
+            return
+
+        from adare.hypervisor.qemu.vm_creator.gui_creator import create_gui_vm
+
+        disk_path = create_gui_vm(
+            os_def=os_def,
+            iso_path=iso_path,
+            vm_name=vm_name,
+            disk_size=disk_size,
+            ram_mb=ram,
+            cpus=cpus,
+            force=force,
+            vm_dir=vm_dir,
+            setup_level=setup_level,
+            record=gui_record,
+            relearn=gui_relearn,
+            display=gui_display,
+            template=gui_template,
+        )
     elif os_def.platform == 'linux':
         from adare.hypervisor.qemu.vm_creator.linux_creator import create_linux_vm
 
@@ -176,8 +208,9 @@ def exec_vm_create(arguments):
         print_error_message(title=f"Unsupported platform: {os_def.platform}")
         return
 
-    # Run interactive post-install session if requested (only for automated installs)
-    if interactive and os_def.install_mode != 'manual':
+    # Run interactive post-install session if requested (only for seed-based
+    # automated installs — manual/gui-auto already drive the GUI directly).
+    if interactive and os_def.install_mode not in ('manual', 'gui-auto'):
         from adare.hypervisor.qemu.vm_creator.interactive import run_post_install_session
 
         nvram_path = disk_path.with_name(disk_path.stem + '_VARS.fd')
@@ -207,7 +240,10 @@ def exec_vm_create(arguments):
             'Then: adare environment load <env.yml> --no-copy',
         ]
 
-    if os_def.install_mode == 'manual':
+    if os_def.install_mode == 'gui-auto':
+        tip = ('This VM was installed by the GUI agent. The generated playbook can be '
+               'edited and replayed; see the install report for a screenshot walkthrough.')
+    elif os_def.install_mode == 'manual':
         tip = 'This VM was installed manually. Configure SSH/guest agent access for full ADARE integration.'
     elif setup_level == SetupLevel.BARE:
         tip = 'No guest tools or agent software installed (--setup bare).'

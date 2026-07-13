@@ -1,0 +1,19 @@
+name: kubuntu2404
+display_name: "Kubuntu 24.04 LTS (Noble Numbat)"
+platform: linux
+distribution: ubuntu
+distribution_label: "Noble Numbat"
+version: "24.04"
+# Kubuntu ships the Calamares GUI installer, which has no answer-file / seed
+# mechanism. It is installed by GUI automation: the vision agent records a
+# reusable playbook on the first run, then it replays deterministically.
+install_mode: gui-auto
+installer: gui
+# No bundled ISO — the user supplies it with --iso (like a manual install).
+iso_url: ""
+iso_sha256: ""
+iso_filename: ""
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0
+requires_uefi: true

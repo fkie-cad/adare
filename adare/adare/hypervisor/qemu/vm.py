@@ -63,7 +63,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         accel: str = 'kvm',
         drive_format: str = 'qcow2',
         disk_path: str | None = None,
-        architecture: str = 'x86_64'
+        architecture: str = 'x86_64',
+        iso_path: str = '',
+        boot_from_cdrom: bool = False,
     ):
         self.vm_name = vm_name
         self.guest_os = guest_os
@@ -82,6 +84,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         self._command_queue = []
         self._qemu_process = None  # Running QEMU process
         self._external_disk_path = disk_path  # Optional external disk path for --no-copy mode
+        # Live-installer boot: attach an ISO as CDROM and (optionally) boot it first.
+        self._iso_path = iso_path or ''
+        self._boot_from_cdrom = bool(boot_from_cdrom)
 
         # libvirt integration
         self._libvirt_conn = None  # Lazy initialization - will use manager's connection

@@ -136,6 +136,11 @@ class QEMUVMConfig:
     # SMB share path — ephemeral temp dir for QEMU SLIRP SMB sharing (macOS)
     smb_share_path: str | None = None
 
+    # Live-installer boot configuration (GUI-automated / manual installs)
+    # When set, an installer ISO is attached as a CDROM device.
+    iso_path: str = ''  # Path to installer ISO to attach as a CDROM (empty = none)
+    boot_from_cdrom: bool = False  # True = boot the CDROM first (order 1), disk second
+
     def __post_init__(self):
         """Initialize empty collections if None."""
         if self.port_forwarding_rules is None:
@@ -172,6 +177,8 @@ class QEMUVMConfig:
             'virtiofs_enabled': self.virtiofs_enabled,
             'virtiofs_shares': self.virtiofs_shares,
             'smb_share_path': self.smb_share_path,
+            'iso_path': self.iso_path,
+            'boot_from_cdrom': self.boot_from_cdrom,
         }
 
     @classmethod
@@ -208,4 +215,8 @@ class QEMUVMConfig:
 
         data.setdefault('virtiofs_shares', [])
         data.setdefault('smb_share_path', None)
+
+        # Live-installer boot defaults (backward compatibility)
+        data.setdefault('iso_path', '')
+        data.setdefault('boot_from_cdrom', False)
         return cls(**data)
