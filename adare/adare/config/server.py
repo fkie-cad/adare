@@ -56,6 +56,12 @@ GUI_AGENT_MAX_STEPS = int(os.environ.get('ADARE_GUI_AGENT_MAX_STEPS', '80'))
 GUI_AGENT_STALL_LIMIT = int(os.environ.get('ADARE_GUI_AGENT_STALL_LIMIT', '6'))
 GUI_AGENT_WALL_CLOCK_SECONDS = int(os.environ.get('ADARE_GUI_AGENT_WALL_CLOCK_SECONDS', '3600'))
 
+# Port the `adare dev mcp` GUI-automation MCP server binds. An external harness
+# (OpenCode / Claude Code / any MCP client) connects here to author playbooks.
+# Distinct from the CV/OCR server's 13109 so both can run against one session.
+GUI_MCP_PORT = int(os.environ.get('ADARE_GUI_MCP_PORT', '13110'))
+GUI_MCP_HOST = os.environ.get('ADARE_GUI_MCP_HOST', '127.0.0.1')
+
 # PORTS FOR OAuth2 Redirects
 PORT_OAUTH2_REDIRECT = [
     13331,

@@ -1,0 +1,37 @@
+# Idiom: launch an application from the desktop's app search, then assert a
+# window/title label appears. A generic "open X and confirm it opened" pattern.
+#
+# Reusable + parameterizable: set `app_query` (what you type into the search)
+# and `window_text` (an OCR string that only appears once the app is up). Adapt
+# the labels to your desktop, or re-record with `adare dev mcp` for image crops.
+settings:
+  idle: 1.0
+  timeout: 1800
+
+variables:
+  app_query: Text Editor
+  window_text: Open
+
+actions:
+  - keyboard:
+      key: super
+      description: Open the activities / application search
+  - keyboard:
+      text: "{{ app_query }}"
+      description: Type the application name
+  - keyboard:
+      key: enter
+      description: Launch the highlighted application
+  - wait_until:
+      condition:
+        exists:
+          text: "{{ window_text }}"
+      timeout: 30.0
+      description: Wait until the application window is visible
+
+tests:
+  - name: app_window_visible
+    function: visual.text_on_screen
+    description: A label unique to the running app must be visible
+    parameter:
+      text: "{{ window_text }}"
