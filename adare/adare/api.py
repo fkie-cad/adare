@@ -514,6 +514,11 @@ class WebAPI:
         from adare.services.submit_service import SubmitService
         return SubmitService().submit_environment(request)
 
+    def precheck_submission(self, entity_type, name):
+        """Classify a create submission by name before opening a PR."""
+        from adare.services.submit_service import SubmitService
+        return SubmitService().precheck_submission(entity_type, name)
+
 
 class AdareAPI:
     """

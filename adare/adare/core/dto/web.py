@@ -149,6 +149,7 @@ class SubmitRequest:
     """Request to submit an entity (experiment/testfunction/environment) as a PR."""
     project_path: Path
     name: str
+    action: str = 'create'
 
 
 @dataclass
