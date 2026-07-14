@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from adare.config import DEFAULT_RESOLUTION_WH
 from adare.hypervisor.base.models import CommandResult as BaseCommandResult
 from adare.hypervisor.base.models import PortForwardingRule as BasePortForwardingRule
 from adare.hypervisor.base.models import SharedFolderConfig as BaseSharedFolderConfig
@@ -124,6 +125,11 @@ class QEMUVMConfig:
     vnc_port: int | None = None  # None = autoport, or specify explicit port
     libvirt_domain_name: str | None = None  # Track libvirt domain name
 
+    # Guest display resolution — drives virtio-gpu xres/yres (+ EDID) so the guest
+    # advertises this mode instead of the QEMU device defaults (1280x800).
+    resolution_x: int = DEFAULT_RESOLUTION_WH[0]
+    resolution_y: int = DEFAULT_RESOLUTION_WH[1]
+
     # VM logging configuration (for experiment runs)
     serial_console_log_path: str | None = None  # Path to serial console log
     qemu_debug_log_path: str | None = None      # Path to QEMU debug log
@@ -172,6 +178,8 @@ class QEMUVMConfig:
             'display_enabled': self.display_enabled,
             'vnc_port': self.vnc_port,
             'libvirt_domain_name': self.libvirt_domain_name,
+            'resolution_x': self.resolution_x,
+            'resolution_y': self.resolution_y,
             'serial_console_log_path': self.serial_console_log_path,
             'qemu_debug_log_path': self.qemu_debug_log_path,
             'virtiofs_enabled': self.virtiofs_enabled,
@@ -192,6 +200,8 @@ class QEMUVMConfig:
         data.setdefault('display_enabled', False)
         data.setdefault('vnc_port', None)
         data.setdefault('libvirt_domain_name', None)
+        data.setdefault('resolution_x', DEFAULT_RESOLUTION_WH[0])
+        data.setdefault('resolution_y', DEFAULT_RESOLUTION_WH[1])
         data.setdefault('serial_console_log_path', None)
         data.setdefault('qemu_debug_log_path', None)
         data.setdefault('boot_mode', 'bios')
