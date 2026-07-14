@@ -51,6 +51,23 @@ VLLM_API_KEY = os.environ.get('ADARE_VLLM_API_KEY', 'EMPTY')
 #   'normalized_1000' — 0..1000 on both axes (rescaled to pixels by the client)
 VLLM_COORD_SPACE = os.environ.get('ADARE_VLLM_COORD_SPACE', 'absolute')
 
+# Optional open-vocabulary element-grounding backend for the GUI agent.
+# When set, `adare dev agent` grounds each click to the true element bounding
+# box (via the standalone LocateAnything sidecar, scripts/locate_anything_sidecar.py)
+# and records the tight icon crop instead of the fixed box around the click.
+# Empty (default) keeps the fixed ~220x90 crop. The sidecar is a separate
+# process holding the heavy model — no VLM deps enter the adare package.
+#   ADARE_LOCATE_URL=http://127.0.0.1:13111
+LOCATE_URL = os.environ.get('ADARE_LOCATE_URL', '')
+LOCATE_MODE = os.environ.get('ADARE_LOCATE_MODE', 'hybrid')
+# The recorded crop expands the grounded element box by this margin (px per side)
+# and is grown to at least this minimum size, keeping it centred on the element.
+# A bare element box can be tiny or a generic glyph (e.g. a document icon) that
+# collides with similar UI; a little context makes the crop robust for the CV
+# replay matcher while staying far tighter than the fixed ~220x90 fallback.
+LOCATE_CROP_MARGIN = int(os.environ.get('ADARE_LOCATE_CROP_MARGIN', '16'))
+LOCATE_CROP_MIN = int(os.environ.get('ADARE_LOCATE_CROP_MIN', '72'))
+
 # Bounded-autonomy budgets for the record run.
 GUI_AGENT_MAX_STEPS = int(os.environ.get('ADARE_GUI_AGENT_MAX_STEPS', '80'))
 GUI_AGENT_STALL_LIMIT = int(os.environ.get('ADARE_GUI_AGENT_STALL_LIMIT', '6'))
