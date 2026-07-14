@@ -543,7 +543,7 @@ class ExperimentService:
                     # Count runs
                     run_count = 0
                     with contextlib.suppress(SQLAlchemyError, ValueError):
-                        run_count = experiment_database.get_experiment_run_count(exp.id, exclude_fake=False)
+                        run_count = experiment_database.get_experiment_run_count(project_path, exp.id, exclude_fake=False)
 
                     items.append(ExperimentListItem(
                         id=exp.id,
