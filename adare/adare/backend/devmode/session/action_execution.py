@@ -143,6 +143,13 @@ class DevModeActionExecutionMixin:
             var_dict = playbook.variables.to_execution_context(for_tests=False)
             self.playbook_controller.execution_context.update(var_dict)
 
+        # Prepare test execution when the playbook has a `tests:` block. The full
+        # experiment runner does this in run_setup; the dev path calls the
+        # action-only execute_playbook(), so wire it up here or a `- test:` action
+        # errors ("No testfunctions directory available" / routes nowhere).
+        if playbook.tests:
+            await self._prepare_test_execution(playbook)
+
         # Execute using existing PlaybookController logic
         with self._command_logger("playbook_execution"):
             result = await self.playbook_controller.execute_playbook(indices=indices)
@@ -156,6 +163,57 @@ class DevModeActionExecutionMixin:
         )
 
         return result
+
+    async def _prepare_test_execution(self, playbook: Playbook) -> None:
+        """Wire up test execution for a playbook's inline ``tests:`` in dev mode.
+
+        The full experiment runner configures this in run_setup; the dev path
+        calls the action-only ``execute_playbook()``, so replicate it here.
+        Resolves the test-execution mode from the session VM + playbook settings
+        (+ CLI override), then either configures the host-mode
+        GuestToHostTestExecutor (QGA proxies, no upload) or uploads the used
+        testfunctions to the guest for agent/VM-side execution.
+        """
+        controller = self.playbook_controller
+        test_actions = getattr(controller.action_executor, 'test_actions', None)
+        if test_actions is None:
+            return
+        vm = getattr(self.experiment_ctx, 'vm', None)
+        if vm is None:
+            log.warning("No VM available; cannot prepare test execution for inline tests")
+            return
+
+        from adare.backend.experiment.execution.base import TestExecutionMode
+        from adare.backend.experiment.execution.test_executor_factory import (
+            resolve_test_execution_mode,
+        )
+        from adare.backend.experiment.run_setup import _setup_guest_to_host_test_executor
+
+        config = getattr(self.experiment_ctx, 'config', None)
+        cli_override = getattr(config, 'test_mode_override', None) if config else None
+        try:
+            mode = resolve_test_execution_mode(
+                vm=vm,
+                playbook_settings=getattr(playbook, 'settings', None),
+                cli_override=cli_override,
+            )
+        except ValueError as e:
+            log.warning(f"Could not resolve test execution mode ({e}); defaulting to agent")
+            mode = TestExecutionMode.AGENT
+
+        vm_os = getattr(self.experiment_ctx, 'guest_platform', None) or 'linux'
+
+        if mode == TestExecutionMode.HOST:
+            _setup_guest_to_host_test_executor(controller, vm, playbook, vm_os)
+            log.info("Dev mode: host-mode test execution configured for inline tests")
+        else:
+            test_actions.set_test_execution_mode(TestExecutionMode.AGENT)
+            client = getattr(self.experiment_ctx, 'client', None)
+            if client is not None:
+                await controller.test_loader.load_tests(client)
+                log.info("Dev mode: uploaded testfunctions for agent-side test execution")
+            else:
+                log.warning("Dev mode: no agent connection; inline tests may not execute")
 
     async def reload_testfunctions(self) -> Result[None]:
         """
