@@ -89,6 +89,11 @@ def _run_detect(image_path: str, prompt: str, mode: str) -> dict:
             'box': [x1, y1, x2, y2],
             'center': [round((x1 + x2) / 2, 2), round((y1 + y2) / 2, 2)],
         })
+    log.info(
+        'detect prompt=%r mode=%s -> %d detections: %s',
+        prompt, mode, len(detections),
+        [(d['label'], d['box']) for d in detections],
+    )
     return {'detections': detections}
 
 
