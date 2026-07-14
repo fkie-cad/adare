@@ -95,6 +95,7 @@ class GuiAgent:
         stall_limit: int = 6,
         wall_clock_seconds: int = 3600,
         step_settle_seconds: float = 1.5,
+        interactive: bool = False,
     ):
         self.executor = gui_executor
         self.client = client
@@ -115,6 +116,9 @@ class GuiAgent:
         self.stall_limit = stall_limit
         self.wall_clock_seconds = wall_clock_seconds
         self.step_settle_seconds = step_settle_seconds
+        # Human-in-the-loop: when True, each proposed action pauses for the
+        # user to approve / skip / quit before it is executed and recorded.
+        self.interactive = interactive
 
         self._steps_dir: Path | None = None
         if self.run_dir:
@@ -171,6 +175,50 @@ class GuiAgent:
             reply, coord_space=self.coord_space,
             screen_width=width, screen_height=height,
         )
+
+    # -- interactive gate ---------------------------------------------------
+
+    async def _confirm_step(self, action: AgentAction, index: int) -> str:
+        """Pause and ask the user to approve the proposed action.
+
+        Renders the action with a ``rich`` panel and reads a single keystroke
+        on the CLI's real stdin (via a worker thread, so the asyncio loop is
+        not blocked). Returns ``'approve'``, ``'skip'`` or ``'quit'``. On
+        ``continue`` the gate is disabled for the rest of the run
+        (``self.interactive = False``) and ``'approve'`` is returned.
+        """
+        from adare.console import console
+        from rich.panel import Panel
+
+        detail = action.describe or action.summary or ''
+        header = f'Step {index} — {action.kind.upper()}'
+        if detail:
+            header += f'  "{detail}"'
+        if action.kind in (A.CLICK, A.DOUBLE_CLICK) and action.x is not None:
+            header += f'  @ ({action.x}, {action.y})'
+        elif action.kind == A.TYPE and action.text is not None:
+            header += f'  text={action.text!r}'
+        elif action.kind == A.KEY and action.combo:
+            header += f'  combo={action.combo!r}'
+
+        body = [header]
+        if action.reasoning:
+            body.append(f'reason: {action.reasoning}')
+        console.print(Panel('\n'.join(body), title='Confirm action', border_style='cyan'))
+
+        prompt = '[a]pprove / [s]kip / [q]uit / [c]ontinue (run rest autonomously) > '
+        while True:
+            choice = (await asyncio.to_thread(input, prompt)).strip().lower()
+            if choice in ('', 'a', 'approve'):
+                return 'approve'
+            if choice in ('s', 'skip'):
+                return 'skip'
+            if choice in ('q', 'quit'):
+                return 'quit'
+            if choice in ('c', 'continue'):
+                self.interactive = False
+                return 'approve'
+            console.print("Please enter 'a', 's', 'q', or 'c'.")
 
     # -- grounding ----------------------------------------------------------
 
@@ -331,6 +379,25 @@ class GuiAgent:
                 return self._finish(False, f'model decision failed: {exc}')
 
             index = len(self._records) + 1
+
+            if self.interactive:
+                choice = await self._confirm_step(action, index)
+                if choice == 'skip':
+                    note = action.describe or action.summary or action.kind
+                    self._records.append(StepRecord(
+                        index=index, action_kind=action.kind, describe=action.describe,
+                        reasoning=action.reasoning, result_status='skipped',
+                    ))
+                    self._history.append(
+                        f'{index}. {action.kind}({action.describe or action.summary}) '
+                        f'-> user skipped: {note}')
+                    await asyncio.sleep(self.step_settle_seconds)
+                    continue
+                if choice == 'quit':
+                    return self._finish(False, 'stopped by user')
+                # 'approve' (or 'continue', which also cleared self.interactive)
+                # falls through to execute + record as normal.
+
             status = await self._execute(action, png)
             shot_file = self._persist_step(index, png, action, status)
 
