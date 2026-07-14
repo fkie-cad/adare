@@ -652,27 +652,35 @@ class DomainXMLBuilder:
             cd_bootindex = 0 if self._boot_from_cdrom else 2
             _add_qemu_arg(qemu_commandline, f'usb-storage,drive=cd0,bootindex={cd_bootindex}')
 
-        # ramfb: firmware/boot framebuffer (no SPICE channels, no conflict).
-        # The GPU device is transport-dependent per guest OS (see branch below).
+        # aarch64 display device — transport differs per guest OS (see branches).
         if self._is_aarch64:
             rx = getattr(self._config, 'resolution_x', 1920)
             ry = getattr(self._config, 'resolution_y', 1080)
-            _add_qemu_arg(qemu_commandline, '-device')
-            _add_qemu_arg(qemu_commandline, 'ramfb')
-            _add_qemu_arg(qemu_commandline, '-device')
             if self._is_windows:
-                # Windows aarch64: the viogpudo driver (UTM guest tools) drives the
-                # MMIO variant; virtio-gpu-PCI causes a WinPE/boot BSOD on the
-                # ramfb->GPU handoff (see vm_creator/qmp_utils.py, windows_creator.py).
-                # edid=on + xres/yres advertise the target mode; viogpudo negotiates it.
+                # Windows aarch64: ramfb boot framebuffer + the MMIO virtio-gpu-device
+                # driven by viogpudo (UTM guest tools). virtio-gpu-PCI causes a
+                # WinPE/boot BSOD on the ramfb->GPU handoff (see vm_creator/
+                # qmp_utils.py, windows_creator.py). edid=on + xres/yres advertise
+                # the target mode; viogpudo negotiates it.
+                _add_qemu_arg(qemu_commandline, '-device')
+                _add_qemu_arg(qemu_commandline, 'ramfb')
+                _add_qemu_arg(qemu_commandline, '-device')
                 _add_qemu_arg(qemu_commandline, f'virtio-gpu-device,edid=on,xres={rx},yres={ry}')
             else:
-                # Linux aarch64: the MMIO virtio-gpu-device is not enumerated into a
-                # usable DRM card, so the guest stays on the fixed 800x600 ramfb
-                # framebuffer (simple-framebuffer/simpledrm) and the EDID/xres/yres
-                # never reach a connector. virtio-gpu-PCI IS probed by the Linux
-                # virtio_gpu driver, which evicts simpledrm and honors the mode below.
-                _add_qemu_arg(qemu_commandline, f'virtio-gpu-pci,edid=on,xres={rx},yres={ry}')
+                # Linux aarch64: virtio-gpu-PCI ONLY, no ramfb. The Linux virtio_gpu
+                # driver probes it and honors the EDID/xres/yres, giving a single
+                # display at the configured resolution (edk2/AAVMF drives it as the
+                # boot GOP). ramfb must NOT be added here: it creates a competing
+                # 800x600 simple-framebuffer/simpledrm card (card0) that GNOME latches
+                # onto instead of the virtio-gpu card — the exact reason the guest was
+                # stuck at 800x600. Pin an explicit high slot on pcie.0 (like the
+                # NVMe/net devices at 0x1e/0x1f) so it doesn't collide with libvirt's
+                # auto-assigned pcie-root-ports on the low slots.
+                _add_qemu_arg(qemu_commandline, '-device')
+                _add_qemu_arg(
+                    qemu_commandline,
+                    f'virtio-gpu-pci,edid=on,xres={rx},yres={ry},bus=pcie.0,addr=0x1d',
+                )
 
         # Keyboards: qemu:commandline args are placed on the QEMU command line
         # BEFORE libvirt's own -device args. virtio-keyboard-device here therefore
