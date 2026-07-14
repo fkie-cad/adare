@@ -241,7 +241,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('-o', '--out', 'output', type=click.Path(), help='Record a replayable playbook to this path')
     @click.option('--max-steps', type=int, default=None, help='Override the agent step budget')
     @click.option('--stall-limit', type=int, default=None, help='Override the agent stall budget')
-    def agent(session_id, goal, goal_file, output, max_steps, stall_limit):
+    @click.option('--step', '--interactive', 'interactive', is_flag=True,
+                  help='Pause before each action to approve / skip / stop')
+    def agent(session_id, goal, goal_file, output, max_steps, stall_limit, interactive):
         """Drive the session VM toward a goal with the vision-LLM GUI agent.
 
         Uses the configured vLLM endpoint (ADARE_VLLM_*; works with Ollama Cloud).
@@ -259,6 +261,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             output=output,
             max_steps=max_steps,
             stall_limit=stall_limit,
+            interactive=interactive,
         )
         exec_with_error_printing(exec_dev_agent, args)
 
