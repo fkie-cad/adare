@@ -475,7 +475,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
 
         # Set up host-mode test executor if in HOST test mode
         if is_host_test_mode:
-            _setup_guest_to_host_test_executor(controller, context, vm_os)
+            _setup_guest_to_host_test_executor(controller, context.vm, context.playbook, vm_os)
 
         # Execute complete experiment (playbook + tests)
         log.info(f"Starting experiment execution for {context.config.experiment_name}")
@@ -495,8 +495,12 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             log.error(f"Action results: {result.successful_actions}/{result.total_actions} succeeded")
 
 
-def _setup_guest_to_host_test_executor(controller, context: ExperimentRunCtx, vm_os: str):
-    """Set up host-mode test execution on the PlaybookController."""
+def _setup_guest_to_host_test_executor(controller, vm, playbook, vm_os: str):
+    """Set up host-mode test execution on the PlaybookController.
+
+    Takes ``vm`` and ``playbook`` directly (rather than an ExperimentRunCtx) so
+    the dev-mode playbook path can reuse it without building a full run context.
+    """
     from adare.backend.experiment.execution.base import TestExecutionMode
     from adare.backend.experiment.guest_to_host_test_executor import GuestToHostTestExecutor
     from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
@@ -507,8 +511,8 @@ def _setup_guest_to_host_test_executor(controller, context: ExperimentRunCtx, vm
     guest_os = vm_os or 'linux'
 
     # Create QGA proxies
-    guest_file = GuestFileProxy(vm=context.vm, guest_os=guest_os)
-    guest_command = GuestCommandProxy(vm=context.vm, guest_os=guest_os)
+    guest_file = GuestFileProxy(vm=vm, guest_os=guest_os)
+    guest_command = GuestCommandProxy(vm=vm, guest_os=guest_os)
 
     # Load testfunctions locally on host
     global_testfunctions_path = STATE_DIR / 'testfunctions'
@@ -520,7 +524,7 @@ def _setup_guest_to_host_test_executor(controller, context: ExperimentRunCtx, vm
         log.warning("Host mode: no testfunctions directory found")
 
     # Pre-flight validation: check all playbook tests are host-mode compatible
-    playbook_tests = getattr(context.playbook, 'tests', [])
+    playbook_tests = getattr(playbook, 'tests', [])
     if playbook_tests:
         ok, issues = GuestToHostTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
         if not ok:
