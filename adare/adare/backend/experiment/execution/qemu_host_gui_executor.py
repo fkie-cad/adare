@@ -105,14 +105,18 @@ SHIFT_MAP = {
 class QEMUHostGUIExecutor(AbstractGUIExecutor):
     """GUI executor using QMP commands for QEMU VMs (host-based)."""
 
-    # Real-time gap left between consecutive characters when typing text. Each
-    # character's key events are sent as their own QMP command with this pause
-    # after it, so the guest's USB HID layer registers every keystroke. Without
-    # a gap, a whole string is injected back-to-back and the guest silently
-    # drops keys (spaces are the usual casualty), which then derails the vision
-    # agent into "fix the typo" correction loops. ~30ms comfortably clears the
-    # typical 8-10ms HID poll interval while keeping typing sub-second.
-    TYPE_INTERKEY_DELAY = 0.03
+    # Pacing for typed text. Every key event (down/up, and the shift-down/
+    # shift-up that bracket a capital or shifted symbol) is sent as its own QMP
+    # command with TYPE_EVENT_DELAY after it, and TYPE_INTERKEY_DELAY is added
+    # between characters. Injecting a whole string -- or even one character's
+    # events -- back-to-back makes the guest's USB HID layer silently drop
+    # transitions: a dropped key-up loses a character (spaces especially), and
+    # a dropped SHIFT-up leaves shift stuck down so the rest of the line comes
+    # out capitalised. Either way the vision agent then sees "wrong" text and
+    # loops trying to fix it. Real-time gaps clearing the ~8-10ms HID poll make
+    # every transition register while keeping typing ~1s.
+    TYPE_EVENT_DELAY = 0.008
+    TYPE_INTERKEY_DELAY = 0.015
 
     def __init__(self, vm, target_resolution_executor=None, experiment_run_id=None,
                  playbook=None, execution_context=None, experiment_run_directory=None, **kwargs):
@@ -292,16 +296,20 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
         """
         try:
             if action_type == "type":
-                # Type text with per-character pacing (see TYPE_INTERKEY_DELAY):
-                # send each character's key events on their own, with a short
-                # real-time gap between characters, so no keystrokes are dropped.
+                # Type text with per-EVENT pacing (see TYPE_EVENT_DELAY /
+                # TYPE_INTERKEY_DELAY): send every key event on its own with a
+                # short real-time gap, plus an extra gap between characters, so
+                # every key-down/up -- including the shift-up that ends a
+                # capital -- is registered and none are dropped.
                 char_groups = self._create_type_events(value)
                 if not char_groups:
                     return {'status': 'error', 'message': f'Failed to create QMP events for: {value}'}
                 success = True
                 for group in char_groups:
-                    if not await self.vm.send_qmp_keyboard(group):
-                        success = False
+                    for event in group:
+                        if not await self.vm.send_qmp_keyboard([event]):
+                            success = False
+                        await asyncio.sleep(self.TYPE_EVENT_DELAY)
                     await asyncio.sleep(self.TYPE_INTERKEY_DELAY)
                 if not success:
                     return {'status': 'error', 'message': 'QMP keyboard command failed'}
