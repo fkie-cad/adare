@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from adare.config import DEFAULT_RESOLUTION_WH
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.models import QEMUVMConfig
 from adare.hypervisor.qemu.utilities.disk_utils import get_boot_mode_for_os
@@ -214,6 +215,16 @@ class ConfigurationMixin:
             config_cpus = self.cpus
             config_ram = self.ram
 
+        # Guest display resolution: default from config, allow an optional per-VM
+        # override (tuple or "WxH" string) via the same getattr pattern as iso_path.
+        resolution_x, resolution_y = DEFAULT_RESOLUTION_WH
+        override = getattr(self, '_resolution', None)
+        if override:
+            if isinstance(override, str):
+                resolution_x, resolution_y = (int(v) for v in override.split('x'))
+            else:
+                resolution_x, resolution_y = int(override[0]), int(override[1])
+
         config = QEMUVMConfig(
             vm_name=self.vm_name,
             uuid=vm_uuid,
@@ -232,6 +243,8 @@ class ConfigurationMixin:
             pid_file_path=pid_file,
             iso_path=getattr(self, '_iso_path', ''),
             boot_from_cdrom=getattr(self, '_boot_from_cdrom', False),
+            resolution_x=resolution_x,
+            resolution_y=resolution_y,
         )
 
         self._save_vm_config_obj(config)

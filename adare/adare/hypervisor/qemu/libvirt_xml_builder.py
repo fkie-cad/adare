@@ -523,7 +523,9 @@ class DomainXMLBuilder:
             model = ET.SubElement(video, 'model', type='qxl', ram='65536', vram='65536', vgamem='16384', heads='1', primary='yes')
 
         if not self._is_aarch64:  # type='none' doesn't support resolution hints
-            ET.SubElement(model, 'resolution', x='1920', y='1080')
+            rx = getattr(self._config, 'resolution_x', 1920)
+            ry = getattr(self._config, 'resolution_y', 1080)
+            ET.SubElement(model, 'resolution', x=str(rx), y=str(ry))
         if self._is_virt:
             pass
         elif self._is_q35:
@@ -653,10 +655,14 @@ class DomainXMLBuilder:
         # virtio-gpu-device (MMIO variant): auto-outputs to SPICE display channels;
         # viogpudo from UTM guest tools takes over for resolution negotiation.
         if self._is_aarch64:
+            rx = getattr(self._config, 'resolution_x', 1920)
+            ry = getattr(self._config, 'resolution_y', 1080)
             _add_qemu_arg(qemu_commandline, '-device')
             _add_qemu_arg(qemu_commandline, 'ramfb')
             _add_qemu_arg(qemu_commandline, '-device')
-            _add_qemu_arg(qemu_commandline, 'virtio-gpu-device')
+            # edid=on + xres/yres so the guest's virtio-gpu connector advertises
+            # this mode (device defaults are 1280x800); viogpudo then negotiates it.
+            _add_qemu_arg(qemu_commandline, f'virtio-gpu-device,edid=on,xres={rx},yres={ry}')
 
         # Keyboards: qemu:commandline args are placed on the QEMU command line
         # BEFORE libvirt's own -device args. virtio-keyboard-device here therefore

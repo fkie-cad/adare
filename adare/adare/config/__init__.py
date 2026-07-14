@@ -19,6 +19,8 @@ ABBREV_CRITICAL = ['CRITICAL', 'critical', 'Critical', 'c', 'C']
 
 # default values for VM and VM scripts
 DEFAULT_RESOLUTION = "1920x1080"
+# Parsed (width, height) form — single source of truth for guest display resolution.
+DEFAULT_RESOLUTION_WH = tuple(int(v) for v in DEFAULT_RESOLUTION.split('x'))
 DEFAULT_VM_IP = "192.168.142.10"
 DEFAULT_GUI_LOGLEVEL = "info"
 DEFAULT_PAUSE_AFTERGUIAUTOMATION = "30"
