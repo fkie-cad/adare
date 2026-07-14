@@ -62,6 +62,31 @@ def crop_around(
     return img.crop(box), box
 
 
+def crop_box(
+    screenshot_png_bytes: bytes,
+    box: tuple[float, float, float, float] | list[float],
+) -> tuple[Image.Image, list[int]]:
+    """Crop the exact ``[x1, y1, x2, y2]`` box, clamped to the image.
+
+    Used when a grounding backend (e.g. LocateAnything) returns a precise
+    element bounding box, so the recorded image target is the tight icon crop
+    instead of the fixed :func:`crop_around` box. Returns ``(image, box)`` with
+    an integer ``[left, top, right, bottom]`` guaranteed to be non-empty.
+    """
+    try:
+        img = Image.open(io.BytesIO(screenshot_png_bytes)).convert('RGB')
+    except (OSError, ValueError) as exc:
+        raise PlaybookRecordingError(f'Could not decode screenshot for crop: {exc}') from exc
+    w, h = img.size
+    x1, y1, x2, y2 = box
+    left = max(0, min(w - 1, int(round(x1))))
+    top = max(0, min(h - 1, int(round(y1))))
+    right = max(left + 1, min(w, int(round(x2))))
+    bottom = max(top + 1, min(h, int(round(y2))))
+    clamped = [left, top, right, bottom]
+    return img.crop(clamped), clamped
+
+
 class PlaybookRecorder:
     """Accumulates playbook actions and writes YAML + a sidecar + image crops."""
 
@@ -99,13 +124,19 @@ class PlaybookRecorder:
         slug: str,
         crop_w: int = _CROP_W,
         crop_h: int = _CROP_H,
+        bbox: tuple[float, float, float, float] | list[float] | None = None,
     ) -> tuple[str, list[int]]:
-        """Crop a box centred on (x, y) and save it under ``img/``.
+        """Crop the click's image target and save it under ``img/``.
 
-        Returns the bare filename (as referenced by the playbook) and the
-        crop bounding box ``[left, top, right, bottom]`` for the sidecar.
+        With ``bbox`` (a precise ``[x1, y1, x2, y2]`` from a grounding backend)
+        the crop is exactly that box; otherwise it is the fixed box centred on
+        (x, y). Returns the bare filename (as referenced by the playbook) and
+        the crop bounding box ``[left, top, right, bottom]`` for the sidecar.
         """
-        cropped, box = crop_around(screenshot_png_bytes, x, y, crop_w=crop_w, crop_h=crop_h)
+        if bbox is not None:
+            cropped, box = crop_box(screenshot_png_bytes, bbox)
+        else:
+            cropped, box = crop_around(screenshot_png_bytes, x, y, crop_w=crop_w, crop_h=crop_h)
         filename = f'step_{self._step:03d}_{slug}.png'
         cropped.save(self.img_dir / filename)
         return filename, box
@@ -121,11 +152,19 @@ class PlaybookRecorder:
         *,
         button: str = 'left',
         double: bool = False,
+        bbox: tuple[float, float, float, float] | list[float] | None = None,
     ) -> None:
-        """Record a click as an image-targeted ``ClickAction``."""
+        """Record a click as an image-targeted ``ClickAction``.
+
+        When ``bbox`` is supplied (a precise element box from a grounding
+        backend such as LocateAnything) the recorded image target is that exact
+        crop; otherwise the fixed box centred on (x, y) is used. Either way the
+        target replays deterministically through the CV matcher — no model is
+        needed at replay time.
+        """
         idx = self._next_index()
         slug = _slugify(describe)
-        filename, box = self._save_crop(screenshot_png_bytes, x, y, slug)
+        filename, box = self._save_crop(screenshot_png_bytes, x, y, slug, bbox=bbox)
 
         click_type = 'double' if double else button
         self._actions.append({
@@ -135,11 +174,15 @@ class PlaybookRecorder:
                 'description': describe,
             }
         })
-        self._meta.append({
+        meta: dict[str, Any] = {
             'step': idx, 'kind': 'click', 'image': filename,
             'coords': [x, y], 'crop_box': box, 'describe': describe,
             'click_type': click_type,
-        })
+        }
+        if bbox is not None:
+            meta['grounding'] = 'locate_anything'
+            meta['element_bbox'] = [float(v) for v in bbox]
+        self._meta.append(meta)
 
     def record_type(self, text: str, describe: str = '') -> None:
         idx = self._next_index()

@@ -174,6 +174,25 @@ or the normal engine with ``adare experiment run <exp> -e <env> --gui-mode host`
 A raw drive (no ``--out``) needs only the VLM; recording a playbook whose steps
 use image/text targets also relies on the CV server (already up in a dev session).
 
+**Optional: precise icon grounding (LocateAnything).** By default each recorded
+click stores a fixed ~220×90 crop around the model's click point. If you run the
+standalone LocateAnything grounding sidecar and point the agent at it, each click
+is grounded to the element's true bounding box and the recorded image target is
+the tight icon crop instead — better centred on the element (the recorded
+playbook still replays deterministically via the CV matcher, no model needed):
+
+.. code-block:: bash
+
+   # sidecar wraps the locate-anything-cli binary; no VLM deps enter the adare package
+   LA_CLI_BIN=/path/to/locate-anything-cli LA_MODEL=/path/to/model.gguf \
+       python3 scripts/locate_anything_sidecar.py --port 13111
+   export ADARE_LOCATE_URL=http://127.0.0.1:13111   # enables grounding for `dev agent`
+
+A tight crop is more precise but less distinctive to the CV matcher: a small,
+generic glyph (e.g. a bare document icon) can collide with near-duplicate UI
+(a full trash bin). Grounding is best-effort — a miss falls back to the fixed
+crop, so a run never breaks when the sidecar is down.
+
 **Goal / acceptance spec.** The record-run *input* is a high-level goal, not a
 per-screen script, in ``gui_<distro>.yaml`` (bundled, or overridden in
 ``~/.adare/vm-templates/``):

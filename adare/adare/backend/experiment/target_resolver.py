@@ -339,6 +339,63 @@ class MCPTargetResolver:
             log.error(f"Error resolving target via MCP: {e}")
             return None
 
+    async def find_element(
+        self,
+        description: str,
+        screenshot_base64: str,
+        *,
+        near: tuple[int, int] | None = None,
+        offset_x: int = 0,
+        offset_y: int = 0,
+    ) -> TargetMatch | None:
+        """Ground a natural-language element description to a :class:`TargetMatch`.
+
+        A described-element grounding path parallel to the CV/OCR resolvers:
+        instead of matching a pre-cropped image (``find_icon``) or OCR text
+        (``find_text``), it asks the LocateAnything sidecar for the element's
+        bounding box and returns a match whose ``coordinates`` are the box
+        centre and whose ``region`` is ``(left, top, width, height)``. Requires
+        ``ADARE_LOCATE_URL`` (the sidecar); returns ``None`` if unset or on miss.
+
+        Unlike ``find_icon``/``find_text`` this uses a model and so is intended
+        for authoring/grounding, not for deterministic (no-LLM) replay.
+        """
+        import asyncio
+
+        from adare.config.server import LOCATE_MODE, LOCATE_URL
+
+        if not LOCATE_URL:
+            log.warning("find_element requires ADARE_LOCATE_URL (LocateAnything sidecar) to be set")
+            return None
+
+        from adare.backend.experiment.grounding import LocateAnythingClient
+        from adare.backend.experiment.grounding.locate_anything import LocateAnythingError
+
+        client = LocateAnythingClient(LOCATE_URL, mode=LOCATE_MODE)
+        near_f = (float(near[0]), float(near[1])) if near else None
+        try:
+            det = await asyncio.to_thread(
+                client.best_for, screenshot_base64, description, near=near_f
+            )
+        except LocateAnythingError as exc:
+            log.error(f"LocateAnything grounding failed for '{description}': {exc}")
+            return None
+
+        if det is None:
+            log.warning(f"LocateAnything found no element for '{description}'")
+            return None
+
+        x1, y1, x2, y2 = det.box
+        cx = int(round((x1 + x2) / 2)) + offset_x
+        cy = int(round((y1 + y2) / 2)) + offset_y
+        region = (int(round(x1)) + offset_x, int(round(y1)) + offset_y,
+                  int(round(x2 - x1)), int(round(y2 - y1)))
+        log.info(f"LocateAnything grounded '{description}' to {(cx, cy)} region={region}")
+        return TargetMatch(
+            coordinates=(cx, cy), confidence=1.0, method='element',
+            region=region, text=description,
+        )
+
     async def _resolve_closest_to_reference(self, target, screenshot_base64, offset_x, offset_y):
         """Resolve the ClosestToStrategy reference target and optionally crop the screenshot.
 
