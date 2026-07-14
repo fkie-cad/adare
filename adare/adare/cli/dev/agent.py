@@ -48,6 +48,7 @@ def exec_dev_agent(arguments):
         output_file=output_file,
         max_steps=getattr(arguments, 'max_steps', None),
         stall_limit=getattr(arguments, 'stall_limit', None),
+        interactive=getattr(arguments, 'interactive', False),
     ))
 
     if not result.success:
