@@ -104,6 +104,7 @@ class GuiAgentMixin:
             max_steps=request.max_steps or GUI_AGENT_MAX_STEPS,
             stall_limit=request.stall_limit or GUI_AGENT_STALL_LIMIT,
             wall_clock_seconds=GUI_AGENT_WALL_CLOCK_SECONDS,
+            interactive=request.interactive,
         )
         res = await agent.run()
         return DevGuiAgentResult(

@@ -334,6 +334,113 @@ When you modify test function code on the host, push the changes to the running 
 This repackages the test files from the host and uploads them to the VM. The guest agent extracts them and uses the updated code for subsequent test executions.
 
 
+GUI Agent
+=========
+
+``adare dev agent`` drives the running session VM toward a natural-language goal
+using a vision LLM: it screenshots the screen, asks the model for the next
+action, executes it over the VM's input primitives, and (with ``-o``) records a
+replayable playbook. It uses the configured vLLM endpoint (``ADARE_VLLM_*``;
+works with Ollama Cloud or a local Ollama model).
+
+.. code-block:: bash
+
+   adare dev agent --goal "open the Files app and go to Documents"
+   adare dev agent -s <id> --goal "..." -o experiments/files.play.yaml
+
+Agent Options
+-------------
+
+``--goal`` / ``--goal-file``
+   The natural-language goal, inline or read from a file.
+
+``-o, --out``
+   Record a replayable playbook to this path. Per-step screenshots are also
+   written live under ``<out-stem>_run/steps/``.
+
+``--max-steps`` / ``--stall-limit``
+   Override the agent's step budget and its "screen unchanged" stall budget.
+
+``--step`` / ``--interactive``
+   Pause before each action to approve, skip, or stop it (see below).
+
+``-s, --session``
+   Session ID. Auto-detected if only one session is running.
+
+Interactive Step-Through (``--step``)
+-------------------------------------------
+
+By default the agent runs the whole perceive → decide → act loop autonomously to
+completion. With ``--step`` (alias ``--interactive``) it pauses **after** the
+model proposes each action and **before** it executes, showing the proposed
+action and prompting for a choice on the terminal:
+
+.. code-block:: text
+
+   ╭───────────────────── Confirm action ─────────────────────╮
+   │ Step 3 — CLICK  "the testfile.txt desktop icon"  @ (725, 352) │
+   │ reason: select the file icon before pressing Delete           │
+   ╰───────────────────────────────────────────────────────────────╯
+   [a]pprove / [s]kip / [q]uit / [c]ontinue (run rest autonomously) >
+
+- **approve** (``Enter`` or ``a``) -- execute the action and record it as normal.
+- **skip** (``s``) -- do not execute or record; the agent is told it skipped and
+  re-plans on the next step (so it tries something else).
+- **quit** (``q``) -- finalize the playbook recorded so far and stop cleanly.
+- **continue** (``c``) -- disable the gate and run the rest autonomously.
+
+The ``done`` action is gated too, so you stay in control of *when the goal is
+finished*: approve it to finish, or skip it to make the agent keep working.
+
+.. code-block:: bash
+
+   adare dev agent -s <id> --step \
+     --goal "Delete testfile.txt from the Desktop by selecting its icon and pressing Delete." \
+     -o experiments/delete-file.play.yaml
+
+This composes with everything else: approved clicks still get tightened crops
+from the optional grounding backend, and the recorded playbook still replays
+deterministically with no LLM.
+
+Watching the VM Live
+--------------------
+
+Interactive mode is most useful when you can *see* the desktop react. The dev VM
+already serves its screen over SPICE, so you can attach a passive viewer while
+the agent runs -- look, but don't touch (moving the host mouse or keyboard in
+that window fights the agent for control).
+
+.. code-block:: bash
+
+   # Find the SPICE display for the session VM
+   virsh -c qemu:///session domdisplay <vm-domain>
+
+   # Attach a viewer (either works):
+   virt-manager -c qemu:///session          # then double-click the running domain
+   remote-viewer spice://127.0.0.1:5900     # needs virt-viewer (brew install virt-viewer)
+
+If you would rather follow along in files, the per-step screenshots under
+``<out-stem>_run/steps/step_NNN.png`` are written as each step runs.
+
+Optional: Element Grounding
+---------------------------
+
+When ``ADARE_LOCATE_URL`` points at a running LocateAnything grounding sidecar,
+approved click crops are tightened to the true element bounding box instead of a
+fixed box around the click point, making the recorded playbook more robust on
+replay. Grounding is best-effort -- a miss falls back to the fixed crop and never
+aborts the run. Omit the variable to disable it.
+
+Replaying a Recorded Run
+------------------------
+
+A run recorded with ``-o`` replays deterministically -- no LLM, no pauses:
+
+.. code-block:: bash
+
+   adare dev playbook -s <id> -f experiments/delete-file.play.yaml
+
+
 Batch Execution
 ===============
 

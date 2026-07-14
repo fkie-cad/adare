@@ -144,6 +144,7 @@ class DevGuiAgentRequest:
     output_file: Path | None = None  # when set, record a replayable playbook
     max_steps: int | None = None
     stall_limit: int | None = None
+    interactive: bool = False  # pause before each action to approve / skip / stop
 
 
 @dataclass
