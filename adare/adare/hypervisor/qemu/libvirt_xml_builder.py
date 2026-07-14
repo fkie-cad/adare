@@ -512,10 +512,11 @@ class DomainXMLBuilder:
         video = ET.SubElement(self._devices, 'video')
         if self._is_aarch64:
             # type='none' tells libvirt not to create any video device.
-            # The actual GPU (virtio-gpu-device, MMIO) and boot framebuffer (ramfb)
-            # are added via qemu:commandline in _add_qemu_commandline().
-            # This prevents libvirt's video device from intercepting SPICE display
-            # channels — virtio-gpu-device auto-outputs to SPICE instead.
+            # The actual GPU (virtio-gpu-pci for Linux, virtio-gpu-device/MMIO for
+            # Windows) and boot framebuffer (ramfb) are added via qemu:commandline
+            # in _add_qemu_commandline(). This prevents libvirt's video device from
+            # intercepting SPICE display channels — the virtio-gpu auto-outputs to
+            # SPICE instead.
             model = ET.SubElement(video, 'model', type='none')
         elif self._is_windows and not self._is_darwin:
             model = ET.SubElement(video, 'model', type='virtio', heads='1', primary='yes', vram='262144')
@@ -652,17 +653,26 @@ class DomainXMLBuilder:
             _add_qemu_arg(qemu_commandline, f'usb-storage,drive=cd0,bootindex={cd_bootindex}')
 
         # ramfb: firmware/boot framebuffer (no SPICE channels, no conflict).
-        # virtio-gpu-device (MMIO variant): auto-outputs to SPICE display channels;
-        # viogpudo from UTM guest tools takes over for resolution negotiation.
+        # The GPU device is transport-dependent per guest OS (see branch below).
         if self._is_aarch64:
             rx = getattr(self._config, 'resolution_x', 1920)
             ry = getattr(self._config, 'resolution_y', 1080)
             _add_qemu_arg(qemu_commandline, '-device')
             _add_qemu_arg(qemu_commandline, 'ramfb')
             _add_qemu_arg(qemu_commandline, '-device')
-            # edid=on + xres/yres so the guest's virtio-gpu connector advertises
-            # this mode (device defaults are 1280x800); viogpudo then negotiates it.
-            _add_qemu_arg(qemu_commandline, f'virtio-gpu-device,edid=on,xres={rx},yres={ry}')
+            if self._is_windows:
+                # Windows aarch64: the viogpudo driver (UTM guest tools) drives the
+                # MMIO variant; virtio-gpu-PCI causes a WinPE/boot BSOD on the
+                # ramfb->GPU handoff (see vm_creator/qmp_utils.py, windows_creator.py).
+                # edid=on + xres/yres advertise the target mode; viogpudo negotiates it.
+                _add_qemu_arg(qemu_commandline, f'virtio-gpu-device,edid=on,xres={rx},yres={ry}')
+            else:
+                # Linux aarch64: the MMIO virtio-gpu-device is not enumerated into a
+                # usable DRM card, so the guest stays on the fixed 800x600 ramfb
+                # framebuffer (simple-framebuffer/simpledrm) and the EDID/xres/yres
+                # never reach a connector. virtio-gpu-PCI IS probed by the Linux
+                # virtio_gpu driver, which evicts simpledrm and honors the mode below.
+                _add_qemu_arg(qemu_commandline, f'virtio-gpu-pci,edid=on,xres={rx},yres={ry}')
 
         # Keyboards: qemu:commandline args are placed on the QEMU command line
         # BEFORE libvirt's own -device args. virtio-keyboard-device here therefore
