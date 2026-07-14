@@ -132,6 +132,11 @@ class DevModeActionExecutionMixin:
 
         # Update playbook reference in controller
         self.playbook_controller.playbook = playbook
+        # Keep the test loader's playbook in sync so a playbook's inline `tests:`
+        # resolve in dev mode, where the file isn't staged as
+        # experiment_dir/playbook.yml (it has an arbitrary name / lives elsewhere).
+        if getattr(self.playbook_controller, 'test_loader', None) is not None:
+            self.playbook_controller.test_loader.playbook = playbook
 
         # Update variables if playbook has them
         if playbook.variables:
