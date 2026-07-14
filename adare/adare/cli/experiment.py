@@ -69,7 +69,7 @@ def exec_experiment_load(arguments):
 
             has_productive_runs = False
             if experiment_ulid:
-                run_count = experiment_database.get_experiment_run_count(experiment_ulid, exclude_fake=True)
+                run_count = experiment_database.get_experiment_run_count(project_directory, experiment_ulid, exclude_fake=True)
                 has_productive_runs = run_count > 0
 
             if not has_productive_runs:
@@ -230,7 +230,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
             project_directory, experiment_name, trigger_error=False
         )
         if experiment_ulid:
-            run_count = experiment_database.get_experiment_run_count(experiment_ulid, exclude_fake=True)
+            run_count = experiment_database.get_experiment_run_count(project_directory, experiment_ulid, exclude_fake=True)
             if run_count > 0:
                 # In production mode with existing runs, load without force (strict integrity)
                 experiment_load(project_directory, experiment_name, force=False, silent=True)
@@ -485,7 +485,7 @@ def exec_experiment_run(arguments):
                     project_directory, experiment_name, trigger_error=False
                 )
                 if experiment_ulid:
-                    run_count = experiment_database.get_experiment_run_count(experiment_ulid, exclude_fake=True)
+                    run_count = experiment_database.get_experiment_run_count(project_directory, experiment_ulid, exclude_fake=True)
                     if run_count > 0:
                         # Production mode with existing runs - strict integrity
                         experiment_load(project_directory, experiment_name, force=False, silent=True)
