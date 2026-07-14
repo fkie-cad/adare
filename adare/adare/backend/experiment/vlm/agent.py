@@ -88,6 +88,9 @@ class GuiAgent:
         run_dir: str | Path | None = None,
         hints: list[str] | None = None,
         coord_space: str = 'absolute',
+        locate_client: Any = None,
+        locate_crop_margin: int = 16,
+        locate_crop_min: int = 72,
         max_steps: int = 80,
         stall_limit: int = 6,
         wall_clock_seconds: int = 3600,
@@ -98,6 +101,13 @@ class GuiAgent:
         self.goal = goal
         self.acceptance_spec = acceptance_spec or {}
         self.recorder = recorder
+        # Optional described-element grounding backend (LocateAnythingClient).
+        # When set, a click's recorded image crop is tightened to the true
+        # element bounding box (plus a small context margin) instead of the
+        # fixed box around the click point.
+        self.locate_client = locate_client
+        self.locate_crop_margin = locate_crop_margin
+        self.locate_crop_min = locate_crop_min
         self.run_dir = Path(run_dir) if run_dir else None
         self.hints = hints or []
         self.coord_space = coord_space
@@ -162,6 +172,55 @@ class GuiAgent:
             screen_width=width, screen_height=height,
         )
 
+    # -- grounding ----------------------------------------------------------
+
+    def _ground_click_bbox(self, pre_png: bytes, action: AgentAction) -> list[float] | None:
+        """Ask the grounding backend for the clicked element's bounding box.
+
+        Returns an ``[x1, y1, x2, y2]`` box — the grounded element (preferring
+        one that contains the model's own click point) expanded by the context
+        margin — for the recorder to crop, or ``None`` when no backend is
+        configured, the element has no
+        description, or grounding fails/misses — in which case the recorder
+        falls back to the fixed box around the click point.
+        """
+        if not self.locate_client or not action.describe:
+            return None
+        try:
+            b64 = base64.b64encode(pre_png).decode('ascii')
+            det = self.locate_client.best_for(
+                b64, action.describe, near=(float(action.x), float(action.y)),
+            )
+        # LocateAnythingError is a RuntimeError; also guard malformed responses.
+        # Grounding is best-effort — a miss must never abort the agent run.
+        except (RuntimeError, OSError, ValueError, TypeError, KeyError, IndexError) as exc:
+            log.warning('LocateAnything grounding failed (%s); using fixed crop', exc)
+            return None
+        if det is None:
+            log.info('LocateAnything found no box for %r; using fixed crop', action.describe)
+            return None
+        box = self._pad_box(det.box)
+        log.info('LocateAnything grounded %r to box %s (crop %s)', action.describe, det.box, box)
+        return box
+
+    def _pad_box(self, box: tuple[float, float, float, float]) -> list[float]:
+        """Expand a grounded element box by the context margin + minimum size.
+
+        Keeps the crop centred on the element but distinctive enough for the CV
+        replay matcher (a bare box can be tiny or a generic glyph). The box is
+        returned unclamped; :func:`recorder.crop_box` clamps it to the image.
+        """
+        x1, y1, x2, y2 = box
+        m = self.locate_crop_margin
+        x1, y1, x2, y2 = x1 - m, y1 - m, x2 + m, y2 + m
+        cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+        half = self.locate_crop_min / 2
+        if x2 - x1 < self.locate_crop_min:
+            x1, x2 = cx - half, cx + half
+        if y2 - y1 < self.locate_crop_min:
+            y1, y2 = cy - half, cy + half
+        return [x1, y1, x2, y2]
+
     # -- action execution + recording --------------------------------------
 
     async def _execute(self, action: AgentAction, pre_png: bytes) -> str:
@@ -173,9 +232,10 @@ class GuiAgent:
             res = await self.executor.click(action.x, action.y,
                                              'double' if double else button)
             if self.recorder:
+                bbox = self._ground_click_bbox(pre_png, action)
                 self.recorder.record_click(
                     pre_png, action.x, action.y, action.describe,
-                    button=button, double=double,
+                    button=button, double=double, bbox=bbox,
                 )
             return res.get('status', 'unknown')
         if kind == A.TYPE:

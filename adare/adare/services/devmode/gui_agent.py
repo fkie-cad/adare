@@ -54,6 +54,10 @@ class GuiAgentMixin:
         from adare.config.server import (
             GUI_AGENT_STALL_LIMIT,
             GUI_AGENT_WALL_CLOCK_SECONDS,
+            LOCATE_CROP_MARGIN,
+            LOCATE_CROP_MIN,
+            LOCATE_MODE,
+            LOCATE_URL,
             VLLM_API_KEY,
             VLLM_BASE_URL,
             VLLM_COORD_SPACE,
@@ -76,6 +80,12 @@ class GuiAgentMixin:
         client = VLMClient(base_url=VLLM_BASE_URL, model=VLLM_MODEL, api_key=VLLM_API_KEY)
         executor = QEMUHostGUIExecutor(vm=vm)
 
+        locate_client = None
+        if LOCATE_URL:
+            from adare.backend.experiment.grounding import LocateAnythingClient
+            locate_client = LocateAnythingClient(LOCATE_URL, mode=LOCATE_MODE)
+            log.info('LocateAnything grounding enabled via %s', LOCATE_URL)
+
         recorder = None
         run_dir: Path | None = None
         if request.output_file:
@@ -88,6 +98,9 @@ class GuiAgentMixin:
         agent = GuiAgent(
             executor, client, request.goal,
             recorder=recorder, run_dir=run_dir, coord_space=VLLM_COORD_SPACE,
+            locate_client=locate_client,
+            locate_crop_margin=LOCATE_CROP_MARGIN,
+            locate_crop_min=LOCATE_CROP_MIN,
             max_steps=request.max_steps or GUI_AGENT_MAX_STEPS,
             stall_limit=request.stall_limit or GUI_AGENT_STALL_LIMIT,
             wall_clock_seconds=GUI_AGENT_WALL_CLOCK_SECONDS,
