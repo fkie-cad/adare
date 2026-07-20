@@ -267,6 +267,33 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @dev.command()
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
+    @click.option('--script-file', type=click.Path(exists=True), help='Read text steps from a file (one action per line)')
+    @click.option('-o', '--out', 'output', type=click.Path(), help='Record the authored playbook to this path')
+    @click.option('-i', '--interactive', 'interactive', is_flag=True,
+                  help='Author step-by-step in a REPL (used when no --script-file)')
+    def author(session_id, script_file, output, interactive):
+        """Author a playbook from human text steps — no VLM planner.
+
+        Each step names WHAT to do; LocateAnything (ADARE_LOCATE_URL) grounds
+        WHERE for described clicks. The recorded playbook replays deterministically,
+        identical in shape to an agent-recorded one. Use `click @x,y ...` to place
+        a click by hand when no grounding backend is available.
+
+        Examples:
+            adare dev author -s <id> --script-file steps.txt -o report.play.yaml
+            adare dev author -s <id> --interactive -o report.play.yaml
+        """
+        from adare.cli.dev import exec_dev_author
+        args = SimpleNamespace(
+            session_id=session_id,
+            script_file=script_file,
+            output=output,
+            interactive=interactive,
+        )
+        exec_with_error_printing(exec_dev_author, args)
+
+    @dev.command()
+    @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
     @click.option('--host', default=None, help='Bind host (default: ADARE_GUI_MCP_HOST or 127.0.0.1)')
     @click.option('--port', type=int, default=None, help='Bind port (default: ADARE_GUI_MCP_PORT or 13110)')
     @click.option('-o', '--out-dir', 'output_dir', type=click.Path(), help='Directory for recorded playbooks (default: project dir)')

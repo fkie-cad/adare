@@ -148,6 +148,20 @@ class DevGuiAgentRequest:
 
 
 @dataclass
+class DevGuiAuthorRequest:
+    """Request to author a playbook from human text steps (no VLM planner).
+
+    The human supplies the *what* as text steps; LocateAnything (ADARE_LOCATE_URL)
+    grounds the *where* for described clicks. With ``script`` set, runs the whole
+    sequence; otherwise (``interactive``) opens a step-at-a-time REPL.
+    """
+    session_id: str
+    script: str | None = None          # text steps; None + interactive -> REPL
+    output_file: Path | None = None    # when set, record a replayable playbook
+    interactive: bool = False          # REPL mode when no script is given
+
+
+@dataclass
 class DevServeMcpRequest:
     """Request to serve a dev session's VM as a GUI-automation MCP server."""
     session_id: str
