@@ -59,11 +59,15 @@ engine (no model runs at replay time), so it must not rely on timing luck.
 8. **Use `{{ adare_* }}` variables** for user/path-dependent values instead of
    hard-coding (e.g. `{{ adare_user_documents }}`).
 9. **Launch apps with the keyboard, not a dock click.** On a GNOME desktop,
-   press the `super` key, `wait_until` the search field is ready, type the app
-   name (e.g. "LibreOffice Writer" or just "writer"), then press `enter`. This
-   is far more robust than a `position:` click on a dock icon. Reserve a dock
-   `position:` click only if a keyboard launch is truly impossible, and wait for
-   a window-specific text to confirm the app opened.
+   press the `super` key, `wait_until` the search field is ready (text
+   "Type to search"), type the app name (e.g. "writer" or "files"), then press
+   `enter` to launch the top (auto-selected) result. IMPORTANT: GNOME search
+   result labels are truncated with an ellipsis (e.g. "LibreOffice Wri…"), so
+   do NOT `wait_until` the full app name appears — it never will. Either press
+   `enter` right after a short wait, or wait on a safe prefix like
+   "LibreOffice". Confirm the launch by waiting on a WINDOW-specific text after
+   pressing enter (e.g. the "File" menu). Reserve a dock `position:` click only
+   if a keyboard launch is truly impossible.
 10. **Prefer stable window/UI text for `wait_until`.** Wait on text that appears
     only once the app/dialog is truly interactive (e.g. a menu label like
     "File", a dialog title), not on transient splash text.
