@@ -75,6 +75,15 @@ class AgentAction:
     # done
     summary: str = ''
     raw: dict[str, Any] = field(default_factory=dict)
+    # Transient, populated by the agent loop (not part of the model JSON
+    # contract): the grounded element crop box the recorder should use for a
+    # click, as ``[x1, y1, x2, y2]``. ``None`` -> recorder falls back to the
+    # fixed box around the click point.
+    crop_bbox: list[float] | None = None
+    # Transient: the model's original click point before a LocateAnything
+    # override (only set when locate_click actually moved x/y). Kept so the
+    # visual step log can show where the click was moved FROM -> TO.
+    vlm_point: tuple[int, int] | None = None
 
 
 def _extract_json_object(reply: str) -> dict[str, Any]:

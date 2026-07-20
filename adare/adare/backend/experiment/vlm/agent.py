@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from ..execution.gui_executor_interface import AbstractGUIExecutor
 from . import actions as A
@@ -52,6 +52,23 @@ rebooting), emit "done" with a short summary.
 - If you are stuck or the screen has not changed, try a different element \
 rather than repeating the same click.
 """
+
+
+# Substrings that mark a recoverable JSON *syntax* failure raised by
+# ``actions._extract_json_object`` (the raw blob is present, only the JSON is
+# broken). Anything else from ``parse_action`` is a *schema* failure (a missing
+# coordinate / unknown action) that a text JSON-fixer cannot invent.
+_SYNTAX_ERROR_MARKERS = (
+    'No JSON object',
+    'Malformed JSON in model reply',
+    'Unbalanced JSON braces',
+)
+
+
+def _is_syntax_error(exc: Exception) -> bool:
+    """True when ``exc`` is a recoverable-by-text JSON syntax failure."""
+    msg = str(exc)
+    return any(marker in msg for marker in _SYNTAX_ERROR_MARKERS)
 
 
 @dataclass
@@ -89,6 +106,7 @@ class GuiAgent:
         hints: list[str] | None = None,
         coord_space: str = 'absolute',
         locate_client: Any = None,
+        locate_click: bool = False,
         locate_crop_margin: int = 16,
         locate_crop_min: int = 72,
         max_steps: int = 80,
@@ -96,17 +114,31 @@ class GuiAgent:
         wall_clock_seconds: int = 3600,
         step_settle_seconds: float = 1.5,
         interactive: bool = False,
+        decision_retry_limit: int = 2,
+        repair_client: Any = None,
     ):
         self.executor = gui_executor
         self.client = client
         self.goal = goal
         self.acceptance_spec = acceptance_spec or {}
         self.recorder = recorder
+        # Self-heal budget for a malformed / incomplete model decision. A pure
+        # JSON-syntax slip is repaired by a cheap text-only call (no screenshot
+        # re-sent) via ``repair_client`` if given, else the main client
+        # text-only; a genuinely missing coordinate/choice costs a full vision
+        # re-ask. ``decision_retry_limit`` recovery attempts follow the first
+        # decision (default 2 -> 3 total) before ``run()`` fails the run.
+        self.decision_retry_limit = decision_retry_limit
+        self.repair_client = repair_client
         # Optional described-element grounding backend (LocateAnythingClient).
         # When set, a click's recorded image crop is tightened to the true
         # element bounding box (plus a small context margin) instead of the
         # fixed box around the click point.
         self.locate_client = locate_client
+        # When True, LocateAnything owns the click coordinate (the VLM point
+        # becomes a disambiguating hint + miss fallback). When False, LA only
+        # tightens the recorded crop and the click lands at the VLM's point.
+        self.locate_click = locate_click
         self.locate_crop_margin = locate_crop_margin
         self.locate_crop_min = locate_crop_min
         self.run_dir = Path(run_dir) if run_dir else None
@@ -171,10 +203,97 @@ class GuiAgent:
     async def _decide(self, screenshot_b64: str, width: int, height: int) -> AgentAction:
         messages = self._build_messages(screenshot_b64)
         reply = await self.client.chat(messages, temperature=0.0, max_tokens=800)
-        return parse_action(
-            reply, coord_space=self.coord_space,
-            screen_width=width, screen_height=height,
+        try:
+            return parse_action(
+                reply, coord_space=self.coord_space,
+                screen_width=width, screen_height=height,
+            )
+        except VLMError as exc:
+            # The model's intent was likely fine; only the serialization broke.
+            # Try to recover cheaply before letting the run die on one glitch.
+            return await self._recover_decision(reply, exc, screenshot_b64, width, height)
+
+    async def _recover_decision(
+        self, bad_reply: str, exc: VLMError,
+        screenshot_b64: str, width: int, height: int,
+    ) -> AgentAction:
+        """Two-tier self-heal for a failed decision parse.
+
+        A JSON *syntax* slip (recoverable blob, broken JSON) is fixed by a cheap
+        text-only repair call; a *schema* failure (missing coordinate / unknown
+        action) needs the screen again, so it costs a full vision re-ask. Up to
+        ``self.decision_retry_limit`` attempts; on exhaustion the last
+        :class:`VLMError` is re-raised so ``run()`` finishes false as today.
+        """
+        last_exc = exc
+        last_reply = bad_reply
+        n = self.decision_retry_limit
+        for attempt in range(1, n + 1):
+            reply: str | None = None
+            try:
+                if _is_syntax_error(last_exc):
+                    log.warning(
+                        'Decision parse failed (attempt %d/%d): %s; '
+                        'repairing via cheap text repair', attempt, n, last_exc)
+                    reply = await self._repair_json(last_reply, last_exc)
+                else:
+                    log.warning(
+                        'Decision parse failed (attempt %d/%d): %s; '
+                        'repairing via vision re-ask', attempt, n, last_exc)
+                    reply = await self._vision_reask(screenshot_b64, last_exc)
+                return parse_action(
+                    reply, coord_space=self.coord_space,
+                    screen_width=width, screen_height=height,
+                )
+            except VLMError as rexc:
+                last_exc = rexc
+                # Only carry a fresh reply forward for the next syntax repair;
+                # if the chat call itself failed, keep the prior blob.
+                if reply is not None:
+                    last_reply = reply
+        raise last_exc
+
+    async def _repair_json(self, bad_reply: str, exc: VLMError) -> str:
+        """Cheap text-only fix for a malformed-JSON decision.
+
+        Sends NO screenshot — just the broken blob and the parser error — to the
+        repair model (``self.repair_client`` if set, else the main client
+        text-only), asking for only the corrected JSON object.
+        """
+        repair = self.repair_client or self.client
+        system = (
+            'You repair malformed JSON. You are given a broken JSON object that '
+            'was meant to be a single GUI action, plus the parser error. Return '
+            'ONLY the corrected JSON object — no prose, no code fence, no '
+            "explanation. Preserve every field's intent; fix the syntax only. "
+            'Do not invent missing coordinates or values.'
         )
+        user_text = (
+            f'The JSON parser failed with: {exc}\n\n'
+            f'Broken reply:\n{bad_reply}\n\n'
+            'Return the corrected single JSON object.'
+        )
+        messages = [
+            {'role': 'system', 'content': system},
+            {'role': 'user', 'content': [repair.text_content(user_text)]},
+        ]
+        return await repair.chat(messages, temperature=0.0, max_tokens=400)
+
+    async def _vision_reask(self, screenshot_b64: str, exc: VLMError) -> str:
+        """Full vision re-ask for a semantic decision failure.
+
+        Rebuilds the normal decision messages (with the screenshot) and appends
+        a short repair hint, sampling at a higher temperature so the model does
+        not deterministically reproduce the same broken choice.
+        """
+        messages = self._build_messages(screenshot_b64)
+        hint = (
+            f'Your last reply could not be used: {exc}. Reply with ONE valid '
+            'JSON action for THIS screen, including every required field '
+            '(e.g. both "x" and "y" for a click, a known "action").'
+        )
+        messages.append({'role': 'user', 'content': [self.client.text_content(hint)]})
+        return await self.client.chat(messages, temperature=0.4, max_tokens=800)
 
     # -- interactive gate ---------------------------------------------------
 
@@ -222,18 +341,27 @@ class GuiAgent:
 
     # -- grounding ----------------------------------------------------------
 
-    def _ground_click_bbox(self, pre_png: bytes, action: AgentAction) -> list[float] | None:
-        """Ask the grounding backend for the clicked element's bounding box.
+    def _ground_click(
+        self, pre_png: bytes, action: AgentAction, width: int, height: int,
+    ) -> None:
+        """Ground a click's element before it executes (best-effort, never raises).
 
-        Returns an ``[x1, y1, x2, y2]`` box — the grounded element (preferring
-        one that contains the model's own click point) expanded by the context
-        margin — for the recorder to crop, or ``None`` when no backend is
-        configured, the element has no
-        description, or grounding fails/misses — in which case the recorder
-        falls back to the fixed box around the click point.
+        Asks the grounding backend to locate ``action.describe`` on the screen,
+        biased toward the box *containing* the VLM's own point (``near=``). On a
+        hit it always sets ``action.crop_bbox`` (the padded element box for the
+        recorder); and when :attr:`locate_click` is on it *also* overrides the
+        click coordinate with the element centre (rounded, clamped to the
+        screen), keeping the VLM's point only as the hint/fallback.
+
+        A no-op (leaves the VLM point + fixed crop — today's behaviour) when no
+        backend is configured, the action has no description, or the result
+        would be used by neither the click nor the recorder. On a miss or any
+        error it logs and returns, so the VLM point and fixed crop stand.
         """
         if not self.locate_client or not action.describe:
-            return None
+            return
+        if not self.locate_click and not self.recorder:
+            return
         try:
             b64 = base64.b64encode(pre_png).decode('ascii')
             det = self.locate_client.best_for(
@@ -242,14 +370,26 @@ class GuiAgent:
         # LocateAnythingError is a RuntimeError; also guard malformed responses.
         # Grounding is best-effort — a miss must never abort the agent run.
         except (RuntimeError, OSError, ValueError, TypeError, KeyError, IndexError) as exc:
-            log.warning('LocateAnything grounding failed (%s); using fixed crop', exc)
-            return None
+            log.warning('LocateAnything grounding failed (%s); using VLM point + fixed crop', exc)
+            return
         if det is None:
-            log.info('LocateAnything found no box for %r; using fixed crop', action.describe)
-            return None
-        box = self._pad_box(det.box)
-        log.info('LocateAnything grounded %r to box %s (crop %s)', action.describe, det.box, box)
-        return box
+            log.info('LocateAnything found no box for %r; using VLM point + fixed crop',
+                     action.describe)
+            return
+        action.crop_bbox = self._pad_box(det.box)
+        if self.locate_click:
+            cx, cy = det.center
+            vlm_x, vlm_y = action.x, action.y
+            action.vlm_point = (vlm_x, vlm_y)
+            action.x = max(0, min(width - 1, round(cx)))
+            action.y = max(0, min(height - 1, round(cy)))
+            log.info(
+                'LocateAnything grounded click %r to element centre (%d, %d); '
+                'VLM point was (%s, %s); crop %s',
+                action.describe, action.x, action.y, vlm_x, vlm_y, action.crop_bbox)
+        else:
+            log.info('LocateAnything grounded %r to box %s (crop %s)',
+                     action.describe, det.box, action.crop_bbox)
 
     def _pad_box(self, box: tuple[float, float, float, float]) -> list[float]:
         """Expand a grounded element box by the context margin + minimum size.
@@ -280,10 +420,11 @@ class GuiAgent:
             res = await self.executor.click(action.x, action.y,
                                              'double' if double else button)
             if self.recorder:
-                bbox = self._ground_click_bbox(pre_png, action)
+                # crop_bbox was grounded in run() before this executed (or is
+                # None -> recorder falls back to the fixed box around the point).
                 self.recorder.record_click(
                     pre_png, action.x, action.y, action.describe,
-                    button=button, double=double, bbox=bbox,
+                    button=button, double=double, bbox=action.crop_bbox,
                 )
             return res.get('status', 'unknown')
         if kind == A.TYPE:
@@ -321,10 +462,69 @@ class GuiAgent:
         if not self._steps_dir:
             return None
         shot = self._steps_dir / f'step_{index:03d}.png'
-        shot.write_bytes(png)
+        # Visual log: for clicks, draw what was found (the grounded crop box) and
+        # where we clicked (crosshair) — plus, if grounding moved the click, the
+        # model's original point and a FROM->TO arrow — so a human can verify at
+        # a glance. Best-effort: any drawing error falls back to the raw shot.
+        shot.write_bytes(self._annotate_click_png(png, action, index))
         note = self._steps_dir / f'step_{index:03d}.json'
         note.write_text(_json_step(index, action, status))
         return shot.name
+
+    def _annotate_click_png(self, png: bytes, action: AgentAction, index: int) -> bytes:
+        """Overlay click markers on a click screenshot; return PNG bytes.
+
+        Draws the grounded crop box (green, what was found/recorded), the
+        executed click point (red crosshair), and — when LocateAnything moved
+        the click — the model's original point (orange) with a line to the final
+        point. Returns the input bytes unchanged for non-click actions or on any
+        rendering error, so the visual log never breaks the run.
+        """
+        if action.kind not in (A.CLICK, A.DOUBLE_CLICK) or action.x is None:
+            return png
+        try:
+            with Image.open(io.BytesIO(png)) as im:
+                img = im.convert('RGB')
+            draw = ImageDraw.Draw(img)
+            green, red, orange, black = (
+                (0, 210, 0), (255, 40, 40), (255, 150, 0), (0, 0, 0))
+
+            if action.crop_bbox:
+                x1, y1, x2, y2 = (round(v) for v in action.crop_bbox)
+                draw.rectangle([x1, y1, x2, y2], outline=green, width=3)
+
+            # From the model's original point (if grounding moved it) to the click.
+            if action.vlm_point and action.vlm_point != (action.x, action.y):
+                ox, oy = action.vlm_point
+                draw.line([ox, oy, action.x, action.y], fill=orange, width=2)
+                self._mark(draw, ox, oy, orange, r=7)
+
+            cx, cy = action.x, action.y
+            draw.line([cx - 11, cy, cx + 11, cy], fill=red, width=3)
+            draw.line([cx, cy - 11, cx, cy + 11], fill=red, width=3)
+            draw.ellipse([cx - 5, cy - 5, cx + 5, cy + 5], outline=red, width=2)
+
+            label = f'#{index} {action.kind} ({cx},{cy})'
+            if action.vlm_point and action.vlm_point != (cx, cy):
+                label += f'  [grounded from {action.vlm_point}]'
+            if action.describe:
+                label += f'  {action.describe[:70]}'
+            font = _label_font(max(13, round(img.width / 110)))
+            tb = draw.textbbox((0, 0), label, font=font)
+            tw, th = tb[2] - tb[0], tb[3] - tb[1]
+            draw.rectangle([0, 0, tw + 12, th + 12], fill=green)
+            draw.text((6, 4), label, fill=black, font=font)
+
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            return buf.getvalue()
+        except (OSError, ValueError) as exc:
+            log.warning('Could not annotate step %d screenshot (%s); saving raw', index, exc)
+            return png
+
+    @staticmethod
+    def _mark(draw: ImageDraw.ImageDraw, x: int, y: int, color: tuple, *, r: int) -> None:
+        draw.ellipse([x - r, y - r, x + r, y + r], outline=color, width=2)
 
     def _write_report(self, result: AgentRunResult) -> Path | None:
         if not self.run_dir:
@@ -380,6 +580,13 @@ class GuiAgent:
 
             index = len(self._records) + 1
 
+            # Ground click coordinates before the human sees them and before
+            # execution, so the interactive gate, the click and the recorded
+            # crop all use the same (grounded) coordinate. Best-effort: on a
+            # miss/error the VLM's own point + fixed crop stand.
+            if action.kind in (A.CLICK, A.DOUBLE_CLICK):
+                self._ground_click(png, action, width, height)
+
             if self.interactive:
                 choice = await self._confirm_step(action, index)
                 if choice == 'skip':
@@ -426,6 +633,25 @@ class GuiAgent:
                 log.warning('Could not finalize playbook: %s', exc)
         result.report_path = self._write_report(result)
         return result
+
+
+def _label_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """A truetype font at ``size`` for the visual-log banner, else the default.
+
+    Tries a few common bundled fonts (Linux DejaVu, macOS Helvetica) so the
+    label is readable on high-res screenshots; falls back to PIL's default
+    bitmap font (fixed small size) if none are present.
+    """
+    for path in (
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        '/System/Library/Fonts/Helvetica.ttc',
+    ):
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
 
 
 def _json_step(index: int, action: AgentAction, status: str) -> str:

@@ -52,8 +52,11 @@ class GuiAgentMixin:
         from adare.backend.experiment.execution.qemu_host_gui_executor import QEMUHostGUIExecutor
         from adare.backend.experiment.vlm import GuiAgent, PlaybookRecorder, VLMClient
         from adare.config.server import (
+            AGENT_REPAIR_MODEL,
+            GUI_AGENT_DECISION_RETRIES,
             GUI_AGENT_STALL_LIMIT,
             GUI_AGENT_WALL_CLOCK_SECONDS,
+            LOCATE_CLICK,
             LOCATE_CROP_MARGIN,
             LOCATE_CROP_MIN,
             LOCATE_MODE,
@@ -86,6 +89,15 @@ class GuiAgentMixin:
             locate_client = LocateAnythingClient(LOCATE_URL, mode=LOCATE_MODE)
             log.info('LocateAnything grounding enabled via %s', LOCATE_URL)
 
+        # Optional cheaper model for text-only JSON-repair of malformed
+        # decisions (same endpoint/key). Empty -> the agent reuses the main
+        # client text-only, which is already far cheaper than a vision decision.
+        repair_client = None
+        if AGENT_REPAIR_MODEL:
+            repair_client = VLMClient(
+                base_url=VLLM_BASE_URL, model=AGENT_REPAIR_MODEL, api_key=VLLM_API_KEY)
+            log.info('Decision-repair model enabled: %s', AGENT_REPAIR_MODEL)
+
         recorder = None
         run_dir: Path | None = None
         if request.output_file:
@@ -99,12 +111,15 @@ class GuiAgentMixin:
             executor, client, request.goal,
             recorder=recorder, run_dir=run_dir, coord_space=VLLM_COORD_SPACE,
             locate_client=locate_client,
+            locate_click=LOCATE_CLICK,
             locate_crop_margin=LOCATE_CROP_MARGIN,
             locate_crop_min=LOCATE_CROP_MIN,
             max_steps=request.max_steps or GUI_AGENT_MAX_STEPS,
             stall_limit=request.stall_limit or GUI_AGENT_STALL_LIMIT,
             wall_clock_seconds=GUI_AGENT_WALL_CLOCK_SECONDS,
             interactive=request.interactive,
+            decision_retry_limit=GUI_AGENT_DECISION_RETRIES,
+            repair_client=repair_client,
         )
         res = await agent.run()
         return DevGuiAgentResult(
