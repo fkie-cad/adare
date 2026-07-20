@@ -249,6 +249,26 @@ def author(
 # --------------------------------------------------------------------------- #
 # Validation (parse via ADARE's parse_playbook)
 # --------------------------------------------------------------------------- #
+def _format_validation_error(exc: BaseException) -> str:
+    """Build a repair-useful message from a parse error.
+
+    cattrs raises a ``ClassValidationError`` whose ``str()`` only says
+    "N sub-exceptions"; the actionable detail (which field, what went wrong) is
+    in the nested exceptions. ``cattrs.transform_error`` flattens those into
+    readable, path-qualified lines the model can act on during repair.
+    """
+    try:
+        import cattrs
+        import cattrs.errors
+        if isinstance(exc, cattrs.errors.BaseValidationError):
+            lines = cattrs.transform_error(exc)
+            if lines:
+                return f'{type(exc).__name__}: ' + '; '.join(lines)
+    except ImportError:  # pragma: no cover - cattrs is a hard dep of the repo
+        pass
+    return f'{type(exc).__name__}: {exc}'
+
+
 def validate(playbook_yaml: str) -> tuple[bool, str | None]:
     """Write ``playbook_yaml`` to a temp file and parse it via ADARE.
 
@@ -266,7 +286,7 @@ def validate(playbook_yaml: str) -> tuple[bool, str | None]:
         parse_playbook(tmp_path)
         return True, None
     except _validation_error_types() as exc:
-        return False, f'{type(exc).__name__}: {exc}'
+        return False, _format_validation_error(exc)
     finally:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)
