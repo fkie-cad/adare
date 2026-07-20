@@ -53,6 +53,7 @@ class MCPTargetResolver:
     def __init__(
         self, experiment_dir: Path, mcp_gui_url: str = "http://localhost:13109/mcp",
         experiment_run_ulid: str | None = None, vm_client=None, os_key: str = "windows",
+        confidence_floor: float = 0.7,
     ):
         """
         Initialize MCP target resolver.
@@ -64,11 +65,17 @@ class MCPTargetResolver:
             vm_client: Connected AdareVMClient used to extract icons for
                 `target.icon` (None disables icon-library resolution).
             os_key: OS profile / build identifier keying the icon cache.
+            confidence_floor: Minimum confidence for a selected match to be
+                accepted. Also passed as the `threshold` to find_icon so
+                low-confidence CV matches are filtered at the source. Applies
+                to all methods; OCR text confidences are typically well above
+                this default so text matching is unaffected in practice.
         """
         self.experiment_dir = experiment_dir
         self.images_dir = experiment_dir / "img" if experiment_dir else None
         self.mcp_gui_url = mcp_gui_url
         self.experiment_run_ulid = experiment_run_ulid
+        self.confidence_floor = confidence_floor
         self._connection_tested = False
         self._connection_available = False
         self._vm_client = vm_client
@@ -449,7 +456,8 @@ class MCPTargetResolver:
             "icon_base64": icon_base64,
             "screenshot_base64": screenshot_base64,
             "offset_x": offset_x,
-            "offset_y": offset_y
+            "offset_y": offset_y,
+            "threshold": self.confidence_floor
         })
 
         locations_data = self._parse_mcp_result(result)
@@ -489,7 +497,8 @@ class MCPTargetResolver:
             "icon_base64": icon_base64,
             "screenshot_base64": screenshot_base64,
             "offset_x": offset_x,
-            "offset_y": offset_y
+            "offset_y": offset_y,
+            "threshold": self.confidence_floor
         })
 
         locations_data = self._parse_mcp_result(result)
@@ -635,6 +644,14 @@ class MCPTargetResolver:
         try:
             selected_match = self._select_match_by_strategy(matches, target.strategy, reference_coords)
             if selected_match:
+                # Fail loudly if the selected match is below the confidence floor:
+                # low-confidence CV matches are a common false-positive source.
+                if selected_match.confidence < self.confidence_floor:
+                    log.error(
+                        f"Rejected {target_desc}: selected match confidence "
+                        f"{selected_match.confidence:.3f} is below floor {self.confidence_floor:.3f}"
+                    )
+                    return None
                 selected_index = matches.index(selected_match) + 1
                 if selected_match.text:
                     log.info(f"Selected match {selected_index}: '{selected_match.text}' at {selected_match.coordinates} via MCP")
