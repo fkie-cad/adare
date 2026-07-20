@@ -185,3 +185,95 @@ adare dev playbook -f experiments/gui_writer/playbook.yml -s <SID> --restore
 
 The harness can also `--boot` its own session (`--boot --environment <ENV>`),
 but under the multi-agent plan the orchestrator boots and owns the session.
+
+---
+
+## Findings from the live authoring campaign (2026-07-20)
+
+Env: `ubuntu2510-libre-20260714` (aarch64). Author models tried:
+`kimi-k2.7-code:cloud`, `minimax-m3:cloud`, `glm-5.2:cloud`. Verification path:
+`adare experiment run --prod --debug-screenshots` on a fresh overlay per run
+(dev-session live snapshots fail on this aarch64/UEFI env — `--restore` is not
+usable there, so `experiment run` is the reliable clean-reset path and doubles
+as the reproducibility harness).
+
+### Results
+| Experiment | Author model | Outcome | Reproducibility (2× fresh overlay) |
+|---|---|---|---|
+| `gui_writer_format` | kimi-k2.7-code | ✅ goal reached (bold+italic text) | 2/2 pass, 12/12 actions |
+| `gui_writer_table`  | kimi-k2.7-code | ✅ goal reached (3×2 table, A1/A2)  | 2/2 pass, 23/23 actions |
+| `gui_files_ops`     | kimi/minimax   | ⚠️ folder-create OK; drag no-op + scroll fail (see below) | n/a |
+
+### Per-interaction reproducibility verdict
+- **Keyboard (keys / combinations / typed text): deterministic.** Every passing
+  step in both Writer playbooks is keyboard-driven; identical action counts on
+  independent overlays. This is the most reproducible primitive.
+- **OCR `text:` targets + `wait_until`: reproducible, but text-sensitive.** Works
+  well for stable UI labels (menus, dialog titles). Sensitive to (a) truncated
+  labels (GNOME search results show "LibreOffice Wri…" — never wait for the full
+  name) and (b) duplicate on-screen text (see drag below).
+- **`wait_until`-gated synchronization: the key to reproducibility.** Replacing
+  fixed `idle` with `wait_until` is what makes runs repeatable. BUT: `block:
+  when:` is a *point-in-time* check and races against dialogs that appear after a
+  delay — for a dialog KNOWN to appear (e.g. LibreOffice first-run Welcome on a
+  fresh profile), do NOT guard it; `wait_until exists → esc → wait_until
+  not_exists` deterministically. This single fix took `writer_format` from
+  "executes but types into the void" to fully goal-reproducible.
+- **Keyboard shortcuts beat menu-structure assumptions.** `writer_table` only
+  worked once switched from "Insert menu → Table" (that item does not exist in
+  this build; table insert lives under the Table menu) to the `Ctrl+F12`
+  shortcut. Prefer documented shortcuts over authored menu navigation.
+- **`drag` / `scroll` (previously untested): new data — see open findings.**
+
+### Engine bugs found & fixed (surfaced by the first drag-using playbook)
+1. **DB playbook serialization of `Target`-valued params** (`database/api/playbook.py`):
+   `_serialize_value` gated its `attrs.asdict` branch behind `hasattr('__dict__')`,
+   which is False for slots-based attrs classes like `Target`, so a `DragAction`'s
+   `src`/`dst` were `str()`-ified and broke `_json_to_target` on load
+   ("string indices must be integers"). Fixed: serialize `Target` symmetrically
+   via `_target_to_json`.
+2. **Drag result persistence** (`execution/gui_actions.py`, `playbook_controller.py`):
+   `execute_drag` put raw `Target` objects in `ActionResult.data`, crashing the
+   run at DB flush ("Object of type Target is not JSON serializable"). Fixed:
+   store the targets' text/image descriptors; also added `TypeError` to the
+   exec-record persistence `except` so a stray non-serializable payload degrades
+   to a warning instead of aborting the whole run.
+
+### Open findings (not fixed — need a decision)
+- **Drag grounding, dual same-type targets:** in `gui_files_ops`, `src: text
+  "sample"` and `dst: text "evidence"` both resolved to the *same* coordinate,
+  so the drag was a no-op. Two OCR-text targets of the same kind are not being
+  disambiguated by the resolver in the drag path. Candidate directions: use
+  distinct strategies / regions per endpoint, or `position:`-based drag, or a
+  drag that keys off the selected item.
+- **Scroll on the agent GUI executor:** `execute_scroll` is wired
+  (`gui_actions.execute_scroll` → `websocket_client.scroll`), but the VM agent
+  returns non-success instantly for a `direction: down, amount: N` scroll. Needs
+  investigation of the agent-side scroll command semantics.
+
+### Harness / prompt improvements folded back in
+- `validate()` now flattens cattrs sub-exceptions (`transform_error`) so the
+  repair loop gets field-level detail instead of "N sub-exceptions".
+- `glm-5.2:cloud` returns HTTP 400 on image input (not vision-capable via
+  `/api/chat`); the two vision authors that work are `kimi-k2.7-code:cloud`
+  (primary; authored both passing Writer playbooks) and `minimax-m3:cloud`.
+- Robustness rules added: no `any`/`all` inside `when:` (only in
+  `wait_until.condition`); GNOME super-key app launch + truncated-label caveat;
+  the deterministic first-run-dialog pattern above.
+
+### Recorder-vs-authored robustness comparison (structural)
+The hardened recorder (Phase 2) emits **image-crop `click` targets** each gated
+by a `wait_until { exists: <same crop> }`. The Ollama-Cloud-authored playbooks
+use **OCR `text:` targets + keyboard shortcuts**, also `wait_until`-gated.
+- *Authored (text/keyboard):* resolution is font/label-text dependent but
+  resolution-independent; keyboard steps are fully deterministic. No image
+  assets to drift. Most robust for menu/dialog/keyboard flows — proven 2/2
+  reproducible here.
+- *Recorded (image crops):* resolution/theme/font-render sensitive (a re-themed
+  or re-scaled UI shifts the crop match), but works where there is no stable OCR
+  text or accelerator (e.g. a dock icon, a toolbar glyph). The Phase 2
+  wait-before-click gate removes the recorder's old "click into the void" race,
+  closing the biggest reproducibility gap in recorded playbooks.
+- *Verdict:* prefer authored text/keyboard playbooks for reproducibility; fall
+  back to recorded image targets only for elements with no text/accelerator.
+  The two paths are complementary, not competing.
