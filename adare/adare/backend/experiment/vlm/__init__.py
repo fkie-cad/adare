@@ -15,6 +15,7 @@ from .exceptions import AgentError, PlaybookRecordingError, VLMError
 from .mcp_server import GuiMcpServer
 from .recorder import PlaybookRecorder
 from .replay import ReplayResult, run_playbook
+from .text_author import TextAuthorDriver, parse_authored_line
 from .verify import CheckResult, run_acceptance_checks
 
 __all__ = [
@@ -26,8 +27,10 @@ __all__ = [
     'PlaybookRecorder',
     'PlaybookRecordingError',
     'ReplayResult',
+    'TextAuthorDriver',
     'VLMClient',
     'VLMError',
+    'parse_authored_line',
     'run_acceptance_checks',
     'run_playbook',
 ]

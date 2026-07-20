@@ -103,6 +103,10 @@ class DevModeAPI:
         """Drive the session VM toward a goal with the vision-LLM GUI agent."""
         return self._service.run_gui_agent(request)
 
+    def run_gui_author(self, request):
+        """Author a playbook from human text steps (no VLM planner)."""
+        return self._service.run_gui_author(request)
+
     def serve_mcp(self, request):
         """Serve the session VM as a GUI-automation MCP server (blocking)."""
         return self._service.serve_mcp(request)

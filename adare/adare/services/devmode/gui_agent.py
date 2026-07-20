@@ -13,7 +13,11 @@ import asyncio
 import logging
 from pathlib import Path
 
-from adare.core.dto.devmode import DevGuiAgentRequest, DevGuiAgentResult
+from adare.core.dto.devmode import (
+    DevGuiAgentRequest,
+    DevGuiAgentResult,
+    DevGuiAuthorRequest,
+)
 from adare.core.result import Result
 
 log = logging.getLogger(__name__)
@@ -122,6 +126,91 @@ class GuiAgentMixin:
             repair_client=repair_client,
         )
         res = await agent.run()
+        return DevGuiAgentResult(
+            success=res.success,
+            reason=res.reason,
+            steps=len(res.steps),
+            summary=res.summary,
+            playbook_path=str(res.playbook_path) if res.playbook_path else None,
+            report_path=str(res.report_path) if res.report_path else None,
+        )
+
+    # -- text authoring -----------------------------------------------------
+
+    def run_gui_author(self, request: DevGuiAuthorRequest) -> Result[DevGuiAgentResult]:
+        """Author a playbook from human text steps against the session VM."""
+        from adare.backend.experiment.vlm.exceptions import AgentError
+
+        try:
+            result = asyncio.run(self._run_gui_author_async(request))
+            return Result.ok(result)
+        except RuntimeError as exc:  # session/VM not found
+            return Result.fail(
+                'SESSION_NOT_FOUND', str(exc),
+                ['Check active sessions with: adare dev list',
+                 'Start one with: adare dev start -e <environment>'],
+            )
+        except AgentError as exc:
+            return Result.fail(
+                'AGENT_ERROR', str(exc),
+                ['Inspect the step screenshots under the run directory'],
+            )
+
+    async def _run_gui_author_async(self, request: DevGuiAuthorRequest) -> DevGuiAgentResult:
+        from adare.backend.experiment.execution.qemu_host_gui_executor import QEMUHostGUIExecutor
+        from adare.backend.experiment.vlm import PlaybookRecorder, TextAuthorDriver
+        from adare.backend.experiment.vlm.exceptions import AgentError
+        from adare.config.server import (
+            LOCATE_CROP_MARGIN,
+            LOCATE_CROP_MIN,
+            LOCATE_MODE,
+            LOCATE_URL,
+            VLLM_COORD_SPACE,
+        )
+
+        session = await self._manager.get_or_restore_session(request.session_id)
+        if not session:
+            raise RuntimeError(
+                f"Dev session '{request.session_id}' not found or could not be restored"
+            )
+        ctx = session.experiment_ctx
+        vm = getattr(ctx, 'vm', None) if ctx else None
+        if vm is None:
+            raise RuntimeError(f"Dev session '{request.session_id}' has no running VM")
+
+        executor = QEMUHostGUIExecutor(vm=vm)
+
+        locate_client = None
+        if LOCATE_URL:
+            from adare.backend.experiment.grounding import LocateAnythingClient
+            locate_client = LocateAnythingClient(LOCATE_URL, mode=LOCATE_MODE)
+            log.info('LocateAnything grounding enabled via %s', LOCATE_URL)
+        else:
+            log.warning('ADARE_LOCATE_URL is not set — described clicks cannot be '
+                        'grounded; use `click @x,y ...` for explicit coordinates')
+
+        recorder = None
+        run_dir: Path | None = None
+        if request.output_file:
+            out = Path(request.output_file)
+            recorder = PlaybookRecorder(out, goal='Authored from text')
+            run_dir = out.parent / f'{out.stem}_run'
+        elif ctx and getattr(ctx, 'experiment_run_directory', None):
+            run_dir = Path(ctx.experiment_run_directory.path) / 'gui_author'
+
+        driver = TextAuthorDriver(
+            executor, recorder=recorder, run_dir=run_dir,
+            locate_client=locate_client, coord_space=VLLM_COORD_SPACE,
+            locate_crop_margin=LOCATE_CROP_MARGIN, locate_crop_min=LOCATE_CROP_MIN,
+        )
+
+        if request.script:
+            res = await driver.run_script(request.script)
+        elif request.interactive:
+            res = await driver.run_interactive()
+        else:
+            raise AgentError('No script provided and not interactive — nothing to author')
+
         return DevGuiAgentResult(
             success=res.success,
             reason=res.reason,
