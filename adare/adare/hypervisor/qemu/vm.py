@@ -1522,24 +1522,39 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             log.error(f"QMP drag button press failed: {response2.get('error')}")
             return False
 
-        await asyncio.sleep(0.01)
+        # Hold at the press point so the toolkit registers the button-down on
+        # the item before motion begins (required for GTK/Nautilus DnD).
+        await asyncio.sleep(0.15)
 
-        # Step 3: Move to end position (while holding button)
-        move_end_command = {
-            "execute": "input-send-event",
-            "arguments": {
-                "events": [
-                    {"type": "abs", "data": {"axis": "x", "value": norm_x2}},
-                    {"type": "abs", "data": {"axis": "y", "value": norm_y2}}
-                ]
+        # Step 3: Move to end in INTERPOLATED steps (while holding button).
+        # A single teleport does not trigger GTK drag-and-drop: the toolkit must
+        # see continuous pointer motion crossing the drag threshold. Send a
+        # sequence of intermediate absolute positions with small real-time gaps.
+        steps = 25
+        move_responses = []
+        for i in range(1, steps + 1):
+            frac = i / steps
+            ix = int(round(norm_x1 + (norm_x2 - norm_x1) * frac))
+            iy = int(round(norm_y1 + (norm_y2 - norm_y1) * frac))
+            move_cmd = {
+                "execute": "input-send-event",
+                "arguments": {
+                    "events": [
+                        {"type": "abs", "data": {"axis": "x", "value": ix}},
+                        {"type": "abs", "data": {"axis": "y", "value": iy}}
+                    ]
+                }
             }
-        }
-        response3 = await self._send_qmp_command(move_end_command)
-        if 'error' in response3:
-            log.error(f"QMP drag move to end failed: {response3.get('error')}")
-            return False
+            resp = await self._send_qmp_command(move_cmd)
+            if 'error' in resp:
+                log.error(f"QMP drag interpolated move failed: {resp.get('error')}")
+                return False
+            move_responses.append(resp)
+            await asyncio.sleep(0.02)
 
-        await asyncio.sleep(0.01)
+        # Settle at the drop target so it can highlight/accept before release.
+        await asyncio.sleep(0.2)
+        response3 = move_responses[-1] if move_responses else {'return': {}}
 
         # Step 4: Release button
         release_command = {
