@@ -709,7 +709,9 @@ class PlaybookController:
                     error_message=result.message if not result.success else None
                 )
                 log.debug(f"Updated execution record {execution_id}")
-        except (ValueError, KeyError, OSError) as e:
+        except (ValueError, KeyError, OSError, TypeError) as e:
+            # TypeError guards against a non-JSON-serializable value slipping
+            # into result_data (would otherwise abort the whole run at DB flush).
             log.warning(f"Failed to update execution record {execution_id}: {e}")
 
     def _is_test_action(self, action: ActionType) -> bool:
