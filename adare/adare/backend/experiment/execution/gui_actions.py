@@ -105,7 +105,15 @@ class GUIActionsMixin:
                 success=success,
                 message=result.get('message', ''),
                 coordinates=src_coords,
-                data={'source': action.src, 'destination': action.dst, 'source_coordinates': src_coords, 'dest_coordinates': dst_coords}
+                # Keep data JSON-serializable: store the targets' descriptors
+                # (text/image) rather than the Target objects themselves, which
+                # are not JSON-encodable and break DB persistence of the result.
+                data={
+                    'source': action.src.text or action.src.image,
+                    'destination': action.dst.text or action.dst.image,
+                    'source_coordinates': src_coords,
+                    'dest_coordinates': dst_coords,
+                }
             )
 
         except Exception as e:
