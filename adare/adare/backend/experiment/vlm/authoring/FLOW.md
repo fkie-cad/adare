@@ -202,7 +202,7 @@ as the reproducibility harness).
 |---|---|---|---|
 | `gui_writer_format` | kimi-k2.7-code | ✅ goal reached (bold+italic text) | 2/2 pass, 12/12 actions |
 | `gui_writer_table`  | kimi-k2.7-code | ✅ goal reached (3×2 table, A1/A2)  | 2/2 pass, 23/23 actions |
-| `gui_files_ops`     | kimi/minimax   | ⚠️ folder-create OK; drag no-op + scroll fail (see below) | n/a |
+| `gui_files_ops`     | kimi/minimax   | ✅ goal reached (2 folders; "sample" moved into "evidence"; scroll) after 3 engine fixes | 2/2 pass, 17/17 actions |
 
 ### Per-interaction reproducibility verdict
 - **Keyboard (keys / combinations / typed text): deterministic.** Every passing
@@ -223,12 +223,14 @@ as the reproducibility harness).
   worked once switched from "Insert menu → Table" (that item does not exist in
   this build; table insert lives under the Table menu) to the `Ctrl+F12`
   shortcut. Prefer documented shortcuts over authored menu navigation.
-- **`drag` / `scroll` (previously untested): new data — see open findings.**
+- **`drag` / `scroll` (previously untested): now reproducible after 5 engine
+  fixes below.** `gui_files_ops` moves "sample" into "evidence" (Nautilus toast
+  "Moved 'sample' to 'evidence'") and scrolls, 2/2 on fresh overlays.
 
-### Engine bugs found & fixed (surfaced by the first drag-using playbook)
+### Engine bugs found & fixed (all surfaced by the first drag/scroll playbook)
 1. **DB playbook serialization of `Target`-valued params** (`database/api/playbook.py`):
    `_serialize_value` gated its `attrs.asdict` branch behind `hasattr('__dict__')`,
-   which is False for slots-based attrs classes like `Target`, so a `DragAction`'s
+   False for slots-based attrs classes like `Target`, so a `DragAction`'s
    `src`/`dst` were `str()`-ified and broke `_json_to_target` on load
    ("string indices must be integers"). Fixed: serialize `Target` symmetrically
    via `_target_to_json`.
@@ -238,18 +240,24 @@ as the reproducibility harness).
    store the targets' text/image descriptors; also added `TypeError` to the
    exec-record persistence `except` so a stray non-serializable payload degrades
    to a warning instead of aborting the whole run.
+3. **Scroll used a non-existent QMP axis** (`hypervisor/qemu/vm.py send_qmp_scroll`):
+   sent `{type: rel, axis: "wheel"}` — QEMU has no wheel axis, so QMP rejected it
+   and scroll silently failed. Fixed: emit `wheel-up`/`wheel-down` **button**
+   press/release per notch.
+4. **Drag never triggered GTK/Nautilus DnD** (`hypervisor/qemu/vm.py
+   send_qmp_mouse_drag`): it teleported start→end in one `abs` move, so the
+   toolkit never saw the continuous motion needed to *initiate* a drag. Fixed:
+   press-hold, 25 interpolated intermediate moves with real-time gaps, and a
+   settle before release — synthetic DnD now registers the move.
+5. **Wrong `dest_coordinates` in the drag-complete event** (`event_manager.py`):
+   read `r.coordinates` (== source) for the destination; fixed to
+   `r.data['dest_coordinates']` (forensic-log correctness).
 
-### Open findings (not fixed — need a decision)
-- **Drag grounding, dual same-type targets:** in `gui_files_ops`, `src: text
-  "sample"` and `dst: text "evidence"` both resolved to the *same* coordinate,
-  so the drag was a no-op. Two OCR-text targets of the same kind are not being
-  disambiguated by the resolver in the drag path. Candidate directions: use
-  distinct strategies / regions per endpoint, or `position:`-based drag, or a
-  drag that keys off the selected item.
-- **Scroll on the agent GUI executor:** `execute_scroll` is wired
-  (`gui_actions.execute_scroll` → `websocket_client.scroll`), but the VM agent
-  returns non-success instantly for a `direction: down, amount: N` scroll. Needs
-  investigation of the agent-side scroll command semantics.
+### Note on grounding (initially misread as a bug)
+The drag endpoints resolved *correctly* the whole time (src "sample"→(911,503),
+dst "evidence"→(1138,412)); the "src==dst" seen in the CLI tree was only the
+cosmetic event bug (#5). The real blockers were the teleport-drag (#4) and the
+scroll axis (#3).
 
 ### Harness / prompt improvements folded back in
 - `validate()` now flattens cattrs sub-exceptions (`transform_error`) so the
