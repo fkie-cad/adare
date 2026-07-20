@@ -41,6 +41,12 @@ engine (no model runs at replay time), so it must not rely on timing luck.
    `when: [ exists: {...} ]` guard** (e.g. "Welcome", "Tip of the Day",
    "Update available", cookie/notice popups). The block runs only if the dialog
    is actually present, so the playbook survives whether or not it appears.
+   CRITICAL: a `when:` (on `block:` or `keyboard:`) is a **flat list of
+   `exists:` / `not_exists:` entries** — they are AND-ed together. NEVER put
+   `any:` or `all:` inside a `when:`. The `any:` / `all:` composites are valid
+   ONLY inside a `wait_until.condition:` (see the WaitCondition docs). If you
+   need "dialog A or B", use one `wait_until` with `condition: { any: [...] }`,
+   or two separate guarded blocks — not `when: [ any: ... ]`.
 4. **NEVER use a fixed `idle:` for synchronization.** Do not "sleep and hope."
    Use `wait_until`. A single small `idle` is tolerable ONLY to let a disk write
    flush after the UI already reports done — never to wait for a window.
@@ -52,6 +58,15 @@ engine (no model runs at replay time), so it must not rely on timing luck.
 7. **Every action needs a short `description`** saying what it does and why.
 8. **Use `{{ adare_* }}` variables** for user/path-dependent values instead of
    hard-coding (e.g. `{{ adare_user_documents }}`).
+9. **Launch apps with the keyboard, not a dock click.** On a GNOME desktop,
+   press the `super` key, `wait_until` the search field is ready, type the app
+   name (e.g. "LibreOffice Writer" or just "writer"), then press `enter`. This
+   is far more robust than a `position:` click on a dock icon. Reserve a dock
+   `position:` click only if a keyboard launch is truly impossible, and wait for
+   a window-specific text to confirm the app opened.
+10. **Prefer stable window/UI text for `wait_until`.** Wait on text that appears
+    only once the app/dialog is truly interactive (e.g. a menu label like
+    "File", a dialog title), not on transient splash text.
 
 ### OUTPUT FORMAT (strict)
 - Output **exactly one** ```yaml fenced code block and NOTHING else.
