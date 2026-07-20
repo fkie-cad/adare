@@ -30,6 +30,10 @@ log = logging.getLogger(__name__)
 _CROP_W = 220
 _CROP_H = 90
 
+# Timeout (seconds) for the wait_until gate recorded before every click, so the
+# click only fires once its image target is actually present on screen.
+_CLICK_WAIT_TIMEOUT = 30.0
+
 
 def _slugify(text: str, *, max_len: int = 32) -> str:
     slug = re.sub(r'[^a-z0-9]+', '_', (text or '').lower()).strip('_')
@@ -102,7 +106,7 @@ class PlaybookRecorder:
         self.img_dir.mkdir(parents=True, exist_ok=True)
         self.meta_path = self.playbook_path.with_suffix('.meta.json')
 
-        self._settings = settings or {'idle': 1.0, 'timeout': 1800}
+        self._settings = settings or {'idle': 2.5, 'timeout': 1800}
         self._goal = goal
         self._actions: list[dict[str, Any]] = []
         self._meta: list[dict[str, Any]] = []
@@ -162,9 +166,26 @@ class PlaybookRecorder:
         target replays deterministically through the CV matcher — no model is
         needed at replay time.
         """
-        idx = self._next_index()
         slug = _slugify(describe)
+        # The wait gate is its own step and precedes the click, so the click's
+        # image filename is numbered against the click step below.
+        wait_idx = self._next_index()
+        idx = self._next_index()
         filename, box = self._save_crop(screenshot_png_bytes, x, y, slug, bbox=bbox)
+
+        # Gate the click on its target actually being present, removing the
+        # "click into the void" race: wait for the same image crop first.
+        self._actions.append({
+            'wait_until': {
+                'condition': {'exists': {'image': filename}},
+                'timeout': _CLICK_WAIT_TIMEOUT,
+                'description': f'wait for {describe} before click',
+            }
+        })
+        self._meta.append({
+            'step': wait_idx, 'kind': 'wait_before_click',
+            'image': filename, 'describe': describe,
+        })
 
         click_type = 'double' if double else button
         self._actions.append({
