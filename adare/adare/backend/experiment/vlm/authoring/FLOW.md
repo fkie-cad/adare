@@ -203,6 +203,7 @@ as the reproducibility harness).
 | `gui_writer_format` | kimi-k2.7-code | ✅ goal reached (bold+italic text) | 2/2 pass, 12/12 actions |
 | `gui_writer_table`  | kimi-k2.7-code | ✅ goal reached (3×2 table, A1/A2)  | 2/2 pass, 23/23 actions |
 | `gui_files_ops`     | kimi/minimax   | ✅ goal reached (2 folders; "sample" moved into "evidence"; scroll) after 3 engine fixes | 2/2 pass, 17/17 actions |
+| `gui_writer_report` | kimi-k2.7-code | ✅ goal reached first candidate/first round (bold+centred heading, 2 paragraphs, 2-col table filled via a `loop`, saved as report.odt) — **no engine fix needed** | 2/2 pass, 44/44 actions |
 
 ### Per-interaction reproducibility verdict
 - **Keyboard (keys / combinations / typed text): deterministic.** Every passing
@@ -226,6 +227,37 @@ as the reproducibility harness).
 - **`drag` / `scroll` (previously untested): now reproducible after 5 engine
   fixes below.** `gui_files_ops` moves "sample" into "evidence" (Nautilus toast
   "Moved 'sample' to 'evidence'") and scrolls, 2/2 on fresh overlays.
+
+### Scale + loop-in-GUI verdict (`gui_writer_report`, 2026-07-20)
+The open questions after the 3 short experiments (12–23 actions) were **(a)** does
+cloud authoring scale to a longer, multi-section playbook, and **(b)** does the
+`loop` primitive — only ever exercised on shell/variable actions before — work
+inside a GUI flow? `gui_writer_report` answers both **yes**:
+
+- **Scale: yes.** `kimi-k2.7-code:cloud` authored a **44-leaf-action** report
+  (heading + keyboard formatting + 2 body paragraphs + Ctrl+F12 table + loop +
+  save) that **passed goal on the first candidate, first round** — no repair
+  iteration, no goal-wording refinement. Roughly 2× the length of the prior
+  playbooks with no drop in first-shot quality. The single ~40-action prompt with
+  explicit ordered steps (STEP A…G) authored cleanly; the model even added its own
+  closing `wait_until exists "report.odt"` title assertion unprompted.
+- **loop-in-GUI: yes, reproducibly.** A `loop: {times: 3}` whose body typed
+  `Metric {{ index }}` / Tab / `{{ index }}` / Tab filled the three data rows
+  reading **Metric 0/1/2** with values 0/1/2. `{{ index }}` (a 0-based *int* auto
+  var) expands correctly inside a `keyboard: text:` because the engine sets the
+  loop context on the executor and re-resolves each sub-action's `text` through
+  Jinja2 (`variable_resolver.resolve_action_variables` →
+  `KeyboardAction.text`). **No engine change was required** — the loop replayed
+  identically on 2/2 fresh overlays (44/44 actions each, pixel-identical final
+  document incl. the `33 words, 182 characters` status bar).
+- **Cell traversal caveat (cosmetic, accepted):** the loop body ends each
+  iteration with Tab, so the final iteration's trailing Tab creates one extra
+  empty table row. Harmless for the goal; if a playbook must end exactly on the
+  last filled cell, drop the trailing Tab in the last iteration (or use
+  `items:`-style iteration and a `stop:` sibling on the boundary).
+- **No new engine bugs.** Unlike the drag/scroll campaign (5 fixes), the deep
+  single-app + loop flow surfaced zero host-side defects — the keyboard/OCR/
+  `wait_until` primitives and the loop executor were already correct for GUI use.
 
 ### Engine bugs found & fixed (all surfaced by the first drag/scroll playbook)
 1. **DB playbook serialization of `Target`-valued params** (`database/api/playbook.py`):
