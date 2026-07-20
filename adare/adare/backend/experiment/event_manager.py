@@ -244,7 +244,7 @@ class EventManager:
             actual_duration=r.execution_time, **d)
         yield DragAction, lambda a, r, d: DragActionCompleteEvent(
             source_coordinates=r.data.get('source_coordinates') if r.data else None,
-            dest_coordinates=r.coordinates, **d)
+            dest_coordinates=r.data.get('dest_coordinates') if r.data else None, **d)
         yield GotoAction, lambda a, r, d: GotoActionCompleteEvent(
             final_url=r.data.get('final_url') if r.data else None, **d)
         yield BlockAction, lambda a, r, d: BlockActionCompleteEvent(

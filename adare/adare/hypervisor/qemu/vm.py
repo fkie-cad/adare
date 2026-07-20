@@ -1607,13 +1607,20 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Returns:
             True if successful, False otherwise
         """
+        # QEMU has no "wheel" axis: the mouse wheel is an InputButton
+        # (wheel-up / wheel-down), pressed once per notch. A "rel"/axis:wheel
+        # event is rejected by QMP, which is why scroll silently failed.
+        button = "wheel-up" if amount > 0 else "wheel-down"
+        clicks = abs(int(amount))
+        if clicks == 0:
+            return True
+        events: list[dict] = []
+        for _ in range(clicks):
+            events.append({"type": "btn", "data": {"button": button, "down": True}})
+            events.append({"type": "btn", "data": {"button": button, "down": False}})
         command = {
             "execute": "input-send-event",
-            "arguments": {
-                "events": [
-                    {"type": "rel", "data": {"axis": "wheel", "value": amount}}
-                ]
-            }
+            "arguments": {"events": events}
         }
         response = await self._send_qmp_command(command)
         return 'return' in response
