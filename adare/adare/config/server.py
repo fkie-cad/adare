@@ -67,11 +67,27 @@ LOCATE_MODE = os.environ.get('ADARE_LOCATE_MODE', 'hybrid')
 # replay matcher while staying far tighter than the fixed ~220x90 fallback.
 LOCATE_CROP_MARGIN = int(os.environ.get('ADARE_LOCATE_CROP_MARGIN', '16'))
 LOCATE_CROP_MIN = int(os.environ.get('ADARE_LOCATE_CROP_MIN', '72'))
+# When on (and a grounding sidecar is configured), LocateAnything owns the click
+# coordinate: the VLM says WHAT to click ("describe") and LA locates the element,
+# then the agent clicks its centre — using the VLM's own point only as a
+# disambiguating hint and as the fallback on a miss/error. Default off keeps
+# today's behaviour (VLM point clicks; LA only tightens the recorded crop).
+LOCATE_CLICK = os.environ.get('ADARE_LOCATE_CLICK', '0').lower() in ('1', 'true', 'yes', 'on')
 
 # Bounded-autonomy budgets for the record run.
 GUI_AGENT_MAX_STEPS = int(os.environ.get('ADARE_GUI_AGENT_MAX_STEPS', '80'))
 GUI_AGENT_STALL_LIMIT = int(os.environ.get('ADARE_GUI_AGENT_STALL_LIMIT', '6'))
 GUI_AGENT_WALL_CLOCK_SECONDS = int(os.environ.get('ADARE_GUI_AGENT_WALL_CLOCK_SECONDS', '3600'))
+
+# Self-heal for a malformed / incomplete agent decision. A pure JSON-syntax
+# slip is fixed by a cheap text-only repair call (no screenshot re-sent); a
+# genuinely missing coordinate/choice costs a full vision re-ask. Recovery runs
+# for at most GUI_AGENT_DECISION_RETRIES attempts after the first decision
+# before the run fails honestly. If AGENT_REPAIR_MODEL is set, the cheap syntax
+# repair uses that (typically smaller/cheaper) model on the same endpoint;
+# empty (default) reuses the main VLLM model text-only.
+AGENT_REPAIR_MODEL = os.environ.get('ADARE_AGENT_REPAIR_MODEL', '')
+GUI_AGENT_DECISION_RETRIES = int(os.environ.get('ADARE_GUI_AGENT_DECISION_RETRIES', '2'))
 
 # Port the `adare dev mcp` GUI-automation MCP server binds. An external harness
 # (OpenCode / Claude Code / any MCP client) connects here to author playbooks.
