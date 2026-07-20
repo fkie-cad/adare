@@ -165,21 +165,15 @@ class TargetResolutionExecutor:
             start_event = event_emitter.create_action_start_event(find_step, -1, find_action_id, parent_action_id)
             emit_action(self.experiment_run_id, start_event, find_action_id)
 
-        # Check cache first if requested or if result is fresh (heuristic for "directly after")
+        # Cache reuse is OPT-IN only via target.use_cache. A stale match must
+        # never be reused implicitly (the old time-based heuristic was removed
+        # because a "fresh" match can already be off-screen after an action).
         cached_match, cached_screenshot_path, cached_age = self.get_cached_match(target)
         should_use_cache = False
 
-        if cached_match:
-            # Explicit request
-            if hasattr(target, 'use_cache') and target.use_cache:
-                should_use_cache = True
-                log.info(f"Using cached target (explicit request, age: {cached_age:.2f}s)")
-
-            # Heuristic: If match is very recent (WaitUntil just finished), it's safe to reuse
-            # Limit to 5.0 seconds (generous buffer for processing implementation delays)
-            elif cached_age is not None and cached_age < 5.0:
-                 should_use_cache = True
-                 log.info(f"Using cached target (fresh heuristic, age: {cached_age:.2f}s)")
+        if cached_match and hasattr(target, 'use_cache') and target.use_cache:
+            should_use_cache = True
+            log.info(f"Using cached target (explicit request, age: {cached_age:.2f}s)")
 
         if should_use_cache and cached_match:
             # Use cached result effectively skipping new screenshot and expensive resolution
