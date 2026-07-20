@@ -261,9 +261,14 @@ class PlaybookApi(ProjectDatabaseApi):
 
         # CRITICAL: Check WaitCondition BEFORE hasattr(__dict__) because attrs classes
         # may not have __dict__ (they use __slots__ by default)
-        from adare.types.playbook import WaitCondition
+        from adare.types.playbook import Target, WaitCondition
         if isinstance(value, WaitCondition):
             return self._serialize_wait_condition(value)
+        # Target is a slots-based attrs class (no __dict__), so it would fall
+        # through to the str() fallback below and break _json_to_target on load
+        # (e.g. a DragAction's src/dst). Serialize it symmetrically here.
+        if isinstance(value, Target):
+            return self._target_to_json(value)
 
         # Now check for __dict__ for other object types
         if hasattr(value, '__dict__'):
