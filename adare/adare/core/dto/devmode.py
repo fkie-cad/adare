@@ -21,6 +21,7 @@ class DevSessionStartRequest:
     """Request to start a new dev mode session."""
     project_path: Path
     environment_name: str
+    name: str | None = None  # optional human-friendly label, selectable via -s
     gui_mode: str | None = None
     vm_memory: int | None = None
     vm_cpus: int | None = None
@@ -192,6 +193,7 @@ class DevSessionInfo:
     current_variables: dict[str, Any]
     available_snapshots: list[DevModeSnapshot]
     experiment_name: str | None = None
+    name: str | None = None  # human-friendly session label
     next_steps: list[str] = field(default_factory=list)
     tip: str | None = None
 
@@ -242,6 +244,7 @@ class DevSessionListItem:
     created_at: datetime
     project_path: Path
     status: str  # 'running', 'stopped', 'crashed'
+    name: str | None = None  # human-friendly session label
 
 
 @dataclass

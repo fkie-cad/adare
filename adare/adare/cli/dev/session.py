@@ -93,6 +93,7 @@ def exec_dev_start(arguments):
         result = api.devmode.start_session(DevSessionStartRequest(
             project_path=project_directory,
             environment_name=arguments.environment,
+            name=getattr(arguments, 'name', None),
             gui_mode=getattr(arguments, 'gui_mode', None),
             vm_memory=getattr(arguments, 'vm_memory', None),
             vm_cpus=getattr(arguments, 'vm_cpus', None),
@@ -268,6 +269,7 @@ def exec_dev_list(arguments):
             for session in result.data:
                 data.append({
                     'session_id': session.session_id,
+                    'name': session.name,
                     'experiment_name': session.experiment_name,
                     'environment_name': session.environment_name,
                     'vm_running': session.vm_running,
@@ -306,6 +308,8 @@ def exec_dev_state(arguments):
     if result.success:
         state = result.data
         print(f"Dev Session State: {state.session_id}\n")
+        if state.name:
+            print(f"  Name: {state.name}")
         print(f"  Experiment: {state.experiment_name}")
         print(f"  Environment: {state.environment_name}")
         print(f"  VM Running: {state.vm_running}")

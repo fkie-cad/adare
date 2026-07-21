@@ -16,6 +16,7 @@ class DevSessionTablePanel:
     def __rich__(self) -> Panel:
         table = Table(expand=True)
         table.add_column("status", style="cyan", no_wrap=True)
+        table.add_column("name", style="gold3", no_wrap=True)
         table.add_column("session id", style="green", no_wrap=True)
         table.add_column("experiment", style="white", no_wrap=True)
         table.add_column("environment", style="white", no_wrap=True)
@@ -39,8 +40,12 @@ class DevSessionTablePanel:
             vm_running = row.get('vm_running', False)
             vm_display = "[green]active[/green]" if vm_running else "[dim]off[/dim]"
 
+            name = row.get('name')
+            name_display = str(name) if name else "[dim]—[/dim]"
+
             table.add_row(
                 status_display,
+                name_display,
                 str(row.get('session_id', 'N/A')),
                 str(row.get('experiment_name', 'N/A')),
                 str(row.get('environment_name', 'N/A')),

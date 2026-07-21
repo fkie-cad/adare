@@ -16,28 +16,52 @@ log = logging.getLogger(__name__)
 
 def _resolve_session_id(session_id: str | None, project_directory: Path | None = None) -> str:
     """
-    Resolve session ID: use provided ID or auto-detect if only one session running.
+    Resolve a session reference: an explicit id/name, or auto-detect one running.
+
+    When a reference is given it may be a session id OR a human-friendly name
+    (set with `adare dev start --name`). A unique name resolves to its id; an
+    ambiguous name lists the candidates and exits.
 
     Args:
-        session_id: Explicitly provided session ID (None if not provided)
-        project_directory: Optional project filter for session lookup
+        session_id: Explicitly provided session id or name (None if not provided)
+        project_directory: Optional project filter for lookup / name scoping
 
     Returns:
-        Valid session ID (either provided or auto-detected)
+        Valid session ID (provided, resolved from a name, or auto-detected)
 
     Exits:
-        With error message if session_id is None and:
-        - No sessions running
-        - Multiple sessions running (shows list)
+        With error message if:
+        - A given name is ambiguous (lists candidates)
+        - session_id is None and no / multiple sessions are running
     """
-    # Fast path: session_id explicitly provided
-    if session_id:
-        return session_id
-
-    # Slow path: auto-detect session
-    from adare.database.api.devmode import DevModeApi
+    from adare.database.api.devmode import AmbiguousSessionNameError, DevModeApi
 
     api = DevModeApi()
+
+    # Fast path: a reference was given — resolve it as an id or a name.
+    if session_id:
+        try:
+            resolved = api.resolve_session_ref(session_id, project_directory)
+        except AmbiguousSessionNameError as e:
+            print_error_message(
+                title=f"Session name '{e.name}' is ambiguous ({len(e.matches)} matches)",
+                next_steps=[
+                    'Specify the exact session with: adare dev <command> -s <session_id>',
+                    'List all sessions with: adare dev list',
+                ]
+            )
+            print("\nMatching sessions:")
+            for s in e.matches:
+                print(
+                    f"  - {s.session_id}  name={s.name}  status={s.status}  "
+                    f"({s.experiment_name} / {s.environment_name})"
+                )
+            exit(1)
+        # None -> ref is neither a known id nor a name; return it unchanged so
+        # downstream emits the familiar SESSION_NOT_FOUND error.
+        return resolved or session_id
+
+    # Slow path: auto-detect session
     running_sessions = api.list_running_sessions(project_directory)
 
     if len(running_sessions) == 0:
