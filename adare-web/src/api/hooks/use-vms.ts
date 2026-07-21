@@ -70,3 +70,28 @@ export async function callVmProxy<T = unknown>(
   }
   return response.json() as Promise<T>
 }
+
+/**
+ * Open a running VM's live screen in a new tab via VirtualSpice
+ * (launch-and-hand-off — no embedded viewer).
+ *
+ * Resolves the ADARE VM *name* to VirtualSpice's *uuid* through the backend,
+ * then opens VirtualSpice's own standalone display page directly on `:8081`
+ * (same-origin with its spice-client). Read-only by default; the observer can
+ * still toggle control from VirtualSpice's own toolbar.
+ *
+ * @returns `true` if a tab was opened, `false` if the VM could not be resolved
+ *          (VirtualSpice down or no matching running domain).
+ */
+export async function openVmWatch(name: string, viewOnly = true): Promise<boolean> {
+  const response = await fetch(endpoints.vmWatchUrl(name, viewOnly))
+  if (!response.ok) {
+    return false
+  }
+  const { path, spice_port } = (await response.json()) as {
+    path: string
+    spice_port: number
+  }
+  window.open(`http://${location.hostname}:${spice_port}${path}`, '_blank')
+  return true
+}

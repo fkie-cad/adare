@@ -246,6 +246,7 @@ class DevSessionListItem:
     project_path: Path
     status: str  # 'running', 'stopped', 'crashed'
     name: str | None = None  # human-friendly session label
+    vm_name: str | None = None  # VM/domain name (== VirtualSpice name for watch)
 
 
 @dataclass

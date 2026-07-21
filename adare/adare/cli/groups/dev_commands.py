@@ -29,8 +29,11 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--debug-screenshots', is_flag=True, help='Save screenshots for debugging')
     @click.option('--reuse', is_flag=True,
                   help='Attach to the most-recent running session for this project instead of booting a new VM')
+    @click.option('--watch', is_flag=True,
+                  help="Open the session VM's live screen (read-only) in the browser via "
+                       'VirtualSpice once it is up. Needs VirtualSpice running (adare web start).')
     def start(environment, project, name, gui_mode, test_mode, vm_memory, vm_cpus,
-              shared_dir, debug_screenshots, reuse):
+              shared_dir, debug_screenshots, reuse, watch):
         """Start a new dev mode session."""
         from adare.cli.dev import exec_dev_start
         args = SimpleNamespace(
@@ -43,7 +46,8 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             vm_cpus=vm_cpus,
             shared_dir=shared_dir,
             debug_screenshots=debug_screenshots,
-            reuse=reuse
+            reuse=reuse,
+            watch=watch
         )
         exec_with_error_printing(exec_dev_start, args)
 
