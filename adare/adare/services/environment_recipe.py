@@ -151,6 +151,7 @@ def build_baked_url_environment_file(
     env_name: str,
     project_path: Path | None = None,
     os_def: OsDefinition | None = None,
+    vm_format: str | None = None,
 ) -> Path:
     """Generate an environment YAML for a baked VM hosted at a published URL.
 
@@ -159,6 +160,10 @@ def build_baked_url_environment_file(
     BYO-URL model). The result is publish-ready: ``vm`` is an ``http(s)`` URL,
     ``vm_type`` is ``url``, and ``vm_sha256`` is carried through for the
     download-time integrity check on ``environment load``.
+
+    ``vm_format`` (qcow2/ova/vmdk/vdi/img/raw) is written when supplied; it names
+    the download cache file and picks the validator/hypervisor for URLs that
+    carry no disk extension (owncloud/Nextcloud share links).
 
     When no ``os_def`` is given a placeholder ``os:`` block is emitted (baked
     create has never collected OS details), which the analyst edits afterwards.
@@ -170,6 +175,8 @@ def build_baked_url_environment_file(
         'os': _os_block(os_def) if os_def is not None else _placeholder_os_block(),
         'hypervisor': 'qemu',
     }
+    if vm_format:
+        env_content['vm_format'] = vm_format
 
     env_path = _target_env_path(env_name, project_path)
     dict_to_yaml(env_path, env_content)

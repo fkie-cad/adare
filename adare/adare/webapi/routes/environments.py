@@ -16,10 +16,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/environments", tags=["environments"])
 
 # Publish contract mirrors (see server `giteaeventmanager/.../plugin.py`
-# `check_file_validity`): a baked VM URL must be an http(s) disk image with a
-# 64-hex sha256. Kept here so the web variant only ever produces publishable
+# `check_file_validity`): a baked VM URL must be an http(s) URL with a REQUIRED
+# 64-hex sha256. The URL no longer needs a disk extension (owncloud/Nextcloud
+# share links have none) — integrity is anchored on the required sha256 and a
+# `vm_format` hint. Kept here so the web variant only ever produces publishable
 # environments.
 BAKED_VM_EXTENSIONS = ('.ova', '.qcow2', '.vmdk', '.vdi', '.img')
+VM_FORMATS = ('qcow2', 'ova', 'vmdk', 'vdi', 'img', 'raw')
 SHA256_HEX_RE = re.compile(r'^[0-9a-f]{64}$')
 
 
@@ -38,6 +41,7 @@ class EnvironmentCreateBody(BaseModel):
     # Baked (published URL) source
     vm_url: str | None = None
     vm_sha256: str | None = None
+    vm_format: str | None = None
     # Recipe source
     os_profile: str | None = None
     iso_url: str | None = None
@@ -53,6 +57,7 @@ class CheckUrlBody(BaseModel):
     url: str
     sha256: str | None = None
     kind: Literal["vm", "iso"] = "vm"
+    vm_format: str | None = None
 
 
 # ---- Helpers ----
@@ -62,24 +67,35 @@ def _api():
     return AdareAPI()
 
 
-def _validate_url_format(url: str, sha256: str | None, kind: str) -> str | None:
+def _validate_url_format(
+    url: str, sha256: str | None, kind: str, vm_format: str | None = None
+) -> str | None:
     """Return a human-readable reason the URL is invalid, or None if valid.
 
-    Mirrors the server's publish contract: http(s) scheme, a disk-image
-    extension for baked VMs, and a 64-hex sha256 when one is supplied.
+    Mirrors the server's publish contract: an http(s) URL (no disk-extension
+    requirement — owncloud/Nextcloud share links have none) with a REQUIRED
+    64-hex sha256. For a baked VM whose URL has no recognized disk extension, a
+    ``vm_format`` hint from the allow-list is required; when present it is always
+    validated against the allow-list.
     """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         return "URL must use the http or https scheme."
     if not parsed.netloc:
         return "URL is missing a host."
-    if kind == "vm" and not parsed.path.lower().endswith(BAKED_VM_EXTENSIONS):
-        return (
-            "VM URL must point to a disk image ending in one of: "
-            + ", ".join(BAKED_VM_EXTENSIONS)
-        )
-    if sha256 is not None and sha256 != "" and not SHA256_HEX_RE.match(sha256):
+    if not sha256:
+        return f"{kind}_sha256 is required (64 lowercase hex characters)."
+    if not SHA256_HEX_RE.match(sha256):
         return "sha256 must be 64 lowercase hex characters."
+    if kind == "vm":
+        if vm_format is not None and vm_format != "" and vm_format not in VM_FORMATS:
+            return "vm_format must be one of: " + ", ".join(VM_FORMATS)
+        has_ext = parsed.path.lower().endswith(BAKED_VM_EXTENSIONS)
+        if not has_ext and not vm_format:
+            return (
+                "vm_format is required when the URL has no recognized disk "
+                "extension (one of: " + ", ".join(VM_FORMATS) + ")."
+            )
     return None
 
 
@@ -115,11 +131,23 @@ async def create_environment(body: EnvironmentCreateBody):
     """Create a new environment descriptor from a published URL (baked or recipe)."""
     from adare.core.dto.environment import EnvironmentCreateRequest
 
+    # Enforce the publish contract on baked-URL creates before touching the
+    # service: http(s), a required 64-hex sha256, and a vm_format when the URL
+    # has no recognized disk extension. (Recipe ISO integrity is enforced by the
+    # service/backend, which already requires iso_sha256.)
+    if body.vm_url:
+        reason = _validate_url_format(body.vm_url, body.vm_sha256, "vm", body.vm_format)
+        if reason is not None:
+            return {"success": False, "error": {
+                "code": "InvalidVmUrl", "message": reason, "solutions": [],
+            }}
+
     dto = EnvironmentCreateRequest(
         project_path=Path(body.project_path),
         name=body.name,
         vm_url=body.vm_url,
         vm_sha256=body.vm_sha256,
+        vm_format=body.vm_format,
         os_profile=body.os_profile,
         iso_url=body.iso_url,
         iso_sha256=body.iso_sha256,
@@ -140,7 +168,7 @@ async def check_environment_url(body: CheckUrlBody):
     format contract; ``reachable`` reflects a live HEAD probe (the browser can't
     do a reliable cross-origin HEAD, so it is proxied here).
     """
-    reason = _validate_url_format(body.url, body.sha256, body.kind)
+    reason = _validate_url_format(body.url, body.sha256, body.kind, body.vm_format)
     if reason is not None:
         return {"success": True, "data": {
             "valid": False, "reachable": False, "status": None, "reason": reason,

@@ -28,9 +28,11 @@ export interface Environment {
 export interface CreateEnvironmentRequest {
   project_path: string
   name: string
-  // Baked source: a published disk-image URL + its sha256 (web = remote-only).
+  // Baked source: a published disk-image URL + its sha256 + disk format
+  // (web = remote-only; any http(s) host, format chosen explicitly).
   vm_url?: string
   vm_sha256?: string
+  vm_format?: string
   // Recipe source: OS profile + a published ISO URL + its sha256, plus params.
   os_profile?: string
   iso_url?: string
