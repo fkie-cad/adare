@@ -248,7 +248,13 @@ def register(cli, AliasedGroup, exec_with_error_printing):
                        'Decomposes a terse goal into sub-goals, checkpoints the VM before '
                        'each, verifies with an independent checker, and resets to retry on a '
                        'dead end — building a playbook from only the verified sub-goals.')
-    def agent(session_id, goal, goal_file, output, max_steps, stall_limit, interactive, planning):
+    @click.option('--ground/--no-ground', 'grounding', default=None,
+                  help='Auto-start the LocateAnything grounding server for this run '
+                       '(default: ADARE_LOCATE_AUTOSTART). Clicks are grounded to the true '
+                       'element box and the server is torn down at run end. Attaches to '
+                       'ADARE_LOCATE_URL if set instead of spawning. Needs the grounding '
+                       'backend: `uv sync --extra grounding` or ADARE_LOCATE_PYTHON.')
+    def agent(session_id, goal, goal_file, output, max_steps, stall_limit, interactive, planning, grounding):
         """Drive the session VM toward a goal with the vision-LLM GUI agent.
 
         Uses the configured vLLM endpoint (ADARE_VLLM_*; works with Ollama Cloud).
@@ -269,8 +275,25 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             stall_limit=stall_limit,
             interactive=interactive,
             planning=planning,
+            grounding=grounding,
         )
         exec_with_error_printing(exec_dev_agent, args)
+
+    @dev.command(name='grounding-pull')
+    @click.option('--model', default=None,
+                  help='HF id or local path (default: ADARE_LOCATE_MODEL_PATH or '
+                       'nvidia/LocateAnything-3B)')
+    def grounding_pull(model):
+        """Pre-download the LocateAnything grounding weights (~7.3 GB).
+
+        Pays the cold-download cost up front instead of on the first
+        `adare dev agent --ground` run. Needs the grounding backend
+        (`uv sync --extra grounding`), an HF_TOKEN and the accepted NVIDIA
+        license. Skipped if the configured model is already a local directory.
+        """
+        from adare.cli.dev import exec_dev_grounding_pull
+        args = SimpleNamespace(model=model)
+        exec_with_error_printing(exec_dev_grounding_pull, args)
 
     @dev.command()
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')

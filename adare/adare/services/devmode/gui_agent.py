@@ -28,11 +28,22 @@ class GuiAgentMixin:
 
     def run_gui_agent(self, request: DevGuiAgentRequest) -> Result[DevGuiAgentResult]:
         """Drive the session VM toward ``request.goal`` with the vision agent."""
+        from adare.backend.experiment.grounding.locate_process_manager import (
+            GroundingUnavailable,
+        )
         from adare.backend.experiment.vlm.exceptions import AgentError, VLMError
 
         try:
             result = asyncio.run(self._run_gui_agent_async(request))
             return Result.ok(result)
+        except GroundingUnavailable as exc:  # --ground could not start (checked before RuntimeError)
+            return Result.fail(
+                'GROUNDING_ERROR', str(exc),
+                ['Install the backend: uv sync --extra grounding',
+                 'Or point ADARE_LOCATE_PYTHON at a venv that already has torch + the model deps',
+                 'Or attach to a running server via ADARE_LOCATE_URL',
+                 'Or drop --ground to run without element grounding'],
+            )
         except RuntimeError as exc:  # session/VM not found
             return Result.fail(
                 'SESSION_NOT_FOUND', str(exc),
@@ -77,10 +88,15 @@ class GuiAgentMixin:
             GUI_AGENT_DECISION_RETRIES,
             GUI_AGENT_STALL_LIMIT,
             GUI_AGENT_WALL_CLOCK_SECONDS,
+            LOCATE_AUTOSTART,
             LOCATE_CLICK,
             LOCATE_CROP_MARGIN,
             LOCATE_CROP_MIN,
             LOCATE_MODE,
+            LOCATE_MODEL_PATH,
+            LOCATE_PORT,
+            LOCATE_PYTHON,
+            LOCATE_START_TIMEOUT,
             LOCATE_URL,
             VLLM_API_KEY,
             VLLM_BASE_URL,
@@ -104,12 +120,6 @@ class GuiAgentMixin:
         client = VLMClient(base_url=VLLM_BASE_URL, model=VLLM_MODEL, api_key=VLLM_API_KEY)
         executor = QEMUHostGUIExecutor(vm=vm)
 
-        locate_client = None
-        if LOCATE_URL:
-            from adare.backend.experiment.grounding import LocateAnythingClient
-            locate_client = LocateAnythingClient(LOCATE_URL, mode=LOCATE_MODE)
-            log.info('LocateAnything grounding enabled via %s', LOCATE_URL)
-
         # Optional cheaper model for text-only JSON-repair of malformed
         # decisions (same endpoint/key). Empty -> the agent reuses the main
         # client text-only, which is already far cheaper than a vision decision.
@@ -127,6 +137,40 @@ class GuiAgentMixin:
             run_dir = out.parent / f'{out.stem}_run'
         elif ctx and getattr(ctx, 'experiment_run_directory', None):
             run_dir = Path(ctx.experiment_run_directory.path) / 'gui_agent'
+
+        # Element grounding. Effective when explicitly requested (--ground), when
+        # ADARE_LOCATE_AUTOSTART is on, or (back-compat) when ADARE_LOCATE_URL is
+        # already set. --no-ground forces it off. With a URL configured we attach
+        # to that server; otherwise --ground auto-starts (and later tears down)
+        # the vendored LocateAnything server.
+        want_ground = request.grounding
+        if want_ground is None:
+            want_ground = LOCATE_AUTOSTART or bool(LOCATE_URL)
+
+        locate_manager = None
+        locate_url = None
+        if want_ground:
+            if LOCATE_URL:
+                locate_url = LOCATE_URL
+                log.info('LocateAnything grounding: attaching to configured %s', LOCATE_URL)
+            else:
+                from adare.backend.experiment.grounding.locate_process_manager import (
+                    LocateGroundingManager,
+                )
+                locate_manager = LocateGroundingManager(
+                    port=LOCATE_PORT,
+                    model_path=LOCATE_MODEL_PATH or None,
+                    python_exe=LOCATE_PYTHON or None,
+                    start_timeout=LOCATE_START_TIMEOUT,
+                    log_file=(run_dir / 'locate_server.log') if run_dir else None,
+                )
+                locate_url = locate_manager.start()
+
+        locate_client = None
+        if locate_url:
+            from adare.backend.experiment.grounding import LocateAnythingClient
+            locate_client = LocateAnythingClient(locate_url, mode=LOCATE_MODE)
+            log.info('LocateAnything grounding enabled via %s', locate_url)
 
         agent = GuiAgent(
             executor, client, request.goal,
@@ -146,35 +190,41 @@ class GuiAgentMixin:
         # Iterative plan/verify/backtrack mode (flag-gated; off by default). When
         # off, today's whole-goal reactive run is used untouched.
         planning = request.planning if request.planning is not None else AGENT_PLAN
-        if planning:
-            res = await self._run_planning_agent(
-                session, agent, request,
-                planner_client=VLMClient(
-                    base_url=AGENT_PLANNER_BASE_URL or VLLM_BASE_URL,
-                    model=AGENT_PLANNER_MODEL or VLLM_MODEL,
-                    api_key=AGENT_PLANNER_API_KEY or VLLM_API_KEY),
-                checker_client=VLMClient(
-                    base_url=AGENT_CHECKER_BASE_URL or VLLM_BASE_URL,
-                    model=AGENT_CHECKER_MODEL or VLLM_MODEL,
-                    api_key=AGENT_CHECKER_API_KEY or VLLM_API_KEY),
-                run_acceptance_checks=run_acceptance_checks,
-                planning_agent_cls=PlanningAgent,
-                host_executor_cls=QEMUHostGUIExecutor,
-                retry_limit=AGENT_PLAN_RETRY_LIMIT,
-                replan_limit=AGENT_PLAN_REPLAN_LIMIT,
-                subgoal_max_steps=AGENT_SUBGOAL_MAX_STEPS,
-                subgoal_stall_limit=AGENT_SUBGOAL_STALL_LIMIT,
+        try:
+            if planning:
+                res = await self._run_planning_agent(
+                    session, agent, request,
+                    planner_client=VLMClient(
+                        base_url=AGENT_PLANNER_BASE_URL or VLLM_BASE_URL,
+                        model=AGENT_PLANNER_MODEL or VLLM_MODEL,
+                        api_key=AGENT_PLANNER_API_KEY or VLLM_API_KEY),
+                    checker_client=VLMClient(
+                        base_url=AGENT_CHECKER_BASE_URL or VLLM_BASE_URL,
+                        model=AGENT_CHECKER_MODEL or VLLM_MODEL,
+                        api_key=AGENT_CHECKER_API_KEY or VLLM_API_KEY),
+                    run_acceptance_checks=run_acceptance_checks,
+                    planning_agent_cls=PlanningAgent,
+                    host_executor_cls=QEMUHostGUIExecutor,
+                    retry_limit=AGENT_PLAN_RETRY_LIMIT,
+                    replan_limit=AGENT_PLAN_REPLAN_LIMIT,
+                    subgoal_max_steps=AGENT_SUBGOAL_MAX_STEPS,
+                    subgoal_stall_limit=AGENT_SUBGOAL_STALL_LIMIT,
+                )
+            else:
+                res = await agent.run()
+            return DevGuiAgentResult(
+                success=res.success,
+                reason=res.reason,
+                steps=len(res.steps),
+                summary=res.summary,
+                playbook_path=str(res.playbook_path) if res.playbook_path else None,
+                report_path=str(res.report_path) if res.report_path else None,
             )
-        else:
-            res = await agent.run()
-        return DevGuiAgentResult(
-            success=res.success,
-            reason=res.reason,
-            steps=len(res.steps),
-            summary=res.summary,
-            playbook_path=str(res.playbook_path) if res.playbook_path else None,
-            report_path=str(res.report_path) if res.report_path else None,
-        )
+        finally:
+            # Always tear down a server *we* auto-started (attach/no-op otherwise),
+            # whether the run succeeded, failed, or raised.
+            if locate_manager is not None:
+                locate_manager.stop()
 
     async def _run_planning_agent(
         self,

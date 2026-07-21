@@ -146,6 +146,7 @@ class DevGuiAgentRequest:
     stall_limit: int | None = None
     interactive: bool = False  # pause before each action to approve / skip / stop
     planning: bool | None = None  # None -> config AGENT_PLAN; iterative plan/verify/backtrack
+    grounding: bool | None = None  # None -> config LOCATE_AUTOSTART; auto-start LocateAnything
 
 
 @dataclass
