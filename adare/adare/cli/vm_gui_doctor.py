@@ -110,7 +110,9 @@ async def _run_checks() -> tuple[bool, str | None]:
 
 def exec_vm_gui_doctor(arguments):
     """Preflight the vLLM endpoint used for GUI automation."""
-    from adare.config.server import VLLM_BASE_URL, VLLM_COORD_SPACE, VLLM_MODEL
+    import shutil
+
+    from adare.config.server import FFMPEG, VLLM_BASE_URL, VLLM_COORD_SPACE, VLLM_MODEL
 
     if not VLLM_BASE_URL:
         print_error_message(
@@ -132,7 +134,18 @@ def exec_vm_gui_doctor(arguments):
         )
         return
 
+    # ffmpeg availability for `adare dev agent --video` (informational — video is
+    # opt-in, so a missing binary must not fail the doctor).
+    ffmpeg_path = shutil.which(FFMPEG)
+    if ffmpeg_path:
+        console.print(f'[green]✓ ffmpeg found[/green] (for `adare dev agent --video`): {ffmpeg_path}')
+    else:
+        console.print('[yellow]! ffmpeg not found[/yellow] — `--video` will error; '
+                      'install ffmpeg or set ADARE_FFMPEG')
+
     next_steps = []
+    if not ffmpeg_path:
+        next_steps.append('For `adare dev agent --video`: install ffmpeg or set ADARE_FFMPEG')
     if detected and detected != VLLM_COORD_SPACE:
         next_steps.append(
             f'Set the coordinate space to match the model: '

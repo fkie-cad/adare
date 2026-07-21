@@ -57,16 +57,29 @@ class QemuVideoRecorder:
         self._frames = 0
         self._stopping = False
 
+    # -- preflight ----------------------------------------------------------
+
+    @staticmethod
+    def ensure_ffmpeg(ffmpeg: str = 'ffmpeg') -> str:
+        """Resolve the ffmpeg binary or raise :class:`VideoUnavailable`.
+
+        A cheap ``shutil.which`` probe callers can run up front (before spinning
+        up grounding / VM work) so a missing-ffmpeg ``--video`` run fails fast.
+        Returns the resolved absolute path.
+        """
+        exe = shutil.which(ffmpeg)
+        if not exe:
+            raise VideoUnavailable(
+                f'ffmpeg not found (looked for {ffmpeg!r}). Install ffmpeg '
+                'or set ADARE_FFMPEG to its path, or drop --video.'
+            )
+        return exe
+
     # -- lifecycle ----------------------------------------------------------
 
     async def start(self) -> None:
         """Spawn ffmpeg and begin polling frames. Raise if ffmpeg is missing."""
-        exe = shutil.which(self.ffmpeg)
-        if not exe:
-            raise VideoUnavailable(
-                f'ffmpeg not found (looked for {self.ffmpeg!r}). Install ffmpeg '
-                'or set ADARE_FFMPEG to its path, or drop --video.'
-            )
+        exe = self.ensure_ffmpeg(self.ffmpeg)
         self.out_path.parent.mkdir(parents=True, exist_ok=True)
         cmd = [
             exe, '-y', '-loglevel', 'error',
