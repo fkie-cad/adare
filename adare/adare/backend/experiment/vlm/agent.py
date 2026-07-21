@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import hashlib
 import io
 import logging
 import time
@@ -606,85 +605,108 @@ class GuiAgent:
         report.write_text('\n'.join(lines))
         return report
 
+    @staticmethod
+    def _screen_signature(png: bytes) -> tuple[int, ...]:
+        """A small grayscale thumbnail used to detect "the screen isn't changing".
+
+        Byte-for-byte comparison of the raw PNG is defeated by cosmetic noise
+        (a blinking cursor, a clock tick, menu fade) that changes the encoded
+        bytes every step without the screen meaningfully changing, so stalls
+        (e.g. clicking around for a missing app) never trip. Downscaling to a
+        tiny thumbnail and comparing with a tolerance (see
+        :meth:`_screen_changed`) absorbs that noise.
+        """
+        with Image.open(io.BytesIO(png)) as img:
+            return tuple(img.convert('L').resize((16, 16)).getdata())
+
+    @staticmethod
+    def _screen_changed(sig: tuple[int, ...], last_sig: tuple[int, ...] | None) -> bool:
+        if last_sig is None:
+            return True
+        diff = sum(abs(a - b) for a, b in zip(sig, last_sig))
+        return diff / (len(sig) * 255) > 0.02  # >2% average pixel delta = real change
+
     # -- main loop ----------------------------------------------------------
 
     async def run(self) -> AgentRunResult:
         start = time.monotonic()
-        last_hash: str | None = None
+        last_sig: tuple[int, ...] | None = None
         stall = 0
 
-        for _ in range(self.max_steps):
+        try:
+            for _ in range(self.max_steps):
+                if self._stop_requested:
+                    return self._finish(False, 'interrupted by user')
+                if time.monotonic() - start > self.wall_clock_seconds:
+                    return self._finish(False, 'wall-clock budget exceeded')
+
+                b64, png, width, height = await self._capture()
+
+                sig = self._screen_signature(png)
+                stall = 0 if self._screen_changed(sig, last_sig) else stall + 1
+                last_sig = sig
+                if stall >= self.stall_limit:
+                    return self._finish(False, f'screen unchanged for {stall} steps (stalled)')
+
+                try:
+                    action = await self._decide(b64, width, height)
+                except VLMError as exc:
+                    log.warning('Decision failed: %s', exc)
+                    return self._finish(False, f'model decision failed: {exc}')
+
+                index = len(self._records) + 1
+
+                # Ground click coordinates before the human sees them and before
+                # execution, so the interactive gate, the click and the recorded
+                # crop all use the same (grounded) coordinate. Best-effort: on a
+                # miss/error the VLM's own point + fixed crop stand.
+                if action.kind in (A.CLICK, A.DOUBLE_CLICK):
+                    self._ground_click(png, action, width, height)
+
+                self._emit_decided(index, action)
+
+                if self.interactive:
+                    self._emit({'type': 'pause'})
+                    choice = await self._confirm_step(action, index)
+                    self._emit({'type': 'resume'})
+                    if choice == 'skip':
+                        note = action.describe or action.summary or action.kind
+                        self._records.append(StepRecord(
+                            index=index, action_kind=action.kind, describe=action.describe,
+                            reasoning=action.reasoning, result_status='skipped',
+                        ))
+                        self._emit_executed(index, 'skipped')
+                        self._history.append(
+                            f'{index}. {action.kind}({action.describe or action.summary}) '
+                            f'-> user skipped: {note}')
+                        await asyncio.sleep(self.step_settle_seconds)
+                        continue
+                    if choice == 'quit':
+                        return self._finish(False, 'stopped by user')
+                    # 'approve' (or 'continue', which also cleared self.interactive)
+                    # falls through to execute + record as normal.
+
+                status = await self._execute(action, png)
+                shot_file = self._persist_step(index, png, action, status)
+                self._emit_executed(index, status, screenshot=shot_file)
+
+                self._records.append(StepRecord(
+                    index=index, action_kind=action.kind, describe=action.describe,
+                    reasoning=action.reasoning, result_status=status, screenshot_file=shot_file,
+                ))
+                self._history.append(
+                    f'{index}. {action.kind}({action.describe or action.summary}) -> {status}')
+
+                if action.kind == A.DONE:
+                    return self._finish(True, 'agent reported done', summary=action.summary)
+
+                await asyncio.sleep(self.step_settle_seconds)
+
+            return self._finish(False, f'reached max steps ({self.max_steps})')
+        except asyncio.CancelledError:
             if self._stop_requested:
                 return self._finish(False, 'interrupted by user')
-            if time.monotonic() - start > self.wall_clock_seconds:
-                return self._finish(False, 'wall-clock budget exceeded')
-
-            b64, png, width, height = await self._capture()
-
-            digest = hashlib.sha256(png).hexdigest()
-            if digest == last_hash:
-                stall += 1
-            else:
-                stall = 0
-            last_hash = digest
-            if stall >= self.stall_limit:
-                return self._finish(False, f'screen unchanged for {stall} steps (stalled)')
-
-            try:
-                action = await self._decide(b64, width, height)
-            except VLMError as exc:
-                log.warning('Decision failed: %s', exc)
-                return self._finish(False, f'model decision failed: {exc}')
-
-            index = len(self._records) + 1
-
-            # Ground click coordinates before the human sees them and before
-            # execution, so the interactive gate, the click and the recorded
-            # crop all use the same (grounded) coordinate. Best-effort: on a
-            # miss/error the VLM's own point + fixed crop stand.
-            if action.kind in (A.CLICK, A.DOUBLE_CLICK):
-                self._ground_click(png, action, width, height)
-
-            self._emit_decided(index, action)
-
-            if self.interactive:
-                self._emit({'type': 'pause'})
-                choice = await self._confirm_step(action, index)
-                self._emit({'type': 'resume'})
-                if choice == 'skip':
-                    note = action.describe or action.summary or action.kind
-                    self._records.append(StepRecord(
-                        index=index, action_kind=action.kind, describe=action.describe,
-                        reasoning=action.reasoning, result_status='skipped',
-                    ))
-                    self._emit_executed(index, 'skipped')
-                    self._history.append(
-                        f'{index}. {action.kind}({action.describe or action.summary}) '
-                        f'-> user skipped: {note}')
-                    await asyncio.sleep(self.step_settle_seconds)
-                    continue
-                if choice == 'quit':
-                    return self._finish(False, 'stopped by user')
-                # 'approve' (or 'continue', which also cleared self.interactive)
-                # falls through to execute + record as normal.
-
-            status = await self._execute(action, png)
-            shot_file = self._persist_step(index, png, action, status)
-            self._emit_executed(index, status, screenshot=shot_file)
-
-            self._records.append(StepRecord(
-                index=index, action_kind=action.kind, describe=action.describe,
-                reasoning=action.reasoning, result_status=status, screenshot_file=shot_file,
-            ))
-            self._history.append(
-                f'{index}. {action.kind}({action.describe or action.summary}) -> {status}')
-
-            if action.kind == A.DONE:
-                return self._finish(True, 'agent reported done', summary=action.summary)
-
-            await asyncio.sleep(self.step_settle_seconds)
-
-        return self._finish(False, f'reached max steps ({self.max_steps})')
+            raise
 
     def _finish(self, success: bool, reason: str, *, summary: str = '') -> AgentRunResult:
         result = AgentRunResult(
@@ -722,7 +744,7 @@ class GuiAgent:
         a reason and lets the orchestrator's checker decide whether to backtrack.
         """
         start = time.monotonic()
-        last_hash: str | None = None
+        last_sig: tuple[int, ...] | None = None
         stall = 0
         prev_subgoal = self._subgoal
         prev_hints = self.hints
@@ -738,9 +760,9 @@ class GuiAgent:
 
                 b64, png, width, height = await self._capture()
 
-                digest = hashlib.sha256(png).hexdigest()
-                stall = stall + 1 if digest == last_hash else 0
-                last_hash = digest
+                sig = self._screen_signature(png)
+                stall = 0 if self._screen_changed(sig, last_sig) else stall + 1
+                last_sig = sig
                 if stall >= stall_limit:
                     return f'screen unchanged for {stall} steps (stalled)'
 
@@ -793,6 +815,10 @@ class GuiAgent:
                 await asyncio.sleep(self.step_settle_seconds)
 
             return f'reached sub-goal step budget ({max_steps})'
+        except asyncio.CancelledError:
+            if self._stop_requested:
+                return 'interrupted by user'
+            raise
         finally:
             self._subgoal = prev_subgoal
             self.hints = prev_hints
