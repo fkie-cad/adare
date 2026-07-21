@@ -106,7 +106,8 @@ class SessionManagementMixin:
                 project_path=request.project_path,
                 experiment_name=experiment_name,
                 environment_name=request.environment_name,
-                vm_name=vm_name
+                vm_name=vm_name,
+                name=request.name
             )
 
             # Store run directory path (prevents "None" directories on restoration)
@@ -143,6 +144,7 @@ class SessionManagementMixin:
                 current_variables=state.current_variables,
                 available_snapshots=state.available_snapshots,
                 experiment_name=None,
+                name=request.name,
                 next_steps=next_steps,
                 tip=tip
             ))
@@ -262,6 +264,7 @@ class SessionManagementMixin:
                 created_at=db_session.created_at,
                 current_variables=state.current_variables,
                 available_snapshots=state.available_snapshots,
+                name=db_session.name,
                 next_steps=next_steps,
                 tip=tip
             ))
@@ -508,7 +511,8 @@ class SessionManagementMixin:
                     actions_executed=actions_executed,
                     created_at=db_session.created_at,
                     project_path=Path(db_session.project_path),
-                    status=db_session.status
+                    status=db_session.status,
+                    name=db_session.name
                 ))
 
             return Result.ok(items)
@@ -567,6 +571,7 @@ class SessionManagementMixin:
                 created_at=db_session.created_at,
                 current_variables=state.current_variables,
                 available_snapshots=state.available_snapshots,
+                name=db_session.name,
                 next_steps=[],
                 tip=None
             ))

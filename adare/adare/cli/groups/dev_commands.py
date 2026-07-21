@@ -17,6 +17,8 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @dev.command()
     @click.option('-e', '--environment', required=True, help='Environment name')
     @click.option('--project', '-p', help='Project name/path')
+    @click.option('--name', 'name', default=None,
+                  help='Human-friendly session label, selectable later via -s <name>')
     @click.option('--gui-mode', type=click.Choice(['auto', 'agent', 'host']),
                   help='GUI execution mode: auto (default), agent (WebSocket), or host (QMP for QEMU)')
     @click.option('--test-mode', type=click.Choice(['auto', 'agent', 'host']),
@@ -25,12 +27,14 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
     @click.option('--shared-dir', multiple=True, help='Shared directories in format HOST_PATH:VM_PATH')
     @click.option('--debug-screenshots', is_flag=True, help='Save screenshots for debugging')
-    def start(environment, project, gui_mode, test_mode, vm_memory, vm_cpus, shared_dir, debug_screenshots):
+    def start(environment, project, name, gui_mode, test_mode, vm_memory, vm_cpus,
+              shared_dir, debug_screenshots):
         """Start a new dev mode session."""
         from adare.cli.dev import exec_dev_start
         args = SimpleNamespace(
             environment=environment,
             project=project,
+            name=name,
             gui_mode=gui_mode,
             test_mode=test_mode,
             vm_memory=vm_memory,
