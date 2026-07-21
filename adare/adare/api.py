@@ -39,13 +39,13 @@ class DevModeAPI:
         """List all dev mode sessions."""
         return self._service.list_sessions(request)
 
-    def get_session_state(self, request):
+    def get_state(self, request):
         """Get session state."""
-        return self._service.get_session_state(request)
+        return self._service.get_state(request)
 
-    def cleanup_sessions(self, request):
+    def cleanup_stale_sessions(self, request):
         """Cleanup stale sessions."""
-        return self._service.cleanup_sessions(request)
+        return self._service.cleanup_stale_sessions(request)
 
     def reset_session(self, request):
         """Reset session (soft or hard)."""
