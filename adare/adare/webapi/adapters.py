@@ -2,6 +2,9 @@
 DTO adapters for converting ADARE internal types to JSON-serializable formats.
 """
 
+import enum
+import inspect
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TypeVar
@@ -10,23 +13,36 @@ from adare.core.result import Result
 
 T = TypeVar("T")
 
+log = logging.getLogger(__name__)
+
 
 def serialize_value(value: Any) -> Any:
     """
     Recursively serialize a value to JSON-compatible format.
 
-    Handles Path, datetime, and other non-JSON types.
+    Handles Path, datetime, Enum members, and other non-JSON types.
     """
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, datetime):
         return value.isoformat()
+    if isinstance(value, enum.Enum):
+        # Enum members (e.g. StatusEnum) must serialize to their name, not be
+        # vars()'d — vars() reaches __objclass__ -> the class -> enum machinery
+        # (a builtin_function_or_method) that FastAPI's encoder cannot handle.
+        return value.name
     if isinstance(value, dict):
         return {k: serialize_value(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
         return [serialize_value(item) for item in value]
-    if hasattr(value, "__dict__"):
-        # For dataclasses and similar objects
+    if callable(value) or isinstance(value, type) or inspect.ismodule(value):
+        # Defense-in-depth: never pass a callable/class/module through to the
+        # encoder. Surface it as a named warning + serializable placeholder so a
+        # future stray leak is visible instead of an opaque FastAPI 500.
+        log.warning("serialize_value: refusing to serialize non-data value %r", value)
+        return repr(value)
+    if hasattr(value, "__dict__") and not isinstance(value, type):
+        # For dataclasses and similar instances (never a class/type).
         return serialize_value(vars(value))
     return value
 
