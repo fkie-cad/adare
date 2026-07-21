@@ -201,15 +201,18 @@ class GuiAgentMixin:
         """
         from adare.backend.experiment.vlm.exceptions import AgentError
 
+        def _err(res) -> str:
+            return res.error.message if res.error else 'unknown error'
+
         async def checkpoint(name: str) -> None:
             res = await session.create_checkpoint(name, 'planning-agent sub-goal')
             if not res.success:
-                raise AgentError(f'Could not checkpoint before sub-goal: {res.message}')
+                raise AgentError(f'Could not checkpoint before sub-goal: {_err(res)}')
 
         async def restore(name: str) -> None:
             res = await session.restore_checkpoint(name)
             if not res.success:
-                raise AgentError(f'Could not restore checkpoint {name!r}: {res.message}')
+                raise AgentError(f'Could not restore checkpoint {name!r}: {_err(res)}')
             # The restore tears down/rebuilds the VM domain + in-VM agent; the
             # session's context.vm is the source of truth, so re-point the host
             # executor at it before the reactive loop resumes.
