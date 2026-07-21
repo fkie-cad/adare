@@ -38,15 +38,25 @@ class OCRProcessor:
                 text_det_unclip_ratio=OCRConstants.OCR_DET_UNCLIP_RATIO,
                 text_det_thresh=OCRConstants.OCR_DET_DB_THRESH,
                 text_det_box_thresh=OCRConstants.OCR_DET_BOX_THRESH,
+                text_det_limit_side_len=OCRConstants.OCR_DET_LIMIT_SIDE_LEN,
+                text_det_limit_type=OCRConstants.OCR_DET_LIMIT_TYPE,
                 lang='en' # Explicitly set language
             )
-            
+
             # Restore logging level
             root_logger.setLevel(original_level)
 
             log.info("Converting bytes to numpy array...")
             nparr = np.frombuffer(screenshot_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+            # Pre-OCR upscaling: PaddleOCR recognizes tiny text poorly, so upscale
+            # before predict() and rescale the detection boxes back afterwards so
+            # returned coordinates remain in original screenshot-pixel space.
+            upscale = OCRConstants.OCR_UPSCALE
+            if upscale and upscale != 1.0:
+                log.info(f"Upscaling screenshot {upscale}x before OCR ({img.shape[1]}x{img.shape[0]})")
+                img = cv2.resize(img, None, fx=upscale, fy=upscale, interpolation=cv2.INTER_CUBIC)
 
             log.info("Running OCR prediction with numpy array...")
             result = ocr.predict(input=img)
@@ -60,6 +70,9 @@ class OCRProcessor:
 
                 # Combine texts, boxes and scores
                 for text, box, score in zip(rec_texts, rec_polys, rec_scores):
+                    # Rescale box back to original screenshot-pixel space
+                    if upscale and upscale != 1.0:
+                        box = box / upscale
                     box_points = box.tolist()
                     detections.append([box_points, (text, score)])
 

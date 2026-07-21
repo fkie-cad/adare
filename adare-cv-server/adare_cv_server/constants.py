@@ -1,5 +1,7 @@
 """Constants for the Adare MCP Server."""
 
+import os
+
 # Default server configuration
 DEFAULT_PORT = 13109
 DEFAULT_HOST = "localhost"
@@ -49,6 +51,19 @@ class OCRConstants:
     OCR_DET_UNCLIP_RATIO = 1.8
     OCR_DET_DB_THRESH = 0.3
     OCR_DET_BOX_THRESH = 0.6
+
+    # Pre-OCR upscaling. PaddleOCR downscales internally for detection and
+    # recognizes tiny crops (e.g. a wrapped "4.17.0" desktop-icon label) poorly.
+    # Upscaling the screenshot before predict() recovers small text; detection
+    # boxes are rescaled back to original screenshot-pixel space so all
+    # downstream coordinates stay unchanged. 1.0 disables it.
+    OCR_UPSCALE = float(os.environ.get("ADARE_OCR_UPSCALE", "2.0"))
+
+    # Detection-side length limit passed to PaddleOCR. Must be large enough that
+    # the upscaled image is NOT downscaled away for detection (which would defeat
+    # the upscale). With limit_type "max" this is the longest allowed side.
+    OCR_DET_LIMIT_SIDE_LEN = int(os.environ.get("ADARE_OCR_DET_LIMIT_SIDE_LEN", "2880"))
+    OCR_DET_LIMIT_TYPE = os.environ.get("ADARE_OCR_DET_LIMIT_TYPE", "max")
 
 # Result limits
 DEFAULT_MAX_RESULTS = 50
