@@ -148,6 +148,8 @@ class GuiAgentMixin:
         # fall back to a temp dir when neither -o nor a run directory gave us one.
         effective_progress = request.progress if request.progress is not None else AGENT_PROGRESS
         want_video = request.video if request.video is not None else AGENT_VIDEO
+        if want_video:
+            QemuVideoRecorder.ensure_ffmpeg(FFMPEG)  # fail fast — before grounding/VM work
         if want_video and run_dir is None:
             import tempfile
             run_dir = Path(tempfile.gettempdir()) / f'adare_agent_run_{request.session_id[:8]}'
