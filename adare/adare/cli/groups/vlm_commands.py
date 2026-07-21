@@ -20,7 +20,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--model', default=None, help='Override the preset model id.')
     @click.option('--name', default=None,
                   help='Name for the profile created from a preset (default: cloud/local).')
-    def use(target, api_key, base_url, model, name):
+    @click.option('--no-verify', is_flag=True,
+                  help='Skip the live endpoint/token check when creating a keyed profile.')
+    def use(target, api_key, base_url, model, name, no_verify):
         """Switch VLM profile — interactively, by name, or from a preset.
 
         With no TARGET, shows a numbered menu of saved profiles (active marked)
@@ -40,19 +42,22 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         """
         from adare.cli.vlm import exec_vlm_use
         args = SimpleNamespace(target=target, api_key=api_key or None,
-                               base_url=base_url, model=model, name=name)
+                               base_url=base_url, model=model, name=name, no_verify=no_verify)
         exec_with_error_printing(exec_vlm_use, args)
 
     @vlm.command()
-    def create():
+    @click.option('--no-verify', is_flag=True,
+                  help='Skip the live endpoint/token check for a keyed profile.')
+    def create(no_verify):
         """Create a profile with a guided menu (provider, model, key, ...).
 
         Walks through: provider (Ollama Cloud / local / custom OpenAI-compatible)
         -> endpoint URL -> model (pick-list or custom) -> coordinate space
-        (custom only) -> API key -> profile name. Saves and activates it.
+        (custom only) -> API key -> profile name. Saves and activates it, then
+        live-checks the endpoint + token for keyed providers (--no-verify skips).
         """
         from adare.cli.vlm import exec_vlm_create
-        exec_with_error_printing(exec_vlm_create, SimpleNamespace())
+        exec_with_error_printing(exec_vlm_create, SimpleNamespace(no_verify=no_verify))
 
     @vlm.command(name='list')
     def list_():
