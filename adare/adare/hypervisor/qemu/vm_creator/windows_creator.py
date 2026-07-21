@@ -108,6 +108,17 @@ class WindowsVMCreator(BaseVMCreator):
             # Create Autounattend media (floppy for x86_64, ISO for aarch64)
             media_path = _create_autounattend_media(self.os_def, tmpdir_path, setup_level=self.setup_level, virtio_iso_path=self._virtio_iso_path)
 
+            # aarch64: build the legacy-boot override ISO. Win11 24H2/25H2 use the
+            # redesigned "ConX" Setup that ignores Autounattend.xml on removable
+            # media (install stalls at the product-key screen); booting a patched
+            # boot.wim forces the legacy setup.exe path that honors the answer file.
+            legacy_boot_iso: Path | None = None
+            if self.os_def.architecture == 'aarch64':
+                print_step('Building legacy-boot override ISO [dim](forces setup.exe /legacy for Win11 24H2/25H2)[/dim]')
+                legacy_boot_iso = _create_legacy_boot_media(
+                    self.os_def, tmpdir_path, self.iso_path, self.setup_level
+                )
+
             # Boot QEMU and wait for install
             try:
                 _run_windows_installation(
@@ -121,6 +132,7 @@ class WindowsVMCreator(BaseVMCreator):
                     ram_mb=self.ram_mb,
                     cpus=self.cpus,
                     has_tpm=shutil.which('swtpm') is not None,
+                    legacy_boot_iso=legacy_boot_iso,
                 )
             except (TimeoutError, subprocess.CalledProcessError) as e:
                 raise WindowsVMCreationError(str(e)) from e
@@ -202,15 +214,7 @@ def _create_autounattend_media(os_def: OsDefinition, tmpdir: Path, setup_level: 
     Returns:
         Path to the media image (floppy .img or .iso)
     """
-    # Resolve template: os_def.template > _AUTOUNATTEND_MAP
-    if os_def.template:
-        template_name = os_def.template
-    else:
-        template_name = _AUTOUNATTEND_MAP.get(os_def.name)
-        if template_name is None:
-            raise WindowsVMCreationError(f"No Autounattend template for OS '{os_def.name}'")
-
-    xml_content = _render_autounattend(template_name, architecture=os_def.architecture, setup_level=setup_level).encode('utf-8')
+    xml_content = _render_autounattend_for(os_def, setup_level)
 
     if os_def.architecture == 'aarch64':
         from adare.hypervisor.qemu.vm_creator.iso_utils import create_tools_iso
@@ -221,6 +225,34 @@ def _create_autounattend_media(os_def: OsDefinition, tmpdir: Path, setup_level: 
     _write_fat12_floppy(floppy_path, {'Autounattend.xml': xml_content})
     log.info(f'Created Autounattend floppy image: {floppy_path}')
     return floppy_path
+
+
+def _render_autounattend_for(os_def: OsDefinition, setup_level: int) -> bytes:
+    """Resolve the Autounattend template for an OS and render it to UTF-8 bytes."""
+    # Resolve template: os_def.template > _AUTOUNATTEND_MAP
+    if os_def.template:
+        template_name = os_def.template
+    else:
+        template_name = _AUTOUNATTEND_MAP.get(os_def.name)
+        if template_name is None:
+            raise WindowsVMCreationError(f"No Autounattend template for OS '{os_def.name}'")
+    return _render_autounattend(
+        template_name, architecture=os_def.architecture, setup_level=setup_level
+    ).encode('utf-8')
+
+
+def _create_legacy_boot_media(
+    os_def: OsDefinition, tmpdir: Path, windows_iso_path: Path, setup_level: int
+) -> Path:
+    """Build the legacy-boot override ISO for aarch64 Windows (see iso_utils).
+
+    Forces Windows Setup into legacy (non-ConX) mode so the Autounattend.xml is
+    honored on Win11 24H2/25H2. The override carries a patched boot.wim + the
+    ISO's EFI boot tree and is attached alongside the untouched Windows ISO.
+    """
+    from adare.hypervisor.qemu.vm_creator.iso_utils import create_legacy_boot_iso
+    xml_content = _render_autounattend_for(os_def, setup_level)
+    return create_legacy_boot_iso(windows_iso_path, xml_content, tmpdir / 'legacy-boot.iso')
 
 
 
@@ -447,6 +479,7 @@ def _run_windows_installation(
     cpus: int,
     has_tpm: bool = False,
     utm_iso_path: Path | None = None,
+    legacy_boot_iso: Path | None = None,
 ) -> None:
     """Boot QEMU with UEFI + Windows ISO + virtio-win + Autounattend media and wait for install.
 
@@ -456,6 +489,10 @@ def _run_windows_installation(
 
     This avoids the UEFI boot loop where AAVMF re-boots from ISO after the
     mid-install reboot instead of continuing from NVMe.
+
+    ``legacy_boot_iso`` (aarch64 only) is attached in Phase 1 exclusively — it
+    carries the legacy-boot marker, so attaching it in Phase 2 would re-boot the
+    guest into WinPE Setup instead of the freshly installed OS.
     """
     if os_def.architecture == 'aarch64':
         print_section('Installation (Phase 1/2)')
@@ -474,6 +511,7 @@ def _run_windows_installation(
             boot_from_disk=False,
             no_reboot=True,
             phase_label='Phase 1/2: WinPE',
+            legacy_boot_iso=legacy_boot_iso,
         )
         print_section('Installation (Phase 2/2)')
         print_step('Completing setup (OOBE + drivers) [dim](this may take 30-60 minutes)[/dim]')
@@ -526,6 +564,7 @@ def _run_qemu_install_phase(
     boot_from_disk: bool,
     no_reboot: bool,
     phase_label: str,
+    legacy_boot_iso: Path | None = None,
 ) -> None:
     """Run a single QEMU install phase.
 
@@ -534,6 +573,7 @@ def _run_qemu_install_phase(
                         If False, ISO gets bootindex=0 and NVMe gets bootindex=1.
         no_reboot: If True, add -no-reboot so QEMU exits on guest reboot.
         phase_label: Label for log messages and status display.
+        legacy_boot_iso: aarch64 legacy-boot override ISO to attach (Phase 1 only).
     """
     arch_params = qemu_params_for_arch(os_def)
     machine = arch_params['machine']
@@ -602,6 +642,14 @@ def _run_qemu_install_phase(
         # Phase 1 (boot_from_disk=False): bootindex=0 (primary — boot from ISO)
         # Phase 2 (boot_from_disk=True):  no bootindex (don't boot from ISO)
         iso_bootindex = '' if boot_from_disk else ',bootindex=0'
+        # Legacy-boot override (Phase 1 only): the UEFI Shell finds its marker and
+        # chainloads its patched boot.wim, forcing setup.exe /legacy. The original
+        # Windows ISO stays attached (below) to supply install.wim.
+        if legacy_boot_iso is not None:
+            cmd.extend([
+                '-drive', f'file={legacy_boot_iso},media=cdrom,if=none,id=bootiso',
+                '-device', 'usb-storage,drive=bootiso,removable=on',
+            ])
         cmd.extend([
             '-drive', f'file={windows_iso_path},media=cdrom,if=none,id=winiso',
             '-device', f'usb-storage,drive=winiso{iso_bootindex},removable=on',

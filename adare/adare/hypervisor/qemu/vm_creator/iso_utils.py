@@ -9,25 +9,49 @@ from adare.hypervisor.exceptions import HypervisorException
 log = logging.getLogger(__name__)
 
 
-# UEFI Shell auto-boot script for aarch64 Windows installation.
-# NVRAM is pre-populated with Shell as Boot0000 (see firmware.py), so the
-# firmware auto-launches Shell which then auto-executes this startup.nsh.
-# Strategy: try Windows Boot Manager first (Phase 2 — only on NVMe after install),
-# then generic EFI boot loader (Phase 1 — on Windows ISO).
-# map -r forces device re-enumeration in case USB devices weren't mapped yet.
-_STARTUP_NSH = "\r\n".join([
-    "@echo -off",
-    "map -r",
-    r"FS0:\EFI\Microsoft\Boot\bootmgfw.efi",
-    r"FS1:\EFI\Microsoft\Boot\bootmgfw.efi",
-    r"FS2:\EFI\Microsoft\Boot\bootmgfw.efi",
-    r"FS3:\EFI\Microsoft\Boot\bootmgfw.efi",
-    r"FS0:\EFI\BOOT\BOOTAA64.EFI",
-    r"FS1:\EFI\BOOT\BOOTAA64.EFI",
-    r"FS2:\EFI\BOOT\BOOTAA64.EFI",
-    r"FS3:\EFI\BOOT\BOOTAA64.EFI",
-    "",
-])
+# Marker file that identifies the ADARE legacy-boot override ISO (see
+# create_legacy_boot_iso). Its presence on a mapped filesystem tells startup.nsh
+# to boot that volume's Windows Boot Manager — which carries a patched boot.wim
+# that forces Windows Setup into legacy mode on Win11 24H2/25H2 (ConX).
+_LEGACY_BOOT_MARKER = 'ADARELGB.MRK'
+
+# Number of UEFI filesystem handles (FS0..FSn-1) to probe. QEMU install phases
+# attach at most a handful of USB CD-ROMs + the NVMe disk, so 10 is ample.
+_FS_PROBE_COUNT = 10
+
+
+def _build_startup_nsh() -> str:
+    """Build the UEFI Shell auto-boot script for aarch64 Windows installation.
+
+    NVRAM is pre-populated with Shell as Boot0000 (see firmware.py), so the
+    firmware auto-launches Shell which then auto-executes this startup.nsh.
+
+    Boot strategy, in order:
+      1. If any mapped filesystem carries the legacy-boot marker (install phase
+         only — the override ISO is attached only while booting from ISO), boot
+         that volume's Windows Boot Manager. This loads the patched boot.wim.
+      2. Otherwise fall back to the Windows Boot Manager / generic EFI loader on
+         the remaining volumes — this is the post-install disk boot (Phase 2),
+         where no override ISO (and thus no marker) is present.
+
+    map -r forces device re-enumeration in case USB devices weren't mapped yet.
+    Flat `if exist ... then / endif` blocks are used instead of a `for` loop to
+    stay within the most conservative UEFI Shell syntax.
+    """
+    lines = ['@echo -off', 'map -r']
+    for i in range(_FS_PROBE_COUNT):
+        lines.append(f'if exist FS{i}:\\{_LEGACY_BOOT_MARKER} then')
+        lines.append(f'  FS{i}:\\EFI\\BOOT\\BOOTAA64.EFI')
+        lines.append('endif')
+    for i in range(4):
+        lines.append(rf'FS{i}:\EFI\Microsoft\Boot\bootmgfw.efi')
+    for i in range(4):
+        lines.append(rf'FS{i}:\EFI\BOOT\BOOTAA64.EFI')
+    lines.append('')
+    return '\r\n'.join(lines)
+
+
+_STARTUP_NSH = _build_startup_nsh()
 
 
 class ISOExtractionError(HypervisorException):
@@ -334,37 +358,164 @@ def _extract_guest_tools_exe(virtio_iso_path: Path, output_dir: Path) -> None:
         iso.close()
 
 
-def _build_tools_iso(source_dir: Path, output_path: Path) -> None:
+def _build_tools_iso(
+    source_dir: Path,
+    output_path: Path,
+    *,
+    volume_label: str = 'AAINSTALL',
+    udf: bool = False,
+) -> None:
     """Build an ISO from a directory using platform-appropriate tools.
 
     macOS: hdiutil makehybrid (always available)
     Linux: mkisofs or genisoimage (matching UTM's exact flags)
     Fallback: pycdlib (pure Python)
+
+    Args:
+        volume_label: ISO volume identifier.
+        udf: If True, emit a UDF filesystem in addition to ISO9660/Joliet. The
+            legacy-boot override ISO uses this so edk2 reads it exactly like a
+            stock Windows ISO (which is UDF) — preserving the nested \\EFI and
+            \\sources tree and long/cased filenames the Windows Boot Manager
+            expects. The pycdlib fallback cannot produce UDF and is not used for
+            bootable media.
     """
     import platform
     import shutil
     import subprocess
 
     if platform.system() == 'Darwin':
-        subprocess.run(
-            ['hdiutil', 'makehybrid', '-iso', '-joliet',
-             '-default-volume-name', 'AAINSTALL',
-             '-o', str(output_path), str(source_dir)],
-            check=True, capture_output=True,
-        )
+        cmd = ['hdiutil', 'makehybrid', '-iso', '-joliet']
+        if udf:
+            cmd += ['-udf', '-udf-volume-name', volume_label]
+        cmd += ['-default-volume-name', volume_label,
+                '-o', str(output_path), str(source_dir)]
+        subprocess.run(cmd, check=True, capture_output=True)
         return
 
     for tool in ('mkisofs', 'genisoimage'):
         if shutil.which(tool):
-            subprocess.run(
-                [tool, '-J', '-rational-rock', '-full-iso9660-filenames',
-                 '-V', 'AAINSTALL', '-quiet',
-                 '-o', str(output_path), str(source_dir)],
-                check=True, capture_output=True,
-            )
+            cmd = [tool, '-J', '-rational-rock', '-full-iso9660-filenames']
+            if udf:
+                cmd += ['-udf']
+            cmd += ['-V', volume_label, '-quiet', '-o', str(output_path), str(source_dir)]
+            subprocess.run(cmd, check=True, capture_output=True)
             return
 
+    if udf:
+        raise ISOExtractionError(
+            str(output_path),
+            'No system ISO tool (hdiutil/mkisofs/genisoimage) available to build '
+            'a UDF bootable ISO; pycdlib fallback cannot produce bootable media.',
+        )
     _build_tools_iso_pycdlib(source_dir, output_path)
+
+
+# ---------------------------------------------------------------------------
+# Legacy-boot override ISO (Win11 24H2/25H2 "ConX" setup workaround)
+# ---------------------------------------------------------------------------
+# Windows 11 24H2/25H2 ship a redesigned Setup front-end ("ConX", SetupPrep.exe)
+# that no longer honors an Autounattend.xml supplied on removable media — Setup
+# stalls interactively at the product-key/OOBE screens. The community-confirmed
+# fix is to force the *legacy* setup.exe path by placing a winpeshl.ini inside
+# the WinPE image (boot.wim) that runs `setup.exe /legacy`.
+#
+# The Windows ISO is attached read-only and its install.wim is >4 GB inside a
+# UDF filesystem, so we do NOT rebuild it. Instead we build a small override ISO
+# carrying only a *patched* boot.wim plus the ISO's EFI boot tree; the UEFI Shell
+# boots this override (identified by a marker file), WinPE runs setup.exe /legacy,
+# and Setup finds the untouched install.wim on the original ISO (still attached).
+
+_WINPESHL_INI = (
+    '[LaunchApps]\r\n'
+    '%SystemDrive%\\sources\\setup.exe, /legacy\r\n'
+)
+
+# boot.wim image index that Windows install media boots ("Windows Setup"); the
+# generic "Windows PE" image (index 1) does not carry setup.exe.
+_SETUP_WIM_INDEX = 2
+
+
+def create_legacy_boot_iso(
+    windows_iso_path: Path,
+    xml_content: bytes,
+    output_path: Path,
+) -> Path:
+    """Build a UEFI-bootable override ISO that forces Windows Setup into legacy mode.
+
+    Extracts the EFI boot tree and boot.wim from ``windows_iso_path``, injects a
+    winpeshl.ini (``setup.exe /legacy``) into the boot.wim "Windows Setup" image,
+    and packages them — with the legacy-boot marker and the Autounattend.xml — as
+    a small UDF ISO. The original Windows ISO is left untouched and must stay
+    attached alongside this override to supply install.wim.
+
+    Requires ``wimlib-imagex`` (patch boot.wim) and ``7z`` (read the UDF source
+    ISO). Both are validated by check_prerequisites for aarch64 Windows builds.
+    """
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix='adare-legacyboot-') as tmpdir:
+        tmp = Path(tmpdir)
+        stage = tmp / 'iso'
+        stage.mkdir()
+
+        # 1. Extract the EFI boot tree + boot.wim from the (UDF) Windows ISO.
+        #    7z reads UDF; the paths are lowercase as stored on the ISO.
+        _extract_with_7z(windows_iso_path, ['efi', 'sources/boot.wim'], stage)
+
+        boot_wim = stage / 'sources' / 'boot.wim'
+        if not boot_wim.is_file():
+            raise ISOExtractionError(
+                str(windows_iso_path),
+                'sources/boot.wim not found in Windows ISO — cannot build legacy-boot ISO.',
+            )
+
+        # 2. Patch the "Windows Setup" image with winpeshl.ini -> setup.exe /legacy.
+        winpeshl = tmp / 'winpeshl.ini'
+        winpeshl.write_bytes(_WINPESHL_INI.encode('ascii'))
+        subprocess.run(
+            ['wimlib-imagex', 'update', str(boot_wim), str(_SETUP_WIM_INDEX),
+             '--command', f'add {winpeshl} /Windows/System32/winpeshl.ini'],
+            check=True, capture_output=True,
+        )
+
+        # 3. Add the marker (so startup.nsh boots this volume) + the answer file.
+        (stage / _LEGACY_BOOT_MARKER).write_bytes(b'ADARE legacy-boot override\r\n')
+        (stage / 'Autounattend.xml').write_bytes(xml_content)
+
+        # 4. Build the bootable override ISO (UDF, like a stock Windows ISO).
+        _build_tools_iso(stage, output_path, volume_label='AABOOT', udf=True)
+
+    log.info(f'Created legacy-boot override ISO: {output_path} ({output_path.stat().st_size} bytes)')
+    return output_path
+
+
+def _extract_with_7z(archive: Path, members: list[str], dest_dir: Path) -> None:
+    """Extract specific members from an archive into dest_dir, preserving paths.
+
+    Uses 7z (handles UDF Windows ISOs, including >4 GB sibling files that trip up
+    xorriso). Raises ISOExtractionError if 7z is missing or the extract fails.
+    """
+    import shutil
+    import subprocess
+
+    sevenzip = shutil.which('7z') or shutil.which('7zz') or shutil.which('7za')
+    if not sevenzip:
+        raise ISOExtractionError(
+            str(archive),
+            '7z not found — required to extract boot files from the Windows ISO. '
+            'Install with: brew install p7zip (macOS) / apt install p7zip-full (Linux).',
+        )
+    result = subprocess.run(
+        [sevenzip, 'x', str(archive), f'-o{dest_dir}', '-y', *members],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise ISOExtractionError(
+            str(archive),
+            f'7z extract failed ({result.returncode}): {result.stderr.strip() or result.stdout.strip()}',
+        )
 
 
 def _build_tools_iso_pycdlib(source_dir: Path, output_path: Path) -> None:

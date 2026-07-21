@@ -104,6 +104,26 @@ def check_prerequisites(
                 'via registry hack in Autounattend.xml. Install swtpm for proper TPM support.'
             )
 
+        # aarch64: the legacy-boot override ISO (Win11 24H2/25H2 "ConX" setup
+        # workaround) needs wimlib-imagex to patch boot.wim and 7z to read the
+        # UDF Windows ISO. See iso_utils.create_legacy_boot_iso.
+        if os_def.architecture == 'aarch64':
+            host = platform.system()
+            if not shutil.which('wimlib-imagex'):
+                hint = ('brew install wimlib' if host == 'Darwin'
+                        else 'sudo apt install wimtools (Debian/Ubuntu) or sudo dnf install wimlib-utils (Fedora)')
+                missing.append(
+                    'wimlib-imagex required to build the Win11 legacy-boot ISO '
+                    f'(24H2/25H2 setup workaround). Install with: {hint}'
+                )
+            if not (shutil.which('7z') or shutil.which('7zz') or shutil.which('7za')):
+                hint = ('brew install p7zip' if host == 'Darwin'
+                        else 'sudo apt install p7zip-full (Debian/Ubuntu) or sudo dnf install p7zip (Fedora)')
+                missing.append(
+                    '7z required to extract boot files from the Windows ISO. '
+                    f'Install with: {hint}'
+                )
+
     # Manual install mode checks
     if os_def.install_mode == 'manual':
         if iso_path is None:
