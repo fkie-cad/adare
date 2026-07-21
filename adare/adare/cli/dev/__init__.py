@@ -28,7 +28,7 @@ from adare.cli.dev.checkpoints import (
     exec_dev_reset_hard,
     exec_dev_reset_soft,
 )
-from adare.cli.dev.agent import exec_dev_agent
+from adare.cli.dev.agent import exec_dev_agent, exec_dev_grounding_pull
 from adare.cli.dev.author import exec_dev_author
 from adare.cli.dev.mcp import exec_dev_mcp
 from adare.cli.dev.recording import exec_dev_record
@@ -66,6 +66,7 @@ __all__ = [
     "exec_dev_reset_hard",
     # Recording
     "exec_dev_agent",
+    "exec_dev_grounding_pull",
     "exec_dev_author",
     "exec_dev_record",
     # MCP server

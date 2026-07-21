@@ -48,6 +48,34 @@ adareexp = "adare.example:main"
 [project.optional-dependencies]
 docs = ["sphinx", "sphinx-rtd-theme"]
 qemu = ["libvirt-python>=11.0.0"]
+# Optional local element-grounding backend for `adare dev agent --ground`:
+# the vendored LocateAnything-3B server (torch/MPS). Heavy + NON-COMMERCIAL
+# (NVIDIA license) -> opt-in only, local testing. torch/transformers are
+# imported lazily inside the server worker, so a base install never loads them.
+# torchvision/peft/lmdb/decord are HARD top-level imports in the model's
+# trust_remote_code processor/model files (needed even for image-only
+# grounding); pillow/numpy/opencv are already in base. transformers is capped
+# <5 — the model was built/tested against the 4.x line.
+#
+# PLATFORM NOTE: everything here resolves to wheels on Linux x86_64 and on
+# macOS-arm64 EXCEPT `decord`, which has no macOS-arm64 wheel upstream (and
+# eva-decord ships only linux/windows wheels). So `uv sync --extra grounding`
+# works on Linux; on macOS-arm64 it cannot install decord — instead point
+# ADARE_LOCATE_PYTHON at an interpreter that already has a working decord (e.g.
+# built from source), and the server runs there by file path (no adare import).
+grounding = [
+    "torch>=2.8",
+    "torchvision>=0.23",
+    "transformers>=4.46,<5",
+    "accelerate>=1.0",
+    "safetensors>=0.4",
+    "peft>=0.11",
+    "lmdb>=1.4",
+    # decord ships no macOS-arm64 wheel; gate it to linux so the universal
+    # uv.lock still resolves on macOS-arm64 (where ADARE_LOCATE_PYTHON is used
+    # instead of an in-venv install).
+    "eva-decord>=0.6.1; sys_platform == 'linux'",
+]
 
 [dependency-groups]
 test = [

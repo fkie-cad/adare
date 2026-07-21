@@ -38,10 +38,13 @@ def exec_dev_agent(arguments):
     output_file = Path(output).resolve() if output else None
 
     planning = getattr(arguments, 'planning', None)
+    grounding = getattr(arguments, 'grounding', None)
 
     print(f"Driving session {session_id} toward goal:\n  {goal}")
     if planning:
         print("Planning mode: decompose -> checkpoint -> execute -> verify -> backtrack")
+    if grounding:
+        print("Grounding mode: auto-start LocateAnything (clicks grounded to element boxes)")
     if output_file:
         print(f"Recording playbook to: {output_file}")
 
@@ -54,6 +57,7 @@ def exec_dev_agent(arguments):
         stall_limit=getattr(arguments, 'stall_limit', None),
         interactive=getattr(arguments, 'interactive', False),
         planning=planning,
+        grounding=grounding,
     ))
 
     if not result.success:
@@ -78,3 +82,53 @@ def exec_dev_agent(arguments):
             next_steps=next_steps or ['Inspect the report and retry with a clearer --goal'],
         )
         exit(1)
+
+
+def exec_dev_grounding_pull(arguments):
+    """Pre-download the LocateAnything grounding weights (~7.3 GB).
+
+    Avoids paying the cold-download cost on the first ``--ground`` run's
+    ``/health`` poll. Needs the grounding backend installed
+    (``uv sync --extra grounding``) plus an ``HF_TOKEN`` and the accepted NVIDIA
+    license. If the configured model is already a local directory, nothing is
+    downloaded.
+    """
+    from adare.config.server import LOCATE_MODEL_PATH
+
+    model = getattr(arguments, 'model', None) or LOCATE_MODEL_PATH or 'nvidia/LocateAnything-3B'
+
+    local = Path(model).expanduser()
+    if local.exists():
+        print_success_message(
+            title=f'Model already present locally: {local}',
+            next_steps=[f'Use it offline: ADARE_LOCATE_MODEL_PATH={local} HF_HUB_OFFLINE=1 '
+                        'adare dev agent --ground --goal "..."'],
+        )
+        return
+
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError:
+        print_error_message(
+            title='Grounding backend not installed',
+            next_steps=['Install it: uv sync --extra grounding',
+                        'Or point ADARE_LOCATE_PYTHON at a venv that already has it'],
+        )
+        exit(1)
+
+    print(f'Downloading {model} (~7.3 GB — needs HF_TOKEN and the accepted NVIDIA license) ...')
+    try:
+        path = snapshot_download(repo_id=model)
+    except (OSError, ValueError) as exc:  # gated/auth/HTTP errors subclass OSError
+        print_error_message(
+            title=f'Could not download {model}: {exc}',
+            next_steps=['Accept the license at https://huggingface.co/nvidia/LocateAnything-3B',
+                        'Export a token: export HF_TOKEN=hf_...',
+                        'Or set ADARE_LOCATE_MODEL_PATH to a local weights directory'],
+        )
+        exit(1)
+
+    print_success_message(
+        title=f'Grounding weights ready: {path}',
+        next_steps=['Run: adare dev agent --ground --goal "..."'],
+    )

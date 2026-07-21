@@ -74,6 +74,27 @@ LOCATE_CROP_MIN = int(os.environ.get('ADARE_LOCATE_CROP_MIN', '72'))
 # today's behaviour (VLM point clicks; LA only tightens the recorded crop).
 LOCATE_CLICK = os.environ.get('ADARE_LOCATE_CLICK', '0').lower() in ('1', 'true', 'yes', 'on')
 
+# Native auto-start of the vendored LocateAnything grounding server (no external
+# project, no pre-running endpoint). `adare dev agent --ground` brings the server
+# up itself and tears it down at run end; ADARE_LOCATE_AUTOSTART=1 makes that the
+# default without the flag. If ADARE_LOCATE_URL is set, the agent attaches to it
+# instead of spawning (and never kills a server it didn't start).
+#   LOCATE_PORT         port the auto-started server binds (also the attach probe)
+#   LOCATE_MODEL_PATH   HF id or local dir for the weights (empty -> nvidia/LocateAnything-3B);
+#                       point at a local backup dir + HF_HUB_OFFLINE=1 to run fully offline
+#   LOCATE_PYTHON       interpreter to run the server with (empty -> adare's own, which
+#                       needs `uv sync --extra grounding`). Set to a venv that already has
+#                       torch + the model's trust_remote_code deps to skip installing the
+#                       heavy stack into adare (the server has no adare imports, so it is
+#                       launched by file path under a foreign interpreter).
+#   LOCATE_START_TIMEOUT seconds to wait for /health while the model loads (cold HF
+#                       download can be minutes; a local backup loads in seconds)
+LOCATE_AUTOSTART = os.environ.get('ADARE_LOCATE_AUTOSTART', '0').lower() in ('1', 'true', 'yes', 'on')
+LOCATE_PORT = int(os.environ.get('ADARE_LOCATE_PORT', '13111'))
+LOCATE_MODEL_PATH = os.environ.get('ADARE_LOCATE_MODEL_PATH', '')
+LOCATE_PYTHON = os.environ.get('ADARE_LOCATE_PYTHON', '')
+LOCATE_START_TIMEOUT = int(os.environ.get('ADARE_LOCATE_START_TIMEOUT', '180'))
+
 # Bounded-autonomy budgets for the record run.
 GUI_AGENT_MAX_STEPS = int(os.environ.get('ADARE_GUI_AGENT_MAX_STEPS', '80'))
 GUI_AGENT_STALL_LIMIT = int(os.environ.get('ADARE_GUI_AGENT_STALL_LIMIT', '6'))

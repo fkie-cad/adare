@@ -21,6 +21,9 @@ mcp_gui = "adare.mcp_gui:main"
 [project.optional-dependencies]
 docs = ["sphinx", "furo", "sphinx-design"]
 qemu = ["adare[qemu]"]
+# Local LocateAnything grounding backend (torch/MPS) for `adare dev agent
+# --ground`. Non-commercial (NVIDIA) — opt-in: `uv sync --extra grounding`.
+grounding = ["adare[grounding]"]
 
 [dependency-groups]
 test = [
