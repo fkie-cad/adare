@@ -131,6 +131,47 @@ def _scale_coord(value: int, extent: int, coord_space: str) -> int:
     return max(0, min(extent - 1, int(value)))
 
 
+def _coerce_coord(value) -> int:
+    """Coerce a single coordinate (int/float/str) to int, or raise ValueError.
+
+    Booleans are rejected (``True`` must not silently become ``1``). Non-numeric
+    types raise so the caller can turn it into a *repairable* ``VLMError`` rather
+    than letting an unhandled ``TypeError`` abort the whole run.
+    """
+    if isinstance(value, bool):
+        raise ValueError(f'boolean is not a coordinate: {value!r}')
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        return int(float(value.strip()))
+    raise ValueError(f'non-numeric coordinate {type(value).__name__}: {value!r}')
+
+
+def _normalize_point(x_raw, y_raw):
+    """Normalise a model's click point when it uses list-valued coordinates.
+
+    Some vision models return the point packed into a single field —
+    ``x: [px, py]`` (often with ``y`` omitted), or nested as ``x: [[px, py]]`` —
+    or wrap each coordinate in a list (``x: [px]``). Returns ``(x, y)`` as raw
+    scalars (``None`` where unrecoverable, so the caller raises a repairable
+    "missing x/y").
+    """
+    # Unwrap one nested level: [[px, py]] -> [px, py].
+    if (isinstance(x_raw, (list, tuple)) and len(x_raw) == 1
+            and isinstance(x_raw[0], (list, tuple))):
+        x_raw = x_raw[0]
+    # A 2+ element point in x with no usable y -> x carries the whole point.
+    y_empty = y_raw is None or (isinstance(y_raw, (list, tuple)) and not y_raw)
+    if isinstance(x_raw, (list, tuple)) and len(x_raw) >= 2 and y_empty:
+        return x_raw[0], x_raw[1]
+    # Otherwise take the first element of any list-valued coordinate.
+    if isinstance(x_raw, (list, tuple)):
+        x_raw = x_raw[0] if x_raw else None
+    if isinstance(y_raw, (list, tuple)):
+        y_raw = y_raw[0] if y_raw else None
+    return x_raw, y_raw
+
+
 def parse_action(
     reply: str,
     *,
@@ -159,12 +200,23 @@ def parse_action(
     )
 
     if kind in (CLICK, DOUBLE_CLICK):
-        if 'x' not in obj or 'y' not in obj:
+        # Models sometimes pack the point into one list field or wrap coords in
+        # lists; normalise to scalars first so a list value cannot raise an
+        # unhandled TypeError (which would abort the run instead of repairing).
+        x_raw, y_raw = _normalize_point(obj.get('x'), obj.get('y'))
+        if x_raw is None or y_raw is None:
             raise VLMError(f'{kind} action missing x/y: {obj!r}')
         w = screen_width or 1
         h = screen_height or 1
-        action.x = _scale_coord(int(obj['x']), w, coord_space)
-        action.y = _scale_coord(int(obj['y']), h, coord_space)
+        try:
+            x_val = _coerce_coord(x_raw)
+            y_val = _coerce_coord(y_raw)
+        except ValueError as exc:
+            raise VLMError(
+                f'{kind} action has non-numeric x/y ({x_raw!r}, {y_raw!r}): {obj!r}'
+            ) from exc
+        action.x = _scale_coord(x_val, w, coord_space)
+        action.y = _scale_coord(y_val, h, coord_space)
         action.button = str(obj.get('button', 'left')).lower()
     elif kind == TYPE:
         action.text = str(obj.get('text', ''))
