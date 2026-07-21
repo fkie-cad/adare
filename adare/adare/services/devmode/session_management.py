@@ -216,7 +216,7 @@ class SessionManagementMixin:
 
             # Validate VM resources exist
             validation_result = self._validate_vm_resources(db_session)
-            if not validation_result.is_success:
+            if not validation_result.success:
                 return validation_result
 
             # Resume session via manager (async)
