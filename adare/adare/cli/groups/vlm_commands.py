@@ -43,6 +43,17 @@ def register(cli, AliasedGroup, exec_with_error_printing):
                                base_url=base_url, model=model, name=name)
         exec_with_error_printing(exec_vlm_use, args)
 
+    @vlm.command()
+    def create():
+        """Create a profile with a guided menu (provider, model, key, ...).
+
+        Walks through: provider (Ollama Cloud / local / custom OpenAI-compatible)
+        -> endpoint URL -> model (pick-list or custom) -> coordinate space
+        (custom only) -> API key -> profile name. Saves and activates it.
+        """
+        from adare.cli.vlm import exec_vlm_create
+        exec_with_error_printing(exec_vlm_create, SimpleNamespace())
+
     @vlm.command(name='list')
     def list_():
         """List saved VLM profiles (active one marked)."""
