@@ -343,8 +343,11 @@ class GuiAgent:
             'reasoning': action.reasoning,
         })
 
-    def _emit_executed(self, index: int, status: str) -> None:
-        self._emit({'type': 'executed', 'index': index, 'status': status})
+    def _emit_executed(self, index: int, status: str, screenshot: str | None = None) -> None:
+        self._emit({
+            'type': 'executed', 'index': index, 'status': status,
+            'screenshot': screenshot,
+        })
 
     # -- interactive gate ---------------------------------------------------
 
@@ -667,7 +670,7 @@ class GuiAgent:
 
             status = await self._execute(action, png)
             shot_file = self._persist_step(index, png, action, status)
-            self._emit_executed(index, status)
+            self._emit_executed(index, status, screenshot=shot_file)
 
             self._records.append(StepRecord(
                 index=index, action_kind=action.kind, describe=action.describe,
@@ -775,7 +778,7 @@ class GuiAgent:
 
                 status = await self._execute(action, png)
                 shot_file = self._persist_step(index, png, action, status)
-                self._emit_executed(index, status)
+                self._emit_executed(index, status, screenshot=shot_file)
 
                 self._records.append(StepRecord(
                     index=index, action_kind=action.kind, describe=action.describe,

@@ -99,9 +99,13 @@ class DevModeAPI:
         """Resume the most recently stopped dev mode session."""
         return self._service.resume_most_recent(project_path, console_ulid=console_ulid)
 
-    def run_gui_agent(self, request):
-        """Drive the session VM toward a goal with the vision-LLM GUI agent."""
-        return self._service.run_gui_agent(request)
+    def run_gui_agent(self, request, event_sink=None):
+        """Drive the session VM toward a goal with the vision-LLM GUI agent.
+
+        ``event_sink`` (optional) is a plain-sync callable that receives each
+        progress event — used by the web server to broadcast a live view.
+        """
+        return self._service.run_gui_agent(request, event_sink=event_sink)
 
     def run_gui_author(self, request):
         """Author a playbook from human text steps (no VLM planner)."""
