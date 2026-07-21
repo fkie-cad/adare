@@ -1,10 +1,20 @@
 import logging
 import os
 
+from . import userconfig
 from .configdirectory import APPDATA_DIR
 from .exceptions import ConfigDirectoryError
 
 log = logging.getLogger(__name__)
+
+
+def _cfg(name, default):
+    """Resolve a setting: environment variable > user config file > default.
+
+    Lets ``adare vlm use ...`` persist a provider choice in ~/.adare/config.json
+    while a one-off ``ADARE_*=... adare ...`` still overrides it for a single run.
+    """
+    return os.environ.get(name) or userconfig.get(name) or default
 
 
 def get_cookie_file():
@@ -42,14 +52,16 @@ TIMEOUT_SECONDS = 10
 #   ADARE_VLLM_MODEL=qwen3-vl:235b-cloud        # GUI-grounding / computer-use
 #   ADARE_VLLM_COORD_SPACE=normalized_1000       # Qwen3-VL returns 0..1000 coords
 # Run `adare vm gui-doctor` to verify the endpoint and auto-detect the coord space.
-VLLM_BASE_URL = os.environ.get('ADARE_VLLM_BASE_URL', 'http://localhost:8000/v1')
-VLLM_MODEL = os.environ.get('ADARE_VLLM_MODEL', 'Qwen/Qwen2-VL-7B-Instruct')
-VLLM_API_KEY = os.environ.get('ADARE_VLLM_API_KEY', 'EMPTY')
+# Persist a provider without env vars: `adare vlm use ollama-cloud` / `... use local`
+# (env still overrides the saved config for a single run — see _cfg above).
+VLLM_BASE_URL = _cfg('ADARE_VLLM_BASE_URL', 'http://localhost:8000/v1')
+VLLM_MODEL = _cfg('ADARE_VLLM_MODEL', 'Qwen/Qwen2-VL-7B-Instruct')
+VLLM_API_KEY = _cfg('ADARE_VLLM_API_KEY', 'EMPTY')
 
 # Coordinate convention the model returns clicks in:
 #   'absolute'        — raw pixel coordinates of the image it was shown (default)
 #   'normalized_1000' — 0..1000 on both axes (rescaled to pixels by the client)
-VLLM_COORD_SPACE = os.environ.get('ADARE_VLLM_COORD_SPACE', 'absolute')
+VLLM_COORD_SPACE = _cfg('ADARE_VLLM_COORD_SPACE', 'absolute')
 
 # Optional open-vocabulary element-grounding backend for the GUI agent.
 # When set, `adare dev agent` grounds each click to the true element bounding
