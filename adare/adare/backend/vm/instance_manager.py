@@ -888,6 +888,13 @@ class VmInstanceManager:
                 return
 
             await vm.destroy()
+
+            # destroy() removes only the overlay (it is hard-guarded to
+            # overlay-only). This path is instance-scoped, so reclaim the
+            # instance's own dedicated base disk + NVRAM too, otherwise they
+            # leak in ~/.adare/qemu/disks/ forever. No-op for --no-copy VMs.
+            await vm.cleanup_base_disk()
+
             log.info(f"Cleaned up QEMU VM: {instance.instance_name}")
         except ImportError:
             log.warning("QEMU module not available for cleanup")
