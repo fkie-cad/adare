@@ -83,6 +83,7 @@ def exec_dev_agent(arguments):
             planning=planning,
             grounding=grounding,
             progress=progress,
+            reasoning=getattr(arguments, 'reasoning', True),
             video=video,
         ))
     except KeyboardInterrupt:

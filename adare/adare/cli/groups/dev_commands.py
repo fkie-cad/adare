@@ -271,6 +271,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--progress/--no-progress', 'progress', default=None,
                   help='Show a live per-step table while the agent runs '
                        '(default: on when stdout is a TTY).')
+    @click.option('--reasoning/--no-reasoning', 'reasoning', default=True,
+                  help='Show the model\'s per-step reasoning in a "chat" panel below the '
+                       'progress table (default: on). Use global --verbose/--very-verbose to '
+                       'also stream grounding + decision-repair logs live; the full per-step '
+                       'reasoning + raw reply is always saved to the run\'s steps/step_NNN.json '
+                       'and install_report.md.')
     @click.option('--video/--no-video', 'video', default=None,
                   help='Record the whole run to <run_dir>/run.mp4 via ffmpeg '
                        '(default: ADARE_AGENT_VIDEO; off). Needs the ffmpeg binary.')
@@ -279,7 +285,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
                        '(playbook.yml + img/ crops + metadata.yml). Files only — no DB '
                        'load; run `adare experiment load NAME` later. Excludes -o/--out.')
     def agent(session_id, goal, goal_file, output, max_steps, stall_limit, interactive,
-              planning, grounding, progress, video, as_experiment):
+              planning, grounding, progress, reasoning, video, as_experiment):
         """Drive the session VM toward a goal with the vision-LLM GUI agent.
 
         Uses the configured vLLM endpoint (ADARE_VLLM_*; works with Ollama Cloud).
@@ -303,6 +309,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             planning=planning,
             grounding=grounding,
             progress=progress,
+            reasoning=reasoning,
             video=video,
             as_experiment=as_experiment,
         )

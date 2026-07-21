@@ -21,10 +21,11 @@ export class WebSocketClient {
   constructor(sessionId: string) {
     this.sessionId = sessionId
     // Use WS protocol for WebSocket, auto-detect host
+    // Connect to the same origin so the Vite dev proxy (see vite.config.ts,
+    // which forwards `/ws` to the backend) and production both work without a
+    // hardcoded port.
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.hostname
-    const port = import.meta.env.DEV ? '8000' : window.location.port
-    this.url = `${protocol}//${host}:${port}/ws/${sessionId}`
+    this.url = `${protocol}//${window.location.host}/ws/${sessionId}`
   }
 
   /**

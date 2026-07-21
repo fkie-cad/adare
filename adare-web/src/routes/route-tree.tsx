@@ -6,6 +6,7 @@ import RunsListPage from '@/pages/runs-list'
 import ExperimentsListPage from '@/pages/experiments-list'
 import ProjectsListPage from '@/pages/projects-list'
 import EnvironmentsListPage from '@/pages/environments-list'
+import AgentLivePage from '@/pages/agent-live'
 
 interface RouterContext {
   queryClient: QueryClient
@@ -49,10 +50,17 @@ const environmentsRoute = createRoute({
   component: EnvironmentsListPage,
 })
 
+const agentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/agent',
+  component: AgentLivePage,
+})
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   runsRoute,
   experimentsRoute,
   projectsRoute,
   environmentsRoute,
+  agentRoute,
 ])

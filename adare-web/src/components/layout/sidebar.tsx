@@ -5,6 +5,7 @@ import {
   FlaskConical,
   FolderKanban,
   Server,
+  Bot,
   Sun,
   Moon,
   Monitor,
@@ -21,6 +22,7 @@ const navItems = [
   { to: '/experiments', label: 'Experiments', icon: FlaskConical },
   { to: '/projects', label: 'Projects', icon: FolderKanban },
   { to: '/environments', label: 'Environments', icon: Server },
+  { to: '/agent', label: 'Agent Live', icon: Bot },
 ] as const
 
 export function Sidebar() {

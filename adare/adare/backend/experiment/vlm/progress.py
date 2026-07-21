@@ -1,9 +1,10 @@
 """Live per-step progress display for the GUI agent.
 
-:class:`AgentProgressReporter` renders a ``rich.Live`` table that grows one row
-per agent step (step #, action kind, description, grounded/click coords,
-status). It follows the ``rich.Live`` precedent in
-:mod:`adare.backend.experiment.print`.
+:class:`AgentProgressReporter` renders a ``rich.Live`` display: a table that
+grows one row per agent step (step #, action kind, description, grounded/click
+coords, status) plus, below it, a "chat" panel showing the *full* reasoning the
+model gave for the latest step (toggle with ``show_reasoning``). It follows the
+``rich.Live`` precedent in :mod:`adare.backend.experiment.print`.
 
 The reporter is driven by a single synchronous callback, :meth:`on_event`, wired
 into :class:`~adare.backend.experiment.vlm.agent.GuiAgent` via its ``progress``
@@ -19,8 +20,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from rich.console import Console
+from rich.console import Console, Group, RenderableType
 from rich.live import Live
+from rich.markup import escape
+from rich.panel import Panel
 from rich.table import Table
 
 log = logging.getLogger(__name__)
@@ -38,6 +41,7 @@ class _Row:
     kind: str
     describe: str
     coords: str
+    reasoning: str = ''
     status: str = 'running'
 
 
@@ -52,10 +56,15 @@ class AgentProgressReporter:
             ...  # agent runs, calling reporter.on_event(...)
     """
 
-    def __init__(self, goal: str, console: Console | None = None):
+    def __init__(
+        self, goal: str, console: Console | None = None, *,
+        show_reasoning: bool = True,
+    ):
         self.goal = goal
         self._console = console or Console()
+        self._show_reasoning = show_reasoning
         self._rows: dict[int, _Row] = {}
+        self._latest: int | None = None  # newest step index, for the reasoning panel
         self._live: Live | None = None
         self._paused = False
 
@@ -118,7 +127,9 @@ class AgentProgressReporter:
             kind=str(event.get('kind', '')),
             describe=_trim(event.get('describe') or ''),
             coords=marker,
+            reasoning=str(event.get('reasoning') or ''),
         )
+        self._latest = index
 
     def _on_executed(self, event: dict) -> None:
         index = int(event['index'])
@@ -144,7 +155,7 @@ class AgentProgressReporter:
         if self._live is not None and not self._paused:
             self._live.update(self._render())
 
-    def _render(self) -> Table:
+    def _render(self) -> RenderableType:
         table = Table(
             title=f'GUI agent — {_trim(self.goal, 80)}',
             title_justify='left', expand=True,
@@ -160,7 +171,25 @@ class AgentProgressReporter:
                 str(row.index), row.kind, row.describe, row.coords,
                 _status_cell(row.status),
             )
-        return table
+        if not self._show_reasoning:
+            return table
+        return Group(table, self._reasoning_panel())
+
+    def _reasoning_panel(self) -> Panel:
+        """A panel showing the latest step's full reasoning ('chat' view).
+
+        Unlike the table cells (trimmed via ``_trim``), the reasoning text is
+        shown in full and wraps/folds to the panel width.
+        """
+        row = self._rows.get(self._latest) if self._latest is not None else None
+        if row is None:
+            body = '[dim]waiting for the first model decision…[/dim]'
+            title = 'reasoning'
+        else:
+            body = (escape(row.reasoning.strip())
+                    or '[dim](no reasoning provided for this step)[/dim]')
+            title = f'reasoning — step {row.index} ({row.kind})'
+        return Panel(body, title=title, title_align='left', border_style='cyan')
 
 
 def _status_cell(status: str) -> str:
