@@ -475,6 +475,13 @@ from adare.cli.groups.dev_commands import register as register_dev_commands
 register_dev_commands(cli, AliasedGroup, exec_with_error_printing)
 
 # ------------------------------
+# VLM provider config (cli/groups/vlm_commands.py)
+# ------------------------------
+from adare.cli.groups.vlm_commands import register as register_vlm_commands
+
+register_vlm_commands(cli, AliasedGroup, exec_with_error_printing)
+
+# ------------------------------
 # Test commands (was: testfunction)
 # ------------------------------
 @cli.group(name='test', cls=AliasedGroup)
