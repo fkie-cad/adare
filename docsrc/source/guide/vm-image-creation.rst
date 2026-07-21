@@ -145,13 +145,15 @@ and use a grounding model:
 
    export ADARE_VLLM_BASE_URL=https://ollama.com/v1
    export ADARE_VLLM_API_KEY=<key from ollama.com/settings/keys>
-   export ADARE_VLLM_MODEL=qwen3-vl:235b-cloud
-   export ADARE_VLLM_COORD_SPACE=normalized_1000   # Qwen3-VL returns 0..1000 coords
+   export ADARE_VLLM_MODEL=gemma4:31b
+   export ADARE_VLLM_COORD_SPACE=normalized_1000   # coord convention varies by model
 
-``qwen3-vl:235b-cloud`` is trained to operate GUIs (tops the OS-World benchmark).
-It returns **normalized 0–1000** coordinates, so ``normalized_1000`` is required.
-Verify everything up front with the preflight, which pings the endpoint and
-auto-detects the coordinate convention:
+Ollama Cloud retired the ``qwen3-vl`` GUI/computer-use line in 2026-06;
+``gemma4:31b`` is the current cloud vision model. It is a *general* multimodal
+model (not coordinate-tuned), so keep ``--ground`` on — LocateAnything localizes
+each click from the model's textual target description. Verify everything up
+front with the preflight, which pings the endpoint and auto-detects the
+coordinate convention:
 
 .. code-block:: bash
 

@@ -29,7 +29,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         plus "+ new" entries. TARGET may be an existing profile name to activate,
         or a preset keyword to create+activate a new profile:
 
-          ollama-cloud  https://ollama.com/v1  qwen3-vl:235b-cloud  (normalized_1000)
+          ollama-cloud  https://ollama.com/v1  gemma4:31b  (normalized_1000)
           local         http://localhost:8000/v1  Qwen/Qwen2-VL-7B-Instruct  (absolute)
 
         An env var (ADARE_VLLM_*) still overrides the active profile for one run.
@@ -38,7 +38,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             adare vlm use                                  # interactive picker
             adare vlm use cloud-235b                       # activate a saved profile
             adare vlm use ollama-cloud --api-key <key>     # create + activate
-            adare vlm use ollama-cloud --name cloud-small --model qwen3-vl:32b-cloud --api-key <key>
+            adare vlm use ollama-cloud --name cloud-alt --model gemma4:31b --api-key <key>
         """
         from adare.cli.vlm import exec_vlm_use
         args = SimpleNamespace(target=target, api_key=api_key or None,
