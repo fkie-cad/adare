@@ -34,9 +34,12 @@ _DEFAULTS = {
 
 # Per-provider presets applied when creating a profile (overridable by flags).
 _PRESETS = {
+    # Ollama Cloud retired the qwen3-vl (GUI/computer-use) line in 2026-06; gemma4
+    # is a general multimodal model, so keep `--ground` on for reliable clicking.
+    # Coord space kept at normalized_1000; run `gui-doctor` to confirm for gemma4.
     'ollama-cloud': {
         _BASE_URL: 'https://ollama.com/v1',
-        _MODEL: 'qwen3-vl:235b-cloud',
+        _MODEL: 'gemma4:31b',
         _COORD: 'normalized_1000',
         'needs_key': True,
     },
@@ -58,7 +61,9 @@ _PROVIDERS = [
 # Known-good models offered per provider in the wizard's model step (a final
 # "custom" entry always lets the user type their own).
 _MODEL_SUGGESTIONS = {
-    'ollama-cloud': ['qwen3-vl:235b-cloud', 'qwen3-vl:32b-cloud'],
+    # Ollama Cloud dropped the qwen3-vl vision line (2026-06); gemma4:31b is the
+    # only verified cloud vision model — general multimodal, use with `--ground`.
+    'ollama-cloud': ['gemma4:31b'],
     'local': ['Qwen/Qwen2-VL-7B-Instruct', 'Qwen/Qwen2-VL-72B-Instruct'],
     'custom': [],
 }

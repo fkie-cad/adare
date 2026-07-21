@@ -49,8 +49,10 @@ TIMEOUT_SECONDS = 10
 # Works with any OpenAI-compatible server, e.g. Ollama Cloud:
 #   ADARE_VLLM_BASE_URL=https://ollama.com/v1
 #   ADARE_VLLM_API_KEY=<key from ollama.com/settings/keys>
-#   ADARE_VLLM_MODEL=qwen3-vl:235b-cloud        # GUI-grounding / computer-use
-#   ADARE_VLLM_COORD_SPACE=normalized_1000       # Qwen3-VL returns 0..1000 coords
+#   ADARE_VLLM_MODEL=gemma4:31b                  # general multimodal — use with --ground
+#   ADARE_VLLM_COORD_SPACE=normalized_1000       # coord convention varies by model
+# Ollama Cloud retired the qwen3-vl GUI/computer-use line in 2026-06; gemma4 is a
+# general multimodal model (not coordinate-tuned), so keep `--ground` on for clicks.
 # Run `adare vm gui-doctor` to verify the endpoint and auto-detect the coord space.
 # Persist a provider without env vars: `adare vlm use ollama-cloud` / `... use local`
 # (env still overrides the saved config for a single run — see _cfg above).
