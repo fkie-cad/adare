@@ -639,20 +639,24 @@ def _run_qemu_install_phase(
     # x86_64 uses IDE CD-ROMs + floppy (classic approach).
     if os_def.architecture == 'aarch64':
         guest_tools_iso = utm_iso_path if utm_iso_path else virtio_iso_path
-        # Phase 1 (boot_from_disk=False): bootindex=0 (primary — boot from ISO)
-        # Phase 2 (boot_from_disk=True):  no bootindex (don't boot from ISO)
-        iso_bootindex = '' if boot_from_disk else ',bootindex=0'
-        # Legacy-boot override (Phase 1 only): the UEFI Shell finds its marker and
-        # chainloads its patched boot.wim, forcing setup.exe /legacy. The original
-        # Windows ISO stays attached (below) to supply install.wim.
+        # Phase 1 (boot_from_disk=False): the boot medium is primary (bootindex=0).
+        # Phase 2 (boot_from_disk=True):  no bootindex (boot from the installed disk).
+        # When a legacy-boot override is present (Phase 1, aarch64) it MUST be the
+        # boot medium — the firmware El-Torito-boots the first bootable device, and
+        # booting the untouched Windows ISO instead would land back in ConX Setup.
+        # In that case the Windows ISO carries no bootindex; it only supplies
+        # install.wim once WinPE (from the patched boot.wim) is running.
         if legacy_boot_iso is not None:
             cmd.extend([
                 '-drive', f'file={legacy_boot_iso},media=cdrom,if=none,id=bootiso',
-                '-device', 'usb-storage,drive=bootiso,removable=on',
+                '-device', 'usb-storage,drive=bootiso,bootindex=0,removable=on',
             ])
+            winiso_bootindex = ''
+        else:
+            winiso_bootindex = '' if boot_from_disk else ',bootindex=0'
         cmd.extend([
             '-drive', f'file={windows_iso_path},media=cdrom,if=none,id=winiso',
-            '-device', f'usb-storage,drive=winiso{iso_bootindex},removable=on',
+            '-device', f'usb-storage,drive=winiso{winiso_bootindex},removable=on',
             '-drive', f'file={media_path},media=cdrom,if=none,id=toolsiso',
             '-device', 'usb-storage,drive=toolsiso,removable=on',
             '-drive', f'file={guest_tools_iso},media=cdrom,if=none,id=guestiso',
