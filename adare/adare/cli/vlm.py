@@ -121,6 +121,7 @@ def _create_from_preset(provider, arguments):
     name = getattr(arguments, 'name', None) or _default_profile_name(provider)
     userconfig.set_profile(name, values, activate=True)
     _activated_message(name, created=True)
+    _maybe_verify(values, getattr(arguments, 'no_verify', False))
 
 
 def _interactive_use():
@@ -151,10 +152,10 @@ def _interactive_use():
 
 def exec_vlm_create(arguments):
     """Guided wizard: provider -> endpoint -> model -> coords -> key -> name."""
-    _wizard()
+    _wizard(skip_verify=getattr(arguments, 'no_verify', False))
 
 
-def _wizard():
+def _wizard(skip_verify=False):
     """Walk the user through building and activating a profile."""
     provider = _select_provider()
     base_url = _prompt_base_url(provider)
@@ -170,6 +171,7 @@ def _wizard():
         values[_API_KEY] = api_key
     userconfig.set_profile(name, values, activate=True)
     _activated_message(name, created=True)
+    _maybe_verify(values, skip_verify)
 
 
 def _select_provider():
@@ -367,6 +369,59 @@ def _activated_message(name, created=False):
                     'Verify the endpoint: adare vm gui-doctor',
                     'See all: adare vlm list'],
     )
+
+
+def _maybe_verify(values, skip):
+    """Live-check a newly configured keyed endpoint (cloud / custom-with-key).
+
+    Non-fatal: the profile is already saved, so a failure (bad token, wrong URL,
+    offline) is a warning the user can act on, not an error. Skipped for keyless
+    profiles (e.g. local), which often point at a server that is not up yet.
+    """
+    if skip or _API_KEY not in values:
+        return
+    console.print('Checking endpoint and API token ...', style='dim')
+    ok, message = _verify_profile(values)
+    if ok is True:
+        console.print(f'[green]✓ endpoint + token OK[/green] — replied {message!r}')
+    elif ok is False:
+        console.print(f'[yellow]⚠ could not reach the endpoint / token rejected[/yellow]: {message}')
+        console.print('[yellow]  The profile was saved anyway — fix the key/URL and re-run '
+                      '`adare vlm create`, or run `adare vm gui-doctor`.[/yellow]')
+    else:  # None — could not run the check
+        console.print(f'[dim]token check skipped: {message} '
+                      '(verify later with `adare vm gui-doctor`)[/dim]')
+
+
+def _verify_profile(values):
+    """Return (ok, message): True/False, or None when the check cannot run.
+
+    A tiny text completion against the configured endpoint exercises URL, model
+    and Authorization in one cheap call, with a short timeout so a wrong host
+    fails fast instead of hanging on the default 120s.
+    """
+    import asyncio
+
+    try:
+        from adare.backend.experiment.vlm.client import VLMClient
+        from adare.backend.experiment.vlm.exceptions import VLMError
+    except ImportError as exc:
+        return None, f'vlm client unavailable ({exc})'
+
+    client = VLMClient(
+        base_url=values.get(_BASE_URL, _DEFAULTS[_BASE_URL]),
+        model=values.get(_MODEL, _DEFAULTS[_MODEL]),
+        api_key=values.get(_API_KEY, _DEFAULTS[_API_KEY]),
+        timeout=20.0,
+    )
+    try:
+        reply = asyncio.run(client.chat(
+            [{'role': 'user', 'content': 'Reply with the single word: OK'}],
+            max_tokens=5,
+        ))
+    except VLMError as exc:
+        return False, str(exc)
+    return True, reply.strip()[:40]
 
 
 def _mask(value):
