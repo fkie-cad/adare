@@ -12,38 +12,65 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         pass
 
     @vlm.command()
-    @click.argument('provider', type=click.Choice(['ollama-cloud', 'local']))
+    @click.argument('target', required=False)
     @click.option('--api-key', default=None,
-                  help='Ollama Cloud API key (from ollama.com/settings/keys). '
-                       'Prompted for if omitted.')
-    @click.option('--base-url', default=None,
-                  help='Override the preset endpoint URL.')
-    @click.option('--model', default=None,
-                  help='Override the preset model id.')
-    def use(provider, api_key, base_url, model):
-        """Persist a VLM provider to ~/.adare/config.json (chmod 600).
+                  help='Ollama Cloud API key (from ollama.com/settings/keys), when '
+                       'creating from the ollama-cloud preset.')
+    @click.option('--base-url', default=None, help='Override the preset endpoint URL.')
+    @click.option('--model', default=None, help='Override the preset model id.')
+    @click.option('--name', default=None,
+                  help='Name for the profile created from a preset (default: cloud/local).')
+    def use(target, api_key, base_url, model, name):
+        """Switch VLM profile — interactively, by name, or from a preset.
 
-        Presets (override with --base-url / --model):
-          ollama-cloud  https://ollama.com/v1  qwen3-vl:235b-cloud  (coords: normalized_1000)
-          local         http://localhost:8000/v1  Qwen/Qwen2-VL-7B-Instruct  (coords: absolute)
+        With no TARGET, shows a numbered menu of saved profiles (active marked)
+        plus "+ new" entries. TARGET may be an existing profile name to activate,
+        or a preset keyword to create+activate a new profile:
 
-        An env var (ADARE_VLLM_*) still overrides the saved config for a single run.
+          ollama-cloud  https://ollama.com/v1  qwen3-vl:235b-cloud  (normalized_1000)
+          local         http://localhost:8000/v1  Qwen/Qwen2-VL-7B-Instruct  (absolute)
+
+        An env var (ADARE_VLLM_*) still overrides the active profile for one run.
 
         Examples:
-            adare vlm use ollama-cloud --api-key <key>
-            adare vlm use ollama-cloud            # prompts for the key
-            adare vlm use local
+            adare vlm use                                  # interactive picker
+            adare vlm use cloud-235b                       # activate a saved profile
+            adare vlm use ollama-cloud --api-key <key>     # create + activate
+            adare vlm use ollama-cloud --name cloud-small --model qwen3-vl:32b-cloud --api-key <key>
         """
-        if provider == 'ollama-cloud' and not api_key:
-            api_key = click.prompt('Ollama Cloud API key', hide_input=True, default='',
-                                   show_default=False)
         from adare.cli.vlm import exec_vlm_use
-        args = SimpleNamespace(provider=provider, api_key=api_key or None,
-                               base_url=base_url, model=model)
+        args = SimpleNamespace(target=target, api_key=api_key or None,
+                               base_url=base_url, model=model, name=name)
         exec_with_error_printing(exec_vlm_use, args)
+
+    @vlm.command(name='list')
+    def list_():
+        """List saved VLM profiles (active one marked)."""
+        from adare.cli.vlm import exec_vlm_list
+        exec_with_error_printing(exec_vlm_list, SimpleNamespace())
+
+    @vlm.command()
+    @click.argument('name')
+    @click.option('--no-activate', is_flag=True,
+                  help='Save the profile without making it active.')
+    def save(name, no_activate):
+        """Snapshot the currently-effective config as profile NAME."""
+        from adare.cli.vlm import exec_vlm_save
+        exec_with_error_printing(exec_vlm_save, SimpleNamespace(name=name, no_activate=no_activate))
+
+    @vlm.command(name='rm')
+    @click.argument('name')
+    def rm(name):
+        """Delete the profile NAME."""
+        from adare.cli.vlm import exec_vlm_remove
+        exec_with_error_printing(exec_vlm_remove, SimpleNamespace(name=name))
 
     @vlm.command()
     def show():
         """Show the resolved VLM config and where each value comes from."""
         from adare.cli.vlm import exec_vlm_show
         exec_with_error_printing(exec_vlm_show, SimpleNamespace())
+
+    # Convenience aliases.
+    vlm.add_alias('ls', 'list')
+    vlm.add_alias('remove', 'rm')
