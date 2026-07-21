@@ -105,8 +105,9 @@ def check_prerequisites(
             )
 
         # aarch64: the legacy-boot override ISO (Win11 24H2/25H2 "ConX" setup
-        # workaround) needs wimlib-imagex to patch boot.wim and 7z to read the
-        # UDF Windows ISO. See iso_utils.create_legacy_boot_iso.
+        # workaround) needs wimlib-imagex to patch boot.wim, 7z to read the UDF
+        # Windows ISO, and xorriso to build the El Torito bootable ISO.
+        # See iso_utils.create_legacy_boot_iso.
         if os_def.architecture == 'aarch64':
             host = platform.system()
             if not shutil.which('wimlib-imagex'):
@@ -121,6 +122,13 @@ def check_prerequisites(
                         else 'sudo apt install p7zip-full (Debian/Ubuntu) or sudo dnf install p7zip (Fedora)')
                 missing.append(
                     '7z required to extract boot files from the Windows ISO. '
+                    f'Install with: {hint}'
+                )
+            if not shutil.which('xorriso'):
+                hint = ('brew install xorriso' if host == 'Darwin'
+                        else 'sudo apt install xorriso (Debian/Ubuntu) or sudo dnf install xorriso (Fedora)')
+                missing.append(
+                    'xorriso required to build the El Torito bootable legacy-boot ISO. '
                     f'Install with: {hint}'
                 )
 

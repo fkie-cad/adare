@@ -9,47 +9,29 @@ from adare.hypervisor.exceptions import HypervisorException
 log = logging.getLogger(__name__)
 
 
-# Relative path (inside the override ISO staging dir) of a copy of the Windows
-# Boot Manager placed at a path unique to ADARE. startup.nsh probes this path
-# first: only the legacy-boot override ISO carries it, so its patched boot.wim
-# is booted regardless of USB enumeration order — and without any shell `if`/`for`
-# scripting (the firmware's fallback "EFI Internal Shell" does not reliably
-# support those). Windows Boot Manager reads its BCD from the fixed device path
-# \EFI\Microsoft\Boot\BCD, not relative to its own directory, so launching the
-# copy from \EFI\ADARE still resolves the store + \sources\boot.wim correctly —
-# exactly as the stock \EFI\BOOT\bootaa64.efi already does.
-_ADARE_LOADER_REL = 'efi/adare/bootaa64.efi'
-
-
-def _build_startup_nsh() -> str:
-    """Build the UEFI Shell auto-boot script for aarch64 Windows installation.
-
-    NVRAM is pre-populated with Shell as Boot0000 (see firmware.py), so the
-    firmware auto-launches Shell which then auto-executes this startup.nsh.
-
-    Boot order (plain sequential launches — no shell scripting, since the
-    fallback "EFI Internal Shell" lacks reliable if/for support):
-      1. \\EFI\\ADARE\\BOOTAA64.EFI on each volume — present ONLY on the
-         legacy-boot override ISO (install phase), so this boots the patched
-         boot.wim and forces setup.exe /legacy on Win11 24H2/25H2.
-      2. \\EFI\\Microsoft\\Boot\\bootmgfw.efi — post-install disk boot (Phase 2),
-         where no override ISO is attached.
-      3. \\EFI\\BOOT\\BOOTAA64.EFI — generic fallback.
-
-    map -r forces device re-enumeration in case USB devices weren't mapped yet.
-    """
-    lines = ['@echo -off', 'map -r']
-    for i in range(10):
-        lines.append(rf'FS{i}:\EFI\ADARE\BOOTAA64.EFI')
-    for i in range(4):
-        lines.append(rf'FS{i}:\EFI\Microsoft\Boot\bootmgfw.efi')
-    for i in range(4):
-        lines.append(rf'FS{i}:\EFI\BOOT\BOOTAA64.EFI')
-    lines.append('')
-    return '\r\n'.join(lines)
-
-
-_STARTUP_NSH = _build_startup_nsh()
+# UEFI Shell auto-boot script for aarch64 Windows installation.
+# NVRAM is pre-populated with Shell as Boot0000 (see firmware.py), so the
+# firmware auto-launches Shell which then auto-executes this startup.nsh.
+#
+# In the INSTALL phase the firmware auto-boots the legacy-boot override ISO
+# directly via its El Torito UEFI record (a USB "HARDDRIVE" boot entry the
+# firmware tries before the Shell), so startup.nsh is not reached then. This
+# script matters for the POST-INSTALL disk boot (Phase 2, no override attached):
+# try the Windows Boot Manager on the installed NVMe, then a generic loader.
+# map -r forces device re-enumeration in case USB devices weren't mapped yet.
+_STARTUP_NSH = "\r\n".join([
+    "@echo -off",
+    "map -r",
+    r"FS0:\EFI\Microsoft\Boot\bootmgfw.efi",
+    r"FS1:\EFI\Microsoft\Boot\bootmgfw.efi",
+    r"FS2:\EFI\Microsoft\Boot\bootmgfw.efi",
+    r"FS3:\EFI\Microsoft\Boot\bootmgfw.efi",
+    r"FS0:\EFI\BOOT\BOOTAA64.EFI",
+    r"FS1:\EFI\BOOT\BOOTAA64.EFI",
+    r"FS2:\EFI\BOOT\BOOTAA64.EFI",
+    r"FS3:\EFI\BOOT\BOOTAA64.EFI",
+    "",
+])
 
 
 class ISOExtractionError(HypervisorException):
@@ -356,56 +338,36 @@ def _extract_guest_tools_exe(virtio_iso_path: Path, output_dir: Path) -> None:
         iso.close()
 
 
-def _build_tools_iso(
-    source_dir: Path,
-    output_path: Path,
-    *,
-    volume_label: str = 'AAINSTALL',
-    udf: bool = False,
-) -> None:
+def _build_tools_iso(source_dir: Path, output_path: Path) -> None:
     """Build an ISO from a directory using platform-appropriate tools.
 
     macOS: hdiutil makehybrid (always available)
     Linux: mkisofs or genisoimage (matching UTM's exact flags)
     Fallback: pycdlib (pure Python)
-
-    Args:
-        volume_label: ISO volume identifier.
-        udf: If True, emit a UDF filesystem in addition to ISO9660/Joliet. The
-            legacy-boot override ISO uses this so edk2 reads it exactly like a
-            stock Windows ISO (which is UDF) — preserving the nested \\EFI and
-            \\sources tree and long/cased filenames the Windows Boot Manager
-            expects. The pycdlib fallback cannot produce UDF and is not used for
-            bootable media.
     """
     import platform
     import shutil
     import subprocess
 
     if platform.system() == 'Darwin':
-        cmd = ['hdiutil', 'makehybrid', '-iso', '-joliet']
-        if udf:
-            cmd += ['-udf', '-udf-volume-name', volume_label]
-        cmd += ['-default-volume-name', volume_label,
-                '-o', str(output_path), str(source_dir)]
-        subprocess.run(cmd, check=True, capture_output=True)
+        subprocess.run(
+            ['hdiutil', 'makehybrid', '-iso', '-joliet',
+             '-default-volume-name', 'AAINSTALL',
+             '-o', str(output_path), str(source_dir)],
+            check=True, capture_output=True,
+        )
         return
 
     for tool in ('mkisofs', 'genisoimage'):
         if shutil.which(tool):
-            cmd = [tool, '-J', '-rational-rock', '-full-iso9660-filenames']
-            if udf:
-                cmd += ['-udf']
-            cmd += ['-V', volume_label, '-quiet', '-o', str(output_path), str(source_dir)]
-            subprocess.run(cmd, check=True, capture_output=True)
+            subprocess.run(
+                [tool, '-J', '-rational-rock', '-full-iso9660-filenames',
+                 '-V', 'AAINSTALL', '-quiet',
+                 '-o', str(output_path), str(source_dir)],
+                check=True, capture_output=True,
+            )
             return
 
-    if udf:
-        raise ISOExtractionError(
-            str(output_path),
-            'No system ISO tool (hdiutil/mkisofs/genisoimage) available to build '
-            'a UDF bootable ISO; pycdlib fallback cannot produce bootable media.',
-        )
     _build_tools_iso_pycdlib(source_dir, output_path)
 
 
@@ -419,10 +381,14 @@ def _build_tools_iso(
 # the WinPE image (boot.wim) that runs `setup.exe /legacy`.
 #
 # The Windows ISO is attached read-only and its install.wim is >4 GB inside a
-# UDF filesystem, so we do NOT rebuild it. Instead we build a small override ISO
-# carrying only a *patched* boot.wim plus the ISO's EFI boot tree; the UEFI Shell
-# boots this override (identified by a marker file), WinPE runs setup.exe /legacy,
-# and Setup finds the untouched install.wim on the original ISO (still attached).
+# UDF filesystem, so we do NOT rebuild it. Instead we build a small, *bootable*
+# override ISO that reproduces the stock ISO's exact UEFI boot chain — its El
+# Torito boot image (efisys.bin), root bootmgr(fw).efi, \boot and \efi trees —
+# but with a *patched* boot.wim. Attached as the first USB device, the firmware
+# El-Torito-boots it (a USB "HARDDRIVE" entry tried before the Shell), WinPE runs
+# setup.exe /legacy, and Setup finds the untouched install.wim on the original
+# ISO (kept attached). Requires wimlib-imagex (patch boot.wim) + 7z (read the UDF
+# source) + xorriso (build the El Torito ISO) — validated in check_prerequisites.
 
 _WINPESHL_INI = (
     '[LaunchApps]\r\n'
@@ -433,22 +399,27 @@ _WINPESHL_INI = (
 # generic "Windows PE" image (index 1) does not carry setup.exe.
 _SETUP_WIM_INDEX = 2
 
+# Boot-chain members copied verbatim from the stock Windows ISO (everything the
+# UEFI boot needs EXCEPT the >4 GB sources/install.wim, which stays on the
+# original ISO). boot.wim is the only file we modify.
+_BOOT_CHAIN_MEMBERS = ['efi', 'boot', 'bootmgr.efi', 'bootmgfw.efi', 'sources/boot.wim']
+
+# Name of the El Torito UEFI boot image on the override ISO (Microsoft's FAT
+# "efisys" image, extracted from the source ISO's boot catalog).
+_EFI_BOOT_IMG = 'efisys.bin'
+
 
 def create_legacy_boot_iso(
     windows_iso_path: Path,
     xml_content: bytes,
     output_path: Path,
 ) -> Path:
-    """Build a UEFI-bootable override ISO that forces Windows Setup into legacy mode.
+    """Build a UEFI El-Torito-bootable override ISO that forces legacy Windows Setup.
 
-    Extracts the EFI boot tree and boot.wim from ``windows_iso_path``, injects a
-    winpeshl.ini (``setup.exe /legacy``) into the boot.wim "Windows Setup" image,
-    and packages them — with the legacy-boot marker and the Autounattend.xml — as
-    a small UDF ISO. The original Windows ISO is left untouched and must stay
+    Reproduces the stock ISO's boot chain with a boot.wim patched to run
+    ``setup.exe /legacy`` (bypassing the 24H2/25H2 "ConX" front-end that ignores
+    the answer file). The original Windows ISO is left untouched and must stay
     attached alongside this override to supply install.wim.
-
-    Requires ``wimlib-imagex`` (patch boot.wim) and ``7z`` (read the UDF source
-    ISO). Both are validated by check_prerequisites for aarch64 Windows builds.
     """
     import shutil
     import subprocess
@@ -459,21 +430,14 @@ def create_legacy_boot_iso(
         stage = tmp / 'iso'
         stage.mkdir()
 
-        # 1. Extract the EFI boot tree + boot.wim from the (UDF) Windows ISO.
-        #    7z reads UDF; the paths are lowercase as stored on the ISO.
-        _extract_with_7z(windows_iso_path, ['efi', 'sources/boot.wim'], stage)
+        # 1. Extract the boot chain (not install.wim) from the (UDF) Windows ISO.
+        _extract_with_7z(windows_iso_path, _BOOT_CHAIN_MEMBERS, stage)
 
         boot_wim = stage / 'sources' / 'boot.wim'
-        stock_loader = stage / 'efi' / 'boot' / 'bootaa64.efi'
         if not boot_wim.is_file():
             raise ISOExtractionError(
                 str(windows_iso_path),
                 'sources/boot.wim not found in Windows ISO — cannot build legacy-boot ISO.',
-            )
-        if not stock_loader.is_file():
-            raise ISOExtractionError(
-                str(windows_iso_path),
-                'efi/boot/bootaa64.efi not found in Windows ISO — cannot build legacy-boot ISO.',
             )
 
         # 2. Patch the "Windows Setup" image with winpeshl.ini -> setup.exe /legacy.
@@ -485,18 +449,82 @@ def create_legacy_boot_iso(
             check=True, capture_output=True,
         )
 
-        # 3. Place a copy of the boot manager at the ADARE-unique path startup.nsh
-        #    probes first, and add the answer file at the ISO root.
-        adare_loader = stage / Path(_ADARE_LOADER_REL)
-        adare_loader.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(stock_loader, adare_loader)
+        # 3. Extract the source ISO's El Torito UEFI boot image + add the answer file.
+        _extract_eltorito_efi_image(windows_iso_path, stage / _EFI_BOOT_IMG)
         (stage / 'Autounattend.xml').write_bytes(xml_content)
 
-        # 4. Build the bootable override ISO (UDF, like a stock Windows ISO).
-        _build_tools_iso(stage, output_path, volume_label='AABOOT', udf=True)
+        # 4. Build the bootable override ISO (El Torito UEFI, no emulation).
+        _build_bootable_iso(stage, output_path, volume_label='AABOOT', efi_boot_img=_EFI_BOOT_IMG)
 
     log.info(f'Created legacy-boot override ISO: {output_path} ({output_path.stat().st_size} bytes)')
     return output_path
+
+
+def _extract_eltorito_efi_image(iso_path: Path, output_path: Path) -> None:
+    """Extract the UEFI El Torito boot image (efisys.bin) from a Windows ISO.
+
+    Reads the boot image's LBA + load size from ``xorriso -report_el_torito`` and
+    slices the bytes out of the ISO directly. This works even though xorriso can
+    not read the ISO's UDF file tree — the El Torito catalog is addressed by LBA,
+    independent of the filesystem.
+    """
+    import subprocess
+
+    result = subprocess.run(
+        ['xorriso', '-indev', str(iso_path), '-report_el_torito', 'plain'],
+        capture_output=True, text=True,
+    )
+    lba = size_sectors = None
+    for line in (result.stdout + '\n' + result.stderr).splitlines():
+        if 'boot img' not in line.lower():
+            continue
+        fields = line.split(':', 1)[-1].split()
+        # fields: [N, Pltf, B, Emul, Ld_seg, Hdpt, Ldsiz, LBA]
+        if len(fields) >= 8 and fields[1].upper() == 'UEFI':
+            size_sectors, lba = int(fields[6]), int(fields[7])
+            break
+    if lba is None or not size_sectors:
+        raise ISOExtractionError(
+            str(iso_path),
+            'No UEFI El Torito boot image found in Windows ISO — cannot build bootable override.',
+        )
+    # LBA is in 2048-byte ISO sectors; load size is in 512-byte virtual sectors.
+    with open(iso_path, 'rb') as f:
+        f.seek(lba * 2048)
+        data = f.read(size_sectors * 512)
+    if len(data) != size_sectors * 512:
+        raise ISOExtractionError(str(iso_path), 'Short read extracting El Torito boot image.')
+    output_path.write_bytes(data)
+
+
+def _build_bootable_iso(
+    source_dir: Path,
+    output_path: Path,
+    *,
+    volume_label: str,
+    efi_boot_img: str,
+) -> None:
+    """Build a UEFI El-Torito-bootable ISO from source_dir using xorriso.
+
+    xorriso is cross-platform (macOS/Linux/Windows); the only host-specific part
+    is installation, hinted by check_prerequisites. ``efi_boot_img`` is a path
+    (relative to source_dir) to the no-emulation UEFI El Torito boot image.
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which('xorriso'):
+        raise ISOExtractionError(
+            str(output_path),
+            'xorriso not found — required to build the bootable legacy-boot ISO. '
+            'Install with: brew install xorriso (macOS) / apt install xorriso (Linux).',
+        )
+    subprocess.run(
+        ['xorriso', '-as', 'mkisofs', '-iso-level', '3', '-R', '-J', '-joliet-long',
+         '-V', volume_label, '-e', efi_boot_img, '-no-emul-boot',
+         '-o', str(output_path), str(source_dir)],
+        check=True, capture_output=True,
+    )
 
 
 def _extract_with_7z(archive: Path, members: list[str], dest_dir: Path) -> None:
