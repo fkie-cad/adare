@@ -32,24 +32,16 @@ const selectClassName =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 
 // Mirrors the ADARE publish contract (server `check_file_validity`): a baked VM
-// must be an http(s) disk image with a 64-hex sha256. The web variant only
-// accepts published URLs so the environment it produces is always publishable.
+// must be an http(s) URL with a 64-hex sha256. Any host is accepted (owncloud /
+// Nextcloud share links included), so the disk format is chosen explicitly
+// rather than inferred from a file extension.
 const SHA256_RE = /^[0-9a-f]{64}$/
-const BAKED_VM_EXTENSIONS = ['.ova', '.qcow2', '.vmdk', '.vdi', '.img']
+const VM_FORMATS = ['qcow2', 'ova', 'vmdk', 'vdi', 'img', 'raw'] as const
 
 function isHttpUrl(value: string): boolean {
   try {
     const u = new URL(value)
     return u.protocol === 'http:' || u.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
-function hasDiskExtension(value: string): boolean {
-  try {
-    const path = new URL(value).pathname.toLowerCase()
-    return BAKED_VM_EXTENSIONS.some((ext) => path.endsWith(ext))
   } catch {
     return false
   }
@@ -63,6 +55,7 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
   const [mode, setMode] = useState<EnvironmentMode>('baked')
   const [vmUrl, setVmUrl] = useState('')
   const [vmSha256, setVmSha256] = useState('')
+  const [vmFormat, setVmFormat] = useState<string>('qcow2')
   const [osProfile, setOsProfile] = useState('')
   const [isoUrl, setIsoUrl] = useState('')
   const [isoSha256, setIsoSha256] = useState('')
@@ -80,6 +73,7 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
       setMode('baked')
       setVmUrl('')
       setVmSha256('')
+      setVmFormat('qcow2')
       setOsProfile('')
       setIsoUrl('')
       setIsoSha256('')
@@ -126,9 +120,7 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
       ? null
       : !isHttpUrl(vmUrlTrimmed)
         ? 'Must be an http(s) URL.'
-        : !hasDiskExtension(vmUrlTrimmed)
-          ? `Must point to a disk image (${BAKED_VM_EXTENSIONS.join(', ')}).`
-          : null
+        : null
   const vmSha256Error =
     vmSha256Trimmed.length === 0
       ? null
@@ -145,7 +137,9 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
         : null
 
   const bakedValid =
-    isHttpUrl(vmUrlTrimmed) && hasDiskExtension(vmUrlTrimmed) && SHA256_RE.test(vmSha256Trimmed)
+    isHttpUrl(vmUrlTrimmed) &&
+    SHA256_RE.test(vmSha256Trimmed) &&
+    (VM_FORMATS as readonly string[]).includes(vmFormat)
   const recipeValid =
     osProfile.trim().length > 0 && isHttpUrl(isoUrlTrimmed) && SHA256_RE.test(isoSha256Trimmed)
 
@@ -159,7 +153,7 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
   const activeUrl = mode === 'baked' ? vmUrlTrimmed : isoUrlTrimmed
   const activeSha = mode === 'baked' ? vmSha256Trimmed : isoSha256Trimmed
   const activeUrlValid =
-    mode === 'baked' ? isHttpUrl(vmUrlTrimmed) && hasDiskExtension(vmUrlTrimmed) : isHttpUrl(isoUrlTrimmed)
+    mode === 'baked' ? isHttpUrl(vmUrlTrimmed) : isHttpUrl(isoUrlTrimmed)
 
   const handleCheckUrl = () => {
     if (!activeUrl || !activeUrlValid) return
@@ -206,7 +200,7 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
         project_path: submittedProjectPath,
         name: name.trim(),
         ...(mode === 'baked'
-          ? { vm_url: vmUrlTrimmed, vm_sha256: vmSha256Trimmed }
+          ? { vm_url: vmUrlTrimmed, vm_sha256: vmSha256Trimmed, vm_format: vmFormat }
           : {
               os_profile: osProfile,
               iso_url: isoUrlTrimmed,
@@ -288,7 +282,7 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
                 htmlFor="env-vm-url"
                 required
                 error={vmUrlError ?? undefined}
-                hint="Published http(s) disk image (.ova, .qcow2, .vmdk, .vdi, .img)"
+                hint="Any published http(s) URL (owncloud/Nextcloud share links work). Pick the disk format below."
               >
                 <Input
                   id="env-vm-url"
@@ -297,8 +291,28 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
                   onBlur={() => {
                     if (!urlCheck && activeUrlValid) handleCheckUrl()
                   }}
-                  placeholder="https://host.example/disks/ubuntu24.qcow2"
+                  placeholder="https://cloud.example/s/TOKEN/download"
                 />
+              </FormField>
+
+              <FormField
+                label="Disk format"
+                htmlFor="env-vm-format"
+                required
+                hint="Format of the hosted disk image"
+              >
+                <select
+                  id="env-vm-format"
+                  value={vmFormat}
+                  onChange={(e) => setVmFormat(e.target.value)}
+                  className={selectClassName}
+                >
+                  {VM_FORMATS.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
               </FormField>
 
               <FormField

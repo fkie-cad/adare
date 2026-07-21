@@ -338,6 +338,29 @@ def create(name, project, with_vm):
     args = SimpleNamespace(name=name, project=project, with_vm=with_vm)
     exec_with_error_printing(exec_environment_create, args)
 
+@env.command(name='publish-prepare')
+@click.argument('name')
+@click.option('--vm-url', required=True, help='Published http(s) URL where the disk image is hosted (any host, incl. owncloud/Nextcloud share links)')
+@click.option('--vm-format', type=click.Choice(['qcow2', 'ova', 'vmdk', 'vdi', 'img', 'raw']), help='Disk format hint (inferred from the local disk extension when omitted; required if neither the local disk nor the URL names a recognized format)')
+@click.option('--verify-url', is_flag=True, help='Download the hosted URL and confirm its bytes hash-match the local disk (catches a wrong/HTML share link or a changed upload)')
+@click.option('--project', '-p', help='Name of the project')
+def publish_prepare(name, vm_url, vm_format, verify_url, project):
+    """Prepare a local baked environment for sharing (local disk -> URL + sha256).
+
+    Hashes the local disk referenced by the environment's "vm:" field, then
+    rewrites the descriptor to reference VM_URL with vm_type=url, the disk format,
+    and the computed vm_sha256. Consumers re-verify that hash after downloading.
+
+    NAME is the environment name (its descriptor lives in the project's
+    environments directory).
+    """
+    from adare.cli.environment import exec_environment_publish_prepare
+    args = SimpleNamespace(
+        name=name, vm_url=vm_url, vm_format=vm_format,
+        verify_url=verify_url, project=project,
+    )
+    exec_with_error_printing(exec_environment_publish_prepare, args)
+
 @env.command()
 @click.argument('source')
 @click.option('--name', '-n', required=True, help='Name for the new environment (must be unique)')

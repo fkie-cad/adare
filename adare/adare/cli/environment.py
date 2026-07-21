@@ -75,6 +75,32 @@ def exec_environment_create(arguments):
         handle_api_error(result)
 
 
+def exec_environment_publish_prepare(arguments):
+    """
+    Convert a local-path baked environment into a publish-ready URL + sha256 one.
+    """
+    project_directory = get_project_path(arguments)
+
+    api = AdareAPI()
+    result = api.environment.publish_prepare(
+        project_path=project_directory,
+        name=arguments.name,
+        vm_url=arguments.vm_url,
+        vm_format=getattr(arguments, 'vm_format', None),
+        verify_url=getattr(arguments, 'verify_url', False),
+    )
+
+    if result.success:
+        print_success_message(
+            title=f'Environment "{result.data.name}" prepared for sharing!',
+            location=str(result.data.file_path) if result.data.file_path else None,
+            next_steps=result.data.next_steps,
+            tip=result.data.tip,
+        )
+    else:
+        handle_api_error(result)
+
+
 def exec_environment_verify(arguments):
     """
     Verify an environment by running the built-in verify_vm experiment foreground.

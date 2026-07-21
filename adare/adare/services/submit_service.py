@@ -86,7 +86,10 @@ class SubmitService:
         import requests
 
         from adare.webappaccess.exceptions import NotLoggedInError
-        from adare.webappaccess.experiment_export import export_environment_for_submission
+        from adare.webappaccess.experiment_export import (
+            EnvironmentSubmissionError,
+            export_environment_for_submission,
+        )
 
         try:
             files = export_environment_for_submission(request.project_path, request.name)
@@ -96,6 +99,17 @@ class SubmitService:
                 pr_number=pr['number'],
                 message=f"PR #{pr['number']} created for environment '{request.name}'"
             ))
+        except EnvironmentSubmissionError as e:
+            return Result.fail(
+                code="InvalidEnvironment",
+                message=str(e),
+                solutions=[
+                    'Host the VM disk (or ISO) at an http(s) URL and reference it',
+                    'Ensure vm_sha256 (and iso_sha256 for recipes) is a 64-hex digest',
+                    'Convert a local env with: adare environment publish-prepare '
+                    '<name> --vm-url <url> --vm-format <fmt>',
+                ]
+            )
         except FileNotFoundError as e:
             return Result.fail(
                 code="FileNotFound",

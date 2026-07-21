@@ -308,6 +308,7 @@ class EnvironmentService:
             vm_sha256=request.vm_sha256,
             env_name=request.name,
             project_path=request.project_path,
+            vm_format=request.vm_format,
         )
 
         next_steps = [
@@ -413,6 +414,207 @@ class EnvironmentService:
             next_steps=next_steps,
             tip='Recipe environment created. The disk is built once from the ISO on first load.',
         ))
+
+    def publish_prepare(
+        self,
+        project_path: Path,
+        name: str,
+        vm_url: str,
+        vm_format: str | None = None,
+        verify_url: bool = False,
+    ) -> Result[EnvironmentInfo]:
+        """Convert a local-path baked environment into a publish-ready URL one.
+
+        Hashes the local disk referenced by ``vm:``, then rewrites the descriptor
+        to ``vm: <vm_url>``, ``vm_type: url``, ``vm_format: <fmt>`` and
+        ``vm_sha256: <hash of the exact local bytes>``. The sha computed here is
+        the integrity anchor consumers re-verify after downloading from the URL.
+
+        With ``verify_url`` the hosted object is downloaded and hashed, confirming
+        it matches the local disk — this catches a wrong/HTML share link or an
+        upload whose bytes differ from the local disk.
+        """
+        from adare.helperfunctions.file.hash import file_sha256_with_progress
+        from adarelib.helper.yaml import dict_to_yaml, yaml_to_dict
+
+        target = self._resolve_publish_target(project_path, name, vm_url, vm_format)
+        if not target.success:
+            return target
+        descriptor, metadata, disk, fmt = target.data
+
+        vm_sha256 = file_sha256_with_progress(
+            disk, description=f'Hashing local disk {disk.name}', silent=False,
+        )
+
+        if verify_url:
+            verify_result = self._verify_hosted_url_matches(vm_url, vm_sha256)
+            if not verify_result.success:
+                return verify_result
+
+        # Rewrite the descriptor in place, preserving all other fields.
+        raw = yaml_to_dict(descriptor)
+        raw['vm'] = vm_url
+        raw['vm_type'] = 'url'
+        raw['vm_sha256'] = vm_sha256
+        if fmt is not None:
+            raw['vm_format'] = fmt
+        dict_to_yaml(descriptor, raw)
+
+        return Result.ok(EnvironmentInfo(
+            id='',
+            name=name,
+            description='',
+            vm_name=None,
+            hypervisor=metadata.hypervisor or 'qemu',
+            os_platform=metadata.os.platform if metadata.os else None,
+            file_path=descriptor,
+            next_steps=[
+                f'Submit for sharing: adare web submit environment {name}',
+                f'Or load locally to verify: adare environment load {descriptor}',
+            ],
+            tip=f'Descriptor rewritten to URL + vm_sha256 ({vm_sha256[:12]}…). '
+                'Consumers re-verify this hash after downloading.',
+        ))
+
+    def _resolve_publish_target(
+        self, project_path: Path, name: str, vm_url: str, vm_format: str | None,
+    ) -> "Result[tuple]":
+        """Validate inputs and resolve the descriptor, local disk, and format.
+
+        Returns ``Result.ok((descriptor, metadata, disk, fmt))`` or a failing
+        ``Result`` describing why the environment cannot be prepared. Kept
+        separate from :meth:`publish_prepare` so the conversion itself (hash →
+        verify → rewrite) stays flat.
+        """
+        from urllib.parse import urlparse
+
+        from adare.backend.project.directory import ProjectDirectory
+        from adare.types.environment import parse_environment_file
+
+        _VM_FORMATS = ('qcow2', 'ova', 'vmdk', 'vdi', 'img', 'raw')
+        _DISK_EXTENSIONS = ('.ova', '.qcow2', '.vmdk', '.vdi', '.img', '.raw')
+
+        if urlparse(vm_url).scheme not in ('http', 'https'):
+            return Result.fail(
+                code='InvalidVmUrl',
+                message=f'--vm-url must be an http(s) URL (got {vm_url!r}).',
+                solutions=['Host the disk image and pass its http(s) URL'],
+            )
+        if vm_format is not None and vm_format not in _VM_FORMATS:
+            return Result.fail(
+                code='InvalidVmFormat',
+                message='--vm-format must be one of: ' + ', '.join(_VM_FORMATS),
+                solutions=['Pass a supported disk format'],
+            )
+
+        # Resolve the descriptor from the project's environments directory (the
+        # env need not be loaded into the database yet).
+        env_dir = ProjectDirectory(project_path).environments
+        descriptor: Path | None = None
+        for candidate in (env_dir / f'{name}.yml', env_dir / f'{name}.yaml', Path(name)):
+            if candidate.is_file():
+                descriptor = candidate
+                break
+        if descriptor is None:
+            return Result.fail(
+                code='EnvironmentFileNotFound',
+                message=f'Environment descriptor not found for {name!r} in {env_dir}.',
+                solutions=['Check the environment name', 'Create it first with: adare env create'],
+            )
+
+        metadata = parse_environment_file(descriptor)
+        if metadata is None or metadata.is_recipe_environment or not metadata.vm:
+            return Result.fail(
+                code='NotABakedEnvironment',
+                message='publish-prepare only applies to a baked disk environment (a "vm:" source).',
+                solutions=['Recipe environments already publish their ISO by URL + iso_sha256'],
+            )
+        if urlparse(metadata.vm).scheme in ('http', 'https'):
+            return Result.fail(
+                code='AlreadyUrlEnvironment',
+                message=f'{name!r} already references a URL ({metadata.vm}); nothing local to hash.',
+                solutions=['Edit the descriptor directly if you need to change the URL/sha'],
+            )
+
+        # Resolve the local disk (absolute, or relative to the descriptor).
+        disk = Path(metadata.vm)
+        if not disk.is_absolute():
+            disk = descriptor.parent / metadata.vm
+        if not disk.is_file():
+            return Result.fail(
+                code='VmDiskNotFound',
+                message=f'Local VM disk not found: {disk}',
+                solutions=['Fix the "vm:" path in the descriptor', 'Use an absolute path'],
+            )
+
+        # Determine the format: explicit flag wins, else infer from the disk
+        # suffix; required when the URL carries no recognized disk extension.
+        fmt = vm_format
+        if fmt is None:
+            inferred = disk.suffix.lower().lstrip('.')
+            if inferred in _VM_FORMATS:
+                fmt = inferred
+        url_has_ext = urlparse(vm_url).path.lower().endswith(_DISK_EXTENSIONS)
+        if fmt is None and not url_has_ext:
+            return Result.fail(
+                code='MissingVmFormat',
+                message='Could not infer the disk format; pass --vm-format explicitly.',
+                solutions=['--vm-format one of: ' + ', '.join(_VM_FORMATS)],
+            )
+
+        return Result.ok((descriptor, metadata, disk, fmt))
+
+    def _verify_hosted_url_matches(self, vm_url: str, expected_sha256: str) -> Result[None]:
+        """Download the hosted URL and confirm it hashes to ``expected_sha256``.
+
+        Catches a wrong/HTML share link or an upload whose bytes differ from the
+        local disk. The download goes to a temp file that is always cleaned up.
+        """
+        import tempfile
+
+        from adare.helperfunctions.file.hash import file_sha256_with_progress
+        from adare.helperfunctions.web.download import download
+
+        tmp = Path(tempfile.mkdtemp(prefix='adare-verify-')) / 'hosted.bin'
+        try:
+            log.info(f'Verifying hosted URL bytes against local disk: {vm_url}')
+            download(vm_url, tmp, quiet=False)
+            if not tmp.is_file() or tmp.stat().st_size == 0:
+                return Result.fail(
+                    code='VerifyUrlFailed',
+                    message=f'Downloaded nothing from {vm_url} (empty response).',
+                    solutions=['Check the URL is a direct download link, not an HTML page'],
+                )
+            hosted_sha256 = file_sha256_with_progress(
+                tmp, description='Hashing hosted object', silent=False,
+            )
+            if hosted_sha256.lower() != expected_sha256.lower():
+                return Result.fail(
+                    code='VerifyUrlMismatch',
+                    message=(
+                        f'Hosted object does not match the local disk: expected {expected_sha256} '
+                        f'but the URL returned bytes hashing to {hosted_sha256}.'
+                    ),
+                    solutions=[
+                        'The share link may return an HTML page — use a direct "download" link',
+                        'Re-upload the exact local disk, then retry',
+                    ],
+                )
+            log.info('Hosted URL matches the local disk hash')
+            return Result.ok(None)
+        except (OSError, ConnectionError, TimeoutError, ValueError) as e:
+            return Result.fail(
+                code='VerifyUrlFailed',
+                message=f'Could not verify hosted URL {vm_url}: {e}',
+                solutions=['Check network connectivity', 'Check the URL is reachable'],
+            )
+        finally:
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+                tmp.parent.rmdir()
+            except OSError:
+                pass
 
     def delete(self, identifier: str, force: bool = False) -> Result[None]:
         """
