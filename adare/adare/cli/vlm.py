@@ -48,6 +48,27 @@ _PRESETS = {
     },
 }
 
+# Providers offered by the `create` wizard, in menu order: (key, label).
+_PROVIDERS = [
+    ('ollama-cloud', 'Ollama Cloud'),
+    ('local', 'Local (self-hosted vLLM / OpenAI-compatible)'),
+    ('custom', 'Custom (any OpenAI-compatible endpoint)'),
+]
+
+# Known-good models offered per provider in the wizard's model step (a final
+# "custom" entry always lets the user type their own).
+_MODEL_SUGGESTIONS = {
+    'ollama-cloud': ['qwen3-vl:235b-cloud', 'qwen3-vl:32b-cloud'],
+    'local': ['Qwen/Qwen2-VL-7B-Instruct', 'Qwen/Qwen2-VL-72B-Instruct'],
+    'custom': [],
+}
+
+# Coordinate spaces (matches config/server.py's VLLM_COORD_SPACE options).
+_COORDS = [
+    ('absolute', 'absolute — raw pixels of the image shown'),
+    ('normalized_1000', 'normalized_1000 — 0..1000 on both axes (e.g. Qwen3-VL)'),
+]
+
 
 # ── use ──────────────────────────────────────────────────────────────────────
 
@@ -112,46 +133,103 @@ def _interactive_use():
     for i, name in enumerate(ordered, start=1):
         mark = '  [green](active)[/green]' if name == active else ''
         console.print(f'  [cyan]{i}[/cyan]) {name}{mark}   [dim]{_summary(existing[name])}[/dim]')
-    new_cloud = len(ordered) + 1
-    new_local = len(ordered) + 2
+    create_idx = len(ordered) + 1
     if ordered:
         console.print('  [dim]---[/dim]')
-    console.print(f'  [cyan]{new_cloud}[/cyan]) [green]+ new Ollama Cloud profile[/green]')
-    console.print(f'  [cyan]{new_local}[/cyan]) [green]+ new local profile[/green]')
+    console.print(f'  [cyan]{create_idx}[/cyan]) [green]+ create new profile (guided)[/green]')
 
-    choice = click.prompt('>', type=click.IntRange(1, new_local))
+    choice = click.prompt('>', type=click.IntRange(1, create_idx))
     if choice <= len(ordered):
         name = ordered[choice - 1]
         userconfig.set_active(name)
         _activated_message(name)
         return
-    provider = 'ollama-cloud' if choice == new_cloud else 'local'
-    _interactive_create(provider)
+    _wizard()
 
 
-def _interactive_create(provider):
-    """Prompt for a name (+ key for cloud) and create+activate the profile."""
-    preset = _PRESETS[provider]
+# ── create (guided wizard) ────────────────────────────────────────────────────
+
+def exec_vlm_create(arguments):
+    """Guided wizard: provider -> endpoint -> model -> coords -> key -> name."""
+    _wizard()
+
+
+def _wizard():
+    """Walk the user through building and activating a profile."""
+    provider = _select_provider()
+    base_url = _prompt_base_url(provider)
+    model = _prompt_model(provider)
+    coord = _prompt_coord(provider)
+    api_key = _prompt_key(provider)
+
     default_name = _default_profile_name(provider)
     name = click.prompt('Profile name', default=default_name).strip() or default_name
-    values = {
-        _BASE_URL: preset[_BASE_URL],
-        _MODEL: preset[_MODEL],
-        _COORD: preset[_COORD],
-    }
-    if preset['needs_key']:
-        api_key = click.prompt('Ollama Cloud API key', hide_input=True, default='',
-                               show_default=False).strip()
-        if not api_key:
-            print_error_message(
-                title='No API key entered',
-                next_steps=['Run `adare vlm use` again and paste the key',
-                            'Get one at https://ollama.com/settings/keys'],
-            )
-            exit(1)
+
+    values = {_BASE_URL: base_url, _MODEL: model, _COORD: coord}
+    if api_key:
         values[_API_KEY] = api_key
     userconfig.set_profile(name, values, activate=True)
     _activated_message(name, created=True)
+
+
+def _select_provider():
+    """Step 1 — pick a provider from the numbered menu."""
+    choice = _menu('Provider:', [label for _, label in _PROVIDERS])
+    return _PROVIDERS[choice - 1][0]
+
+
+def _prompt_base_url(provider):
+    """Step 2 — endpoint URL, pre-filled from the preset (required for custom)."""
+    default = _PRESETS.get(provider, {}).get(_BASE_URL, 'http://localhost:8000/v1')
+    return click.prompt('Base URL', default=default).strip() or default
+
+
+def _prompt_model(provider):
+    """Step 3 — pick a known model or type a custom one."""
+    suggestions = _MODEL_SUGGESTIONS.get(provider, [])
+    if not suggestions:
+        default = _PRESETS.get(provider, {}).get(_MODEL, _DEFAULTS[_MODEL])
+        return click.prompt('Model id', default=default).strip() or default
+    choice = _menu('Model:', suggestions + ['custom — type your own'])
+    if choice <= len(suggestions):
+        return suggestions[choice - 1]
+    return click.prompt('Model id').strip()
+
+
+def _prompt_coord(provider):
+    """Step 4 — coordinate space (asked only for custom; preset otherwise)."""
+    if provider != 'custom':
+        return _PRESETS[provider][_COORD]
+    choice = _menu('Coordinate space the model returns clicks in:',
+                   [label for _, label in _COORDS])
+    return _COORDS[choice - 1][0]
+
+
+def _prompt_key(provider):
+    """Step 5 — API key: required for cloud, optional for custom, none for local."""
+    if provider == 'ollama-cloud':
+        key = click.prompt('Ollama Cloud API key (ollama.com/settings/keys)',
+                           hide_input=True, default='', show_default=False).strip()
+        if not key:
+            print_error_message(
+                title='No API key entered',
+                next_steps=['Run `adare vlm create` again and paste the key',
+                            'Get one at https://ollama.com/settings/keys'],
+            )
+            exit(1)
+        return key
+    if provider == 'custom':
+        return click.prompt('API key (leave blank for none)', hide_input=True,
+                            default='', show_default=False).strip() or None
+    return None
+
+
+def _menu(title, labels):
+    """Print a numbered menu and return the chosen 1-based index."""
+    console.print(f'[bold]{title}[/bold]')
+    for i, label in enumerate(labels, start=1):
+        console.print(f'  [cyan]{i}[/cyan]) {label}')
+    return click.prompt('>', type=click.IntRange(1, len(labels)))
 
 
 # ── list / save / rm / show ──────────────────────────────────────────────────
@@ -164,8 +242,8 @@ def exec_vlm_list(arguments):
     if not existing:
         print_success_message(
             title='No VLM profiles yet',
-            next_steps=['Create one: adare vlm use  (interactive)',
-                        'Or: adare vlm use ollama-cloud --api-key <key>'],
+            next_steps=['Create one with the guided wizard: adare vlm create',
+                        'Or quickly: adare vlm use ollama-cloud --api-key <key>'],
         )
         return
     active = userconfig.active_name()
@@ -270,7 +348,7 @@ def _summary(values):
 def _default_profile_name(provider):
     """A memorable default name that does not collide with an existing profile."""
     existing = userconfig.profiles()
-    base = 'cloud' if provider == 'ollama-cloud' else 'local'
+    base = {'ollama-cloud': 'cloud', 'local': 'local', 'custom': 'custom'}.get(provider, provider)
     if base not in existing:
         return base
     i = 2
