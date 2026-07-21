@@ -254,7 +254,18 @@ def register(cli, AliasedGroup, exec_with_error_printing):
                        'element box and the server is torn down at run end. Attaches to '
                        'ADARE_LOCATE_URL if set instead of spawning. Needs the grounding '
                        'backend: `uv sync --extra grounding` or ADARE_LOCATE_PYTHON.')
-    def agent(session_id, goal, goal_file, output, max_steps, stall_limit, interactive, planning, grounding):
+    @click.option('--progress/--no-progress', 'progress', default=None,
+                  help='Show a live per-step table while the agent runs '
+                       '(default: on when stdout is a TTY).')
+    @click.option('--video/--no-video', 'video', default=None,
+                  help='Record the whole run to <run_dir>/run.mp4 via ffmpeg '
+                       '(default: ADARE_AGENT_VIDEO; off). Needs the ffmpeg binary.')
+    @click.option('--as-experiment', 'as_experiment', default=None, metavar='NAME',
+                  help='Scaffold experiments/NAME/ and record the run into it '
+                       '(playbook.yml + img/ crops + metadata.yml). Files only — no DB '
+                       'load; run `adare experiment load NAME` later. Excludes -o/--out.')
+    def agent(session_id, goal, goal_file, output, max_steps, stall_limit, interactive,
+              planning, grounding, progress, video, as_experiment):
         """Drive the session VM toward a goal with the vision-LLM GUI agent.
 
         Uses the configured vLLM endpoint (ADARE_VLLM_*; works with Ollama Cloud).
@@ -264,6 +275,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             adare dev agent --goal "open the Files app and go to Documents"
             adare dev agent -s <id> --goal "..." -o experiments/files.play.yaml
             adare dev agent --plan --goal "open LibreOffice and write an invoice" -o inv.play.yaml
+            adare dev agent --goal "..." --video --as-experiment demo_invoice
         """
         from adare.cli.dev import exec_dev_agent
         args = SimpleNamespace(
@@ -276,6 +288,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             interactive=interactive,
             planning=planning,
             grounding=grounding,
+            progress=progress,
+            video=video,
+            as_experiment=as_experiment,
         )
         exec_with_error_printing(exec_dev_agent, args)
 

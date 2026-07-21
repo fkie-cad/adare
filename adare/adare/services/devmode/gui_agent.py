@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import signal
+from contextlib import nullcontext, suppress
 from pathlib import Path
 
 from adare.core.dto.devmode import (
@@ -28,6 +30,9 @@ class GuiAgentMixin:
 
     def run_gui_agent(self, request: DevGuiAgentRequest) -> Result[DevGuiAgentResult]:
         """Drive the session VM toward ``request.goal`` with the vision agent."""
+        from adare.backend.experiment.execution.qemu_video_recorder import (
+            VideoUnavailable,
+        )
         from adare.backend.experiment.grounding.locate_process_manager import (
             GroundingUnavailable,
         )
@@ -43,6 +48,13 @@ class GuiAgentMixin:
                  'Or point ADARE_LOCATE_PYTHON at a venv that already has torch + the model deps',
                  'Or attach to a running server via ADARE_LOCATE_URL',
                  'Or drop --ground to run without element grounding'],
+            )
+        except VideoUnavailable as exc:  # --video needs ffmpeg (checked before RuntimeError)
+            return Result.fail(
+                'VIDEO_ERROR', str(exc),
+                ['Install ffmpeg (e.g. `brew install ffmpeg` / `apt install ffmpeg`)',
+                 'Or point ADARE_FFMPEG at the ffmpeg binary',
+                 'Or drop --video to run without recording the session'],
             )
         except RuntimeError as exc:  # session/VM not found
             return Result.fail(
@@ -65,7 +77,9 @@ class GuiAgentMixin:
 
     async def _run_gui_agent_async(self, request: DevGuiAgentRequest) -> DevGuiAgentResult:
         from adare.backend.experiment.execution.qemu_host_gui_executor import QEMUHostGUIExecutor
+        from adare.backend.experiment.execution.qemu_video_recorder import QemuVideoRecorder
         from adare.backend.experiment.vlm import (
+            AgentProgressReporter,
             GuiAgent,
             PlanningAgent,
             PlaybookRecorder,
@@ -82,28 +96,25 @@ class GuiAgentMixin:
             AGENT_PLANNER_API_KEY,
             AGENT_PLANNER_BASE_URL,
             AGENT_PLANNER_MODEL,
+            AGENT_PROGRESS,
             AGENT_REPAIR_MODEL,
             AGENT_SUBGOAL_MAX_STEPS,
             AGENT_SUBGOAL_STALL_LIMIT,
+            AGENT_VIDEO,
+            AGENT_VIDEO_FPS,
+            FFMPEG,
             GUI_AGENT_DECISION_RETRIES,
+            GUI_AGENT_MAX_STEPS,
             GUI_AGENT_STALL_LIMIT,
             GUI_AGENT_WALL_CLOCK_SECONDS,
-            LOCATE_AUTOSTART,
             LOCATE_CLICK,
             LOCATE_CROP_MARGIN,
             LOCATE_CROP_MIN,
-            LOCATE_MODE,
-            LOCATE_MODEL_PATH,
-            LOCATE_PORT,
-            LOCATE_PYTHON,
-            LOCATE_START_TIMEOUT,
-            LOCATE_URL,
             VLLM_API_KEY,
             VLLM_BASE_URL,
             VLLM_COORD_SPACE,
             VLLM_MODEL,
         )
-        from adare.config.server import GUI_AGENT_MAX_STEPS
 
         session = await self._manager.get_or_restore_session(request.session_id)
         if not session:
@@ -129,48 +140,20 @@ class GuiAgentMixin:
                 base_url=VLLM_BASE_URL, model=AGENT_REPAIR_MODEL, api_key=VLLM_API_KEY)
             log.info('Decision-repair model enabled: %s', AGENT_REPAIR_MODEL)
 
-        recorder = None
-        run_dir: Path | None = None
-        if request.output_file:
-            out = Path(request.output_file)
-            recorder = PlaybookRecorder(out, goal=request.goal)
-            run_dir = out.parent / f'{out.stem}_run'
-        elif ctx and getattr(ctx, 'experiment_run_directory', None):
-            run_dir = Path(ctx.experiment_run_directory.path) / 'gui_agent'
+        recorder, run_dir = self._setup_recorder(request, ctx, PlaybookRecorder)
 
-        # Element grounding. Effective when explicitly requested (--ground), when
-        # ADARE_LOCATE_AUTOSTART is on, or (back-compat) when ADARE_LOCATE_URL is
-        # already set. --no-ground forces it off. With a URL configured we attach
-        # to that server; otherwise --ground auto-starts (and later tears down)
-        # the vendored LocateAnything server.
-        want_ground = request.grounding
-        if want_ground is None:
-            want_ground = LOCATE_AUTOSTART or bool(LOCATE_URL)
+        # Observability / capture. Progress defaults to the config value for
+        # non-CLI callers (the CLI already resolves a TTY-aware default); video
+        # is off unless requested. A video run needs a directory for run.mp4 —
+        # fall back to a temp dir when neither -o nor a run directory gave us one.
+        effective_progress = request.progress if request.progress is not None else AGENT_PROGRESS
+        want_video = request.video if request.video is not None else AGENT_VIDEO
+        if want_video and run_dir is None:
+            import tempfile
+            run_dir = Path(tempfile.gettempdir()) / f'adare_agent_run_{request.session_id[:8]}'
 
-        locate_manager = None
-        locate_url = None
-        if want_ground:
-            if LOCATE_URL:
-                locate_url = LOCATE_URL
-                log.info('LocateAnything grounding: attaching to configured %s', LOCATE_URL)
-            else:
-                from adare.backend.experiment.grounding.locate_process_manager import (
-                    LocateGroundingManager,
-                )
-                locate_manager = LocateGroundingManager(
-                    port=LOCATE_PORT,
-                    model_path=LOCATE_MODEL_PATH or None,
-                    python_exe=LOCATE_PYTHON or None,
-                    start_timeout=LOCATE_START_TIMEOUT,
-                    log_file=(run_dir / 'locate_server.log') if run_dir else None,
-                )
-                locate_url = locate_manager.start()
-
-        locate_client = None
-        if locate_url:
-            from adare.backend.experiment.grounding import LocateAnythingClient
-            locate_client = LocateAnythingClient(locate_url, mode=LOCATE_MODE)
-            log.info('LocateAnything grounding enabled via %s', locate_url)
+        # Element grounding (attach / auto-start / off) — see :meth:`_setup_grounding`.
+        locate_client, locate_manager = self._setup_grounding(request, run_dir)
 
         agent = GuiAgent(
             executor, client, request.goal,
@@ -187,31 +170,67 @@ class GuiAgentMixin:
             repair_client=repair_client,
         )
 
+        # Live per-step display (rich table). Wired as the agent's progress sink
+        # and entered as a context manager around the run below.
+        reporter = None
+        if effective_progress:
+            from adare.console import console
+            reporter = AgentProgressReporter(request.goal, console=console)
+            agent.progress = reporter.on_event
+
+        # Whole-run MP4 via ffmpeg. start() raises VideoUnavailable if ffmpeg is
+        # missing (mapped to VIDEO_ERROR by run_gui_agent). Stopped in finally so
+        # the clip is finalized on success, failure, or interrupt.
+        video_recorder = None
+        video_path: Path | None = None
+        if want_video:
+            video_recorder = QemuVideoRecorder(
+                vm, run_dir / 'run.mp4', fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
+
+        # Cooperative graceful Ctrl-C: SIGINT flips the agent's stop flag so the
+        # run finalizes the partial playbook/report and the finally still tears
+        # down video + grounding. The VM is left running (DB-restorable), so the
+        # same session can be driven from another `adare dev …` command.
+        loop = asyncio.get_running_loop()
+        sigint_installed = False
+        try:
+            loop.add_signal_handler(signal.SIGINT, agent.request_stop)
+            sigint_installed = True
+        except (NotImplementedError, RuntimeError, ValueError) as exc:
+            log.debug('Could not install SIGINT handler (%s); Ctrl-C will not finalize', exc)
+
         # Iterative plan/verify/backtrack mode (flag-gated; off by default). When
         # off, today's whole-goal reactive run is used untouched.
         planning = request.planning if request.planning is not None else AGENT_PLAN
         try:
-            if planning:
-                res = await self._run_planning_agent(
-                    session, agent, request,
-                    planner_client=VLMClient(
-                        base_url=AGENT_PLANNER_BASE_URL or VLLM_BASE_URL,
-                        model=AGENT_PLANNER_MODEL or VLLM_MODEL,
-                        api_key=AGENT_PLANNER_API_KEY or VLLM_API_KEY),
-                    checker_client=VLMClient(
-                        base_url=AGENT_CHECKER_BASE_URL or VLLM_BASE_URL,
-                        model=AGENT_CHECKER_MODEL or VLLM_MODEL,
-                        api_key=AGENT_CHECKER_API_KEY or VLLM_API_KEY),
-                    run_acceptance_checks=run_acceptance_checks,
-                    planning_agent_cls=PlanningAgent,
-                    host_executor_cls=QEMUHostGUIExecutor,
-                    retry_limit=AGENT_PLAN_RETRY_LIMIT,
-                    replan_limit=AGENT_PLAN_REPLAN_LIMIT,
-                    subgoal_max_steps=AGENT_SUBGOAL_MAX_STEPS,
-                    subgoal_stall_limit=AGENT_SUBGOAL_STALL_LIMIT,
-                )
-            else:
-                res = await agent.run()
+            if video_recorder is not None:
+                await video_recorder.start()
+            with (reporter or nullcontext()):
+                if planning:
+                    res = await self._run_planning_agent(
+                        session, agent, request,
+                        planner_client=VLMClient(
+                            base_url=AGENT_PLANNER_BASE_URL or VLLM_BASE_URL,
+                            model=AGENT_PLANNER_MODEL or VLLM_MODEL,
+                            api_key=AGENT_PLANNER_API_KEY or VLLM_API_KEY),
+                        checker_client=VLMClient(
+                            base_url=AGENT_CHECKER_BASE_URL or VLLM_BASE_URL,
+                            model=AGENT_CHECKER_MODEL or VLLM_MODEL,
+                            api_key=AGENT_CHECKER_API_KEY or VLLM_API_KEY),
+                        run_acceptance_checks=run_acceptance_checks,
+                        planning_agent_cls=PlanningAgent,
+                        host_executor_cls=QEMUHostGUIExecutor,
+                        retry_limit=AGENT_PLAN_RETRY_LIMIT,
+                        replan_limit=AGENT_PLAN_REPLAN_LIMIT,
+                        subgoal_max_steps=AGENT_SUBGOAL_MAX_STEPS,
+                        subgoal_stall_limit=AGENT_SUBGOAL_STALL_LIMIT,
+                    )
+                else:
+                    res = await agent.run()
+            # Finalize the video before building the result so its path is
+            # included; the finally re-stops (idempotent) on the error path.
+            if video_recorder is not None:
+                video_path = await video_recorder.stop()
             return DevGuiAgentResult(
                 success=res.success,
                 reason=res.reason,
@@ -219,12 +238,84 @@ class GuiAgentMixin:
                 summary=res.summary,
                 playbook_path=str(res.playbook_path) if res.playbook_path else None,
                 report_path=str(res.report_path) if res.report_path else None,
+                video_path=str(video_path) if video_path else None,
             )
         finally:
+            # Finalize the video (idempotent) even on failure / interrupt.
+            if video_recorder is not None:
+                await video_recorder.stop()
             # Always tear down a server *we* auto-started (attach/no-op otherwise),
             # whether the run succeeded, failed, or raised.
             if locate_manager is not None:
                 locate_manager.stop()
+            if sigint_installed:
+                with suppress(NotImplementedError, RuntimeError, ValueError):
+                    loop.remove_signal_handler(signal.SIGINT)
+
+    @staticmethod
+    def _setup_recorder(request, ctx, playbook_recorder_cls):
+        """Resolve the playbook recorder + run directory for this run.
+
+        With ``request.output_file`` set, records a standalone playbook and puts
+        the run artifacts beside it; otherwise (no ``-o``) reuses the dev
+        session's experiment run directory when it has one. Returns
+        ``(recorder_or_None, run_dir_or_None)``.
+        """
+        if request.output_file:
+            out = Path(request.output_file)
+            recorder = playbook_recorder_cls(out, goal=request.goal)
+            return recorder, out.parent / f'{out.stem}_run'
+        if ctx and getattr(ctx, 'experiment_run_directory', None):
+            return None, Path(ctx.experiment_run_directory.path) / 'gui_agent'
+        return None, None
+
+    def _setup_grounding(self, request, run_dir):
+        """Resolve element grounding to a (locate_client, locate_manager) pair.
+
+        Effective when explicitly requested (``--ground``), when
+        ``ADARE_LOCATE_AUTOSTART`` is on, or (back-compat) when
+        ``ADARE_LOCATE_URL`` is already set; ``--no-ground`` forces it off. With
+        a URL configured we attach to that server; otherwise ``--ground``
+        auto-starts (and the caller later tears down) the vendored
+        LocateAnything server. Returns ``(None, None)`` when grounding is off.
+        """
+        from adare.config.server import (
+            LOCATE_AUTOSTART,
+            LOCATE_MODE,
+            LOCATE_MODEL_PATH,
+            LOCATE_PORT,
+            LOCATE_PYTHON,
+            LOCATE_START_TIMEOUT,
+            LOCATE_URL,
+        )
+
+        want_ground = request.grounding
+        if want_ground is None:
+            want_ground = LOCATE_AUTOSTART or bool(LOCATE_URL)
+        if not want_ground:
+            return None, None
+
+        locate_manager = None
+        if LOCATE_URL:
+            locate_url = LOCATE_URL
+            log.info('LocateAnything grounding: attaching to configured %s', LOCATE_URL)
+        else:
+            from adare.backend.experiment.grounding.locate_process_manager import (
+                LocateGroundingManager,
+            )
+            locate_manager = LocateGroundingManager(
+                port=LOCATE_PORT,
+                model_path=LOCATE_MODEL_PATH or None,
+                python_exe=LOCATE_PYTHON or None,
+                start_timeout=LOCATE_START_TIMEOUT,
+                log_file=(run_dir / 'locate_server.log') if run_dir else None,
+            )
+            locate_url = locate_manager.start()
+
+        from adare.backend.experiment.grounding import LocateAnythingClient
+        locate_client = LocateAnythingClient(locate_url, mode=LOCATE_MODE)
+        log.info('LocateAnything grounding enabled via %s', locate_url)
+        return locate_client, locate_manager
 
     async def _run_planning_agent(
         self,

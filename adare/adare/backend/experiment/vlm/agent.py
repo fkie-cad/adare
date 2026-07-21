@@ -18,6 +18,7 @@ import hashlib
 import io
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -116,6 +117,7 @@ class GuiAgent:
         interactive: bool = False,
         decision_retry_limit: int = 2,
         repair_client: Any = None,
+        progress: Callable[[dict], None] | None = None,
     ):
         self.executor = gui_executor
         self.client = client
@@ -151,6 +153,13 @@ class GuiAgent:
         # Human-in-the-loop: when True, each proposed action pauses for the
         # user to approve / skip / quit before it is executed and recorded.
         self.interactive = interactive
+        # Optional live-progress sink (a sync callback taking one event dict);
+        # default None -> no-op. See :class:`.progress.AgentProgressReporter`.
+        self.progress = progress
+        # Cooperative graceful-stop flag (set by :meth:`request_stop`, e.g. from
+        # a SIGINT handler). Checked at each loop boundary; a set flag ends the
+        # run via ``_finish`` so the partial playbook / report are finalized.
+        self._stop_requested = False
 
         self._steps_dir: Path | None = None
         if self.run_dir:
@@ -301,6 +310,41 @@ class GuiAgent:
         )
         messages.append({'role': 'user', 'content': [self.client.text_content(hint)]})
         return await self.client.chat(messages, temperature=0.4, max_tokens=800)
+
+    # -- progress + graceful stop -------------------------------------------
+
+    def request_stop(self) -> None:
+        """Ask the run to stop cleanly at the next loop boundary.
+
+        Safe to call from a signal handler: it only flips a flag. The reactive
+        loop breaks to ``_finish(False, 'interrupted by user')`` which finalizes
+        the partial playbook and report; the VM is left running.
+        """
+        self._stop_requested = True
+
+    def _emit(self, event: dict) -> None:
+        """Send one progress event to the sink; never raises."""
+        if not self.progress:
+            return
+        try:
+            self.progress(event)
+        except (ValueError, RuntimeError, TypeError, KeyError) as exc:
+            log.debug('progress sink error (ignored): %s', exc)
+
+    def _emit_decided(self, index: int, action: AgentAction) -> None:
+        coords = None
+        if action.kind in (A.CLICK, A.DOUBLE_CLICK) and action.x is not None:
+            coords = (action.x, action.y)
+        self._emit({
+            'type': 'decided', 'index': index, 'kind': action.kind,
+            'describe': action.describe or action.summary or '',
+            'coords': coords,
+            'grounded': bool(action.crop_bbox) or bool(action.vlm_point),
+            'reasoning': action.reasoning,
+        })
+
+    def _emit_executed(self, index: int, status: str) -> None:
+        self._emit({'type': 'executed', 'index': index, 'status': status})
 
     # -- interactive gate ---------------------------------------------------
 
@@ -567,6 +611,8 @@ class GuiAgent:
         stall = 0
 
         for _ in range(self.max_steps):
+            if self._stop_requested:
+                return self._finish(False, 'interrupted by user')
             if time.monotonic() - start > self.wall_clock_seconds:
                 return self._finish(False, 'wall-clock budget exceeded')
 
@@ -596,14 +642,19 @@ class GuiAgent:
             if action.kind in (A.CLICK, A.DOUBLE_CLICK):
                 self._ground_click(png, action, width, height)
 
+            self._emit_decided(index, action)
+
             if self.interactive:
+                self._emit({'type': 'pause'})
                 choice = await self._confirm_step(action, index)
+                self._emit({'type': 'resume'})
                 if choice == 'skip':
                     note = action.describe or action.summary or action.kind
                     self._records.append(StepRecord(
                         index=index, action_kind=action.kind, describe=action.describe,
                         reasoning=action.reasoning, result_status='skipped',
                     ))
+                    self._emit_executed(index, 'skipped')
                     self._history.append(
                         f'{index}. {action.kind}({action.describe or action.summary}) '
                         f'-> user skipped: {note}')
@@ -616,6 +667,7 @@ class GuiAgent:
 
             status = await self._execute(action, png)
             shot_file = self._persist_step(index, png, action, status)
+            self._emit_executed(index, status)
 
             self._records.append(StepRecord(
                 index=index, action_kind=action.kind, describe=action.describe,
@@ -676,6 +728,8 @@ class GuiAgent:
             self.hints = [*self.hints, plan_context]
         try:
             for _ in range(max_steps):
+                if self._stop_requested:
+                    return 'interrupted by user'
                 if time.monotonic() - start > self.wall_clock_seconds:
                     return 'wall-clock budget exceeded'
 
@@ -698,14 +752,19 @@ class GuiAgent:
                 if action.kind in (A.CLICK, A.DOUBLE_CLICK):
                     self._ground_click(png, action, width, height)
 
+                self._emit_decided(index, action)
+
                 if self.interactive:
+                    self._emit({'type': 'pause'})
                     choice = await self._confirm_step(action, index)
+                    self._emit({'type': 'resume'})
                     if choice == 'skip':
                         note = action.describe or action.summary or action.kind
                         self._records.append(StepRecord(
                             index=index, action_kind=action.kind, describe=action.describe,
                             reasoning=action.reasoning, result_status='skipped',
                         ))
+                        self._emit_executed(index, 'skipped')
                         self._history.append(
                             f'{index}. {action.kind}({action.describe or action.summary}) '
                             f'-> user skipped: {note}')
@@ -716,6 +775,7 @@ class GuiAgent:
 
                 status = await self._execute(action, png)
                 shot_file = self._persist_step(index, png, action, status)
+                self._emit_executed(index, status)
 
                 self._records.append(StepRecord(
                     index=index, action_kind=action.kind, describe=action.describe,
