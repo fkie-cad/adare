@@ -29,6 +29,49 @@ from adare.core.dto.devmode import (
 log = logging.getLogger(__name__)
 
 
+def _running_sessions_for(project_directory):
+    """Running sessions for a project (most recent first)."""
+    from adare.database.api.devmode import DevModeApi
+    return DevModeApi().list_running_sessions(project_directory)
+
+
+def _handle_start_reuse_or_warn(arguments, project_directory) -> str | None:
+    """Warn about (or reuse) sessions already running before booting a new VM.
+
+    Returns the session id to reuse (caller should stop) when --reuse finds a
+    running session; otherwise None (caller proceeds to start a new session),
+    printing a warning first if other sessions are already running.
+    """
+    running = _running_sessions_for(project_directory)
+
+    if getattr(arguments, 'reuse', False):
+        if running:
+            reused = running[0]  # list_running_sessions is ordered most-recent first
+            label = f" (name={reused.name})" if reused.name else ""
+            print_success_message(
+                title=f'Reusing running dev session: {reused.session_id}{label}',
+                next_steps=[
+                    f"Drive it:   adare dev agent -s {reused.session_id} --goal '<goal>'",
+                    f"Inspect it: adare dev state -s {reused.session_id}",
+                    f"Stop it:    adare dev stop -s {reused.session_id}",
+                ],
+                tip='Wanted a fresh VM instead? re-run without --reuse.'
+            )
+            return reused.session_id
+        print("No running session to reuse for this project — starting a new one.\n")
+        return None
+
+    if running:
+        print(f"\n⚠ {len(running)} dev session(s) already running for this project:")
+        for s in running:
+            label = f" name={s.name}" if s.name else ""
+            print(f"  - {s.session_id}{label} ({s.experiment_name} / {s.environment_name})")
+        print("  Target one with:  adare dev <command> -s <id|name>")
+        print("  Attach instead:   adare dev start --reuse")
+        print("  Starting a new session anyway...\n")
+    return None
+
+
 def exec_dev_start(arguments):
     """Start dev session with flow console UI."""
     from pathlib import Path
@@ -40,6 +83,11 @@ def exec_dev_start(arguments):
     # Setup
     project_directory = get_project_path(arguments)
     Path(arguments.log) if hasattr(arguments, 'log') and arguments.log else None
+
+    # Coherent lifecycle: attach to a running session with --reuse, or warn when
+    # sessions are already running before stacking another VM.
+    if _handle_start_reuse_or_warn(arguments, project_directory) is not None:
+        return
 
     # Process shared directories
     # Format: host_path:vm_path
@@ -93,6 +141,7 @@ def exec_dev_start(arguments):
         result = api.devmode.start_session(DevSessionStartRequest(
             project_path=project_directory,
             environment_name=arguments.environment,
+            name=getattr(arguments, 'name', None),
             gui_mode=getattr(arguments, 'gui_mode', None),
             vm_memory=getattr(arguments, 'vm_memory', None),
             vm_cpus=getattr(arguments, 'vm_cpus', None),
@@ -203,15 +252,65 @@ def exec_dev_resume(arguments):
         _stop_event_listeners()
 
 
-def exec_dev_stop(arguments):
-    """Stop a dev mode session."""
-    # AUTO-DETECT SESSION ID
-    session_id = _resolve_session_id(arguments.session_id)
+def _exec_dev_stop_all(api, remove_resources, assume_yes):
+    """Stop every running dev session (used by `dev stop --all`)."""
+    import click
 
+    from adare.database.api.devmode import DevModeApi
+
+    running = DevModeApi().list_running_sessions()
+    if not running:
+        print("No running dev sessions to stop")
+        return
+
+    verb = 'remove' if remove_resources else 'stop'
+    print(f"{len(running)} running dev session(s):")
+    for s in running:
+        label = f" name={s.name}" if s.name else ""
+        print(f"  - {s.session_id}{label} ({s.experiment_name} / {s.environment_name})")
+
+    if not assume_yes and not click.confirm(
+        f"\n{verb.capitalize()} all {len(running)} running session(s)?", default=False
+    ):
+        print("Aborted")
+        return
+
+    done, failed = [], []
+    for s in running:
+        result = api.devmode.stop_session(DevSessionStopRequest(
+            session_id=s.session_id,
+            remove_resources=remove_resources
+        ))
+        if result.success:
+            done.append(s.session_id)
+            print(f"  {'removed' if remove_resources else 'stopped'}: {s.session_id}")
+        else:
+            failed.append(s.session_id)
+            print(f"  FAILED: {s.session_id} ({result.error.message if result.error else 'unknown error'})")
+
+    if failed:
+        print_error_message(
+            title=f'{len(done)} session(s) {verb}ped, {len(failed)} failed',
+            next_steps=['Check logs for the failed sessions', 'Retry with: adare dev stop -s <session_id>']
+        )
+    else:
+        print_success_message(title=f'All {len(done)} running session(s) {verb}ped')
+
+
+def exec_dev_stop(arguments):
+    """Stop a dev mode session (or every running session with --all)."""
     api = AdareAPI()
 
     # Extract remove_resources flag (default to False)
     remove_resources = getattr(arguments, 'remove_resources', False)
+
+    # --all: stop every running session (with confirmation unless --yes)
+    if getattr(arguments, 'all_sessions', False):
+        _exec_dev_stop_all(api, remove_resources, assume_yes=getattr(arguments, 'yes', False))
+        return
+
+    # AUTO-DETECT SESSION ID (accepts an id or a name)
+    session_id = _resolve_session_id(arguments.session_id)
 
     result = api.devmode.stop_session(DevSessionStopRequest(
         session_id=session_id,
@@ -268,6 +367,7 @@ def exec_dev_list(arguments):
             for session in result.data:
                 data.append({
                     'session_id': session.session_id,
+                    'name': session.name,
                     'experiment_name': session.experiment_name,
                     'environment_name': session.environment_name,
                     'vm_running': session.vm_running,
@@ -306,6 +406,8 @@ def exec_dev_state(arguments):
     if result.success:
         state = result.data
         print(f"Dev Session State: {state.session_id}\n")
+        if state.name:
+            print(f"  Name: {state.name}")
         print(f"  Experiment: {state.experiment_name}")
         print(f"  Environment: {state.environment_name}")
         print(f"  VM Running: {state.vm_running}")
@@ -335,13 +437,21 @@ def exec_dev_cleanup(arguments):
     ))
 
     if result.success:
-        if result.data.sessions_removed == 0:
-            print("No stale sessions found")
+        data = result.data
+        if data.sessions_reconciled == 0:
+            print(
+                f"No stale sessions found ({data.sessions_left_running} running "
+                f"session(s) left untouched)"
+            )
         else:
             print_success_message(
-                title=f'Cleaned up {result.data.sessions_removed} stale session(s)'
+                title=(
+                    f'Reconciled {data.sessions_reconciled} stale session(s) to '
+                    f"'stopped'; left {data.sessions_left_running} running untouched"
+                ),
+                next_steps=['Resume a reconciled session with: adare dev resume <session_id|name>']
             )
-            for session_id in result.data.removed_session_ids:
-                print(f"  Removed: {session_id}")
+            for session_id in data.reconciled_session_ids:
+                print(f"  Reconciled -> stopped: {session_id}")
     else:
         handle_api_error(result)

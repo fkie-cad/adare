@@ -17,6 +17,8 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @dev.command()
     @click.option('-e', '--environment', required=True, help='Environment name')
     @click.option('--project', '-p', help='Project name/path')
+    @click.option('--name', 'name', default=None,
+                  help='Human-friendly session label, selectable later via -s <name>')
     @click.option('--gui-mode', type=click.Choice(['auto', 'agent', 'host']),
                   help='GUI execution mode: auto (default), agent (WebSocket), or host (QMP for QEMU)')
     @click.option('--test-mode', type=click.Choice(['auto', 'agent', 'host']),
@@ -25,18 +27,23 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
     @click.option('--shared-dir', multiple=True, help='Shared directories in format HOST_PATH:VM_PATH')
     @click.option('--debug-screenshots', is_flag=True, help='Save screenshots for debugging')
-    def start(environment, project, gui_mode, test_mode, vm_memory, vm_cpus, shared_dir, debug_screenshots):
+    @click.option('--reuse', is_flag=True,
+                  help='Attach to the most-recent running session for this project instead of booting a new VM')
+    def start(environment, project, name, gui_mode, test_mode, vm_memory, vm_cpus,
+              shared_dir, debug_screenshots, reuse):
         """Start a new dev mode session."""
         from adare.cli.dev import exec_dev_start
         args = SimpleNamespace(
             environment=environment,
             project=project,
+            name=name,
             gui_mode=gui_mode,
             test_mode=test_mode,
             vm_memory=vm_memory,
             vm_cpus=vm_cpus,
             shared_dir=shared_dir,
-            debug_screenshots=debug_screenshots
+            debug_screenshots=debug_screenshots,
+            reuse=reuse
         )
         exec_with_error_printing(exec_dev_start, args)
 
@@ -62,16 +69,23 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_dev_resume, args)
 
     @dev.command()
-    @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
+    @click.option('-s', '--session', 'session_id', default=None,
+                  help='Session id or name (auto-detected if only one running)')
     @click.option('--rm', is_flag=True, help='Remove all resources (VM, snapshots, database entries)')
-    def stop(session_id, rm):
+    @click.option('--all', 'all_sessions', is_flag=True, help='Stop every running session')
+    @click.option('-y', '--yes', is_flag=True, help='Skip the confirmation prompt (with --all)')
+    def stop(session_id, rm, all_sessions, yes):
         """Stop a dev mode session.
 
         Without --rm: Stops the VM but keeps all resources for future restart.
         With --rm: Completely removes the session and all associated resources.
+        With --all: Stops every running session (confirms first unless --yes).
         """
         from adare.cli.dev import exec_dev_stop
-        args = SimpleNamespace(session_id=session_id, remove_resources=rm)
+        args = SimpleNamespace(
+            session_id=session_id, remove_resources=rm,
+            all_sessions=all_sessions, yes=yes
+        )
         exec_with_error_printing(exec_dev_stop, args)
 
     @dev.command()
