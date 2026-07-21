@@ -1,6 +1,7 @@
 # internal imports
 # configure logging
 import logging
+from pathlib import Path
 
 from adare.api import AdareAPI
 from adare.cli.utils import handle_api_error
@@ -303,3 +304,143 @@ def exec_vm_instance_usage(arguments):
 
     formatter, output_file, dual_output = get_formatter_from_context()
     print_vm_instance_usage(formatter, output_file, dual_output)
+
+
+def _fmt_size(num_bytes: int) -> str:
+    """Human-readable byte size (binary units)."""
+    size = float(num_bytes)
+    for unit in ('B', 'KiB', 'MiB', 'GiB', 'TiB'):
+        if size < 1024 or unit == 'TiB':
+            return f"{size:.1f} {unit}" if unit != 'B' else f"{int(size)} B"
+        size /= 1024
+    return f"{size:.1f} TiB"
+
+
+def exec_vm_prune(arguments):
+    """Reclaim orphaned QEMU base disks / NVRAM (and optionally dead sockets).
+
+    Mirrors the validated manual sweep: an orphan is a managed '-base.qcow2'
+    (plus its '-nvram.fd' sibling) whose instance/VM is no longer registered
+    in the database. Deletes nothing unless --force is given.
+    """
+    import click
+
+    from adare.database.api.vm import VmApi
+    from adare.hypervisor.qemu.mixins.configuration import (
+        find_stale_sockets,
+        get_qemu_disk_dir,
+    )
+
+    dry_run = getattr(arguments, 'dry_run', True)
+    include_sockets = getattr(arguments, 'sockets', False)
+
+    # 1. Referenced set: every registered VM + instance name from the DB.
+    referenced: set[str] = set()
+    with VmApi() as api:
+        for vm in api.get_all_vms():
+            referenced.add(vm.name)
+        for instance in api.get_all_vm_instances():
+            referenced.add(instance.instance_name)
+
+    disk_dir = get_qemu_disk_dir()
+
+    # 2. Scan for orphaned base disks + their nvram siblings.
+    orphan_files: list[Path] = []
+    seen: set[Path] = set()
+
+    def _add(path: Path):
+        if path.exists() and path not in seen:
+            seen.add(path)
+            orphan_files.append(path)
+
+    for base_file in sorted(disk_dir.glob('*-base.qcow2')):
+        name = base_file.name
+        # Final backstop: never touch overlay/dev artifacts.
+        if '-overlay-' in name or '-dev-' in name:
+            continue
+        stem = name[:-len('-base.qcow2')]
+        if stem in referenced:
+            continue  # still referenced — keep
+        _add(base_file)
+        _add(base_file.with_name(f"{stem}-nvram.fd"))
+
+    # Also catch orphaned nvram whose base was already reclaimed.
+    for nvram_file in sorted(disk_dir.glob('*-nvram.fd')):
+        name = nvram_file.name
+        if '-overlay-' in name or '-dev-' in name:
+            continue
+        stem = name[:-len('-nvram.fd')]
+        if stem in referenced:
+            continue
+        _add(nvram_file)
+
+    # 3. Optionally scan for crash-orphaned dead sockets (no running QEMU owns
+    #    them). find_stale_sockets() cross-checks live libvirt domains, so a
+    #    live-but-occupied QGA socket is never flagged.
+    dead_sockets: list[Path] = []
+    if include_sockets:
+        dead_sockets = sorted(find_stale_sockets())
+
+    # 4. Report.
+    if not orphan_files and not dead_sockets:
+        print_success_message(title="No orphaned QEMU disks or sockets found — nothing to reclaim.")
+        return
+
+    total_bytes = 0
+    if orphan_files:
+        click.echo("\nOrphaned base disks / NVRAM:")
+        click.echo(f"  {'SIZE':>12}  FILE")
+        for path in orphan_files:
+            try:
+                size = path.stat().st_size
+            except OSError:
+                size = 0
+            total_bytes += size
+            click.echo(f"  {_fmt_size(size):>12}  {path.name}")
+        click.echo(f"  {'-' * 12}")
+        click.echo(f"  {_fmt_size(total_bytes):>12}  ({len(orphan_files)} file(s))")
+
+    if dead_sockets:
+        click.echo("\nDead sockets (no live listener):")
+        for sock_path in dead_sockets:
+            click.echo(f"                {sock_path.name}")
+
+    # 5. Delete (only with --force).
+    if dry_run:
+        click.echo(
+            f"\nDry-run: nothing deleted. Re-run with --force to reclaim "
+            f"{_fmt_size(total_bytes)} across {len(orphan_files)} file(s)"
+            + (f" + {len(dead_sockets)} dead socket(s)." if dead_sockets else ".")
+        )
+        return
+
+    reclaimed_bytes = 0
+    reclaimed_files = 0
+    for path in orphan_files:
+        name = path.name
+        # Backstop before every unlink.
+        if '-overlay-' in name or '-dev-' in name:
+            continue
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = 0
+        try:
+            path.unlink()
+            reclaimed_bytes += size
+            reclaimed_files += 1
+        except OSError as e:
+            log.warning(f"Failed to remove {path}: {e}")
+
+    reaped_sockets = 0
+    for sock_path in dead_sockets:
+        try:
+            sock_path.unlink()
+            reaped_sockets += 1
+        except OSError as e:
+            log.warning(f"Failed to remove socket {sock_path}: {e}")
+
+    summary = f"Reclaimed {_fmt_size(reclaimed_bytes)} across {reclaimed_files} file(s)"
+    if include_sockets:
+        summary += f"; reaped {reaped_sockets} dead socket(s)"
+    print_success_message(title=summary + ".")
