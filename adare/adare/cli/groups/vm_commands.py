@@ -64,6 +64,28 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         args = SimpleNamespace()
         exec_with_error_printing(exec_vm_instance_usage, args)
 
+    @vm.command(name='prune')
+    @click.option('--dry-run/--force', 'dry_run', default=True,
+                  help='Dry-run (default) previews only; --force actually deletes.')
+    @click.option('--sockets', is_flag=True, default=False,
+                  help='Also reap crash-orphaned dead QMP/QGA sockets in run/.')
+    def vm_prune(dry_run, sockets):
+        """Reclaim orphaned QEMU base disks (and, with --sockets, dead sockets).
+
+        An orphan is a '<name>-base.qcow2' (plus its '-nvram.fd' sibling) whose
+        instance/VM is no longer registered in the database. This is the
+        garbage collector for debris left by older removal paths or crashes.
+
+        \b
+        Examples:
+          adare vm prune                    # preview orphans, delete nothing
+          adare vm prune --force            # reclaim orphaned base/nvram files
+          adare vm prune --force --sockets  # also reap dead QMP/QGA sockets
+        """
+        from adare.cli.vm import exec_vm_prune
+        args = SimpleNamespace(dry_run=dry_run, sockets=sockets)
+        exec_with_error_printing(exec_vm_prune, args)
+
     @vm.command()
     @click.argument('target')
     @click.option('--platform', '-p', required=False, type=click.Choice(['linux', 'windows']), help='VM platform (required for OVA files; auto-derived for registered VMs)')
