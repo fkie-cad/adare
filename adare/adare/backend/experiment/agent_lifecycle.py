@@ -323,6 +323,31 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
             powercfg, stop_event=stop_event, admin=True, run_as_user=True,
         )
 
+    # Linux (QEMU) counterpart to the Windows keep-awake above. The Ubuntu envs
+    # bake idle-delay=0 + screensaver-off (autoinstall_ubuntu_rolling.yaml), but NOT
+    # the GNOME power-plugin keys — so the compositor can still blank the monitor and
+    # tear down the virtio-gpu scanout during the idle agent-install window, making
+    # QMP screendumps come back "Display output is not active." Disable the power
+    # plugin's inactive-sleep + idle-dim in the console user's session up-front.
+    if context.guest_platform == 'linux' and context.hypervisor_type == 'qemu':
+        log.info("Disabling guest monitor sleep (GNOME power keep-awake)")
+        gsettings = (
+            "sudo -u adare bash -lc '"
+            "export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u adare)/bus; "
+            "gsettings set org.gnome.settings-daemon.plugins.power "
+            "sleep-inactive-ac-type nothing; "
+            "gsettings set org.gnome.settings-daemon.plugins.power "
+            "sleep-inactive-battery-type nothing; "
+            "gsettings set org.gnome.settings-daemon.plugins.power idle-dim false"
+            "'"
+        )
+        result = await vm.run_command(gsettings, stop_event=stop_event)
+        if result.returncode != 0:
+            log.warning(
+                "GNOME power keep-awake command returned %s (non-fatal): %s",
+                result.returncode, result.stderr,
+            )
+
     # Execute setup commands
     for idx, setup_cmd in enumerate(commands.setup_commands):
         await _run_command_with_retry(
