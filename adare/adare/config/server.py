@@ -99,13 +99,17 @@ LOCATE_CLICK = os.environ.get('ADARE_LOCATE_CLICK', '0').lower() in ('1', 'true'
 #                       torch + the model's trust_remote_code deps to skip installing the
 #                       heavy stack into adare (the server has no adare imports, so it is
 #                       launched by file path under a foreign interpreter).
-#   LOCATE_START_TIMEOUT seconds to wait for /health while the model loads (cold HF
-#                       download can be minutes; a local backup loads in seconds)
+#   LOCATE_START_TIMEOUT seconds to wait for /health while the model loads. The
+#                       server now answers /health instantly (loading in a
+#                       background thread), so this whole budget is spent on the
+#                       actual load — a cold HF download or a cold MPS load of
+#                       the ~7 GB weights can legitimately exceed 180 s, hence
+#                       the 600 s default; a warm local backup loads in seconds.
 LOCATE_AUTOSTART = os.environ.get('ADARE_LOCATE_AUTOSTART', '0').lower() in ('1', 'true', 'yes', 'on')
 LOCATE_PORT = int(os.environ.get('ADARE_LOCATE_PORT', '13111'))
 LOCATE_MODEL_PATH = os.environ.get('ADARE_LOCATE_MODEL_PATH', '')
 LOCATE_PYTHON = os.environ.get('ADARE_LOCATE_PYTHON', '')
-LOCATE_START_TIMEOUT = int(os.environ.get('ADARE_LOCATE_START_TIMEOUT', '180'))
+LOCATE_START_TIMEOUT = int(os.environ.get('ADARE_LOCATE_START_TIMEOUT', '600'))
 
 # Bounded-autonomy budgets for the record run.
 GUI_AGENT_MAX_STEPS = int(os.environ.get('ADARE_GUI_AGENT_MAX_STEPS', '80'))

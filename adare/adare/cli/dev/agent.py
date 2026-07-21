@@ -6,6 +6,7 @@ GUI-automation engine, exposed against an already-installed environment.
 """
 
 import logging
+import shutil
 import sys
 from pathlib import Path
 
@@ -98,8 +99,16 @@ def exec_dev_agent(arguments):
         # grounding server or ffmpeg failed to start) would otherwise be left
         # behind and block a retry with "experiment already exists". Roll it
         # back here; a run that recorded screenshots is kept (see helper).
-        if exp is not None:
-            _cleanup_empty_scaffold(exp)
+        salvaged = _cleanup_empty_scaffold(exp) if exp is not None else None
+        # The GROUNDING_ERROR/VIDEO_ERROR message carries a " See the server
+        # log: <scaffold path>" suffix that names a file the cleanup just
+        # deleted. Strip that stale pointer, then print an authoritative one
+        # naming the durable copy. handle_api_error() exits, so the pointer is
+        # printed first (it still reads as belonging to the error above it).
+        if salvaged is not None and result.error and result.error.code in (
+                'GROUNDING_ERROR', 'VIDEO_ERROR'):
+            result.error.message = _strip_log_hint(result.error.message)
+            print(f'Diagnostic log saved to: {salvaged / "locate_server.log"}')
         handle_api_error(result)
         return
 
@@ -220,20 +229,62 @@ def _cleanup_empty_scaffold(exp):
     leaving an empty scaffold that blocks re-running with the same
     --as-experiment NAME. Delete it only when ``img/`` holds no screenshots, so
     a partially-recorded (interrupted-but-loadable) run is preserved.
+
+    Before deleting, salvage any diagnostic ``*.log`` from ``playbook_run/`` to a
+    durable sibling ``.diagnostics/<name>/`` so the error message can point at a
+    file that still exists (the scaffold rmtree would otherwise delete the very
+    ``locate_server.log`` the message names). Returns that diagnostics directory
+    (or ``None`` if nothing was salvaged / the scaffold was kept).
     """
     from adare.backend.experiment.exceptions import ExperimentRemovalError
 
     try:
         recorded = exp.img.exists() and any(exp.img.iterdir())
     except OSError:
-        return  # can't inspect it — leave it alone rather than risk deletion
+        return None  # can't inspect it — leave it alone rather than risk deletion
     if recorded:
-        return
+        return None
+
+    salvaged = _salvage_diagnostic_logs(exp)
     try:
         exp.remove()
         print(f'Cleaned up empty experiment scaffold: {exp.path}')
     except (ExperimentRemovalError, OSError) as exc:
         log.warning('Could not remove empty experiment scaffold %s: %s', exp.path, exc)
+    return salvaged
+
+
+def _salvage_diagnostic_logs(exp):
+    """Copy ``playbook_run/*.log`` to a durable ``.diagnostics/<name>/`` sibling.
+
+    Returns the diagnostics directory when at least one log was copied, else
+    ``None``. Never blocks cleanup: any :class:`OSError` skips the salvage.
+    """
+    try:
+        run_dir = exp.path / 'playbook_run'
+        logs = sorted(run_dir.glob('*.log')) if run_dir.exists() else []
+        if not logs:
+            return None
+        dest = exp.path.parent / '.diagnostics' / exp.path.name
+        dest.mkdir(parents=True, exist_ok=True)
+        for src in logs:
+            shutil.copy2(src, dest / src.name)
+        return dest
+    except OSError as exc:
+        log.warning('Could not salvage diagnostic logs from %s: %s', exp.path, exc)
+        return None
+
+
+def _strip_log_hint(message):
+    """Drop the trailing ' See the server log: <path>' hint from an error message.
+
+    The grounding manager appends that hint pointing inside the experiment
+    scaffold; once the scaffold is deleted the path is stale, so we remove it and
+    print a fresh pointer at the salvaged copy instead.
+    """
+    marker = ' See the server log:'
+    idx = message.find(marker)
+    return message[:idx].rstrip() if idx != -1 else message
 
 
 def _write_experiment_metadata(exp, environment_name, goal):
