@@ -109,8 +109,15 @@ class EnvironmentMetadata:
 
     # Expected SHA256 of the disk referenced by `vm` (baked envs only). When
     # `vm` resolves to a URL, this is checked against the downloaded file's
-    # actual hash on load; absent/empty skips the check (back-compat).
+    # actual hash on load; absent/empty skips the check (back-compat for local
+    # `path` envs). URL sources REQUIRE it (verified after download).
     vm_sha256: str | None = None
+
+    # Disk-image format hint for a baked URL source. Required when the URL has no
+    # recognized disk extension (e.g. an owncloud `.../s/TOKEN/download` share
+    # link); optional when the URL already ends in one. Names the download cache
+    # file and selects the validator/hypervisor without relying on a URL suffix.
+    vm_format: Literal['qcow2', 'ova', 'vmdk', 'vdi', 'img', 'raw'] | None = None
 
     name: str | None = None
     postsetupinstallations: list[PostsetupInstallations] = attrs.Factory(list)

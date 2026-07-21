@@ -283,6 +283,12 @@ class EnvironmentAPI:
         """Create a new environment."""
         return self._service.create(request)
 
+    def publish_prepare(self, project_path, name, vm_url, vm_format=None, verify_url=False):
+        """Convert a local-path baked environment into a publish-ready URL one."""
+        return self._service.publish_prepare(
+            project_path, name, vm_url, vm_format=vm_format, verify_url=verify_url,
+        )
+
     def delete(self, identifier, force=False):
         """Delete an environment."""
         return self._service.delete(identifier, force=force)

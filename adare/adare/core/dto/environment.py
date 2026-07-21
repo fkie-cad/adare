@@ -31,6 +31,9 @@ class EnvironmentCreateRequest:
     vm_path: Path | None = None
     vm_url: str | None = None
     vm_sha256: str | None = None
+    # Disk-image format hint for a baked URL source (qcow2/ova/vmdk/vdi/img/raw).
+    # Required when the URL has no recognized disk extension (owncloud case).
+    vm_format: str | None = None
     os_profile: str | None = None
     iso_path: Path | None = None
     iso_url: str | None = None

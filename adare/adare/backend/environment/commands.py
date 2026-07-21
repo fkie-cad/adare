@@ -82,15 +82,28 @@ def _copy_environment_file(source_path: Path, environment_name: str, file_hash: 
         ) from e
 
 
-def resolve_vm_from_url(url: str) -> Path:
+# Disk-image extensions we recognize in a URL path. Kept in sync with the
+# publish contract (webapi `_validate_url_format`, server `check_file_validity`).
+DISK_EXTENSIONS = ('.ova', '.ovf', '.qcow2', '.vmdk', '.vdi', '.img', '.raw')
+
+
+def resolve_vm_from_url(url: str, vm_format: str | None = None) -> Path:
     """
-    Download and cache an OVA file from URL using the global vm directory.
+    Download and cache a disk image from a URL into the global vm directory.
+
+    Works for any host, including owncloud/Nextcloud share links whose URL has
+    no disk extension. The cache-file suffix is derived from the URL's own
+    extension when it has a recognized one, otherwise from ``vm_format`` — so an
+    extension-less qcow2 is cached as ``*.qcow2`` (not ``*_downloaded.ova``),
+    which drives the correct validator/hypervisor handling downstream.
 
     Args:
-        url: URL to the OVA file
+        url: URL to the disk image.
+        vm_format: Optional format hint (qcow2/ova/vmdk/vdi/img/raw) used to name
+            the cache file when the URL carries no recognized disk extension.
 
     Returns:
-        Path to the downloaded/cached OVA file
+        Path to the downloaded/cached disk image.
 
     Raises:
         EnvironmentLoadFailed: If download fails
@@ -108,10 +121,14 @@ def resolve_vm_from_url(url: str) -> Path:
     # Create hash-based filename to avoid conflicts and enable caching
     url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
 
-    if original_filename and original_filename.lower().endswith(('.ova', '.ovf')):
+    if original_filename and original_filename.lower().endswith(DISK_EXTENSIONS):
+        # URL already names the disk (e.g. .../win10.qcow2) — keep its filename.
         filename = f"{url_hash}_{original_filename}"
     else:
-        filename = f"{url_hash}_downloaded.ova"
+        # No recognized extension (owncloud/Nextcloud share link): name the
+        # cache file from the format hint so the suffix reflects the real disk.
+        suffix = (vm_format or 'ova').lower().lstrip('.')
+        filename = f"{url_hash}_downloaded.{suffix}"
 
     cached_file_path = vm_dir / filename
 
@@ -320,38 +337,63 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                 is_url = False
 
             if is_url:
+                # A URL source must be http(s) — explicit scheme allow-list, not a
+                # bare startswith. This rejects file://, ftp://, and bare local
+                # paths that were mislabeled `vm_type: url`.
+                if urlparse(environment_metadata.vm).scheme not in ('http', 'https'):
+                    raise EnvironmentLoadFailed(
+                        log,
+                        f'VM URL must use the http or https scheme: {environment_metadata.vm}',
+                        possible_solutions=[
+                            'Host the disk image at an http(s) URL and reference that',
+                            'Use vm_type "path" for a local disk file',
+                        ]
+                    )
+
+                # A URL source MUST declare vm_sha256 — it is the only integrity
+                # anchor for a remotely-hosted disk (no local bytes to trust).
+                if not environment_metadata.vm_sha256:
+                    raise EnvironmentLoadFailed(
+                        log,
+                        f'vm_sha256 is required for a URL-based VM: {environment_metadata.vm}',
+                        possible_solutions=[
+                            'Add the expected SHA256 of the hosted disk to "vm_sha256"',
+                            'Compute it from the local disk with: shasum -a 256 <disk-image>',
+                            'Use: adare environment publish-prepare <name> --vm-url <url> --vm-format <fmt>',
+                        ]
+                    )
+
                 # Download VM from URL and cache in global vm directory
                 # NOTE: URLs ALWAYS download to managed storage, ignoring --no-copy
                 log.info(f'Processing URL-based VM: {environment_metadata.vm}')
                 if no_copy:
                     log.info('Note: --no-copy flag is ignored for URL-based VMs (always downloaded to managed storage)')
                 try:
-                    vm_path = resolve_vm_from_url(environment_metadata.vm)
+                    vm_path = resolve_vm_from_url(environment_metadata.vm, environment_metadata.vm_format)
                     log.info(f'VM downloaded from URL and cached: {vm_path}')
                 except (OSError, ConnectionError, TimeoutError, ValueError, EnvironmentLoadFailed) as e:
                     log.error(f'Failed to download VM from URL {environment_metadata.vm}: {e}')
                     raise
 
-                if environment_metadata.vm_sha256:
-                    log.info('Verifying downloaded VM against declared vm_sha256...')
-                    actual_sha256 = file_sha256_with_progress(
-                        vm_path,
-                        description=f"Verifying {vm_path.name}",
-                        silent=False
+                log.info('Verifying downloaded VM against declared vm_sha256...')
+                actual_sha256 = file_sha256_with_progress(
+                    vm_path,
+                    description=f"Verifying {vm_path.name}",
+                    silent=False
+                )
+                expected_sha256 = environment_metadata.vm_sha256.lower()
+                if actual_sha256.lower() != expected_sha256:
+                    raise EnvironmentLoadFailed(
+                        log,
+                        f'VM integrity check failed for {environment_metadata.vm}: '
+                        f'expected vm_sha256 {expected_sha256} but downloaded file hashes to {actual_sha256}',
+                        possible_solutions=[
+                            'The downloaded file may be corrupted or tampered with — re-download and retry',
+                            'Verify the "vm_sha256" in the environment file matches the published disk',
+                            'Contact the environment author if the mismatch persists',
+                        ]
                     )
-                    expected_sha256 = environment_metadata.vm_sha256.lower()
-                    if actual_sha256.lower() != expected_sha256:
-                        raise EnvironmentLoadFailed(
-                            log,
-                            f'VM integrity check failed for {environment_metadata.vm}: '
-                            f'expected vm_sha256 {expected_sha256} but downloaded file hashes to {actual_sha256}',
-                            possible_solutions=[
-                                'The downloaded file may be corrupted or tampered with — re-download and retry',
-                                'Verify the "vm_sha256" in the environment file matches the published disk',
-                                'Contact the environment author if the mismatch persists',
-                            ]
-                        )
-                    log.info('VM integrity check passed')
+                log.info('VM integrity check passed')
             else:
                 # Handle local file path - support both relative and absolute paths
                 vm_path = Path(environment_metadata.vm)
