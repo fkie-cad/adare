@@ -34,6 +34,7 @@ import logging
 import os
 import re
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -140,12 +141,36 @@ class LocateAnythingWorker:
 _WORKER: LocateAnythingWorker | None = None
 _MODEL_PATH = os.environ.get('ADARE_LOCATE_MODEL_PATH', '') or DEFAULT_MODEL
 
+# The model load is expensive (~7 GB) and happens exactly once. `_LOAD_LOCK`
+# serializes it so that concurrent callers (the readiness prober reconnecting in
+# fresh ThreadingHTTPServer threads, plus /locate requests) never kick off a
+# second `from_pretrained` — stacked loads used to thrash MPS and could stop the
+# load ever completing. `_LOADING` / `_LOAD_ERROR` let /health answer instantly.
+_LOAD_LOCK = threading.Lock()
+_LOADING = False
+_LOAD_ERROR: str | None = None
+
 
 def get_worker() -> LocateAnythingWorker:
-    """Lazily build the singleton worker (blocks on first call: model load)."""
-    global _WORKER
-    if _WORKER is None:
-        _WORKER = LocateAnythingWorker(_MODEL_PATH)
+    """Build the singleton worker under a lock (blocks on first call: model load).
+
+    Serialized by ``_LOAD_LOCK`` so only one ``from_pretrained`` ever runs even
+    though the server is threaded and several callers may race here at once.
+    """
+    global _WORKER, _LOADING, _LOAD_ERROR
+    if _WORKER is not None:
+        return _WORKER
+    with _LOAD_LOCK:
+        if _WORKER is None:  # re-check: another thread may have loaded it
+            _LOADING = True
+            try:
+                _WORKER = LocateAnythingWorker(_MODEL_PATH)
+                _LOAD_ERROR = None
+            except (GroundingExtraMissing, OSError, ValueError, RuntimeError, ImportError) as exc:
+                _LOAD_ERROR = str(exc)
+                raise
+            finally:
+                _LOADING = False
     return _WORKER
 
 
@@ -189,12 +214,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.rstrip('/') == '/health':
-            try:
-                get_worker()  # lazy-load + keep warm; blocks until ready
-            except GroundingExtraMissing as exc:
-                self._send(503, {'status': 'error', 'error': str(exc)})
-                return
-            self._send(200, {'status': 'ok', 'model': _MODEL_PATH})
+            # Non-blocking: report the state of the background load rather than
+            # driving it. The model is loaded once by the daemon thread started
+            # in main(); probes must return instantly so the manager sees clean
+            # 503s (loading) until the single load finishes, not 5 s stalls.
+            if _WORKER is not None:
+                self._send(200, {'status': 'ok', 'model': _MODEL_PATH})
+            elif _LOAD_ERROR is not None:
+                self._send(503, {'status': 'error', 'error': _LOAD_ERROR})
+            else:
+                self._send(503, {'status': 'loading', 'model': _MODEL_PATH})
         else:
             self._send(404, {'error': f'no route {self.path}'})
 
@@ -250,8 +279,21 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    log.info('LocateAnything grounding server on http://%s:%d (model=%s, warms on first call)',
+    log.info('LocateAnything grounding server on http://%s:%d (model=%s, loading in background)',
              args.host, args.port, _MODEL_PATH)
+
+    # Bind the port first (above), then load the model once in the background so
+    # /health can answer immediately while the weights load. Failures are
+    # captured into _LOAD_ERROR so /health reports status:"error" (the manager
+    # then fails fast instead of waiting out the whole timeout).
+    def _preload():
+        try:
+            get_worker()
+        except (GroundingExtraMissing, OSError, ValueError, RuntimeError, ImportError) as exc:
+            log.error('model load failed: %s', exc)
+
+    threading.Thread(target=_preload, name='locate-preload', daemon=True).start()
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:
