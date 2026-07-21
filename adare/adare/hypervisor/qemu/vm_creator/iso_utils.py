@@ -9,15 +9,16 @@ from adare.hypervisor.exceptions import HypervisorException
 log = logging.getLogger(__name__)
 
 
-# Marker file that identifies the ADARE legacy-boot override ISO (see
-# create_legacy_boot_iso). Its presence on a mapped filesystem tells startup.nsh
-# to boot that volume's Windows Boot Manager — which carries a patched boot.wim
-# that forces Windows Setup into legacy mode on Win11 24H2/25H2 (ConX).
-_LEGACY_BOOT_MARKER = 'ADARELGB.MRK'
-
-# Number of UEFI filesystem handles (FS0..FSn-1) to probe. QEMU install phases
-# attach at most a handful of USB CD-ROMs + the NVMe disk, so 10 is ample.
-_FS_PROBE_COUNT = 10
+# Relative path (inside the override ISO staging dir) of a copy of the Windows
+# Boot Manager placed at a path unique to ADARE. startup.nsh probes this path
+# first: only the legacy-boot override ISO carries it, so its patched boot.wim
+# is booted regardless of USB enumeration order — and without any shell `if`/`for`
+# scripting (the firmware's fallback "EFI Internal Shell" does not reliably
+# support those). Windows Boot Manager reads its BCD from the fixed device path
+# \EFI\Microsoft\Boot\BCD, not relative to its own directory, so launching the
+# copy from \EFI\ADARE still resolves the store + \sources\boot.wim correctly —
+# exactly as the stock \EFI\BOOT\bootaa64.efi already does.
+_ADARE_LOADER_REL = 'efi/adare/bootaa64.efi'
 
 
 def _build_startup_nsh() -> str:
@@ -26,23 +27,20 @@ def _build_startup_nsh() -> str:
     NVRAM is pre-populated with Shell as Boot0000 (see firmware.py), so the
     firmware auto-launches Shell which then auto-executes this startup.nsh.
 
-    Boot strategy, in order:
-      1. If any mapped filesystem carries the legacy-boot marker (install phase
-         only — the override ISO is attached only while booting from ISO), boot
-         that volume's Windows Boot Manager. This loads the patched boot.wim.
-      2. Otherwise fall back to the Windows Boot Manager / generic EFI loader on
-         the remaining volumes — this is the post-install disk boot (Phase 2),
-         where no override ISO (and thus no marker) is present.
+    Boot order (plain sequential launches — no shell scripting, since the
+    fallback "EFI Internal Shell" lacks reliable if/for support):
+      1. \\EFI\\ADARE\\BOOTAA64.EFI on each volume — present ONLY on the
+         legacy-boot override ISO (install phase), so this boots the patched
+         boot.wim and forces setup.exe /legacy on Win11 24H2/25H2.
+      2. \\EFI\\Microsoft\\Boot\\bootmgfw.efi — post-install disk boot (Phase 2),
+         where no override ISO is attached.
+      3. \\EFI\\BOOT\\BOOTAA64.EFI — generic fallback.
 
     map -r forces device re-enumeration in case USB devices weren't mapped yet.
-    Flat `if exist ... then / endif` blocks are used instead of a `for` loop to
-    stay within the most conservative UEFI Shell syntax.
     """
     lines = ['@echo -off', 'map -r']
-    for i in range(_FS_PROBE_COUNT):
-        lines.append(f'if exist FS{i}:\\{_LEGACY_BOOT_MARKER} then')
-        lines.append(f'  FS{i}:\\EFI\\BOOT\\BOOTAA64.EFI')
-        lines.append('endif')
+    for i in range(10):
+        lines.append(rf'FS{i}:\EFI\ADARE\BOOTAA64.EFI')
     for i in range(4):
         lines.append(rf'FS{i}:\EFI\Microsoft\Boot\bootmgfw.efi')
     for i in range(4):
@@ -452,6 +450,7 @@ def create_legacy_boot_iso(
     Requires ``wimlib-imagex`` (patch boot.wim) and ``7z`` (read the UDF source
     ISO). Both are validated by check_prerequisites for aarch64 Windows builds.
     """
+    import shutil
     import subprocess
     import tempfile
 
@@ -465,10 +464,16 @@ def create_legacy_boot_iso(
         _extract_with_7z(windows_iso_path, ['efi', 'sources/boot.wim'], stage)
 
         boot_wim = stage / 'sources' / 'boot.wim'
+        stock_loader = stage / 'efi' / 'boot' / 'bootaa64.efi'
         if not boot_wim.is_file():
             raise ISOExtractionError(
                 str(windows_iso_path),
                 'sources/boot.wim not found in Windows ISO — cannot build legacy-boot ISO.',
+            )
+        if not stock_loader.is_file():
+            raise ISOExtractionError(
+                str(windows_iso_path),
+                'efi/boot/bootaa64.efi not found in Windows ISO — cannot build legacy-boot ISO.',
             )
 
         # 2. Patch the "Windows Setup" image with winpeshl.ini -> setup.exe /legacy.
@@ -480,8 +485,11 @@ def create_legacy_boot_iso(
             check=True, capture_output=True,
         )
 
-        # 3. Add the marker (so startup.nsh boots this volume) + the answer file.
-        (stage / _LEGACY_BOOT_MARKER).write_bytes(b'ADARE legacy-boot override\r\n')
+        # 3. Place a copy of the boot manager at the ADARE-unique path startup.nsh
+        #    probes first, and add the answer file at the ISO root.
+        adare_loader = stage / Path(_ADARE_LOADER_REL)
+        adare_loader.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(stock_loader, adare_loader)
         (stage / 'Autounattend.xml').write_bytes(xml_content)
 
         # 4. Build the bootable override ISO (UDF, like a stock Windows ISO).
