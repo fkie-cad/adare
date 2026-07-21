@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useSessions } from '@/api/hooks/use-sessions'
-import { openVmWatch } from '@/api/hooks/use-vms'
+import { VmLiveView } from '@/components/vm/vm-live-view'
 import { useRunAgent } from '@/api/hooks/use-gui-agent'
 import { endpoints } from '@/api/endpoints'
 import { wsManager } from '@/services/websocket'
@@ -106,24 +106,13 @@ export default function AgentLivePage() {
   const [video, setVideo] = useState(false)
 
   const [state, dispatch] = useReducer(agentReducer, initialState)
-  const [watchError, setWatchError] = useState<string | null>(null)
+  const [rightPane, setRightPane] = useState<'screenshot' | 'live'>('screenshot')
   const runAgent = useRunAgent(sessionId)
   const logEndRef = useRef<HTMLDivElement>(null)
 
   const selectedSession = sessions?.find((s) => s.session_id === sessionId)
-  // A running VM with a resolvable name is required to hand off to VirtualSpice.
+  // A running VM with a resolvable name is required to embed the live view.
   const canWatch = !!selectedSession?.vm_name && selectedSession.vm_running !== false
-
-  const handleWatch = async () => {
-    if (!selectedSession?.vm_name) return
-    setWatchError(null)
-    const opened = await openVmWatch(selectedSession.vm_name)
-    if (!opened) {
-      setWatchError(
-        'Could not open the live view. Is VirtualSpice running and the VM up?',
-      )
-    }
-  }
 
   // Subscribe to the session's WebSocket for agent frames.
   useEffect(() => {
@@ -230,18 +219,20 @@ export default function AgentLivePage() {
             </label>
 
             <Button
-              variant="outline"
+              variant={rightPane === 'live' ? 'default' : 'outline'}
               className="ml-auto"
-              onClick={handleWatch}
-              disabled={!canWatch}
+              onClick={() =>
+                setRightPane((p) => (p === 'live' ? 'screenshot' : 'live'))
+              }
+              disabled={!canWatch && rightPane !== 'live'}
               title={
                 canWatch
-                  ? 'Open the VM screen live in a new tab (read-only)'
+                  ? 'Embed the live, interactive VM screen in the right pane'
                   : 'Select a session with a running VM to watch'
               }
             >
               <Eye size={14} />
-              Watch VM
+              {rightPane === 'live' ? 'Show screenshot' : 'Watch VM'}
             </Button>
 
             <Button onClick={handleRun} disabled={!canRun}>
@@ -253,8 +244,6 @@ export default function AgentLivePage() {
               Run agent
             </Button>
           </div>
-
-          {watchError && <p className="text-sm text-destructive">{watchError}</p>}
 
           {runAgent.isError && (
             <p className="text-sm text-destructive">
@@ -325,25 +314,32 @@ export default function AgentLivePage() {
           </CardContent>
         </Card>
 
-        {/* Latest annotated screenshot */}
-        <Card className="flex flex-col max-h-[70vh]">
-          <CardContent className="pt-6 flex-1 overflow-auto flex items-center justify-center">
-            {sessionId && state.latestImageIndex != null ? (
-              <img
-                key={state.latestImageIndex}
-                src={endpoints.agentStepImage(sessionId, state.latestImageIndex)}
-                alt={`Annotated screenshot for step ${state.latestImageIndex}`}
-                className="max-w-full h-auto rounded-md border border-border"
-              />
-            ) : (
-              <EmptyState
-                icon={ImageIcon}
-                title="No screenshot yet"
-                description="Annotated screenshots appear here as steps execute."
-              />
-            )}
-          </CardContent>
-        </Card>
+        {/* Right pane: annotated screenshot or embedded live VM */}
+        {rightPane === 'live' && canWatch && selectedSession?.vm_name ? (
+          // Mount only while `live` so switching away tears down the SPICE session.
+          <Card className="flex flex-col min-h-[400px] max-h-[70vh] overflow-hidden">
+            <VmLiveView vmName={selectedSession.vm_name} className="flex-1" />
+          </Card>
+        ) : (
+          <Card className="flex flex-col min-h-[400px] max-h-[70vh]">
+            <CardContent className="pt-6 flex-1 overflow-auto flex items-center justify-center">
+              {sessionId && state.latestImageIndex != null ? (
+                <img
+                  key={state.latestImageIndex}
+                  src={endpoints.agentStepImage(sessionId, state.latestImageIndex)}
+                  alt={`Annotated screenshot for step ${state.latestImageIndex}`}
+                  className="max-w-full h-auto rounded-md border border-border"
+                />
+              ) : (
+                <EmptyState
+                  icon={ImageIcon}
+                  title="No screenshot yet"
+                  description="Annotated screenshots appear here as steps execute."
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )

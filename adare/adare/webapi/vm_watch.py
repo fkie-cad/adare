@@ -12,10 +12,13 @@ import logging
 from urllib.parse import quote
 
 import httpx
+from fastapi import APIRouter, HTTPException
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_SPICE_PORT = 8081
+
+router = APIRouter(tags=["vm-watch"])
 
 
 def resolve_vm_uuid(name: str, spice_port: int = DEFAULT_SPICE_PORT) -> str | None:
@@ -51,3 +54,24 @@ def build_display_path(uuid: str, name: str, view_only: bool) -> str:
         f"&name={quote(name)}"
         f"&viewOnly={'1' if view_only else '0'}"
     )
+
+
+@router.get("/api/vm-watch-url")
+def vm_watch_url(name: str, view_only: bool = True):
+    """Resolve an ADARE VM name to a VirtualSpice display-page path.
+
+    The frontend builds the absolute URL as
+    ``http://${location.hostname}:{spice_port}${path}`` (used both by the
+    pop-out tab and the in-app ``<iframe>`` embed). Returns 404 when the VM
+    name cannot be resolved (VirtualSpice down or no matching domain).
+    """
+    uuid = resolve_vm_uuid(name, spice_port=DEFAULT_SPICE_PORT)
+    if uuid is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No running VM named '{name}' found in VirtualSpice",
+        )
+    return {
+        "path": build_display_path(uuid, name, view_only),
+        "spice_port": DEFAULT_SPICE_PORT,
+    }

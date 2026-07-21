@@ -4,13 +4,8 @@ import { endpoints } from '@/api/endpoints'
 import type { ApiResponse } from '@/types/api'
 
 /**
- * Hooks for managing locally-registered VMs (database-tracked).
- *
- * For interacting with running VMs (VirtualSpice instances, snapshots,
- * live events), use the VM proxy paths from `endpoints.vmProxy` /
- * `endpoints.vmWebSocket` / `endpoints.vmEventsWebSocket` directly, since
- * those requests hit the FastAPI reverse proxy mounted at the app root
- * (outside the `/api` axios baseURL).
+ * Hooks for managing locally-registered VMs (database-tracked) and for
+ * resolving a running VM's live VirtualSpice display URL (watch / embed).
  */
 
 // Shape of a locally-registered VM record. The backend returns whatever
@@ -54,44 +49,60 @@ export function useDeleteLocalVm() {
 }
 
 /**
- * Call an arbitrary VirtualSpice REST endpoint via the backend proxy.
- *
- * VirtualSpice routes are proxied at `/api/vm/{path}` from the FastAPI root,
- * so this helper uses `fetch` directly rather than the `/api`-scoped axios
- * instance to avoid double-prefixing.
- */
-export async function callVmProxy<T = unknown>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
-  const response = await fetch(endpoints.vmProxy(path), init)
-  if (!response.ok) {
-    throw new Error(`VM proxy request failed: ${response.status} ${response.statusText}`)
-  }
-  return response.json() as Promise<T>
-}
-
-/**
- * Open a running VM's live screen in a new tab via VirtualSpice
- * (launch-and-hand-off — no embedded viewer).
+ * Resolve a running VM's live VirtualSpice display URL.
  *
  * Resolves the ADARE VM *name* to VirtualSpice's *uuid* through the backend,
- * then opens VirtualSpice's own standalone display page directly on `:8081`
- * (same-origin with its spice-client). Read-only by default; the observer can
- * still toggle control from VirtualSpice's own toolbar.
+ * then builds the absolute URL to VirtualSpice's own standalone display page
+ * on `:8081` (same-origin with its spice-client). This single URL is consumed
+ * both by the pop-out tab (`openVmWatch`) and the in-app `<iframe>` embed
+ * (`VmLiveView` / `useVmWatchUrl`).
  *
- * @returns `true` if a tab was opened, `false` if the VM could not be resolved
- *          (VirtualSpice down or no matching running domain).
+ * @returns the absolute `display.html` URL, or `null` if the VM could not be
+ *          resolved (VirtualSpice down or no matching running domain).
  */
-export async function openVmWatch(name: string, viewOnly = true): Promise<boolean> {
+export async function resolveVmWatchUrl(
+  name: string,
+  viewOnly = true,
+): Promise<string | null> {
   const response = await fetch(endpoints.vmWatchUrl(name, viewOnly))
   if (!response.ok) {
-    return false
+    return null
   }
   const { path, spice_port } = (await response.json()) as {
     path: string
     spice_port: number
   }
-  window.open(`http://${location.hostname}:${spice_port}${path}`, '_blank')
+  return `http://${location.hostname}:${spice_port}${path}`
+}
+
+/**
+ * Open a running VM's live screen in a new tab via VirtualSpice
+ * (launch-and-hand-off — no embedded viewer). Used by the CLI-style
+ * "pop out to tab" action.
+ *
+ * @returns `true` if a tab was opened, `false` if the VM could not be resolved.
+ */
+export async function openVmWatch(name: string, viewOnly = true): Promise<boolean> {
+  const url = await resolveVmWatchUrl(name, viewOnly)
+  if (!url) {
+    return false
+  }
+  window.open(url, '_blank')
   return true
+}
+
+/**
+ * React-Query hook exposing a running VM's live display URL for the in-app
+ * embed. `data === null` means "not reachable" (VirtualSpice down or VM
+ * stopped) — distinct from `isLoading`. Does not retry (a 404 is a definitive
+ * "no such running VM", not a transient failure).
+ */
+export function useVmWatchUrl(name: string, viewOnly = false, enabled = true) {
+  return useQuery({
+    queryKey: ['vm-watch-url', name, viewOnly],
+    queryFn: () => resolveVmWatchUrl(name, viewOnly),
+    enabled: enabled && !!name,
+    retry: false,
+    staleTime: 60_000,
+  })
 }
