@@ -271,9 +271,15 @@ class DevResetResult:
 
 @dataclass
 class DevCleanupResult:
-    """Result of cleanup operation."""
-    sessions_removed: int
-    removed_session_ids: list[str] = field(default_factory=list)
+    """Result of a cleanup (reconciliation) pass.
+
+    Cleanup no longer deletes rows: 'running' sessions whose VM is gone are
+    reconciled to 'stopped' (so they stay resumable), and 'running' sessions
+    with a live VM are left untouched.
+    """
+    sessions_reconciled: int = 0            # dead-VM 'running' rows -> 'stopped'
+    reconciled_session_ids: list[str] = field(default_factory=list)
+    sessions_left_running: int = 0          # live-VM 'running' rows, untouched
 
 
 @dataclass

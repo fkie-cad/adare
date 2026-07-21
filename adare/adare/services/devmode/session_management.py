@@ -11,6 +11,7 @@ from pathlib import Path
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from adare.backend.devmode.vm_state_checker import is_vm_running
 from adare.backend.environment import database as environment_database
 from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
 from adare.core.dto.devmode import (
@@ -29,12 +30,33 @@ from adare.core.dto.devmode import (
     DevUpdateTestfunctionsResult,
 )
 from adare.core.result import Result
+from adare.database.exceptions import DatabaseError
 
 log = logging.getLogger(__name__)
 
 
 class SessionManagementMixin:
     """Mixin providing session lifecycle methods for DevModeService."""
+
+    def _session_vm_alive(self, db_session) -> bool:
+        """Cross-process check: is this session's VM actually running?
+
+        Resolves the environment's hypervisor from the DB row and asks it
+        directly (libvirt lookupByName for QEMU), so the answer is correct from
+        a fresh CLI process with no in-memory session handle. Returns False when
+        the environment/hypervisor cannot be resolved.
+        """
+        try:
+            environment_ulid = environment_database.resolve_environment_identifier(
+                db_session.environment_name
+            )
+            hypervisor_type = environment_database.get_environment_hypervisor(environment_ulid)
+        except (EnvironmentDoesNotExistInDatabase, DatabaseError, OSError) as e:
+            log.warning(
+                f"Could not resolve hypervisor for session {db_session.session_id}: {e}"
+            )
+            return False
+        return is_vm_running(db_session.vm_name, hypervisor_type)
 
     def start_session(self, request: DevSessionStartRequest) -> Result[DevSessionInfo]:
         """
@@ -491,17 +513,25 @@ class SessionManagementMixin:
             # Build list items
             items = []
             for db_session in db_sessions:
-                # Try to get live state from manager
-                session = self._manager.get_session(db_session.session_id)
+                # Cross-process truth: is the VM actually running right now?
+                # (self._manager is per-process memory and is empty in a fresh CLI.)
+                vm_running = self._session_vm_alive(db_session)
 
-                if session:
-                    state = session.get_state()
-                    vm_running = state.vm_running
-                    actions_executed = state.actions_executed
-                else:
-                    # Session not in manager
-                    vm_running = False
-                    actions_executed = 0
+                # In-memory state, when present in *this* process, gives the live
+                # action count; otherwise it's unknown from here.
+                session = self._manager.get_session(db_session.session_id)
+                actions_executed = session.get_state().actions_executed if session else 0
+
+                # Self-heal: a row still marked 'running' whose VM is gone is
+                # stale — reconcile it to 'stopped' so it stays resumable.
+                status = db_session.status
+                if status == 'running' and not vm_running:
+                    self._db_api.update_session_status(db_session.session_id, 'stopped')
+                    status = 'stopped'
+                    log.info(
+                        f"Reconciled stale session {db_session.session_id}: "
+                        f"VM '{db_session.vm_name}' not running -> status 'stopped'"
+                    )
 
                 items.append(DevSessionListItem(
                     session_id=db_session.session_id,
@@ -511,7 +541,7 @@ class SessionManagementMixin:
                     actions_executed=actions_executed,
                     created_at=db_session.created_at,
                     project_path=Path(db_session.project_path),
-                    status=db_session.status,
+                    status=status,
                     name=db_session.name
                 ))
 
@@ -689,41 +719,50 @@ class SessionManagementMixin:
 
     def cleanup_stale_sessions(self, request: DevSessionCleanupRequest) -> Result[DevCleanupResult]:
         """
-        Cleanup orphaned dev mode sessions.
+        Reconcile orphaned dev mode sessions against real VM state.
 
-        Removes sessions marked as 'running' that are not actually active in memory.
-        This handles cases where sessions crashed or were killed unexpectedly.
+        For every row marked 'running', decide by a cross-process VM liveness
+        check (not in-memory state, which is empty in a fresh CLI process):
+        - VM alive  -> leave the row untouched (never orphan a live VM).
+        - VM dead   -> reconcile to 'stopped' so the row stays resumable.
 
-        Does NOT remove sessions with 'stopped' status - these are intentionally
-        not in memory and can be resumed later.
+        Sessions with 'stopped' (or other) status are left alone.
 
         Args:
             request: DevSessionCleanupRequest with optional project filter
 
         Returns:
-            Result[DevCleanupResult] with cleanup statistics
+            Result[DevCleanupResult] summarising reconciled vs. left-running
         """
         try:
-            removed_ids = []
+            reconciled_ids = []
+            left_running = 0
 
             # Get all sessions from database
             db_sessions = self._db_api.list_sessions(request.project_path)
 
             for db_session in db_sessions:
-                # Skip stopped sessions - they're intentionally not in memory
-                if db_session.status == 'stopped':
+                # Only 'running' rows can be stale.
+                if db_session.status != 'running':
                     continue
 
-                # Check if session exists in manager
-                session = self._manager.get_session(db_session.session_id)
-                if not session:
-                    # Stale session - remove from database (marked as running but not actually running)
-                    self._db_api.delete_session(db_session.session_id)
-                    removed_ids.append(db_session.session_id)
+                if self._session_vm_alive(db_session):
+                    # Live VM — never delete or disturb it.
+                    left_running += 1
+                    continue
+
+                # VM is gone: reconcile to 'stopped' (keeps the row resumable).
+                self._db_api.update_session_status(db_session.session_id, 'stopped')
+                reconciled_ids.append(db_session.session_id)
+                log.info(
+                    f"Reconciled stale session {db_session.session_id}: "
+                    f"VM '{db_session.vm_name}' not running -> status 'stopped'"
+                )
 
             return Result.ok(DevCleanupResult(
-                sessions_removed=len(removed_ids),
-                removed_session_ids=removed_ids
+                sessions_reconciled=len(reconciled_ids),
+                reconciled_session_ids=reconciled_ids,
+                sessions_left_running=left_running
             ))
 
         except (SQLAlchemyError, OSError) as e:
