@@ -31,6 +31,36 @@ log = logging.getLogger(__name__)
 class SnapshotMixin(AbstractSnapshotMixin):
     """Mixin class providing external snapshot operations for QEMU VMs using virsh."""
 
+    def _use_qmp_internal_snapshot(self) -> bool:
+        """Use QMP internal (qcow2) snapshots when libvirt does not model the disk.
+
+        aarch64 guests attach their disk via raw ``<qemu:commandline>`` (no libvirt
+        NVMe emulation; the virtio-blk controller is pinned on pcie.0), so
+        ``virsh domblklist`` is empty and ``virsh snapshot-create`` fails ("too
+        many disk snapshot requests"). With no modelled disk we drive QEMU
+        savevm/loadvm over QMP instead; modelled-disk platforms keep the libvirt
+        external path. Probing the live domain avoids trusting the persisted
+        ``config.architecture``, which can be stale.
+        """
+        try:
+            result = subprocess.run(
+                ['virsh', 'domblklist', self.vm_name, '--details'],
+                capture_output=True, text=True, timeout=10, check=False,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            log.warning(f"domblklist probe failed ({e}); assuming libvirt external snapshot")
+            return False
+        if result.returncode != 0:
+            log.warning(f"domblklist rc={result.returncode}; assuming external snapshot")
+            return False
+        # Columns: Type Device Target Source. A modelled disk has a real Source.
+        for line in result.stdout.splitlines():
+            parts = line.split()
+            if len(parts) >= 4 and parts[1] == 'disk' and parts[3] != '-':
+                return False  # libvirt models the disk -> external snapshot works
+        log.info(f"No libvirt-modelled disk for '{self.vm_name}'; using QMP internal snapshot")
+        return True
+
     def _get_snapshot_storage_dir(self) -> Path:
         """
         Compute snapshot storage directory from VM disk path.
@@ -470,6 +500,14 @@ class SnapshotMixin(AbstractSnapshotMixin):
         snapshot_dir = Path(memory_path).parent
         self._ensure_snapshot_dir(snapshot_dir)
 
+        # No libvirt-modelled disk (aarch64 commandline disk): libvirt external
+        # snapshots are impossible, so use a QMP internal (qcow2) snapshot.
+        if self._use_qmp_internal_snapshot():
+            from adare.hypervisor.qemu import qmp_internal_snapshot
+            return qmp_internal_snapshot.create(
+                self.config.qmp_socket_path, snapshot_name, memory_path, disk_path
+            )
+
         snapshot_success = False
         virtiofs_payloads = []
         import tempfile
@@ -623,6 +661,11 @@ class SnapshotMixin(AbstractSnapshotMixin):
         log.info(f"Restoring external snapshot for VM '{self.vm_name}'")
         log.debug(f"Memory file: {memory_path}")
         log.debug(f"Disk file: {disk_path}")
+
+        # No libvirt-modelled disk: loadvm in place (no destroy/redefine).
+        if self._use_qmp_internal_snapshot():
+            from adare.hypervisor.qemu import qmp_internal_snapshot
+            return qmp_internal_snapshot.restore(self.config.qmp_socket_path, memory_path)
 
         # Verify files exist
         if not os.path.exists(memory_path):
@@ -831,6 +874,13 @@ class SnapshotMixin(AbstractSnapshotMixin):
             True if deletion successful, False otherwise
         """
         log.info(f"Deleting external snapshot '{snapshot_name}' for VM '{self.vm_name}'")
+
+        # No libvirt-modelled disk: snapshot lives in the overlay, tracked by markers.
+        if self._use_qmp_internal_snapshot():
+            from adare.hypervisor.qemu import qmp_internal_snapshot
+            return qmp_internal_snapshot.delete(
+                self.config.qmp_socket_path, memory_path, disk_path
+            )
 
         success = True
 
