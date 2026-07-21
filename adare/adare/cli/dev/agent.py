@@ -37,7 +37,11 @@ def exec_dev_agent(arguments):
     output = getattr(arguments, 'output', None)
     output_file = Path(output).resolve() if output else None
 
+    planning = getattr(arguments, 'planning', None)
+
     print(f"Driving session {session_id} toward goal:\n  {goal}")
+    if planning:
+        print("Planning mode: decompose -> checkpoint -> execute -> verify -> backtrack")
     if output_file:
         print(f"Recording playbook to: {output_file}")
 
@@ -49,6 +53,7 @@ def exec_dev_agent(arguments):
         max_steps=getattr(arguments, 'max_steps', None),
         stall_limit=getattr(arguments, 'stall_limit', None),
         interactive=getattr(arguments, 'interactive', False),
+        planning=planning,
     ))
 
     if not result.success:
