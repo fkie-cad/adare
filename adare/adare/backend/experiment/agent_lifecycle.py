@@ -8,6 +8,7 @@ import asyncio
 
 # configure logging
 import logging
+import os
 import threading
 
 log = logging.getLogger(__name__)
@@ -299,6 +300,28 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
             -1, "", "Guest agent not responsive after boot validation",
         )
     log.info("Guest agent verification successful")
+
+    # EXPERIMENTAL (env-gated, paired with ADARE_TEST_GPU_PCI): with the PCI
+    # virtio-gpu the DOD driver honours Windows monitor power-off — the screen
+    # blanks during the idle agent-install window and the scanout is torn down,
+    # so QMP screendumps come back "Display output is not active". Disable the
+    # monitor sleep timeout up-front (before that idle window) so the display
+    # stays scanned out. The old ramfb framebuffer never blanked, so this was
+    # not needed there.
+    if context.guest_platform == 'windows' and os.environ.get('ADARE_TEST_GPU_PCI'):
+        log.info("Disabling guest monitor sleep (PCI virtio-gpu keep-awake)")
+        powercfg = (
+            'powercfg /change monitor-timeout-ac 0; '
+            'powercfg /change monitor-timeout-dc 0; '
+            'powercfg /change standby-timeout-ac 0; '
+            'powercfg /change standby-timeout-dc 0'
+        )
+        # Must run as the logged-in (console) user: monitor DPMS is governed by
+        # THAT session's active power scheme, not SYSTEM's. Run before the idle
+        # agent-install window so the display never blanks in the first place.
+        await vm.run_command(
+            powercfg, stop_event=stop_event, admin=True, run_as_user=True,
+        )
 
     # Execute setup commands
     for idx, setup_cmd in enumerate(commands.setup_commands):

@@ -670,7 +670,21 @@ class DomainXMLBuilder:
         if self._is_aarch64:
             rx = getattr(self._config, 'resolution_x', 1920)
             ry = getattr(self._config, 'resolution_y', 1080)
-            if self._is_windows:
+            if self._is_windows and os.environ.get('ADARE_TEST_GPU_PCI'):
+                # EXPERIMENTAL (env-gated): give Windows the PCI virtio-gpu with NO
+                # ramfb — mirroring the Linux branch. Hypothesis: the documented
+                # WinPE BSOD was the ramfb->GPU *handoff*; without ramfb there is no
+                # handoff, edk2 VirtioGpuDxe provides the boot GOP, and viogpudo binds
+                # to PCI virtio-gpu (DEV_1050) post-boot to honor the EDID mode. The
+                # MMIO virtio-gpu-device otherwise lands on an ACPI\LNRO0005 virtio-mmio
+                # slot Windows has no bus driver for, so the display falls back to
+                # ramfb at 800x600. Remove this branch (or the env var) to restore.
+                _add_qemu_arg(qemu_commandline, '-device')
+                _add_qemu_arg(
+                    qemu_commandline,
+                    f'virtio-gpu-pci,edid=on,xres={rx},yres={ry},bus=pcie.0,addr=0x1d',
+                )
+            elif self._is_windows:
                 # Windows aarch64: ramfb boot framebuffer + the MMIO virtio-gpu-device
                 # driven by viogpudo (UTM guest tools). virtio-gpu-PCI causes a
                 # WinPE/boot BSOD on the ramfb->GPU handoff (see vm_creator/
