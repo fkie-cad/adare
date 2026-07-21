@@ -351,6 +351,24 @@ def _fmt_size(num_bytes: int) -> str:
     return f"{size:.1f} TiB"
 
 
+def _physical_size(path: Path) -> int:
+    """On-disk footprint of ``path`` in bytes.
+
+    Uses allocated blocks (st_blocks * 512) so a CoW-cloned base that shares
+    blocks with its template reports its true reclaimable cost, not its logical
+    size. Falls back to st_size where st_blocks is unavailable (e.g. some
+    non-POSIX filesystems).
+    """
+    try:
+        st = path.stat()
+    except OSError:
+        return 0
+    blocks = getattr(st, 'st_blocks', None)
+    if blocks is None:
+        return st.st_size
+    return blocks * 512
+
+
 def exec_vm_prune(arguments):
     """Reclaim orphaned QEMU base disks / NVRAM (and optionally dead sockets).
 
@@ -426,10 +444,7 @@ def exec_vm_prune(arguments):
         click.echo("\nOrphaned base disks / NVRAM:")
         click.echo(f"  {'SIZE':>12}  FILE")
         for path in orphan_files:
-            try:
-                size = path.stat().st_size
-            except OSError:
-                size = 0
+            size = _physical_size(path)
             total_bytes += size
             click.echo(f"  {_fmt_size(size):>12}  {path.name}")
         click.echo(f"  {'-' * 12}")
@@ -456,10 +471,7 @@ def exec_vm_prune(arguments):
         # Backstop before every unlink.
         if '-overlay-' in name or '-dev-' in name:
             continue
-        try:
-            size = path.stat().st_size
-        except OSError:
-            size = 0
+        size = _physical_size(path)
         try:
             path.unlink()
             reclaimed_bytes += size
