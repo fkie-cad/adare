@@ -86,6 +86,27 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         args = SimpleNamespace(dry_run=dry_run, sockets=sockets)
         exec_with_error_printing(exec_vm_prune, args)
 
+    @vm.command(name='watch')
+    @click.argument('name')
+    @click.option('--view-only/--interactive', 'view_only', default=True,
+                  help='Read-only view (default) or allow input. Toggle live from '
+                       "VirtualSpice's own toolbar either way.")
+    def vm_watch(name, view_only):
+        """Watch a running VM's live screen in the browser (via VirtualSpice).
+
+        NAME is the VM/instance name (run 'adare vm list' to see names). Opens
+        VirtualSpice's standalone display page pointed at that VM. Requires
+        VirtualSpice to be running (started by 'adare web start').
+
+        \b
+        Examples:
+          adare vm watch my-vm                 # read-only live view
+          adare vm watch my-vm --interactive   # allow input
+        """
+        from adare.cli.vm import exec_vm_watch
+        args = SimpleNamespace(name=name, view_only=view_only)
+        exec_with_error_printing(exec_vm_watch, args)
+
     @vm.command()
     @click.argument('target')
     @click.option('--platform', '-p', required=False, type=click.Choice(['linux', 'windows']), help='VM platform (required for OVA files; auto-derived for registered VMs)')
