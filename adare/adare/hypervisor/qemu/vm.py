@@ -459,6 +459,14 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             if not os.path.exists(self.config.disk_path):
                 raise VMStartException(self.vm_name, f"VM disk not found at {self.config.disk_path}")
 
+            # Directory-level sweep: reap crash-orphaned QMP/QGA sockets left by
+            # OTHER instances whose QEMU died and is never re-run (the per-VM
+            # cleanup below only handles this VM's own same-name sockets). Never
+            # touches a socket with a live listener; keep our own sockets for the
+            # explicit per-VM cleanup that follows.
+            from adare.hypervisor.qemu.mixins.configuration import sweep_stale_sockets
+            sweep_stale_sockets(keep={self.config.qmp_socket_path, self.config.guest_agent_socket_path})
+
             # Clean up any stale socket files before starting
             for socket_path in [self.config.qmp_socket_path, self.config.guest_agent_socket_path]:
                 if os.path.exists(socket_path):

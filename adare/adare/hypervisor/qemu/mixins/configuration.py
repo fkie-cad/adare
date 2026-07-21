@@ -1,6 +1,7 @@
 """
 Configuration Mixin - VM configuration lifecycle (load, save, defaults).
 """
+import contextlib
 import json
 import logging
 import subprocess
@@ -17,6 +18,148 @@ if TYPE_CHECKING:
     from adare.hypervisor.qemu.vm import QEMUVM
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Managed QEMU storage locations (single source of truth)
+# ---------------------------------------------------------------------------
+
+def get_qemu_disk_dir() -> Path:
+    """Directory holding managed disks (base/overlay/nvram): ~/.adare/qemu/disks."""
+    disk_dir = Path.home() / '.adare' / 'qemu' / 'disks'
+    disk_dir.mkdir(parents=True, exist_ok=True)
+    return disk_dir
+
+
+def get_qemu_runtime_dir() -> Path:
+    """Directory holding runtime sockets/pids (QMP/QGA/pid): ~/.adare/qemu/run."""
+    runtime_dir = Path.home() / '.adare' / 'qemu' / 'run'
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    return runtime_dir
+
+
+def get_qemu_vm_config_dir() -> Path:
+    """Directory holding per-VM config JSON: ~/.adare/qemu/vms."""
+    config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return config_dir
+
+
+def is_socket_listening(socket_path: str, timeout: float = 0.2) -> bool:
+    """Return True if a Unix socket currently accepts a new connection.
+
+    A successful non-blocking connect proves something is serving the socket,
+    so it is definitely live. The converse is NOT reliable: QMP/QGA are
+    single-client channels, so a *live* socket that already has its one client
+    connected refuses further connects (``ECONNREFUSED``). Treat this only as a
+    positive "definitely alive" signal — never infer "stale" from a failure
+    alone (cross-check with the owning domain via ``get_active_domain_names``).
+    """
+    import socket as _socket
+
+    sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    try:
+        sock.settimeout(timeout)
+        sock.connect(socket_path)
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.close()
+
+
+def get_active_domain_names() -> set[str] | None:
+    """Return the set of running libvirt domain names, or None if unknowable.
+
+    The QMP/QGA socket basename stem equals the VM/domain name, so a running
+    domain authoritatively marks its sockets as live. Returns None (rather than
+    an empty set) when libvirt is unavailable or the query fails, so callers can
+    refuse to reap anything rather than risk deleting a live socket.
+    """
+    try:
+        import libvirt
+    except ImportError:
+        return None
+
+    try:
+        from adare.config import HYPERVISOR_CONFIGS
+        libvirt_uri = HYPERVISOR_CONFIGS.get('qemu', {}).get('libvirt_uri', 'qemu:///session')
+    except ImportError:
+        libvirt_uri = 'qemu:///session'
+
+    conn = None
+    try:
+        conn = libvirt.open(libvirt_uri)
+        if conn is None:
+            return None
+        # VIR_CONNECT_LIST_DOMAINS_ACTIVE = running/paused domains only.
+        active = conn.listAllDomains(libvirt.VIR_CONNECT_LIST_DOMAINS_ACTIVE)
+        return {domain.name() for domain in active}
+    except libvirt.libvirtError as e:
+        log.warning(f"Could not query active libvirt domains: {e}")
+        return None
+    finally:
+        if conn is not None:
+            with contextlib.suppress(libvirt.libvirtError):
+                conn.close()
+
+
+def find_stale_sockets(runtime_dir: Path | None = None, keep: set[str] | None = None) -> list[Path]:
+    """Return QMP/QGA sockets in *runtime_dir* that no running QEMU owns.
+
+    A socket is considered LIVE (and never returned) if its owning domain is
+    active, or if it still accepts a connection. It is only reported stale when
+    BOTH checks say it is dead — this is what protects a live-but-occupied QGA
+    socket from being reaped. Sockets whose absolute path or basename is in
+    *keep* are always skipped.
+
+    Returns an empty list (reaping nothing) if the active-domain set cannot be
+    determined, so we never delete a socket we could not verify as dead.
+    """
+    if runtime_dir is None:
+        runtime_dir = get_qemu_runtime_dir()
+    keep = keep or set()
+
+    active = get_active_domain_names()
+    if active is None:
+        log.warning("Cannot determine active libvirt domains — skipping stale-socket sweep for safety")
+        return []
+
+    stale: list[Path] = []
+    for pattern in ('*.qmp', '*.qga'):
+        for sock_path in runtime_dir.glob(pattern):
+            if str(sock_path) in keep or sock_path.name in keep:
+                continue
+            # Only ever operate on genuine sockets.
+            try:
+                if not sock_path.is_socket():
+                    continue
+            except OSError:
+                continue
+            # sock_path.stem strips the .qmp/.qga suffix → the domain/VM name.
+            if sock_path.stem in active:
+                continue  # owning domain running → live
+            if is_socket_listening(str(sock_path)):
+                continue  # someone is still serving it → live
+            stale.append(sock_path)
+    return stale
+
+
+def sweep_stale_sockets(runtime_dir: Path | None = None, keep: set[str] | None = None) -> list[str]:
+    """Reap crash-orphaned QMP/QGA sockets (those no running QEMU owns).
+
+    Uses :func:`find_stale_sockets` for the safe liveness determination, then
+    unlinks each. Returns the list of unlinked socket paths (errors swallowed).
+    """
+    removed: list[str] = []
+    for sock_path in find_stale_sockets(runtime_dir, keep):
+        try:
+            sock_path.unlink()
+            removed.append(str(sock_path))
+            log.debug(f"Swept stale socket: {sock_path}")
+        except OSError as e:
+            log.warning(f"Could not remove stale socket {sock_path}: {e}")
+    return removed
 
 
 class ConfigurationMixin:
@@ -102,9 +245,7 @@ class ConfigurationMixin:
     def _get_vm_config_path(self: 'QEMUVM') -> Path:
         """Get path to VM configuration JSON file."""
         # Store VM configs in ~/.adare/qemu/vms/
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
-        config_dir.mkdir(parents=True, exist_ok=True)
-        return config_dir / f"{self.vm_name}.json"
+        return get_qemu_vm_config_dir() / f"{self.vm_name}.json"
 
     def _load_or_create_vm_config(self: 'QEMUVM') -> QEMUVMConfig:
         """Load VM config from JSON or create new one."""
@@ -182,14 +323,12 @@ class ConfigurationMixin:
             disk_path = self._external_disk_path
             log.debug(f"Using external disk path for --no-copy mode: {disk_path}")
         else:
-            disk_dir = Path.home() / '.adare' / 'qemu' / 'disks'
-            disk_dir.mkdir(parents=True, exist_ok=True)
+            disk_dir = get_qemu_disk_dir()
             disk_path = str(disk_dir / f"{self.vm_name}.qcow2")
             log.debug(f"Using managed disk path: {disk_path}")
 
         # Socket paths
-        runtime_dir = Path.home() / '.adare' / 'qemu' / 'run'
-        runtime_dir.mkdir(parents=True, exist_ok=True)
+        runtime_dir = get_qemu_runtime_dir()
         qmp_socket = str(runtime_dir / f"{self.vm_name}.qmp")
         qga_socket = str(runtime_dir / f"{self.vm_name}.qga")
         pid_file = str(runtime_dir / f"{self.vm_name}.pid")
