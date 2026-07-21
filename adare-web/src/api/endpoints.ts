@@ -18,8 +18,8 @@ export const endpoints = {
 
   // GUI agent (live view)
   agentRun: (id: string) => `/sessions/${id}/agent/run`,
-  // NOTE: `agentStepImage` returns an absolute `/api/...` path (like `vmProxy`)
-  // because it is consumed by an `<img src>`, which bypasses the axios baseURL.
+  // NOTE: `agentStepImage` returns an absolute `/api/...` path because it is
+  // consumed by an `<img src>`, which bypasses the axios baseURL.
   agentStepImage: (id: string, index: number) =>
     `/api/sessions/${id}/agent/steps/${index}.png`,
 
@@ -28,16 +28,9 @@ export const endpoints = {
   playbookSave: '/playbooks/save',
   playbookLoad: (name: string) => `/playbooks/${name}`,
 
-  // VirtualSpice REST/WebSocket proxy
-  // NOTE: `vmProxy` returns a path starting with `/api/vm/...` because the
-  // VirtualSpice proxy router is mounted at the app root (not under the `/api`
-  // axios baseURL). Consumers should pass the full path to `fetch` or build an
-  // absolute URL. WebSocket paths are likewise absolute.
-  vmProxy: (path: string) => `/api/vm/${path}`,
-  vmWebSocket: (path: string) => `/ws/vm/${path}`,
-  vmEventsWebSocket: '/ws/vm-events',
   // Resolve an ADARE VM name to a VirtualSpice display-page path. Mounted at the
-  // app root (like `vmProxy`), so consumers `fetch` this absolute path directly.
+  // app root (not under the `/api` axios baseURL), so consumers `fetch` this
+  // absolute path directly and prepend the `:8081` origin themselves.
   vmWatchUrl: (name: string, viewOnly = true) =>
     `/api/vm-watch-url?name=${encodeURIComponent(name)}&view_only=${viewOnly}`,
 
