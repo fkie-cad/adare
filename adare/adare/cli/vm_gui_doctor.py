@@ -120,7 +120,7 @@ def exec_vm_gui_doctor(arguments):
             next_steps=[
                 'export ADARE_VLLM_BASE_URL=https://ollama.com/v1',
                 'export ADARE_VLLM_API_KEY=<key>',
-                'export ADARE_VLLM_MODEL=qwen3-vl:235b-cloud',
+                'export ADARE_VLLM_MODEL=gemma4:31b',
             ],
         )
         return
@@ -155,7 +155,7 @@ def exec_vm_gui_doctor(arguments):
         next_steps.append(f'Coordinate space already correct: ADARE_VLLM_COORD_SPACE={VLLM_COORD_SPACE}')
     else:
         next_steps.append('Could not auto-detect the coordinate space — try a grounding model '
-                          '(e.g. qwen3-vl:235b-cloud) and re-run.')
+                          '(e.g. gemma4:31b) and re-run.')
 
     print_success_message(
         title=f'GUI-automation preflight complete (model: {VLLM_MODEL})',
