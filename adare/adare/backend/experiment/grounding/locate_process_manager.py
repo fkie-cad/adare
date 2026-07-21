@@ -21,6 +21,7 @@ the server is launched by its **file path** with that interpreter instead
 """
 from __future__ import annotations
 
+import json
 import logging
 import signal
 import socket
@@ -143,8 +144,23 @@ class LocateGroundingManager:
                         return
                     last_err = f'HTTP {resp.status}'
             except urllib.error.HTTPError as exc:
-                # 503 -> extra missing / still loading; keep the body for the message.
-                last_err = f'HTTP {exc.code}: {exc.read().decode("utf-8", "replace")[:200]}'
+                # 503 -> still loading (keep waiting) or a terminal load error.
+                # The server answers instantly now, so parse the JSON body: a
+                # status:"error" means the model can never load here (e.g. deps
+                # missing) -> fail fast instead of waiting out the whole timeout.
+                # status:"loading" (or an unparseable body) -> keep polling.
+                raw = exc.read().decode('utf-8', 'replace')
+                last_err = f'HTTP {exc.code}: {raw[:200]}'
+                try:
+                    payload = json.loads(raw)
+                except (ValueError, json.JSONDecodeError):
+                    payload = {}
+                if isinstance(payload, dict) and payload.get('status') == 'error':
+                    self.stop()
+                    raise GroundingUnavailable(
+                        f'LocateAnything grounding server could not load the model: '
+                        f'{payload.get("error", raw[:200])}' + self._log_hint()
+                    ) from exc
             except (urllib.error.URLError, TimeoutError, OSError):
                 last_err = 'not up yet'
             time.sleep(2.0)

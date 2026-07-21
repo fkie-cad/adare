@@ -25,6 +25,30 @@ from adare.core.result import Result
 log = logging.getLogger(__name__)
 
 
+def _grounding_next_steps(msg: str) -> list[str]:
+    """Pick next-steps for a GROUNDING_ERROR by failure kind (from the message).
+
+    A readiness *timeout* means the server launched fine but the model didn't
+    finish loading in time — the fix is to pre-warm / grant more time / read the
+    log, NOT to (re)install the backend. A process that *exited early* or *could
+    not launch* is genuinely a missing/broken backend, so keep the install
+    guidance for those.
+    """
+    if 'not ready within' in msg:
+        return [
+            'Pre-warm the weights once, then rerun: adare dev grounding pull',
+            'Or allow more load time: ADARE_LOCATE_START_TIMEOUT=900 adare dev agent ...',
+            'Read the server log named above to see how far the load got',
+            'Or drop --ground to run without element grounding',
+        ]
+    return [
+        'Install the backend: uv sync --extra grounding',
+        'Or point ADARE_LOCATE_PYTHON at a venv that already has torch + the model deps',
+        'Or attach to a running server via ADARE_LOCATE_URL',
+        'Or drop --ground to run without element grounding',
+    ]
+
+
 class GuiAgentMixin:
     """Adds vision-LLM GUI-agent execution to :class:`DevModeService`."""
 
@@ -53,10 +77,7 @@ class GuiAgentMixin:
         except GroundingUnavailable as exc:  # --ground could not start (checked before RuntimeError)
             return Result.fail(
                 'GROUNDING_ERROR', str(exc),
-                ['Install the backend: uv sync --extra grounding',
-                 'Or point ADARE_LOCATE_PYTHON at a venv that already has torch + the model deps',
-                 'Or attach to a running server via ADARE_LOCATE_URL',
-                 'Or drop --ground to run without element grounding'],
+                _grounding_next_steps(str(exc)),
             )
         except VideoUnavailable as exc:  # --video needs ffmpeg (checked before RuntimeError)
             return Result.fail(
