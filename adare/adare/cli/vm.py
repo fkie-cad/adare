@@ -101,6 +101,41 @@ def exec_vm_clear_by_environment(arguments):
         handle_api_error(result)
 
 
+def exec_vm_watch(arguments):
+    """Open a running VM's live screen in the browser via VirtualSpice.
+
+    Resolves the VM name to a VirtualSpice uuid and opens its standalone display
+    page. Read-only by default (safe for forensic runs); the observer can still
+    toggle control from VirtualSpice's own toolbar.
+    """
+    import webbrowser
+
+    from adare.webapi.vm_watch import DEFAULT_SPICE_PORT, build_display_path, resolve_vm_uuid
+
+    name = arguments.name
+    view_only = getattr(arguments, 'view_only', True)
+
+    uuid = resolve_vm_uuid(name, spice_port=DEFAULT_SPICE_PORT)
+    if uuid is None:
+        print_error_message(
+            title=f"Could not open a live view for '{name}'",
+            next_steps=[
+                "Is VirtualSpice running?  Start it with:  adare web start",
+                f"Is the VM running?  Check:  adare vm list  (name must match '{name}')",
+            ],
+        )
+        return
+
+    path = build_display_path(uuid, name, view_only)
+    url = f"http://127.0.0.1:{DEFAULT_SPICE_PORT}{path}"
+    webbrowser.open(url)
+    print_success_message(
+        title=f"Opening live view for '{name}'"
+        + (" (view-only)" if view_only else " (interactive)"),
+        next_steps=[f"If no tab opened, visit:  {url}"],
+    )
+
+
 async def exec_vm_test(arguments):
     """Test ADARE compatibility of a VM: OVA file path OR registered VM name.
 

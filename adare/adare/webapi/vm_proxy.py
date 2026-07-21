@@ -3,13 +3,35 @@ import asyncio
 import logging
 
 import httpx
-from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
+
+from adare.webapi.vm_watch import DEFAULT_SPICE_PORT, build_display_path, resolve_vm_uuid
 
 logger = logging.getLogger(__name__)
 
 VIRTUALSPICE_URL = "http://127.0.0.1:8081"
 
 router = APIRouter(tags=["vm-proxy"])
+
+
+@router.get("/api/vm-watch-url")
+def vm_watch_url(name: str, view_only: bool = True):
+    """Resolve an ADARE VM name to a VirtualSpice display-page path.
+
+    The frontend builds the absolute URL as
+    ``http://${location.hostname}:{spice_port}${path}``. Returns 404 when the
+    VM name cannot be resolved (VirtualSpice down or no matching domain).
+    """
+    uuid = resolve_vm_uuid(name, spice_port=DEFAULT_SPICE_PORT)
+    if uuid is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No running VM named '{name}' found in VirtualSpice",
+        )
+    return {
+        "path": build_display_path(uuid, name, view_only),
+        "spice_port": DEFAULT_SPICE_PORT,
+    }
 
 
 @router.api_route(

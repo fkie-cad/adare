@@ -542,7 +542,8 @@ class SessionManagementMixin:
                     created_at=db_session.created_at,
                     project_path=Path(db_session.project_path),
                     status=status,
-                    name=db_session.name
+                    name=db_session.name,
+                    vm_name=db_session.vm_name
                 ))
 
             return Result.ok(items)
