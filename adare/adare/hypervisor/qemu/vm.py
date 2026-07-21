@@ -39,6 +39,7 @@ from adare.hypervisor.qemu.mixins.networking import NetworkingMixin
 from adare.hypervisor.qemu.mixins.registry import RegistryMixin
 from adare.hypervisor.qemu.mixins.snapshots import SnapshotMixin
 from adare.hypervisor.qemu.models import CommandResult
+from adare.hypervisor.qemu.utilities.disk_utils import try_cow_clone
 
 log = logging.getLogger(__name__)
 
@@ -1237,6 +1238,16 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                         f"Cannot create converted qcow2 file for external VM.\n"
                         f"Please ensure directory has write permissions."
                     )
+
+        # Materialize the instance base. For a qcow2 source on a managed VM, try a CoW
+        # clone (APFS clonefile / reflink) so the base shares blocks with the template
+        # until written; otherwise fall back to a full qemu-img convert (also the path
+        # for non-qcow2 sources that genuinely need format conversion).
+        if source_format == 'qcow2' and not self._external_disk_path:
+            if try_cow_clone(str(source_disk), dest_disk):
+                log.info(f"CoW-cloned instance base from template: {dest_disk}")
+                self._save_vm_config()
+                return 0, "VM imported successfully (CoW clone)"
 
         # Convert to qcow2
         log.debug(f"Converting {source_format} disk to qcow2 at {dest_disk}")
