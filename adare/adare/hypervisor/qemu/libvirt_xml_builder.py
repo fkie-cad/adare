@@ -340,9 +340,9 @@ class DomainXMLBuilder:
     def _add_disk(self) -> None:
         """Add disk configuration with iothread.
 
-        ARM64 uses NVMe (native Windows driver, matches installation).
-        NVMe is added via qemu:commandline since libvirt has no native NVMe
-        emulation support in <disk> elements.
+        ARM64 disks are added via qemu:commandline (see _add_qemu_commandline):
+        Windows uses NVMe (native driver, matches installation), Linux uses
+        virtio-blk (migratable, so savevm/loadvm checkpoints work).
         x86_64 uses virtio-blk (viostor loaded by Windows).
         """
         if self._is_aarch64:
@@ -621,8 +621,20 @@ class DomainXMLBuilder:
             _add_qemu_arg(qemu_commandline, '-d')
             _add_qemu_arg(qemu_commandline, 'guest_errors,cpu_reset,unimp')
 
-        # ARM64 NVMe disk — libvirt has no native NVMe emulation in <disk>,
-        # so we pass raw QEMU args. Matches the installation disk controller.
+        # ARM64 guest disk — attached via raw QEMU args because the controller
+        # lives on pcie.0 at a pinned high slot (kept clear of libvirt's
+        # auto-assigned pcie-root-ports). Controller choice depends on the guest:
+        #
+        #   * Windows aarch64 -> nvme. Windows ships a native NVMe driver and the
+        #     guest was installed on nvme; virtio-blk would need viostor.
+        #   * Linux aarch64   -> virtio-blk-pci. nvme is a NON-MIGRATABLE QEMU
+        #     device, which makes savevm/loadvm (dev-mode checkpoint/restore on
+        #     qemu:///session, where libvirt external snapshots are unavailable)
+        #     abort with "State blocked by non-migratable device". virtio-blk-pci
+        #     is fully migratable, so the VM RAM+device state can be captured into
+        #     an internal qcow2 snapshot. Linux's generic initramfs carries
+        #     virtio_blk and mounts by UUID, so the /dev/nvme0n1 -> /dev/vda
+        #     controller change does not affect boot.
         if self._is_aarch64:
             _add_qemu_arg(qemu_commandline, '-drive')
             disk_cache = 'writethrough' if self._is_darwin else 'none'
@@ -635,9 +647,11 @@ class DomainXMLBuilder:
             # When installing from an ISO the CDROM boots first (bootindex 0) and
             # the target disk is bootindex 1; otherwise the disk boots first.
             disk_bootindex = 1 if (self._iso_path and self._boot_from_cdrom) else 0
+            disk_model = 'nvme' if self._is_windows else 'virtio-blk-pci'
             _add_qemu_arg(
                 qemu_commandline,
-                f'nvme,drive=hd0,serial=disk0,bootindex={disk_bootindex},bus=pcie.0,addr=0x1e',
+                f'{disk_model},drive=hd0,serial=disk0,bootindex={disk_bootindex},'
+                f'bus=pcie.0,addr=0x1e',
             )
 
         # aarch64 installer CDROM (libvirt <disk device='cdrom'> is skipped for
