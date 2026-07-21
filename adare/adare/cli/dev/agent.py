@@ -93,6 +93,12 @@ def exec_dev_agent(arguments):
         exit(1)
 
     if not result.success:
+        # A fresh --as-experiment scaffold that recorded nothing (e.g. the
+        # grounding server or ffmpeg failed to start) would otherwise be left
+        # behind and block a retry with "experiment already exists". Roll it
+        # back here; a run that recorded screenshots is kept (see helper).
+        if exp is not None:
+            _cleanup_empty_scaffold(exp)
         handle_api_error(result)
         return
 
@@ -203,6 +209,30 @@ def _scaffold_experiment(api, project_directory, session_id, name):
         exit(1)
     exp.create(empty=True)  # directories only — the recorder fills playbook.yml + img/
     return exp, environment_name
+
+
+def _cleanup_empty_scaffold(exp):
+    """Remove a freshly-scaffolded experiment that never recorded anything.
+
+    A pre-run setup failure (grounding server won't start, ffmpeg missing,
+    session/VM gone) exits before the agent loop captures a single screenshot,
+    leaving an empty scaffold that blocks re-running with the same
+    --as-experiment NAME. Delete it only when ``img/`` holds no screenshots, so
+    a partially-recorded (interrupted-but-loadable) run is preserved.
+    """
+    from adare.backend.experiment.exceptions import ExperimentRemovalError
+
+    try:
+        recorded = exp.img.exists() and any(exp.img.iterdir())
+    except OSError:
+        return  # can't inspect it — leave it alone rather than risk deletion
+    if recorded:
+        return
+    try:
+        exp.remove()
+        print(f'Cleaned up empty experiment scaffold: {exp.path}')
+    except (ExperimentRemovalError, OSError) as exc:
+        log.warning('Could not remove empty experiment scaffold %s: %s', exp.path, exc)
 
 
 def _write_experiment_metadata(exp, environment_name, goal):
