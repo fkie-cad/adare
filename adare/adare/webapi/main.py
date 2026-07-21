@@ -661,6 +661,7 @@ async def health_check():
 
 from adare.webapi.routes.environments import router as environments_router
 from adare.webapi.routes.experiments import router as experiments_router
+from adare.webapi.routes.gui_agent import router as gui_agent_router
 from adare.webapi.routes.local_vms import router as local_vms_router
 from adare.webapi.routes.manage import router as manage_router
 from adare.webapi.routes.projects import router as projects_router
@@ -675,6 +676,7 @@ app.include_router(environments_router)
 app.include_router(runs_router)
 app.include_router(testfunctions_router)
 app.include_router(local_vms_router)
+app.include_router(gui_agent_router)
 app.include_router(web_sync_router)
 app.include_router(manage_router)
 app.include_router(vm_proxy_router)

@@ -49,6 +49,8 @@ export type WebSocketMessageType =
   | 'checkpoint_created'
   | 'checkpoint_restored'
   | 'checkpoint_deleted'
+  | 'agent_step'
+  | 'agent_status'
   | 'error'
 
 export interface WebSocketMessage {
@@ -71,6 +73,29 @@ export interface ActionCompleteMessage extends WebSocketMessage {
   data: {
     action_type: string
     result: ActionResult
+  }
+}
+
+export interface AgentStepMessage extends WebSocketMessage {
+  type: 'agent_step'
+  data: {
+    phase: 'decided' | 'executed' | 'pause' | 'resume'
+    index: number
+    kind: string
+    describe: string
+    reasoning: string
+    coords: [number, number] | null
+    grounded: boolean
+    status: string
+    screenshot: string | null
+  }
+}
+
+export interface AgentStatusMessage extends WebSocketMessage {
+  type: 'agent_status'
+  data: {
+    state: 'running' | 'finished' | 'failed'
+    summary: string
   }
 }
 
