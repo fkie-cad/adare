@@ -16,6 +16,13 @@ export const endpoints = {
   actionExecute: (id: string) => `/sessions/${id}/actions/execute`,
   actionTypes: '/actions/types',
 
+  // GUI agent (live view)
+  agentRun: (id: string) => `/sessions/${id}/agent/run`,
+  // NOTE: `agentStepImage` returns an absolute `/api/...` path (like `vmProxy`)
+  // because it is consumed by an `<img src>`, which bypasses the axios baseURL.
+  agentStepImage: (id: string, index: number) =>
+    `/api/sessions/${id}/agent/steps/${index}.png`,
+
   // Playbooks
   playbookExecute: (id: string) => `/sessions/${id}/playbooks/execute`,
   playbookSave: '/playbooks/save',

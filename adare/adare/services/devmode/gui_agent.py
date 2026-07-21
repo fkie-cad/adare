@@ -28,8 +28,17 @@ log = logging.getLogger(__name__)
 class GuiAgentMixin:
     """Adds vision-LLM GUI-agent execution to :class:`DevModeService`."""
 
-    def run_gui_agent(self, request: DevGuiAgentRequest) -> Result[DevGuiAgentResult]:
-        """Drive the session VM toward ``request.goal`` with the vision agent."""
+    def run_gui_agent(
+        self, request: DevGuiAgentRequest, event_sink=None,
+    ) -> Result[DevGuiAgentResult]:
+        """Drive the session VM toward ``request.goal`` with the vision agent.
+
+        ``event_sink`` is an optional plain-sync callable that receives the same
+        progress events the rich ``Live`` display consumes (plus a one-off
+        ``{'type':'run_dir', 'path': ...}`` event). It is passed as a separate
+        argument (not a request field) because it is a live callable — the web
+        server uses it to broadcast per-step activity over a websocket.
+        """
         from adare.backend.experiment.execution.qemu_video_recorder import (
             VideoUnavailable,
         )
@@ -39,7 +48,7 @@ class GuiAgentMixin:
         from adare.backend.experiment.vlm.exceptions import AgentError, VLMError
 
         try:
-            result = asyncio.run(self._run_gui_agent_async(request))
+            result = asyncio.run(self._run_gui_agent_async(request, event_sink=event_sink))
             return Result.ok(result)
         except GroundingUnavailable as exc:  # --ground could not start (checked before RuntimeError)
             return Result.fail(
@@ -75,7 +84,9 @@ class GuiAgentMixin:
                  'Try a clearer --goal or raise --max-steps'],
             )
 
-    async def _run_gui_agent_async(self, request: DevGuiAgentRequest) -> DevGuiAgentResult:
+    async def _run_gui_agent_async(
+        self, request: DevGuiAgentRequest, event_sink=None,
+    ) -> DevGuiAgentResult:
         from adare.backend.experiment.execution.qemu_host_gui_executor import QEMUHostGUIExecutor
         from adare.backend.experiment.execution.qemu_video_recorder import QemuVideoRecorder
         from adare.backend.experiment.vlm import (
@@ -150,9 +161,19 @@ class GuiAgentMixin:
         want_video = request.video if request.video is not None else AGENT_VIDEO
         if want_video:
             QemuVideoRecorder.ensure_ffmpeg(FFMPEG)  # fail fast — before grounding/VM work
-        if want_video and run_dir is None:
+        # A video run needs a directory for run.mp4; a web run (event_sink) needs
+        # one so per-step screenshots are persisted for the browser to fetch.
+        if (want_video or event_sink is not None) and run_dir is None:
             import tempfile
             run_dir = Path(tempfile.gettempdir()) / f'adare_agent_run_{request.session_id[:8]}'
+
+        # Tell the sink where step_NNN.png files will land, so an image endpoint
+        # can serve them. Sent once, before the loop; never raises out.
+        if event_sink is not None and run_dir is not None:
+            try:
+                event_sink({'type': 'run_dir', 'path': str(run_dir)})
+            except (ValueError, RuntimeError, TypeError, KeyError, OSError) as exc:
+                log.debug('event_sink run_dir notification failed: %s', exc)
 
         # Element grounding (attach / auto-start / off) — see :meth:`_setup_grounding`.
         locate_client, locate_manager = self._setup_grounding(request, run_dir)
@@ -172,13 +193,21 @@ class GuiAgentMixin:
             repair_client=repair_client,
         )
 
-        # Live per-step display (rich table). Wired as the agent's progress sink
-        # and entered as a context manager around the run below.
+        # Live per-step display (rich table + reasoning panel). Wired as an
+        # agent progress sink and entered as a context manager around the run
+        # below. A web ``event_sink`` (if any) is fanned out alongside it, so a
+        # single run can drive both the terminal display and a browser view.
         reporter = None
+        sinks = []
         if effective_progress:
             from adare.console import console
-            reporter = AgentProgressReporter(request.goal, console=console)
-            agent.progress = reporter.on_event
+            reporter = AgentProgressReporter(
+                request.goal, console=console, show_reasoning=request.reasoning)
+            sinks.append(reporter.on_event)
+        if event_sink is not None:
+            sinks.append(event_sink)
+        if sinks:
+            agent.progress = lambda e: [s(e) for s in sinks]
 
         # Whole-run MP4 via ffmpeg. start() raises VideoUnavailable if ffmpeg is
         # missing (mapped to VIDEO_ERROR by run_gui_agent). Stopped in finally so
