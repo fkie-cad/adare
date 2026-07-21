@@ -68,6 +68,46 @@ def parse_output(answer: str, w: int, h: int) -> list[tuple]:
     return boxes
 
 
+def _ensure_decord_importable() -> None:
+    """Register a stub ``decord`` module when the real one can't be imported.
+
+    LocateAnything's ``trust_remote_code`` processor does a hard top-level
+    ``import decord``, but only *uses* it to read video files (guarded by
+    ``is_decord_available()`` with a torchvision fallback). ADARE only ever
+    grounds still screenshots, so that video path never runs — the bare import
+    is the sole obstacle. ``decord`` ships no macOS-arm64 wheel, so on Apple
+    Silicon the import fails and blocks image grounding for no real reason.
+
+    If ``decord`` imports for real (e.g. Linux), do nothing. Otherwise inject a
+    minimal placeholder into ``sys.modules`` so the import succeeds. It carries a
+    real ``ModuleSpec`` (a bare ``__spec__ = None`` makes ``find_spec`` *raise*,
+    not return None), so the processor's ``is_decord_available()`` reads True and
+    picks the decord backend for video — but ``fetch_video`` wraps that call in a
+    try/except and falls back to torchvision when the stub's ``VideoReader``
+    raises, so video would still work and image grounding is untouched.
+    """
+    import importlib.machinery
+    import importlib.util
+
+    if importlib.util.find_spec('decord') is not None:
+        return  # real decord is installed — use it
+
+    import types
+
+    stub = types.ModuleType('decord')
+    stub.__spec__ = importlib.machinery.ModuleSpec('decord', loader=None)
+
+    def _unavailable(*_args, **_kwargs):
+        raise NotImplementedError(
+            'decord is a stub on this platform (no macOS-arm64 wheel); ADARE '
+            'grounds still images, not video.'
+        )
+
+    stub.VideoReader = _unavailable
+    sys.modules['decord'] = stub
+    log.info('decord unavailable — registered a stub (image grounding only)')
+
+
 class GroundingExtraMissing(RuntimeError):
     """Raised when the optional ``grounding`` extra (torch/transformers) is absent."""
 
@@ -85,6 +125,11 @@ class LocateAnythingWorker:
                 'Install the extra:  uv sync --extra grounding  — or point '
                 'ADARE_LOCATE_PYTHON at an interpreter that already has them.'
             ) from exc
+
+        # The model's trust_remote_code processor hard-imports decord (video
+        # only). Satisfy it with a stub where no wheel exists (macOS-arm64) so
+        # image grounding loads. No-op when real decord is present.
+        _ensure_decord_importable()
 
         self.dtype = torch.bfloat16
         self.device = device or ('mps' if torch.backends.mps.is_available() else 'cpu')
