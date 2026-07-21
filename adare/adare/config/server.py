@@ -137,6 +137,20 @@ AGENT_PLAN_REPLAN_LIMIT = int(os.environ.get('ADARE_AGENT_PLAN_REPLAN_LIMIT', '2
 AGENT_SUBGOAL_MAX_STEPS = int(os.environ.get('ADARE_AGENT_SUBGOAL_MAX_STEPS', '25'))
 AGENT_SUBGOAL_STALL_LIMIT = int(os.environ.get('ADARE_AGENT_SUBGOAL_STALL_LIMIT', '4'))
 
+# Observability + capture for `adare dev agent`.
+#   AGENT_PROGRESS   render a live per-step table while the agent runs. The CLI
+#                    resolves this to on when stdout is a TTY and off otherwise;
+#                    this config value is the fallback for non-CLI callers (API/web).
+#   AGENT_VIDEO      record the whole run to <run_dir>/run.mp4 via ffmpeg (off by
+#                    default; needs the ffmpeg binary — `--video` fails clearly without it).
+#   AGENT_VIDEO_FPS  poll rate of the QMP screendump -> ffmpeg pipe. Kept low (2)
+#                    so the recorder does not contend with the agent's per-step screenshots.
+#   FFMPEG           ffmpeg executable (name on PATH or absolute path).
+AGENT_PROGRESS = os.environ.get('ADARE_AGENT_PROGRESS', '1').lower() in ('1', 'true', 'yes', 'on')
+AGENT_VIDEO = os.environ.get('ADARE_AGENT_VIDEO', '0').lower() in ('1', 'true', 'yes', 'on')
+AGENT_VIDEO_FPS = int(os.environ.get('ADARE_AGENT_VIDEO_FPS', '2'))
+FFMPEG = os.environ.get('ADARE_FFMPEG', 'ffmpeg')
+
 # Port the `adare dev mcp` GUI-automation MCP server binds. An external harness
 # (OpenCode / Claude Code / any MCP client) connects here to author playbooks.
 # Distinct from the CV/OCR server's 13109 so both can run against one session.

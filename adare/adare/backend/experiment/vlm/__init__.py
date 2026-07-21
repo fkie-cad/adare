@@ -14,6 +14,7 @@ from .client import VLMClient
 from .exceptions import AgentError, PlaybookRecordingError, VLMError
 from .mcp_server import GuiMcpServer
 from .planning_agent import Plan, PlanningAgent, PlanStep
+from .progress import AgentProgressReporter
 from .recorder import PlaybookRecorder
 from .replay import ReplayResult, run_playbook
 from .text_author import TextAuthorDriver, parse_authored_line
@@ -21,6 +22,7 @@ from .verify import CheckResult, run_acceptance_checks
 
 __all__ = [
     'AgentError',
+    'AgentProgressReporter',
     'AgentRunResult',
     'CheckResult',
     'GuiAgent',

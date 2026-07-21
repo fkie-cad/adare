@@ -147,6 +147,8 @@ class DevGuiAgentRequest:
     interactive: bool = False  # pause before each action to approve / skip / stop
     planning: bool | None = None  # None -> config AGENT_PLAN; iterative plan/verify/backtrack
     grounding: bool | None = None  # None -> config LOCATE_AUTOSTART; auto-start LocateAnything
+    progress: bool | None = None  # None -> config AGENT_PROGRESS; live per-step display
+    video: bool | None = None  # None -> config AGENT_VIDEO; record run.mp4 via ffmpeg
 
 
 @dataclass
@@ -213,6 +215,7 @@ class DevGuiAgentResult:
     summary: str = ''
     playbook_path: str | None = None
     report_path: str | None = None
+    video_path: str | None = None
 
 
 @dataclass
