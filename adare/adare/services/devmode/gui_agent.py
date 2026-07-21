@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
 from contextlib import nullcontext, suppress
 from pathlib import Path
@@ -239,14 +240,36 @@ class GuiAgentMixin:
             video_recorder = QemuVideoRecorder(
                 vm, run_dir / 'run.mp4', fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
 
-        # Cooperative graceful Ctrl-C: SIGINT flips the agent's stop flag so the
-        # run finalizes the partial playbook/report and the finally still tears
-        # down video + grounding. The VM is left running (DB-restorable), so the
-        # same session can be driven from another `adare dev …` command.
+        # Cooperative graceful Ctrl-C: SIGINT flips the agent's stop flag AND
+        # cancels the in-flight run task, so a step blocked on a slow VLM call,
+        # screenshot capture or grounding request is interrupted immediately
+        # instead of only being noticed at the next loop-top check. The agent
+        # classes swallow their own cancellation (see GuiAgent/PlanningAgent
+        # ``run``/``execute_subgoal``) and finalize the partial playbook/report
+        # as usual; the finally below still tears down video + grounding. The
+        # VM is left running (DB-restorable), so the same session can be driven
+        # from another `adare dev …` command. A second Ctrl-C force-exits in
+        # case cleanup itself is stuck (e.g. grounding server not acknowledging
+        # SIGTERM, ffmpeg not exiting).
         loop = asyncio.get_running_loop()
+        main_task = asyncio.current_task()
+        sigint_count = 0
         sigint_installed = False
+
+        def _on_sigint():
+            nonlocal sigint_count
+            sigint_count += 1
+            agent.request_stop()
+            if sigint_count == 1:
+                print('\nInterrupting — finishing the current step and saving the '
+                      'playbook/report ...')
+                main_task.cancel()
+            else:
+                print('\nForced exit (cleanup was still in progress).')
+                os._exit(130)
+
         try:
-            loop.add_signal_handler(signal.SIGINT, agent.request_stop)
+            loop.add_signal_handler(signal.SIGINT, _on_sigint)
             sigint_installed = True
         except (NotImplementedError, RuntimeError, ValueError) as exc:
             log.debug('Could not install SIGINT handler (%s); Ctrl-C will not finalize', exc)
