@@ -11,17 +11,19 @@ from pathlib import Path
 
 from adare.api import AdareAPI
 from adare.cli.dev._helpers import _resolve_session_id
-from adare.cli.utils import get_project_path, handle_api_error
+from adare.cli.utils import handle_api_error
 from adare.console import print_error_message, print_success_message
 from adare.core.dto.devmode import DevGuiAgentRequest, DevSessionStateRequest
+from adare.exceptions import NoProjectFoundError
 
 log = logging.getLogger(__name__)
 
 
 def exec_dev_agent(arguments):
     """Run the vision-LLM GUI agent against a dev session's VM."""
-    project_directory = get_project_path(arguments)
-    session_id = _resolve_session_id(getattr(arguments, 'session_id', None), project_directory)
+    session_id_arg = getattr(arguments, 'session_id', None)
+    project_directory = _resolve_project_directory(arguments, session_id_arg)
+    session_id = _resolve_session_id(session_id_arg, project_directory)
 
     goal = getattr(arguments, 'goal', None)
     goal_file = getattr(arguments, 'goal_file', None)
@@ -118,6 +120,32 @@ def exec_dev_agent(arguments):
             next_steps=next_steps or ['Inspect the report and retry with a clearer --goal'],
         )
         exit(1)
+
+
+def _resolve_project_directory(arguments, session_id):
+    """Project from cwd/-p, else from the named session's stored project_path.
+
+    `adare dev agent` needs a project to filter sessions and to place
+    --as-experiment output. Normally that comes from the cwd or -p; but a
+    session already records its project_path, so with -s we can run from
+    anywhere. Raises NoProjectFoundError only when neither the location nor a
+    resolvable session yields a project.
+    """
+    from adare.backend.basics import determine_projectdirectory
+    project = getattr(arguments, 'project', None)
+    # Quiet the "project not found at cwd" log line only when we have a session
+    # to fall back to (otherwise keep the helpful message).
+    project_directory = determine_projectdirectory(project, silent=bool(session_id))
+    if project_directory:
+        return project_directory
+    if session_id:
+        from adare.database.api.devmode import DevModeApi
+        session = DevModeApi().get_session(session_id)
+        if session:
+            resolved = Path(session.project_path)
+            log.info('Resolved project from session %s: %s', session_id, resolved)
+            return resolved
+    raise NoProjectFoundError(log, specified_project=project)
 
 
 def _announce_agent_run(session_id, goal, planning, grounding, video, exp, output_file):
