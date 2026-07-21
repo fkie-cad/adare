@@ -13,6 +13,7 @@ from .agent import AgentRunResult, GuiAgent
 from .client import VLMClient
 from .exceptions import AgentError, PlaybookRecordingError, VLMError
 from .mcp_server import GuiMcpServer
+from .planning_agent import Plan, PlanningAgent, PlanStep
 from .recorder import PlaybookRecorder
 from .replay import ReplayResult, run_playbook
 from .text_author import TextAuthorDriver, parse_authored_line
@@ -24,6 +25,9 @@ __all__ = [
     'CheckResult',
     'GuiAgent',
     'GuiMcpServer',
+    'Plan',
+    'PlanStep',
+    'PlanningAgent',
     'PlaybookRecorder',
     'PlaybookRecordingError',
     'ReplayResult',

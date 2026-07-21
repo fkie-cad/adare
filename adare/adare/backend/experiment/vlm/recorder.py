@@ -114,6 +114,36 @@ class PlaybookRecorder:
         self._variables: dict[str, Any] = {}
         self._step = 0
 
+    # -- rollback (for the planning orchestrator) ---------------------------
+
+    def mark(self) -> tuple[int, int, int, int, dict[str, Any]]:
+        """Snapshot the recorder position so a failed sub-goal can be discarded.
+
+        Returns an opaque token — the lengths of the action / meta / test lists,
+        the step counter, and a copy of the variables — to hand back to
+        :meth:`rollback`. Taken by the planning agent *before* it attempts a
+        sub-goal, so a dead end can undo exactly the steps it recorded.
+        """
+        return (len(self._actions), len(self._meta), len(self._tests),
+                self._step, dict(self._variables))
+
+    def rollback(self, mark: tuple[int, int, int, int, dict[str, Any]]) -> None:
+        """Discard everything recorded since ``mark`` (from :meth:`mark`).
+
+        Truncates the action / meta / test lists back to their marked lengths
+        and restores the step counter and variables. A ``record_click`` appends
+        *two* actions/meta (the wait gate + the click), but truncation is by the
+        saved length, so partial blocks are removed cleanly. Any crop PNGs
+        written under ``img/`` since the mark are left on disk (harmless — only
+        filenames referenced by the truncated actions replay).
+        """
+        actions_len, meta_len, tests_len, step, variables = mark
+        del self._actions[actions_len:]
+        del self._meta[meta_len:]
+        del self._tests[tests_len:]
+        self._step = step
+        self._variables = dict(variables)
+
     # -- helpers ------------------------------------------------------------
 
     def _next_index(self) -> int:

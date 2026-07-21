@@ -145,6 +145,7 @@ class DevGuiAgentRequest:
     max_steps: int | None = None
     stall_limit: int | None = None
     interactive: bool = False  # pause before each action to approve / skip / stop
+    planning: bool | None = None  # None -> config AGENT_PLAN; iterative plan/verify/backtrack
 
 
 @dataclass

@@ -54,9 +54,26 @@ class GuiAgentMixin:
 
     async def _run_gui_agent_async(self, request: DevGuiAgentRequest) -> DevGuiAgentResult:
         from adare.backend.experiment.execution.qemu_host_gui_executor import QEMUHostGUIExecutor
-        from adare.backend.experiment.vlm import GuiAgent, PlaybookRecorder, VLMClient
+        from adare.backend.experiment.vlm import (
+            GuiAgent,
+            PlanningAgent,
+            PlaybookRecorder,
+            VLMClient,
+            run_acceptance_checks,
+        )
         from adare.config.server import (
+            AGENT_CHECKER_API_KEY,
+            AGENT_CHECKER_BASE_URL,
+            AGENT_CHECKER_MODEL,
+            AGENT_PLAN,
+            AGENT_PLAN_REPLAN_LIMIT,
+            AGENT_PLAN_RETRY_LIMIT,
+            AGENT_PLANNER_API_KEY,
+            AGENT_PLANNER_BASE_URL,
+            AGENT_PLANNER_MODEL,
             AGENT_REPAIR_MODEL,
+            AGENT_SUBGOAL_MAX_STEPS,
+            AGENT_SUBGOAL_STALL_LIMIT,
             GUI_AGENT_DECISION_RETRIES,
             GUI_AGENT_STALL_LIMIT,
             GUI_AGENT_WALL_CLOCK_SECONDS,
@@ -125,7 +142,31 @@ class GuiAgentMixin:
             decision_retry_limit=GUI_AGENT_DECISION_RETRIES,
             repair_client=repair_client,
         )
-        res = await agent.run()
+
+        # Iterative plan/verify/backtrack mode (flag-gated; off by default). When
+        # off, today's whole-goal reactive run is used untouched.
+        planning = request.planning if request.planning is not None else AGENT_PLAN
+        if planning:
+            res = await self._run_planning_agent(
+                session, agent, request,
+                planner_client=VLMClient(
+                    base_url=AGENT_PLANNER_BASE_URL or VLLM_BASE_URL,
+                    model=AGENT_PLANNER_MODEL or VLLM_MODEL,
+                    api_key=AGENT_PLANNER_API_KEY or VLLM_API_KEY),
+                checker_client=VLMClient(
+                    base_url=AGENT_CHECKER_BASE_URL or VLLM_BASE_URL,
+                    model=AGENT_CHECKER_MODEL or VLLM_MODEL,
+                    api_key=AGENT_CHECKER_API_KEY or VLLM_API_KEY),
+                run_acceptance_checks=run_acceptance_checks,
+                planning_agent_cls=PlanningAgent,
+                host_executor_cls=QEMUHostGUIExecutor,
+                retry_limit=AGENT_PLAN_RETRY_LIMIT,
+                replan_limit=AGENT_PLAN_REPLAN_LIMIT,
+                subgoal_max_steps=AGENT_SUBGOAL_MAX_STEPS,
+                subgoal_stall_limit=AGENT_SUBGOAL_STALL_LIMIT,
+            )
+        else:
+            res = await agent.run()
         return DevGuiAgentResult(
             success=res.success,
             reason=res.reason,
@@ -134,6 +175,64 @@ class GuiAgentMixin:
             playbook_path=str(res.playbook_path) if res.playbook_path else None,
             report_path=str(res.report_path) if res.report_path else None,
         )
+
+    async def _run_planning_agent(
+        self,
+        session,
+        agent,
+        request,
+        *,
+        planner_client,
+        checker_client,
+        run_acceptance_checks,
+        planning_agent_cls,
+        host_executor_cls,
+        retry_limit,
+        replan_limit,
+        subgoal_max_steps,
+        subgoal_stall_limit,
+    ):
+        """Wrap the session's VM ops as async callables and run the PlanningAgent.
+
+        The VLM package never imports the devmode session, so the checkpoint /
+        restore / verify capabilities are injected here as closures over the live
+        ``session``. After a restore the host GUI executor is re-pointed at the
+        (refreshed) domain so the reactive loop keeps screenshotting/clicking.
+        """
+        from adare.backend.experiment.vlm.exceptions import AgentError
+
+        async def checkpoint(name: str) -> None:
+            res = await session.create_checkpoint(name, 'planning-agent sub-goal')
+            if not res.success:
+                raise AgentError(f'Could not checkpoint before sub-goal: {res.message}')
+
+        async def restore(name: str) -> None:
+            res = await session.restore_checkpoint(name)
+            if not res.success:
+                raise AgentError(f'Could not restore checkpoint {name!r}: {res.message}')
+            # The restore tears down/rebuilds the VM domain + in-VM agent; the
+            # session's context.vm is the source of truth, so re-point the host
+            # executor at it before the reactive loop resumes.
+            agent.executor = host_executor_cls(vm=session.experiment_ctx.vm)
+
+        async def verify(statement: str) -> tuple[bool, str]:
+            result = await run_acceptance_checks(
+                session.experiment_ctx.vm, {'visual': [statement]},
+                client=checker_client,
+            )
+            reason = '; '.join(
+                c['reason'] for c in result.checks if not c['passed']
+            ) or 'all checks passed'
+            return result.passed, reason
+
+        planner = planning_agent_cls(
+            agent, planner_client,
+            checkpoint=checkpoint, restore=restore, verify=verify,
+            retry_limit=retry_limit, replan_limit=replan_limit,
+            subgoal_max_steps=subgoal_max_steps,
+            subgoal_stall_limit=subgoal_stall_limit,
+        )
+        return await planner.run()
 
     # -- text authoring -----------------------------------------------------
 

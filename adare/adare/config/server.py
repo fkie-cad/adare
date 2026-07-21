@@ -89,6 +89,33 @@ GUI_AGENT_WALL_CLOCK_SECONDS = int(os.environ.get('ADARE_GUI_AGENT_WALL_CLOCK_SE
 AGENT_REPAIR_MODEL = os.environ.get('ADARE_AGENT_REPAIR_MODEL', '')
 GUI_AGENT_DECISION_RETRIES = int(os.environ.get('ADARE_GUI_AGENT_DECISION_RETRIES', '2'))
 
+# Iterative build-verify-backtrack planning agent (PlanningAgent). Off by
+# default — `adare dev agent --plan` (or ADARE_AGENT_PLAN=1) turns a terse,
+# high-level goal into a decomposed plan, executes each sub-goal with the
+# reactive loop, verifies it with an independent checker, and resets the VM to a
+# prior checkpoint to retry / re-plan on a dead end, building the playbook out of
+# only the verified sub-goals.
+AGENT_PLAN = os.environ.get('ADARE_AGENT_PLAN', '0').lower() in ('1', 'true', 'yes', 'on')
+
+# The planner, executor and checker are all one model by default (the main
+# VLLM_* endpoint), each independently overridable to a different model/endpoint
+# (extends the AGENT_REPAIR_MODEL precedent). An unset per-role value falls back
+# to the main VLLM_* setting in the service layer.
+AGENT_PLANNER_MODEL = os.environ.get('ADARE_AGENT_PLANNER_MODEL', '')
+AGENT_PLANNER_BASE_URL = os.environ.get('ADARE_AGENT_PLANNER_BASE_URL', '')
+AGENT_PLANNER_API_KEY = os.environ.get('ADARE_AGENT_PLANNER_API_KEY', '')
+AGENT_CHECKER_MODEL = os.environ.get('ADARE_AGENT_CHECKER_MODEL', '')
+AGENT_CHECKER_BASE_URL = os.environ.get('ADARE_AGENT_CHECKER_BASE_URL', '')
+AGENT_CHECKER_API_KEY = os.environ.get('ADARE_AGENT_CHECKER_API_KEY', '')
+
+# Planning-agent budgets: retries of the current sub-goal before re-planning,
+# re-plans of the remainder before aborting, and the per-sub-goal reactive-loop
+# step / stall budgets (kept small — each sub-goal is checkpointed).
+AGENT_PLAN_RETRY_LIMIT = int(os.environ.get('ADARE_AGENT_PLAN_RETRY_LIMIT', '2'))
+AGENT_PLAN_REPLAN_LIMIT = int(os.environ.get('ADARE_AGENT_PLAN_REPLAN_LIMIT', '2'))
+AGENT_SUBGOAL_MAX_STEPS = int(os.environ.get('ADARE_AGENT_SUBGOAL_MAX_STEPS', '25'))
+AGENT_SUBGOAL_STALL_LIMIT = int(os.environ.get('ADARE_AGENT_SUBGOAL_STALL_LIMIT', '4'))
+
 # Port the `adare dev mcp` GUI-automation MCP server binds. An external harness
 # (OpenCode / Claude Code / any MCP client) connects here to author playbooks.
 # Distinct from the CV/OCR server's 13109 so both can run against one session.

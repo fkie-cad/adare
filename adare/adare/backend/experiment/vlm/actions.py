@@ -26,8 +26,9 @@ SCROLL = 'scroll'
 WAIT = 'wait'
 NOTE = 'note'
 DONE = 'done'
+STEP_DONE = 'step_done'
 
-_KINDS = {CLICK, DOUBLE_CLICK, TYPE, KEY, SCROLL, WAIT, NOTE, DONE}
+_KINDS = {CLICK, DOUBLE_CLICK, TYPE, KEY, SCROLL, WAIT, NOTE, DONE, STEP_DONE}
 
 # The human-readable schema handed to the model in the system prompt.
 ACTION_SCHEMA_DOC = """\
@@ -47,7 +48,12 @@ action. Fields depend on "action":
   {"reasoning": "...", "action": "wait",
    "until_describe": "<what should appear on screen before continuing>"}
   {"reasoning": "...", "action": "note"}          # observe, take no action
+  {"reasoning": "...", "action": "step_done", "summary": "<what was accomplished>"}
   {"reasoning": "...", "action": "done", "summary": "<what was accomplished>"}
+
+Use "step_done" when the CURRENT sub-goal is satisfied (more sub-goals may
+follow); use "done" only when the WHOLE goal is complete. When no sub-goal is
+named, treat "step_done" and "done" the same.
 
 Coordinates MUST refer to the exact image you were shown."""
 
@@ -74,6 +80,9 @@ class AgentAction:
     until_describe: str | None = None
     # done
     summary: str = ''
+    # step_done: set True when the model signals the current sub-goal (not the
+    # whole goal) is complete; the planning orchestrator ends the sub-goal run.
+    step_done: bool = False
     raw: dict[str, Any] = field(default_factory=dict)
     # Transient, populated by the agent loop (not part of the model JSON
     # contract): the grounded element crop box the recorder should use for a
@@ -171,5 +180,8 @@ def parse_action(
         action.until_describe = str(obj.get('until_describe', '')) or None
     elif kind == DONE:
         action.summary = str(obj.get('summary', ''))
+    elif kind == STEP_DONE:
+        action.summary = str(obj.get('summary', ''))
+        action.step_done = True
 
     return action

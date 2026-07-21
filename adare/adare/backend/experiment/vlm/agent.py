@@ -159,6 +159,9 @@ class GuiAgent:
 
         self._history: list[str] = []
         self._records: list[StepRecord] = []
+        # Set by ``execute_subgoal`` while the reactive loop is scoped to one
+        # sub-goal (the planning orchestrator); ``None`` in whole-goal ``run()``.
+        self._subgoal: str | None = None
 
     # -- perception ---------------------------------------------------------
 
@@ -185,6 +188,10 @@ class GuiAgent:
     def _build_messages(self, screenshot_b64: str) -> list[dict[str, Any]]:
         system = _SYSTEM_PROMPT.format(schema=A.ACTION_SCHEMA_DOC)
         parts: list[str] = [f'GOAL: {self.goal}']
+        if self._subgoal:
+            parts.append(
+                f'SUB-GOAL (focus only on this now): {self._subgoal}\n'
+                'Emit "step_done" as soon as THIS sub-goal is satisfied.')
         if self.hints:
             parts.append('HINTS:\n' + '\n'.join(f'- {h}' for h in self.hints))
         if self._history:
@@ -454,6 +461,8 @@ class GuiAgent:
             return 'noted'
         if kind == A.DONE:
             return 'done'
+        if kind == A.STEP_DONE:
+            return 'step_done'
         return 'unknown'
 
     # -- documentation ------------------------------------------------------
@@ -633,6 +642,97 @@ class GuiAgent:
                 log.warning('Could not finalize playbook: %s', exc)
         result.report_path = self._write_report(result)
         return result
+
+    # -- sub-goal loop (used by the planning orchestrator) ------------------
+
+    async def execute_subgoal(
+        self,
+        subgoal: str,
+        plan_context: str = '',
+        *,
+        max_steps: int = 25,
+        stall_limit: int = 4,
+    ) -> str:
+        """Run the reactive loop scoped to ONE sub-goal; return a short reason.
+
+        This is the same perceive->decide->act loop as :meth:`run`, but budgeted
+        per sub-goal and ended as soon as the model emits ``step_done`` (this
+        sub-goal is satisfied) or ``done`` (the whole goal is). It reuses
+        ``_capture``/``_decide``/``_ground_click``/``_execute``/``_persist_step``
+        and appends to the shared history, records, and recorder so the verified
+        blocks accumulate into one playbook. ``plan_context`` (the full plan and
+        what is already done) is injected via the hints channel and a ``SUB-GOAL``
+        line for the duration; both are restored on exit so a later ``run()`` is
+        unaffected. Never raises for a stall/budget/decision failure — it returns
+        a reason and lets the orchestrator's checker decide whether to backtrack.
+        """
+        start = time.monotonic()
+        last_hash: str | None = None
+        stall = 0
+        prev_subgoal = self._subgoal
+        prev_hints = self.hints
+        self._subgoal = subgoal
+        if plan_context:
+            self.hints = [*self.hints, plan_context]
+        try:
+            for _ in range(max_steps):
+                if time.monotonic() - start > self.wall_clock_seconds:
+                    return 'wall-clock budget exceeded'
+
+                b64, png, width, height = await self._capture()
+
+                digest = hashlib.sha256(png).hexdigest()
+                stall = stall + 1 if digest == last_hash else 0
+                last_hash = digest
+                if stall >= stall_limit:
+                    return f'screen unchanged for {stall} steps (stalled)'
+
+                try:
+                    action = await self._decide(b64, width, height)
+                except VLMError as exc:
+                    log.warning('Sub-goal decision failed: %s', exc)
+                    return f'model decision failed: {exc}'
+
+                index = len(self._records) + 1
+
+                if action.kind in (A.CLICK, A.DOUBLE_CLICK):
+                    self._ground_click(png, action, width, height)
+
+                if self.interactive:
+                    choice = await self._confirm_step(action, index)
+                    if choice == 'skip':
+                        note = action.describe or action.summary or action.kind
+                        self._records.append(StepRecord(
+                            index=index, action_kind=action.kind, describe=action.describe,
+                            reasoning=action.reasoning, result_status='skipped',
+                        ))
+                        self._history.append(
+                            f'{index}. {action.kind}({action.describe or action.summary}) '
+                            f'-> user skipped: {note}')
+                        await asyncio.sleep(self.step_settle_seconds)
+                        continue
+                    if choice == 'quit':
+                        return 'stopped by user'
+
+                status = await self._execute(action, png)
+                shot_file = self._persist_step(index, png, action, status)
+
+                self._records.append(StepRecord(
+                    index=index, action_kind=action.kind, describe=action.describe,
+                    reasoning=action.reasoning, result_status=status, screenshot_file=shot_file,
+                ))
+                self._history.append(
+                    f'{index}. {action.kind}({action.describe or action.summary}) -> {status}')
+
+                if action.kind in (A.STEP_DONE, A.DONE):
+                    return status  # 'step_done' or 'done'
+
+                await asyncio.sleep(self.step_settle_seconds)
+
+            return f'reached sub-goal step budget ({max_steps})'
+        finally:
+            self._subgoal = prev_subgoal
+            self.hints = prev_hints
 
 
 def _label_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:

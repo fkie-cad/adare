@@ -243,7 +243,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--stall-limit', type=int, default=None, help='Override the agent stall budget')
     @click.option('--step', '--interactive', 'interactive', is_flag=True,
                   help='Pause before each action to approve / skip / stop')
-    def agent(session_id, goal, goal_file, output, max_steps, stall_limit, interactive):
+    @click.option('--plan/--no-plan', 'planning', default=None,
+                  help='Iterative plan/verify/backtrack mode (default: ADARE_AGENT_PLAN). '
+                       'Decomposes a terse goal into sub-goals, checkpoints the VM before '
+                       'each, verifies with an independent checker, and resets to retry on a '
+                       'dead end — building a playbook from only the verified sub-goals.')
+    def agent(session_id, goal, goal_file, output, max_steps, stall_limit, interactive, planning):
         """Drive the session VM toward a goal with the vision-LLM GUI agent.
 
         Uses the configured vLLM endpoint (ADARE_VLLM_*; works with Ollama Cloud).
@@ -252,6 +257,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         Examples:
             adare dev agent --goal "open the Files app and go to Documents"
             adare dev agent -s <id> --goal "..." -o experiments/files.play.yaml
+            adare dev agent --plan --goal "open LibreOffice and write an invoice" -o inv.play.yaml
         """
         from adare.cli.dev import exec_dev_agent
         args = SimpleNamespace(
@@ -262,6 +268,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             max_steps=max_steps,
             stall_limit=stall_limit,
             interactive=interactive,
+            planning=planning,
         )
         exec_with_error_printing(exec_dev_agent, args)
 
