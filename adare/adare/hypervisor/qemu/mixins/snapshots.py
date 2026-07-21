@@ -380,7 +380,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             f"$script = '{script_path}'; "
             f"$st = (Get-Date).AddMinutes(2).ToString('HH:mm'); "
             f"'{command}' | Out-File -FilePath $script -Encoding ascii; "
-            f"$c = \"powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script\"; "
+            f"$c = \"powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File $script\"; "
             f"schtasks /Create /TN $t /TR \"$c\" /SC ONCE /ST $st /RU $u /RP $p /RL {rl} /F; "
             f"schtasks /Run /TN $t; "
             f"Start-Sleep -Seconds 15; "
