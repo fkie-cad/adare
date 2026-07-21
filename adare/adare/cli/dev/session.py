@@ -72,6 +72,41 @@ def _handle_start_reuse_or_warn(arguments, project_directory) -> str | None:
     return None
 
 
+def _open_watch_for_session(session_id: str) -> None:
+    """Open the session VM's read-only live view via VirtualSpice (best-effort).
+
+    Only called when `dev start --watch` is set. Degrades gracefully with a
+    clear message if VirtualSpice is down or the VM name cannot be resolved —
+    never a stack trace, and never blocks the session.
+    """
+    import webbrowser
+
+    from adare.database.api.devmode import DevModeApi
+    from adare.webapi.vm_watch import (
+        DEFAULT_SPICE_PORT,
+        build_display_path,
+        resolve_vm_uuid,
+    )
+
+    session = DevModeApi().get_session(session_id)
+    vm_name = getattr(session, 'vm_name', None) if session else None
+    if not vm_name:
+        print("\n⚠ --watch: could not determine the session's VM name; skipping live view.")
+        return
+
+    uuid = resolve_vm_uuid(vm_name, spice_port=DEFAULT_SPICE_PORT)
+    if uuid is None:
+        print(
+            f"\n⚠ --watch: could not open a live view for '{vm_name}'. "
+            "Is VirtualSpice running (adare web start)?"
+        )
+        return
+
+    url = f"http://127.0.0.1:{DEFAULT_SPICE_PORT}{build_display_path(uuid, vm_name, True)}"
+    webbrowser.open(url)
+    print(f"\n👁  Watching VM '{vm_name}' (read-only): {url}")
+
+
 def exec_dev_start(arguments):
     """Start dev session with flow console UI."""
     from pathlib import Path
@@ -163,6 +198,9 @@ def exec_dev_start(arguments):
                 print("\nShared Directories:")
                 for name, paths in shared_directories.items():
                     print(f"  - {paths['host']} -> {paths['vm']} ({name})")
+
+            if getattr(arguments, 'watch', False):
+                _open_watch_for_session(result.data.session_id)
         else:
             flow_console.stop()
             handle_api_error(result)

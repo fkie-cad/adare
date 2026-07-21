@@ -36,6 +36,10 @@ export const endpoints = {
   vmProxy: (path: string) => `/api/vm/${path}`,
   vmWebSocket: (path: string) => `/ws/vm/${path}`,
   vmEventsWebSocket: '/ws/vm-events',
+  // Resolve an ADARE VM name to a VirtualSpice display-page path. Mounted at the
+  // app root (like `vmProxy`), so consumers `fetch` this absolute path directly.
+  vmWatchUrl: (name: string, viewOnly = true) =>
+    `/api/vm-watch-url?name=${encodeURIComponent(name)}&view_only=${viewOnly}`,
 
   // Local VMs (database-tracked)
   localVms: '/local-vms',
