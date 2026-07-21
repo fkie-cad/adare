@@ -47,6 +47,15 @@ class VirtualSpiceManager:
             if path.is_file():
                 return str(path)
 
+        # Managed cache tier: a release binary downloaded by virtualspice_release.
+        # This is network-free — cached_binary_path() never downloads; it only
+        # reports an already-present, executable cached binary.
+        from adare.webapi.virtualspice_release import cached_binary_path
+
+        cached = cached_binary_path()
+        if cached is not None:
+            return str(cached)
+
         # Try PATH (either name)
         return shutil.which("virtualspice") or shutil.which("spice-client")
 
