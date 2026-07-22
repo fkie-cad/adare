@@ -11,7 +11,18 @@ import logging
 import os
 import threading
 
+from adare.hypervisor.exceptions import HypervisorException
+
 log = logging.getLogger(__name__)
+
+
+def _parse_resolution(resolution: str) -> tuple[int, int] | None:
+    """Parse a 'WxH' resolution string into (width, height), or None if malformed."""
+    try:
+        width_s, height_s = str(resolution).lower().split('x')
+        return int(width_s), int(height_s)
+    except (ValueError, AttributeError):
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +189,90 @@ async def verify_guest_agent_readiness(
 
 
 # ---------------------------------------------------------------------------
+# Guest-side display mode-set (Windows only)
+# ---------------------------------------------------------------------------
+
+# Windows does not adopt the advertised virtio-gpu EDID the way the Linux
+# virtio_gpu DRM driver does, so a configured playbook resolution needs a
+# guest-side ChangeDisplaySettingsEx call to actually take effect on-screen.
+# NOTE: no single quotes may appear below — the run_as_user path wraps the whole
+# command in a single-quoted PowerShell string before writing it to a .ps1.
+_WIN_SET_RESOLUTION_PS_TEMPLATE = r'''
+$W = __W__
+$H = __H__
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+public struct ADARE_DEVMODE {
+  [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+  public ushort dmSpecVersion;
+  public ushort dmDriverVersion;
+  public ushort dmSize;
+  public ushort dmDriverExtra;
+  public uint dmFields;
+  public int dmPositionX;
+  public int dmPositionY;
+  public uint dmDisplayOrientation;
+  public uint dmDisplayFixedOutput;
+  public short dmColor;
+  public short dmDuplex;
+  public short dmYResolution;
+  public short dmTTOption;
+  public short dmCollate;
+  [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+  public ushort dmLogPixels;
+  public uint dmBitsPerPel;
+  public uint dmPelsWidth;
+  public uint dmPelsHeight;
+  public uint dmDisplayFlags;
+  public uint dmDisplayFrequency;
+  public uint dmICMMethod;
+  public uint dmICMIntent;
+  public uint dmMediaType;
+  public uint dmDitherType;
+  public uint dmReserved1;
+  public uint dmReserved2;
+  public uint dmPanningWidth;
+  public uint dmPanningHeight;
+}
+public class AdareDisplay {
+  [DllImport("user32.dll")]
+  public static extern int EnumDisplaySettings(string deviceName, int modeNum, ref ADARE_DEVMODE devMode);
+  [DllImport("user32.dll")]
+  public static extern int ChangeDisplaySettingsEx(string deviceName, ref ADARE_DEVMODE devMode, IntPtr hwnd, uint flags, IntPtr lParam);
+}
+"@
+$dm = New-Object ADARE_DEVMODE
+$found = $false
+$i = 0
+while ([AdareDisplay]::EnumDisplaySettings($null, $i, [ref]$dm) -ne 0) {
+  if ($dm.dmPelsWidth -eq $W -and $dm.dmPelsHeight -eq $H) { $found = $true; break }
+  $i = $i + 1
+}
+if ($found) {
+  $ret = [AdareDisplay]::ChangeDisplaySettingsEx($null, [ref]$dm, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+  Write-Output ("ADARE ChangeDisplaySettingsEx returned " + $ret + " for " + $W + "x" + $H)
+} else {
+  Write-Output ("ADARE requested display mode " + $W + "x" + $H + " not supported; leaving display unchanged")
+}
+'''
+
+
+def _build_windows_set_resolution_ps(width: int, height: int) -> str:
+    """Build an as-user PowerShell script that sets the desktop to width x height.
+
+    Enumerates supported modes first and only applies the change if the target
+    mode exists, so an unsupported request is a no-op (not an error).
+    """
+    return (
+        _WIN_SET_RESOLUTION_PS_TEMPLATE
+        .replace('__W__', str(int(width)))
+        .replace('__H__', str(int(height)))
+    )
+
+
+# ---------------------------------------------------------------------------
 # Agent installation & startup
 # ---------------------------------------------------------------------------
 
@@ -322,6 +417,34 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
         await vm.run_command(
             powercfg, stop_event=stop_event, admin=True, run_as_user=True,
         )
+
+    # Guest-side display mode-set: only when the playbook declared a resolution
+    # and only on Windows (Linux's virtio_gpu driver already adopts the advertised
+    # EDID, so no guest-side step is needed there). Unset resolution => this block
+    # is skipped entirely => byte-for-byte prior behavior. Never hard-fail the run:
+    # unsupported modes / errors are logged and the run continues.
+    resolution = getattr(context.config, 'vm_display_resolution', None)
+    if context.guest_platform == 'windows' and resolution:
+        target = _parse_resolution(resolution)
+        if target is None:
+            log.warning("Ignoring malformed resolution %r; not applying a guest mode-set", resolution)
+        else:
+            width, height = target
+            log.info("Forcing guest desktop resolution to %dx%d", width, height)
+            ps = _build_windows_set_resolution_ps(width, height)
+            try:
+                result = await vm.run_command(
+                    ps, stop_event=stop_event, admin=True, run_as_user=True,
+                )
+                if result.returncode != 0:
+                    log.warning(
+                        "Guest resolution mode-set returned %s (non-fatal): %s",
+                        result.returncode, result.stderr,
+                    )
+                else:
+                    log.info("Guest resolution mode-set: %s", (result.stdout or "").strip())
+            except HypervisorException as e:
+                log.warning("Guest resolution mode-set failed (non-fatal): %s", e)
 
     # Linux (QEMU) counterpart to the Windows keep-awake above. The Ubuntu envs
     # bake idle-delay=0 + screensaver-off (autoinstall_ubuntu_rolling.yaml), but NOT
