@@ -202,7 +202,8 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             machine=vm_machine,
             accel=vm_accel,
             disk_path=disk_path,
-            architecture=vm_architecture
+            architecture=vm_architecture,
+            resolution=context.config.vm_display_resolution,
         )
         log.debug(f"Created QEMU VM instance: {context.vm_name}")
 
