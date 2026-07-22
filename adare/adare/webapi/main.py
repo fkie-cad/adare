@@ -667,6 +667,7 @@ from adare.webapi.routes.manage import router as manage_router
 from adare.webapi.routes.projects import router as projects_router
 from adare.webapi.routes.runs import router as runs_router
 from adare.webapi.routes.testfunctions import router as testfunctions_router
+from adare.webapi.routes.vm_instances import router as vm_instances_router
 from adare.webapi.routes.web_sync import router as web_sync_router
 from adare.webapi.vm_watch import router as vm_watch_router
 
@@ -676,6 +677,7 @@ app.include_router(environments_router)
 app.include_router(runs_router)
 app.include_router(testfunctions_router)
 app.include_router(local_vms_router)
+app.include_router(vm_instances_router)
 app.include_router(gui_agent_router)
 app.include_router(web_sync_router)
 app.include_router(manage_router)

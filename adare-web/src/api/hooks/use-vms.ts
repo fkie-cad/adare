@@ -48,6 +48,102 @@ export function useDeleteLocalVm() {
   })
 }
 
+/** A running VM instance (as opposed to a registered VM image). */
+export interface VmInstance {
+  id: string
+  vm_id?: string
+  name?: string
+  status?: 'active' | 'available' | 'stopped' | string
+  websocket_port?: number
+  [key: string]: unknown
+}
+
+export interface VmSnapshot {
+  name: string
+  instance_id?: string
+  [key: string]: unknown
+}
+
+export interface VmInstanceUsage {
+  [key: string]: unknown
+}
+
+export function useVmInstances(vmId?: string) {
+  return useQuery({
+    queryKey: ['vm-instances', vmId ?? null],
+    queryFn: async () => {
+      const url = vmId
+        ? `${endpoints.vmInstances}?vm_id=${encodeURIComponent(vmId)}`
+        : endpoints.vmInstances
+      const { data } = await api.get<ApiResponse<VmInstance[]>>(url)
+      return data.data ?? []
+    },
+  })
+}
+
+export function useVmInstance(instanceId: string) {
+  return useQuery({
+    queryKey: ['vm-instance', instanceId],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<VmInstance>>(endpoints.vmInstance(instanceId))
+      return data.data!
+    },
+    enabled: !!instanceId,
+  })
+}
+
+export function useVmInstanceUsage() {
+  return useQuery({
+    queryKey: ['vm-instance-usage'],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<VmInstanceUsage>>(endpoints.vmInstanceUsage)
+      return data.data!
+    },
+  })
+}
+
+export function useRemoveVmInstance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (instanceId: string) => {
+      await api.delete(endpoints.vmInstance(instanceId))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vm-instances'] }),
+  })
+}
+
+export function useRemoveAllStoppedInstances() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.delete<ApiResponse<number>>(endpoints.vmInstances)
+      return data.data ?? 0
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vm-instances'] }),
+  })
+}
+
+export function useVmSnapshots(instanceId: string) {
+  return useQuery({
+    queryKey: ['vm-snapshots', instanceId],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<VmSnapshot[]>>(endpoints.vmInstanceSnapshots(instanceId))
+      return data.data ?? []
+    },
+    enabled: !!instanceId,
+  })
+}
+
+export function useDeleteVmSnapshot(instanceId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (name: string) => {
+      await api.delete(endpoints.vmInstanceSnapshotDelete(instanceId, name))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vm-snapshots', instanceId] }),
+  })
+}
+
 /**
  * Resolve a running VM's live VirtualSpice display URL.
  *
