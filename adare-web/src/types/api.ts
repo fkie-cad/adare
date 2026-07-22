@@ -29,10 +29,18 @@ export interface CreateCheckpointRequest {
   description?: string
 }
 
-// Playbook requests
+// Playbook requests — mirrors the actual backend contract
+// (adare/adare/webapi/main.py: POST /api/playbooks/save, GET /api/playbooks/{filename}),
+// which takes/returns structured actions+settings, not a YAML string.
 export interface SavePlaybookRequest {
-  name: string
-  content: string
+  filename: string
+  actions: Action[]
+  settings?: Record<string, unknown>
+}
+
+export interface PlaybookData {
+  actions: Action[]
+  settings: Record<string, unknown>
 }
 
 // WebSocket message types

@@ -60,6 +60,11 @@ class CheckUrlBody(BaseModel):
     vm_format: str | None = None
 
 
+class EnvironmentVerifyBody(BaseModel):
+    """Request body for verifying an environment."""
+    project_path: str
+
+
 # ---- Helpers ----
 
 def _api():
@@ -196,3 +201,20 @@ async def delete_environment(name: str, force: bool = False):
     """Delete an environment by name or ULID."""
     result = _api().environment.delete(name, force=force)
     return result_to_response(result)
+
+
+@router.post("/{name}/verify")
+async def verify_environment(name: str, body: EnvironmentVerifyBody):
+    """Run the built-in ``verify_vm`` smoke test against this environment.
+
+    Idempotently attaches the built-in verify experiment to the environment,
+    then starts a background run and returns immediately with its ULID.
+    """
+    project_path = Path(body.project_path)
+
+    setup_result = _api().experiment.ensure_verify_setup(project_path, name)
+    if not setup_result.success:
+        return result_to_response(setup_result)
+
+    run_result = await _api().experiment.run(project_path, setup_result.data, name)
+    return result_to_response(run_result)
