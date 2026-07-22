@@ -361,6 +361,10 @@ class ShowAPI:
         """Remove a run."""
         return self._service.remove_run(request)
 
+    def get_run_files(self, ulid):
+        """Resolve a run's on-disk directory and known artifact file paths."""
+        return self._service.get_run_files(ulid)
+
     def list_projects(self):
         """List all projects."""
         return self._service.list_projects()

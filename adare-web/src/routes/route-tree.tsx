@@ -3,10 +3,15 @@ import type { QueryClient } from '@tanstack/react-query'
 import { MainLayout } from '@/components/layout/main-layout'
 import HomePage from '@/pages/home'
 import RunsListPage from '@/pages/runs-list'
+import RunDetailPage from '@/pages/run-detail'
 import ExperimentsListPage from '@/pages/experiments-list'
+import ExperimentDetailPage from '@/pages/experiment-detail'
 import ProjectsListPage from '@/pages/projects-list'
 import EnvironmentsListPage from '@/pages/environments-list'
-import AgentLivePage from '@/pages/agent-live'
+import EnvironmentDetailPage from '@/pages/environment-detail'
+import VmsListPage from '@/pages/vms-list'
+import VmDetailPage from '@/pages/vm-detail'
+import WorkbenchPage from '@/pages/workbench'
 
 interface RouterContext {
   queryClient: QueryClient
@@ -32,10 +37,22 @@ const runsRoute = createRoute({
   },
 })
 
+const runDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/runs/$ulid',
+  component: RunDetailPage,
+})
+
 const experimentsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/experiments',
   component: ExperimentsListPage,
+})
+
+const experimentDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/experiments/$name',
+  component: ExperimentDetailPage,
 })
 
 const projectsRoute = createRoute({
@@ -50,17 +67,48 @@ const environmentsRoute = createRoute({
   component: EnvironmentsListPage,
 })
 
-const agentRoute = createRoute({
+const environmentDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/agent',
-  component: AgentLivePage,
+  path: '/environments/$name',
+  component: EnvironmentDetailPage,
+})
+
+const vmsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/vms',
+  component: VmsListPage,
+})
+
+const vmDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/vms/$instanceId',
+  component: VmDetailPage,
+})
+
+const developRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/develop',
+  component: WorkbenchPage,
+  validateSearch: (search: Record<string, unknown>): { experiment?: string; environment?: string } => {
+    const experiment = search.experiment
+    const environment = search.environment
+    return {
+      ...(typeof experiment === 'string' && experiment.length > 0 ? { experiment } : {}),
+      ...(typeof environment === 'string' && environment.length > 0 ? { environment } : {}),
+    }
+  },
 })
 
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   runsRoute,
+  runDetailRoute,
   experimentsRoute,
+  experimentDetailRoute,
   projectsRoute,
   environmentsRoute,
-  agentRoute,
+  environmentDetailRoute,
+  vmsRoute,
+  vmDetailRoute,
+  developRoute,
 ])

@@ -1,6 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { Bot, Play, Loader2, Image as ImageIcon, Eye } from 'lucide-react'
-import { PageHeader } from '@/components/layout/page-header'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge, statusToVariant } from '@/components/ui/badge'
@@ -10,7 +9,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { useSessions } from '@/api/hooks/use-sessions'
 import { VmLiveView } from '@/components/vm/vm-live-view'
 import { useRunAgent } from '@/api/hooks/use-gui-agent'
 import { endpoints } from '@/api/endpoints'
@@ -21,8 +19,6 @@ import type {
   AgentStatusMessage,
 } from '@/types/api'
 
-// One row in the step log. Fields are populated by the `decided` phase and the
-// status (plus screenshot) is refined by the matching `executed` phase.
 interface StepEntry {
   index: number
   kind: string
@@ -60,8 +56,6 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
 
     case 'step': {
       const d = action.data
-      // pause/resume bracket an interactive gate; web runs are non-interactive
-      // so there is nothing to merge into the step log.
       if (d.phase === 'pause' || d.phase === 'resume') return state
 
       const existing = state.steps.find((s) => s.index === d.index)
@@ -95,10 +89,13 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
   }
 }
 
-export default function AgentLivePage() {
-  const { data: sessions, isPending: sessionsPending } = useSessions()
+interface Props {
+  sessionId: string
+  vmName?: string
+  vmRunning?: boolean
+}
 
-  const [sessionId, setSessionId] = useState('')
+export function RunAgentPanel({ sessionId, vmName, vmRunning }: Props) {
   const [goal, setGoal] = useState('')
   const [maxSteps, setMaxSteps] = useState('')
   const [planning, setPlanning] = useState(true)
@@ -110,11 +107,8 @@ export default function AgentLivePage() {
   const runAgent = useRunAgent(sessionId)
   const logEndRef = useRef<HTMLDivElement>(null)
 
-  const selectedSession = sessions?.find((s) => s.session_id === sessionId)
-  // A running VM with a resolvable name is required to embed the live view.
-  const canWatch = !!selectedSession?.vm_name && selectedSession.vm_running !== false
+  const canWatch = !!vmName && vmRunning !== false
 
-  // Subscribe to the session's WebSocket for agent frames.
   useEffect(() => {
     if (!sessionId) return
 
@@ -134,7 +128,6 @@ export default function AgentLivePage() {
     }
   }, [sessionId])
 
-  // Keep the newest step visible.
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [state.steps])
@@ -155,45 +148,9 @@ export default function AgentLivePage() {
   const canRun = !!sessionId && !!goal.trim() && state.runState !== 'running'
 
   return (
-    <div className="p-6 space-y-6">
-      <PageHeader title="Agent Live" description="Watch the GUI agent work step by step" />
-
-      {/* Controls */}
+    <div className="space-y-6">
       <Card>
         <CardContent className="pt-6 space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="agent-session">Session</Label>
-              <select
-                id="agent-session"
-                value={sessionId}
-                onChange={(e) => setSessionId(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="">
-                  {sessionsPending ? 'Loading sessions…' : 'Select a session…'}
-                </option>
-                {sessions?.map((s) => (
-                  <option key={s.session_id} value={s.session_id}>
-                    {s.experiment} · {s.environment} ({s.session_id.slice(0, 8)})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="agent-max-steps">Max steps (optional)</Label>
-              <Input
-                id="agent-max-steps"
-                type="number"
-                min={1}
-                placeholder="Default"
-                value={maxSteps}
-                onChange={(e) => setMaxSteps(e.target.value)}
-              />
-            </div>
-          </div>
-
           <div className="space-y-1.5">
             <Label htmlFor="agent-goal">Goal</Label>
             <Textarea
@@ -205,6 +162,17 @@ export default function AgentLivePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-6">
+            <div className="w-40 space-y-1.5">
+              <Label htmlFor="agent-max-steps">Max steps</Label>
+              <Input
+                id="agent-max-steps"
+                type="number"
+                min={1}
+                placeholder="Default"
+                value={maxSteps}
+                onChange={(e) => setMaxSteps(e.target.value)}
+              />
+            </div>
             <label className="flex items-center gap-2 text-sm">
               <Checkbox checked={planning} onChange={(e) => setPlanning(e.target.checked)} />
               Planning
@@ -221,9 +189,7 @@ export default function AgentLivePage() {
             <Button
               variant={rightPane === 'live' ? 'default' : 'outline'}
               className="ml-auto"
-              onClick={() =>
-                setRightPane((p) => (p === 'live' ? 'screenshot' : 'live'))
-              }
+              onClick={() => setRightPane((p) => (p === 'live' ? 'screenshot' : 'live'))}
               disabled={!canWatch && rightPane !== 'live'}
               title={
                 canWatch
@@ -253,11 +219,8 @@ export default function AgentLivePage() {
         </CardContent>
       </Card>
 
-      {/* Run summary */}
       {(state.runState === 'finished' || state.runState === 'failed') && state.summary && (
-        <Card
-          className={cn(state.runState === 'failed' && 'border-destructive')}
-        >
+        <Card className={cn(state.runState === 'failed' && 'border-destructive')}>
           <CardContent className="pt-6 flex items-start gap-3">
             <Badge variant={statusToVariant(state.runState)}>{state.runState}</Badge>
             <p className="text-sm flex-1 whitespace-pre-wrap">{state.summary}</p>
@@ -265,37 +228,28 @@ export default function AgentLivePage() {
         </Card>
       )}
 
-      {/* Two-pane layout: step log + latest screenshot */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Step log */}
         <Card className="flex flex-col max-h-[70vh]">
           <CardContent className="pt-6 flex-1 overflow-y-auto space-y-3">
             {state.steps.length === 0 ? (
               <EmptyState
                 icon={Bot}
                 title="No steps yet"
-                description="Select a session, set a goal, and run the agent."
+                description="Set a goal and run the agent."
               />
             ) : (
               <>
                 {state.steps.map((step) => (
-                  <div
-                    key={step.index}
-                    className="rounded-md border border-border p-3 space-y-2"
-                  >
+                  <div key={step.index} className="rounded-md border border-border p-3 space-y-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-muted-foreground">
-                        #{step.index}
-                      </span>
+                      <span className="text-xs font-mono text-muted-foreground">#{step.index}</span>
                       <Badge variant="secondary">{step.kind || '—'}</Badge>
                       {step.grounded && <Badge variant="outline">grounded</Badge>}
                       <Badge variant={statusToVariant(step.status)} className="ml-auto">
                         {step.status}
                       </Badge>
                     </div>
-                    {step.describe && (
-                      <p className="text-sm font-medium">{step.describe}</p>
-                    )}
+                    {step.describe && <p className="text-sm font-medium">{step.describe}</p>}
                     {step.reasoning && (
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                         {step.reasoning}
@@ -314,11 +268,9 @@ export default function AgentLivePage() {
           </CardContent>
         </Card>
 
-        {/* Right pane: annotated screenshot or embedded live VM */}
-        {rightPane === 'live' && canWatch && selectedSession?.vm_name ? (
-          // Mount only while `live` so switching away tears down the SPICE session.
+        {rightPane === 'live' && canWatch && vmName ? (
           <Card className="flex flex-col min-h-[400px] max-h-[70vh] overflow-hidden">
-            <VmLiveView vmName={selectedSession.vm_name} className="flex-1" />
+            <VmLiveView vmName={vmName} className="flex-1" />
           </Card>
         ) : (
           <Card className="flex flex-col min-h-[400px] max-h-[70vh]">
