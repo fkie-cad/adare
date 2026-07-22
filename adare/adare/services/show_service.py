@@ -231,6 +231,33 @@ class ShowService:
                 solutions=['Check database connection', 'Verify the ULID is correct']
             )
 
+    def get_run_files(self, ulid: str) -> Result[dict]:
+        """Resolve a run's on-disk directory and known artifact file paths.
+
+        Searches across all project databases the same way `get_run` does,
+        since the caller (a ULID-only route) has no project context.
+        """
+        try:
+            matches = self._query_across_projects(
+                lambda api, name: (
+                    [files] if (files := api.get_run_files(ulid)) is not None else []
+                )
+            )
+            if not matches:
+                return Result.fail(
+                    code="RunNotFoundError",
+                    message=f"Run with ULID {ulid} not found",
+                    solutions=['Use `adare show runs` to find valid run ULIDs']
+                )
+            return Result.ok(matches[0])
+        except (FileNotFoundError, OSError) as e:
+            log.error(f"Failed to get run files for {ulid}: {e}")
+            return Result.fail(
+                code="RunRetrievalError",
+                message=f"Failed to get run files: {e}",
+                solutions=['Check database connection', 'Verify the ULID is correct']
+            )
+
     def remove_run(self, request: RunRemoveRequest) -> Result[RunRemoveResult]:
         """
         Remove a single experiment run.

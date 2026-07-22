@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FormField } from '@/components/ui/form-field'
 import { Spinner } from '@/components/ui/spinner'
-import { useCreateExperiment } from '@/api/hooks/use-experiments'
+import { useCreateExperiment, type Experiment } from '@/api/hooks/use-experiments'
 import { useProjects } from '@/api/hooks/use-projects'
 import { toast } from '@/components/ui/toast'
 
@@ -19,9 +19,10 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   defaultProjectPath?: string
+  onCreated?: (experiment: Experiment) => void
 }
 
-export function CreateExperimentDialog({ open, onOpenChange, defaultProjectPath }: Props) {
+export function CreateExperimentDialog({ open, onOpenChange, defaultProjectPath, onCreated }: Props) {
   const projectsQuery = useProjects()
   const [projectPath, setProjectPath] = useState(defaultProjectPath ?? '')
   const [name, setName] = useState('')
@@ -50,8 +51,9 @@ export function CreateExperimentDialog({ open, onOpenChange, defaultProjectPath 
     mutation.mutate(
       { project_path: projectPath.trim(), name: name.trim() },
       {
-        onSuccess: () => {
+        onSuccess: (experiment) => {
           toast.success('Experiment created', name.trim())
+          onCreated?.(experiment)
           onOpenChange(false)
         },
       },

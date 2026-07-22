@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react'
-import { Play, RefreshCw } from 'lucide-react'
-import { useSearch } from '@tanstack/react-router'
+import { Play, Trash2 } from 'lucide-react'
+import { Link, useSearch } from '@tanstack/react-router'
 import { PageHeader } from '@/components/layout/page-header'
+import { AsyncBoundary } from '@/components/layout/async-boundary'
 import { cn } from '@/lib/utils'
-import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from '@/components/ui/table'
 import { Badge, statusToVariant } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
-import { useRuns } from '@/api/hooks/use-runs'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { useRuns, useRemoveRun } from '@/api/hooks/use-runs'
 import { formatDateTime, formatDuration } from '@/lib/formatters'
+import { toast } from '@/components/ui/toast'
 
 // Narrower view of the RunInfo shape returned by the backend
 interface RunRow {
   ulid: string
+  project_path?: string
   experiment_name?: string
   environment_name?: string
   start_time?: string
@@ -25,7 +27,7 @@ interface RunRow {
 }
 
 const SKELETON_ROWS = 5
-const COLUMNS = 7
+const COLUMNS = 8
 
 function LoadingTable() {
   return (
@@ -39,6 +41,7 @@ function LoadingTable() {
           <TableHead>Duration</TableHead>
           <TableHead>Result</TableHead>
           <TableHead>Published</TableHead>
+          <TableHead className="w-16 text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -58,9 +61,11 @@ function LoadingTable() {
 
 export default function RunsListPage() {
   const { data, isPending, isError, error, refetch } = useRuns()
+  const removeMutation = useRemoveRun()
   const search = useSearch({ from: '/runs' }) as { focus?: string }
   const focusUlid = search.focus
   const [highlightUlid, setHighlightUlid] = useState<string | undefined>(focusUlid)
+  const [deleteTarget, setDeleteTarget] = useState<RunRow | null>(null)
 
   useEffect(() => {
     setHighlightUlid(focusUlid)
@@ -69,35 +74,38 @@ export default function RunsListPage() {
     return () => clearTimeout(t)
   }, [focusUlid])
 
+  const handleDelete = () => {
+    if (!deleteTarget) return
+    removeMutation.mutate(
+      { ulid: deleteTarget.ulid, projectPath: deleteTarget.project_path },
+      {
+        onSuccess: () => {
+          toast.success('Run removed', deleteTarget.ulid)
+          setDeleteTarget(null)
+        },
+        onError: (err) => {
+          toast.error('Failed to remove run', (err as Error)?.message)
+        },
+      },
+    )
+  }
+
   return (
     <div className="p-6 space-y-6">
       <PageHeader title="Runs" description="Experiment execution history" />
 
-      {isPending && <LoadingTable />}
-
-      {isError && (
-        <Card className="border-destructive">
-          <CardContent className="pt-6 flex items-center gap-4">
-            <p className="text-sm text-destructive flex-1">
-              {(error as Error)?.message ?? 'Failed to load runs.'}
-            </p>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
-              <RefreshCw size={14} />
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {!isPending && !isError && data?.length === 0 && (
-        <EmptyState
-          icon={Play}
-          title="No runs yet"
-          description="Run an experiment to see results here."
-        />
-      )}
-
-      {!isPending && !isError && data && data.length > 0 && (
+      <AsyncBoundary
+        isPending={isPending}
+        isError={isError}
+        error={error}
+        onRetry={() => refetch()}
+        errorFallbackMessage="Failed to load runs."
+        loadingFallback={<LoadingTable />}
+        isEmpty={data?.length === 0}
+        emptyIcon={Play}
+        emptyTitle="No runs yet"
+        emptyDescription="Run an experiment to see results here."
+      >
         <Table>
           <TableHeader>
             <TableRow>
@@ -108,10 +116,11 @@ export default function RunsListPage() {
               <TableHead>Duration</TableHead>
               <TableHead>Result</TableHead>
               <TableHead>Published</TableHead>
+              <TableHead className="w-16 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(data as unknown as RunRow[]).map((run) => (
+            {((data ?? []) as unknown as RunRow[]).map((run) => (
               <TableRow
                 key={run.ulid}
                 className={cn(
@@ -120,12 +129,38 @@ export default function RunsListPage() {
                 )}
               >
                 <TableCell>
-                  <Badge variant={statusToVariant(run.status ?? null)}>
-                    {run.status ?? '—'}
-                  </Badge>
+                  <Link to="/runs/$ulid" params={{ ulid: run.ulid }} className="inline-flex">
+                    <Badge variant={statusToVariant(run.status ?? null)}>
+                      {run.status ?? '—'}
+                    </Badge>
+                  </Link>
                 </TableCell>
-                <TableCell>{run.experiment_name ?? '—'}</TableCell>
-                <TableCell>{run.environment_name || '—'}</TableCell>
+                <TableCell>
+                  {run.experiment_name ? (
+                    <Link
+                      to="/experiments/$name"
+                      params={{ name: run.experiment_name }}
+                      className="hover:underline"
+                    >
+                      {run.experiment_name}
+                    </Link>
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+                <TableCell>
+                  {run.environment_name ? (
+                    <Link
+                      to="/environments/$name"
+                      params={{ name: run.environment_name }}
+                      className="hover:underline"
+                    >
+                      {run.environment_name}
+                    </Link>
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
                 <TableCell>{formatDateTime(run.start_time)}</TableCell>
                 <TableCell>{formatDuration(run.duration_seconds)}</TableCell>
                 <TableCell>{run.overall_result || '—'}</TableCell>
@@ -134,12 +169,37 @@ export default function RunsListPage() {
                     {run.published ? 'Yes' : 'No'}
                   </Badge>
                 </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="Delete run"
+                    onClick={() => setDeleteTarget(run)}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
-          <TableCaption>{data.length} run{data.length === 1 ? '' : 's'}</TableCaption>
+          <TableCaption>{(data ?? []).length} run{(data ?? []).length === 1 ? '' : 's'}</TableCaption>
         </Table>
-      )}
+      </AsyncBoundary>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Remove run"
+        description={
+          deleteTarget
+            ? `Are you sure you want to remove run "${deleteTarget.ulid}"? This cannot be undone.`
+            : undefined
+        }
+        confirmLabel="Remove"
+        variant="destructive"
+        loading={removeMutation.isPending}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

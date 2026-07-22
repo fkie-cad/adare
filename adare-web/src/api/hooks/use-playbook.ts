@@ -1,14 +1,14 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { endpoints } from '@/api/endpoints'
-import type { ApiResponse, SavePlaybookRequest } from '@/types/api'
+import type { ApiResponse, PlaybookData, SavePlaybookRequest } from '@/types/api'
 
 export function useLoadPlaybook(name: string) {
   return useQuery({
     queryKey: ['playbook', name],
     queryFn: async () => {
-      const { data } = await api.get<ApiResponse<string>>(endpoints.playbookLoad(name))
-      return data.data ?? ''
+      const { data } = await api.get<ApiResponse<PlaybookData>>(endpoints.playbookLoad(name))
+      return data.data ?? { actions: [], settings: {} }
     },
     enabled: !!name,
   })
@@ -17,7 +17,7 @@ export function useLoadPlaybook(name: string) {
 export function useSavePlaybook() {
   return useMutation({
     mutationFn: async (request: SavePlaybookRequest) => {
-      const { data } = await api.post<ApiResponse<string>>(endpoints.playbookSave, request)
+      const { data } = await api.post<ApiResponse<{ file_path: string }>>(endpoints.playbookSave, request)
       return data.data
     },
   })

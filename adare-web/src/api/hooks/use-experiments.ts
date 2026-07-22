@@ -41,6 +41,16 @@ export interface ValidateExperimentRequest {
   environment?: string
 }
 
+export interface RunExperimentRequest {
+  project_path: string
+  environment_name: string
+}
+
+export interface RunExperimentResponse {
+  run_ulid: string
+  experiment_name: string
+}
+
 export function useExperiments(tags?: string[]) {
   const tagsParam = tags?.join(',') ?? ''
   return useQuery({
@@ -72,6 +82,20 @@ export function useCreateExperiment() {
       return data.data!
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['experiments'] }),
+  })
+}
+
+export function useRunExperiment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ name, request }: { name: string; request: RunExperimentRequest }) => {
+      const { data } = await api.post<ApiResponse<RunExperimentResponse>>(
+        endpoints.runExperiment(name),
+        request,
+      )
+      return data.data!
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['runs'] }),
   })
 }
 
