@@ -7,7 +7,12 @@ import { cn } from '@/lib/utils'
 
 interface VmLiveViewProps {
   vmName: string
-  /** `false` (default) enables keyboard/mouse control; `true` starts read-only. */
+  /**
+   * `true` (default) starts read-only: no keyboard/mouse control AND no
+   * viewer-driven guest resolution change (forensically non-mutating, matching
+   * the `adare vm watch` CLI default). `false` enables interactive control and
+   * auto-resize. Users can still flip this in-iframe via the View Only toggle.
+   */
   viewOnly?: boolean
   className?: string
 }
@@ -35,7 +40,7 @@ interface VmLiveViewProps {
  *   mixed content (both are HTTP today). Loading / "unavailable" states come
  *   from the resolver, not the iframe (cross-origin `onError` is unreliable).
  */
-export function VmLiveView({ vmName, viewOnly = false, className }: VmLiveViewProps) {
+export function VmLiveView({ vmName, viewOnly = true, className }: VmLiveViewProps) {
   const { data: url, isLoading, refetch, isFetching } = useVmWatchUrl(vmName, viewOnly)
   // Cross-origin frames can't be `.reload()`-ed, so remount via a key bump.
   const [reloadKey, setReloadKey] = useState(0)
