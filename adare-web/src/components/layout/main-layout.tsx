@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Outlet } from '@tanstack/react-router'
+import { Outlet, useLocation } from '@tanstack/react-router'
 import { useThemeStore } from '@/stores/theme-store'
 import { useSidebarStore } from '@/stores/sidebar-store'
 import { ToastViewport } from '@/components/ui/toast'
@@ -31,6 +31,18 @@ export function MainLayout() {
 
     return undefined
   }, [mode, colorScheme])
+
+  // The VM watch page is a chrome-less, full-window host (pop-out target): no
+  // sidebar, the viewer fills the viewport.
+  const { pathname } = useLocation()
+  if (pathname === '/vm/watch') {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <Outlet />
+        <ToastViewport />
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">

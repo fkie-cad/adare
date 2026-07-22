@@ -7,6 +7,7 @@ import ExperimentsListPage from '@/pages/experiments-list'
 import ProjectsListPage from '@/pages/projects-list'
 import EnvironmentsListPage from '@/pages/environments-list'
 import AgentLivePage from '@/pages/agent-live'
+import VmWatchPage from '@/pages/vm-watch'
 
 interface RouterContext {
   queryClient: QueryClient
@@ -56,6 +57,23 @@ const agentRoute = createRoute({
   component: AgentLivePage,
 })
 
+const vmWatchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/vm/watch',
+  component: VmWatchPage,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { name?: string; viewOnly?: boolean } => {
+    const rawName = search.name
+    const name = typeof rawName === 'string' && rawName.length > 0 ? rawName : undefined
+    // Accept either `view_only` (from CLI/pop-out URLs) or `viewOnly`.
+    const rawViewOnly = search.view_only ?? search.viewOnly
+    const viewOnly =
+      rawViewOnly === true || rawViewOnly === 'true' || rawViewOnly === '1'
+    return name ? { name, viewOnly } : { viewOnly }
+  },
+})
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   runsRoute,
@@ -63,4 +81,5 @@ export const routeTree = rootRoute.addChildren([
   projectsRoute,
   environmentsRoute,
   agentRoute,
+  vmWatchRoute,
 ])

@@ -109,8 +109,13 @@ def exec_vm_watch(arguments):
     toggle control from VirtualSpice's own toolbar.
     """
     import webbrowser
+    from urllib.parse import quote
 
-    from adare.webapi.vm_watch import DEFAULT_SPICE_PORT, build_display_path, resolve_vm_uuid
+    from adare.webapi.vm_watch import DEFAULT_SPICE_PORT, resolve_vm_uuid
+
+    # ADARE web server port (default of `adare web start`); the in-app viewer is
+    # served here, so the live view opens same-origin, not on VirtualSpice's :8081.
+    ADARE_WEB_PORT = 8089
 
     name = arguments.name
     view_only = getattr(arguments, 'view_only', True)
@@ -126,8 +131,10 @@ def exec_vm_watch(arguments):
         )
         return
 
-    path = build_display_path(uuid, name, view_only)
-    url = f"http://127.0.0.1:{DEFAULT_SPICE_PORT}{path}"
+    url = (
+        f"http://127.0.0.1:{ADARE_WEB_PORT}/vm/watch"
+        f"?name={quote(name)}&view_only={'true' if view_only else 'false'}"
+    )
     webbrowser.open(url)
     print_success_message(
         title=f"Opening live view for '{name}'"
