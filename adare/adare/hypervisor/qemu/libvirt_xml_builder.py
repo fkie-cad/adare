@@ -539,9 +539,13 @@ class DomainXMLBuilder:
         if not self._is_windows:
             return
         if shutil.which('swtpm'):
-            tpm = ET.SubElement(self._devices, 'tpm', model='tpm-crb')
+            # tpm-crb is an x86-only interface; aarch64 QEMU only provides the
+            # TIS device (tpm-tis-device). Advertising tpm-crb on aarch64 makes
+            # libvirt reject the domain ("does not support TPM model tpm-crb").
+            tpm_model = 'tpm-tis' if self._is_aarch64 else 'tpm-crb'
+            tpm = ET.SubElement(self._devices, 'tpm', model=tpm_model)
             ET.SubElement(tpm, 'backend', type='emulator', version='2.0')
-            log.info(f"Added TPM 2.0 emulator for Windows VM {self._config.vm_name}")
+            log.info(f"Added TPM 2.0 emulator ({tpm_model}) for Windows VM {self._config.vm_name}")
         elif self._is_darwin:
             log.warning(
                 "swtpm not available — Windows 11 may not boot without TPM. "
@@ -670,26 +674,34 @@ class DomainXMLBuilder:
         if self._is_aarch64:
             rx = getattr(self._config, 'resolution_x', 1920)
             ry = getattr(self._config, 'resolution_y', 1080)
-            if self._is_windows and os.environ.get('ADARE_TEST_GPU_PCI'):
-                # EXPERIMENTAL (env-gated): give Windows the PCI virtio-gpu with NO
-                # ramfb — mirroring the Linux branch. Hypothesis: the documented
-                # WinPE BSOD was the ramfb->GPU *handoff*; without ramfb there is no
-                # handoff, edk2 VirtioGpuDxe provides the boot GOP, and viogpudo binds
-                # to PCI virtio-gpu (DEV_1050) post-boot to honor the EDID mode. The
-                # MMIO virtio-gpu-device otherwise lands on an ACPI\LNRO0005 virtio-mmio
-                # slot Windows has no bus driver for, so the display falls back to
-                # ramfb at 800x600. Remove this branch (or the env var) to restore.
+            if self._is_windows and not self._iso_path:
+                # Windows aarch64, running a baked env (no installer ISO): PCI
+                # virtio-gpu with NO ramfb, mirroring the Linux branch below. This is
+                # the default runtime path. edk2 VirtioGpuDxe provides the boot GOP,
+                # and viogpudo (VioGpuDod, shipped by UTM Guest Tools) binds to PCI
+                # virtio-gpu (DEV_1050) — a real display driver instead of the
+                # Microsoft Basic Display Driver. The MMIO virtio-gpu-device (install
+                # branch) otherwise lands on an ACPI\LNRO0005 virtio-mmio slot Windows
+                # has no bus driver for, so the display falls back to the Basic Display
+                # Driver over ramfb at 800x600.
+                #
+                # NOTE: viogpudo does NOT honour the advertised EDID/xres/yres at boot
+                # (live-tested: it comes up at its 1024x768 default). The configured
+                # resolution is applied at runtime by a guest-side ChangeDisplaySettings
+                # call in the console session — see agent_lifecycle._build_windows_set_
+                # resolution_command. edid=on is kept as it is harmless and advertises
+                # the intended mode.
                 _add_qemu_arg(qemu_commandline, '-device')
                 _add_qemu_arg(
                     qemu_commandline,
                     f'virtio-gpu-pci,edid=on,xres={rx},yres={ry},bus=pcie.0,addr=0x1d',
                 )
             elif self._is_windows:
-                # Windows aarch64: ramfb boot framebuffer + the MMIO virtio-gpu-device
-                # driven by viogpudo (UTM guest tools). virtio-gpu-PCI causes a
-                # WinPE/boot BSOD on the ramfb->GPU handoff (see vm_creator/
-                # qmp_utils.py, windows_creator.py). edid=on + xres/yres advertise
-                # the target mode; viogpudo negotiates it.
+                # Windows aarch64, installing (installer ISO attached): ramfb boot
+                # framebuffer + the MMIO virtio-gpu-device. PCI virtio-gpu risks the
+                # documented WinPE/boot BSOD on the ramfb->GPU handoff (see vm_creator/
+                # qmp_utils.py, windows_creator.py), and the resolution is irrelevant
+                # during install anyway. edid=on + xres/yres advertise the target mode.
                 _add_qemu_arg(qemu_commandline, '-device')
                 _add_qemu_arg(qemu_commandline, 'ramfb')
                 _add_qemu_arg(qemu_commandline, '-device')
