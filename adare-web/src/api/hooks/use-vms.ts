@@ -193,7 +193,7 @@ export async function openVmWatch(name: string, viewOnly = true): Promise<boolea
  * stopped) — distinct from `isLoading`. Does not retry (a 404 is a definitive
  * "no such running VM", not a transient failure).
  */
-export function useVmWatchUrl(name: string, viewOnly = false, enabled = true) {
+export function useVmWatchUrl(name: string, viewOnly = true, enabled = true) {
   return useQuery({
     queryKey: ['vm-watch-url', name, viewOnly],
     queryFn: () => resolveVmWatchUrl(name, viewOnly),
