@@ -24,6 +24,7 @@ class ExperimentConfig:
     vm_cpus: int = 4
     vm_memory: int = 4096  # Default, can be overridden based on guest platform or CLI
     vm_resolution: tuple[int, int] = (1920, 1080)
+    vm_display_resolution: str | None = None  # Guest display resolution "WxH" from playbook Settings.resolution; None = env/host default
     websocket_port: int | None = None  # Allocated dynamically from database
     shared_directories: dict[str, dict[str, Path]] = field(default_factory=dict)
     gui_mode_override: str | None = None  # CLI override for GUI execution mode

@@ -126,6 +126,7 @@ class Settings:
     forensic_logging: bool = True  # Generate forensic audit logs (YAML) after experiment completion
     enable_filesystem_diff: bool = False  # Enable automatic snapshots at experiment start/end
     gui_execution_mode: str = 'auto'  # GUI automation mode: 'auto', 'agent', 'host' (QEMU only)
+    resolution: str | None = None  # Guest display resolution "WxH" (e.g. "1280x1024"); unset = host/env default
 
 @attrs.define
 class Offset:

@@ -67,6 +67,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         architecture: str = 'x86_64',
         iso_path: str = '',
         boot_from_cdrom: bool = False,
+        resolution: str | None = None,
     ):
         self.vm_name = vm_name
         self.guest_os = guest_os
@@ -88,6 +89,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         # Live-installer boot: attach an ISO as CDROM and (optionally) boot it first.
         self._iso_path = iso_path or ''
         self._boot_from_cdrom = bool(boot_from_cdrom)
+        # Optional guest display resolution "WxH" (e.g. "1280x1024"); None => host/env
+        # default. Consumed by ConfigurationMixin -> QEMUVMConfig.resolution_x/y (EDID).
+        self._resolution = resolution or None
 
         # libvirt integration
         self._libvirt_conn = None  # Lazy initialization - will use manager's connection

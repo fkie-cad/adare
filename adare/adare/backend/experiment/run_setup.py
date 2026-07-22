@@ -119,6 +119,19 @@ def step_initialize(context: ExperimentRunCtx, fake: bool = False, run_ulid: str
     log.info(f'initialized experiment run {context.experiment_run_ulid}')
 
 
+def _apply_playbook_resolution(context: ExperimentRunCtx):
+    """Copy the playbook's optional `settings.resolution` onto the run config.
+
+    Unset/None leaves ``vm_display_resolution`` at its default (None), so the VM
+    builder advertises the host/env default and issues no guest-side mode-set.
+    """
+    settings = getattr(context.playbook, 'settings', None) if context.playbook else None
+    resolution = getattr(settings, 'resolution', None) if settings else None
+    if resolution:
+        context.config.vm_display_resolution = resolution
+        log.info(f"Playbook requests guest display resolution: {resolution}")
+
+
 def step_setup_experiment_environment(context: ExperimentRunCtx):
     """Consolidated step: Setup directories, validate playbook, and resolve environment."""
     with StageCtxManager(SetupExperimentEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
@@ -158,6 +171,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                 # Get VM OS and user for automatic variables
                 context.playbook = parse_playbook(playbook_path)
                 log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
+                _apply_playbook_resolution(context)
                 return
 
             # Load from database (pre-validated)
@@ -180,6 +194,10 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
 
         except (ValueError, KeyError, OSError, TypeError) as e:
             raise LoggedException(log, f"Playbook loading failed: {str(e)}") from e
+
+        # Carry the playbook's optional display-resolution setting into the run
+        # config so the QEMU VM builder can advertise it (mirrors iso_path plumbing).
+        _apply_playbook_resolution(context)
 
         # Verify integrity of testfunctions used in playbook
         # TODO: Re-enable this for production use - currently disabled for testing
