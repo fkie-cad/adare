@@ -87,10 +87,17 @@ def exec_dev_agent(arguments):
     ephemeral = environment is not None
     if ephemeral:
         project_directory = _resolve_project_directory(arguments, None)
+        # Guard the --as-experiment name BEFORE the (expensive) VM boot: the
+        # collision check is pure filesystem, so a name clash should abort
+        # instantly instead of after a ~minute of booting + snapshotting.
+        if as_experiment:
+            _ensure_experiment_available(project_directory, as_experiment)
         session_id = _boot_ephemeral_session(api, project_directory, environment)
     else:
         project_directory = _resolve_project_directory(arguments, session_id_arg)
         session_id = _resolve_session_id(session_id_arg, project_directory)
+        if as_experiment:
+            _ensure_experiment_available(project_directory, as_experiment)
 
     planning = getattr(arguments, 'planning', None)
     grounding = getattr(arguments, 'grounding', None)
@@ -504,8 +511,6 @@ def _scaffold_experiment(api, project_directory, session_id, name, known_environ
     When ``known_environment`` is supplied (the -e path already knows it), the
     get_state round-trip is skipped.
     """
-    from adare.backend.experiment.directory import ExperimentDirectory
-
     if known_environment is not None:
         environment_name = known_environment
     else:
@@ -515,6 +520,20 @@ def _scaffold_experiment(api, project_directory, session_id, name, known_environ
             exit(1)
         environment_name = state.data.environment_name
 
+    exp = _ensure_experiment_available(project_directory, name)
+    exp.create(empty=True)  # directories only — the recorder fills playbook.yml + img/
+    return exp, environment_name
+
+
+def _ensure_experiment_available(project_directory, name):
+    """Return the ExperimentDirectory for ``name``, exiting if it already exists.
+
+    The collision guard is pure filesystem (no session/VM), so callers run it
+    before an ephemeral boot to fail a name clash instantly rather than after
+    booting. We never overwrite an existing experiment.
+    """
+    from adare.backend.experiment.directory import ExperimentDirectory
+
     exp = ExperimentDirectory(project_directory, name)
     if exp.exists():
         print_error_message(
@@ -523,8 +542,7 @@ def _scaffold_experiment(api, project_directory, session_id, name, known_environ
                         f'Or remove the existing one: rm -rf {exp.path}'],
         )
         exit(1)
-    exp.create(empty=True)  # directories only — the recorder fills playbook.yml + img/
-    return exp, environment_name
+    return exp
 
 
 def _cleanup_empty_scaffold(exp):
