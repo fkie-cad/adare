@@ -131,6 +131,7 @@ class AdareVMClient:
 
             try:
                 # Cancel message handler task (handle cross-loop scenario)
+                cross_loop = False
                 if self.message_handler_task:
                     try:
                         current_loop = asyncio.get_running_loop()
@@ -141,7 +142,9 @@ class AdareVMClient:
                             with contextlib.suppress(asyncio.CancelledError):
                                 await self.message_handler_task
                         else:
-                            # Different loop - task is already dead, just clear reference
+                            # Different loop - task (and the websocket alongside it)
+                            # belong to a dead loop, e.g. a prior asyncio.run().
+                            cross_loop = True
                             log.debug("Message handler task is from different event loop (already destroyed)")
                     except RuntimeError:
                         # No running loop or task has no loop, just clear
@@ -149,9 +152,18 @@ class AdareVMClient:
                     finally:
                         self.message_handler_task = None
 
-                # Close WebSocket connection
+                # Close WebSocket connection. Skip the awaited close() when the
+                # connection was created in a different (now-dead) event loop:
+                # awaiting its close-future here raises "attached to a different
+                # loop", and the socket is already gone — just drop the reference.
                 if self.websocket:
-                    await self.websocket.close()
+                    if cross_loop:
+                        log.debug("WebSocket is from a different event loop; dropping reference without close()")
+                    else:
+                        try:
+                            await self.websocket.close()
+                        except RuntimeError as loop_err:
+                            log.debug(f"WebSocket close skipped (event loop already gone): {loop_err}")
 
                 self.connected = False
                 self.websocket = None

@@ -399,11 +399,15 @@ class DevModeSnapshotsMixin:
                         await step_install_and_run_websocket_server(self.experiment_ctx)
                         await step_connect_websocket(self.experiment_ctx)
 
-                # Reset playbook controller state
-                self.playbook_controller.execution_context.clear()
-                self.playbook_controller.execution_context.update(
-                    snapshot.variable_state.copy()
-                )
+                # Reset playbook controller state. It is lazily created
+                # (_ensure_playbook_controller), so it may still be None if no
+                # playbook has run in this session yet (e.g. boot -> checkpoint ->
+                # restore) — mirror the guard used by create_checkpoint above.
+                if self.playbook_controller:
+                    self.playbook_controller.execution_context.clear()
+                    self.playbook_controller.execution_context.update(
+                        snapshot.variable_state.copy()
+                    )
 
                 # Reset counters
                 self.actions_executed = 0
