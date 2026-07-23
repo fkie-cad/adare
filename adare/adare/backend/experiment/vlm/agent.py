@@ -617,7 +617,10 @@ class GuiAgent:
         :meth:`_screen_changed`) absorbs that noise.
         """
         with Image.open(io.BytesIO(png)) as img:
-            return tuple(img.convert('L').resize((16, 16)).getdata())
+            # tobytes() on an 'L' image is one byte per pixel in row-major order,
+            # identical to the old getdata() tuple but without Pillow's
+            # getdata() deprecation (removed in Pillow 14).
+            return tuple(img.convert('L').resize((16, 16)).tobytes())
 
     @staticmethod
     def _screen_changed(sig: tuple[int, ...], last_sig: tuple[int, ...] | None) -> bool:

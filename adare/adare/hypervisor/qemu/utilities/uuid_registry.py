@@ -69,6 +69,17 @@ class QEMUVMRegistry:
 
 
     @staticmethod
+    def vm_exists(vm_name: str) -> bool:
+        """True if a QEMU VM config exists for this name.
+
+        A non-raising probe for callers that must not trigger the self-logging
+        (ERROR-level) VMNotFoundException on an expected miss — e.g. cleaning up
+        a VM a prior boot-retry already removed.
+        """
+        config_path = Path.home() / '.adare' / 'qemu' / 'vms' / f"{vm_name}.json"
+        return config_path.exists()
+
+    @staticmethod
     def get_vm_info_by_uuid(uuid: str) -> dict[str, Any] | None:
         """
         Get VM information by UUID/identifier.

@@ -872,12 +872,19 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         try:
             log_file = get_experiment_log_file()
 
-            # Try to get domain state from libvirt
+            # Resolve the domain with a direct, non-raising lookup. Going through
+            # _ensure_libvirt_domain() would raise a HypervisorException that
+            # self-logs at ERROR, but an undefined domain is the normal
+            # "poweroff" case while a VM is still being defined / booting.
             if not self._libvirt_domain:
+                conn = self._get_libvirt_connection()
+                if not conn:
+                    return "poweroff"
                 try:
-                    self._ensure_libvirt_domain()
-                except HypervisorException:
-                    # Domain not defined in libvirt or connection unavailable
+                    with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                        self._libvirt_domain = conn.lookupByName(self.vm_name)
+                except libvirt.libvirtError as e:
+                    log.debug(f"Domain '{self.vm_name}' not defined yet: {e}")
                     return "poweroff"
 
             # Get domain state
