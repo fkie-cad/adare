@@ -9,6 +9,7 @@ downstream in :mod:`adare.backend.experiment.vlm.actions`.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -17,6 +18,13 @@ import httpx
 from .exceptions import VLMError
 
 log = logging.getLogger(__name__)
+
+# Bounded retry for transport-level failures (read timeout / connection reset)
+# on the decision POST. A single network hiccup against a remote endpoint
+# (e.g. Ollama Cloud) must not abort a whole agent run. HTTP-status errors
+# (4xx/5xx) are NOT retried here — a real auth/server error surfaces at once.
+_TRANSPORT_RETRIES = 3
+_TRANSPORT_BACKOFF_BASE = 1.5  # seconds; grows exponentially per attempt
 
 
 class VLMClient:
@@ -76,15 +84,7 @@ class VLMClient:
             'Content-Type': 'application/json',
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.post(url, json=payload, headers=headers)
-                resp.raise_for_status()
-                data = resp.json()
-        except httpx.HTTPError as exc:
-            raise VLMError(f'vLLM request to {url} failed: {exc}') from exc
-        except ValueError as exc:  # JSON decode
-            raise VLMError(f'vLLM returned non-JSON response: {exc}') from exc
+        data = await self._post_with_retry(url, payload, headers)
 
         try:
             content = data['choices'][0]['message']['content']
@@ -94,3 +94,50 @@ class VLMClient:
         if not isinstance(content, str):
             raise VLMError(f'vLLM message content was not text: {content!r}')
         return content
+
+    async def _post_with_retry(
+        self, url: str, payload: dict[str, Any], headers: dict[str, str]
+    ) -> dict[str, Any]:
+        """POST the payload, retrying only transport-level failures.
+
+        ``httpx.TransportError`` (read timeouts, connection resets — the class
+        whose ``str(exc)`` is often empty) is retried with exponential backoff
+        up to :data:`_TRANSPORT_RETRIES` attempts. ``httpx.HTTPStatusError``
+        (a real 4xx/5xx) is raised immediately — retrying an auth or server
+        error only hides it. The error message names the exception *type* so an
+        empty-``str(exc)`` transport error is still identifiable in logs.
+        """
+        last_exc: httpx.TransportError | None = None
+        for attempt in range(1, _TRANSPORT_RETRIES + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
+                    resp.raise_for_status()
+                    return resp.json()
+            except httpx.TransportError as exc:
+                last_exc = exc
+                if attempt < _TRANSPORT_RETRIES:
+                    delay = _TRANSPORT_BACKOFF_BASE ** attempt
+                    log.warning(
+                        'vLLM transport error on attempt %d/%d (%s: %s); '
+                        'retrying in %.1fs',
+                        attempt, _TRANSPORT_RETRIES,
+                        type(exc).__name__, exc, delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+            except httpx.HTTPError as exc:
+                # Non-transport HTTP errors — chiefly httpx.HTTPStatusError from
+                # raise_for_status() (a real 4xx/5xx). Surface immediately, never
+                # retry: an auth or server error will not fix itself.
+                raise VLMError(
+                    f'vLLM request to {url} failed: '
+                    f'{type(exc).__name__}: {exc}'
+                ) from exc
+            except ValueError as exc:  # JSON decode
+                raise VLMError(f'vLLM returned non-JSON response: {exc}') from exc
+
+        raise VLMError(
+            f'vLLM request to {url} failed after {_TRANSPORT_RETRIES} attempts: '
+            f'{type(last_exc).__name__}: {last_exc}'
+        ) from last_exc
