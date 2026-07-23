@@ -147,6 +147,7 @@ class GuiAgentMixin:
             VLLM_BASE_URL,
             VLLM_COORD_SPACE,
             VLLM_MODEL,
+            VLLM_TIMEOUT,
         )
 
         session = await self._manager.get_or_restore_session(request.session_id)
@@ -161,7 +162,10 @@ class GuiAgentMixin:
                 f"Dev session '{request.session_id}' has no running VM"
             )
 
-        client = VLMClient(base_url=VLLM_BASE_URL, model=VLLM_MODEL, api_key=VLLM_API_KEY)
+        client = VLMClient(
+            base_url=VLLM_BASE_URL, model=VLLM_MODEL, api_key=VLLM_API_KEY,
+            timeout=VLLM_TIMEOUT,
+        )
         executor = QEMUHostGUIExecutor(vm=vm)
 
         # Optional cheaper model for text-only JSON-repair of malformed
@@ -170,7 +174,8 @@ class GuiAgentMixin:
         repair_client = None
         if AGENT_REPAIR_MODEL:
             repair_client = VLMClient(
-                base_url=VLLM_BASE_URL, model=AGENT_REPAIR_MODEL, api_key=VLLM_API_KEY)
+                base_url=VLLM_BASE_URL, model=AGENT_REPAIR_MODEL, api_key=VLLM_API_KEY,
+                timeout=VLLM_TIMEOUT)
             log.info('Decision-repair model enabled: %s', AGENT_REPAIR_MODEL)
 
         recorder, run_dir = self._setup_recorder(request, ctx, PlaybookRecorder)
@@ -287,11 +292,13 @@ class GuiAgentMixin:
                         planner_client=VLMClient(
                             base_url=AGENT_PLANNER_BASE_URL or VLLM_BASE_URL,
                             model=AGENT_PLANNER_MODEL or VLLM_MODEL,
-                            api_key=AGENT_PLANNER_API_KEY or VLLM_API_KEY),
+                            api_key=AGENT_PLANNER_API_KEY or VLLM_API_KEY,
+                            timeout=VLLM_TIMEOUT),
                         checker_client=VLMClient(
                             base_url=AGENT_CHECKER_BASE_URL or VLLM_BASE_URL,
                             model=AGENT_CHECKER_MODEL or VLLM_MODEL,
-                            api_key=AGENT_CHECKER_API_KEY or VLLM_API_KEY),
+                            api_key=AGENT_CHECKER_API_KEY or VLLM_API_KEY,
+                            timeout=VLLM_TIMEOUT),
                         run_acceptance_checks=run_acceptance_checks,
                         planning_agent_cls=PlanningAgent,
                         host_executor_cls=QEMUHostGUIExecutor,
