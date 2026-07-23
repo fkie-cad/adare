@@ -254,6 +254,18 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @dev.command()
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
+    @click.option('-e', '--environment', 'environment', default=None, metavar='NAME',
+                  help='Boot a fresh VM from this environment, drive it, then tear it down. '
+                       'Self-contained — no prior `adare dev start` needed. Mutually '
+                       'exclusive with -s/--session.')
+    @click.option('--keep', 'keep', is_flag=True,
+                  help='With -e, leave the booted VM/session running afterwards instead of '
+                       'tearing it down (prints how to drive it again / stop it).')
+    @click.option('--verify/--no-verify', 'verify', default=True,
+                  help='After recording a playbook (-o or --as-experiment), validate it by '
+                       'replaying it on the VM from a pre-run baseline checkpoint '
+                       '(default: on). The playbook is always parse-checked regardless. '
+                       'No-op for a bare drive that records nothing.')
     @click.option('--goal', help='Natural-language goal for the agent to accomplish')
     @click.option('--goal-file', type=click.Path(exists=True), help='Read the goal from a file')
     @click.option('-o', '--out', 'output', type=click.Path(), help='Record a replayable playbook to this path')
@@ -288,22 +300,29 @@ def register(cli, AliasedGroup, exec_with_error_printing):
                   help='Scaffold experiments/NAME/ and record the run into it '
                        '(playbook.yml + img/ crops + metadata.yml). Files only — no DB '
                        'load; run `adare experiment load NAME` later. Excludes -o/--out.')
-    def agent(session_id, goal, goal_file, output, max_steps, stall_limit, interactive,
-              planning, grounding, progress, reasoning, video, as_experiment):
-        """Drive the session VM toward a goal with the vision-LLM GUI agent.
+    def agent(session_id, environment, keep, verify, goal, goal_file, output, max_steps,
+              stall_limit, interactive, planning, grounding, progress, reasoning, video,
+              as_experiment):
+        """Drive a VM toward a goal with the vision-LLM GUI agent.
 
         Uses the configured vLLM endpoint (ADARE_VLLM_*; works with Ollama Cloud).
-        With --out, records a reusable playbook you can replay with `dev playbook`.
+        Attach to a running session with -s, or boot a fresh VM from an
+        environment with -e (driven, then torn down unless --keep). With --out or
+        --as-experiment, records a reusable playbook; --verify (default) then
+        replays it on the VM to validate it.
 
         Examples:
-            adare dev agent --goal "open the Files app and go to Documents"
+            adare dev agent -s <id> --goal "open the Files app and go to Documents"
             adare dev agent -s <id> --goal "..." -o experiments/files.play.yaml
             adare dev agent --plan --goal "open LibreOffice and write an invoice" -o inv.play.yaml
-            adare dev agent --goal "..." --video --as-experiment demo_invoice
+            adare dev agent -e ubuntu2510-libre --goal "..." --as-experiment demo_invoice6 --ground --video
         """
         from adare.cli.dev import exec_dev_agent
         args = SimpleNamespace(
             session_id=session_id,
+            environment=environment,
+            keep=keep,
+            verify=verify,
             goal=goal,
             goal_file=goal_file,
             output=output,
