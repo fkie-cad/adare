@@ -1,2 +1,14 @@
 environments:
- - ubuntu24043
+  - win11
+
+description: >-
+  Tool validation of PECmd (paper section 5.3): launch regedit ten times and, after each
+  execution, export the Prefetch directory with PECmd and assert both the run count and
+  the last-run timestamp. State Transition Testing — every step is checked.
+
+tags:
+  - prefetch
+  - tool:PECmd
+  - goal:tool-test
+  - state-transition-testing
+  - windows
