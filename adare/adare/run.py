@@ -541,6 +541,34 @@ def sync():
     args = SimpleNamespace()
     exec_with_error_printing(exec_sync_testfunctions, args)
 
+@test.command()
+@click.argument('path', type=click.Path(exists=False))
+def validate(path):
+    """Validate a testfunction collection offline (no VM, no DB).
+
+    PATH is a collection directory (or .py file). Reports every authoring-contract
+    violation — filename≠dirname, missing 'ctx', unannotated params, duplicate
+    testnames, import/syntax errors, missing dependencies — with fix hints.
+    """
+    from adare.cli.testfunction import exec_validate_testfunction
+    args = SimpleNamespace(path=path)
+    exec_with_error_printing(exec_validate_testfunction, args)
+
+@test.command(name='dry-run')
+@click.argument('target')
+@click.option('--param', '-P', multiple=True, help='Parameter as key=value (repeatable)')
+@click.option('--file', '-f', 'file', help='Local sample file used as the dst parameter')
+@click.option('--path', help='Collection dir/.py to load (else resolved from known locations)')
+def dry_run(target, param, file, path):
+    """Execute one testfunction against a local sample file (no VM).
+
+    TARGET is <collection>.<function> (e.g. mycollection.file_contains_word).
+    Scope: FILE_BASED / FILE_CONTENT tests only.
+    """
+    from adare.cli.testfunction import exec_dry_run_testfunction
+    args = SimpleNamespace(target=target, param=param, file=file, path=path)
+    exec_with_error_printing(exec_dry_run_testfunction, args)
+
 
 @test.command(name='list')
 @click.option('--set', help='Filter testfunctions by set (e.g., standard)')

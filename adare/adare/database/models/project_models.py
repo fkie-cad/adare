@@ -671,14 +671,20 @@ class ExperimentRun(SerializerMixin, ProjectBase):
 
         # First check for test execution failures and result failures
         # This takes priority over missing tests since failed tests cause early termination
+        saw_warning = False
         for t in self.tests:
             # Check if test execution failed (success=False in Event base class)
             if hasattr(t, 'success') and t.success is False:
                 return StatusEnum.FAILED
 
-            # Check if test result indicates failure
-            if t.result and int(t.result.status_id) != StatusEnum.SUCCESS:
-                return StatusEnum.FAILED
+            # Check if test result indicates failure. WARNING is pass-with-warning:
+            # it must not be treated as a failure (see TestResult.warning).
+            if t.result:
+                status = int(t.result.status_id)
+                if status == StatusEnum.WARNING:
+                    saw_warning = True
+                elif status != StatusEnum.SUCCESS:
+                    return StatusEnum.FAILED
 
         # Only check for missing tests if no tests failed
         # (missing tests are expected when earlier tests failed and stopped execution)
@@ -691,7 +697,8 @@ class ExperimentRun(SerializerMixin, ProjectBase):
             if not found:
                 return StatusEnum.TEST_MISSING
 
-        return StatusEnum.SUCCESS
+        # All tests passed; surface WARNING distinctly (still a passing verdict).
+        return StatusEnum.WARNING if saw_warning else StatusEnum.SUCCESS
 
     @hybrid_property
     def ulid(self):
