@@ -1,0 +1,12 @@
+# No 'name:' key -- ExperimentMetadata does not define one and cattrs drops it silently.
+description: "Paper 5.2: open one document on Ubuntu 20.04 and pin the known 'visited' = integer -1 defect plus second-level timestamp precision"
+
+environments:
+  - ubuntu-2004
+
+tags:
+  - xbel
+  - recently-used
+  - xdg
+  - regression
+  - defect-pin
