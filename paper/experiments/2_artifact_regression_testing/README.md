@@ -192,3 +192,17 @@ for so long — action keys still have to be reviewed against
 scalars only, so the namespaced `bookmark:application/@count` assertion (which needs a
 `namespaces` dict) cannot be exercised from the CLI; it has to be driven from Python via
 `cattrs.structure` the way the CLI does internally.
+
+### One assertion is untested at runtime
+
+Every `xml.*` assertion above was executed against hand-written 20.04-shaped and
+24.04-shaped sample artifacts, each with a negative control, and the tolerance-placeholder
+path was driven end-to-end with synthesised `variable_metadata`.
+
+`text_file_accessed` (`standard.file_timestamps`) is the exception: it is `QGA_PROBE`, so it
+needs a live guest, *and* its `expected_time` parameter is union-typed, so it also trips the
+dry-run bug above. It is therefore doubly un-dry-runnable and was verified **by source
+reading only** — `_get_file_timestamp` accepts `timestamp_type: accessed`, and
+`comparison_type: within_last` with `within_duration` needs no `expected_time` at all, which
+is why that comparison was chosen over `after`. It has never actually run. Treat a failure
+of this one test on the first VM run as suspect-the-test, not suspect-the-artifact.

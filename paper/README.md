@@ -76,12 +76,15 @@ Two known limits are worth reading before trusting a green result:
   but `_validate_attrs_class` structures with a fresh converter that lacks them). A
   passing validation is necessary, not sufficient. An illegal `pull: name:` had been
   sitting in §5.2 unnoticed because of this; it is fixed.
-- `adare testfunction dry-run` currently cannot run any test function whose parameter is
-  union-typed (`json.value_matches`, `jsonl.line_matches`, …) — `cattrs` has no structure
-  hook for `str | int | float | bool | None`, so the CLI raises
-  `StructureHandlerNotFoundError` before the test executes. The test-function contracts
-  here were therefore verified by invoking the functions directly rather than through
-  that CLI.
+- `adare testfunction dry-run` has two gaps. It cannot run any test function whose
+  parameter is union-typed (`json.value_matches`, `jsonl.line_matches`,
+  `standard.file_timestamps`, …) — `cattrs` has no structure hook for
+  `str | int | float | bool | None`, so the CLI raises `StructureHandlerNotFoundError`
+  before the test executes. And it coerces `-P` values to scalars only, so a `dict`
+  parameter such as `xml.*`'s `namespaces` cannot be expressed. The `xml.*` assertions in
+  §5.2 have no union-typed parameters and *were* exercised through the CLI; everything
+  else was verified by invoking the functions directly, and the namespaced assertion was
+  driven through the same `cattrs.structure` path the CLI uses internally.
 
 Neither is a defect in these artifacts, but both change how much a clean validation run
 proves, so they are recorded here rather than left for the next person to rediscover.
