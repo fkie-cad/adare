@@ -15,6 +15,7 @@ from pathlib import Path
 
 from adare.database.api.base import EnhancedDatabaseApi
 from adare.database.exceptions import EntityNotFoundError, ValidationError
+from adare.database.migrations.runner import apply_pending
 from adare.database.models.devcheckpoint import DevCheckpoint
 from adare.database.models.devsession import DevSession
 from adare.database.models.global_models import GlobalBase
@@ -56,6 +57,9 @@ class DevModeApi(EnhancedDatabaseApi):
         super().__init__(db_path)
         self._start_session()
         GlobalBase.metadata.create_all(self.engine)
+        # create_all never ALTERs existing tables — apply pending schema
+        # migrations (dev_sessions gained columns over time).
+        apply_pending(self.engine, 'global')
 
     def save_session(
         self,

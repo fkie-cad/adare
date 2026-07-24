@@ -13,6 +13,7 @@ from adare.config.database import get_global_database_location
 from adare.core.dto.manage import (
     DbCleanInstallResult,
     DbInitResult,
+    DbMigrateResult,
     DbRepairResult,
     DbResetResult,
     DbStatusResult,
@@ -24,9 +25,11 @@ from adare.core.result import Result
 from adare.database.init import (
     clean_install_database_system,
     initialize_database_system,
+    migrate_database_system,
     repair_database_system,
     validate_database_integrity,
 )
+from adare.database.migrations.runner import invalidate_cache
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +61,7 @@ class ManageService:
                 global_db_accessible=status.get('global_db_accessible', False),
                 global_db_location=Path(status['global_db_location']) if status.get('global_db_location') else None,
                 valid=status.get('valid', False),
+                pending_migrations=status.get('pending_migrations', []),
                 errors=status.get('errors', []),
             ))
 
@@ -117,6 +121,37 @@ class ManageService:
                 solutions=['Try running with elevated permissions', 'Check file system health']
             )
 
+    def migrate_db(self, quiet: bool = False) -> Result[DbMigrateResult]:
+        """
+        Apply pending schema migrations to the global and all project databases.
+
+        Args:
+            quiet: Route migration output to the log instead of stdout.
+
+        Returns:
+            Result[DbMigrateResult] with the applied migrations.
+        """
+        try:
+            results = migrate_database_system(quiet=quiet)
+
+            return Result.ok(DbMigrateResult(
+                migrated=results.get('migrated', False),
+                applied=results.get('applied', []),
+                errors=results.get('errors', []),
+            ))
+
+        except (SQLAlchemyError, OSError) as e:
+            log.error(f"Failed to migrate database: {e}")
+            return Result.fail(
+                code="DbMigrateError",
+                message=f"Failed to migrate database: {e}",
+                solutions=[
+                    'Run "adare --verbose db migrate" for details',
+                    'Check file system permissions',
+                    'Ensure no other process is using the database'
+                ]
+            )
+
     def clean_install_db(self, force: bool = False) -> Result[DbCleanInstallResult]:
         """
         Perform clean database installation.
@@ -166,6 +201,9 @@ class ManageService:
 
             if database_location.exists():
                 database_location.unlink()
+                # The migration ledger went with the file — forget the cache so
+                # a recreated database gets migrated and stamped again.
+                invalidate_cache()
                 log.info(f'Removed global database: {database_location}')
 
                 return Result.ok(DbResetResult(

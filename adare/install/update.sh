@@ -27,5 +27,8 @@ else
     exit 1
 fi
 
+echo "Applying database schema migrations..."
+uv run adare db migrate
+
 echo "Syncing testfunctions..."
 uv run adare testfunction sync
