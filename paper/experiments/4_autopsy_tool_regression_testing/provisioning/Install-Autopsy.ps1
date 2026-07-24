@@ -140,7 +140,33 @@ foreach ($v in $versions) {
 }
 
 # ---------------------------------------------------------------------------
-# Step 3: summary
+# Step 3: harden the boot against hard power-off
+# ---------------------------------------------------------------------------
+# ADARE force-stops (hard power-off) Windows guests on teardown to avoid
+# triggering Windows Update. A hard-killed Win11 guest otherwise intermittently
+# comes back into "Windows didn't shut down correctly" / automatic Startup
+# Repair, which WAITS FOR INPUT — so the desktop and QEMU Guest Agent never
+# start and the next run dead-waits its readiness budget and fails.
+#
+# Baking these boot-manager policies into the image once makes cold boot off a
+# hard-killed disk deterministic: skip failure detection, never auto-launch the
+# recovery/repair environment. This is a boot policy only (no files/logs added),
+# consistent with the "minimal guest state / no VM remnants" constraint.
+Write-Section "Hardening boot policy (survive hard power-off)"
+foreach ($bcd in @(
+    @('bootstatuspolicy', 'ignoreallfailures'),
+    @('recoveryenabled',  'No')
+)) {
+    $name, $value = $bcd
+    Write-Host "bcdedit /set {default} $name $value"
+    & bcdedit.exe /set '{default}' $name $value
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "bcdedit /set {default} $name $value failed (exit $LASTEXITCODE) — run elevated?"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Step 4: summary
 # ---------------------------------------------------------------------------
 Write-Section "Summary"
 $results | Format-Table -AutoSize Version, Status, Detail | Out-String | Write-Host

@@ -162,6 +162,8 @@ class PlaybookApi(ProjectDatabaseApi):
             result["screenshot"] = config.settings.screenshot
         if hasattr(config.settings, 'continue_on_test_failure'):
             result["continue_on_test_failure"] = config.settings.continue_on_test_failure
+        if getattr(config.settings, 'resolution', None) is not None:
+            result["resolution"] = config.settings.resolution
 
         return result
 
@@ -405,7 +407,8 @@ class PlaybookApi(ProjectDatabaseApi):
             continue_on_test_failure=settings_json.get('continue_on_test_failure', False),
             auto_pull_on_test_failure=settings_json.get('auto_pull_on_test_failure', True),
             collect_system_info=settings_json.get('collect_system_info', True),
-            forensic_logging=settings_json.get('forensic_logging', True)
+            forensic_logging=settings_json.get('forensic_logging', True),
+            resolution=settings_json.get('resolution')
         )
 
     def _json_to_target(self, target_json: dict[str, Any] | None):

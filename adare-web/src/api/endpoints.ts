@@ -39,6 +39,14 @@ export const endpoints = {
   localVms: '/local-vms',
   localVm: (id: string) => `/local-vms/${id}`,
 
+  // VM instances (running VMs) and their snapshots
+  vmInstances: '/vm-instances',
+  vmInstanceUsage: '/vm-instances/usage',
+  vmInstance: (id: string) => `/vm-instances/${id}`,
+  vmInstanceSnapshots: (id: string) => `/vm-instances/${id}/snapshots`,
+  vmInstanceSnapshotDelete: (id: string, name: string) =>
+    `/vm-instances/${id}/snapshots/${encodeURIComponent(name)}`,
+
   // Projects
   projects: '/projects',
   project: (path: string) => `/projects/${path}`,
@@ -66,6 +74,9 @@ export const endpoints = {
   // Runs
   runs: '/runs',
   run: (ulid: string) => `/runs/${ulid}`,
+  runArtifacts: (ulid: string) => `/runs/${ulid}/artifacts`,
+  runArtifact: (ulid: string, path: string) =>
+    `/api/runs/${ulid}/artifacts/${path.split('/').map(encodeURIComponent).join('/')}`,
 
   // Test functions
   testfunctions: '/testfunctions',

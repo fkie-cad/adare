@@ -13,7 +13,11 @@ import { cn } from '@/lib/utils'
 
 interface VmLiveViewProps {
   vmName: string
-  /** `false` (default) enables keyboard/mouse control; `true` starts read-only. */
+  /**
+   * `true` (default) starts read-only — no keyboard/mouse reaches the guest,
+   * matching the forensically non-mutating `adare vm watch` CLI default. Pass
+   * `false` to enable interactive control (the `/vm/watch` pop-out does).
+   */
   viewOnly?: boolean
   className?: string
 }
@@ -28,7 +32,7 @@ interface VmLiveViewProps {
  * captured on the canvas and streamed back on the same socket (unless
  * `viewOnly`). Click into the screen to give it keyboard focus.
  */
-export function VmLiveView({ vmName, viewOnly = false, className }: VmLiveViewProps) {
+export function VmLiveView({ vmName, viewOnly = true, className }: VmLiveViewProps) {
   const { data: spice, isLoading, refetch, isFetching } = useVmSpice(vmName, viewOnly)
 
   const canvasRef = useRef<RemoteDesktopHandle>(null)

@@ -177,6 +177,27 @@ class DevServeMcpRequest:
     output_dir: Path | None = None     # where recordings land (default: project dir)
 
 
+@dataclass
+class DevAuthorPlaybookRequest:
+    """Request to have a vision LLM author a UI-action playbook for a session.
+
+    Mirrors ``author_playbook.py``'s harness: a cloud vision model is shown a
+    screenshot of the session VM and authors a robust ``actions:`` playbook for
+    ``goal``; the harness validates it via ``parse_playbook`` and — when
+    ``replay`` is set — replays it on the live session (serialized) to verify,
+    repairing on failure and picking the best model.
+    """
+    session_id: str
+    goal: str
+    models: list[str] | None = None    # default: author_playbook.DEFAULT_MODELS
+    rounds: int = 3                    # max author/repair rounds per model
+    replay: bool = False               # verify each valid playbook live on the VM
+    os_key: str = 'linux'              # replay OS key (CV/OCR grounding profile)
+    output_file: Path | None = None    # when set, write the best authored YAML here
+    host: str | None = None            # Ollama daemon base URL (default: localhost)
+    read_timeout: float | None = None  # HTTP read timeout for cloud reasoning (s)
+
+
 
 # =============================================================================
 # Response DTOs
@@ -219,6 +240,28 @@ class DevGuiAgentResult:
     playbook_path: str | None = None
     report_path: str | None = None
     video_path: str | None = None
+
+
+@dataclass
+class DevAuthorRoundInfo:
+    """One author/validate/replay round in an authoring run (serializable)."""
+    model: str
+    round: int
+    valid: bool
+    replayed: bool
+    passing: bool
+    error: str | None = None
+
+
+@dataclass
+class DevAuthorPlaybookResult:
+    """Result of an LLM-authored playbook run against a dev session."""
+    success: bool                       # a parseable playbook was produced
+    best_model: str | None
+    best_passing: bool                  # the best playbook also replayed cleanly
+    playbook_yaml: str | None
+    rounds: list[DevAuthorRoundInfo] = field(default_factory=list)
+    output_file: str | None = None      # path the best YAML was written to, if any
 
 
 @dataclass

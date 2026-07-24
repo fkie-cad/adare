@@ -194,6 +194,15 @@ class AbstractTest(SerializerMixin, ProjectBase):
     # Reference to global test function by ID (not FK)
     testfunction_id = Column(String, nullable=False)  # Global test function ID
 
+    # Reproducibility pins captured at experiment-bind time. Record which version
+    # of which testfunction *file* (collection) and which method version/hash the
+    # experiment was created against. Nullable: NULL = pre-versioning (no pin).
+    testfunction_file_name = Column(String, nullable=True)
+    testfunction_file_version = Column(Integer, nullable=True)
+    testfunction_file_sha256 = Column(String, nullable=True)
+    testfunction_version = Column(Integer, nullable=True)
+    testfunction_sha256 = Column(String, nullable=True)
+
     parameters = relationship(TestParameterEntry, secondary=mapping_abstracttest_testparameterentry)
     tools = relationship(Tool, secondary=mapping_abstracttest_tool)
 
@@ -367,6 +376,14 @@ class TestEvent(Event):
     result_id = Column(CHAR(26), ForeignKey('result.id'), nullable=True)
     abstract_test = relationship(AbstractTest, backref=backref("test_events", cascade="all, delete-orphan"))
     result = relationship(Result)
+
+    # What actually executed, stamped at run time. Compared against the AbstractTest
+    # pins to detect drift (current code always runs; drift is logged loudly).
+    testfunction_file_name = Column(String, nullable=True)
+    testfunction_file_version = Column(Integer, nullable=True)
+    testfunction_file_sha256 = Column(String, nullable=True)
+    testfunction_version = Column(Integer, nullable=True)
+    testfunction_sha256 = Column(String, nullable=True)
 
     def __str__(self):
         return str(self.abstract_test.name)
@@ -671,14 +688,20 @@ class ExperimentRun(SerializerMixin, ProjectBase):
 
         # First check for test execution failures and result failures
         # This takes priority over missing tests since failed tests cause early termination
+        saw_warning = False
         for t in self.tests:
             # Check if test execution failed (success=False in Event base class)
             if hasattr(t, 'success') and t.success is False:
                 return StatusEnum.FAILED
 
-            # Check if test result indicates failure
-            if t.result and int(t.result.status_id) != StatusEnum.SUCCESS:
-                return StatusEnum.FAILED
+            # Check if test result indicates failure. WARNING is pass-with-warning:
+            # it must not be treated as a failure (see TestResult.warning).
+            if t.result:
+                status = int(t.result.status_id)
+                if status == StatusEnum.WARNING:
+                    saw_warning = True
+                elif status != StatusEnum.SUCCESS:
+                    return StatusEnum.FAILED
 
         # Only check for missing tests if no tests failed
         # (missing tests are expected when earlier tests failed and stopped execution)
@@ -691,7 +714,8 @@ class ExperimentRun(SerializerMixin, ProjectBase):
             if not found:
                 return StatusEnum.TEST_MISSING
 
-        return StatusEnum.SUCCESS
+        # All tests passed; surface WARNING distinctly (still a passing verdict).
+        return StatusEnum.WARNING if saw_warning else StatusEnum.SUCCESS
 
     @hybrid_property
     def ulid(self):

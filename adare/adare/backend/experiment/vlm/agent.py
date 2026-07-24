@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import hashlib
 import io
 import logging
 import time
@@ -118,6 +117,7 @@ class GuiAgent:
         decision_retry_limit: int = 2,
         repair_client: Any = None,
         progress: Callable[[dict], None] | None = None,
+        restart_vm: Callable[..., Any] | None = None,
     ):
         self.executor = gui_executor
         self.client = client
@@ -160,6 +160,15 @@ class GuiAgent:
         # a SIGINT handler). Checked at each loop boundary; a set flag ends the
         # run via ``_finish`` so the partial playbook / report are finalized.
         self._stop_requested = False
+        # LLM-invokable "restart the VM (optionally with more RAM)" capability,
+        # injected by the session layer (None -> the action is unavailable). See
+        # the RESTART_VM branch in ``_execute`` and the stall nudge in ``run``.
+        self.restart_vm = restart_vm
+        # One-shot stall nudge state: a transient note surfaced to the model when
+        # the screen is persistently unchanged, offering restart_vm before the
+        # run dead-ends. Reset per run()/execute_subgoal() entry and per restart.
+        self._stall_nudged = False
+        self._stall_note: str | None = None
 
         self._steps_dir: Path | None = None
         if self.run_dir:
@@ -203,6 +212,8 @@ class GuiAgent:
                 'Emit "step_done" as soon as THIS sub-goal is satisfied.')
         if self.hints:
             parts.append('HINTS:\n' + '\n'.join(f'- {h}' for h in self.hints))
+        if self._stall_note:
+            parts.append(self._stall_note)
         if self._history:
             recent = self._history[-12:]
             parts.append('ACTIONS SO FAR:\n' + '\n'.join(recent))
@@ -510,6 +521,23 @@ class GuiAgent:
             return 'done'
         if kind == A.STEP_DONE:
             return 'step_done'
+        if kind == A.RESTART_VM:
+            if self.restart_vm is None:
+                # Capability not wired in this context (e.g. non-QEMU / no
+                # session handle); tell the model so it does not keep trying.
+                return 'restart_vm unavailable'
+            # Cold-reboot the VM (optionally at more RAM). The injected callable
+            # rebuilds the domain, reconnects, re-points self.executor at the
+            # fresh VM, resets the recorder's actions, and persists the working
+            # RAM into settings.vm_memory.
+            status = await self.restart_vm(action.memory_mb)
+            # A cold reboot discards all in-VM progress: clear the model-facing
+            # history and stall state so the fresh attempt re-drives the goal
+            # cleanly (the recorder actions were reset inside the callable).
+            self._history.clear()
+            self._stall_nudged = False
+            self._stall_note = None
+            return status
         return 'unknown'
 
     # -- documentation ------------------------------------------------------
@@ -606,85 +634,145 @@ class GuiAgent:
         report.write_text('\n'.join(lines))
         return report
 
+    @staticmethod
+    def _screen_signature(png: bytes) -> tuple[int, ...]:
+        """A small grayscale thumbnail used to detect "the screen isn't changing".
+
+        Byte-for-byte comparison of the raw PNG is defeated by cosmetic noise
+        (a blinking cursor, a clock tick, menu fade) that changes the encoded
+        bytes every step without the screen meaningfully changing, so stalls
+        (e.g. clicking around for a missing app) never trip. Downscaling to a
+        tiny thumbnail and comparing with a tolerance (see
+        :meth:`_screen_changed`) absorbs that noise.
+        """
+        with Image.open(io.BytesIO(png)) as img:
+            # tobytes() on an 'L' image is one byte per pixel in row-major order,
+            # identical to the old getdata() tuple but without Pillow's
+            # getdata() deprecation (removed in Pillow 14).
+            return tuple(img.convert('L').resize((16, 16)).tobytes())
+
+    @staticmethod
+    def _screen_changed(sig: tuple[int, ...], last_sig: tuple[int, ...] | None) -> bool:
+        if last_sig is None:
+            return True
+        diff = sum(abs(a - b) for a, b in zip(sig, last_sig))
+        return diff / (len(sig) * 255) > 0.02  # >2% average pixel delta = real change
+
+    def _maybe_nudge_restart(self, stall: int) -> bool:
+        """On a persistent stall, offer the restart_vm capability once.
+
+        Returns True if a one-shot nudge was surfaced (the caller should keep
+        going and give the model a chance to act), False if the run should
+        dead-end as before (capability unavailable or the nudge already spent).
+        User rejected fixed auto-escalation, so this only *suggests* the action
+        — the LLM decides whether to restart_vm.
+        """
+        if self.restart_vm is None or self._stall_nudged:
+            return False
+        self._stall_nudged = True
+        self._stall_note = (
+            f'NOTE: the screen has not changed for {stall} steps. If the VM or '
+            'the app appears frozen or under-resourced, you may emit '
+            '{"action": "restart_vm", "memory_mb": <int optional>, '
+            '"reason": "..."} to cold-reboot the VM (optionally with more RAM). '
+            'This DISCARDS all in-VM progress and restarts the goal from a clean '
+            'boot, so only do it if you are genuinely stuck. Otherwise, take a '
+            'different action to make progress.'
+        )
+        log.info('Stall (%d steps) — surfacing restart_vm nudge to the model', stall)
+        return True
+
     # -- main loop ----------------------------------------------------------
 
     async def run(self) -> AgentRunResult:
         start = time.monotonic()
-        last_hash: str | None = None
+        last_sig: tuple[int, ...] | None = None
         stall = 0
+        self._stall_nudged = False
+        self._stall_note = None
 
-        for _ in range(self.max_steps):
+        try:
+            for _ in range(self.max_steps):
+                if self._stop_requested:
+                    return self._finish(False, 'interrupted by user')
+                if time.monotonic() - start > self.wall_clock_seconds:
+                    return self._finish(False, 'wall-clock budget exceeded')
+
+                b64, png, width, height = await self._capture()
+
+                sig = self._screen_signature(png)
+                if self._screen_changed(sig, last_sig):
+                    stall = 0
+                    self._stall_note = None
+                else:
+                    stall += 1
+                last_sig = sig
+                if stall >= self.stall_limit:
+                    if self._maybe_nudge_restart(stall):
+                        stall = 0  # give the model room to act on the nudge
+                    else:
+                        return self._finish(
+                            False, f'screen unchanged for {stall} steps (stalled)')
+
+                try:
+                    action = await self._decide(b64, width, height)
+                except VLMError as exc:
+                    log.warning('Decision failed: %s', exc)
+                    return self._finish(False, f'model decision failed: {exc}')
+
+                index = len(self._records) + 1
+
+                # Ground click coordinates before the human sees them and before
+                # execution, so the interactive gate, the click and the recorded
+                # crop all use the same (grounded) coordinate. Best-effort: on a
+                # miss/error the VLM's own point + fixed crop stand.
+                if action.kind in (A.CLICK, A.DOUBLE_CLICK):
+                    self._ground_click(png, action, width, height)
+
+                self._emit_decided(index, action)
+
+                if self.interactive:
+                    self._emit({'type': 'pause'})
+                    choice = await self._confirm_step(action, index)
+                    self._emit({'type': 'resume'})
+                    if choice == 'skip':
+                        note = action.describe or action.summary or action.kind
+                        self._records.append(StepRecord(
+                            index=index, action_kind=action.kind, describe=action.describe,
+                            reasoning=action.reasoning, result_status='skipped',
+                        ))
+                        self._emit_executed(index, 'skipped')
+                        self._history.append(
+                            f'{index}. {action.kind}({action.describe or action.summary}) '
+                            f'-> user skipped: {note}')
+                        await asyncio.sleep(self.step_settle_seconds)
+                        continue
+                    if choice == 'quit':
+                        return self._finish(False, 'stopped by user')
+                    # 'approve' (or 'continue', which also cleared self.interactive)
+                    # falls through to execute + record as normal.
+
+                status = await self._execute(action, png)
+                shot_file = self._persist_step(index, png, action, status)
+                self._emit_executed(index, status, screenshot=shot_file)
+
+                self._records.append(StepRecord(
+                    index=index, action_kind=action.kind, describe=action.describe,
+                    reasoning=action.reasoning, result_status=status, screenshot_file=shot_file,
+                ))
+                self._history.append(
+                    f'{index}. {action.kind}({action.describe or action.summary}) -> {status}')
+
+                if action.kind == A.DONE:
+                    return self._finish(True, 'agent reported done', summary=action.summary)
+
+                await asyncio.sleep(self.step_settle_seconds)
+
+            return self._finish(False, f'reached max steps ({self.max_steps})')
+        except asyncio.CancelledError:
             if self._stop_requested:
                 return self._finish(False, 'interrupted by user')
-            if time.monotonic() - start > self.wall_clock_seconds:
-                return self._finish(False, 'wall-clock budget exceeded')
-
-            b64, png, width, height = await self._capture()
-
-            digest = hashlib.sha256(png).hexdigest()
-            if digest == last_hash:
-                stall += 1
-            else:
-                stall = 0
-            last_hash = digest
-            if stall >= self.stall_limit:
-                return self._finish(False, f'screen unchanged for {stall} steps (stalled)')
-
-            try:
-                action = await self._decide(b64, width, height)
-            except VLMError as exc:
-                log.warning('Decision failed: %s', exc)
-                return self._finish(False, f'model decision failed: {exc}')
-
-            index = len(self._records) + 1
-
-            # Ground click coordinates before the human sees them and before
-            # execution, so the interactive gate, the click and the recorded
-            # crop all use the same (grounded) coordinate. Best-effort: on a
-            # miss/error the VLM's own point + fixed crop stand.
-            if action.kind in (A.CLICK, A.DOUBLE_CLICK):
-                self._ground_click(png, action, width, height)
-
-            self._emit_decided(index, action)
-
-            if self.interactive:
-                self._emit({'type': 'pause'})
-                choice = await self._confirm_step(action, index)
-                self._emit({'type': 'resume'})
-                if choice == 'skip':
-                    note = action.describe or action.summary or action.kind
-                    self._records.append(StepRecord(
-                        index=index, action_kind=action.kind, describe=action.describe,
-                        reasoning=action.reasoning, result_status='skipped',
-                    ))
-                    self._emit_executed(index, 'skipped')
-                    self._history.append(
-                        f'{index}. {action.kind}({action.describe or action.summary}) '
-                        f'-> user skipped: {note}')
-                    await asyncio.sleep(self.step_settle_seconds)
-                    continue
-                if choice == 'quit':
-                    return self._finish(False, 'stopped by user')
-                # 'approve' (or 'continue', which also cleared self.interactive)
-                # falls through to execute + record as normal.
-
-            status = await self._execute(action, png)
-            shot_file = self._persist_step(index, png, action, status)
-            self._emit_executed(index, status, screenshot=shot_file)
-
-            self._records.append(StepRecord(
-                index=index, action_kind=action.kind, describe=action.describe,
-                reasoning=action.reasoning, result_status=status, screenshot_file=shot_file,
-            ))
-            self._history.append(
-                f'{index}. {action.kind}({action.describe or action.summary}) -> {status}')
-
-            if action.kind == A.DONE:
-                return self._finish(True, 'agent reported done', summary=action.summary)
-
-            await asyncio.sleep(self.step_settle_seconds)
-
-        return self._finish(False, f'reached max steps ({self.max_steps})')
+            raise
 
     def _finish(self, success: bool, reason: str, *, summary: str = '') -> AgentRunResult:
         result = AgentRunResult(
@@ -722,8 +810,10 @@ class GuiAgent:
         a reason and lets the orchestrator's checker decide whether to backtrack.
         """
         start = time.monotonic()
-        last_hash: str | None = None
+        last_sig: tuple[int, ...] | None = None
         stall = 0
+        self._stall_nudged = False
+        self._stall_note = None
         prev_subgoal = self._subgoal
         prev_hints = self.hints
         self._subgoal = subgoal
@@ -738,11 +828,18 @@ class GuiAgent:
 
                 b64, png, width, height = await self._capture()
 
-                digest = hashlib.sha256(png).hexdigest()
-                stall = stall + 1 if digest == last_hash else 0
-                last_hash = digest
+                sig = self._screen_signature(png)
+                if self._screen_changed(sig, last_sig):
+                    stall = 0
+                    self._stall_note = None
+                else:
+                    stall += 1
+                last_sig = sig
                 if stall >= stall_limit:
-                    return f'screen unchanged for {stall} steps (stalled)'
+                    if self._maybe_nudge_restart(stall):
+                        stall = 0  # give the model room to act on the nudge
+                    else:
+                        return f'screen unchanged for {stall} steps (stalled)'
 
                 try:
                     action = await self._decide(b64, width, height)
@@ -793,6 +890,10 @@ class GuiAgent:
                 await asyncio.sleep(self.step_settle_seconds)
 
             return f'reached sub-goal step budget ({max_steps})'
+        except asyncio.CancelledError:
+            if self._stop_requested:
+                return 'interrupted by user'
+            raise
         finally:
             self._subgoal = prev_subgoal
             self.hints = prev_hints

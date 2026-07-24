@@ -47,6 +47,20 @@ class OCRProcessor:
             root_logger.setLevel(original_level)
 
             log.info("Converting bytes to numpy array...")
+
+            # Handle SVG format
+            if screenshot_bytes[:200].decode('utf-8', errors='ignore').strip().lower().startswith(('<?xml', '<svg')):
+                try:
+                    import cairosvg
+                    log.info("Detected SVG format, converting to PNG for OCR")
+                    screenshot_bytes = cairosvg.svg2png(bytestring=screenshot_bytes)
+                except ImportError:
+                    raise OCRProcessingError(
+                        "CairoSVG library required for SVG support. Install: pip install cairosvg"
+                    )
+                except Exception as e:
+                    raise OCRProcessingError(f"SVG conversion failed: {e}") from e
+
             nparr = np.frombuffer(screenshot_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 

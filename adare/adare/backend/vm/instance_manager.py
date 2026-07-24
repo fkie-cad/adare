@@ -882,10 +882,15 @@ class VmInstanceManager:
         try:
             from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
 
-            vm = QEMUVMRegistry.get_vm_by_name(instance.instance_name)
-            if not vm:
-                log.warning(f"QEMU VM not found: {instance.instance_name}")
+            # Look before leap: get_vm_by_name() raises the self-logging
+            # VMNotFoundException on a missing config (which would spam ERROR
+            # during boot-retry cleanup of an already-removed attempt), and it
+            # never returns falsy — so probe existence first.
+            if not QEMUVMRegistry.vm_exists(instance.instance_name):
+                log.debug(f"QEMU VM config already gone, nothing to clean up: {instance.instance_name}")
                 return
+
+            vm = QEMUVMRegistry.get_vm_by_name(instance.instance_name)
 
             await vm.destroy()
 

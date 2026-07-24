@@ -28,6 +28,7 @@ defaulting to the main ``VLLM_*`` model, each overridable per role):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
@@ -225,77 +226,90 @@ class PlanningAgent:
 
     async def run(self) -> AgentRunResult:
         """Decompose, then execute/verify each sub-goal with backtrack + replan."""
-        recorder = self.executor.recorder
-        first = await self._screenshot_b64()
-        plan = await self.decompose(self.goal, first)
-        self.plan = plan
+        try:
+            recorder = self.executor.recorder
+            first = await self._screenshot_b64()
+            plan = await self.decompose(self.goal, first)
+            self.plan = plan
 
-        replans = 0
-        i = 0
-        while i < len(plan.steps):
-            sg = plan.steps[i]
-            plan.current = i
-            sg.status = 'active'
+            replans = 0
+            i = 0
+            while i < len(plan.steps):
+                sg = plan.steps[i]
+                plan.current = i
+                sg.status = 'active'
 
-            name = f'plan_sg{i}_{self._ckpt_seq}'
-            self._ckpt_seq += 1
-            await self._checkpoint(name)                       # snapshot BEFORE
-            mark = recorder.mark() if recorder else None
+                name = f'plan_sg{i}_{self._ckpt_seq}'
+                self._ckpt_seq += 1
+                await self._checkpoint(name)                       # snapshot BEFORE
+                mark = recorder.mark() if recorder else None
 
-            attempt = 0
-            outcome = 'abort'
-            while True:
-                context = self._plan_context(plan, i, sg.hint)
-                run_reason = await self.executor.execute_subgoal(
-                    sg.text, context,
-                    max_steps=self.subgoal_max_steps,
-                    stall_limit=self.subgoal_stall_limit,
-                )
-                ok, vreason = await self._verify(sg.success)
-                if ok:
-                    log.info('Sub-goal %d verified: %s', i, sg.text)
-                    sg.status = 'done'
-                    sg.hint = ''
-                    outcome = 'pass'
-                    break
-
-                # Dead end: discard the steps recorded for this attempt and roll
-                # the live VM back to the pre-sub-goal checkpoint before retrying.
-                log.info('Sub-goal %d failed verification (%s); backtracking',
-                         i, vreason or run_reason)
-                if mark is not None:
-                    recorder.rollback(mark)
-                await self._restore(name)
-                attempt += 1
-
-                if attempt <= self.retry_limit:
-                    sg.hint = vreason or run_reason
-                    sg.status = 'active'
-                    continue
-
-                if replans < self.replan_limit:
-                    done = [s.text for s in plan.steps[:i]]
-                    screen = await self._screenshot_b64()
-                    revised = await self.revise(
-                        self.goal, done, screen, vreason or run_reason)
-                    replans += 1
-                    plan.steps[i:] = revised.steps            # keep verified prefix
-                    outcome = 'replan'
-                    break
-
-                sg.status = 'failed'
+                attempt = 0
                 outcome = 'abort'
-                break
+                while True:
+                    context = self._plan_context(plan, i, sg.hint)
+                    run_reason = await self.executor.execute_subgoal(
+                        sg.text, context,
+                        max_steps=self.subgoal_max_steps,
+                        stall_limit=self.subgoal_stall_limit,
+                    )
+                    # Belt-and-suspenders: the cancellation that stops the whole
+                    # run may be delivered slightly after execute_subgoal already
+                    # returned normally (its own except CancelledError caught it
+                    # and returned this string). Stop here rather than falling
+                    # into _verify/backtrack/retry/replan, which would otherwise
+                    # burn more VLM calls on a run the user already asked to end.
+                    if run_reason == 'interrupted by user':
+                        return self._finish(False, 'interrupted by user')
+                    ok, vreason = await self._verify(sg.success)
+                    if ok:
+                        log.info('Sub-goal %d verified: %s', i, sg.text)
+                        sg.status = 'done'
+                        sg.hint = ''
+                        outcome = 'pass'
+                        break
 
-            if outcome == 'pass':
-                i += 1
-                continue
-            if outcome == 'replan':
-                continue                                       # i now = first revised step
-            return self._finish(
-                False,
-                f'could not complete sub-goal {i + 1} ("{sg.text}") after '
-                f'{self.retry_limit} retries and {replans} re-plan(s)')
+                    # Dead end: discard the steps recorded for this attempt and roll
+                    # the live VM back to the pre-sub-goal checkpoint before retrying.
+                    log.info('Sub-goal %d failed verification (%s); backtracking',
+                             i, vreason or run_reason)
+                    if mark is not None:
+                        recorder.rollback(mark)
+                    await self._restore(name)
+                    attempt += 1
 
-        done_txt = '; '.join(s.text for s in plan.steps)
-        return self._finish(True, 'all sub-goals verified', summary=done_txt)
+                    if attempt <= self.retry_limit:
+                        sg.hint = vreason or run_reason
+                        sg.status = 'active'
+                        continue
+
+                    if replans < self.replan_limit:
+                        done = [s.text for s in plan.steps[:i]]
+                        screen = await self._screenshot_b64()
+                        revised = await self.revise(
+                            self.goal, done, screen, vreason or run_reason)
+                        replans += 1
+                        plan.steps[i:] = revised.steps            # keep verified prefix
+                        outcome = 'replan'
+                        break
+
+                    sg.status = 'failed'
+                    outcome = 'abort'
+                    break
+
+                if outcome == 'pass':
+                    i += 1
+                    continue
+                if outcome == 'replan':
+                    continue                                       # i now = first revised step
+                return self._finish(
+                    False,
+                    f'could not complete sub-goal {i + 1} ("{sg.text}") after '
+                    f'{self.retry_limit} retries and {replans} re-plan(s)')
+
+            done_txt = '; '.join(s.text for s in plan.steps)
+            return self._finish(True, 'all sub-goals verified', summary=done_txt)
+        except asyncio.CancelledError:
+            if self.executor._stop_requested:
+                return self._finish(False, 'interrupted by user')
+            raise

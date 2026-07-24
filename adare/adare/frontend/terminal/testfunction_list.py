@@ -35,6 +35,7 @@ class TestfunctionListPanel:
             table.add_column("file", justify="left", style="cyan", no_wrap=True)
 
         table.add_column("testfunction", justify="left", style="cyan", no_wrap=True)
+        table.add_column("version", justify="left", style="cyan", no_wrap=True)
         table.add_column("description", justify="left", style="cyan", no_wrap=True)
         table.add_column("#parameters", justify="left", style="cyan", no_wrap=True)
 
@@ -67,8 +68,12 @@ class TestfunctionListPanel:
                     file_name = 'unknown'
                 row_data.append(file_name)
 
+            version = str(row['version']) if 'version' in row and str(row['version']) not in ('', 'None', 'nan') else '1'
+            if 'is_current' in row and str(row['is_current']) in ('False', '0', 'false'):
+                version = f'{version} (removed)'
             row_data.extend([
                 display_name,
+                f'v{version}',
                 row['description'],
                 str(row['num_parameters']),
             ])

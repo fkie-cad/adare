@@ -197,6 +197,21 @@ class ForensicReporter:
                 if hasattr(event.abstract_test, 'testfunction') and event.abstract_test.testfunction:
                     result_details['testfunction'] = event.abstract_test.testfunction.dotnotation
 
+                # Executed testfunction file + version stamped at run time, plus a
+                # drift flag vs the version the experiment was created against.
+                if getattr(event, 'testfunction_file_name', None):
+                    result_details['testfunction_file'] = event.testfunction_file_name
+                    result_details['testfunction_file_version'] = event.testfunction_file_version
+                    if event.testfunction_version is not None:
+                        result_details['testfunction_version'] = event.testfunction_version
+                    pinned_fv = getattr(event.abstract_test, 'testfunction_file_version', None)
+                    if pinned_fv is not None:
+                        result_details['testfunction_drift'] = (
+                            pinned_fv != event.testfunction_file_version
+                            or event.abstract_test.testfunction_file_sha256 != event.testfunction_file_sha256
+                            or event.abstract_test.testfunction_version != event.testfunction_version
+                        )
+
                 # Extract test parameters
                 if hasattr(event.abstract_test, 'parameters') and event.abstract_test.parameters:
                     parameters = {}

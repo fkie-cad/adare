@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
 from contextlib import nullcontext, suppress
 from pathlib import Path
@@ -146,6 +147,7 @@ class GuiAgentMixin:
             VLLM_BASE_URL,
             VLLM_COORD_SPACE,
             VLLM_MODEL,
+            VLLM_TIMEOUT,
         )
 
         session = await self._manager.get_or_restore_session(request.session_id)
@@ -160,7 +162,10 @@ class GuiAgentMixin:
                 f"Dev session '{request.session_id}' has no running VM"
             )
 
-        client = VLMClient(base_url=VLLM_BASE_URL, model=VLLM_MODEL, api_key=VLLM_API_KEY)
+        client = VLMClient(
+            base_url=VLLM_BASE_URL, model=VLLM_MODEL, api_key=VLLM_API_KEY,
+            timeout=VLLM_TIMEOUT,
+        )
         executor = QEMUHostGUIExecutor(vm=vm)
 
         # Optional cheaper model for text-only JSON-repair of malformed
@@ -169,10 +174,18 @@ class GuiAgentMixin:
         repair_client = None
         if AGENT_REPAIR_MODEL:
             repair_client = VLMClient(
-                base_url=VLLM_BASE_URL, model=AGENT_REPAIR_MODEL, api_key=VLLM_API_KEY)
+                base_url=VLLM_BASE_URL, model=AGENT_REPAIR_MODEL, api_key=VLLM_API_KEY,
+                timeout=VLLM_TIMEOUT)
             log.info('Decision-repair model enabled: %s', AGENT_REPAIR_MODEL)
 
         recorder, run_dir = self._setup_recorder(request, ctx, PlaybookRecorder)
+        # Persist the RAM this run boots at into the recorded playbook's
+        # settings, so a successful run's playbook replays at a size known to
+        # work (restart_vm bumps this value if the model resizes mid-run).
+        if recorder is not None and ctx and getattr(ctx, 'config', None):
+            working_mb = getattr(ctx.config, 'vm_memory', None)
+            if working_mb:
+                recorder.set_vm_memory(working_mb)
 
         # Observability / capture. Progress defaults to the config value for
         # non-CLI callers (the CLI already resolves a TTY-aware default); video
@@ -199,6 +212,27 @@ class GuiAgentMixin:
         # Element grounding (attach / auto-start / off) — see :meth:`_setup_grounding`.
         locate_client, locate_manager = self._setup_grounding(request, run_dir)
 
+        # LLM-invokable "restart the VM (optionally with more RAM)" capability.
+        # The VLM package never imports the devmode session, so this is injected
+        # as a closure over the live ``session`` (mirroring the checkpoint /
+        # restore / verify injection in ``_run_planning_agent``). After the cold
+        # reboot the host executor is re-pointed at the rebuilt domain and the
+        # recorder's actions are reset (keeping the persisted vm_memory).
+        async def restart_vm(memory_mb: int | None = None) -> str:
+            from adare.backend.experiment.vlm.exceptions import AgentError
+            res = await session.restart_with_memory(memory_mb)
+            if not res.success:
+                reason = res.error.message if res.error else 'unknown error'
+                raise AgentError(f'Could not restart VM with more memory: {reason}')
+            agent.executor = QEMUHostGUIExecutor(vm=session.experiment_ctx.vm)
+            working_mb = getattr(session.experiment_ctx.config, 'vm_memory', memory_mb)
+            if recorder is not None:
+                recorder.reset_recorded_actions()
+                if working_mb:
+                    recorder.set_vm_memory(working_mb)
+            log.info('restart_vm: VM back up at %s MB', working_mb)
+            return f'VM restarted at {working_mb} MB'
+
         agent = GuiAgent(
             executor, client, request.goal,
             recorder=recorder, run_dir=run_dir, coord_space=VLLM_COORD_SPACE,
@@ -212,6 +246,7 @@ class GuiAgentMixin:
             interactive=request.interactive,
             decision_retry_limit=GUI_AGENT_DECISION_RETRIES,
             repair_client=repair_client,
+            restart_vm=restart_vm,
         )
 
         # Live per-step display (rich table + reasoning panel). Wired as an
@@ -239,14 +274,36 @@ class GuiAgentMixin:
             video_recorder = QemuVideoRecorder(
                 vm, run_dir / 'run.mp4', fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
 
-        # Cooperative graceful Ctrl-C: SIGINT flips the agent's stop flag so the
-        # run finalizes the partial playbook/report and the finally still tears
-        # down video + grounding. The VM is left running (DB-restorable), so the
-        # same session can be driven from another `adare dev …` command.
+        # Cooperative graceful Ctrl-C: SIGINT flips the agent's stop flag AND
+        # cancels the in-flight run task, so a step blocked on a slow VLM call,
+        # screenshot capture or grounding request is interrupted immediately
+        # instead of only being noticed at the next loop-top check. The agent
+        # classes swallow their own cancellation (see GuiAgent/PlanningAgent
+        # ``run``/``execute_subgoal``) and finalize the partial playbook/report
+        # as usual; the finally below still tears down video + grounding. The
+        # VM is left running (DB-restorable), so the same session can be driven
+        # from another `adare dev …` command. A second Ctrl-C force-exits in
+        # case cleanup itself is stuck (e.g. grounding server not acknowledging
+        # SIGTERM, ffmpeg not exiting).
         loop = asyncio.get_running_loop()
+        main_task = asyncio.current_task()
+        sigint_count = 0
         sigint_installed = False
+
+        def _on_sigint():
+            nonlocal sigint_count
+            sigint_count += 1
+            agent.request_stop()
+            if sigint_count == 1:
+                print('\nInterrupting — finishing the current step and saving the '
+                      'playbook/report ...')
+                main_task.cancel()
+            else:
+                print('\nForced exit (cleanup was still in progress).')
+                os._exit(130)
+
         try:
-            loop.add_signal_handler(signal.SIGINT, agent.request_stop)
+            loop.add_signal_handler(signal.SIGINT, _on_sigint)
             sigint_installed = True
         except (NotImplementedError, RuntimeError, ValueError) as exc:
             log.debug('Could not install SIGINT handler (%s); Ctrl-C will not finalize', exc)
@@ -264,11 +321,13 @@ class GuiAgentMixin:
                         planner_client=VLMClient(
                             base_url=AGENT_PLANNER_BASE_URL or VLLM_BASE_URL,
                             model=AGENT_PLANNER_MODEL or VLLM_MODEL,
-                            api_key=AGENT_PLANNER_API_KEY or VLLM_API_KEY),
+                            api_key=AGENT_PLANNER_API_KEY or VLLM_API_KEY,
+                            timeout=VLLM_TIMEOUT),
                         checker_client=VLMClient(
                             base_url=AGENT_CHECKER_BASE_URL or VLLM_BASE_URL,
                             model=AGENT_CHECKER_MODEL or VLLM_MODEL,
-                            api_key=AGENT_CHECKER_API_KEY or VLLM_API_KEY),
+                            api_key=AGENT_CHECKER_API_KEY or VLLM_API_KEY,
+                            timeout=VLLM_TIMEOUT),
                         run_acceptance_checks=run_acceptance_checks,
                         planning_agent_cls=PlanningAgent,
                         host_executor_cls=QEMUHostGUIExecutor,

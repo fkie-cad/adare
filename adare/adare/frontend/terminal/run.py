@@ -92,6 +92,15 @@ class ExperimentRunTestsPanel:
                     title_right=f'[b {color}]{test_data["result_status_name"]}[/b {color}]',
                 ),
             )
+            # Show which testfunction file version actually executed, flagging drift
+            # from the version the experiment was created against.
+            executed_file = test_data.get('testfunction_file')
+            executed_fv = test_data.get('testfunction_file_version')
+            if executed_file and executed_fv is not None:
+                used_line = f':package: [b]used[/b] {executed_file} @ v{executed_fv}'
+                if test_data.get('testfunction_drift'):
+                    used_line += ' [b yellow]⚠ drifted from pinned version (ran current code)[/b yellow]'
+                grid.add_row(used_line)
             # Add parameters section
             grid.add_row(':gear: [b]parameters[/b]:')
             for parameter in test_data['parameters']:

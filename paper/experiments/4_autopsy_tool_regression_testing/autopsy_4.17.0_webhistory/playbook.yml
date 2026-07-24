@@ -710,7 +710,7 @@ actions:
   description: Wait for report generation to complete
 - command:
     command: r"Get-Item "{{ case_directory | win_path }}\Reports\*\Excel.xlsx" | Copy-Item
-      -Destination "{{ adare_shared_data | win_path }}\Report_{{ autopsy_version }}.xlsx""
+      -Destination "{{ adare_run_dir | win_path }}\artifacts\Report_{{ autopsy_version }}.xlsx""
     shell: true
 - test: test_report_file_exists
 - test: test_sheet_summary_exists

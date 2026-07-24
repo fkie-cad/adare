@@ -8,10 +8,63 @@ import asyncio
 
 # configure logging
 import logging
-import os
 import threading
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Windows-aarch64 guest display resolution
+# ---------------------------------------------------------------------------
+
+def _build_windows_set_resolution_command(width: int, height: int) -> str:
+    """Build a PowerShell command that sets the console-session display resolution.
+
+    Calls ChangeDisplaySettings (GDI) via P/Invoke. This MUST run in the interactive
+    console session (via run_command(run_as_user=True) -> schtasks /IT); in the
+    non-interactive QGA/session-0 context it is a silent no-op.
+
+    The script is base64-encoded (UTF-16LE, the -EncodedCommand format) and returned
+    as ``powershell.exe ... -EncodedCommand <b64>``. The base64 alphabet contains no
+    single quotes, so the command survives the run_as_user wrapper that embeds it as a
+    single-quoted string before writing it to the guest .ps1 launcher.
+    """
+    import base64
+
+    ps = (
+        'Add-Type @"\n'
+        'using System;\n'
+        'using System.Runtime.InteropServices;\n'
+        'public class AdareDisp {\n'
+        '  [DllImport("user32.dll")]\n'
+        '  public static extern int ChangeDisplaySettings(ref DEVMODE dm, int flags);\n'
+        '  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Ansi)]\n'
+        '  public struct DEVMODE {\n'
+        '    [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string dmDeviceName;\n'
+        '    public ushort dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;\n'
+        '    public uint dmFields;\n'
+        '    public int dmPositionX, dmPositionY;\n'
+        '    public uint dmDisplayOrientation, dmDisplayFixedOutput;\n'
+        '    public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;\n'
+        '    [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string dmFormName;\n'
+        '    public ushort dmLogPixels;\n'
+        '    public uint dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency,\n'
+        '      dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2,\n'
+        '      dmPanningWidth, dmPanningHeight;\n'
+        '  }\n'
+        '}\n'
+        '"@\n'
+        '$dm = New-Object AdareDisp+DEVMODE\n'
+        '$dm.dmSize = [System.Runtime.InteropServices.Marshal]::SizeOf($dm)\n'
+        f'$dm.dmPelsWidth = {int(width)}\n'
+        f'$dm.dmPelsHeight = {int(height)}\n'
+        '$dm.dmFields = 0x80000 -bor 0x100000\n'  # DM_PELSWIDTH | DM_PELSHEIGHT
+        '$r = [AdareDisp]::ChangeDisplaySettings([ref]$dm, 0)\n'
+        'if ($r -ne 0) { [Console]::Error.WriteLine("ChangeDisplaySettings failed: " + $r); exit 1 }\n'
+        'exit 0\n'
+    )
+    b64 = base64.b64encode(ps.encode('utf-16-le')).decode('ascii')
+    return f'powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand {b64}'
 
 
 # ---------------------------------------------------------------------------
@@ -301,14 +354,14 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
         )
     log.info("Guest agent verification successful")
 
-    # EXPERIMENTAL (env-gated, paired with ADARE_TEST_GPU_PCI): with the PCI
-    # virtio-gpu the DOD driver honours Windows monitor power-off — the screen
-    # blanks during the idle agent-install window and the scanout is torn down,
-    # so QMP screendumps come back "Display output is not active". Disable the
-    # monitor sleep timeout up-front (before that idle window) so the display
-    # stays scanned out. The old ramfb framebuffer never blanked, so this was
-    # not needed there.
-    if context.guest_platform == 'windows' and os.environ.get('ADARE_TEST_GPU_PCI'):
+    # Windows-aarch64 baked runs now default to the PCI virtio-gpu (see
+    # libvirt_xml_builder._add_qemu_commandline), whose DOD driver honours Windows
+    # monitor power-off — the screen blanks during the idle agent-install window and
+    # the scanout is torn down, so QMP screendumps come back "Display output is not
+    # active". Disable the monitor sleep timeout up-front (before that idle window)
+    # so the display stays scanned out. The old ramfb framebuffer never blanked, so
+    # this is scoped to Windows-aarch64.
+    if context.guest_platform == 'windows' and getattr(context.vm, 'architecture', '') in ('aarch64', 'arm64'):
         log.info("Disabling guest monitor sleep (PCI virtio-gpu keep-awake)")
         powercfg = (
             'powercfg /change monitor-timeout-ac 0; '
@@ -322,6 +375,33 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
         await vm.run_command(
             powercfg, stop_event=stop_event, admin=True, run_as_user=True,
         )
+
+    # Guest display resolution (Windows-aarch64). The virtio-gpu EDID advertised at
+    # boot (libvirt_xml_builder emits virtio-gpu-pci edid=on,xres/yres) is NOT honoured
+    # by viogpudo, which comes up at its 1024x768 default. The only mechanism that
+    # applies the configured resolution headlessly — no VNC, no SPICE-vdagent, no host
+    # display event, no reboot — is a guest-side ChangeDisplaySettings (GDI) call run in
+    # the INTERACTIVE console session (session 1). Run in the plain QGA session (session
+    # 0) it is a silent no-op — which is exactly why the earlier ChangeDisplaySettingsEx
+    # attempt failed — so it must go through run_as_user (schtasks /IT). Verified live on
+    # a fresh Win-ARM64 VM: 1024x768 -> 1920x1080, guest desktop and host scanout both
+    # active with real content. Best-effort: non-fatal on failure.
+    if context.guest_platform == 'windows' and getattr(context.vm, 'architecture', '') in ('aarch64', 'arm64'):
+        rx = getattr(context.vm.config, 'resolution_x', 1920)
+        ry = getattr(context.vm.config, 'resolution_y', 1080)
+        log.info(f"Setting guest display resolution to {rx}x{ry} (console-session ChangeDisplaySettings)")
+        try:
+            result = await vm.run_command(
+                _build_windows_set_resolution_command(rx, ry),
+                stop_event=stop_event, admin=True, run_as_user=True,
+            )
+            if result.returncode != 0:
+                log.warning(
+                    "Set-resolution command returned %s (non-fatal): %s",
+                    result.returncode, result.stderr,
+                )
+        except (OSError, TimeoutError, RuntimeError) as e:
+            log.warning(f"Failed to set guest resolution (non-fatal): {e}")
 
     # Linux (QEMU) counterpart to the Windows keep-awake above. The Ubuntu envs
     # bake idle-delay=0 + screensaver-off (autoinstall_ubuntu_rolling.yaml), but NOT

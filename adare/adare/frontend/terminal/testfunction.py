@@ -55,6 +55,10 @@ class TestfunctionPanel:
 
     def __rich__(self) -> Panel:
         title = f'[b gold3]{self.testfunction_name}[/b gold3]'
+        if 'version' in self.testfunction.columns and not self.testfunction.empty:
+            version = self.testfunction['version'].values[0]
+            if version is not None and str(version) not in ('', 'None', 'nan'):
+                title += f' [dim]v{version}[/dim]'
         layout = Layout(name="testfunction")
         layout.split_row(
             Layout(name="description", ratio=1),
@@ -81,6 +85,7 @@ def print_testfunction(dotnotation: str = None, testfunction_id: str = None, for
             structured_data = {
                 'dotnotation': dotnotation,
                 'id': testfunction_id,
+                'version': testfunction['version'].values[0] if ('version' in testfunction.columns and not testfunction.empty) else None,
                 'description': testfunction['description'].values[0] if not testfunction.empty else None,
                 'parameters': parameters.to_dict('records') if not parameters.empty else []
             }

@@ -11,6 +11,7 @@ Supported transfer modes (chosen automatically):
 - QGA: QEMU Guest Agent file operations (macOS fallback)
 """
 import logging
+import os
 import platform
 import shutil
 import subprocess
@@ -20,7 +21,7 @@ from pathlib import Path
 from adare.config import get_vm_credentials
 from adare.exceptions import LoggedException
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
-from adare.hypervisor.exceptions import HypervisorException
+from adare.hypervisor.exceptions import GuestAgentTimeoutException, HypervisorException
 from adare.hypervisor.qemu.disk_diff import DiskDiffComparator
 from adare.hypervisor.qemu.file_transfer import get_file_transfer_strategy
 from adare.hypervisor.qemu.guestfish_client import GuestfishClient
@@ -126,6 +127,18 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         source_vm_path = Path(source_vm.file)
 
+        # Load environment metadata for hypervisor config
+        from adare.types.environment import parse_environment_file
+
+        environment_metadata = None
+        if context.environment_file and context.environment_file.exists():
+            try:
+                environment_metadata = parse_environment_file(context.environment_file)
+                log.debug("Loaded environment metadata for hypervisor config")
+            except (LoggedException, OSError, ValueError, KeyError, TypeError) as e:
+                log.warning(f"Could not load environment metadata: {e}")
+                # Continue without hypervisor config (will use auto-detection)
+
         # Determine if this is an external VM (--no-copy mode)
         is_external = not _is_vm_managed(source_vm_path)
 
@@ -202,7 +215,9 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             machine=vm_machine,
             accel=vm_accel,
             disk_path=disk_path,
-            architecture=vm_architecture
+            architecture=vm_architecture,
+            resolution=context.config.vm_display_resolution,
+            hypervisor_config=environment_metadata.hypervisor_config if environment_metadata else None,
         )
         log.debug(f"Created QEMU VM instance: {context.vm_name}")
 
@@ -377,9 +392,84 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         log.info(f'Added port forwarding for websocket server: host:{context.config.websocket_port} -> guest:18765')
 
 
+    @staticmethod
+    def _boot_attempts() -> int:
+        """Number of cold-boot attempts before giving up (ADARE_VM_BOOT_ATTEMPTS, default 3).
+
+        Windows cold boot off a hard-killed image hangs ~independently ~45% of the
+        time; retrying converts that to ~0.45**n (3 → ~9%, 4 → ~4%).
+        """
+        try:
+            return max(1, int(os.environ.get('ADARE_VM_BOOT_ATTEMPTS', '3')))
+        except ValueError:
+            return 3
+
+    @staticmethod
+    def _ready_timeout() -> int:
+        """Per-attempt guest-agent readiness budget (ADARE_VM_READY_TIMEOUT, default 90s).
+
+        A genuine success always reaches QGA well under this; a hang never does.
+        Kept far below the historical 360s so a failed attempt is abandoned fast
+        (~90s) rather than dead-waiting the full budget.
+        """
+        try:
+            return max(30, int(os.environ.get('ADARE_VM_READY_TIMEOUT', '90')))
+        except ValueError:
+            return 90
+
+    async def _reset_vm_for_boot_retry(self, context):
+        """Return the VM to a clean, independent cold-boot state between boot attempts.
+
+        A hard-killed / hung Windows guest can leave the overlay filesystem in a
+        'dirty' state that deterministically re-triggers the same boot hang, so a
+        naive reboot of the same overlay would just hang again. To make each retry
+        an INDEPENDENT trial we:
+          1. force-destroy the (hung) running domain — it stays defined; start()
+             redefines it, and the domain-redefine path keeps the NVRAM file,
+          2. discard the dirtied overlay,
+          3. recreate a fresh overlay from the immutable base,
+          4. re-run any pre-boot file transfer (re-injects for libguestfs;
+             cheap / no-op for QGA and virtiofs).
+
+        NVRAM (UEFI vars, incl. the aarch64 shell-boot entry) is intentionally
+        preserved — the boot-hang state lives in the guest filesystem, not UEFI.
+        """
+        vm = context.vm
+
+        # 1. Hard power-off. Keep the domain defined; start() will redefine it.
+        try:
+            await vm.stop(force=True, silent=True)
+        except (HypervisorException, OSError) as e:
+            log.warning(f"Force-stop during boot-retry teardown failed (continuing): {e}")
+
+        # 2/3. Discard the dirtied overlay and recreate a clean one from base.
+        experiment_id = context.experiment_run_ulid or 'default'
+        try:
+            await vm.cleanup_overlay_disk(experiment_id)
+            overlay_path = await vm.create_overlay_disk(experiment_id)
+            vm.config.disk_path = overlay_path
+            log.info(f"Recreated fresh overlay for boot retry: {overlay_path}")
+        except HypervisorException as e:
+            log.warning(f"Could not recreate overlay for boot retry (booting existing overlay): {e}")
+
+        # 4. Re-run pre-boot file transfer so the fresh overlay carries any injected files.
+        try:
+            await self.file_transfer.setup(context)
+        except (HypervisorException, OSError) as e:
+            log.warning(f"Re-running pre-boot file transfer during boot retry failed (continuing): {e}")
+
     async def start_and_initialize_vm(self, context):
         """
         Start QEMU VM via libvirt and perform post-boot file transfer.
+
+        Cold boot of a heavy Windows image off a hard-killed base hangs
+        (guest agent never appears) ~independently ~45% of the time. To make
+        an unattended sweep reliable, Stage 1 (start) + Stage 2 (guest-agent
+        readiness) are wrapped in a bounded retry loop with a SHORT per-attempt
+        readiness budget: a real success lands well within it, a hang is
+        abandoned fast, and each retry is torn down to an independent cold boot
+        (see ``_reset_vm_for_boot_retry``) instead of rebooting the same
+        dirtied overlay.
 
         After VM boot and guest agent readiness, delegates to the
         FileTransferStrategy for any post-boot actions (mounting
@@ -388,37 +478,63 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         Args:
             context: ExperimentRunCtx containing VM
         """
+        from adare.backend.experiment.execution.base import GUIExecutionMode
+        from adare.backend.experiment.execution.gui_executor_factory import resolve_gui_execution_mode
         from adare.backend.experiment.stagectxmanager import StageCtxManager
         from adare.types.stages import VMGuestAgentWaitStage, VMStartStage
 
-        # Stage 1: Start VM
-        with StageCtxManager(
-            VMStartStage(),
-            context.experiment_run_ulid,
-            context.user_interrupt_event
-        ) as start_stage:
-            log.info(f"Starting VM '{context.vm.vm_name}' via libvirt")
-            await context.vm.start(stop_event=context.user_interrupt_event, stage_ctx=start_stage)
-            log.debug("VM visible in virt-manager (use 'Open' button to access display)")
+        max_attempts = self._boot_attempts()
+        ready_timeout = self._ready_timeout()
 
-        # Stage 2: Wait for guest agent
-        with StageCtxManager(
-            VMGuestAgentWaitStage(),
-            context.experiment_run_ulid,
-            context.user_interrupt_event
-        ):
-            from adare.backend.experiment.execution.base import GUIExecutionMode
-            from adare.backend.experiment.execution.gui_executor_factory import resolve_gui_execution_mode
-            playbook_settings = context.playbook.settings if context.playbook and hasattr(context.playbook, 'settings') else None
-            gui_mode = resolve_gui_execution_mode(context.vm, playbook_settings)
-            skip_x11 = (gui_mode == GUIExecutionMode.HOST)
+        playbook_settings = context.playbook.settings if context.playbook and hasattr(context.playbook, 'settings') else None
+        gui_mode = resolve_gui_execution_mode(context.vm, playbook_settings)
+        skip_x11 = (gui_mode == GUIExecutionMode.HOST)
 
-            log.info('Waiting until VM is ready (QEMU Guest Agent)')
-            start_wait = time.time()
-            if not await context.vm.wait_until_fully_booted(timeout=360, stop_event=context.user_interrupt_event, skip_x11_discovery=skip_x11):
-                raise LoggedException(log, 'VM did not become ready in time')
-            elapsed = time.time() - start_wait
-            log.info(f'VM is ready (waited {elapsed:.1f}s)')
+        for attempt in range(1, max_attempts + 1):
+            if context.user_interrupt_event and context.user_interrupt_event.is_set():
+                raise LoggedException(log, 'VM boot cancelled by user')
+
+            # Between attempts: tear down to a clean, independent cold-boot state.
+            if attempt > 1:
+                log.warning(
+                    f"Boot attempt {attempt - 1}/{max_attempts} did not reach the guest "
+                    f"agent in {ready_timeout}s; tearing down and retrying "
+                    f"(attempt {attempt}/{max_attempts})"
+                )
+                await self._reset_vm_for_boot_retry(context)
+
+            # Stage 1: Start VM
+            with StageCtxManager(
+                VMStartStage(),
+                context.experiment_run_ulid,
+                context.user_interrupt_event
+            ) as start_stage:
+                log.info(f"Starting VM '{context.vm.vm_name}' via libvirt (attempt {attempt}/{max_attempts})")
+                await context.vm.start(stop_event=context.user_interrupt_event, stage_ctx=start_stage)
+                log.debug("VM visible in virt-manager (use 'Open' button to access display)")
+
+            # Stage 2: Wait for guest agent
+            with StageCtxManager(
+                VMGuestAgentWaitStage(),
+                context.experiment_run_ulid,
+                context.user_interrupt_event
+            ):
+                log.info(f'Waiting until VM is ready (QEMU Guest Agent), budget {ready_timeout}s')
+                start_wait = time.time()
+                ready = await context.vm.wait_until_fully_booted(
+                    timeout=ready_timeout,
+                    stop_event=context.user_interrupt_event,
+                    skip_x11_discovery=skip_x11
+                )
+                elapsed = time.time() - start_wait
+
+            if ready:
+                log.info(f'VM is ready (waited {elapsed:.1f}s, attempt {attempt}/{max_attempts})')
+                break
+        else:
+            raise GuestAgentTimeoutException(
+                context.vm.vm_name, max_attempts * ready_timeout
+            )
 
         # Stage 3: Post-boot file transfer (only if strategy needs it)
         if self.file_transfer.has_post_boot_transfer:

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from adare.config import DEFAULT_RESOLUTION_WH
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.models import QEMUVMConfig
-from adare.hypervisor.qemu.utilities.disk_utils import get_boot_mode_for_os
+from adare.hypervisor.qemu.utilities.disk_utils import get_boot_mode_for_os, resolve_boot_mode
 
 if TYPE_CHECKING:
     from adare.hypervisor.qemu.vm import QEMUVM
@@ -266,7 +266,7 @@ class ConfigurationMixin:
             # Validate and sync guest_os, architecture, and boot_mode from current environment
             # This fixes stale configs that may have incorrect values
             current_arch = getattr(self, 'architecture', 'x86_64')
-            expected_boot_mode = get_boot_mode_for_os(self.guest_os, current_arch)
+            expected_boot_mode = resolve_boot_mode(self.guest_os, self._hypervisor_config, current_arch)
             config_updated = False
 
             if config.guest_os != self.guest_os:
@@ -338,9 +338,9 @@ class ConfigurationMixin:
             if len(path) > 107:
                 raise ValueError(f"{name} socket path too long ({len(path)} > 107 chars): {path}")
 
-        # Determine boot mode based on guest OS and architecture
+        # Determine boot mode: environment YAML override, else architecture-aware auto-detection
         current_arch = getattr(self, 'architecture', 'x86_64')
-        boot_mode = get_boot_mode_for_os(self.guest_os, current_arch)
+        boot_mode = resolve_boot_mode(self.guest_os, self._hypervisor_config, current_arch)
 
         # Windows VMs need more resources for proper operation
         # Use higher defaults if the current values are the standard defaults

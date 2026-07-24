@@ -51,6 +51,28 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
 
 
+def _playbook_settings_memory(project_path: Path, experiment_name: str) -> int | None:
+    """Read ``settings.vm_memory`` (MB) from the experiment playbook, if any.
+
+    Best-effort: returns None when the playbook is absent, unparseable, or the
+    field is unset. The playbook is parsed authoritatively later during setup,
+    so a parse error here is not fatal — we simply fall through to defaults.
+    """
+    try:
+        from adare.backend.experiment.directory import ExperimentDirectory
+        from adare.types.playbook import parse_playbook
+
+        exp_dir = ExperimentDirectory(project_path, experiment_name)
+        if not exp_dir.playbookfile.exists():
+            return None
+        playbook = parse_playbook(exp_dir.playbookfile)
+    except (FileNotFoundError, OSError, ValueError, KeyError, TypeError) as e:
+        log.warning(f"Could not read settings.vm_memory from playbook: {e}")
+        return None
+    settings = getattr(playbook, 'settings', None)
+    return getattr(settings, 'vm_memory', None) if settings else None
+
+
 def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_success: bool) -> tuple[bool, dict]:
     """Resolve the success verdict for an experiment run.
 
@@ -89,7 +111,8 @@ def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_succe
     if is_smoke_run:
         success = bool(execution_success)
     else:
-        success = result_status == StatusEnum.SUCCESS
+        # WARNING is pass-with-warning: a passing verdict, reported distinctly.
+        success = result_status in (StatusEnum.SUCCESS, StatusEnum.WARNING)
 
     diagnostics = {
         "verdict": "SUCCESS" if success else "FAILED",
@@ -136,29 +159,45 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             environment_metadata = parse_environment_file(environment_file)
             guest_platform = environment_metadata.os.platform
 
-            # Set platform-specific defaults if not overridden by CLI
-            if vm_memory is None:
-                if 'windows' in guest_platform.lower():
+            # Memory precedence: CLI override > playbook settings.vm_memory >
+            # platform default. settings.vm_memory carries a RAM size a prior
+            # run recorded as working, so replays boot there without rediscovery.
+            if vm_memory is not None:
+                config.vm_memory = vm_memory
+                log.info(f"Using custom VM memory: {vm_memory}MB")
+            else:
+                settings_memory = _playbook_settings_memory(project_path, experiment_name)
+                if settings_memory:
+                    config.vm_memory = settings_memory
+                    log.info(f"Using playbook settings.vm_memory: {settings_memory}MB")
+                elif 'windows' in guest_platform.lower():
                     config.vm_memory = 8192  # 8GB for Windows
                     log.info("Using Windows default VM memory: 8192MB")
                 else:
                     config.vm_memory = 4096  # 4GB for Linux
                     log.info("Using Linux default VM memory: 4096MB")
-            else:
-                config.vm_memory = vm_memory
-                log.info(f"Using custom VM memory: {vm_memory}MB")
         else:
-            # Fallback: apply CLI override or keep default
+            # Fallback: CLI override > playbook settings > keep default
             if vm_memory is not None:
                 config.vm_memory = vm_memory
                 log.info(f"Using custom VM memory: {vm_memory}MB")
+            else:
+                settings_memory = _playbook_settings_memory(project_path, experiment_name)
+                if settings_memory:
+                    config.vm_memory = settings_memory
+                    log.info(f"Using playbook settings.vm_memory: {settings_memory}MB")
     except (FileNotFoundError, OSError) as e:
         # Only catch file system related errors, not environment validation errors
         log.warning(f"Could not determine guest platform for memory defaults: {e}")
-        # Fallback: apply CLI override or keep default
+        # Fallback: CLI override > playbook settings > keep default
         if vm_memory is not None:
             config.vm_memory = vm_memory
             log.info(f"Using custom VM memory: {vm_memory}MB")
+        else:
+            settings_memory = _playbook_settings_memory(project_path, experiment_name)
+            if settings_memory:
+                config.vm_memory = settings_memory
+                log.info(f"Using playbook settings.vm_memory: {settings_memory}MB")
 
     # Override VM CPU settings if provided via CLI
     if vm_cpus is not None:

@@ -48,6 +48,23 @@ export function useRun(ulid: string) {
   })
 }
 
+export interface RunArtifact {
+  path: string
+  kind: 'screenshot' | 'video' | 'report' | 'log' | 'other'
+  size: number
+}
+
+export function useRunArtifacts(ulid: string) {
+  return useQuery({
+    queryKey: ['run-artifacts', ulid],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<RunArtifact[]>>(endpoints.runArtifacts(ulid))
+      return data.data ?? []
+    },
+    enabled: !!ulid,
+  })
+}
+
 export function useRemoveRun() {
   const qc = useQueryClient()
   return useMutation({

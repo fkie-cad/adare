@@ -317,3 +317,99 @@ use **OCR `text:` targets + keyboard shortcuts**, also `wait_until`-gated.
 - *Verdict:* prefer authored text/keyboard playbooks for reproducibility; fall
   back to recorded image targets only for elements with no text/accelerator.
   The two paths are complementary, not competing.
+
+---
+
+## Vision-agent loop + LocateAnything (2026-07-20)
+
+The sections above are the **authoring** path (an Ollama-Cloud model *writes* a
+playbook that then replays deterministically). This section covers the **other**
+path — the closed-loop **vision agent** `adare dev agent`, driven by a local
+`qwen3-vl:32b-instruct`, that observes the screen and clicks/types live each
+step — and whether **LocateAnything** icon grounding helps it. Same goal as
+`gui_writer_report` (bold+centred heading, 2 paragraphs, filled 2-col table,
+save as `report.odt`), rephrased as a natural-language goal for the agent. One
+WITH-LocateAnything run, partial completion accepted as an honest finding.
+
+### Setup (env-only, no adare code change)
+- Vision model: `ADARE_VLLM_BASE_URL=http://localhost:11434/v1`,
+  `ADARE_VLLM_MODEL=qwen3-vl:32b-instruct`, `ADARE_VLLM_COORD_SPACE=normalized_1000`,
+  `ADARE_VLLM_API_KEY=ollama`. `adare vm gui-doctor` confirmed the endpoint and
+  auto-detected `normalized_1000` (model returned (734,312) vs target (740,250) —
+  6px normalized error).
+- Grounding sidecar: **new stdlib-only HTTP adapter**
+  `LocateAnything/locate_adapter.py` (118 lines, `http.server`, no new deps in
+  either repo) wraps `app.py`'s warm worker: `GET /health` →
+  `{"status":"ok","model":"nvidia/LocateAnything-3B"}`; `POST /locate` builds the
+  `GUI Grounding (box)` prompt, runs `get_worker().predict(..., generation_mode)`,
+  `parse_output` → boxes, maps to ADARE's `{label, box:[x1,y1,x2,y2], center}`
+  contract (adapter computes `center`; empty list on a miss → fixed-crop fallback).
+  Run: `uv run python locate_adapter.py --host 127.0.0.1 --port 13111`.
+  Enable in the agent with `ADARE_LOCATE_URL=http://127.0.0.1:13111`.
+- **Gate test** (LA in isolation, clean 1920×1080 desktop): every centre landed
+  on target — Writer dock icon (33,197), Firefox (33,69), Trash (37,390), clock
+  (995,14). Model + adapter + `normalized_1000→pixel` scaling proven before
+  spending an agent run.
+
+### Result: partial, and the stall was model-side (not LA)
+Session `01KY0…KP9W6`, env `ubuntu2510-libre-20260714`, `--max-steps 40`.
+**Outcome: FAILED (partial) at step 22**, ~12.5 min wall-clock (~34 s/step). The
+live 32B agent got ~90% of the *content* built before stalling:
+
+| Reached | Not reached |
+|---|---|
+| Opened Writer (clicked dock icon), dismissed Welcome, typed the heading, both body paragraphs, navigated **Table menu → Insert Table…** dialog (genuine vision nav, not a shortcut), inserted the table, typed the "Metric"/"Value" headers, started the first data label | Never saved `report.odt`; stalled mid-table-fill |
+
+The stall cause was **qwen3-vl emitting malformed JSON** for its decision
+(`{… "action":"click", "x":528, "309", …}` — a missing `"y":` key), which the
+loop treats as fatal (`agent.py` → "model decision failed"). This is a
+**model-output defect, unrelated to LocateAnything.** *(Aside / bug-on-`dev`
+candidate: a single malformed-JSON decision aborts the whole run rather than
+being retried like a stall — worth a lenient re-ask before giving up.)*
+
+Beyond the stall, the live run also showed **imprecision the deterministic
+playbook does not have**: the heading was not visibly retained and both
+paragraphs came out bold, because the agent "selected the heading" by
+click-to-place-cursor **then Ctrl+A** — but Ctrl+A selects the *whole document*,
+so bold/centre hit everything; and the table came out with ~20 rows instead of 4
+because live typing into the Rows field didn't clear the default first. The
+authored playbook avoids both by construction (`Ctrl+Home`, `Shift+End` to select
+exactly the heading line; `Ctrl+A` inside the specific spin field before typing).
+
+### LocateAnything effect: 100% grounding hit-rate, real crop-tightening — but no effect on clicking
+- **Fires every click, always hits.** `LocateAnything grounding enabled via
+  http://127.0.0.1:13111` (`gui_agent.py:87`) logged at startup; the adapter
+  served **11/11 click-step `/locate` calls with the agent's own click
+  description as the prompt, all returning a box, 0 misses** (plus the 4 gate-test
+  calls = 15 total). No `"grounding failed … using fixed crop"` (`agent.py:245`)
+  or `"found no box"` (`agent.py:248`) lines.
+- **Crops are tightened to the element** (LA's real payoff). Recorded click crops
+  are element-proportional vs the fixed ~220×90 (19,800 px²) fallback, using
+  `LOCATE_CROP_MIN=72` + `LOCATE_CROP_MARGIN=16`/side:
+  - 72×72 (5,184 px², **~3.8× tighter**) for square glyphs (Bold, Center, Insert
+    button, table cells);
+  - 260×72 for the wide "Insert Table…" menu item (correctly *expands* to the
+    real label width);
+  - 79×90 Writer dock icon, 103×72 heading start, 147×72 Rows field.
+- **LA does NOT change where the agent clicks or how fast it runs** (confirmed
+  architectural, `agent.py:280`): the click lands at qwen3-vl's own point; LA's
+  bbox only (a) tightens the *recorded* crop saved into the playbook and (b)
+  powers the optional described-element resolver at *replay*. So LA improves
+  **replay-crop quality / robustness**, not live-loop accuracy or speed — and,
+  as expected, it neither caused nor could have prevented the JSON stall.
+
+### Autonomy-vs-determinism verdict
+- **Vision agent (`dev agent` + LA):** zero authoring — just a natural-language
+  goal — and it *reasons* about the live screen (it chose the Table menu on its
+  own). But it is **slow** (~34 s/step under a local 32B), **imprecise**
+  (whole-doc Ctrl+A, wrong row count), **incomplete** (stalled at 22/40, never
+  saved), and **non-deterministic** (a malformed-JSON decision can kill a run).
+- **Authored playbook (`gui_writer_report`):** one-shot authoring, then
+  **fast** (~7 min), **complete**, and **reproducible** (pixel-identical 2/2 fresh
+  overlays, 44/44 keyboard/OCR actions).
+- **Use each for what it's for.** The live agent is a *capability/authoring aid*
+  (explore a UI, propose steps, record a first-draft playbook), not a production
+  runner. LocateAnything's value is squarely on the **recorded-playbook side**:
+  it turns the agent's fixed ~220×90 click boxes into tight, element-shaped crops,
+  which is exactly what makes a *recorded* (image-target) playbook — the fallback
+  path from the recorder-vs-authored comparison above — more robust at replay.

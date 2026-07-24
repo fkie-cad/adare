@@ -327,6 +327,31 @@ class StructuredDataApi(DatabaseApi):
 
         return result
 
+    def get_run_files(self, ulid: str) -> dict | None:
+        """Resolve a run's on-disk directory and known artifact file paths.
+
+        Returns ``None`` if no run with this ULID exists in this project's
+        database (callers search across projects the same way `get_run` does).
+        """
+        run = safe_query_first(
+            self._session.query(ExperimentRun)
+            .options(joinedload(ExperimentRun.files))
+            .filter(ExperimentRun.id == ulid)
+        )
+        if run is None:
+            return None
+
+        files = run.files
+        return {
+            "run_dir": run.path,
+            "log_adare": files.log_adare.path if files and files.log_adare else None,
+            "log_adarevm": files.log_adarevm.path if files and files.log_adarevm else None,
+            "results_file": files.results_file_path if files else None,
+            "actions_file": files.actions_file_path if files else None,
+            "system_info_file": files.system_info_file_path if files else None,
+            "zip_file": files.zip_file_path if files else None,
+        }
+
     def __build_unlinked_run_info(self, run: ExperimentRun, current_project_name: str) -> RunInfo:
         """Build a RunInfo for a run not linked to an experiment.
 

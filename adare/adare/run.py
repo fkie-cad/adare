@@ -541,6 +541,34 @@ def sync():
     args = SimpleNamespace()
     exec_with_error_printing(exec_sync_testfunctions, args)
 
+@test.command()
+@click.argument('path', type=click.Path(exists=False))
+def validate(path):
+    """Validate a testfunction collection offline (no VM, no DB).
+
+    PATH is a collection directory (or .py file). Reports every authoring-contract
+    violation — filename≠dirname, missing 'ctx', unannotated params, duplicate
+    testnames, import/syntax errors, missing dependencies — with fix hints.
+    """
+    from adare.cli.testfunction import exec_validate_testfunction
+    args = SimpleNamespace(path=path)
+    exec_with_error_printing(exec_validate_testfunction, args)
+
+@test.command(name='dry-run')
+@click.argument('target')
+@click.option('--param', '-P', multiple=True, help='Parameter as key=value (repeatable)')
+@click.option('--file', '-f', 'file', help='Local sample file used as the dst parameter')
+@click.option('--path', help='Collection dir/.py to load (else resolved from known locations)')
+def dry_run(target, param, file, path):
+    """Execute one testfunction against a local sample file (no VM).
+
+    TARGET is <collection>.<function> (e.g. mycollection.file_contains_word).
+    Scope: FILE_BASED / FILE_CONTENT tests only.
+    """
+    from adare.cli.testfunction import exec_dry_run_testfunction
+    args = SimpleNamespace(target=target, param=param, file=file, path=path)
+    exec_with_error_printing(exec_dry_run_testfunction, args)
+
 
 @test.command(name='list')
 @click.option('--set', help='Filter testfunctions by set (e.g., standard)')
@@ -566,9 +594,22 @@ def info(dotnotation):
     args = SimpleNamespace(dotnotation=dotnotation)
     exec_with_error_printing(exec_show_testfunction, args)
 
+@test.command()
+@click.argument('target')
+def versions(target):
+    """List the version history of a testfunction library.
+
+    TARGET is a library name (e.g. mycollection) or <library>.<function>
+    (e.g. mycollection.file_contains_word) for per-method history.
+    """
+    from adare.cli.testfunction import exec_testfunction_versions
+    args = SimpleNamespace(target=target)
+    exec_with_error_printing(exec_testfunction_versions, args)
+
 # Add aliases for test commands
 test.add_alias('l', 'list')
 test.add_alias('rm', 'remove')
+test.add_alias('v', 'versions')
 
 
 # ------------------------------
@@ -634,6 +675,40 @@ web.add_command(web_start, "start")
 web.add_command(web_build, "build")
 web.add_command(web_services, "services")
 web.add_command(web_install_spice, "install-spice")
+
+
+# ------------------------------
+# Control-plane MCP server (adare mcp serve)
+# ------------------------------
+@cli.group(name='mcp', cls=AliasedGroup)
+def mcp():
+    """ADARE control-plane MCP server (drive all of ADARE from an MCP client)."""
+    pass
+
+@mcp.command(name='serve')
+@click.option('--transport', type=click.Choice(['stdio', 'http']), default='stdio',
+              show_default=True, help='MCP transport: stdio (client launches this process) or http')
+@click.option('--host', default='127.0.0.1', show_default=True, help='[http] Bind host')
+@click.option('--port', type=int, default=13111, show_default=True, help='[http] Bind port')
+def mcp_serve(transport, host, port):
+    """Serve the whole ADARE lifecycle as MCP tools.
+
+    Exposes projects, environments, experiments, runs, VMs, dev sessions, and
+    LLM playbook authoring over MCP. Distinct from the session-scoped
+    `adare dev mcp`. Point Claude Code / Claude Desktop at it and drive ADARE
+    conversationally.
+
+    Examples:
+        adare mcp serve                       # stdio (for a client to launch)
+        adare mcp serve --transport http --port 13111
+
+    Client setup (Claude Code / OpenCode) and the playbook fix loop:
+        docs/mcp-clients.md   ·   skill: .claude/skills/adare-playbook/SKILL.md
+        Claude Code: claude mcp add adare -- adare mcp serve
+    """
+    from adare.cli.mcp_control import exec_mcp_serve
+    args = SimpleNamespace(transport=transport, host=host, port=port)
+    exec_with_error_printing(exec_mcp_serve, args)
 
 
 # ------------------------------
@@ -782,6 +857,43 @@ def start(port, host, dev):
     from adare.cli.webserver import exec_webserver_start
     args = SimpleNamespace(port=port, host=host, dev=dev)
     exec_with_error_printing(exec_webserver_start, args)
+
+
+# ------------------------------
+# Chat — embedded agentic REPL
+# ------------------------------
+@cli.command(name='chat')
+@click.option('--model', default=None,
+              help='Chat model id (default: $ADARE_CHAT_MODEL, else the vlm model)')
+@click.option('--base-url', default=None,
+              help='OpenAI-compatible endpoint (default: the active `adare vlm` provider)')
+@click.option('--tool-protocol', type=click.Choice(['native', 'json', 'auto']),
+              default='auto',
+              help='Tool-call protocol: native function-calling, JSON-in-text, or auto (default)')
+@click.option('--max-tokens', type=int, default=None, help='Max tokens per assistant turn')
+def cli_chat(model, base_url, tool_protocol, max_tokens):
+    """Control ADARE conversationally in an embedded agentic REPL.
+
+    A terminal console with its own agent loop and a provider-agnostic brain that
+    reuses whatever OpenAI-compatible endpoint you configured for `adare vlm`
+    (vLLM / Ollama-cloud / custom — select one with `adare vlm use`). It drives
+    ADARE by calling the same tool registry the MCP control server exposes:
+    environments, experiments, runs, VMs, dev sessions, and LLM playbook
+    authoring.
+
+    The default model is often a vision model; for the best tool-caller set a
+    tool-capable text model via `--model` or $ADARE_CHAT_MODEL. `--tool-protocol
+    auto` tries native function-calling and falls back to a JSON-in-text contract
+    when the endpoint rejects it.
+
+    Example:
+        adare vlm use ollama-cloud
+        adare chat
+    """
+    from adare.cli.chat import exec_chat
+    args = SimpleNamespace(model=model, base_url=base_url,
+                           tool_protocol=tool_protocol, max_tokens=max_tokens)
+    exec_with_error_printing(exec_chat, args)
 
 
 # ------------------------------

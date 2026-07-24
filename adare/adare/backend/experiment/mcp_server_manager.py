@@ -11,6 +11,8 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
+import httpx
+
 log = logging.getLogger(__name__)
 
 
@@ -22,6 +24,13 @@ class MCPServerManager:
     that provides image and text detection services for playbook execution.
     """
 
+
+    # How long to wait for the freshly-launched server to actually serve its
+    # /mcp endpoint. The cv-server imports cv2 + PaddleOCR at module load
+    # (several seconds cold) before it binds, so a naive fixed sleep is not
+    # enough — we poll the endpoint until it answers or this budget elapses.
+    STARTUP_PROBE_TIMEOUT = 60.0
+    STARTUP_PROBE_INTERVAL = 1.0
 
     def __init__(self, server_port: int = 13109, log_file: Path | None = None, debug: bool = False, debug_output_dir: Path | None = None):
         """
@@ -91,17 +100,16 @@ class MCPServerManager:
                 start_new_session=True
             )
 
-            # Wait briefly and check if process started successfully
-            await asyncio.sleep(1)
-            if self.process.poll() is not None:
-                # Process already exited
-                stdout, stderr = self.process.communicate() if self.process.stdout else ("", "")
-                log.error(f"MCP server failed to start: {stderr}")
-                self.process = None
+            # Wait for the server to actually serve /mcp — not just for the
+            # process to still be alive. A silent crash on heavy imports (cv2 /
+            # PaddleOCR) or a lazy model-load failure would otherwise report
+            # "started successfully" and only surface later as a ConnectError
+            # during replay. Probe the endpoint until it answers, failing fast
+            # if the process dies meanwhile.
+            if not await self._await_ready():
+                await self._terminate_dead_process()
                 return False
 
-            # Wait for server to be ready (brief delay)
-            await asyncio.sleep(2)  # Give server time to start up
             log.info("MCP GUI server started successfully")
             return True
 
@@ -109,6 +117,63 @@ class MCPServerManager:
             log.error(f"Failed to start MCP server: {e}")
             self.process = None
             return False
+
+    async def _await_ready(self) -> bool:
+        """Poll the /mcp endpoint until it responds or the budget elapses.
+
+        Returns True once a FastMCP handshake (``list_tools``) succeeds, False
+        if the process exits or the endpoint never serves within
+        :data:`STARTUP_PROBE_TIMEOUT`.
+        """
+        from fastmcp import Client
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.STARTUP_PROBE_TIMEOUT
+        last_error: str = "no response"
+
+        while loop.time() < deadline:
+            # Fail fast if the subprocess has already exited.
+            if self.process is None or self.process.poll() is not None:
+                log.error(
+                    f"MCP server process exited during startup "
+                    f"(rc={self.process.poll() if self.process else 'n/a'}); "
+                    f"see {self.log_file or 'server log'} for details"
+                )
+                return False
+
+            try:
+                async with Client(self.server_url) as client:
+                    await client.list_tools()
+                log.info(f"MCP GUI server is serving at {self.server_url}")
+                return True
+            except (OSError, ConnectionError, TimeoutError, RuntimeError,
+                    httpx.HTTPError) as exc:
+                # httpx.ConnectError ("connection refused" while the server is
+                # still binding) is an httpx.HTTPError, NOT an OSError — it must
+                # be listed explicitly or the probe crashes instead of retrying.
+                last_error = f"{type(exc).__name__}: {exc}"
+
+            await asyncio.sleep(self.STARTUP_PROBE_INTERVAL)
+
+        log.error(
+            f"MCP server did not become ready at {self.server_url} within "
+            f"{self.STARTUP_PROBE_TIMEOUT:.0f}s (last error: {last_error}); "
+            f"see {self.log_file or 'server log'} for details"
+        )
+        return False
+
+    async def _terminate_dead_process(self) -> None:
+        """Reap a launched-but-unready process so it does not linger."""
+        if self.process and self.process.poll() is None:
+            try:
+                self.process.terminate()
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+            except (OSError, subprocess.SubprocessError) as exc:
+                log.warning(f"Error reaping unready MCP server: {exc}")
+        self.process = None
 
     async def stop(self, force_external: bool = False):
         """
