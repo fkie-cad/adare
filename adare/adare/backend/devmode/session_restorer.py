@@ -142,7 +142,8 @@ async def restore_infrastructure_context(
                 username=username,
                 password=password,
                 executables=qemu_manager.executables,
-                disk_path=str(session.experiment_ctx.vm_file) if session.experiment_ctx.vm_file else None
+                disk_path=str(session.experiment_ctx.vm_file) if session.experiment_ctx.vm_file else None,
+                hypervisor_config=None  # No hypervisor config for dev mode restoration
             )
 
             log.debug(f"Attached to existing QEMU VM: {vm_name}")

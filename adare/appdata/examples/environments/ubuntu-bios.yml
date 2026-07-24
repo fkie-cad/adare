@@ -1,0 +1,15 @@
+# Example: Linux VM with an explicit boot_mode override.
+# Note: boot mode is auto-detected by architecture/OS (x86_64 Linux -> BIOS,
+#       Windows and aarch64 -> UEFI). This override forces a specific mode.
+# Use hypervisor_config.boot_mode to pin BIOS/UEFI regardless of auto-detection.
+vm: "/path/to/ubuntu.ova"
+os:
+  os: "Ubuntu"
+  platform: "linux"
+  distribution: "Noble Numbat"
+  version: "24.04.3"
+  language: "English"
+  details: "Ubuntu 24.04.3 LTS"
+hypervisor: qemu
+hypervisor_config:
+  boot_mode: bios  # Override default UEFI boot for legacy compatibility

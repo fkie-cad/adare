@@ -127,6 +127,18 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         source_vm_path = Path(source_vm.file)
 
+        # Load environment metadata for hypervisor config
+        from adare.types.environment import parse_environment_file
+
+        environment_metadata = None
+        if context.environment_file and context.environment_file.exists():
+            try:
+                environment_metadata = parse_environment_file(context.environment_file)
+                log.debug("Loaded environment metadata for hypervisor config")
+            except (LoggedException, OSError, ValueError, KeyError, TypeError) as e:
+                log.warning(f"Could not load environment metadata: {e}")
+                # Continue without hypervisor config (will use auto-detection)
+
         # Determine if this is an external VM (--no-copy mode)
         is_external = not _is_vm_managed(source_vm_path)
 
@@ -205,6 +217,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             disk_path=disk_path,
             architecture=vm_architecture,
             resolution=context.config.vm_display_resolution,
+            hypervisor_config=environment_metadata.hypervisor_config if environment_metadata else None,
         )
         log.debug(f"Created QEMU VM instance: {context.vm_name}")
 
