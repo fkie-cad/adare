@@ -117,6 +117,7 @@ class GuiAgent:
         decision_retry_limit: int = 2,
         repair_client: Any = None,
         progress: Callable[[dict], None] | None = None,
+        restart_vm: Callable[..., Any] | None = None,
     ):
         self.executor = gui_executor
         self.client = client
@@ -159,6 +160,15 @@ class GuiAgent:
         # a SIGINT handler). Checked at each loop boundary; a set flag ends the
         # run via ``_finish`` so the partial playbook / report are finalized.
         self._stop_requested = False
+        # LLM-invokable "restart the VM (optionally with more RAM)" capability,
+        # injected by the session layer (None -> the action is unavailable). See
+        # the RESTART_VM branch in ``_execute`` and the stall nudge in ``run``.
+        self.restart_vm = restart_vm
+        # One-shot stall nudge state: a transient note surfaced to the model when
+        # the screen is persistently unchanged, offering restart_vm before the
+        # run dead-ends. Reset per run()/execute_subgoal() entry and per restart.
+        self._stall_nudged = False
+        self._stall_note: str | None = None
 
         self._steps_dir: Path | None = None
         if self.run_dir:
@@ -202,6 +212,8 @@ class GuiAgent:
                 'Emit "step_done" as soon as THIS sub-goal is satisfied.')
         if self.hints:
             parts.append('HINTS:\n' + '\n'.join(f'- {h}' for h in self.hints))
+        if self._stall_note:
+            parts.append(self._stall_note)
         if self._history:
             recent = self._history[-12:]
             parts.append('ACTIONS SO FAR:\n' + '\n'.join(recent))
@@ -509,6 +521,23 @@ class GuiAgent:
             return 'done'
         if kind == A.STEP_DONE:
             return 'step_done'
+        if kind == A.RESTART_VM:
+            if self.restart_vm is None:
+                # Capability not wired in this context (e.g. non-QEMU / no
+                # session handle); tell the model so it does not keep trying.
+                return 'restart_vm unavailable'
+            # Cold-reboot the VM (optionally at more RAM). The injected callable
+            # rebuilds the domain, reconnects, re-points self.executor at the
+            # fresh VM, resets the recorder's actions, and persists the working
+            # RAM into settings.vm_memory.
+            status = await self.restart_vm(action.memory_mb)
+            # A cold reboot discards all in-VM progress: clear the model-facing
+            # history and stall state so the fresh attempt re-drives the goal
+            # cleanly (the recorder actions were reset inside the callable).
+            self._history.clear()
+            self._stall_nudged = False
+            self._stall_note = None
+            return status
         return 'unknown'
 
     # -- documentation ------------------------------------------------------
@@ -629,12 +658,38 @@ class GuiAgent:
         diff = sum(abs(a - b) for a, b in zip(sig, last_sig))
         return diff / (len(sig) * 255) > 0.02  # >2% average pixel delta = real change
 
+    def _maybe_nudge_restart(self, stall: int) -> bool:
+        """On a persistent stall, offer the restart_vm capability once.
+
+        Returns True if a one-shot nudge was surfaced (the caller should keep
+        going and give the model a chance to act), False if the run should
+        dead-end as before (capability unavailable or the nudge already spent).
+        User rejected fixed auto-escalation, so this only *suggests* the action
+        — the LLM decides whether to restart_vm.
+        """
+        if self.restart_vm is None or self._stall_nudged:
+            return False
+        self._stall_nudged = True
+        self._stall_note = (
+            f'NOTE: the screen has not changed for {stall} steps. If the VM or '
+            'the app appears frozen or under-resourced, you may emit '
+            '{"action": "restart_vm", "memory_mb": <int optional>, '
+            '"reason": "..."} to cold-reboot the VM (optionally with more RAM). '
+            'This DISCARDS all in-VM progress and restarts the goal from a clean '
+            'boot, so only do it if you are genuinely stuck. Otherwise, take a '
+            'different action to make progress.'
+        )
+        log.info('Stall (%d steps) — surfacing restart_vm nudge to the model', stall)
+        return True
+
     # -- main loop ----------------------------------------------------------
 
     async def run(self) -> AgentRunResult:
         start = time.monotonic()
         last_sig: tuple[int, ...] | None = None
         stall = 0
+        self._stall_nudged = False
+        self._stall_note = None
 
         try:
             for _ in range(self.max_steps):
@@ -646,10 +701,18 @@ class GuiAgent:
                 b64, png, width, height = await self._capture()
 
                 sig = self._screen_signature(png)
-                stall = 0 if self._screen_changed(sig, last_sig) else stall + 1
+                if self._screen_changed(sig, last_sig):
+                    stall = 0
+                    self._stall_note = None
+                else:
+                    stall += 1
                 last_sig = sig
                 if stall >= self.stall_limit:
-                    return self._finish(False, f'screen unchanged for {stall} steps (stalled)')
+                    if self._maybe_nudge_restart(stall):
+                        stall = 0  # give the model room to act on the nudge
+                    else:
+                        return self._finish(
+                            False, f'screen unchanged for {stall} steps (stalled)')
 
                 try:
                     action = await self._decide(b64, width, height)
@@ -749,6 +812,8 @@ class GuiAgent:
         start = time.monotonic()
         last_sig: tuple[int, ...] | None = None
         stall = 0
+        self._stall_nudged = False
+        self._stall_note = None
         prev_subgoal = self._subgoal
         prev_hints = self.hints
         self._subgoal = subgoal
@@ -764,10 +829,17 @@ class GuiAgent:
                 b64, png, width, height = await self._capture()
 
                 sig = self._screen_signature(png)
-                stall = 0 if self._screen_changed(sig, last_sig) else stall + 1
+                if self._screen_changed(sig, last_sig):
+                    stall = 0
+                    self._stall_note = None
+                else:
+                    stall += 1
                 last_sig = sig
                 if stall >= stall_limit:
-                    return f'screen unchanged for {stall} steps (stalled)'
+                    if self._maybe_nudge_restart(stall):
+                        stall = 0  # give the model room to act on the nudge
+                    else:
+                        return f'screen unchanged for {stall} steps (stalled)'
 
                 try:
                     action = await self._decide(b64, width, height)

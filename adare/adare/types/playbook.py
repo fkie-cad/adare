@@ -127,6 +127,7 @@ class Settings:
     enable_filesystem_diff: bool = False  # Enable automatic snapshots at experiment start/end
     gui_execution_mode: str = 'auto'  # GUI automation mode: 'auto', 'agent', 'host' (QEMU only)
     resolution: str | None = None  # Guest display resolution "WxH" (e.g. "1280x1024"); unset = host/env default
+    vm_memory: int | None = None  # Working RAM in MB discovered/used for this run; boots future runs at this size
 
 @attrs.define
 class Offset:

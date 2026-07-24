@@ -21,7 +21,7 @@ from pathlib import Path
 from adare.config import get_vm_credentials
 from adare.exceptions import LoggedException
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
-from adare.hypervisor.exceptions import HypervisorException
+from adare.hypervisor.exceptions import GuestAgentTimeoutException, HypervisorException
 from adare.hypervisor.qemu.disk_diff import DiskDiffComparator
 from adare.hypervisor.qemu.file_transfer import get_file_transfer_strategy
 from adare.hypervisor.qemu.guestfish_client import GuestfishClient
@@ -519,8 +519,8 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 log.info(f'VM is ready (waited {elapsed:.1f}s, attempt {attempt}/{max_attempts})')
                 break
         else:
-            raise LoggedException(
-                log, f'VM did not become ready after {max_attempts} attempts'
+            raise GuestAgentTimeoutException(
+                context.vm.vm_name, max_attempts * ready_timeout
             )
 
         # Stage 3: Post-boot file transfer (only if strategy needs it)

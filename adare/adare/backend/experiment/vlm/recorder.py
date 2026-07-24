@@ -144,6 +144,29 @@ class PlaybookRecorder:
         self._step = step
         self._variables = dict(variables)
 
+    # -- settings / restart -------------------------------------------------
+
+    def set_vm_memory(self, memory_mb: int) -> None:
+        """Persist the working VM RAM (MB) into the playbook ``settings:`` block.
+
+        Written whenever the agent restarts the VM with more memory (or at
+        finalize) so future runs/replays boot at this size without rediscovery.
+        """
+        self._settings['vm_memory'] = int(memory_mb)
+
+    def reset_recorded_actions(self) -> None:
+        """Drop all recorded actions/meta/tests/variables after a cold restart.
+
+        A RAM change requires a cold reboot, which invalidates every prior
+        screenshot/click, so the fresh attempt re-drives the goal from scratch.
+        Settings — including a persisted ``vm_memory`` — are intentionally kept.
+        """
+        self._actions.clear()
+        self._meta.clear()
+        self._tests.clear()
+        self._variables.clear()
+        self._step = 0
+
     # -- helpers ------------------------------------------------------------
 
     def _next_index(self) -> int:
