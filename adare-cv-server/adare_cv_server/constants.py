@@ -12,7 +12,7 @@ class CVConstants:
     """Computer Vision algorithm constants."""
 
     # Template Matching
-    DEFAULT_TEMPLATE_THRESHOLD = 0.8
+    DEFAULT_TEMPLATE_THRESHOLD = 0.75
 
     # SIFT Parameters
     SIFT_MIN_MATCHES = 4
@@ -32,9 +32,86 @@ class CVConstants:
     ORB_HOMOGRAPHY_THRESHOLD = 3.0
     ORB_MAX_DISTANCE_NORMALIZE = 100.0
 
+    # ORB Adaptive Parameters for Small Icons
+    ORB_SMALL_ICON_NLEVELS = 6  # Pyramid levels for small icons
+    ORB_SMALL_ICON_EDGE_THRESHOLD = 5  # Edge threshold for small icons
+
+    # SVG Conversion Parameters
+    SVG_SMALL_ICON_THRESHOLD = 100  # Icons smaller than this are upscaled
+    SVG_UPSCALE_FACTOR = 4  # Upscale small icons by this factor
+    SVG_BACKGROUND_COLOR = None  # Transparent background (enables trimming)
+    SVG_COMPOSITE_BACKGROUND = None  # Preserve alpha for masked matching (disabled compositing)
+    SVG_TRIM_TRANSPARENT_PIXELS = True  # Trim transparent padding from SVG icons
+
     # Clustering thresholds
     SMALL_CLUSTER_SIZE = 6
     MIN_HOMOGRAPHY_POINTS = 4
+
+    # Multi-Scale Template Matching (Stage 1: Precision Gate)
+    MULTISCALE_TEMPLATE_THRESHOLD = 0.9  # High precision threshold for exact matches
+    MULTISCALE_TEMPLATE_FALLBACK_THRESHOLD = 0.8  # Skip ORB/SIFT if match >= 0.8
+    MULTISCALE_TEMPLATE_SCALE_RANGE = (0.1, 10.0)  # 10% to 1000% (extreme scale range)
+    MULTISCALE_TEMPLATE_SCALE_STEP_FINE = 0.05  # Steps below 1.0x: 0.1, 0.2, ..., 0.9
+    MULTISCALE_TEMPLATE_SCALE_STEP_COARSE = 0.5  # Steps above 1.0x: 1.5, 2.0, ..., 10.0
+    MULTISCALE_TEMPLATE_MIN_ICON_SIZE = 10  # Minimum 10x10 pixels (prevents misdetections)
+
+    # Mask Validation (prevents inf/nan from small/uniform masked regions)
+    MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_PIXELS_ABSOLUTE = 25  # Hard minimum (relaxed from 50)
+    MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_RATIO = 0.10  # 10% of total pixels must be opaque (adaptive)
+    MULTISCALE_TEMPLATE_MIN_STD_DEV = 10.0  # Minimum standard deviation for texture detection (replaces variance check)
+    MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_RATIO_DEGENERATE = 0.05  # Reject masks <5% opaque (safety net)
+    MULTISCALE_TEMPLATE_ALLOW_PARTIAL_INF_NAN = True  # Use np.isfinite to handle partial inf/nan in result matrix
+    # MULTISCALE_TEMPLATE_MIN_MASK_VARIANCE = 0.5  # DEPRECATED: Use MIN_STD_DEV instead (mathematically incorrect normalization)
+
+    # Laplacian Variance Gatekeeper (Stage 2: ORB Suitability)
+    LAPLACIAN_VARIANCE_THRESHOLD = 0.5  # Normalized per-pixel variance
+    # Note: Requires empirical tuning on representative icon set
+
+    # Canny Edge-Based Multi-Scale Matching (Stage 0: Edge-First Detection)
+    CANNY_EDGE_THRESHOLD = 0.80  # High confidence for edge-based matches
+    CANNY_EDGE_FALLBACK_THRESHOLD = 0.75  # Skip to Stage 2+ if match >= 0.75
+    CANNY_EDGE_BLUR_KERNEL = (3, 3)  # Gaussian blur before edge detection
+    CANNY_EDGE_AUTO_THRESHOLD_LOWER = 0.66  # Multiplier for lower threshold (median * 0.66)
+    CANNY_EDGE_AUTO_THRESHOLD_UPPER = 1.33  # Multiplier for upper threshold (median * 1.33)
+    CANNY_EDGE_DILATE_ITERATIONS = 1  # Dilate edges by 1 iteration (3x3 kernel)
+    CANNY_EDGE_SCALE_RANGE = (0.1, 10.0)  # Scale range for edge-based matching (same as Stage 1)
+    CANNY_EDGE_SCALE_STEP_FINE = 0.1  # Steps below 1.0x: 0.1, 0.2, ..., 0.9
+    CANNY_EDGE_SCALE_STEP_COARSE = 0.5  # Steps above 1.0x: 1.5, 2.0, ..., 10.0
+    CANNY_EDGE_MIN_ICON_SIZE = 14  # Minimum 15x15 pixels (edges need more pixels than intensity matching)
+
+    # Non-Maximum Suppression (NMS) for Multi-Match Detection
+    NMS_OVERLAP_THRESHOLD = 0.5  # IoU threshold for considering matches as duplicates
+
+    # Method Weighting for Aggregation (priority-based confidence)
+    METHOD_WEIGHTS = {
+        'canny_edge': 1.0,           # Highest - theme invariant, best for UI
+        'multiscale_template': 0.95,  # High - pixel exact matching
+        'sift': 0.90,                # Robust - gradient/complex icons
+        'orb': 0.85,                 # Good - but prone to text false positives
+        'template': 0.80             # Catch-all - relaxed threshold
+    }
+    SIFT_NORMALIZATION_THRESHOLD = 20.0  # 20+ matches = 1.0 confidence
+    ENABLE_AGGREGATION = True  # Feature toggle for multi-method aggregation
+
+# Debug Visualization
+class DebugConstants:
+    """Debug visualization constants."""
+
+    # Match box annotation
+    MATCH_BOX_COLOR = (0, 255, 0)  # Green in BGR
+    MATCH_BOX_THICKNESS = 2
+
+    # Text annotation
+    TEXT_COLOR = (255, 255, 255)  # White in BGR
+    TEXT_SCALE = 0.6
+    TEXT_THICKNESS = 1
+    TEXT_FONT = 0  # cv2.FONT_HERSHEY_SIMPLEX
+
+    # Early termination indicator
+    EARLY_TERM_COLOR = (0, 0, 255)  # Red in BGR
+
+    # Summary text
+    SUMMARY_COLOR = (255, 255, 255)  # White in BGR
 
 # OCR Parameters
 class OCRConstants:

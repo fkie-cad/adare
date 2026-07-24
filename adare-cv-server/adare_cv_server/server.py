@@ -6,10 +6,10 @@ import click
 import logging
 import cv2
 
-from typing import Dict, Any, Optional, List, Union
-from .constants import DEFAULT_PORT, DEFAULT_HOST, MCP_PATH, DEFAULT_MAX_RESULTS
-from .feature_matching import SIFTMatcher, ORBMatcher, TemplateMatcher
-from .image_processing import ImageDecoder, RegionValidator, IconSearchDebugger
+from typing import Dict, Any, Optional, List, Union, Tuple
+from .constants import DEFAULT_PORT, DEFAULT_HOST, MCP_PATH, DEFAULT_MAX_RESULTS, CVConstants
+from .feature_matching import SIFTMatcher, ORBMatcher, TemplateMatcher, MultiScaleTemplateMatcher, CannyEdgeMatcher
+from .image_processing import ImageDecoder, IconComplexityAnalyzer, DetectionMatch, non_maximum_suppression
 from .ocr_processing import TextDetector
 from .exceptions import FeatureMatchingError, ImageDecodingError, OCRProcessingError
 
@@ -18,13 +18,204 @@ log = logging.getLogger(__name__)
 mcp = FastMCP(name="adare-cv-server")
 
 
+# ========== Aggregation Helper Functions ==========
+
+def _normalize_similarity(similarity: float, method: str) -> float:
+    """Normalize similarity scores to 0.0-1.0 range.
+
+    SIFT returns match count (unbounded), so we normalize it.
+    Other methods already return 0.0-1.0 similarities.
+
+    Args:
+        similarity: Raw similarity score
+        method: Detection method name
+
+    Returns:
+        Normalized similarity (0.0-1.0)
+    """
+    if method == 'sift':
+        # SIFT returns match count - normalize to 0.0-1.0
+        # 20+ matches = 1.0 confidence (exceptional match)
+        return min(1.0, similarity / CVConstants.SIFT_NORMALIZATION_THRESHOLD)
+    else:
+        # Already normalized (template, canny_edge, multiscale_template, orb)
+        return similarity
+
+
+def _get_method_weight(method: str) -> float:
+    """Get method weight for aggregation.
+
+    Args:
+        method: Detection method name
+
+    Returns:
+        Weight (0.0-1.0), defaults to 0.8 for unknown methods
+    """
+    return CVConstants.METHOD_WEIGHTS.get(method, 0.8)
+
+
+def _estimate_match_size(scale: float, original_icon_size: Tuple[int, int]) -> Tuple[int, int]:
+    """Estimate bounding box size for a match at a given scale.
+
+    Args:
+        scale: Detected scale (1.0 = original size)
+        original_icon_size: Original icon dimensions (width, height)
+
+    Returns:
+        Estimated size (width, height) at detected scale
+    """
+    original_w, original_h = original_icon_size
+    return (int(original_w * scale), int(original_h * scale))
+
+
+def _aggregate_matches(
+    all_matches: List[DetectionMatch],
+    max_results: int,
+    icon_size: Tuple[int, int]
+) -> Dict[str, Any]:
+    """Aggregate matches from multiple detection methods.
+
+    Applies global NMS to remove cross-method duplicates, then groups
+    matches by location and tracks contributing methods.
+
+    Args:
+        all_matches: All detection matches from all methods
+        max_results: Maximum number of results to return
+        icon_size: Original icon size (width, height)
+
+    Returns:
+        Dict with structure:
+            - locations: List of final (x, y) centers
+            - similarities: List of weighted similarities
+            - methods: List of primary method names
+            - contributing_methods: List of all methods per location
+            - method_used: "aggregated" (or method name if single)
+    """
+    if not all_matches:
+        return {
+            'locations': [],
+            'similarities': [],
+            'methods': [],
+            'contributing_methods': [],
+            'method_used': 'no_matches'
+        }
+
+    log.info(f"Aggregating {len(all_matches)} matches from {len(set(m.method for m in all_matches))} methods")
+
+    # Extract data for NMS
+    locations = [m.location for m in all_matches]
+    weighted_sims = [m.weighted_similarity for m in all_matches]
+    sizes = [m.size if m.size != (0, 0) else _estimate_match_size(m.scale, icon_size) for m in all_matches]
+
+    # Apply global NMS to remove cross-method duplicates
+    filtered_locations, filtered_similarities = non_maximum_suppression(
+        locations, weighted_sims, sizes, overlap_threshold=CVConstants.NMS_OVERLAP_THRESHOLD
+    )
+
+    if not filtered_locations:
+        log.info("All matches suppressed by global NMS")
+        return {
+            'locations': [],
+            'similarities': [],
+            'methods': [],
+            'contributing_methods': [],
+            'method_used': 'all_suppressed'
+        }
+
+    log.info(f"After global NMS: {len(filtered_locations)} unique locations "
+             f"(suppressed {len(all_matches) - len(filtered_locations)} duplicates)")
+
+    # Build lookup: location → all matches at that location
+    location_to_matches = {}
+    for match in all_matches:
+        # Check if this match's location survived NMS
+        if match.location in filtered_locations:
+            if match.location not in location_to_matches:
+                location_to_matches[match.location] = []
+            location_to_matches[match.location].append(match)
+
+    # Build final results
+    final_locations = []
+    final_similarities = []
+    final_methods = []
+    final_contributing_methods = []
+
+    for loc in filtered_locations:
+        matches_at_loc = location_to_matches.get(loc, [])
+
+        if not matches_at_loc:
+            continue
+
+        # Sort by weighted similarity (highest first)
+        matches_at_loc.sort(key=lambda m: m.weighted_similarity, reverse=True)
+
+        # Primary match = highest weighted similarity
+        primary = matches_at_loc[0]
+
+        # Contributing methods = all unique methods at this location
+        contributing = list(set(m.method for m in matches_at_loc))
+
+        final_locations.append(loc)
+        final_similarities.append(primary.weighted_similarity)
+        final_methods.append(primary.method)
+        final_contributing_methods.append(contributing)
+
+    # Sort by similarity (descending)
+    sorted_results = sorted(
+        zip(final_locations, final_similarities, final_methods, final_contributing_methods),
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    # Limit to max_results
+    if max_results and len(sorted_results) > max_results:
+        sorted_results = sorted_results[:max_results]
+
+    # Unpack
+    if sorted_results:
+        final_locations, final_similarities, final_methods, final_contributing_methods = zip(*sorted_results)
+        final_locations = list(final_locations)
+        final_similarities = list(final_similarities)
+        final_methods = list(final_methods)
+        final_contributing_methods = list(final_contributing_methods)
+    else:
+        final_locations = []
+        final_similarities = []
+        final_methods = []
+        final_contributing_methods = []
+
+    # Determine method_used
+    unique_methods = set(final_methods)
+    if len(unique_methods) == 1:
+        method_used = list(unique_methods)[0]
+    else:
+        method_used = "aggregated"
+
+    # Log top 3 matches with contributing methods
+    top_matches = min(3, len(final_locations))
+    if top_matches > 0:
+        log.info(f"Top {top_matches} matches:")
+        for i in range(top_matches):
+            methods_str = ', '.join(final_contributing_methods[i])
+            log.info(f"  {i+1}. {final_locations[i]} - similarity: {final_similarities[i]:.3f}, "
+                     f"primary: {final_methods[i]}, contributors: [{methods_str}]")
+
+    return {
+        'locations': final_locations,
+        'similarities': final_similarities,
+        'methods': final_methods,
+        'contributing_methods': final_contributing_methods,
+        'method_used': method_used
+    }
+
+
 @mcp.tool()
 async def find_icon(
     icon_base64: str,
     screenshot_base64: str,
     offset_x: int = 0,
     offset_y: int = 0,
-    threshold: float = 0.5,
+    threshold: float = CVConstants.DEFAULT_TEMPLATE_THRESHOLD,
     max_results: int = DEFAULT_MAX_RESULTS,
     use_sift: bool = True,
     sift_min_matches: int = 4,
@@ -34,113 +225,250 @@ async def find_icon(
     orb_max_matches: int = 10,
     orb_distance_threshold: float = 80.0
 ) -> Dict[str, Any]:
-    """Find icon locations in provided screenshot data using base64 encoded icon."""
+    """Find icon locations in provided screenshot data using base64 encoded icon.
+
+    Multi-Method Aggregated Detection Pipeline:
+        Stage 0: Canny edge-based multi-scale template matching
+                 → Lighting-invariant detection using structural outlines
+        Stage 1: Multi-scale template matching (0.9 threshold, 0.1-10.0x scale)
+                 → Pixel-exact matching across extreme scale range
+        Stage 2: Laplacian variance gatekeeper
+                 → Determines if icon is complex enough for ORB
+        Stage 3: ORB feature matching (textured icons only)
+                 → Handles scaled/rotated complex icons
+        Stage 4: SIFT fallback
+                 → Most robust for gradient/complex icons
+        Stage 5: Template matching at 0.75 threshold (catch-all)
+                 → Relaxed threshold for difficult cases
+
+    All applicable methods run and results are aggregated using weighted confidences.
+    Global NMS removes cross-method duplicates.
+    """
     try:
-        log.info(f"Starting icon search with base64 icon data (SIFT: {use_sift}, ORB: {use_orb})")
+        log.info(f"Starting aggregated detection pipeline (SIFT: {use_sift}, ORB: {use_orb}, "
+                 f"aggregation: {CVConstants.ENABLE_AGGREGATION})")
         screenshot_bytes = base64.b64decode(screenshot_base64)
         icon_bytes = base64.b64decode(icon_base64)
 
-        # Collect debug candidates throughout the cascade
-        debug_candidates = []
+        # Preprocess icon once (SVG→PNG conversion + trimming if needed)
+        # This ensures all stages use the same preprocessed icon
+        icon_bytes = ImageDecoder.preprocess_icon(icon_bytes)
 
-        def _save_debug():
-            IconSearchDebugger.save_search_result(screenshot_bytes, debug_candidates)
+        # Decode images with alpha channel preservation for masked matching
+        screenshot_img, icon_img, icon_mask = ImageDecoder.decode_images_with_alpha(
+            screenshot_bytes, icon_bytes
+        )
 
-        def _make_result(res):
-            res = res.apply_offset(offset_x, offset_y).limit_results(max_results)
-            return {
-                "locations": res.locations,
-                "similarities": res.similarities,
-                "method_used": res.method
-            }
+        log.info(f"Decoded images - screenshot: {screenshot_img.shape}, "
+                f"icon: {icon_img.shape}, mask: {icon_mask.shape if icon_mask is not None else 'None'}")
 
-        # 1. Try template matching FIRST (fastest, most reliable for GUI icons)
-        log.info("Trying template matching (primary method)...")
-        result = TemplateMatcher.find_icon_locations(screenshot_bytes, icon_bytes, threshold)
-        if result.success:
-            log.info(f"Template matching found {len(result.locations)} matches")
-            for loc, sim in zip(result.locations, result.similarities):
-                debug_candidates.append({
-                    'method': 'template', 'x': loc[0], 'y': loc[1],
-                    'similarity': sim, 'accepted': True
-                })
-            _save_debug()
-            return _make_result(result)
-        log.info("Template matching found no matches, trying feature-based methods...")
+        # Get original icon size for scale estimation
+        icon_h, icon_w = icon_img.shape[:2]
+        icon_size = (icon_w, icon_h)
 
-        # Decode images once for region validation (shared by SIFT and ORB)
-        screenshot_img, icon_img, alpha_mask = ImageDecoder.decode_images(screenshot_bytes, icon_bytes)
+        # Collect all matches from all methods
+        all_matches: List[DetectionMatch] = []
 
-        # 2. Try SIFT (scale-invariant, good for rotated/transformed icons)
-        if use_sift:
-            try:
-                log.info("Trying SIFT feature matching...")
-                result = SIFTMatcher.find_icon_locations(
-                    screenshot_bytes, icon_bytes, sift_min_matches, sift_ratio
-                )
-                if result.success:
-                    validated = RegionValidator.filter_matches(
-                        screenshot_img, icon_img, result, alpha_mask=alpha_mask
-                    )
-                    # Record all candidates with validation status
-                    for loc, sim in zip(result.locations, result.similarities):
-                        accepted = loc in {v for v in validated.locations}
-                        debug_candidates.append({
-                            'method': 'sift', 'x': loc[0], 'y': loc[1],
-                            'similarity': sim, 'accepted': accepted
-                        })
-                    if validated.success:
-                        log.info(f"SIFT found {len(validated.locations)} validated matches")
-                        _save_debug()
-                        return _make_result(validated)
-                    else:
-                        log.info("SIFT matches rejected by region validation")
-                else:
-                    log.info("SIFT found no matches")
-            except (FeatureMatchingError, cv2.error, ValueError) as sift_error:
-                log.warning(f"SIFT failed: {sift_error}, trying ORB...")
-            except Exception as sift_error:
-                log.warning(f"Unexpected SIFT error: {sift_error}, trying ORB...", exc_info=True)
+        # ========== Stage 0: Canny Edge-Based Multi-Scale Template Matching ==========
+        try:
+            log.info("Stage 0 - Canny edge-based multi-scale template matching")
+            result = CannyEdgeMatcher.find_icon_locations(
+                screenshot_bytes,
+                icon_bytes,
+                threshold=CVConstants.CANNY_EDGE_THRESHOLD,
+                fallback_threshold=CVConstants.CANNY_EDGE_FALLBACK_THRESHOLD,
+            )
 
-        # 3. Try ORB last (fastest feature method, but most prone to false positives)
+            if result.success:
+                log.info(f"Stage 0 (Canny edge) found {len(result.locations)} match(es), adding to pool")
+                method_weight = _get_method_weight(result.method)
+
+                for i, (loc, sim, scale, size) in enumerate(zip(
+                    result.locations, result.similarities, result.scales, result.sizes
+                )):
+                    normalized_sim = _normalize_similarity(sim, result.method)
+                    all_matches.append(DetectionMatch(
+                        location=loc,
+                        similarity=normalized_sim,
+                        method=result.method,
+                        scale=scale,
+                        size=size,
+                        weighted_similarity=normalized_sim * method_weight
+                    ))
+            else:
+                log.info("Stage 0 (Canny edge) found no matches")
+
+        except FeatureMatchingError as e:
+            log.warning(f"Stage 0 (Canny edge) failed: {str(e)}")
+        except Exception as e:
+            log.warning(f"Stage 0 (Canny edge) unexpected error: {str(e)}")
+
+        # ========== Stage 1: Multi-Scale Template Matching (Precision Gate) ==========
+        try:
+            log.info("Stage 1 - Multi-scale template matching (precision gate)")
+            result = MultiScaleTemplateMatcher.find_icon_locations(
+                screenshot_bytes, icon_bytes, icon_mask=icon_mask
+            )
+
+            if result.success:
+                log.info(f"Stage 1 (multi-scale template) found {len(result.locations)} match(es), adding to pool")
+                method_weight = _get_method_weight(result.method)
+
+                for i, (loc, sim, scale, size) in enumerate(zip(
+                    result.locations, result.similarities, result.scales, result.sizes
+                )):
+                    normalized_sim = _normalize_similarity(sim, result.method)
+                    all_matches.append(DetectionMatch(
+                        location=loc,
+                        similarity=normalized_sim,
+                        method=result.method,
+                        scale=scale,
+                        size=size,
+                        weighted_similarity=normalized_sim * method_weight
+                    ))
+            else:
+                log.info("Stage 1 (multi-scale template) found no matches")
+
+        except (FeatureMatchingError, cv2.error, ValueError) as e:
+            log.warning(f"Stage 1 error: {e}")
+        except Exception as e:
+            log.warning(f"Stage 1 unexpected error: {e}", exc_info=True)
+
+        # ========== Stage 2: Laplacian Variance Gatekeeper ==========
+        should_use_orb_method = False
         if use_orb:
             try:
-                log.info("Trying ORB feature matching...")
+                decoded = ImageDecoder.decode_images(screenshot_bytes, icon_bytes)
+                if decoded is not None:
+                    _, icon_img_gray_check = decoded
+                    icon_gray = cv2.cvtColor(icon_img_gray_check, cv2.COLOR_BGR2GRAY)
+                    should_use_orb_method = IconComplexityAnalyzer.should_use_orb(icon_gray)
+
+                    if should_use_orb_method:
+                        log.info("Stage 2 - Icon is textured, will run Stage 3 (ORB)")
+                    else:
+                        log.info("Stage 2 - Icon is flat, skipping Stage 3 (ORB)")
+            except (ImageDecodingError, cv2.error, ValueError) as e:
+                log.warning(f"Stage 2 complexity check failed: {e}, skipping ORB")
+                should_use_orb_method = False
+            except Exception as e:
+                log.warning(f"Stage 2 unexpected error: {e}, skipping ORB", exc_info=True)
+                should_use_orb_method = False
+
+        # ========== Stage 3: ORB Feature Matching (Textured Icons Only) ==========
+        if should_use_orb_method:
+            try:
+                log.info("Stage 3 - ORB feature matching (textured icon)")
                 result = ORBMatcher.find_icon_locations(
                     screenshot_bytes, icon_bytes,
                     orb_min_matches, orb_max_matches, orb_distance_threshold
                 )
-                if result.success:
-                    validated = RegionValidator.filter_matches(
-                        screenshot_img, icon_img, result, alpha_mask=alpha_mask
-                    )
-                    for loc, sim in zip(result.locations, result.similarities):
-                        accepted = loc in {v for v in validated.locations}
-                        debug_candidates.append({
-                            'method': 'orb', 'x': loc[0], 'y': loc[1],
-                            'similarity': sim, 'accepted': accepted
-                        })
-                    if validated.success:
-                        log.info(f"ORB found {len(validated.locations)} validated matches")
-                        _save_debug()
-                        return _make_result(validated)
-                    else:
-                        log.info("ORB matches rejected by region validation")
-                else:
-                    log.info("ORB found no matches")
-            except (FeatureMatchingError, cv2.error, ValueError) as orb_error:
-                log.warning(f"ORB failed: {orb_error}")
-            except Exception as orb_error:
-                log.warning(f"Unexpected ORB error: {orb_error}", exc_info=True)
 
-        # 4. No match found by any method
-        log.info("No icon matches found by any method")
-        _save_debug()
-        return {
-            "locations": [],
-            "similarities": [],
-            "method_used": "none"
-        }
+                if result.success:
+                    log.info(f"Stage 3 (ORB) found {len(result.locations)} match(es), adding to pool")
+                    method_weight = _get_method_weight(result.method)
+
+                    for i, (loc, sim, scale, size) in enumerate(zip(
+                        result.locations, result.similarities, result.scales, result.sizes
+                    )):
+                        normalized_sim = _normalize_similarity(sim, result.method)
+                        all_matches.append(DetectionMatch(
+                            location=loc,
+                            similarity=normalized_sim,
+                            method=result.method,
+                            scale=scale,
+                            size=size if size != (0, 0) else _estimate_match_size(scale, icon_size),
+                            weighted_similarity=normalized_sim * method_weight
+                        ))
+                else:
+                    log.info("Stage 3 (ORB) found no matches")
+
+            except (FeatureMatchingError, cv2.error, ValueError) as e:
+                log.warning(f"Stage 3 ORB failed: {e}")
+            except Exception as e:
+                log.warning(f"Stage 3 ORB unexpected error: {e}", exc_info=True)
+
+        # ========== Stage 4: SIFT Fallback ==========
+        if use_sift:
+            try:
+                log.info("Stage 4 - SIFT fallback (gradient/complex icons)")
+                result = SIFTMatcher.find_icon_locations(
+                    screenshot_bytes, icon_bytes, sift_min_matches, sift_ratio
+                )
+
+                if result.success:
+                    log.info(f"Stage 4 (SIFT) found {len(result.locations)} match(es), adding to pool")
+                    method_weight = _get_method_weight(result.method)
+
+                    for i, (loc, sim, scale, size) in enumerate(zip(
+                        result.locations, result.similarities, result.scales, result.sizes
+                    )):
+                        normalized_sim = _normalize_similarity(sim, result.method)
+                        all_matches.append(DetectionMatch(
+                            location=loc,
+                            similarity=normalized_sim,
+                            method=result.method,
+                            scale=scale,
+                            size=size if size != (0, 0) else _estimate_match_size(scale, icon_size),
+                            weighted_similarity=normalized_sim * method_weight
+                        ))
+                else:
+                    log.info("Stage 4 (SIFT) found no matches")
+
+            except (FeatureMatchingError, cv2.error, ValueError) as e:
+                log.warning(f"Stage 4 SIFT failed: {e}")
+            except Exception as e:
+                log.warning(f"Stage 4 SIFT unexpected error: {e}", exc_info=True)
+
+        # ========== Stage 5: Template Matching at 0.75 Threshold (Catch-All) ==========
+        try:
+            log.info("Stage 5 - Template matching at relaxed threshold (catch-all)")
+            result = TemplateMatcher.find_icon_locations(screenshot_bytes, icon_bytes, threshold, icon_mask=icon_mask)
+
+            if result.success:
+                log.info(f"Stage 5 (template) found {len(result.locations)} match(es), adding to pool")
+                method_weight = _get_method_weight(result.method)
+
+                for i, (loc, sim, scale, size) in enumerate(zip(
+                    result.locations, result.similarities, result.scales, result.sizes
+                )):
+                    normalized_sim = _normalize_similarity(sim, result.method)
+                    all_matches.append(DetectionMatch(
+                        location=loc,
+                        similarity=normalized_sim,
+                        method=result.method,
+                        scale=scale,
+                        size=size,
+                        weighted_similarity=normalized_sim * method_weight
+                    ))
+            else:
+                log.info("Stage 5 (template) found no matches")
+
+        except (FeatureMatchingError, cv2.error, ValueError) as e:
+            log.warning(f"Stage 5 template failed: {e}")
+        except Exception as e:
+            log.warning(f"Stage 5 template unexpected error: {e}", exc_info=True)
+
+        # ========== Aggregate All Results ==========
+        if all_matches:
+            log.info(f"Aggregating {len(all_matches)} matches from {len(set(m.method for m in all_matches))} methods")
+            aggregated = _aggregate_matches(all_matches, max_results, icon_size)
+
+            # Apply offset to final locations
+            if offset_x != 0 or offset_y != 0:
+                aggregated['locations'] = [(x + offset_x, y + offset_y) for x, y in aggregated['locations']]
+
+            log.info(f"Final result: {len(aggregated['locations'])} unique matches after aggregation")
+            return aggregated
+        else:
+            log.info("No matches from any method")
+            return {
+                'locations': [],
+                'similarities': [],
+                'methods': [],
+                'contributing_methods': [],
+                'method_used': 'no_matches'
+            }
 
     except (ImageDecodingError, base64.binascii.Error, ValueError) as e:
         log.error(f"Icon search input error: {e}")
@@ -275,7 +603,7 @@ def main(port: int, host: str, debug: bool, debug_output_dir: str = None) -> Non
         output_path.mkdir(parents=True, exist_ok=True)
         log.info(f"Debug output enabled. Saving images to: {output_path}")
         TextDetector.set_debug_output_dir(output_path)
-        IconSearchDebugger.set_debug_output_dir(output_path)
+        CannyEdgeMatcher.set_debug_output_dir(output_path)
 
     try:
         # Run FastMCP server
