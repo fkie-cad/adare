@@ -1,2 +1,16 @@
 environments:
-  - ubuntu24043
+  - win11-autopsy-solr4
+
+description: >-
+  Autopsy 4.5.0 regression test (paper section 5.4): run the Recent Activity ingest
+  module over the NIST CFReDS Windows image, export the Excel report, and compare every
+  sheet against the 4.4.0 baseline. Autopsy 4.5.0 bundles Solr 4.10.3.
+
+tags:
+  - autopsy
+  - tool:Autopsy
+  - goal:tool-test
+  - regression
+  - recent-activity
+  - solr4
+  - windows
