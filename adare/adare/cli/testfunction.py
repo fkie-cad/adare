@@ -386,6 +386,42 @@ def exec_dry_run_testfunction(arguments):
     console.print()
 
 
+def exec_testfunction_versions(arguments):
+    """List the version history of a testfunction library (or a single method)."""
+    from adare.backend.testfunction import database as testfunction_database
+    from adare.console import console
+
+    target = arguments.target
+    if '.' in target:
+        lib, func = target.split('.', 1)
+    else:
+        lib, func = target, None
+
+    history = testfunction_database.get_version_history(lib, func)
+    if history is None:
+        raise TestFunctionNotFoundError(log, message=f'testfunction library "{lib}" not found')
+
+    console.print(f'\n[bold]{lib}[/bold] — current file version: [b]v{history["current_version"]}[/b]')
+    for entry in history['versions']:
+        marker = ' [green](current)[/green]' if entry['is_current'] else ''
+        created = entry['created_at'] or '—'
+        console.print(f'  v{entry["version"]}  {str(entry["sha256"])[:12]}  {created}{marker}')
+
+    method = history.get('method')
+    if func:
+        if not method:
+            console.print(f'\n[yellow]method "{func}" not found in {lib}[/yellow]')
+        else:
+            status = '' if method['is_current'] else ' [red](removed / not current)[/red]'
+            console.print(f'\n[bold]{lib}.{func}[/bold] — current method version: [b]v{method["current_version"]}[/b]{status}')
+            for entry in method['versions']:
+                marker = ' [green](current)[/green]' if entry['is_current'] else ''
+                created = entry['created_at'] or '—'
+                fv = entry['file_version']
+                console.print(f'  v{entry["version"]}  {str(entry["sha256"])[:12]}  file v{fv}  {created}{marker}')
+    console.print()
+
+
 def exec_check_testfunction_exists(arguments):
     """Check if a testfunction exists in the database using AdareAPI."""
     from pathlib import Path

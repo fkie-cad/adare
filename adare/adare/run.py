@@ -594,9 +594,22 @@ def info(dotnotation):
     args = SimpleNamespace(dotnotation=dotnotation)
     exec_with_error_printing(exec_show_testfunction, args)
 
+@test.command()
+@click.argument('target')
+def versions(target):
+    """List the version history of a testfunction library.
+
+    TARGET is a library name (e.g. mycollection) or <library>.<function>
+    (e.g. mycollection.file_contains_word) for per-method history.
+    """
+    from adare.cli.testfunction import exec_testfunction_versions
+    args = SimpleNamespace(target=target)
+    exec_with_error_printing(exec_testfunction_versions, args)
+
 # Add aliases for test commands
 test.add_alias('l', 'list')
 test.add_alias('rm', 'remove')
+test.add_alias('v', 'versions')
 
 
 # ------------------------------

@@ -29,6 +29,40 @@ def replace_list_recursive_in_dict(d: dict):
             d[key] = ' '.join(value)
 
 
+def _resolve_current_testfunction_pin(testfunction_id: str) -> dict | None:
+    """Resolve the current file + method identity/version/hash for a global
+    TestFunction id (the stable ULID). Returns None if it can't be resolved.
+
+    Used at run time to stamp what actually executed and to detect drift against
+    the pins captured on the AbstractTest at experiment-bind time.
+    """
+    from adare.database.api.base import GlobalDatabaseApi
+    from adare.database.models.global_models import TestFunction
+
+    try:
+        with GlobalDatabaseApi() as global_api:
+            testfunction = global_api._session.query(TestFunction).options(
+                joinedload(TestFunction.file)
+            ).filter(TestFunction.id == testfunction_id).first()
+            if not testfunction:
+                return None
+            file = testfunction.file
+            return {
+                'testfunction_file_name': file.name if file else None,
+                'testfunction_file_version': file.version if file else None,
+                'testfunction_file_sha256': file.sha256hash if file else None,
+                'testfunction_version': testfunction.version,
+                'testfunction_sha256': testfunction.sha256hash,
+            }
+    except SQLAlchemyError as e:
+        log.warning(f'Could not resolve current testfunction pin for {testfunction_id}: {e}')
+        return None
+
+
+def _short_sha(value) -> str:
+    return str(value)[:12] if value else '—'
+
+
 class EventDbApi(ExperimentApi):
 
     def __init__(self, project_path: Path = None, experiment_run_ulid: str = None):
@@ -153,6 +187,36 @@ class EventDbApi(ExperimentApi):
                 log.error(f'Failed to add action event: {e}', exc_info=True)
                 self._session.rollback()
 
+    def _warn_on_testfunction_drift(self, abstract_test, executed_pin: dict, test_name: str):
+        """Log a loud warning when the current testfunction code differs from the
+        version the experiment was pinned to. Current code always executes.
+        """
+        pinned_fv = abstract_test.testfunction_file_version
+        # No pin recorded (pre-versioning experiment) → nothing to compare against.
+        if pinned_fv is None:
+            return
+
+        cur_fv = executed_pin.get('testfunction_file_version')
+        cur_fsha = executed_pin.get('testfunction_file_sha256')
+        cur_mv = executed_pin.get('testfunction_version')
+
+        drifted = (
+            pinned_fv != cur_fv
+            or abstract_test.testfunction_file_sha256 != cur_fsha
+            or abstract_test.testfunction_version != cur_mv
+        )
+        if not drifted:
+            return
+
+        file_name = executed_pin.get('testfunction_file_name') or abstract_test.testfunction_file_name or '?'
+        log.warning(
+            f"testfunction file '{file_name}' changed since experiment created: "
+            f"pinned file v{pinned_fv} (sha {_short_sha(abstract_test.testfunction_file_sha256)}) / "
+            f"method v{abstract_test.testfunction_version} "
+            f"vs current file v{cur_fv} (sha {_short_sha(cur_fsha)}) / method v{cur_mv}; "
+            f"running current code (test: {test_name})"
+        )
+
     def add_test_event(self, action_data: dict, action_id: str, experiment_run_ulid: str, parent_event_id: str = None):
         """
         Add a test event to the database as a TestEvent (now stores both start and complete events).
@@ -205,6 +269,15 @@ class EventDbApi(ExperimentApi):
                 if not abstract_test:
                     log.warning(f'No AbstractTest found with name "{test_name}" in experiment {experiment.id if experiment else "None"}')
 
+                # Resolve what actually executed (current global rows) and detect drift
+                # against the pins the experiment was created with. Current code always
+                # runs; drift is only reported, never blocks execution.
+                executed_pin = None
+                if abstract_test and abstract_test.testfunction_id:
+                    executed_pin = _resolve_current_testfunction_pin(abstract_test.testfunction_id)
+                    if executed_pin and not is_complete:
+                        self._warn_on_testfunction_drift(abstract_test, executed_pin, test_name)
+
                 # Create or update result based on test success (only for complete events)
                 test_result = None
                 success = action_data.get('success')
@@ -227,7 +300,14 @@ class EventDbApi(ExperimentApi):
                     success=success,
                     execution_time=action_data.get('execution_time'),
                     abstract_test=abstract_test,
-                    result=test_result
+                    result=test_result,
+                    # Stamp the executed testfunction file + method version/hash so each
+                    # run answers precisely which code ran.
+                    testfunction_file_name=(executed_pin or {}).get('testfunction_file_name'),
+                    testfunction_file_version=(executed_pin or {}).get('testfunction_file_version'),
+                    testfunction_file_sha256=(executed_pin or {}).get('testfunction_file_sha256'),
+                    testfunction_version=(executed_pin or {}).get('testfunction_version'),
+                    testfunction_sha256=(executed_pin or {}).get('testfunction_sha256'),
                 )
 
                 self._session.add(model_event)

@@ -25,11 +25,23 @@ class TestQueryMixin:
         test_events = self._project_api._session.query(Event).filter_by(experiment_run_id=run_ulid).filter(Event.category == 'test').all()
         for event in test_events:
             if event.abstract_test.name not in tests_data:
+                pinned_fv = getattr(event.abstract_test, 'testfunction_file_version', None)
+                executed_fv = getattr(event, 'testfunction_file_version', None)
+                drift = None
+                if pinned_fv is not None and executed_fv is not None:
+                    drift = (
+                        pinned_fv != executed_fv
+                        or event.abstract_test.testfunction_file_sha256 != event.testfunction_file_sha256
+                        or event.abstract_test.testfunction_version != event.testfunction_version
+                    )
                 tests_data[event.abstract_test.name] = {
                     'name': event.abstract_test.name,
                     'description': event.abstract_test.description,
                     'testfunction_name': event.abstract_test.testfunction.dotnotation,
                     'testfunction_description': event.abstract_test.testfunction.description,
+                    'testfunction_file': getattr(event, 'testfunction_file_name', None),
+                    'testfunction_file_version': executed_fv,
+                    'testfunction_drift': drift,
                     'result_status': int(event.stage_result) if event.result else None,
                     'result_details': event.result.details if event.result else None,
                     'result_status_name': self._project_api._session.query(Status).filter_by(id=event.result.status).one().name if event.result else None,

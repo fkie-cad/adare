@@ -194,6 +194,15 @@ class AbstractTest(SerializerMixin, ProjectBase):
     # Reference to global test function by ID (not FK)
     testfunction_id = Column(String, nullable=False)  # Global test function ID
 
+    # Reproducibility pins captured at experiment-bind time. Record which version
+    # of which testfunction *file* (collection) and which method version/hash the
+    # experiment was created against. Nullable: NULL = pre-versioning (no pin).
+    testfunction_file_name = Column(String, nullable=True)
+    testfunction_file_version = Column(Integer, nullable=True)
+    testfunction_file_sha256 = Column(String, nullable=True)
+    testfunction_version = Column(Integer, nullable=True)
+    testfunction_sha256 = Column(String, nullable=True)
+
     parameters = relationship(TestParameterEntry, secondary=mapping_abstracttest_testparameterentry)
     tools = relationship(Tool, secondary=mapping_abstracttest_tool)
 
@@ -367,6 +376,14 @@ class TestEvent(Event):
     result_id = Column(CHAR(26), ForeignKey('result.id'), nullable=True)
     abstract_test = relationship(AbstractTest, backref=backref("test_events", cascade="all, delete-orphan"))
     result = relationship(Result)
+
+    # What actually executed, stamped at run time. Compared against the AbstractTest
+    # pins to detect drift (current code always runs; drift is logged loudly).
+    testfunction_file_name = Column(String, nullable=True)
+    testfunction_file_version = Column(Integer, nullable=True)
+    testfunction_file_sha256 = Column(String, nullable=True)
+    testfunction_version = Column(Integer, nullable=True)
+    testfunction_sha256 = Column(String, nullable=True)
 
     def __str__(self):
         return str(self.abstract_test.name)
