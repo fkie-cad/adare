@@ -154,6 +154,13 @@ def db_repair():
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_repair_db, args)
 
+@db.command(name='migrate')
+def db_migrate():
+    """Apply pending database schema migrations (global + all projects)."""
+    from adare.cli.manage import exec_manage_migrate_db
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_manage_migrate_db, args)
+
 @db.command(name='clean-install')
 @click.option('--force', '-f', is_flag=True, help='Force clean installation without confirmation')
 def db_clean_install(force):

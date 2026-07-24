@@ -14,9 +14,10 @@ and which actually executed at run time (on test_events):
 
 All columns are nullable; NULL means pre-versioning (no pin / unknown).
 
-This migration runs against every project database registered in the global DB.
-
-Run this script manually if you have an existing ADARE installation:
+This is a *project*-scoped migration: it is applied automatically whenever a
+project database is opened (see ``adare.database.migrations.runner``). Run it
+explicitly against every registered project with:
+    adare db migrate
     python -m adare.database.migrations.add_testfunction_pins_to_tests
 
 For new installations, the columns are created automatically from the model.
@@ -62,6 +63,12 @@ def _migrate_table(conn, table: str) -> int:
     return added
 
 
+def upgrade(conn) -> None:
+    """Add the pin columns to abstract_test + test_events on ``conn`` (idempotent)."""
+    for table in _TABLES:
+        _migrate_table(conn, table)
+
+
 def _migrate_project(project_path: Path) -> bool:
     from adare.database.api.base import ProjectDatabaseApi
 
@@ -69,8 +76,7 @@ def _migrate_project(project_path: Path) -> bool:
     try:
         with ProjectDatabaseApi(project_path) as api:
             with api.engine.begin() as conn:
-                for table in _TABLES:
-                    _migrate_table(conn, table)
+                upgrade(conn)
         return True
     except SQLAlchemyError as e:
         print(f"  ✗ failed: {e}", file=sys.stderr)
