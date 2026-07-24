@@ -261,6 +261,10 @@ class ManageAPI:
         """Repair the database system."""
         return self._service.repair_db()
 
+    def migrate_db(self, quiet=False):
+        """Apply pending schema migrations to global + project databases."""
+        return self._service.migrate_db(quiet=quiet)
+
     def clean_install_db(self, force=False):
         """Perform clean database installation."""
         return self._service.clean_install_db(force=force)
