@@ -671,11 +671,17 @@ from adare.cli.groups.web_commands import register as register_web_commands
 web = register_web_commands(cli, AliasedGroup, exec_with_error_printing)
 
 # Web UI commands (start, build, services)
-from adare.cli.web_cmd import web_build, web_services, web_start
+from adare.cli.web_cmd import (
+    web_build,
+    web_install_spice,
+    web_services,
+    web_start,
+)
 
 web.add_command(web_start, "start")
 web.add_command(web_build, "build")
 web.add_command(web_services, "services")
+web.add_command(web_install_spice, "install-spice")
 
 
 # ------------------------------

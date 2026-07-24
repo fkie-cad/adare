@@ -470,6 +470,14 @@ class DomainXMLBuilder:
         graphics = ET.SubElement(self._devices, 'graphics', type='spice', autoport='yes')
         graphics.set('listen', '127.0.0.1')
         ET.SubElement(graphics, 'listen', type='address', address='127.0.0.1')
+        # Force a codec the ADARE-owned SPICE client fully decodes. The server emits
+        # LZ_RGB (image_type 101); if the client advertises SPICE_DISPLAY_CAP_LZ4 the
+        # server upgrades to LZ4 (109) — both have real decoders. This keeps QUIC/GLZ
+        # (unimplemented) off the wire. Localhost listen makes LZ4's larger frames free.
+        ET.SubElement(graphics, 'image', compression='lz')
+        # Disable MJPEG video streaming so no STREAM_* messages are emitted — the client
+        # has no stream parser and does not need one.
+        ET.SubElement(graphics, 'streaming', mode='off')
 
     def _add_vnc_graphics(self) -> None:
         """Add VNC graphics as fallback (e.g. Linux hosts without SPICE client)."""
