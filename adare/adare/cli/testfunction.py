@@ -64,6 +64,11 @@ def exec_load_testfunction(arguments):
     # Resolve the testfunction path
     testfunction_path = Path(arguments.name)
 
+    # Resolve appdata via APPDATA_DIR (matching exec_sync_testfunctions); the
+    # source layout is <APPDATA_DIR>/adare/adare/appdata/testfunctions/<name>.
+    from adare.config.configdirectory import APPDATA_DIR
+    appdata_testfunctions_root = APPDATA_DIR / 'adare' / 'adare' / 'appdata' / 'testfunctions'
+
     # If it's an absolute path or exists as given, use it directly
     if testfunction_path.is_absolute() or testfunction_path.exists():
         resolved_path = testfunction_path
@@ -71,26 +76,16 @@ def exec_load_testfunction(arguments):
         resolved_path = None
 
         # Try to find in adare appdata testfunctions directory
-        try:
-            from adare.config.configdirectory import get_config_directory
-            config_dir = get_config_directory()
-            appdata_testfunction_path = config_dir / 'appdata' / 'testfunctions' / arguments.name
-            if appdata_testfunction_path.exists():
-                resolved_path = appdata_testfunction_path
-        except Exception as e:
-            log.debug(f'Could not check appdata testfunctions: {e}')
+        appdata_testfunction_path = appdata_testfunctions_root / arguments.name
+        if appdata_testfunction_path.exists():
+            resolved_path = appdata_testfunction_path
 
         # Handle special case for "examples/testfunctions/xxx" pattern
         if resolved_path is None and arguments.name.startswith('examples/testfunctions/'):
             testfunction_name = arguments.name.split('/')[-1]  # Get the last part (e.g., "json")
-            try:
-                from adare.config.configdirectory import get_config_directory
-                config_dir = get_config_directory()
-                appdata_testfunction_path = config_dir / 'appdata' / 'testfunctions' / testfunction_name
-                if appdata_testfunction_path.exists():
-                    resolved_path = appdata_testfunction_path
-            except Exception as e:
-                log.debug(f'Could not check appdata testfunctions with examples pattern: {e}')
+            appdata_testfunction_path = appdata_testfunctions_root / testfunction_name
+            if appdata_testfunction_path.exists():
+                resolved_path = appdata_testfunction_path
 
         # Last fallback - try to resolve as relative to current directory
         if resolved_path is None:
@@ -159,6 +154,236 @@ def exec_sync_testfunctions(arguments):
             f"skipped:   {', '.join(summary['skipped']) or '—'}",
         ],
     )
+
+
+def _locate_collection_pyfile(lib: str, explicit_path: str | None):
+    """Find a collection's <lib>/<lib>.py across known locations (offline).
+
+    Search order: explicit --path, cwd testfunctions/, loaded global dir,
+    shipped appdata source tree.
+    """
+    from pathlib import Path
+
+    from adare.config.configdirectory import APPDATA_DIR, STATE_DIR
+
+    candidates = []
+    if explicit_path:
+        p = Path(explicit_path)
+        if p.is_file() and p.suffix == '.py':
+            candidates.append(p)
+        elif p.is_dir():
+            candidates.append(p / f'{p.name}.py')
+            candidates.append(p / f'{lib}.py')
+
+    candidates.extend([
+        Path.cwd() / 'testfunctions' / lib / f'{lib}.py',
+        STATE_DIR / 'testfunctions' / lib / f'{lib}.py',
+        APPDATA_DIR / 'adare' / 'adare' / 'appdata' / 'testfunctions' / lib / f'{lib}.py',
+    ])
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _parse_param_value(raw: str):
+    """Best-effort scalar coercion for --param k=v values (int/float/bool/None/str)."""
+    lowered = raw.strip().lower()
+    if lowered in ('true', 'false'):
+        return lowered == 'true'
+    if lowered in ('none', 'null'):
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        pass
+    try:
+        return float(raw)
+    except ValueError:
+        pass
+    return raw
+
+
+def exec_validate_testfunction(arguments):
+    """Validate a candidate testfunction collection offline (no VM, no DB).
+
+    Reports every authoring-contract violation with an actionable message:
+    filename≠dirname, missing 'ctx', unannotated params, duplicate testnames,
+    import/syntax errors, and missing dependencies.
+    """
+    from pathlib import Path
+
+    from adarelib.testset.testfunction import (
+        clear_module_load_failures,
+        get_module_load_failures,
+        import_basictest_subclasses,
+    )
+
+    path = Path(arguments.path)
+    if not path.exists():
+        raise TestFunctionNotFoundError(log, message=f'path "{arguments.path}" does not exist')
+
+    issues: list[str] = []
+    py_file = None
+
+    if path.is_file() and path.suffix == '.py':
+        py_file = path
+        collection_dir = path.parent
+        name = path.stem
+    elif path.is_dir():
+        collection_dir = path
+        name = collection_dir.name
+        expected = collection_dir / f'{name}.py'
+        py_candidates = sorted(collection_dir.glob('*.py'))
+        if expected.is_file():
+            py_file = expected
+        elif py_candidates:
+            py_file = py_candidates[0]
+            issues.append(
+                f"filename ≠ dirname: expected '{name}.py' but found "
+                f"{[p.name for p in py_candidates]}. The .py file must be named exactly "
+                f"like its directory, or the collection is silently skipped on load."
+            )
+        else:
+            issues.append(f"no .py file found in {collection_dir}")
+    else:
+        raise TestFunctionNotFoundError(
+            log, message=f'"{arguments.path}" must be a testfunction directory or .py file'
+        )
+
+    discovered: dict = {}
+    if py_file is not None:
+        clear_module_load_failures()
+        result = import_basictest_subclasses(source=[(name, py_file)])
+        failures = get_module_load_failures()
+        if name in failures:
+            issues.append(failures[name].get_user_friendly_message())
+        discovered = result.get(name, {})
+
+    # requirements.txt sanity note (not an error — just informational)
+    req = collection_dir / 'requirements.txt'
+    req_note = None
+    if req.is_file():
+        deps = [
+            ln.strip() for ln in req.read_text(encoding='utf-8').splitlines()
+            if ln.strip() and not ln.strip().startswith('#')
+        ]
+        if deps:
+            req_note = f"declares {len(deps)} dependency(ies): {', '.join(deps)}"
+
+    if issues:
+        from adare.console import console
+        console.print(f'\n[bold red]✗ Validation failed for {name}[/bold red] ({len(issues)} issue(s)):')
+        for i, issue in enumerate(issues, 1):
+            console.print(f'  [red]({i})[/red] {issue}')
+        if discovered:
+            console.print(f'\n  Loadable tests despite issues: {", ".join(sorted(discovered))}')
+        console.print()
+        exit(1)
+
+    from adare.console import console
+    console.print(f'\n[bold green]✓ {name} is valid[/bold green]')
+    console.print(f'  tests: {", ".join(sorted(discovered)) or "—"}')
+    if req_note:
+        console.print(f'  requirements.txt {req_note}')
+    console.print()
+
+
+def exec_dry_run_testfunction(arguments):
+    """Execute a single testfunction against a local sample path (no VM).
+
+    Scope: FILE_BASED / FILE_CONTENT only — host/async and QGA tests need a live
+    ctx.host / guest and are out of scope for this offline harness.
+    """
+    import cattrs
+
+    from adarelib.testset.basictest import HostModeCategory
+    from adarelib.testset.testfunction import (
+        clear_module_load_failures,
+        get_module_load_failures,
+        get_testclass_from_testfunction,
+        import_basictest_subclasses,
+    )
+
+    target = arguments.target
+    if '.' not in target:
+        raise TestFunctionNotFoundError(
+            log, message=f'target "{target}" must be in <collection>.<function> form (e.g. mycollection.file_contains_word)'
+        )
+    lib, func = target.split('.', 1)
+
+    py_file = _locate_collection_pyfile(lib, getattr(arguments, 'path', None))
+    if py_file is None:
+        raise TestFunctionNotFoundError(
+            log,
+            message=f'could not locate collection "{lib}" — pass --path <collection dir> or load it first',
+        )
+
+    clear_module_load_failures()
+    collection = import_basictest_subclasses(source=[(lib, py_file)])
+    failures = get_module_load_failures()
+    if lib in failures:
+        from adare.console import console
+        console.print(f'[red]✗ {failures[lib].get_user_friendly_message()}[/red]')
+        exit(1)
+
+    testclass = get_testclass_from_testfunction(target, collection)
+    if testclass is None:
+        available = ', '.join(sorted(collection.get(lib, {}))) or '—'
+        raise TestFunctionNotFoundError(
+            log, message=f'function "{func}" not found in collection "{lib}". Available: {available}'
+        )
+
+    category = getattr(testclass, 'host_mode_category', HostModeCategory.AGENT_ONLY)
+    if category not in (HostModeCategory.FILE_BASED, HostModeCategory.FILE_CONTENT):
+        raise TestFunctionNotFoundError(
+            log,
+            message=(
+                f'dry-run supports FILE_BASED / FILE_CONTENT tests only; '
+                f'"{target}" is {category.value} and needs a live host/guest context.'
+            ),
+        )
+
+    # Build parameters from --param k=v (repeatable) and --file (as dst default).
+    params: dict = {}
+    for pair in getattr(arguments, 'param', None) or ():
+        if '=' not in pair:
+            raise TestFunctionNotFoundError(log, message=f'invalid --param "{pair}" (expected key=value)')
+        key, value = pair.split('=', 1)
+        params[key.strip()] = _parse_param_value(value)
+
+    sample = getattr(arguments, 'file', None)
+    if sample and 'dst' not in params:
+        params['dst'] = sample
+
+    test_dict = {
+        'name': f'dryrun_{func}',
+        'parameter': params,
+        'description': '',
+        'variable_metadata': None,
+    }
+
+    from adare.console import console
+    try:
+        test_instance = cattrs.structure(test_dict, testclass)
+    except cattrs.errors.ClassValidationError as e:
+        console.print(f'[red]✗ parameter validation failed for {target}:[/red] {e}')
+        console.print('[yellow]  check --param names/types against the function signature[/yellow]')
+        exit(1)
+
+    result = test_instance.test()
+
+    from adarelib.constants import StatusEnum
+    status_name = StatusEnum(result.status).name
+    color = StatusEnum.get_color(result.status) or 'white'
+    console.print(f'\n[bold]{target}[/bold] (sample: {sample or params.get("dst", "—")})')
+    console.print(f'  status: [{color}]{status_name}[/{color}]')
+    if result.details:
+        console.print('  details:')
+        for detail in result.details:
+            console.print(f'    - {detail}')
+    console.print()
 
 
 def exec_check_testfunction_exists(arguments):
