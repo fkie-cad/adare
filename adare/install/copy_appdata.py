@@ -55,6 +55,10 @@ if __name__ == '__main__':
 
     # move all files from adare/adare/appdata to appdata root (except testfunctions)
     for file in (APPDATA_DIR / 'adare' / 'adare' / 'appdata').iterdir():
-        if file.name != 'testfunctions':  # Skip testfunctions - we'll load directly from source
+        if file.name == 'testfunctions':  # Skip testfunctions - we'll load directly from source
+            continue
+        if file.is_dir():
             shutil.copytree(file, APPDATA_DIR / file.name, dirs_exist_ok=True,
                             ignore=shutil.ignore_patterns(*IGNORE_PATTERNS))
+        else:
+            shutil.copy2(file, APPDATA_DIR / file.name)
