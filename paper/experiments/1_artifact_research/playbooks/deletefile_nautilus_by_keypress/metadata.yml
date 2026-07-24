@@ -1,4 +1,10 @@
 environments:
+  - ubuntu-1804
   - ubuntu-2004
   - ubuntu-2204
   - ubuntu-2404
+
+tags: [trash, deletion, xdg, fred]
+
+description: >-
+  Delete a file from three home subdirectories by selecting it in Nautilus (GNOME) and pressing the Delete key, then verify the resulting XDG trash can artifacts.
