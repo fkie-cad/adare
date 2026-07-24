@@ -1,8 +1,16 @@
-# Paper section 5.2 -- Artifact Regression Testing, Ubuntu 24.04 (GNOME / Nautilus).
+# Paper section 5.2 -- Artifact Regression Testing, Ubuntu 20.04 (GNOME / Nautilus).
 #
-# Interaction: create a document, open it exactly once, then validate the XDG
-# recently-used artifact against the known ground truth.
-# Expected outcome for this distro/version: artifact PRESENT and CORRECT.
+# Same interaction as the 22.04 / 24.04 variants: create a document, open it exactly
+# once, then validate the XDG recently-used artifact against the known ground truth.
+#
+# Expected outcome for this distro/version: artifact PRESENT but the 'visited' access
+# metadata is DEFECTIVE -- Ubuntu 20.04 records integer -1, serialised as
+# 1969-12-31T23:59:59Z. This playbook is therefore a regression test that PINS a known
+# defect: xbel_visited_is_epoch_minus_one is expected to pass here and would fail on any
+# release that fixed the bug, which is exactly the drift the paper wants surfaced.
+#
+# GUI crops in img/ were copied from the Ubuntu 24.04 variant and MUST be re-taken
+# against a live Ubuntu 20.04 VM (Yaru icon theme differs between releases).
 
 settings:
   idle: 2.0
@@ -52,7 +60,7 @@ tests:
     parameter:
       dst: '{{ text_file }}'
 
-  # --- paper claim: "validate whether recently-used.xbel exists" ---
+  # --- paper claim: "the artifact was created in all tested Ubuntu versions" ---
   - name: xbel_exists
     description: 'Verify the recently-used artifact was created by opening the document'
     function: standard.file_exists
@@ -89,21 +97,26 @@ tests:
         bookmark: "http://www.freedesktop.org/standards/desktop-bookmarks"
         mime: "http://www.freedesktop.org/standards/shared-mime-info"
 
-  # --- paper claim: access metadata -- timestamps match the interaction time ---
-  # The xbel attributes are UTC with a trailing 'Z', so the format string carries the
-  # literal Z and '| localtime' is deliberately NOT applied: the host side of the
-  # comparison is a UTC epoch from save_timestamp, and adding '| localtime' would make
-  # basictest._parse_timestamp_with_format read the guest's UTC wall time as local wall
-  # time, skewing the comparison by the host's UTC offset. See README ("UTC, not localtime").
-  - name: xbel_visited_timestamp
-    description: 'visited timestamp matches the moment the document was opened (+/-5s)'
+  # --- paper claim: "Ubuntu 20.04 consistently recorded the 'visited' timestamp as
+  # 1969-12-31T23:59:59Z (integer -1)" -- the observed defect IS the expectation here.
+  # No tolerance placeholder: the value is not a real timestamp, it is the serialisation
+  # of time_t == -1 by GLib < 2.66, so it must match exactly.
+  - name: xbel_visited_is_epoch_minus_one
+    description: 'REGRESSION PIN: Ubuntu 20.04 writes visited as integer -1 (1969-12-31T23:59:59Z) instead of the access time'
     function: xml.attribute_matches
     parameter:
       dst: '{{ xbel_file }}'
       xpath: '//bookmark'
       attribute: 'visited'
-      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -5) }}"
+      expected_value: '1969-12-31T23:59:59Z'
 
+  # --- paper claim: access metadata -- timestamps match the interaction time ---
+  # Only 'modified' and 'added' carry usable times on 20.04; 'visited' is pinned above.
+  # The xbel attributes are UTC with a trailing 'Z', so the format string carries the
+  # literal Z and '| localtime' is deliberately NOT applied: the host side of the
+  # comparison is a UTC epoch from save_timestamp, and adding '| localtime' would make
+  # basictest._parse_timestamp_with_format read the guest's UTC wall time as local wall
+  # time, skewing the comparison by the host's UTC offset. See README ("UTC, not localtime").
   - name: xbel_modified_timestamp
     description: 'modified timestamp matches the moment the document was opened (+/-5s)'
     function: xml.attribute_matches
@@ -111,7 +124,7 @@ tests:
       dst: '{{ xbel_file }}'
       xpath: '//bookmark'
       attribute: 'modified'
-      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -5) }}"
+      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%SZ') | tolerance(5, -5) }}"
 
   - name: xbel_added_timestamp
     description: 'added timestamp matches the moment the document was opened (+/-5s)'
@@ -120,20 +133,29 @@ tests:
       dst: '{{ xbel_file }}'
       xpath: '//bookmark'
       attribute: 'added'
-      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -5) }}"
+      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%SZ') | tolerance(5, -5) }}"
 
-  # --- paper claim: timestamp precision improved after Ubuntu 20.04 ---
-  # Executable form of the precision-drift finding: 20.04 stores second-level precision,
-  # later versions store fractional seconds (GLib >= 2.66 writes GDateTime ISO-8601 with
-  # microseconds instead of the old time_t seconds).
-  - name: xbel_visited_subsecond_precision
-    description: 'visited timestamp carries fractional seconds (higher precision than Ubuntu 20.04)'
+  # --- paper claim: "timestamp precision improved over time: Ubuntu 20.04 stored only
+  # second-level precision" -- executable form of the precision-drift finding. The regex
+  # rejects any fractional-second component, so it fails on 22.04 / 24.04 output.
+  - name: xbel_modified_second_precision
+    description: 'PRECISION DRIFT: Ubuntu 20.04 stores second-level precision only (no fractional seconds)'
     function: xml.attribute_matches
     parameter:
       dst: '{{ xbel_file }}'
       xpath: '//bookmark'
-      attribute: 'visited'
-      expected_value: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z$'
+      attribute: 'modified'
+      expected_value: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+      regex_match: true
+
+  - name: xbel_added_second_precision
+    description: 'PRECISION DRIFT: Ubuntu 20.04 stores second-level precision only (no fractional seconds)'
+    function: xml.attribute_matches
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark'
+      attribute: 'added'
+      expected_value: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
       regex_match: true
 
   # --- proof that the interaction really reached the document ---
@@ -200,7 +222,7 @@ actions:
       type: "double"
       target:
         text: "{{ filename }}"
-      description: "Open the document exactly once"
+      description: "Open the document exactly once (gedit on 20.04)"
 
   - wait_until:
       condition:
@@ -216,10 +238,11 @@ actions:
   - test: xbel_bookmark_count
   - test: xbel_bookmark_href
   - test: xbel_visit_count
-  - test: xbel_visited_timestamp
+  - test: xbel_visited_is_epoch_minus_one
   - test: xbel_modified_timestamp
   - test: xbel_added_timestamp
-  - test: xbel_visited_subsecond_precision
+  - test: xbel_modified_second_precision
+  - test: xbel_added_second_precision
   - test: text_file_accessed
 
   - pull:

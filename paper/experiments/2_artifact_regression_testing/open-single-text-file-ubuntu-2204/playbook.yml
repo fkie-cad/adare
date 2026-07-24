@@ -1,4 +1,11 @@
-# Paper section 5.2 -- Artifact Regression Testing, Ubuntu 24.04 (GNOME / Nautilus).
+# Paper section 5.2 -- Artifact Regression Testing, Ubuntu 22.04 (GNOME / Nautilus).
+#
+# Identical interaction to the Ubuntu 24.04 variant: the only thing that varies across
+# the section 5.2 experiments is the distro/version, which is what makes the comparison
+# a regression test.
+#
+# GUI crops in img/ were copied from the Ubuntu 24.04 variant and MUST be re-taken
+# against a live Ubuntu 22.04 VM (Yaru icon theme differs between releases).
 #
 # Interaction: create a document, open it exactly once, then validate the XDG
 # recently-used artifact against the known ground truth.

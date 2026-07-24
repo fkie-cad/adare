@@ -1,12 +1,12 @@
 # No 'name:' key -- ExperimentMetadata does not define one and cattrs drops it silently.
-description: "Open one document and validate that recently-used.xbel is created (belongs to paper 5.1, see README)"
+description: "Paper 5.2: open one document on Kubuntu 24.04 and validate the recently-used.xbel access metadata"
 
 environments:
-  - fedora-42
+  - kubuntu-2404
 
 tags:
   - xbel
   - recently-used
   - xdg
   - regression
-  - misfiled
+

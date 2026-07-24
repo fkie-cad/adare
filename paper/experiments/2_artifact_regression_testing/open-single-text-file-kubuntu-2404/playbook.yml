@@ -1,8 +1,21 @@
-# Paper section 5.2 -- Artifact Regression Testing, Ubuntu 24.04 (GNOME / Nautilus).
+# Paper section 5.2 -- Artifact Regression Testing, Kubuntu 24.04 (KDE Plasma / Dolphin).
 #
-# Interaction: create a document, open it exactly once, then validate the XDG
-# recently-used artifact against the known ground truth.
-# Expected outcome for this distro/version: artifact PRESENT and CORRECT.
+# Same interaction as the Ubuntu variants, executed through Dolphin instead of Nautilus:
+# create a document, open it exactly once, then validate the XDG recently-used artifact.
+#
+# Expected outcome for this distro/version: artifact PRESENT and CORRECT. This is the
+# counterpart to kubuntu-2004 / kubuntu-2204, where the same interaction produces NO
+# artifact at all -- the version boundary the paper reports.
+#
+# GUI icon img/dolphin_taskbar.png is reused from section 5.1
+# (paper/experiments/1_artifact_research/playbooks/deletefile_dolphin_by_click) and is a
+# rasterization of upstream KDE Breeze art, NOT a crop from a live VM. It MUST be re-taken
+# from a live Kubuntu 24.04 screenshot before the results are trusted.
+#
+# CLICK-MODE CAVEAT: Plasma may be configured to open files on a SINGLE click. Under that
+# setting a 'double' click opens the document twice and xbel_visit_count reports 2 instead
+# of 1. Verify the VM's click behaviour and switch this action to a single click if needed
+# -- the failing assertion is the intended signal, not a reason to loosen the test.
 
 settings:
   idle: 2.0
@@ -29,8 +42,8 @@ variables:
 
   icon_filemanager_taskbar:
     type: string
-    value: "filemanager-app.png"
-    description: "Taskbar icon of the GNOME file manager (Nautilus)"
+    value: "dolphin_taskbar.png"
+    description: "Taskbar icon of the KDE file manager (Dolphin)"
 
   file_content:
     type: string
@@ -52,7 +65,7 @@ tests:
     parameter:
       dst: '{{ text_file }}'
 
-  # --- paper claim: "validate whether recently-used.xbel exists" ---
+  # --- paper claim: "on Kubuntu the artifact was [...] present in 24.04" ---
   - name: xbel_exists
     description: 'Verify the recently-used artifact was created by opening the document'
     function: standard.file_exists
@@ -122,12 +135,11 @@ tests:
       attribute: 'added'
       expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -5) }}"
 
-  # --- paper claim: timestamp precision improved after Ubuntu 20.04 ---
-  # Executable form of the precision-drift finding: 20.04 stores second-level precision,
-  # later versions store fractional seconds (GLib >= 2.66 writes GDateTime ISO-8601 with
-  # microseconds instead of the old time_t seconds).
+  # --- paper claim: timestamp precision improved over time ---
+  # Kubuntu 24.04 ships GLib >= 2.66, which serialises GDateTime with microseconds
+  # instead of the second-granular time_t of the 20.04 era.
   - name: xbel_visited_subsecond_precision
-    description: 'visited timestamp carries fractional seconds (higher precision than Ubuntu 20.04)'
+    description: 'visited timestamp carries fractional seconds (higher precision than the 20.04 era)'
     function: xml.attribute_matches
     parameter:
       dst: '{{ xbel_file }}'
@@ -137,8 +149,6 @@ tests:
       regex_match: true
 
   # --- proof that the interaction really reached the document ---
-  # atime was reset to 2000-01-01 immediately before the opening click, so any recent
-  # access time can only come from the document actually being read afterwards.
   - name: text_file_accessed
     description: 'The document was read after the opening click (access time no longer the reset value)'
     function: standard.file_timestamps
@@ -166,12 +176,12 @@ actions:
   - click:
       target:
         image: "{{ icon_filemanager_taskbar }}"
-      description: "Open the GNOME file manager (Nautilus)"
+      description: "Open the KDE file manager (Dolphin)"
   - wait_until:
       condition:
         exists:
           text: "Documents"
-      description: "Wait for the file manager sidebar to be usable"
+      description: "Wait for the Dolphin Places panel to be usable"
 
   - click:
       target:
@@ -186,8 +196,8 @@ actions:
           text: "{{ filename }}"
       description: "Wait for the document to be listed"
 
-  # Reset atime AFTER navigation so that file-manager previewing/thumbnailing cannot be
-  # mistaken for the opening read.
+  # Reset atime AFTER navigation so that Dolphin's text preview cannot be mistaken for
+  # the opening read.
   - command:
       name: "Reset access time of the document"
       description: "Pin atime to 2000-01-01 so a later access time proves the document was opened"
@@ -200,7 +210,7 @@ actions:
       type: "double"
       target:
         text: "{{ filename }}"
-      description: "Open the document exactly once"
+      description: "Open the document exactly once (see CLICK-MODE CAVEAT at the top)"
 
   - wait_until:
       condition:
