@@ -384,19 +384,22 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
     async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> list[SetupCommand]:
         """Build Linux setup commands with per-command admin requirements."""
         commands = [
-            # Add project-wide tools to PATH (user bashrc, no admin needed)
+            # Add project-wide tools to PATH (user bashrc)
+            # Ensure /home/adare exists and has correct ownership before modifying .bashrc (QGA runs as root)
             SetupCommand(
-                command="grep -qxF 'export PATH=$PATH:/adare/project_shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/project_shared/tools' >> ~/.bashrc; . ~/.bashrc",
+                command="(grep -qxF \"export PATH=\\$PATH:/adare/project_shared/tools\" /home/adare/.bashrc || echo \"export PATH=\\$PATH:/adare/project_shared/tools\" >> /home/adare/.bashrc)",
                 requires_admin=False
             ),
-            # Add experiment-specific tools to PATH (user bashrc, no admin needed)
+            # Add experiment-specific tools to PATH (user bashrc)
+            # Ensure /home/adare exists and has correct ownership before modifying .bashrc (QGA runs as root)
             SetupCommand(
-                command="grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc; . ~/.bashrc",
+                command="(grep -qxF \"export PATH=\\$PATH:/adare/shared/tools\" /home/adare/.bashrc || echo \"export PATH=\\$PATH:/adare/shared/tools\" >> /home/adare/.bashrc)",
                 requires_admin=False
             ),
-            # Add ~/.local/bin to PATH for installations (user bashrc, no admin needed)
+            # Add ~/.local/bin to PATH for installations (user bashrc)
+            # Ensure /home/adare exists and has correct ownership before modifying .bashrc (QGA runs as root)
             SetupCommand(
-                command="grep -qxF 'export PATH=\"$HOME/.local/bin:$PATH\"' ~/.bashrc || echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.bashrc; . ~/.bashrc",
+                command="(grep -qxF \"export PATH=\\\"\\$HOME/.local/bin:\\$PATH\\\"\" /home/adare/.bashrc || echo \"export PATH=\\\"\\$HOME/.local/bin:\\$PATH\\\"\" >> /home/adare/.bashrc)",
                 requires_admin=False
             )
         ]
