@@ -190,7 +190,13 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--cpus', type=int, default=None, help='CPU count')
     @click.option('--force', is_flag=True, default=False, help='Overwrite existing VM disk image')
     @click.option('--vm-dir', type=click.Path(), default=None, help='Directory for VM disk image (default: ~/.adare/state/vms/)')
-    @click.option('--bare', is_flag=True, default=False, help='Skip ADARE agent software (Miniforge3, qemu-guest-agent)')
+    @click.option('--setup', 'setup_level', type=click.Choice(['bare', 'base', 'full', 'agent']),
+                  default=None,
+                  help='What to install during creation: bare (OS only), base (+ guest tools), '
+                       'full (+ Python env, default), agent (+ pre-installed adarevm, '
+                       'not implemented).')
+    @click.option('--bare', is_flag=True, default=False,
+                  help='Deprecated alias for --setup bare.')
     @click.option('--env-name', default=None, help='Environment file name (defaults to VM name)')
     @click.option('--interactive', is_flag=True, default=False, help='Boot VM after install for manual software installation')
     @click.option('--arch', type=click.Choice(['x86_64', 'aarch64']), default=None, help='Override CPU architecture (default: from OS profile)')
@@ -199,7 +205,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--relearn', is_flag=True, default=False, help='GUI-auto: discard the cached playbook and re-record from scratch.')
     @click.option('--display', is_flag=True, default=False, help='GUI-auto: show the VM window while the agent drives the installer.')
     @click.option('--template', default=None, help='GUI-auto: explicit goal/spec template name (default: gui_<distribution>).')
-    def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, bare, env_name, interactive, arch, recipe, record, relearn, display, template):
+    def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, setup_level, bare, env_name, interactive, arch, recipe, record, relearn, display, template):
         """Create a new ADARE-ready VM from scratch.
 
         OS_NAME is the target OS. Run `adare manage os-profile list` to see all entries.
@@ -222,13 +228,14 @@ def register(cli, AliasedGroup, exec_with_error_printing):
           adare vm create mint --iso /path/to/linuxmint.iso       # manual install
           adare vm create kubuntu2404 --iso /path/to/kubuntu.iso  # GUI-automated (record then replay)
           adare vm create ubuntu2404 --bare
+          adare vm create ubuntu2404 --setup base
           adare vm create ubuntu2404 --interactive
           adare vm create windows11 --iso /path/to/Win11.iso
           adare vm create ubuntu2404 --iso /path/to/ubuntu.iso --recipe
           adare vm create ubuntu2204 --name my-ubuntu --disk-size 100G --ram 8192
         """
         from adare.cli.vm_create import exec_vm_create
-        args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, bare=bare, env_name=env_name, interactive=interactive, arch=arch, recipe=recipe, record=record, relearn=relearn, display=display, template=template)
+        args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, setup_level=setup_level, bare=bare, env_name=env_name, interactive=interactive, arch=arch, recipe=recipe, record=record, relearn=relearn, display=display, template=template)
         exec_with_error_printing(exec_vm_create, args)
 
     @vm.command(name='gui-doctor')

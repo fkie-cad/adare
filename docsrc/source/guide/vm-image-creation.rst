@@ -243,7 +243,9 @@ Options
    * - ``--cpus N``
      - CPU core count (default: half of host cores, clamped 2--8)
    * - ``--setup LEVEL``
-     - Setup level: ``bare`` (OS only), ``base`` (+ guest tools), ``full`` (+ Python, default), ``agent`` (+ adarevm, deferred)
+     - Setup level: ``bare`` (OS only), ``base`` (+ guest tools), ``full`` (+ Python, default), ``agent`` (not implemented -- rejected)
+   * - ``--bare``
+     - Deprecated alias for ``--setup bare``
    * - ``--interactive``
      - Boot the VM after automated install for manual customization
    * - ``--force``
@@ -288,14 +290,28 @@ Each level is cumulative -- it includes everything from the levels below it.
      - Python environment (Miniforge3 + ``pyadare`` conda env)
      - Standard ADARE experiments
    * - ``agent``
-     - Pre-installed ``adarevm`` guest agent (deferred)
-     - Zero-overhead experiment runs
+     - **Not implemented** -- the CLI rejects ``--setup agent``
+     - Documented placeholder only
+
+**What ``full`` actually bakes:**
+
+- **Linux and Windows x86_64** -- Miniforge3 plus a ``pyadare`` conda environment
+- **Windows ARM64** -- plain CPython 3.11 (no conda; there is no Miniforge build for
+  Windows on ARM64), which is by design
+- **``gui-auto`` and ``manual`` installs** -- no Python environment at all; the level
+  therefore has little effect for those profiles
 
 **Guest tools per platform:**
 
 - **Linux** -- ``qemu-guest-agent``
 - **Windows x86_64** -- ``virtio-win-guest-tools.exe`` (VirtIO drivers, QGA, SPICE) + firewall rule for port 18765
 - **Windows ARM64 (UTM)** -- UTM guest tools + firewall rule for port 18765
+
+**Conda vs. system Python is never a create-time choice.** The guest's Python stack is
+auto-detected at run time (a baked conda env is used if present, otherwise the system
+interpreter, with a create-the-env recovery path). Likewise the ``adarevm``/``adarelib``
+wheels are *not* installed during ``vm create`` -- they install themselves on the first
+experiment or dev-session start.
 
 
 .. _recipe-environments:

@@ -34,17 +34,37 @@ def exec_vm_create(arguments):
     force = getattr(arguments, 'force', False)
     vm_dir_raw = getattr(arguments, 'vm_dir', None)
     vm_dir = Path(vm_dir_raw).resolve() if vm_dir_raw else None
-    setup_level = SetupLevel[getattr(arguments, 'setup_level', 'full').upper()]
     env_name = getattr(arguments, 'env_name', None)
     interactive = getattr(arguments, 'interactive', False)
     arch = getattr(arguments, 'arch', None)
     recipe_flag = getattr(arguments, 'recipe', None)
     bare = getattr(arguments, 'bare', False)
+    setup_arg = getattr(arguments, 'setup_level', None)
+    # Resolve the setup level once, before branching, so every creator path
+    # (recipe, manual, gui-auto, linux, windows) honours it. `--setup` wins;
+    # `--bare` is the deprecated alias for `--setup bare`.
+    if setup_arg is not None:
+        setup_level = SetupLevel[setup_arg.upper()]
+        if bare and setup_level != SetupLevel.BARE:
+            log.warning('--bare is ignored because --setup %s was given explicitly', setup_arg)
+    else:
+        setup_level = SetupLevel.BARE if bare else SetupLevel.FULL
     # GUI-automation (gui-auto install mode) options.
     gui_record = getattr(arguments, 'record', False)
     gui_relearn = getattr(arguments, 'relearn', False)
     gui_display = getattr(arguments, 'display', False)
     gui_template = getattr(arguments, 'template', None)
+
+    if setup_level == SetupLevel.AGENT:
+        print_error_message(
+            title="Setup level 'agent' is not implemented",
+            next_steps=[
+                f'Use the default instead: adare vm create {os_name} --setup full',
+                'The adarevm agent installs itself on the first experiment/dev-session run, '
+                'so no create-time install is needed.',
+            ],
+        )
+        return
 
     # Look up OS definition
     try:
@@ -62,6 +82,12 @@ def exec_vm_create(arguments):
     # Override architecture if --arch was specified
     if arch is not None:
         os_def = replace(os_def, architecture=arch)
+
+    if setup_level != SetupLevel.FULL and os_def.install_mode in ('manual', 'gui-auto'):
+        log.warning(
+            '--setup %s has little effect for %s installs: they bake no Python environment anyway',
+            setup_level.name.lower(), os_def.install_mode,
+        )
 
     iso_path = Path(iso).resolve() if iso else None
 
@@ -88,7 +114,6 @@ def exec_vm_create(arguments):
         from adare.console import print_step
         print_step(f'Hashing ISO for recipe integrity: [dim]{iso_path}[/dim]')
         iso_sha256 = hash_file_sha256(iso_path)
-        setup_level = SetupLevel.BARE if bare else SetupLevel.FULL
         final_name = env_name or vm_name or f'{os_name}-recipe'
 
         env_file_path = build_recipe_environment_file(
