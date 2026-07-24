@@ -2,17 +2,95 @@
 # configure logging
 import logging
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 # internal imports
 import adare.backend.testfunction.database as testfunction_database
 from adare.backend.testfunction.directory import TestfunctionDirectory
-from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
+from adare.backend.testfunction.exceptions import (
+    TestfunctionDependencyError,
+    TestfunctionMissingFileError,
+)
 from adare.exceptions import NotLoggedInError
 from adare.webappaccess.download import download_testfunction, sync
 from adare.webappaccess.login import is_logged_in
 
 log = logging.getLogger(__name__)
+
+
+def _requirements_has_entries(requirements_file: Path) -> bool:
+    """True if requirements.txt lists at least one non-comment, non-blank dependency."""
+    if not requirements_file.exists():
+        return False
+    try:
+        for raw_line in requirements_file.read_text(encoding='utf-8').splitlines():
+            line = raw_line.strip()
+            if line and not line.startswith('#'):
+                return True
+    except OSError as e:
+        log.warning(f'Could not read requirements file {requirements_file}: {e}')
+    return False
+
+
+def _install_testfunction_requirements(requirements_file: Path, name: str) -> None:
+    """Install a testfunction collection's dependencies into the running interpreter.
+
+    Prefers `uv pip install` (this project uses uv); falls back to `pip`.
+    Raises TestfunctionDependencyError at load time (not run time) with the exact
+    command to run manually, so a missing dependency never fails silently later.
+    """
+    if not _requirements_has_entries(requirements_file):
+        log.debug(f'No dependencies to install for testfunction "{name}"')
+        return
+
+    # uv needs to target this interpreter's environment explicitly; pip is invoked
+    # via the interpreter itself so it always lands in the same env.
+    candidates = [
+        ['uv', 'pip', 'install', '--python', sys.executable, '-r', str(requirements_file)],
+        [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)],
+    ]
+    manual_cmd = f'uv pip install -r "{requirements_file}"'
+
+    last_error: str | None = None
+    for cmd in candidates:
+        try:
+            log.info(f'Installing dependencies for testfunction "{name}": {" ".join(cmd)}')
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            log.info(f'Dependencies for testfunction "{name}" installed')
+            return
+        except FileNotFoundError:
+            # Installer binary (e.g. uv) not on PATH — try the next candidate.
+            log.debug(f'Installer not found, trying fallback: {cmd[0]}')
+            continue
+        except subprocess.CalledProcessError as e:
+            error_text = (e.stderr or e.stdout or str(e)).strip()
+            log.warning(f'Dependency install command failed ({cmd[0]}): {error_text}')
+            # Keep the first real error (uv's resolution message is more useful
+            # than a subsequent "No module named pip" fallback failure).
+            if last_error is None:
+                last_error = error_text
+            continue
+        except OSError as e:
+            log.warning(f'Dependency install command errored ({cmd[0]}): {e}')
+            if last_error is None:
+                last_error = str(e)
+            continue
+
+    raise TestfunctionDependencyError(
+        log,
+        message=(
+            f'Failed to install dependencies for testfunction "{name}" from '
+            f'{requirements_file}'
+            + (f': {last_error}' if last_error else '')
+        ),
+        possible_solutions=[
+            f'Install them manually: {manual_cmd}',
+            'Make sure the package names/versions in requirements.txt are correct',
+            'Ensure `uv` or `pip` is available in the current environment',
+        ],
+    )
 
 
 def testfunction_sync(testfunction_id: int):
@@ -110,6 +188,10 @@ def testfunction_load(project_path: Path, name: str):
         name=name
     )
 
+    # Install declared dependencies now (load time) so a missing package fails
+    # loudly here instead of silently at run time inside the guest.
+    _install_testfunction_requirements(target_requirements_file, name)
+
     # Load testfunction using the global paths
     testfunction_id = testfunction_database.load_testfunction_file(project_path, target_python_file, target_requirements_file)
     testfunction_sync(testfunction_id)
@@ -197,6 +279,10 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
         source_requirements_file=requirements_file,
         name=testfunction_name
     )
+
+    # Install declared dependencies now (load time) so a missing package fails
+    # loudly here instead of silently at run time inside the guest.
+    _install_testfunction_requirements(target_requirements_file, testfunction_name)
 
     # Load the testfunction into the global database using global paths
     testfunction_id = testfunction_database.load_testfunction_file(project_path, target_python_file, target_requirements_file)
