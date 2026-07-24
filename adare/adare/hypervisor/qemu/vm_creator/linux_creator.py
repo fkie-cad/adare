@@ -6,10 +6,13 @@ kernel command line are chosen per OS, so a single orchestrator drives all of
 them.
 """
 
+import functools
 import logging
 import platform
 import subprocess
 import tempfile
+import threading
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from adare.config.configdirectory import QEMU_CACHE_DIR
@@ -109,6 +112,7 @@ class LinuxVMCreator(BaseVMCreator):
                     kernel_path=kernel_path,
                     initrd_path=initrd_path,
                     seed_path=seed_path,
+                    autoinstall_dir=autoinstall_dir,
                     disk_path=disk_path,
                     os_def=self.os_def,
                     ram_mb=self.ram_mb,
@@ -174,11 +178,28 @@ def _download_and_cache_iso(os_def: OsDefinition) -> Path:
     return iso_path
 
 
+def _start_preseed_http_server(directory: Path) -> tuple[ThreadingHTTPServer, int]:
+    """Serve ``directory`` over HTTP on an ephemeral localhost port.
+
+    Returns the running server and its port. Used for installers (e.g. Ubuntu
+    18.04's debian-installer) that cannot auto-load a preseed from a labeled
+    CD-ROM and must fetch it over the network instead. QEMU user-mode networking
+    maps the host to ``10.0.2.2``, so the guest reaches this server there.
+    """
+    handler = functools.partial(SimpleHTTPRequestHandler, directory=str(directory))
+    httpd = ThreadingHTTPServer(('0.0.0.0', 0), handler)
+    port = httpd.server_address[1]
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    return httpd, port
+
+
 def _run_qemu_installation(
     iso_path: Path,
     kernel_path: Path,
     initrd_path: Path,
     seed_path: Path,
+    autoinstall_dir: Path,
     disk_path: Path,
     os_def: OsDefinition,
     ram_mb: int,
@@ -199,6 +220,19 @@ def _run_qemu_installation(
     console_dev = 'ttyAMA0' if os_def.architecture == 'aarch64' else 'ttyS0'
 
     kernel_cmdline = os_def.kernel_cmdline.format(console=console_dev)
+
+    # HTTP preseed transport: serve the rendered preseed over a local HTTP server
+    # and point the installer at it via the kernel cmdline. Needed for older
+    # debian-installer releases (e.g. Ubuntu 18.04) that ignore an OEMDRV CD.
+    preseed_httpd: ThreadingHTTPServer | None = None
+    if os_def.seed_transport == 'http':
+        preseed_httpd, http_port = _start_preseed_http_server(autoinstall_dir)
+        preseed_url = f'http://10.0.2.2:{http_port}/preseed.cfg'
+        if '---' in kernel_cmdline:
+            kernel_cmdline = kernel_cmdline.replace('---', f'url={preseed_url} ---', 1)
+        else:
+            kernel_cmdline = f'{kernel_cmdline} url={preseed_url}'
+        print_step(f'Serving preseed over HTTP for the installer: [dim]{preseed_url}[/dim]')
 
     cmd = [
         arch_params['exe'],
@@ -268,3 +302,6 @@ def _run_qemu_installation(
         process.terminate()
         process.wait(timeout=30)
         raise LinuxVMCreationError('Installation interrupted by user') from None
+    finally:
+        if preseed_httpd is not None:
+            preseed_httpd.shutdown()
