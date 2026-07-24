@@ -198,7 +198,8 @@ class QEMUManager(AbstractHypervisorManager):
             username=username,
             password=password,
             executables=self.executables,
-            disk_path=disk_path  # Pass disk_path for external VMs
+            disk_path=disk_path,  # Pass disk_path for external VMs
+            hypervisor_config=None  # No hypervisor config for session mode
         )
 
         try:

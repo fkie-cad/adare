@@ -9,7 +9,7 @@ These models are stored in the global database and shared across all projects.
 from pathlib import Path
 
 import ulid
-from sqlalchemy import CHAR, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, func
+from sqlalchemy import CHAR, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, UniqueConstraint, func
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import backref, declarative_base, relationship
@@ -158,6 +158,10 @@ class TestFunctionFile(SerializerMixin, GlobalBase):
     sha256hash = Column(String, nullable=False)
     description = Column(String, nullable=True, default=None)
 
+    # Immutable version counter. Bumped (never overwritten) each time the file's
+    # content changes; the retained snapshots live in TestFunctionFileVersion.
+    version = Column(Integer, nullable=False, default=1, server_default='1')
+
     sync_metadata_id = Column(CHAR(26), ForeignKey('sync_metadata.id', ondelete='CASCADE'), nullable=True)
     sync_metadata = relationship("SyncMetadata", backref="test_function_file")
 
@@ -186,6 +190,13 @@ class TestFunction(SerializerMixin, GlobalBase):
     description = Column(String, nullable=True)
     sha256hash = Column(String, nullable=False)
 
+    # Stable identity = this ULID (referenced by experiments). A content change
+    # bumps `version` in place and appends a TestFunctionVersion row — the ULID
+    # never changes. `is_current` is flipped to False (not deleted) when the
+    # method vanishes from source, so prior experiment references never dangle.
+    version = Column(Integer, nullable=False, default=1, server_default='1')
+    is_current = Column(Boolean, nullable=False, default=True, server_default='1')
+
     file_id = Column(CHAR(26), ForeignKey('test_function_file.id'), nullable=False)
     file = relationship(TestFunctionFile, backref=backref("test_functions", cascade="all, delete-orphan"))
 
@@ -204,6 +215,59 @@ class TestFunction(SerializerMixin, GlobalBase):
 
     def __repr__(self):
         return f"<TestFunction(name='{self.dotnotation}',description='{self.description}')>"
+
+
+class TestFunctionFileVersion(SerializerMixin, GlobalBase):
+    """
+    Snapshot registry for a testfunction *file* (collection). One row per
+    retained version: which sha256 the whole collection had at that version and
+    where the on-disk copy of that version was kept. Old versions are never
+    pruned (forensic tool; snapshots are cheap .py files).
+    """
+    __tablename__ = 'test_function_file_version'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+    file_id = Column(CHAR(26), ForeignKey('test_function_file.id', ondelete='CASCADE'), nullable=False)
+    file = relationship(TestFunctionFile, backref=backref("versions", cascade="all, delete-orphan"))
+
+    version = Column(Integer, nullable=False)
+    sha256hash = Column(String, nullable=False)
+    snapshot_dir = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=True, default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('file_id', 'version', name='uq_test_function_file_version'),
+    )
+
+    def __repr__(self):
+        return f"<TestFunctionFileVersion(file_id='{self.file_id}', version={self.version})>"
+
+
+class TestFunctionVersion(SerializerMixin, GlobalBase):
+    """
+    Per-method version history. Answers "what version is this test method" and
+    is the per-method pin source. `file_version` records which file version
+    introduced this method hash.
+    """
+    __tablename__ = 'test_function_version'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+    test_function_id = Column(CHAR(26), ForeignKey('test_function.id', ondelete='CASCADE'), nullable=False)
+    test_function = relationship(TestFunction, backref=backref("versions", cascade="all, delete-orphan"))
+
+    version = Column(Integer, nullable=False)
+    sha256hash = Column(String, nullable=False)
+    file_version = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=True, default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('test_function_id', 'version', name='uq_test_function_version'),
+    )
+
+    def __repr__(self):
+        return f"<TestFunctionVersion(test_function_id='{self.test_function_id}', version={self.version})>"
 
 
 class OsInfo(SerializerMixin, GlobalBase):

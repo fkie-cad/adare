@@ -209,6 +209,95 @@ class DevModeSnapshotsMixin:
                 log.error(f"Hard reset failed: {e}", exc_info=True)
                 return Result.fail("RESET_FAILED", f"Hard reset failed: {e}")
 
+    async def restart_with_memory(self, memory_mb: int | None = None) -> Result[None]:
+        """Cold-restart the VM, optionally rebuilding the domain with more RAM.
+
+        RAM is bound when the QEMU domain is (re)built from ``config.vm_memory``
+        (see ``QEMUVM`` construction in the qemu lifecycle strategy), so a memory
+        change requires a full rebuild — not just a stop/start. This mirrors the
+        VM-setup sequence in :meth:`DevModeSession.start` (create/prepare -> file
+        transfer -> networking -> start -> reinstall + reconnect WS), which is
+        the proven cold-boot path.
+
+        A rebuild uses a fresh overlay, so ALL in-VM state is discarded — the
+        caller (the GUI agent) re-drives its goal on the resized VM. When
+        ``memory_mb`` is None the VM simply reboots at its current size.
+
+        Persisting the working value into ``settings.vm_memory`` is done by the
+        caller via its recorder (the session holds no recorder reference).
+        """
+        with self._command_logger("restart_with_memory"):
+            try:
+                if memory_mb is not None:
+                    memory_mb = int(memory_mb)
+                    log.info(
+                        f"Restarting VM with {memory_mb} MB RAM "
+                        f"(was {self.experiment_ctx.config.vm_memory} MB)"
+                    )
+                    self.vm_memory = memory_mb
+                    self.experiment_ctx.config.vm_memory = memory_mb
+                else:
+                    log.info(
+                        f"Restarting VM at current size "
+                        f"({self.experiment_ctx.config.vm_memory} MB)"
+                    )
+
+                # 1. Disconnect WebSocket
+                if self.experiment_ctx.client:
+                    await self.experiment_ctx.client.disconnect()
+                    log.debug("WebSocket disconnected")
+
+                # 2. Stop VM (don't check interrupt event during teardown)
+                with self._create_stage_context(CleanupShutdownStage()):
+                    await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True)
+                log.debug("VM stopped")
+
+                # 3. Rebuild the domain with the (possibly new) RAM and start it.
+                #    Same sequence as start(): the rebuild reconstructs the QEMU
+                #    domain from config.vm_memory and boots a fresh overlay.
+                await self.vm_manager.create_and_prepare_vm(self.experiment_ctx)
+                await self.vm_manager.setup_file_transfer(self.experiment_ctx)
+                await self.vm_manager.setup_networking(self.experiment_ctx)
+                await self.vm_manager.start_vm(self.experiment_ctx)
+                log.debug("VM rebuilt and restarted")
+
+                # 4. Reinstall + reconnect the WebSocket server on the fresh boot
+                from adare.backend.experiment.run import (
+                    step_connect_websocket,
+                    step_install_and_run_websocket_server,
+                )
+                with StageCtxManager(
+                    SoftwareInstallationStage(),
+                    self.experiment_ctx.experiment_run_ulid,
+                    event=self.experiment_ctx.user_interrupt_event
+                ):
+                    await step_install_and_run_websocket_server(self.experiment_ctx)
+                    await step_connect_websocket(self.experiment_ctx)
+                    log.debug("WebSocket reconnected")
+
+                # 5. A fresh boot invalidates the controller state and counters.
+                if self.playbook_controller:
+                    self.playbook_controller.execution_context.clear()
+                    self.playbook_controller.execution_context.update(
+                        self.initial_variables.copy()
+                    )
+                self.actions_executed = 0
+
+                log.info(
+                    f"VM restart completed at {self.experiment_ctx.config.vm_memory} MB"
+                )
+                return Result.ok(None)
+
+            except HypervisorException as e:
+                log.error(f"VM restart failed: {e}", exc_info=True)
+                return Result.fail("VM_OPERATION_FAILED", f"VM restart failed: {e}")
+            except (WebSocketTimeoutError, ConnectionError, OSError) as e:
+                log.error(f"VM restart failed: {e}", exc_info=True)
+                return Result.fail("CONNECTION_FAILED", f"VM restart connection failed: {e}")
+            except LoggedErrorException as e:
+                log.error(f"VM restart failed: {e}", exc_info=True)
+                return Result.fail("RESTART_FAILED", f"VM restart failed: {e}")
+
     async def create_checkpoint(self, name: str, description: str = "") -> Result[None]:
         """
         Create a named snapshot for later restoration.
@@ -399,11 +488,15 @@ class DevModeSnapshotsMixin:
                         await step_install_and_run_websocket_server(self.experiment_ctx)
                         await step_connect_websocket(self.experiment_ctx)
 
-                # Reset playbook controller state
-                self.playbook_controller.execution_context.clear()
-                self.playbook_controller.execution_context.update(
-                    snapshot.variable_state.copy()
-                )
+                # Reset playbook controller state. It is lazily created
+                # (_ensure_playbook_controller), so it may still be None if no
+                # playbook has run in this session yet (e.g. boot -> checkpoint ->
+                # restore) — mirror the guard used by create_checkpoint above.
+                if self.playbook_controller:
+                    self.playbook_controller.execution_context.clear()
+                    self.playbook_controller.execution_context.update(
+                        snapshot.variable_state.copy()
+                    )
 
                 # Reset counters
                 self.actions_executed = 0

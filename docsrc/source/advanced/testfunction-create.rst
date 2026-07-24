@@ -12,7 +12,7 @@ The fastest way to create a test function is with the ``@testfunction`` decorato
 .. code-block:: python
 
    # /path/to/your/testfunctions/mycollection/mycollection.py
-   from adarelib.testset import testfunction
+   from adarelib.testset.api import testfunction
    from adarelib.testset.basictest import HostModeCategory
 
    @testfunction(
@@ -48,11 +48,24 @@ Create your test function collection in a directory:
    touch /path/to/your/testfunctions/mycollection/mycollection.py
    touch /path/to/your/testfunctions/mycollection/requirements.txt
 
+.. important::
+
+   The ``.py`` file **must be named exactly like its directory**
+   (``mycollection/mycollection.py``). A collection is loaded from
+   ``<dir>/<dir>.py``; if the names differ, the directory is skipped on load
+   (``adare test validate`` warns about this — see below).
+
+Validate the collection offline first (no VM required):
+
+.. code-block:: bash
+
+   adare test validate /path/to/your/testfunctions/mycollection
+
 Load into ADARE:
 
 .. code-block:: bash
 
-   adare testfunction load /path/to/your/testfunctions
+   adare test load /path/to/your/testfunctions/mycollection
 
 Use in a playbook:
 
@@ -65,6 +78,69 @@ Use in a playbook:
          dst: "/evidence/logfile.txt"
          word: "ERROR"
          case_sensitive: false
+
+
+Updating a Library
+------------------
+
+To change a loaded library, edit its source and re-load it — there is no
+separate ``update`` command:
+
+.. code-block:: bash
+
+   # edit /path/to/your/testfunctions/mycollection/mycollection.py
+   adare test validate /path/to/your/testfunctions/mycollection
+   adare test load     /path/to/your/testfunctions/mycollection
+
+``adare test load`` now **refreshes the loaded copy** and **bumps the version**
+whenever the content changed. (Previously this was a silent no-op: the file was
+only copied if it did not already exist, so edits to an already-loaded library
+never propagated.) A load that finds no changes leaves the version untouched.
+
+Each changed method's version is bumped independently, and the whole collection
+(file) gets its own version number too. A method that you remove from the source
+is **not deleted** — it is marked *not current* so experiments that referenced it
+still resolve; new experiments simply can't bind it anymore. If you later add the
+method back under the same name, it is reactivated (same identity, next version).
+
+
+Versioning and Reproducibility
+------------------------------
+
+ADARE treats a testfunction's **identity** (its ``collection.function``
+dotnotation, backed by a stable internal id) separately from its **version**:
+
+- **Identity is stable.** Updating a library never changes the identity an
+  experiment is bound to, so prior experiments never end up with dangling
+  references.
+- **Versions are immutable and retained.** Every content change appends a new
+  version (``v1``, ``v2``, …) and keeps an on-disk snapshot under
+  ``<state>/testfunctions/<name>/versions/v<N>/``. Old versions are **never
+  pruned** — snapshots are cheap ``.py`` files and this is a forensic tool.
+
+Inspect the history:
+
+.. code-block:: bash
+
+   adare test versions mycollection                     # file (collection) history
+   adare test versions mycollection.file_contains_word  # per-method history
+
+The current version is also shown by ``adare test list`` and ``adare test info``.
+
+**Reproducibility = drift detection.** When an experiment is created, ADARE pins
+the collection version + hash and the method version + hash it was built against.
+Every run records the file name + file version/hash and method version/hash of
+the code that **actually executed**, so a report reads e.g. *"used mycollection
+@ v3"*.
+
+.. important::
+
+   ADARE **always executes the current code**. It does **not** re-run an old
+   version. If the current code has drifted from the version an experiment was
+   created against, the run emits a loud warning naming the pinned vs current
+   versions and stamps the executed version/hash onto the run — but it still
+   runs and reports with the current code. Re-running historical code is out of
+   scope (the retained snapshots make it a possible future addition).
 
 
 Core Concepts
@@ -121,6 +197,14 @@ Test functions can return values in several ways:
    def my_test(ctx, dst: str):
        return TestResult.success(['custom result'])
 
+   # Pass, but flag something noteworthy → reported as WARNING, not FAILED
+   def my_test(ctx, dst: str):
+       return TestResult.warning(['passed, but the file was nearly empty'])
+
+``TestResult.warning([...])`` is a *pass-with-warning*: it does not fail the
+experiment verdict, but is reported distinctly from a plain success (and never
+counted as a failure).
+
 Use ``ctx.fail_if()`` and ``ctx.error_if()`` for failure/error conditions — they raise exceptions that the decorator catches and converts to the appropriate ``TestResult``.
 
 Uncaught exceptions are automatically converted to ``TestResult.execution_error()``.
@@ -159,7 +243,7 @@ Some tests execute on the host machine rather than the analyzed system — for e
 
 .. code-block:: python
 
-   from adarelib.testset import testfunction
+   from adarelib.testset.api import testfunction
    from adarelib.testset.basictest import HostModeCategory
 
    @testfunction(
@@ -313,6 +397,40 @@ List additional Python packages in ``requirements.txt``:
    lxml>=4.9.0
    requests>=2.28.0
 
+When you run ``adare test load``, a non-empty ``requirements.txt`` is installed
+into ADARE's interpreter (via ``uv pip install``, falling back to ``pip``). If
+installation fails, ``load`` stops with an actionable error listing the exact
+command to run manually — dependencies are resolved **at load time**, not
+silently deferred to run time.
+
+Validating and Dry-Running
+---------------------------
+
+Two commands let you check a collection offline before wiring it into an
+experiment:
+
+.. code-block:: bash
+
+   # Report every authoring-contract violation (missing ctx, unannotated params,
+   # duplicate testnames, filename≠dirname, import/dependency errors):
+   adare test validate /path/to/testfunctions/mycollection
+
+   # Execute one test against a local sample file (no VM):
+   adare test dry-run mycollection.file_contains_word \
+       --path /path/to/testfunctions/mycollection \
+       --file ./sample.txt --param word=ERROR
+
+``dry-run`` structures ``--param key=value`` pairs through the same cattrs path
+used for playbooks, sets ``--file`` as the ``dst`` parameter, runs the test, and
+prints the resulting ``TestResult``. It supports ``FILE_BASED`` / ``FILE_CONTENT``
+tests only — host/async and QGA tests need a live ``ctx.host`` / guest and are
+out of scope for the offline harness.
+
+A copyable starter collection lives at ``examples/testfunctions/example/`` —
+copy it (the built-in collections under ``appdata/testfunctions/`` are
+integrity-protected and not meant to be edited in place), rename the directory
+**and** its ``.py`` file to match, then ``validate`` and ``load``.
+
 
 Real-World Example
 ===================
@@ -324,7 +442,7 @@ Here's a complete example testing a JSON API response:
    # /path/to/your/testfunctions/api/api.py
    import requests
    import json
-   from adarelib.testset import testfunction
+   from adarelib.testset.api import testfunction
    from adarelib.testset.basictest import HostModeCategory
    from adarelib.event.event import TestResult
 

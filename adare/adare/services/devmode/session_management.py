@@ -172,9 +172,31 @@ class SessionManagementMixin:
             ))
 
         except RuntimeError as e:
+            msg = str(e)
+            # Boot-readiness fingerprint: the guest agent never responded across
+            # all cold-boot attempts. No LLM is alive pre-boot, so instead of
+            # auto-escalating RAM we surface an actionable "retry with more
+            # memory" hint built from the resources we actually requested.
+            if "did not become ready" in msg or "Guest agent did not respond" in msg:
+                ram = request.vm_memory or 4096
+                cpus = request.vm_cpus or 4
+                env = request.environment_name
+                next_steps = [
+                    f"VM never became ready (guest agent never responded) at "
+                    f"{ram} MB / {cpus} vCPU — the VM is likely under-resourced",
+                    f"Retry with more memory: adare dev agent -e {env} "
+                    f"--vm-memory {ram * 2} ...",
+                    f"Or set 'settings.vm_memory: {ram * 2}' in the playbook so "
+                    f"it is remembered for future runs/replays",
+                ]
+                return Result.fail(
+                    "SESSION_START_FAILED",
+                    f"Failed to start dev mode session: {msg}",
+                    next_steps,
+                )
             return Result.fail(
                 "SESSION_START_FAILED",
-                f"Failed to start dev mode session: {str(e)}",
+                f"Failed to start dev mode session: {msg}",
                 [
                     "Check VM exists: adare vm list",
                     "Check hypervisor (VirtualBox/QEMU) is running",

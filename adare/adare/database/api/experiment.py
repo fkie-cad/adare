@@ -396,16 +396,26 @@ class ExperimentApi(ProjectDatabaseApi):
 
         # Look up the global test function
         testfunction_id = None
+        # Reproducibility pin captured from the current (is_current) global rows.
+        pin: dict = {}
 
         with GlobalDatabaseApi() as global_api:
             testfunction_file = global_api._session.query(TestFunctionFile).filter_by(name=testfunction_set).first()
             if testfunction_file:
                 testfunction = global_api._session.query(TestFunction).filter_by(
                     name=testfunction_type,
-                    file_id=testfunction_file.id
+                    file_id=testfunction_file.id,
+                    is_current=True,
                 ).first()
                 if testfunction:
                     testfunction_id = testfunction.id
+                    pin = {
+                        'testfunction_file_name': testfunction_file.name,
+                        'testfunction_file_version': testfunction_file.version,
+                        'testfunction_file_sha256': testfunction_file.sha256hash,
+                        'testfunction_version': testfunction.version,
+                        'testfunction_sha256': testfunction.sha256hash,
+                    }
 
         if not testfunction_id:
             raise TestSetFormatError(
@@ -463,9 +473,16 @@ class ExperimentApi(ProjectDatabaseApi):
         if not abstract_test_obj:
             abstract_test_obj = AbstractTest(
                 name=test.name,
-                testfunction_id=testfunction_id
+                testfunction_id=testfunction_id,
+                **pin
             )
             self._session.add(abstract_test_obj)
+        else:
+            # Backfill pins on pre-versioning rows without overwriting an existing pin
+            # (the original pin captures what the experiment was created against).
+            for pin_key, pin_value in pin.items():
+                if getattr(abstract_test_obj, pin_key) is None:
+                    setattr(abstract_test_obj, pin_key, pin_value)
 
         # Add parameter entries
         for param_entry in parameter_entries:

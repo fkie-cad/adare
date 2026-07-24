@@ -303,7 +303,13 @@ class DevModeSessionCore:
             if self.experiment_ctx.experiment_directory:
                 experiment_dir = self.experiment_ctx.experiment_directory.path
 
-            self.playbook_controller = PlaybookController(
+            # Use the CV/OCR server URL from the session's own MCPServerManager
+            # rather than the controller's hardcoded 13109 default — guards
+            # against a non-default port (matches mcp_serving / authoring).
+            mcp_server = self.experiment_ctx.mcp_server
+            cv_url = getattr(mcp_server, 'server_url', None) if mcp_server else None
+
+            controller_kwargs = dict(
                 websocket_client=self.experiment_ctx.client,
                 experiment_dir=experiment_dir,
                 project_dir=self.experiment_ctx.project_directory.path,
@@ -316,8 +322,11 @@ class DevModeSessionCore:
                 vm_os=vm_os,
                 vm_user=vm_user,
                 test_mode=True,
-                config=self.experiment_ctx.config
+                config=self.experiment_ctx.config,
             )
+            if cv_url:
+                controller_kwargs['mcp_gui_url'] = cv_url
+            self.playbook_controller = PlaybookController(**controller_kwargs)
             log.info("PlaybookController initialized lazily")
 
             # Store initial variables if not already done

@@ -1,0 +1,13 @@
+# Example: Windows VM with an explicit BIOS boot_mode override.
+# Note: Windows auto-detects to UEFI; this override forces BIOS instead.
+# This is a rare use case - most Windows VMs should use the default UEFI.
+vm: "/path/to/windows11.ova"
+os:
+  os: "Windows 11"
+  platform: "windows"
+  distribution: "Home"
+  version: "24H2"
+  language: "English"
+hypervisor: qemu
+hypervisor_config:
+  boot_mode: bios  # Override default UEFI boot for Windows

@@ -115,6 +115,10 @@ class DevModeAPI:
         """Serve the session VM as a GUI-automation MCP server (blocking)."""
         return self._service.serve_mcp(request)
 
+    def author_playbook(self, request):
+        """LLM-author a UI-action playbook for the session VM (author/validate/replay/repair)."""
+        return self._service.author_playbook(request)
+
 
 class TestFunctionAPI:
     """Testfunction operations API."""
@@ -222,6 +226,18 @@ class ExperimentAPI:
     def get_by_id(self, project_path, experiment_id):
         """Get experiment by ID."""
         return self._service.get_by_id(project_path, experiment_id)
+
+    def read_playbook(self, request):
+        """Read an experiment's playbook YAML (disk, DB fallback)."""
+        return self._service.read_playbook(request)
+
+    def validate_playbook(self, request):
+        """Statically validate a playbook YAML string (no VM)."""
+        return self._service.validate_playbook(request)
+
+    def write_playbook(self, request):
+        """Validate, write, and DB-re-ingest an experiment's playbook YAML."""
+        return self._service.write_playbook(request)
 
 
 class ManageAPI:
@@ -360,6 +376,10 @@ class ShowAPI:
     def remove_run(self, request):
         """Remove a run."""
         return self._service.remove_run(request)
+
+    def get_run_files(self, ulid):
+        """Resolve a run's on-disk directory and known artifact file paths."""
+        return self._service.get_run_files(ulid)
 
     def list_projects(self):
         """List all projects."""

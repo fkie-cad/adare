@@ -59,6 +59,19 @@ TIMEOUT_SECONDS = 10
 VLLM_BASE_URL = _cfg('ADARE_VLLM_BASE_URL', 'http://localhost:8000/v1')
 VLLM_MODEL = _cfg('ADARE_VLLM_MODEL', 'Qwen/Qwen2-VL-7B-Instruct')
 VLLM_API_KEY = _cfg('ADARE_VLLM_API_KEY', 'EMPTY')
+# Per-request timeout (seconds) for a vision-LLM decision POST. A remote,
+# heavily-loaded endpoint (e.g. Ollama Cloud) can legitimately take well over
+# the old 120 s httpx default on a large multi-modal prompt; a too-short budget
+# turns a slow-but-succeeding inference into a spurious ReadTimeout. The client
+# retries transport errors, but a longer ceiling avoids the retry entirely.
+VLLM_TIMEOUT = float(_cfg('ADARE_VLLM_TIMEOUT', '300'))
+
+# Text model the embedded `adare chat` REPL brain uses over the SAME
+# OpenAI-compatible endpoint (VLLM_BASE_URL / VLLM_API_KEY). The vlm default is
+# usually a *vision* model (poor at text tool-calling), so chat gets its own
+# override: ADARE_CHAT_MODEL wins, else it falls back to the vlm model.
+# `adare chat` re-reads this via _cfg so a freshly-`use`d profile is picked up.
+CHAT_MODEL = _cfg('ADARE_CHAT_MODEL', '') or VLLM_MODEL
 
 # Coordinate convention the model returns clicks in:
 #   'absolute'        — raw pixel coordinates of the image it was shown (default)

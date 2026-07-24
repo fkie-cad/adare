@@ -1,6 +1,9 @@
 """
 Disk Utilities - Standalone functions for disk operations.
 """
+import logging
+
+log = logging.getLogger(__name__)
 
 import json
 import logging
@@ -146,3 +149,60 @@ def get_boot_mode_for_os(guest_os: str, architecture: str = 'x86_64') -> str:
     if 'windows' in guest_os.lower():
         return 'uefi'
     return 'bios'
+
+
+def resolve_boot_mode(guest_os: str, hypervisor_config: dict = None, architecture: str = 'x86_64') -> str:
+    """
+    Resolve boot mode with support for environment YAML overrides.
+
+    Priority:
+    1. Explicit boot_mode in hypervisor_config
+    2. Architecture-aware auto-detection based on guest OS
+
+    Args:
+        guest_os: Guest OS string (e.g., 'windows', 'linux', 'Windows_10')
+        hypervisor_config: Optional hypervisor config dict from environment YAML
+        architecture: Guest architecture ('x86_64' or 'aarch64'), used for auto-detection
+
+    Returns:
+        'uefi' or 'bios'
+
+    Raises:
+        ValueError: If boot_mode value is invalid
+
+    Example:
+        >>> resolve_boot_mode('linux', {'boot_mode': 'uefi'})
+        'uefi'
+        >>> resolve_boot_mode('linux', {'boot_mode': 'auto'}, 'x86_64')
+        'bios'
+        >>> resolve_boot_mode('windows', None)
+        'uefi'
+    """
+    if hypervisor_config and 'boot_mode' in hypervisor_config:
+        boot_mode = hypervisor_config['boot_mode']
+
+        # Validate boot_mode value
+        if boot_mode not in ('uefi', 'bios', 'auto'):
+            raise ValueError(
+                f"Invalid boot_mode '{boot_mode}' in hypervisor_config. "
+                f"Must be 'uefi', 'bios', or 'auto'"
+            )
+
+        # Handle 'auto' - delegate to architecture-aware auto-detection
+        if boot_mode == 'auto':
+            detected = get_boot_mode_for_os(guest_os, architecture)
+            log.info(
+                f"Boot mode 'auto' specified for {guest_os}, "
+                f"auto-detected: {detected}"
+            )
+            return detected
+
+        # Explicit override
+        log.info(
+            f"Using explicit boot_mode '{boot_mode}' from environment config "
+            f"for {guest_os} (auto-detect would be: {get_boot_mode_for_os(guest_os, architecture)})"
+        )
+        return boot_mode
+
+    # No override - use architecture-aware auto-detection
+    return get_boot_mode_for_os(guest_os, architecture)

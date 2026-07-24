@@ -176,6 +176,28 @@ The standard shares are:
 User-defined shared directories from the experiment configuration are
 appended to this list.
 
+.. important::
+
+   **Write experiment outputs to the run share.** Only the ``run`` share is
+   read-write, and it maps directly onto the host experiment run directory, so
+   anything a playbook writes there is retrieved back to the host on **every**
+   backend. In a playbook, target it through the automatic variable
+   ``adare_run_dir`` (``C:\adare\run`` / ``/adare/run``) -- for example, copy a
+   generated report to ``{{ adare_run_dir }}\artifacts\report.xlsx``. The
+   ``artifacts`` and ``logs`` subdirectories are created automatically. The
+   host-to-guest **input** channels (``adare_shared_data``,
+   ``adare_project_shared_data``, etc.) are the wrong destination for outputs.
+
+.. warning::
+
+   **The read-only modes above are not enforced uniformly across backends.**
+   Read-only is honoured under **SMB** (writes to a read-only share are
+   discarded on cleanup and never reach the host) but **not** under
+   **virtiofs** (the guest can write through to the host path). A playbook that
+   writes outputs to ``adare_shared_data`` therefore appears to "work" on Linux
+   (virtiofs) yet silently loses those files on macOS (SMB). Do not rely on
+   writes to any read-only share -- always write outputs to ``adare_run_dir``.
+
 A ``config.json`` file is written to the run directory before boot. It tells
 the ``adarevm`` agent where to find tools, data files, and where to write
 its log:

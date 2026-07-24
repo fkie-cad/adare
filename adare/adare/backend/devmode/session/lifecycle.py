@@ -76,6 +76,16 @@ class DevModeLifecycleMixin:
                 step_start_mcp_server,
             )
 
+            # Memory precedence: CLI/session override > playbook settings.vm_memory
+            # > 4096 default. settings.vm_memory lets a recorded playbook boot at
+            # the RAM a prior run found working (only affects a fresh cold boot).
+            resolved_memory = self.vm_memory
+            if resolved_memory is None and self.experiment_name:
+                from adare.backend.experiment.run import _playbook_settings_memory
+                resolved_memory = _playbook_settings_memory(
+                    self.project_path, self.experiment_name
+                )
+
             # 1. Create ExperimentConfig (test mode + preserve snapshot)
             config = ExperimentConfig(
                 project_path=self.project_path,
@@ -86,7 +96,7 @@ class DevModeLifecycleMixin:
                 runlog=True,  # Enable logging
                 disable_printing=True,  # No CLI output in dev mode
                 gui_mode_override=self.gui_mode,  # Pass GUI mode override
-                vm_memory=self.vm_memory or 4096,  # VM RAM (default: 4096)
+                vm_memory=resolved_memory or 4096,  # VM RAM (default: 4096)
                 vm_cpus=self.vm_cpus or 4,  # VM CPUs (default: 4)
                 shared_directories=self.shared_directories,
                 dev_mode=True,  # Dev mode session = force dev mode flag

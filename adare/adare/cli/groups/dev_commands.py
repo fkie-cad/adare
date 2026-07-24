@@ -254,6 +254,18 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @dev.command()
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
+    @click.option('-e', '--environment', 'environment', default=None, metavar='NAME',
+                  help='Boot a fresh VM from this environment, drive it, then tear it down. '
+                       'Self-contained — no prior `adare dev start` needed. Mutually '
+                       'exclusive with -s/--session.')
+    @click.option('--keep', 'keep', is_flag=True,
+                  help='With -e, leave the booted VM/session running afterwards instead of '
+                       'tearing it down (prints how to drive it again / stop it).')
+    @click.option('--verify/--no-verify', 'verify', default=True,
+                  help='After recording a playbook (-o or --as-experiment), validate it by '
+                       'replaying it on the VM from a pre-run baseline checkpoint '
+                       '(default: on). The playbook is always parse-checked regardless. '
+                       'No-op for a bare drive that records nothing.')
     @click.option('--goal', help='Natural-language goal for the agent to accomplish')
     @click.option('--goal-file', type=click.Path(exists=True), help='Read the goal from a file')
     @click.option('-o', '--out', 'output', type=click.Path(), help='Record a replayable playbook to this path')
@@ -288,22 +300,29 @@ def register(cli, AliasedGroup, exec_with_error_printing):
                   help='Scaffold experiments/NAME/ and record the run into it '
                        '(playbook.yml + img/ crops + metadata.yml). Files only — no DB '
                        'load; run `adare experiment load NAME` later. Excludes -o/--out.')
-    def agent(session_id, goal, goal_file, output, max_steps, stall_limit, interactive,
-              planning, grounding, progress, reasoning, video, as_experiment):
-        """Drive the session VM toward a goal with the vision-LLM GUI agent.
+    def agent(session_id, environment, keep, verify, goal, goal_file, output, max_steps,
+              stall_limit, interactive, planning, grounding, progress, reasoning, video,
+              as_experiment):
+        """Drive a VM toward a goal with the vision-LLM GUI agent.
 
         Uses the configured vLLM endpoint (ADARE_VLLM_*; works with Ollama Cloud).
-        With --out, records a reusable playbook you can replay with `dev playbook`.
+        Attach to a running session with -s, or boot a fresh VM from an
+        environment with -e (driven, then torn down unless --keep). With --out or
+        --as-experiment, records a reusable playbook; --verify (default) then
+        replays it on the VM to validate it.
 
         Examples:
-            adare dev agent --goal "open the Files app and go to Documents"
+            adare dev agent -s <id> --goal "open the Files app and go to Documents"
             adare dev agent -s <id> --goal "..." -o experiments/files.play.yaml
             adare dev agent --plan --goal "open LibreOffice and write an invoice" -o inv.play.yaml
-            adare dev agent --goal "..." --video --as-experiment demo_invoice
+            adare dev agent -e ubuntu2510-libre --goal "..." --as-experiment demo_invoice6 --ground --video
         """
         from adare.cli.dev import exec_dev_agent
         args = SimpleNamespace(
             session_id=session_id,
+            environment=environment,
+            keep=keep,
+            verify=verify,
             goal=goal,
             goal_file=goal_file,
             output=output,
@@ -362,6 +381,42 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         )
         exec_with_error_printing(exec_dev_author, args)
 
+    @dev.command(name='author-ai')
+    @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
+    @click.option('--goal', required=True, help='Natural-language task the authored playbook must accomplish')
+    @click.option('--models', default=None,
+                  help='Comma-separated Ollama Cloud vision models, in preference order '
+                       '(default: the harness DEFAULT_MODELS)')
+    @click.option('--rounds', type=int, default=3, help='Max author/repair rounds per model')
+    @click.option('--replay', is_flag=True,
+                  help='Verify each valid playbook by replaying it live on the session VM '
+                       '(serialized), repairing on failure. Off = author + validate only.')
+    @click.option('--os-key', default='linux', help='Replay OS key / CV grounding profile (default: linux)')
+    @click.option('-o', '--out', 'output', type=click.Path(), help='Write the best authored playbook YAML to this path')
+    def author_ai(session_id, goal, models, rounds, replay, os_key, output):
+        """LLM-author a UI-action playbook from a screenshot of the session VM.
+
+        A cloud vision model is shown the current screen and authors a robust
+        ``actions:`` playbook for --goal; the harness validates it against the
+        real schema and, with --replay, verifies it live on the VM and repairs
+        on failure, picking the best model. See vlm/authoring/FLOW.md.
+
+        Examples:
+            adare dev author-ai -s <id> --goal "open the File menu"
+            adare dev author-ai -s <id> --goal "type a sentence in Writer and save" --replay -o report.play.yaml
+        """
+        from adare.cli.dev import exec_dev_author_ai
+        args = SimpleNamespace(
+            session_id=session_id,
+            goal=goal,
+            models=models,
+            rounds=rounds,
+            replay=replay,
+            os_key=os_key,
+            output=output,
+        )
+        exec_with_error_printing(exec_dev_author_ai, args)
+
     @dev.command()
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
     @click.option('--host', default=None, help='Bind host (default: ADARE_GUI_MCP_HOST or 127.0.0.1)')
@@ -378,6 +433,10 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         Example:
             adare dev mcp -s <id> --port 13110
+
+        Client setup (Claude Code / OpenCode): docs/mcp-clients.md
+            Claude Code: claude mcp add --transport http adare-gui \\
+                http://127.0.0.1:13110/mcp
         """
         from adare.cli.dev import exec_dev_mcp
         args = SimpleNamespace(
