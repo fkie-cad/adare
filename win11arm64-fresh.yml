@@ -1,0 +1,17 @@
+vm_type: recipe
+hypervisor: qemu
+recipe:
+  profile: windows11arm64
+  iso: /Users/miq/Documents/ISO/Win11_25H2_English_Arm64_v2.iso
+  iso_sha256: 638aa2c88e94385b00f4f178d071e3df0b7d9e335577a83bd533b7f2eb65adf0
+  template: autounattend_win11_arm64.xml
+  params:
+    setup_level: 2
+    disk_size: 120G
+os:
+  os: Windows 11 (ARM64)
+  platform: windows
+  distribution: Home
+  version: '11'
+  language: English
+  architecture: aarch64

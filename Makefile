@@ -5,7 +5,7 @@ help:
 	@echo "--------------- HELP -----------------"
 	@echo "Available targets:"
 	@echo "  help            Show this help message."
-	@echo "  install         Run the installer (PowerShell on Windows, shell on *nix; QEMU support included on *nix)."
+	@echo "  install         Run the installer (PowerShell on Windows, shell on *nix); installs QEMU support and reports on system tool availability."
 	@echo "  install-qemu    Alias for install (kept for backwards compatibility)."
 	@echo "  update          Refresh dependencies, appdata, and testfunctions (hash-based, no symlink rebuild)."
 	@echo "  adare-clean     Reset adare state."

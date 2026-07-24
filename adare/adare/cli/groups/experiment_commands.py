@@ -309,4 +309,57 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         )
         exec_with_error_printing(exec_experiment_diff, args)
 
+    # ------------------------------
+    # Playbook read / validate / write (file + DB, no VM)
+    # ------------------------------
+    @experiment.group(name='playbook', cls=AliasedGroup)
+    def playbook():
+        """Read, validate, and write an experiment's playbook.yml."""
+        pass
+
+    playbook.add_alias('cat', 'show')
+
+    @playbook.command(name='show')
+    @click.argument('experiment', type=click.Path(exists=False))
+    @click.option('--project', '-p', help='Name of the project')
+    def playbook_show(experiment, project):
+        """Print an experiment's playbook YAML (disk, DB fallback).
+
+        EXPERIMENT is the experiment name.
+        """
+        from adare.cli.experiment import exec_playbook_show
+        args = SimpleNamespace(experiment=experiment, project=project)
+        exec_with_error_printing(exec_playbook_show, args)
+
+    @playbook.command(name='validate')
+    @click.argument('file', type=click.Path(exists=True))
+    def playbook_validate(file):
+        """Statically validate a playbook YAML file (parse + schema, no VM).
+
+        FILE is a path to a playbook YAML file.
+        """
+        from adare.cli.experiment import exec_playbook_validate
+        args = SimpleNamespace(file=file)
+        exec_with_error_printing(exec_playbook_validate, args)
+
+    @playbook.command(name='set')
+    @click.argument('experiment', type=click.Path(exists=False))
+    @click.argument('file', type=click.Path(exists=True))
+    @click.option('--no-backup', is_flag=True, help='Do not back up the existing playbook.yml to .bak')
+    @click.option('--project', '-p', help='Name of the project')
+    def playbook_set(experiment, file, no_backup, project):
+        """Validate then write a playbook YAML file to an experiment.
+
+        Refuses invalid YAML; on success writes playbook.yml (with a .bak
+        backup unless --no-backup) and re-ingests the project database.
+
+        EXPERIMENT is the target experiment name.
+        FILE is the playbook YAML file to write.
+        """
+        from adare.cli.experiment import exec_playbook_set
+        args = SimpleNamespace(
+            experiment=experiment, file=file, backup=not no_backup, project=project
+        )
+        exec_with_error_printing(exec_playbook_set, args)
+
     return experiment

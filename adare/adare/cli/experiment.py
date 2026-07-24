@@ -6,7 +6,7 @@ from datetime import UTC
 from adare.api import AdareAPI
 from adare.backend.basics import determine_projectdirectory
 from adare.cli.utils import get_project_path, handle_api_error
-from adare.console import print_success_message
+from adare.console import print_error_message, print_success_message
 from adare.core.dto.experiment import (
     ExperimentCloneRequest,
     ExperimentCreateRequest,
@@ -751,6 +751,102 @@ def exec_experiment_clone(arguments):
         )
     else:
         handle_api_error(result)
+
+
+def exec_playbook_show(arguments):
+    """Print an experiment's playbook YAML (disk, DB fallback)."""
+    from adare.core.dto.playbook import PlaybookReadRequest
+
+    project_directory = get_project_path(arguments)
+    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+
+    api = AdareAPI()
+    result = api.experiment.read_playbook(PlaybookReadRequest(
+        project_path=project_directory,
+        experiment=experiment_name,
+    ))
+
+    if not result.success:
+        handle_api_error(result)
+        return
+
+    if getattr(arguments, 'verbose', False) or getattr(arguments, 'very_verbose', False):
+        log.info('Playbook source: %s (%s)', result.data.path, result.data.source)
+    print(result.data.yaml)
+
+
+def exec_playbook_validate(arguments):
+    """Statically validate a playbook YAML file (no VM)."""
+    import sys
+    from pathlib import Path
+
+    from adare.core.dto.playbook import PlaybookValidateRequest
+
+    playbook_path = Path(arguments.file)
+    try:
+        yaml_content = playbook_path.read_text(encoding='utf-8')
+    except OSError as e:
+        print_error_message(title=f'Cannot read {playbook_path}: {e}')
+        sys.exit(1)
+
+    api = AdareAPI()
+    result = api.experiment.validate_playbook(PlaybookValidateRequest(yaml=yaml_content))
+
+    if not result.success:
+        handle_api_error(result)
+        return
+
+    if result.data.valid:
+        print_success_message(title=f'Playbook "{playbook_path}" is valid')
+    else:
+        print_error_message(
+            title=f'Playbook "{playbook_path}" is invalid',
+            next_steps=result.data.errors,
+        )
+        sys.exit(1)
+
+
+def exec_playbook_set(arguments):
+    """Validate then write a playbook YAML file to an experiment (DB re-ingest)."""
+    import sys
+    from pathlib import Path
+
+    from adare.core.dto.playbook import PlaybookWriteRequest
+
+    project_directory = get_project_path(arguments)
+    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+
+    source_path = Path(arguments.file)
+    try:
+        yaml_content = source_path.read_text(encoding='utf-8')
+    except OSError as e:
+        print_error_message(title=f'Cannot read {source_path}: {e}')
+        sys.exit(1)
+
+    api = AdareAPI()
+    result = api.experiment.write_playbook(PlaybookWriteRequest(
+        project_path=project_directory,
+        experiment=experiment_name,
+        yaml=yaml_content,
+        backup=arguments.backup,
+    ))
+
+    if not result.success:
+        handle_api_error(result)
+        return
+
+    next_steps = []
+    if result.data.backup_path:
+        next_steps.append(f'Previous playbook backed up to {result.data.backup_path}')
+    if result.data.db_ingested:
+        next_steps.append(f'Database re-ingested (playbook version {result.data.version})')
+    else:
+        next_steps.append('Experiment not loaded in DB — file written only; '
+                          f'run `adare experiment load {experiment_name}` to ingest')
+    print_success_message(
+        title=f'Playbook written to {result.data.path}',
+        next_steps=next_steps,
+    )
 
 
 def exec_experiment_validate(arguments):
