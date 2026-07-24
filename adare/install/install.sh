@@ -56,3 +56,6 @@ fi
 
 echo "Syncing testfunctions..."
 uv run adare testfunction sync
+
+echo "Checking optional QEMU/system tools..."
+uv run adare vm doctor

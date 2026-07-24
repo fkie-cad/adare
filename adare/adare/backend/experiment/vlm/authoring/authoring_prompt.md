@@ -47,6 +47,16 @@ engine (no model runs at replay time), so it must not rely on timing luck.
    ONLY inside a `wait_until.condition:` (see the WaitCondition docs). If you
    need "dialog A or B", use one `wait_until` with `condition: { any: [...] }`,
    or two separate guarded blocks — not `when: [ any: ... ]`.
+   RACE WARNING: `block: when:` is evaluated ONCE the instant the block is
+   reached. It is the WRONG tool for a dialog that appears after a delay — the
+   guard checks before the dialog renders, skips the block, and your later
+   keystrokes get swallowed by the modal that then pops up. Use `block: when:`
+   ONLY for dialogs that are already on screen at that point. For a dialog that
+   is KNOWN to appear (e.g. an app's first-run Welcome/Tip window on a fresh
+   profile — which happens on every clean run), do NOT guard it: instead
+   `wait_until { exists: <dialog text> }` (with a real timeout) so you actually
+   wait for it, press `esc`, then `wait_until { not_exists: <dialog text> }`
+   before continuing. Deterministic, no race, no fixed idle.
 4. **NEVER use a fixed `idle:` for synchronization.** Do not "sleep and hope."
    Use `wait_until`. A single small `idle` is tolerable ONLY to let a disk write
    flush after the UI already reports done — never to wait for a window.

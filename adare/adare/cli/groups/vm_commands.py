@@ -242,6 +242,19 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         args = SimpleNamespace()
         exec_with_error_printing(exec_vm_gui_doctor, args)
 
+    @vm.command(name='doctor')
+    def vm_doctor():
+        """Report on system-level QEMU/VM-creation tool availability.
+
+        Locates qemu-system/qemu-img, OVMF firmware, swtpm, the libvirt Python
+        binding, and (on Apple Silicon) the wimlib/7z/xorriso trio used for the
+        Win11-ARM64 legacy-boot workaround. Detect-and-report only — never
+        installs anything and always exits 0.
+        """
+        from adare.cli.vm_doctor import exec_vm_doctor
+        args = SimpleNamespace()
+        exec_with_error_printing(exec_vm_doctor, args)
+
     @vm.command(name='reset')
     @click.option('--force', '-f', is_flag=True, help='Force reset of all VMs (required for confirmation)')
     def vm_reset(force):

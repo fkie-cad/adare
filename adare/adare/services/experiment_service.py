@@ -69,6 +69,14 @@ from adare.core.dto.experiment import (
     ExperimentValidateRequest,
     ExperimentValidateResult,
 )
+from adare.core.dto.playbook import (
+    PlaybookReadRequest,
+    PlaybookReadResult,
+    PlaybookValidateRequest,
+    PlaybookValidateResult,
+    PlaybookWriteRequest,
+    PlaybookWriteResult,
+)
 from adare.core.result import Result
 from adare.database.api.experiment import ExperimentApi
 from adare.exceptions import LoggedException
@@ -459,6 +467,168 @@ class ExperimentService:
 
         except (ExperimentDirectoryDoesNotExistError, ExperimentIntegrityError) as e:
             return Result.from_exception(e)
+
+    # =========================================================================
+    # Playbook read / validate / write (file + DB, no VM)
+    # =========================================================================
+
+    def read_playbook(self, request: PlaybookReadRequest) -> Result[PlaybookReadResult]:
+        """Read an experiment's playbook YAML.
+
+        Prefers the on-disk ``playbook.yml``; falls back to the DB-stored
+        ``original_yaml_content`` when the file is missing. Fails
+        ``PLAYBOOK_NOT_FOUND`` if neither exists.
+        """
+        experiment_dir = ExperimentDirectory(request.project_path, request.experiment)
+        playbook_file = experiment_dir.playbookfile
+
+        if playbook_file.exists():
+            try:
+                content = playbook_file.read_text(encoding='utf-8')
+            except OSError as e:
+                return Result.fail(
+                    code='PLAYBOOK_READ_ERROR',
+                    message=f'Failed to read playbook file {playbook_file}: {e}',
+                    solutions=['Check file permissions', 'Verify the experiment directory is intact'],
+                )
+            return Result.ok(PlaybookReadResult(path=playbook_file, yaml=content, source='file'))
+
+        # Fall back to the database-stored original YAML.
+        db_yaml = self._recover_playbook_yaml_from_db(request.project_path, request.experiment)
+        if db_yaml is not None:
+            return Result.ok(PlaybookReadResult(path=playbook_file, yaml=db_yaml, source='database'))
+
+        return Result.fail(
+            code='PLAYBOOK_NOT_FOUND',
+            message=(
+                f'No playbook found for experiment "{request.experiment}" '
+                f'(neither {playbook_file} on disk nor a loaded copy in the database)'
+            ),
+            solutions=[
+                'Use `adare experiment list` to see available experiments',
+                f'Load the experiment with: adare experiment load {request.experiment}',
+                'Author one with the dev-mode playbook authoring tools',
+            ],
+        )
+
+    def _recover_playbook_yaml_from_db(self, project_path: Path, experiment: str) -> str | None:
+        """Best-effort recovery of the stored YAML from the project DB.
+
+        Returns ``None`` when the experiment (or its stored YAML) is absent.
+        """
+        from adare.database.api.experiment import ExperimentApi
+        from adare.database.api.playbook import PlaybookApi
+
+        try:
+            with ExperimentApi(project_path) as api:
+                experiment_row = api.get_experiment_by_project_and_name(project_path, experiment)
+                if not experiment_row:
+                    return None
+                experiment_id = experiment_row.id
+            with PlaybookApi(project_path) as playbook_api:
+                return playbook_api.recover_playbook_yaml(experiment_id)
+        except (SQLAlchemyError, ValueError, OSError):
+            return None
+
+    def validate_playbook(self, request: PlaybookValidateRequest) -> Result[PlaybookValidateResult]:
+        """Statically validate a playbook YAML string (parse only, no VM).
+
+        Validation *findings* are data, not a call failure: a well-formed
+        request always returns ``Result.ok`` with ``valid`` / ``errors`` so a
+        brain can read the errors and fix them.
+        """
+        from adare.backend.experiment.vlm.authoring.author_playbook import validate as author_validate
+
+        ok, error = author_validate(request.yaml)
+        return Result.ok(PlaybookValidateResult(
+            valid=ok,
+            errors=[] if ok else [error or 'Unknown validation error'],
+        ))
+
+    def write_playbook(self, request: PlaybookWriteRequest) -> Result[PlaybookWriteResult]:
+        """Validate, then write playbook YAML to an experiment and re-ingest the DB.
+
+        Refuses to write invalid YAML (``PLAYBOOK_INVALID``). On valid YAML it
+        optionally backs up the existing file to ``playbook.yml.bak``, writes
+        ``playbook.yml``, then re-ingests the DB via
+        :meth:`PlaybookApi.populate_playbook_from_file` (version bump + item
+        replace). DB re-ingest is skipped (not an error) if the experiment is
+        not loaded in the project database.
+        """
+        from adare.backend.experiment.vlm.authoring.author_playbook import validate as author_validate
+
+        ok, error = author_validate(request.yaml)
+        if not ok:
+            return Result.fail(
+                code='PLAYBOOK_INVALID',
+                message=f'Refusing to write: playbook YAML failed validation. {error}',
+                solutions=[
+                    'Fix the reported parse/schema error and validate again',
+                    'Use validate_playbook to check YAML before writing',
+                ],
+                context={'errors': [error or 'Unknown validation error']},
+            )
+
+        experiment_dir = ExperimentDirectory(request.project_path, request.experiment)
+        playbook_file = experiment_dir.playbookfile
+
+        if not experiment_dir.path.exists():
+            return Result.fail(
+                code='ExperimentDirectoryDoesNotExist',
+                message=f'Experiment directory does not exist: {experiment_dir.path}',
+                solutions=[
+                    'Use `adare experiment list` to see available experiments',
+                    f'Create it with: adare experiment create {request.experiment}',
+                ],
+            )
+
+        backup_path: Path | None = None
+        try:
+            if request.backup and playbook_file.exists():
+                backup_path = playbook_file.with_suffix('.yml.bak')
+                backup_path.write_text(playbook_file.read_text(encoding='utf-8'), encoding='utf-8')
+            playbook_file.write_text(request.yaml, encoding='utf-8')
+        except OSError as e:
+            return Result.fail(
+                code='PLAYBOOK_WRITE_ERROR',
+                message=f'Failed to write playbook file {playbook_file}: {e}',
+                solutions=['Check file permissions', 'Verify the experiment directory is writable'],
+            )
+
+        version, db_ingested = self._reingest_playbook_db(
+            request.project_path, request.experiment, playbook_file
+        )
+
+        return Result.ok(PlaybookWriteResult(
+            path=playbook_file,
+            version=version,
+            backup_path=backup_path,
+            db_ingested=db_ingested,
+        ))
+
+    def _reingest_playbook_db(
+        self, project_path: Path, experiment: str, playbook_file: Path
+    ) -> tuple[int | None, bool]:
+        """Re-ingest the on-disk playbook into the DB. Returns ``(version, ingested)``.
+
+        No-op (``(None, False)``) if the experiment is not in the project DB.
+        """
+        from adare.database.api.experiment import ExperimentApi
+        from adare.database.api.playbook import PlaybookApi
+
+        try:
+            with ExperimentApi(project_path) as api:
+                experiment_row = api.get_experiment_by_project_and_name(project_path, experiment)
+                if not experiment_row:
+                    return None, False
+                playbook_api = PlaybookApi(project_path)
+                playbook_api._session = api._session
+                playbook_api._engine = api._engine
+                playbook = playbook_api.populate_playbook_from_file(experiment_row, playbook_file)
+                return playbook.version, True
+        except (SQLAlchemyError, OSError, ValueError) as e:
+            log.warning('Playbook written but DB re-ingest failed for %s: %s', experiment, e)
+            return None, False
 
     # =========================================================================
     # Environment Management

@@ -1,0 +1,11 @@
+# Autopsy versions bundling Apache Solr 8.6.3+ (Autopsy >= 4.18.0).
+# Install these into VM "win11-autopsy-solr8". One version per line; blank
+# lines and lines starting with '#' are ignored by Install-Autopsy.ps1.
+4.18.0
+4.19.0
+4.19.1
+4.19.2
+4.19.3
+4.20.0
+4.21.0
+4.22.1
