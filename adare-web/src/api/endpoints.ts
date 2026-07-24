@@ -28,9 +28,10 @@ export const endpoints = {
   playbookSave: '/playbooks/save',
   playbookLoad: (name: string) => `/playbooks/${name}`,
 
-  // Resolve an ADARE VM name to a VirtualSpice display-page path. Mounted at the
+  // Resolve an ADARE VM name to the live-display connection info (uuid + the
+  // same-origin `ws_path` the ADARE-owned viewer connects to). Mounted at the
   // app root (not under the `/api` axios baseURL), so consumers `fetch` this
-  // absolute path directly and prepend the `:8081` origin themselves.
+  // absolute path directly. The viewer WS is same-origin — never `:8081`.
   vmWatchUrl: (name: string, viewOnly = true) =>
     `/api/vm-watch-url?name=${encodeURIComponent(name)}&view_only=${viewOnly}`,
 

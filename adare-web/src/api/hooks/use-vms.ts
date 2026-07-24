@@ -145,58 +145,56 @@ export function useDeleteVmSnapshot(instanceId: string) {
 }
 
 /**
- * Resolve a running VM's live VirtualSpice display URL.
+ * Live-display connection info for a running VM, as resolved by the backend.
  *
- * Resolves the ADARE VM *name* to VirtualSpice's *uuid* through the backend,
- * then builds the absolute URL to VirtualSpice's own standalone display page
- * on `:8081` (same-origin with its spice-client). This single URL is consumed
- * both by the pop-out tab (`openVmWatch`) and the in-app `<iframe>` embed
- * (`VmLiveView` / `useVmWatchUrl`).
- *
- * @returns the absolute `display.html` URL, or `null` if the VM could not be
- *          resolved (VirtualSpice down or no matching running domain).
+ * The backend maps the ADARE VM *name* to VirtualSpice's *uuid* and returns the
+ * same-origin WebSocket path (`ws_path`) that the ADARE-owned viewer connects
+ * to. ADARE proxies that socket to VirtualSpice internally, so the browser
+ * never contacts `:8081` directly (no cross-origin, no mixed-content).
  */
-export async function resolveVmWatchUrl(
+export interface VmSpiceInfo {
+  uuid: string
+  name: string
+  view_only: boolean
+  spice_port: number
+  ws_path: string
+}
+
+/**
+ * Build the same-origin WebSocket URL for the viewer from a resolved `ws_path`.
+ */
+export function buildVmWsUrl(wsPath: string): string {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${proto}://${location.host}${wsPath}`
+}
+
+/**
+ * Resolve a running VM's live display connection info.
+ *
+ * @returns the {@link VmSpiceInfo}, or `null` if the VM could not be resolved
+ *          (VirtualSpice down or no matching running domain).
+ */
+export async function resolveVmSpice(
   name: string,
   viewOnly = true,
-): Promise<string | null> {
+): Promise<VmSpiceInfo | null> {
   const response = await fetch(endpoints.vmWatchUrl(name, viewOnly))
   if (!response.ok) {
     return null
   }
-  const { path, spice_port } = (await response.json()) as {
-    path: string
-    spice_port: number
-  }
-  return `http://${location.hostname}:${spice_port}${path}`
+  return (await response.json()) as VmSpiceInfo
 }
 
 /**
- * Open a running VM's live screen in a new tab via VirtualSpice
- * (launch-and-hand-off — no embedded viewer). Used by the CLI-style
- * "pop out to tab" action.
- *
- * @returns `true` if a tab was opened, `false` if the VM could not be resolved.
- */
-export async function openVmWatch(name: string, viewOnly = true): Promise<boolean> {
-  const url = await resolveVmWatchUrl(name, viewOnly)
-  if (!url) {
-    return false
-  }
-  window.open(url, '_blank')
-  return true
-}
-
-/**
- * React-Query hook exposing a running VM's live display URL for the in-app
- * embed. `data === null` means "not reachable" (VirtualSpice down or VM
+ * React-Query hook exposing a running VM's live display connection info for the
+ * in-app viewer. `data === null` means "not reachable" (VirtualSpice down or VM
  * stopped) — distinct from `isLoading`. Does not retry (a 404 is a definitive
  * "no such running VM", not a transient failure).
  */
-export function useVmWatchUrl(name: string, viewOnly = true, enabled = true) {
+export function useVmSpice(name: string, viewOnly = true, enabled = true) {
   return useQuery({
-    queryKey: ['vm-watch-url', name, viewOnly],
-    queryFn: () => resolveVmWatchUrl(name, viewOnly),
+    queryKey: ['vm-spice', name, viewOnly],
+    queryFn: () => resolveVmSpice(name, viewOnly),
     enabled: enabled && !!name,
     retry: false,
     staleTime: 60_000,

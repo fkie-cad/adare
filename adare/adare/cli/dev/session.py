@@ -80,13 +80,17 @@ def _open_watch_for_session(session_id: str) -> None:
     never a stack trace, and never blocks the session.
     """
     import webbrowser
+    from urllib.parse import quote
 
     from adare.database.api.devmode import DevModeApi
     from adare.webapi.vm_watch import (
         DEFAULT_SPICE_PORT,
-        build_display_path,
         resolve_vm_uuid,
     )
+
+    # ADARE web server port (default of `adare web start`); the in-app viewer is
+    # served here, so the live view opens same-origin, not on VirtualSpice's :8081.
+    ADARE_WEB_PORT = 8089
 
     session = DevModeApi().get_session(session_id)
     vm_name = getattr(session, 'vm_name', None) if session else None
@@ -102,7 +106,10 @@ def _open_watch_for_session(session_id: str) -> None:
         )
         return
 
-    url = f"http://127.0.0.1:{DEFAULT_SPICE_PORT}{build_display_path(uuid, vm_name, True)}"
+    url = (
+        f"http://127.0.0.1:{ADARE_WEB_PORT}/vm/watch"
+        f"?name={quote(vm_name)}&view_only=true"
+    )
     webbrowser.open(url)
     print(f"\n👁  Watching VM '{vm_name}' (read-only): {url}")
 
