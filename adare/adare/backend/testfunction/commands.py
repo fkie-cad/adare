@@ -181,19 +181,25 @@ def testfunction_load(project_path: Path, name: str):
     manager = TestfunctionManager()
     manager.ensure_global_directory_exists()
 
-    # Install testfunction to global directory (copies files if they don't exist)
-    target_python_file, target_requirements_file = manager.install_testfunction(
-        source_python_file=testfunction_directory.pythonfile,
-        source_requirements_file=testfunction_directory.requirements,
-        name=name
+    # Refresh the global copy so source edits actually propagate. install_testfunction
+    # is a no-op when the target already exists, so an edited-and-reloaded custom lib
+    # would silently keep the old code otherwise.
+    target_python_file, target_requirements_file = _refresh_global_testfunction(
+        manager, testfunction_directory.pythonfile, testfunction_directory.requirements, name
     )
 
     # Install declared dependencies now (load time) so a missing package fails
     # loudly here instead of silently at run time inside the guest.
     _install_testfunction_requirements(target_requirements_file, name)
 
-    # Load testfunction using the global paths
-    testfunction_id = testfunction_database.load_testfunction_file(project_path, target_python_file, target_requirements_file)
+    # Upsert by hash: create the file at v1, or bump its version (and retain a
+    # snapshot) when the content changed. This drives the versioned update path.
+    from adare.database.api.testfunction import TestfunctionDbApi
+    with TestfunctionDbApi() as api:
+        action, file_obj = api.upsert_testfunction_file_obj(target_python_file, target_requirements_file)
+        testfunction_id = file_obj.id
+        file_version = file_obj.version
+    log.info(f'Testfunction "{name}" {action} (file version {file_version})')
     testfunction_sync(testfunction_id)
 
     # Protect testfunction files after loading (protect the global copies)
@@ -273,19 +279,23 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
     manager = TestfunctionManager()
     manager.ensure_global_directory_exists()
 
-    # Install testfunction to global directory (copies files if they don't exist)
-    target_python_file, target_requirements_file = manager.install_testfunction(
-        source_python_file=python_file,
-        source_requirements_file=requirements_file,
-        name=testfunction_name
+    # Refresh the global copy so source edits actually propagate (install_testfunction
+    # is a no-op when the target exists), then upsert by hash below.
+    target_python_file, target_requirements_file = _refresh_global_testfunction(
+        manager, python_file, requirements_file, testfunction_name
     )
 
     # Install declared dependencies now (load time) so a missing package fails
     # loudly here instead of silently at run time inside the guest.
     _install_testfunction_requirements(target_requirements_file, testfunction_name)
 
-    # Load the testfunction into the global database using global paths
-    testfunction_id = testfunction_database.load_testfunction_file(project_path, target_python_file, target_requirements_file)
+    # Upsert by hash: create at v1 or bump the version (retaining a snapshot) on change.
+    from adare.database.api.testfunction import TestfunctionDbApi
+    with TestfunctionDbApi() as api:
+        action, file_obj = api.upsert_testfunction_file_obj(target_python_file, target_requirements_file)
+        testfunction_id = file_obj.id
+        file_version = file_obj.version
+    log.info(f'Testfunction "{testfunction_name}" {action} (file version {file_version})')
     testfunction_sync(testfunction_id)
 
     # Protect testfunction files after loading (protect the global copies)
