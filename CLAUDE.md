@@ -114,6 +114,17 @@ Framework for detecting forensic artifact changes across OS/software versions us
 - ✅ Integrity validation prevents tampering
 - ✅ Scalable for analytics and web interfaces
 
+## Database Schema Migrations
+
+`create_all()` never ALTERs existing tables, so adding a column to an existing model needs a
+migration or installs break with `no such column: ...`. `database/migrations/runner.py` applies
+pending migrations automatically after every `create_all` (ledger table `schema_migration`);
+`adare db migrate` / `db status` are the explicit commands.
+
+Adding one: idempotent `upgrade(conn)` in `database/migrations/<name>.py` (never open a DB API
+inside it — that recurses), then append a `Migration(...)` to `MIGRATIONS` — append only, never
+reorder. Full recipe: `docsrc/source/architecture/database-migrations.rst`.
+
 ## Test Execution Performance
 
 ### Testfunction Caching (2026-02-06)

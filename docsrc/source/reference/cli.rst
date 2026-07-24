@@ -565,14 +565,56 @@ System Management
 
 Administrative commands for maintaining the ADARE system.
 
-``adare manage reset-db``
-  Reset the ADARE database (use with caution - will delete all experiment data).
+Database
+--------
 
-``adare manage reset-vm``
-  Reset all VMs in the system (use with caution).
-  
+ADARE keeps a global database (VMs, environments, test functions, project
+registry) plus one database per project (experiments, runs). Schema changes are
+carried by ordered migrations that are applied automatically whenever a
+database is opened -- see :doc:`../architecture/database-migrations`.
+
+``adare db status``
+  Report whether the global database exists, is accessible, and whether any
+  schema migrations are still pending. Pending migrations are informational:
+  they are applied on next use.
+
+``adare db migrate``
+  Apply pending schema migrations to the global database and to every
+  registered project database, printing each migration as it is applied.
+  Re-running reports that nothing is pending. Safe to run at any time; it is
+  part of ``make install`` and ``make update``.
+
+``adare db init``
+  Initialize the database system (directories + global database).
+
+``adare db repair``
+  Reinitialize the global database and apply pending migrations.
+
+``adare db reset``
+  Delete the global database (use with caution - VMs, environments and the
+  test function registry are lost).
+
+``adare db clean-install``
+  Recreate the global database from scratch (DANGER: deletes all global data).
+
   Options:
-    * ``--force`` - Force deletion of all VMs (required for confirmation)
+    * ``--force``, ``-f`` - Skip the confirmation prompt
+
+VMs and runtime
+---------------
+
+``adare vm reset``
+  Reset all VMs in the system (use with caution).
+
+  Options:
+    * ``--force``, ``-f`` - Force reset of all VMs (required for confirmation)
+
+``adare runtime refresh``
+  Refresh the VM runtime files in the current project.
+
+``adare runtime build``
+  Build fresh VM runtime wheels (``adarelib``, ``adarevm``) for the current
+  project.
 
 Help Commands
 =============
