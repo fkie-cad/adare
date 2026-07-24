@@ -1,0 +1,5 @@
+# Python dependencies for this example collection (one per line).
+# This example needs none. When your tests import third-party packages, list
+# them here — they are installed when the collection is loaded, e.g.:
+#   lxml>=4.9.0
+#   openpyxl>=3.1.0

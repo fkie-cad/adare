@@ -25,14 +25,24 @@ class Event:
 
 @attrs.define
 class TestResult:
-    status: Literal[StatusEnum.SUCCESS, StatusEnum.FAILED, StatusEnum.ERROR]
+    status: Literal[StatusEnum.SUCCESS, StatusEnum.WARNING, StatusEnum.FAILED, StatusEnum.ERROR]
     details: list = attrs.field(default=attrs.Factory(list))
-    
+
     @classmethod
     def success(cls, details: list = None):
         """Create a successful test result."""
         return cls(status=StatusEnum.SUCCESS, details=details or [])
-    
+
+    @classmethod
+    def warning(cls, details: list = None):
+        """Create a pass-with-warning result.
+
+        The test passed but the author wants to flag something noteworthy.
+        Treated as passing for the run verdict, but reported distinctly from
+        SUCCESS (and never as FAILED).
+        """
+        return cls(status=StatusEnum.WARNING, details=details or [])
+
     @classmethod
     def failed(cls, details: list = None):
         """Create a failed test result (test ran but condition not met)."""

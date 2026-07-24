@@ -111,7 +111,8 @@ def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_succe
     if is_smoke_run:
         success = bool(execution_success)
     else:
-        success = result_status == StatusEnum.SUCCESS
+        # WARNING is pass-with-warning: a passing verdict, reported distinctly.
+        success = result_status in (StatusEnum.SUCCESS, StatusEnum.WARNING)
 
     diagnostics = {
         "verdict": "SUCCESS" if success else "FAILED",

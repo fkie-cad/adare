@@ -26,7 +26,9 @@ class TestResultProcessor:
     # Error categorization for better reporting
     EXECUTION_ERRORS = {STATUS_ERROR}
     TEST_FAILURES = {STATUS_FAILED}
-    SUCCESS_STATUSES = {STATUS_SUCCESS}
+    WARNING_STATUSES = {STATUS_WARNING}
+    # WARNING counts as passing (pass-with-warning) but is categorized separately.
+    SUCCESS_STATUSES = {STATUS_SUCCESS, STATUS_WARNING}
 
     @classmethod
     def process_test_result(cls, test_name: str, ws_result: dict[str, Any], expect_to_fail: bool = False) -> ActionResult:
@@ -43,7 +45,7 @@ class TestResultProcessor:
         """
         # Extract test result data from WebSocket response
         test_result_data = ws_result.get('result', {})
-        test_status = test_result_data.get('status', cls.STATUS_UNKNOWN)
+        test_status = cls._normalize_status(test_result_data.get('status', cls.STATUS_UNKNOWN))
         test_details = test_result_data.get('details', [])
 
         # Categorize the result for better logging
@@ -98,6 +100,8 @@ class TestResultProcessor:
                     log.error(f"Test '{test_name}' execution error: {detail}")
                 elif category == 'test_failure':
                     log.warning(f"Test '{test_name}' test failure: {detail}")
+                elif category == 'warning':
+                    log.warning(f"Test '{test_name}' warning: {detail}")
                 else:
                     log.info(f"Test '{test_name}' detail: {detail}")
 
@@ -110,6 +114,7 @@ class TestResultProcessor:
         # Create category-specific message prefixes
         category_prefix = {
             'success': '✓',
+            'warning': '⚠',
             'test_failure': '✗',
             'execution_error': '⚠'
         }.get(category, '')
@@ -142,8 +147,34 @@ class TestResultProcessor:
         return status in cls.TEST_FAILURES
 
     @classmethod
+    def _normalize_status(cls, status: Any) -> str:
+        """Normalize a status to its canonical name string.
+
+        The VM (WebSocket) path already sends a name like 'SUCCESS'; the host-mode
+        paths hand over a raw StatusEnum/int. Convert the latter so a single set of
+        string constants (including the new WARNING) covers every execution path.
+        """
+        if isinstance(status, str):
+            return status
+        from adarelib.constants import StatusEnum
+        name_map = {
+            StatusEnum.SUCCESS: cls.STATUS_SUCCESS,
+            StatusEnum.WARNING: cls.STATUS_WARNING,
+            StatusEnum.FAILED: cls.STATUS_FAILED,
+            StatusEnum.ERROR: cls.STATUS_ERROR,
+        }
+        try:
+            return name_map.get(StatusEnum(status), cls.STATUS_UNKNOWN)
+        except (ValueError, TypeError):
+            return cls.STATUS_UNKNOWN
+
+    @classmethod
     def _categorize_result(cls, status: str) -> str:
         """Categorize test result for better handling and display."""
+        # Check WARNING before SUCCESS_STATUSES (which now includes WARNING) so the
+        # pass-with-warning case is reported distinctly rather than as plain success.
+        if status in cls.WARNING_STATUSES:
+            return 'warning'
         if status in cls.SUCCESS_STATUSES:
             return 'success'
         if status in cls.TEST_FAILURES:
