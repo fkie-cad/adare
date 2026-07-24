@@ -73,6 +73,14 @@ class OsDefinition:
     # NoCloud auto-detects 'cidata'; debian-installer and Anaconda detect
     # 'OEMDRV'; AutoYaST reads from a device path so the label is informational.
     seed_label: str = 'cidata'
+    # How the installer config reaches the guest. 'cdrom' (default) attaches the
+    # rendered seed as a labeled second CD-ROM, auto-detected by the installer.
+    # 'http' additionally serves the seed directory over a short-lived local HTTP
+    # server (reachable from the guest at 10.0.2.2 via QEMU user-mode net) and
+    # appends a fetch URL to the kernel cmdline. Needed for older debian-installer
+    # releases (e.g. Ubuntu 18.04) that do not auto-load a preseed from an OEMDRV
+    # volume.
+    seed_transport: str = 'cdrom'  # 'cdrom' | 'http'
 
 
 # Ubuntu 26.04 LTS (Resolute Raccoon) - Server ISO with autoinstall support
@@ -789,6 +797,7 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                         'kernel_cmdline', 'autoinstall console={console} ---'
                     ),
                     seed_label=data.get('seed_label', 'cidata'),
+                    seed_transport=data.get('seed_transport', 'cdrom'),
                 )
             except (OSError, yaml.YAMLError, TypeError, ValueError) as e:
                 log.warning('Skipping %s: %s', yml_file, e)
