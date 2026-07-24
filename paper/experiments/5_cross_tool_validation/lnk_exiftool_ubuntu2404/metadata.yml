@@ -1,0 +1,14 @@
+environments:
+  - ubuntu24043
+
+description: >-
+  Cross-tool validation (paper section 5.5): parse three LNK samples with ExifTool 12.76
+  on Ubuntu 24.04. ExifTool tolerates the non-standard appended data in L2/L3, reporting
+  it as an unparsed overlay while still recovering every link field.
+
+tags:
+  - lnk
+  - cross-tool-validation
+  - tool:ExifTool
+  - goal:tool-test
+  - linux

@@ -1,0 +1,14 @@
+environments:
+  - ubuntu24043
+
+description: >-
+  Cross-tool validation (paper section 5.5): parse three LNK samples with lnkinfo
+  (liblnk-utils 20181227) on Ubuntu 24.04. L1 parses; L2/L3 are REJECTED on liblnk's
+  strict ExtraData size constraint, and those two failures are asserted expectations.
+
+tags:
+  - lnk
+  - cross-tool-validation
+  - tool:lnkinfo
+  - goal:tool-test
+  - linux
