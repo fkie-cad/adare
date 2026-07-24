@@ -27,8 +27,9 @@ WAIT = 'wait'
 NOTE = 'note'
 DONE = 'done'
 STEP_DONE = 'step_done'
+RESTART_VM = 'restart_vm'
 
-_KINDS = {CLICK, DOUBLE_CLICK, TYPE, KEY, SCROLL, WAIT, NOTE, DONE, STEP_DONE}
+_KINDS = {CLICK, DOUBLE_CLICK, TYPE, KEY, SCROLL, WAIT, NOTE, DONE, STEP_DONE, RESTART_VM}
 
 # The human-readable schema handed to the model in the system prompt.
 ACTION_SCHEMA_DOC = """\
@@ -50,10 +51,19 @@ action. Fields depend on "action":
   {"reasoning": "...", "action": "note"}          # observe, take no action
   {"reasoning": "...", "action": "step_done", "summary": "<what was accomplished>"}
   {"reasoning": "...", "action": "done", "summary": "<what was accomplished>"}
+  {"reasoning": "...", "action": "restart_vm", "memory_mb": <int optional>,
+   "reason": "<why the VM seems under-resourced/unresponsive>"}
 
 Use "step_done" when the CURRENT sub-goal is satisfied (more sub-goals may
 follow); use "done" only when the WHOLE goal is complete. When no sub-goal is
 named, treat "step_done" and "done" the same.
+
+Use "restart_vm" ONLY when the screen is persistently unresponsive across
+several steps or you suspect the VM is under-resourced (e.g. the guest agent /
+window keeps freezing). It cold-reboots the VM — optionally with more RAM via
+"memory_mb" (in MB) — and DISCARDS all in-VM progress so far, so use it early
+or as a last resort. After a restart you begin the goal again from a clean boot
+on the resized VM. Omit "memory_mb" to reboot at the current size.
 
 Coordinates MUST refer to the exact image you were shown."""
 
@@ -80,6 +90,8 @@ class AgentAction:
     until_describe: str | None = None
     # done
     summary: str = ''
+    # restart_vm: optional new RAM size in MB (None -> reboot at current size)
+    memory_mb: int | None = None
     # step_done: set True when the model signals the current sub-goal (not the
     # whole goal) is complete; the planning orchestrator ends the sub-goal run.
     step_done: bool = False
@@ -235,5 +247,19 @@ def parse_action(
     elif kind == STEP_DONE:
         action.summary = str(obj.get('summary', ''))
         action.step_done = True
+    elif kind == RESTART_VM:
+        # "reason" is folded into describe/reasoning for the step log; memory_mb
+        # is optional and only coerced when present (a bad value is repairable).
+        reason = obj.get('reason')
+        if reason and not action.describe:
+            action.describe = str(reason)
+        mem_raw = obj.get('memory_mb')
+        if mem_raw is not None:
+            try:
+                action.memory_mb = int(float(mem_raw))
+            except (TypeError, ValueError) as exc:
+                raise VLMError(
+                    f'restart_vm action has non-numeric memory_mb ({mem_raw!r}): {obj!r}'
+                ) from exc
 
     return action

@@ -179,6 +179,13 @@ class GuiAgentMixin:
             log.info('Decision-repair model enabled: %s', AGENT_REPAIR_MODEL)
 
         recorder, run_dir = self._setup_recorder(request, ctx, PlaybookRecorder)
+        # Persist the RAM this run boots at into the recorded playbook's
+        # settings, so a successful run's playbook replays at a size known to
+        # work (restart_vm bumps this value if the model resizes mid-run).
+        if recorder is not None and ctx and getattr(ctx, 'config', None):
+            working_mb = getattr(ctx.config, 'vm_memory', None)
+            if working_mb:
+                recorder.set_vm_memory(working_mb)
 
         # Observability / capture. Progress defaults to the config value for
         # non-CLI callers (the CLI already resolves a TTY-aware default); video
@@ -205,6 +212,27 @@ class GuiAgentMixin:
         # Element grounding (attach / auto-start / off) — see :meth:`_setup_grounding`.
         locate_client, locate_manager = self._setup_grounding(request, run_dir)
 
+        # LLM-invokable "restart the VM (optionally with more RAM)" capability.
+        # The VLM package never imports the devmode session, so this is injected
+        # as a closure over the live ``session`` (mirroring the checkpoint /
+        # restore / verify injection in ``_run_planning_agent``). After the cold
+        # reboot the host executor is re-pointed at the rebuilt domain and the
+        # recorder's actions are reset (keeping the persisted vm_memory).
+        async def restart_vm(memory_mb: int | None = None) -> str:
+            from adare.backend.experiment.vlm.exceptions import AgentError
+            res = await session.restart_with_memory(memory_mb)
+            if not res.success:
+                reason = res.error.message if res.error else 'unknown error'
+                raise AgentError(f'Could not restart VM with more memory: {reason}')
+            agent.executor = QEMUHostGUIExecutor(vm=session.experiment_ctx.vm)
+            working_mb = getattr(session.experiment_ctx.config, 'vm_memory', memory_mb)
+            if recorder is not None:
+                recorder.reset_recorded_actions()
+                if working_mb:
+                    recorder.set_vm_memory(working_mb)
+            log.info('restart_vm: VM back up at %s MB', working_mb)
+            return f'VM restarted at {working_mb} MB'
+
         agent = GuiAgent(
             executor, client, request.goal,
             recorder=recorder, run_dir=run_dir, coord_space=VLLM_COORD_SPACE,
@@ -218,6 +246,7 @@ class GuiAgentMixin:
             interactive=request.interactive,
             decision_retry_limit=GUI_AGENT_DECISION_RETRIES,
             repair_client=repair_client,
+            restart_vm=restart_vm,
         )
 
         # Live per-step display (rich table + reasoning panel). Wired as an
