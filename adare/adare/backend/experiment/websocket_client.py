@@ -48,6 +48,12 @@ class AdareVMClient:
         self.websocket: websockets.WebSocketClientProtocol | None = None
         self.connected = False
 
+        # Event loop the websocket was created in. A websockets asyncio
+        # connection binds its internal futures/queues to this loop, so the
+        # socket cannot be reused from a different loop (e.g. a later
+        # asyncio.run()). Used to detect loop changes and reconnect.
+        self._ws_loop: asyncio.AbstractEventLoop | None = None
+
         # Pending tool calls (waiting for results)
         self.pending_calls: dict[str, asyncio.Future] = {}
 
@@ -89,6 +95,8 @@ class AdareVMClient:
                 )
 
                 self.connected = True
+                # Remember which loop owns this connection's futures/queues.
+                self._ws_loop = asyncio.get_running_loop()
 
                 # Start message handler task
                 self.message_handler_task = asyncio.create_task(self._handle_messages())
@@ -167,6 +175,7 @@ class AdareVMClient:
 
                 self.connected = False
                 self.websocket = None
+                self._ws_loop = None
 
                 log.info("Disconnected from adarevm server")
 
@@ -286,36 +295,48 @@ class AdareVMClient:
             with contextlib.suppress(ValueError):
                 self.event_handlers[event_type].remove(handler)
 
-    async def _ensure_message_handler_running(self):
+    async def _ensure_connection_in_current_loop(self):
         """
-        Ensure the message handler task is running in the current event loop.
+        Ensure the connection (and its message handler) live in the current event loop.
 
         This is critical for dev mode where commands run in separate asyncio.run() calls.
-        When asyncio.run() exits, the event loop and all its tasks are cleaned up.
-        If we reconnected in a previous command, the message_handler_task is dead.
-        We need to restart it in the current event loop before making WebSocket calls.
+        When asyncio.run() exits, the event loop and all its primitives are cleaned up.
+        A websockets asyncio connection binds its internal futures/queues to the loop it
+        was created in; touching them from a different loop raises "got Future ... attached
+        to a different loop". So a socket from a prior loop cannot be reused — we must
+        reconnect in the current loop.
+
+        Same loop: keep the socket, restart the message handler task if it died.
+        Different loop: drop all stale references (without any cross-loop await) and
+        reconnect fresh in the current loop.
         """
         if not self.connected or not self.websocket:
             return
 
-        # Check if message handler task exists and is still running
-        if self.message_handler_task and not self.message_handler_task.done():
-            # Task exists and is running - check if it's in the current event loop
-            try:
-                current_loop = asyncio.get_running_loop()
-                task_loop = self.message_handler_task.get_loop()
-                if current_loop == task_loop:
-                    # Task is running in current loop, all good
-                    return
-                # Task is from a different event loop (previous asyncio.run())
-                log.debug("Message handler task is from a different event loop, restarting")
-            except RuntimeError:
-                # No running loop, which is odd but handle it
-                log.debug("No running event loop detected")
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop, which is odd but handle it by leaving state as-is.
+            log.debug("No running event loop detected")
+            return
 
-        # Message handler is not running in current loop - restart it
-        log.info("Restarting message handler task in current event loop")
-        self.message_handler_task = asyncio.create_task(self._handle_messages())
+        if self._ws_loop is current_loop:
+            # Socket belongs to the current loop. Restart the handler if it died.
+            if self.message_handler_task is None or self.message_handler_task.done():
+                log.info("Restarting message handler task in current event loop")
+                self.message_handler_task = asyncio.create_task(self._handle_messages())
+            return
+
+        # Socket belongs to a dead/foreign loop and cannot be reused. Drop every
+        # loop-bound reference without awaiting (the pending futures are bound to the
+        # old loop), then reconnect fresh in the current loop.
+        log.info("WebSocket connection is from a different event loop, reconnecting")
+        self.websocket = None
+        self.connected = False
+        self.message_handler_task = None
+        self.pending_calls.clear()
+        self._ws_loop = None
+        await self.connect()
 
     async def call_tool(self, tool_name: str, params: dict[str, Any] = None, timeout: float = 30.0) -> dict[str, Any]:
         """
@@ -336,8 +357,8 @@ class AdareVMClient:
         if not self.connected:
             raise RuntimeError("Not connected to adarevm server")
 
-        # Ensure message handler is running in current event loop
-        await self._ensure_message_handler_running()
+        # Ensure the connection (and its message handler) live in the current event loop
+        await self._ensure_connection_in_current_loop()
 
         # Create tool call message
         call_msg = create_tool_call(tool_name, params or {})
