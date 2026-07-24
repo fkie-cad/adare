@@ -111,7 +111,9 @@ upstream KDE Breeze art**, not crops from a live VM screenshot:
 
 * Source: `https://raw.githubusercontent.com/KDE/breeze-icons/master/icons/apps/48/system-file-manager.svg`
   (KDE Breeze icons, LGPL — redistributable)
-* Rasterized with `rsvg-convert -w 48 -h 48`
+* Rasterized with `rsvg-convert -w 48 -h 48 -o dolphin_taskbar.png <svg>` → 48×48 RGBA;
+  the two Dolphin directories hold byte-identical copies. `open-single-text-file-kubuntu-*`
+  in case study §5.2 reuses the same file and needs the same replacement.
 
 **Caveat:** because it comes from upstream SVG rather than from the actual Fedora KDE panel,
 the template may not match pixel-for-pixel what the CV matcher sees at runtime — the panel
@@ -120,6 +122,59 @@ possible theme variant (Breeze Dark). If `click: { target: { image: ... } }` fai
 launcher, **re-take the crop from a live Fedora KDE VM screenshot** and replace both copies.
 The Nautilus counterparts in this case study were cropped from live screenshots (46×42), which
 is the approach to follow.
+
+## Verification status
+
+The five test functions **were** executed, against synthetic trash state on the host, each
+with a negative control:
+
+| test | result |
+|---|---|
+| `testfile_created`, `trashbin_check_file`, `trahsbin_check_info_file` (`file_exists`) | pass; `file_does_not_exist` on a live file correctly fails |
+| `testfile_deleted` (`file_does_not_exist`) | pass on an absent path |
+| `trashbin_check_info_date` (`file_content_equals` + tolerance placeholder) | pass at +2 s and +4 s offsets; **fails** at ±600 s with *"Outside tolerance: −600.0s difference (range: −5s to 5s)"* |
+
+That last row settles two things that were open: `| tolerance(5, -5)` really does produce a
+range comparison rather than a literal string match, and the trailing newline the YAML `|`
+block scalar adds is harmless (`file_content_equals` strips both sides).
+
+Everything below is **not** verified — none of it can be without a live Fedora KDE VM.
+
+## Runtime risks on the first KDE run
+
+Ranked by how likely they are to break the first run. None is a defect in the artifact set;
+all are assumptions that need one manual run to settle.
+
+1. **`SweepStrategy: { index: 2 }` on the folder click is almost certainly wrong for
+   Dolphin.** The index was tuned against the Nautilus sidebar and carried over verbatim.
+   There is no reason the second left-to-right, top-to-bottom text match in Dolphin's Places
+   panel is the folder we want. This is the single most likely failure. Correcting it needs
+   a screenshot from a real Dolphin window — the right index is an empirical fact, not one
+   that can be derived.
+2. **`kioclient5 move <path> trash:/` is the paper's wording, kept verbatim, unverified.**
+   Two distinct risks: on a KF6-only Fedora KDE image the binary is `kioclient`, not
+   `kioclient5`; and `kioclient move` into `trash:/` may not be equivalent to KIO's own
+   trash operation, so it could write a different `Path=` into the `.trashinfo` — or fail
+   outright. Worth one manual run before the paper leans on this row.
+3. **The Dolphin context-menu label `"Move to Trash"` is assumed, not observed.** The label
+   and accelerator vary across KDE versions, and the OCR target is a near-exact text match.
+   The same applies to the Places entries `Documents` / `Downloads` / `Desktop` under any
+   non-English locale — all four playbook targets are English strings.
+4. **Opening Dolphin once before the loop can show a stale listing.** The trash reset and
+   the file creation happen outside Dolphin's knowledge, so only the per-iteration
+   navigation click refreshes the view. That works for iterations 2 and 3, but there is no
+   `F5` and no `wait_until` guarding it, so a missed click leaves the window on a stale
+   folder. Opening Dolphin per iteration instead would trade this for three stacked windows
+   breaking the icon match — a judgement call, not a verified choice.
+5. **`trash-put` is not installed by default** on either Ubuntu or Fedora; it comes from
+   `trash-cli` and the environment must provide it.
+6. **`gio trash` on Ubuntu 18.04** should exist — the `gio` CLI arrived in GLib 2.56, which
+   is what 18.04 ships (the pre-2.56 path was `gvfs-trash`) — but this is unconfirmed, and
+   18.04 has no OS profile anyway.
+7. **`Desktop` and `Downloads` are assumed to exist.** The playbooks do not `mkdir -p` the
+   XDG directories, so on a minimal image where `xdg-user-dirs` has not populated them the
+   create step fails. The create command was kept byte-identical to the original rather than
+   hardened, to preserve the "same tests, same setup" property.
 
 ## Prerequisites / not shipped
 
