@@ -68,6 +68,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         iso_path: str = '',
         boot_from_cdrom: bool = False,
         resolution: str | None = None,
+        hypervisor_config: dict | None = None,
     ):
         self.vm_name = vm_name
         self.guest_os = guest_os
@@ -92,6 +93,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         # Optional guest display resolution "WxH" (e.g. "1280x1024"); None => host/env
         # default. Consumed by ConfigurationMixin -> QEMUVMConfig.resolution_x/y (EDID).
         self._resolution = resolution or None
+        self._hypervisor_config = hypervisor_config or {}  # Store for mixins (boot_mode override)
 
         # libvirt integration
         self._libvirt_conn = None  # Lazy initialization - will use manager's connection

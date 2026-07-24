@@ -6,6 +6,12 @@ os:
   distribution: "Home"
   version: "21H1"
   language: "English"
+
+# Optional: Override hypervisor-specific settings
+# hypervisor: qemu  # Default is virtualbox, but use qemu for UEFI/BIOS control
+# hypervisor_config:
+#   boot_mode: auto  # Options: 'auto' (arch-aware: x86_64 Linux->BIOS, Windows/ARM->UEFI), 'uefi', 'bios'
+
 # postsetupinstallations:
 #   - name: "jinja2"
 #     command: "pip3 install jinja2"

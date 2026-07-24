@@ -64,7 +64,8 @@ class QEMUVMRegistry:
             ram=data.get('ram', 2048),
             machine=data.get('machine', 'pc'),
             accel=data.get('accel', 'kvm'),
-            drive_format=data.get('drive_format', 'qcow2')
+            drive_format=data.get('drive_format', 'qcow2'),
+            hypervisor_config=None  # No hypervisor config for UUID registry recovery
         )
 
 

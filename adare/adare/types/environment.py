@@ -90,10 +90,9 @@ class EnvironmentMetadata:
         The hypervisor_config field allows hypervisor-specific settings:
 
         QEMU hypervisor supports:
-        - boot_mode: 'bios' or 'uefi' (default: auto-detected based on OS)
-            - Windows VMs automatically use 'uefi'
-            - Linux VMs automatically use 'bios'
-            - Override with explicit boot_mode setting
+        - boot_mode: 'uefi', 'bios', or 'auto' (default: 'uefi' for all OSes)
+            - Both Windows and Linux VMs default to UEFI boot
+            - Override with explicit boot_mode setting for legacy BIOS boot
 
         Example environment YAML:
             vm: windows-10
@@ -102,7 +101,7 @@ class EnvironmentMetadata:
               os: Windows 10
             hypervisor: qemu
             hypervisor_config:
-              boot_mode: uefi  # Optional: override auto-detection
+              boot_mode: bios  # Optional: override default UEFI to use BIOS
     """
     vm: str | None = None
     os: OsInfo | None = None
