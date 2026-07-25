@@ -1,0 +1,72 @@
+# LLM-free replay of a manual Ubuntu 18.04 desktop install (ubiquity installer).
+# Replay with:
+#   ./gui_install.py playbooks/ubuntu1804-desktop.yaml \
+#       --iso ubuntu-18.04.5-desktop-amd64.iso --vm-dir /vms
+#
+# 18.04's ubiquity differs from 20.04: the 'Download updates' checkbox is
+# disabled (Tab skips it) and the installation-type screen has Encrypt/LVM
+# checkboxes instead of 'Advanced features', so a couple of Tab counts differ.
+# Accepts the geoip default timezone.
+name: ubuntu1804-desktop
+description: Ubuntu 18.04.5 Desktop via the graphical ubiquity installer
+credentials: "user 'adare' / password 'adare' / host 'ubuntu1804'"
+
+vm:
+  ram_mb: 4096
+  cpus: 4
+  disk_size: "60G"
+  vga: qxl
+  firmware: bios
+
+install:
+  - {action: wait_stable, settle: 6, timeout: 360, min: 120, shot: welcome, note: "live session + Welcome dialog (min skips early-boot plymouth)"}
+  - {action: key, keys: [ret], note: "Welcome: 'Install Ubuntu' (dialog default)"}
+
+  - {action: wait_stable, settle: 4, timeout: 120, shot: keyboard}
+  - {action: key, keys: [ret], note: "Keyboard layout English(US): Continue"}
+
+  - {action: wait_stable, settle: 4, timeout: 120, shot: updates}
+  # 'Download updates' is disabled here and Tab skips it; leave defaults.
+  - {action: key, keys: [tab], repeat: 4, note: "-> Continue (third-party, Quit, Back)"}
+  - {action: key, keys: [ret], note: "Continue"}
+
+  - {action: wait_stable, settle: 6, timeout: 180, shot: installtype}
+  - {action: key, keys: [tab], repeat: 5, note: "'Erase disk' -> Install Now (past Encrypt/LVM/Quit/Back)"}
+  - {action: key, keys: [ret], note: "Install Now"}
+
+  - {action: wait_stable, settle: 4, timeout: 120, shot: writeconfirm}
+  - {action: key, keys: [tab], note: "'Write changes?' dialog: -> Continue"}
+  - {action: key, keys: [ret], note: "commit partitioning (point of no return)"}
+
+  - {action: wait_stable, settle: 6, timeout: 180, shot: timezone}
+  # Timezone: accept the geoip default. The city entry traps focus on 18.04;
+  # esc closes autocomplete and End deselects before Tabbing to Continue.
+  - {action: key, keys: [esc]}
+  - {action: key, keys: [end]}
+  - {action: key, keys: [tab], note: "-> Continue (Back is disabled here)"}
+  - {action: key, keys: [ret], note: "Continue"}
+
+  - {action: wait_stable, settle: 6, timeout: 120, shot: whoami}
+  - {action: type, text: "adare", note: "Your name"}
+  - {action: key, keys: [tab], note: "-> computer name"}
+  - {action: key, keys: [ctrl, a]}
+  - {action: type, text: "ubuntu1804", note: "computer name"}
+  - {action: key, keys: [tab], repeat: 2, note: "-> password (skip username)"}
+  - {action: type, text: "adare", note: "password"}
+  - {action: key, keys: [tab], note: "-> confirm password"}
+  - {action: type, text: "adare"}
+  - {action: shot, name: user-filled}
+  - {action: key, keys: [tab], repeat: 3, note: "-> Continue (past login radios, Back; no AD on 18.04)"}
+  - {action: key, keys: [ret], note: "Continue -> start install"}
+
+  - {action: wait_stable, settle: 45, timeout: 3600, shot: complete, note: "wait for install to finish"}
+
+reboot_from_disk: true
+
+verify:
+  - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login, note: "GDM login screen (min skips reboot/boot)"}
+  - {action: key, keys: [ret], note: "select the 'adare' user"}
+  - {action: wait, seconds: 2}
+  - {action: type, text: "adare", note: "password"}
+  - {action: key, keys: [ret]}
+  - {action: wait_stable, settle: 12, timeout: 180, shot: desktop, note: "GNOME desktop"}
