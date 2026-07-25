@@ -1,0 +1,8 @@
+environments:
+  - fedora-41
+  - fedora-42
+
+tags: [trash, deletion, xdg, fred]
+
+description: >-
+  Delete a file from three home subdirectories via the Dolphin (KDE) context menu entry 'Move to Trash' and verify the resulting XDG trash can artifacts.
