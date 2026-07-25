@@ -10,6 +10,11 @@ from adare.services.environment_recipe import build_baked_environment_file, buil
 
 log = logging.getLogger(__name__)
 
+# Install modes that drive the OS installer's own GUI instead of handing it a
+# seed file. They bake no Python environment, and they need no post-install
+# interactive session because the install already ran in a driven window.
+_GUI_INSTALL_MODES = frozenset({'manual', 'gui-auto', 'gui-script'})
+
 
 def _use_recipe(os_def: OsDefinition, recipe_flag: bool | None) -> bool:
     """Decide recipe vs baked. Explicit flag wins; else Windows defaults to
@@ -41,7 +46,7 @@ def exec_vm_create(arguments):
     bare = getattr(arguments, 'bare', False)
     setup_arg = getattr(arguments, 'setup_level', None)
     # Resolve the setup level once, before branching, so every creator path
-    # (recipe, manual, gui-auto, linux, windows) honours it. `--setup` wins;
+    # (recipe, manual, gui-auto, gui-script, linux, windows) honours it. `--setup` wins;
     # `--bare` is the deprecated alias for `--setup bare`.
     if setup_arg is not None:
         setup_level = SetupLevel[setup_arg.upper()]
@@ -49,7 +54,7 @@ def exec_vm_create(arguments):
             log.warning('--bare is ignored because --setup %s was given explicitly', setup_arg)
     else:
         setup_level = SetupLevel.BARE if bare else SetupLevel.FULL
-    # GUI-automation (gui-auto install mode) options.
+    # GUI-automation options (gui-auto and gui-script install modes).
     gui_record = getattr(arguments, 'record', False)
     gui_relearn = getattr(arguments, 'relearn', False)
     gui_display = getattr(arguments, 'display', False)
@@ -83,7 +88,7 @@ def exec_vm_create(arguments):
     if arch is not None:
         os_def = replace(os_def, architecture=arch)
 
-    if setup_level != SetupLevel.FULL and os_def.install_mode in ('manual', 'gui-auto'):
+    if setup_level != SetupLevel.FULL and os_def.install_mode in _GUI_INSTALL_MODES:
         log.warning(
             '--setup %s has little effect for %s installs: they bake no Python environment anyway',
             setup_level.name.lower(), os_def.install_mode,
@@ -191,6 +196,25 @@ def exec_vm_create(arguments):
             display=gui_display,
             template=gui_template,
         )
+    elif os_def.install_mode == 'gui-script':
+        # Deterministic playbook replay — no vision model and no CV server, so
+        # unlike gui-auto this needs no ADARE_VLLM_* configuration. The ISO may
+        # come from --iso or from a baked iso_url on the profile.
+        from adare.hypervisor.qemu.vm_creator.qmp_script_creator import create_qmp_script_vm
+
+        disk_path = create_qmp_script_vm(
+            os_def=os_def,
+            iso_path=iso_path,
+            vm_name=vm_name,
+            disk_size=disk_size,
+            ram_mb=ram,
+            cpus=cpus,
+            force=force,
+            vm_dir=vm_dir,
+            setup_level=setup_level,
+            template=gui_template,
+            keep_running=gui_display,
+        )
     elif os_def.platform == 'linux':
         from adare.hypervisor.qemu.vm_creator.linux_creator import create_linux_vm
 
@@ -234,8 +258,8 @@ def exec_vm_create(arguments):
         return
 
     # Run interactive post-install session if requested (only for seed-based
-    # automated installs — manual/gui-auto already drive the GUI directly).
-    if interactive and os_def.install_mode not in ('manual', 'gui-auto'):
+    # automated installs — the manual/gui-* modes already drive the GUI directly).
+    if interactive and os_def.install_mode not in _GUI_INSTALL_MODES:
         from adare.hypervisor.qemu.vm_creator.interactive import run_post_install_session
 
         nvram_path = disk_path.with_name(disk_path.stem + '_VARS.fd')
@@ -268,6 +292,9 @@ def exec_vm_create(arguments):
     if os_def.install_mode == 'gui-auto':
         tip = ('This VM was installed by the GUI agent. The generated playbook can be '
                'edited and replayed; see the install report for a screenshot walkthrough.')
+    elif os_def.install_mode == 'gui-script':
+        tip = ('This VM was installed by deterministic playbook replay (no vision model). '
+               'The per-step screenshots next to the disk show exactly what was clicked.')
     elif os_def.install_mode == 'manual':
         tip = 'This VM was installed manually. Configure SSH/guest agent access for full ADARE integration.'
     elif setup_level == SetupLevel.BARE:

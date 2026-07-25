@@ -19,9 +19,12 @@ kernel_cmdline: >-
   automatic-ubiquity noprompt boot=casper console={console} ---
 # UNTESTED: x86_64 guests cannot be built on an Apple Silicon host (no TCG
 # fallback). Shipped for replication on Intel/AMD hosts.
-iso_url: ""
-iso_sha256: ""
-iso_filename: ""
+# Kubuntu 20.04.5 has already been pruned from cdimage; only .6 remains.
+# Hash is the vendor SHA256SUMS entry (verified 2026-07-25); a mismatch
+# re-downloads rather than installing a wrong image.
+iso_url: "https://cdimage.ubuntu.com/kubuntu/releases/20.04/release/kubuntu-20.04.6-desktop-amd64.iso"
+iso_sha256: "96f765d63302ec15615287afcb910f2e539301d753fd65c13c7300064e795b0a"
+iso_filename: "kubuntu-20.04.6-desktop-amd64.iso"
 default_disk_size: "60G"
 default_ram_mb: 8192
 default_cpus: 0

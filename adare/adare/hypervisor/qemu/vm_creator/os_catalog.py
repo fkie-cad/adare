@@ -56,8 +56,10 @@ class OsDefinition:
     kernel_path_in_iso: str = ''    # Path to vmlinuz inside ISO (Linux only)
     initrd_path_in_iso: str = ''    # Path to initrd inside ISO (Linux only)
     extra_packages: list[str] = field(default_factory=list)
-    install_mode: str = 'auto'  # 'auto' (unattended), 'manual' (interactive VNC),
-    #                            or 'gui-auto' (vision-LLM-driven GUI automation)
+    install_mode: str = 'auto'  # 'auto' (unattended seed file), 'manual'
+    #   (interactive window), 'gui-auto' (vision-LLM drives the GUI installer),
+    #   or 'gui-script' (deterministic QMP playbook replay, no model). See
+    #   _INSTALL_MODES.
     architecture: str = 'x86_64'  # 'x86_64' or 'aarch64'
     template: str = ''  # Custom template filename (empty = use default lookup)
     # Installer family — selects how the rendered template is laid out on the
@@ -320,6 +322,32 @@ _KICKSTART_CMDLINE = (
     'inst.ks=hd:LABEL=OEMDRV:/ks.cfg inst.text console={console}'
 )
 
+
+def _fedora_archive_cmdline(release: str, arch: str = 'x86_64') -> str:
+    """Kickstart cmdline with ``inst.repo`` pinned to the Fedora *archive*.
+
+    An Everything-netinst ISO carries no packages; Anaconda resolves them through
+    the mirror metalink. Once a release goes EOL the metalink resolves to nothing
+    and the install dies at dependency resolution, so an EOL release must name the
+    archive mirror explicitly. Every release ADARE ships for replication is or will
+    be EOL, hence the pin.
+    """
+    return (
+        f'inst.ks=hd:LABEL=OEMDRV:/ks.cfg '
+        f'inst.repo=https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/'
+        f'{release}/Everything/{arch}/os/ '
+        f'inst.text console={{console}}'
+    )
+
+
+# Fedora 41 and 42 are both permanently EOL, so their metalink is dead — see
+# _fedora_archive_cmdline. The Workstation profiles below are pinned to the
+# archive; fedora41kde / fedora42kde share the defect and are NOT pinned, because
+# no one has verified a KDE-spin build against the archive repo (their kickstart
+# selects a different package group). Pin them the same way once verified.
+_FEDORA_41_CMDLINE = _fedora_archive_cmdline('41')
+_FEDORA_42_CMDLINE = _fedora_archive_cmdline('42')
+
 FEDORA_41_WORKSTATION = OsDefinition(
     name='fedora41',
     display_name='Fedora 41 Workstation (GNOME)',
@@ -327,16 +355,18 @@ FEDORA_41_WORKSTATION = OsDefinition(
     distribution='fedora',
     distribution_label='Workstation',
     version='41',
-    iso_url='',
-    iso_sha256='',
-    iso_filename='',
+    iso_url=(
+        'https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/iso/Fedora-Everything-netinst-x86_64-41-1.4.iso'
+    ),
+    iso_sha256='bc943f6b426ef8db9587715d87d6361c4048146f3aadd36a9dcbab2b33fe320e',
+    iso_filename='Fedora-Everything-netinst-x86_64-41-1.4.iso',
     default_disk_size='60G',
     default_ram_mb=8192,
     default_cpus=0,
     kernel_path_in_iso='/images/pxeboot/vmlinuz',
     initrd_path_in_iso='/images/pxeboot/initrd.img',
     installer='kickstart',
-    kernel_cmdline=_KICKSTART_CMDLINE,
+    kernel_cmdline=_FEDORA_41_CMDLINE,
     seed_label='OEMDRV',
 )
 
@@ -367,16 +397,18 @@ FEDORA_42_WORKSTATION = OsDefinition(
     distribution='fedora',
     distribution_label='Workstation',
     version='42',
-    iso_url='',
-    iso_sha256='',
-    iso_filename='',
+    iso_url=(
+        'https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/42/Everything/x86_64/iso/Fedora-Everything-netinst-x86_64-42-1.1.iso'
+    ),
+    iso_sha256='1bd6ab4798983c2fe4a210f9c4ca135fed453d6142ba852c1f8d5fba22e113ab',
+    iso_filename='Fedora-Everything-netinst-x86_64-42-1.1.iso',
     default_disk_size='60G',
     default_ram_mb=8192,
     default_cpus=0,
     kernel_path_in_iso='/images/pxeboot/vmlinuz',
     initrd_path_in_iso='/images/pxeboot/initrd.img',
     installer='kickstart',
-    kernel_cmdline=_KICKSTART_CMDLINE,
+    kernel_cmdline=_FEDORA_42_CMDLINE,
     seed_label='OEMDRV',
 )
 
@@ -731,6 +763,12 @@ _BUILTIN_CATALOG: dict[str, OsDefinition] = {
 
 _REQUIRED_YAML_FIELDS = {'name', 'platform', 'distribution', 'version'}
 
+# Recognised install_mode values. 'auto' is the unattended seed-file path;
+# 'manual' opens a QEMU window for a human; 'gui-auto' lets a vision-LLM agent
+# drive the graphical installer; 'gui-script' replays a hand-calibrated QMP
+# playbook against it with no model involved.
+_INSTALL_MODES = frozenset({'auto', 'manual', 'gui-auto', 'gui-script'})
+
 
 def _load_yaml_profiles() -> dict[str, OsDefinition]:
     """Load OS profiles from YAML files in the os-profiles directory."""
@@ -758,10 +796,10 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     continue
 
                 install_mode = data.get('install_mode', 'auto')
-                if install_mode not in ('auto', 'manual', 'gui-auto'):
+                if install_mode not in _INSTALL_MODES:
                     log.warning(
-                        'Skipping %s: install_mode must be "auto", "manual" or "gui-auto", got "%s"',
-                        yml_file, install_mode,
+                        'Skipping %s: install_mode must be one of %s, got "%s"',
+                        yml_file, ', '.join(sorted(_INSTALL_MODES)), install_mode,
                     )
                     continue
 

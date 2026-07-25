@@ -9,6 +9,29 @@ This is the LLM-free counterpart to ADARE's `install_mode: gui-auto`
 (`adare vm create`, which *records* a playbook with a vision agent). Here you
 author the steps once and they replay forever.
 
+## Relationship to `install_mode: gui-script`
+
+These primitives now also live **inside the package**, and the playbook format is
+**shared**:
+
+| | this directory | the package |
+|---|---|---|
+| role | **authoring** — calibrate coordinates interactively | **replay** — `adare vm create <profile>` |
+| entry point | `./gui_install.py <playbook>` | `install_mode: gui-script` → `vm_creator/qmp_script_creator.py` |
+| primitives | `qmp_drive.py` | `vm_creator/qmp_replay.py` |
+| playbooks | `playbooks/<os>-desktop.yaml` | `vm_creator/templates/qmpinstall_<stem>.yaml` |
+
+Use this harness to *find* the coordinates — `--keep-running` plus
+`qmp_drive.py shot` / `key` / `tap` is the calibration loop, and nothing here
+touches ADARE state. Once a route is proven, copy the playbook to
+`adare/adare/hypervisor/qemu/vm_creator/templates/qmpinstall_<stem>.yaml`, add a
+`vm.frame:` block naming the resolution the coords belong to (the packaged
+creator rejects a mismatch instead of mis-clicking), and set the profile's
+`install_mode: gui-script`.
+
+The packaged creator asserts what this harness leaves to the playbook: `-vga qxl`
+always, and a headless display unless `--display` is passed.
+
 ## Why it works without image recognition
 
 The one primitive that makes replay robust to host speed is **`wait_stable`**:
