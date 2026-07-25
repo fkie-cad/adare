@@ -1,0 +1,27 @@
+name: ubuntu2004
+display_name: "Ubuntu 20.04 LTS (Focal Fossa)"
+platform: linux
+distribution: ubuntu
+distribution_label: "Focal Fossa"
+version: "20.04"
+architecture: x86_64
+requires_uefi: true
+# Installed from the Ubuntu 20.04 *Desktop* ISO, which runs ubiquity. ubiquity has
+# no OEMDRV-style seed auto-detect, so ADARE serves the rendered preseed over HTTP
+# and points casper's network-preseed at it (10.0.2.2:{seed_port}).
+install_mode: auto
+installer: ubiquity
+kernel_path_in_iso: /casper/vmlinuz
+initrd_path_in_iso: /casper/initrd
+kernel_cmdline: >-
+  automatic-ubiquity noprompt boot=casper
+  url=http://10.0.2.2:{seed_port}/preseed.cfg
+  console={console} ---
+# UNTESTED: x86_64 guests cannot be built on an Apple Silicon host (no TCG
+# fallback). Shipped for replication on Intel/AMD hosts.
+iso_url: ""
+iso_sha256: ""
+iso_filename: ""
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0

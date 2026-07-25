@@ -73,7 +73,7 @@ def exec_vm_create(arguments):
         print_error_message(
             title=str(e),
             next_steps=[
-                'Run: adare manage os-profile list',
+                'Run: adare os-profile list',
                 'Example: adare vm create ubuntu2404',
             ],
         )

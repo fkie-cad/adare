@@ -208,21 +208,35 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, setup_level, bare, env_name, interactive, arch, recipe, record, relearn, display, template):
         """Create a new ADARE-ready VM from scratch.
 
-        OS_NAME is the target OS. Run `adare manage os-profile list` to see all entries.
+        OS_NAME is the target OS. Run `adare os-profile list` to see all entries.
 
         \b
         Common targets:
-          Ubuntu (autoinstall):  ubuntu2204, ubuntu2404, ubuntu2510, ubuntu2604
+          Ubuntu (autoinstall):  ubuntu2004, ubuntu2204, ubuntu2404, ubuntu2510, ubuntu2604
+          Ubuntu/Kubuntu ARM64:  ubuntu2004arm64, ubuntu2204arm64, ubuntu2404arm64,
+                                 kubuntu2004arm64, kubuntu2204arm64, kubuntu2404arm64
+          Kubuntu x86_64:        kubuntu2004, kubuntu2204 (ubiquity), kubuntu2404 (GUI-auto)
           Debian (preseed):      debian12, debian13, kali
-          Fedora/RHEL (kickstart): fedora44, fedora44kde, fedora43, fedora43kde, fedora42, fedora42kde, fedora41, fedora41kde, rocky9, alma9
+          Fedora/RHEL (kickstart): fedora44, fedora44kde, fedora43, fedora43kde, fedora42,
+                                 fedora42arm64, fedora42kde, fedora41, fedora41arm64,
+                                 fedora41kde, rocky9, alma9
           openSUSE (autoyast):   opensuseleap156, opensusetumbleweed
           GUI manual install:    mint, popos, nixos, elementary
           Windows (unattend):    windows10, windows11, windows11arm64
 
         \b
+        Neither Ubuntu nor Kubuntu publishes an arm64 desktop ISO, so every
+        *arm64 profile installs the live-server ISO of the matching version and
+        pulls in the desktop metapackage (ubuntu-desktop-minimal / kubuntu-desktop).
+        The x86_64 kubuntu2004/kubuntu2204 profiles ship untested — see
+        docs "VM image creation".
+
+        \b
         Examples:
           adare vm create ubuntu2404
           adare vm create debian12 --iso /path/to/debian-12-netinst.iso
+          adare vm create fedora42arm64 --iso /path/to/Fedora-Everything-netinst-aarch64-42.iso
+          adare vm create kubuntu2204arm64 --iso /path/to/ubuntu-22.04.5-live-server-arm64.iso
           adare vm create fedora41 --iso /path/to/Fedora-Workstation-Live.iso
           adare vm create kali --iso /path/to/kali-linux-installer.iso
           adare vm create mint --iso /path/to/linuxmint.iso       # manual install

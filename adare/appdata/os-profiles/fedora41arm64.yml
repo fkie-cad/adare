@@ -1,14 +1,28 @@
 name: fedora41arm64
-display_name: "Fedora 41 Workstation (ARM64)"
+display_name: "Fedora 41 Workstation (GNOME, ARM64)"
 platform: linux
 distribution: fedora
+distribution_label: "Workstation"
 version: "41"
-install_mode: manual
 architecture: aarch64
+requires_uefi: true
+# Unattended Anaconda install driven by the shared kickstart template.
+install_mode: auto
+installer: kickstart
+kernel_path_in_iso: /images/pxeboot/vmlinuz
+initrd_path_in_iso: /images/pxeboot/initrd.img
+# Fedora 41 never shipped an aarch64 Workstation *Live* ISO (aarch64 live media
+# start with 42), so this profile installs from Fedora-Everything-netinst-aarch64-41.
+# Fedora 41 is also EOL, so its metalink no longer resolves to a mirror — pin
+# inst.repo at the archive tree, which also serves stage2 (images/install.img).
+kernel_cmdline: >-
+  inst.ks=hd:LABEL=OEMDRV:/ks.cfg
+  inst.repo=https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/aarch64/os/
+  inst.text console={console}
+seed_label: OEMDRV
 iso_url: ""
 iso_sha256: ""
 iso_filename: ""
 default_disk_size: "60G"
-default_ram_mb: 4096
+default_ram_mb: 8192
 default_cpus: 0
-requires_uefi: true

@@ -7,6 +7,7 @@ them.
 """
 
 import logging
+import os
 import platform
 import subprocess
 import tempfile
@@ -27,8 +28,58 @@ from adare.hypervisor.qemu.vm_creator.iso_utils import (
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
 from adare.hypervisor.qemu.vm_creator.progress import wait_for_qemu_exit
 from adare.hypervisor.qemu.vm_creator.qmp_utils import qemu_params_for_arch
+from adare.hypervisor.qemu.vm_creator.seed_http import SeedHTTPServer, serves_seed_over_http
 
 log = logging.getLogger(__name__)
+
+# Wall-clock ceiling for one unattended install. It is a hang detector, not a
+# budget: a healthy install that merely runs long must not be killed. 60 minutes
+# was too low — a Fedora Workstation netinst pulls ~1900 RPMs and spends ~50 min
+# on download plus scriptlets before it ever reaches %post, and a Kubuntu build
+# fetches the whole `kubuntu-desktop` set from the archive. Override per run with
+# ADARE_VM_INSTALL_TIMEOUT_MINUTES.
+_DEFAULT_INSTALL_TIMEOUT_MINUTES = 150
+
+
+def _install_timeout_minutes() -> int:
+    """Install timeout in minutes, overridable via ``ADARE_VM_INSTALL_TIMEOUT_MINUTES``."""
+    raw = os.environ.get('ADARE_VM_INSTALL_TIMEOUT_MINUTES', '').strip()
+    if not raw:
+        return _DEFAULT_INSTALL_TIMEOUT_MINUTES
+    try:
+        minutes = int(raw)
+        if minutes <= 0:
+            raise ValueError('must be a positive number of minutes')
+    except ValueError as e:
+        log.warning(
+            'Ignoring ADARE_VM_INSTALL_TIMEOUT_MINUTES=%r (%s); using %d',
+            raw, e, _DEFAULT_INSTALL_TIMEOUT_MINUTES,
+        )
+        return _DEFAULT_INSTALL_TIMEOUT_MINUTES
+    return minutes
+
+
+# Installer-specific "this install did not finish" markers, matched against the
+# serial console log after QEMU exits.
+#
+# QEMU exits 0 whenever the guest powers down — on SIGTERM, on a closed QEMU
+# window, and on an installer that gives up and powers off. A zero exit is
+# therefore NOT evidence that the install completed: without this check a
+# half-installed disk gets hashed and registered as a usable environment, which
+# for a forensic baseline is worse than a loud failure. Keep the patterns narrow
+# and installer-specific — UEFI/kernel logs are full of unrelated "Error:" lines.
+_INSTALL_FAILURE_MARKERS = (
+    # subiquity: drops to a rescue shell and waits forever
+    'An error occurred. Press enter to start a shell',
+    'install_fail',
+    # curtin: in-target apt/dpkg step failed (exit 100 == apt error)
+    "returned non-zero exit status 100",
+    # Anaconda
+    'The following error occurred while installing',
+    'Kickstart error',
+    # debian-installer
+    'The installation step failed',
+)
 
 
 class LinuxVMCreationError(VMCreationError):
@@ -36,6 +87,26 @@ class LinuxVMCreationError(VMCreationError):
 
     def __init__(self, detail: str):
         super().__init__(f"Linux: {detail}")
+
+
+def _assert_install_succeeded(install_log: Path) -> None:
+    """Raise if the installer's serial log shows the install did not complete.
+
+    Complements the QEMU exit code, which cannot distinguish "installer finished
+    and rebooted" from "guest powered off mid-install" (both are exit 0).
+    """
+    try:
+        text = install_log.read_text(encoding='utf-8', errors='replace')
+    except OSError as e:
+        log.warning('Could not read install log %s: %s', install_log, e)
+        return
+
+    for marker in _INSTALL_FAILURE_MARKERS:
+        if marker in text:
+            raise LinuxVMCreationError(
+                f'installer reported failure ({marker!r}) — see {install_log}. '
+                f'The disk is incomplete and has not been kept.'
+            )
 
 
 class LinuxVMCreator(BaseVMCreator):
@@ -93,15 +164,25 @@ class LinuxVMCreator(BaseVMCreator):
             except (OSError, ValueError) as e:
                 raise LinuxVMCreationError(f'Kernel extraction failed: {e}') from e
 
-            seed_path = create_seed_iso(
-                autoinstall_dir,
-                tmpdir_path / 'seed.iso',
-                label=self.os_def.seed_label,
-            )
-            print_step(
-                f'Created seed ISO ([dim]{self.os_def.seed_label}[/dim]) for '
-                f'autoinstall: [dim]{seed_path}[/dim]'
-            )
+            # ubiquity has no labelled-drive auto-detect; it fetches the preseed
+            # from the host over HTTP (see seed_http). Attaching a seed drive in
+            # that case would only add a second disk for partman to trip over.
+            seed_path: Path | None = None
+            if serves_seed_over_http(self.os_def.kernel_cmdline):
+                print_step(
+                    'Serving autoinstall seed over HTTP for the installer: '
+                    f'[dim]{autoinstall_dir}[/dim]'
+                )
+            else:
+                seed_path = create_seed_iso(
+                    autoinstall_dir,
+                    tmpdir_path / 'seed.iso',
+                    label=self.os_def.seed_label,
+                )
+                print_step(
+                    f'Created seed ISO ([dim]{self.os_def.seed_label}[/dim]) for '
+                    f'autoinstall: [dim]{seed_path}[/dim]'
+                )
 
             try:
                 _run_qemu_installation(
@@ -109,6 +190,7 @@ class LinuxVMCreator(BaseVMCreator):
                     kernel_path=kernel_path,
                     initrd_path=initrd_path,
                     seed_path=seed_path,
+                    seed_dir=autoinstall_dir,
                     disk_path=disk_path,
                     os_def=self.os_def,
                     ram_mb=self.ram_mb,
@@ -178,93 +260,131 @@ def _run_qemu_installation(
     iso_path: Path,
     kernel_path: Path,
     initrd_path: Path,
-    seed_path: Path,
+    seed_path: Path | None,
     disk_path: Path,
     os_def: OsDefinition,
     ram_mb: int,
     cpus: int,
     nvram_path: Path | None = None,
+    seed_dir: Path | None = None,
 ) -> None:
-    """Boot QEMU with direct kernel boot + seed ISO for unattended install.
+    """Boot QEMU with direct kernel boot + seed medium for unattended install.
 
-    The seed ISO carries the rendered installer config (cloud-init NoCloud,
+    The seed medium carries the rendered installer config (cloud-init NoCloud,
     preseed, kickstart, AutoYaST, ...). Each installer family announces
     itself through ``os_def.kernel_cmdline`` and ``os_def.seed_label``; the
     label drives auto-detection (``cidata`` for cloud-init, ``OEMDRV`` for
     debian-installer / Anaconda) while the cmdline carries any extra hints
     (``inst.ks=``, ``autoyast=``, ``auto=true preseed/file=...``).
+
+    ubiquity (Ubuntu / Kubuntu desktop ISOs) has no labelled-drive auto-detect,
+    so it declares ``{seed_port}`` in its cmdline instead: ``seed_dir`` is then
+    served over HTTP on an ephemeral host port for the duration of the install
+    and ``seed_path`` is ``None``.
     """
     arch_params = qemu_params_for_arch(os_def)
     needs_uefi = os_def.requires_uefi or os_def.architecture == 'aarch64'
     console_dev = 'ttyAMA0' if os_def.architecture == 'aarch64' else 'ttyS0'
 
-    kernel_cmdline = os_def.kernel_cmdline.format(console=console_dev)
+    install_log = disk_path.parent / (disk_path.stem + '_install.log')
 
-    cmd = [
-        arch_params['exe'],
-        '-machine', arch_params['machine'],
-        '-cpu', arch_params['cpu'],
-        '-m', str(ram_mb),
-        '-smp', str(cpus),
-        # Disk
-        '-drive', f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
-        # Ubuntu ISO as CD-ROM
-        '-cdrom', str(iso_path),
-        # Direct kernel boot — passes installer-specific cmdline to the guest
-        '-kernel', str(kernel_path),
-        '-initrd', str(initrd_path),
-        '-append', kernel_cmdline,
-        # Seed ISO — auto-detected by volume label (cidata / OEMDRV / ...)
-        '-drive', f'file={seed_path},format=raw,if=virtio,readonly=on',
-        # Network (user mode)
-        '-netdev', 'user,id=net0',
-        '-device', 'virtio-net-pci,netdev=net0',
-        # Display — show QEMU window so user can watch install progress
-        '-display', 'cocoa' if platform.system() == 'Darwin' else 'gtk',
-        # USB devices for input in display window
-        '-device', 'qemu-xhci',
-        '-device', 'usb-tablet',
-        '-device', 'usb-kbd',
-        # Virtio RNG for faster entropy
-        '-device', 'virtio-rng-pci',
-        # Serial console for installer log output
-        '-serial', f'file:{disk_path.parent / (disk_path.stem + "_install.log")}',
-        # Exit QEMU on guest reboot (Subiquity reboots after install)
-        '-no-reboot',
-    ]
-    cmd.extend(arch_params['vga_args'])
-
-    if needs_uefi and nvram_path is not None:
-        ovmf_code, _ = find_ovmf_firmware(os_def.architecture)
-        pflash_args = [
-            '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
-            '-drive', f'if=pflash,format=raw,file={nvram_path}',
-        ]
-        machine_idx = cmd.index('-machine') + 2
-        cmd[machine_idx:machine_idx] = pflash_args
-
-    log.info(f'Starting QEMU installation: {" ".join(cmd)}')
-    print_section('Installation')
-    print_step('Starting unattended installation [dim](this may take 15-45 minutes)[/dim]')
-
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    seed_server: SeedHTTPServer | None = None
+    if serves_seed_over_http(os_def.kernel_cmdline):
+        if seed_dir is None:
+            raise LinuxVMCreationError(
+                f'{os_def.name} fetches its seed over HTTP but no seed directory '
+                f'was rendered'
+            )
+        seed_server = SeedHTTPServer(seed_dir).start()
+        print_step(
+            f'Seed HTTP server listening on port [dim]{seed_server.port}[/dim] '
+            f'(guest reaches it at 10.0.2.2)'
+        )
 
     try:
-        with console.status(f'  [cyan]{disk_path.stem}[/cyan] installing...', spinner='dots') as status:
-            wait_for_qemu_exit(
-                process,
-                timeout_minutes=60,
-                label=f'{disk_path.stem} installation',
-                status=status,
-            )
-    except (TimeoutError, subprocess.CalledProcessError):
-        raise
-    except KeyboardInterrupt:
-        console.print('\n  [bold red]Installation interrupted by user[/bold red]')
-        process.terminate()
-        process.wait(timeout=30)
-        raise LinuxVMCreationError('Installation interrupted by user') from None
+        # Unused keys are ignored by str.format, so profiles only declare what they need.
+        kernel_cmdline = os_def.kernel_cmdline.format(
+            console=console_dev,
+            seed_port=seed_server.port if seed_server is not None else 0,
+        )
+
+        cmd = [
+            arch_params['exe'],
+            '-machine', arch_params['machine'],
+            '-cpu', arch_params['cpu'],
+            '-m', str(ram_mb),
+            '-smp', str(cpus),
+            # Disk
+            '-drive', f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
+            # Ubuntu ISO as CD-ROM
+            '-cdrom', str(iso_path),
+            # Direct kernel boot — passes installer-specific cmdline to the guest
+            '-kernel', str(kernel_path),
+            '-initrd', str(initrd_path),
+            '-append', kernel_cmdline,
+            # Network (user mode)
+            '-netdev', 'user,id=net0',
+            '-device', 'virtio-net-pci,netdev=net0',
+            # Display — show QEMU window so user can watch install progress
+            '-display', 'cocoa' if platform.system() == 'Darwin' else 'gtk',
+            # USB devices for input in display window
+            '-device', 'qemu-xhci',
+            '-device', 'usb-tablet',
+            '-device', 'usb-kbd',
+            # Virtio RNG for faster entropy
+            '-device', 'virtio-rng-pci',
+            # Serial console for installer log output
+            '-serial', f'file:{install_log}',
+            # Exit QEMU on guest reboot (Subiquity reboots after install)
+            '-no-reboot',
+        ]
+        if seed_path is not None:
+            # Seed ISO — auto-detected by volume label (cidata / OEMDRV / ...)
+            cmd.extend(['-drive', f'file={seed_path},format=raw,if=virtio,readonly=on'])
+        cmd.extend(arch_params['vga_args'])
+
+        if needs_uefi and nvram_path is not None:
+            ovmf_code, _ = find_ovmf_firmware(os_def.architecture)
+            pflash_args = [
+                '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
+                '-drive', f'if=pflash,format=raw,file={nvram_path}',
+            ]
+            machine_idx = cmd.index('-machine') + 2
+            cmd[machine_idx:machine_idx] = pflash_args
+
+        log.info(f'Starting QEMU installation: {" ".join(cmd)}')
+        timeout_minutes = _install_timeout_minutes()
+        print_section('Installation')
+        print_step(
+            'Starting unattended installation [dim](15-45 min for a server ISO; a '
+            'Fedora Workstation netinst or a kubuntu-desktop build runs longer — '
+            f'giving up after {timeout_minutes} min)[/dim]'
+        )
+
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        try:
+            with console.status(f'  [cyan]{disk_path.stem}[/cyan] installing...', spinner='dots') as status:
+                wait_for_qemu_exit(
+                    process,
+                    timeout_minutes=timeout_minutes,
+                    label=f'{disk_path.stem} installation',
+                    status=status,
+                )
+            # A zero exit only means the guest powered down; confirm the
+            # installer actually got to the end before the disk is trusted.
+            _assert_install_succeeded(install_log)
+        except (TimeoutError, subprocess.CalledProcessError):
+            raise
+        except KeyboardInterrupt:
+            console.print('\n  [bold red]Installation interrupted by user[/bold red]')
+            process.terminate()
+            process.wait(timeout=30)
+            raise LinuxVMCreationError('Installation interrupted by user') from None
+    finally:
+        if seed_server is not None:
+            seed_server.stop()

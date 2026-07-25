@@ -381,6 +381,10 @@ _INSTALLER_LAYOUTS: dict[str, tuple[str, tuple[str, ...]]] = {
     'subiquity': ('user-data', ('meta-data',)),
     'archinstall-cloudinit': ('user-data', ('meta-data',)),
     'preseed': ('preseed.cfg', ()),
+    # ubiquity (Ubuntu / Kubuntu *desktop* ISOs) reads the same d-i answer file,
+    # but has no OEMDRV auto-detect — it is fetched over HTTP via `url=` on the
+    # kernel command line (see seed_http.SeedHTTPServer).
+    'ubiquity': ('preseed.cfg', ()),
     'kickstart': ('ks.cfg', ()),
     'autoyast': ('autoinst.xml', ()),
 }

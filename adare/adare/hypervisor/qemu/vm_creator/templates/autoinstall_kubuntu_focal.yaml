@@ -1,0 +1,125 @@
+{# adare-template
+schema: 1
+id: kubuntu-focal
+description: Kubuntu 20.04 (KDE Plasma on an Ubuntu 20.04 live-server autoinstall base, no conda + uv)
+maintainer: ADARE
+revision: 2026-07-25
+supports:
+  - kubuntu2004arm64
+-#}
+{# Focal variant of autoinstall_kubuntu.yaml: KDE Plasma from `kubuntu-desktop` on
+   the Ubuntu 20.04 live-server base (Kubuntu publishes no arm64 ISO).
+
+   Python comes from standalone `uv` + the system python rather than Miniforge,
+   matching the recipe the existing 24.04 ARM64 environment was built with.
+
+   `sizing-policy: all` is accepted but ignored by focal's installer (the root LV
+   still lands at half the PV — measured 28.5 GiB of 57 GiB); it is kept for
+   correctness on refreshed installers. `shutdown: poweroff` does work: a 20.04.5
+   ISO ships subiquity snap rev 3704, not the 2020 original.
+   See autoinstall_ubuntu_focal.yaml. #}
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  storage:
+    layout:
+      name: lvm
+      sizing-policy: all
+  identity:
+    hostname: {{ hostname }}
+    username: adare
+    password: {{ password_hash }}
+  ssh:
+    install-server: true
+    allow-pw: true
+  error-commands:
+    # Subiquity swallows apt/curtin output into the installer journal, so a failed
+    # in-target package install shows up on the host as nothing but
+    # "returned non-zero exit status 100" — undiagnosable. Dump the relevant logs
+    # to /dev/console, which is the serial port ADARE captures to
+    # <vm>_install.log. Deliberately no `poweroff` here: ADARE detects a failed
+    # install by the QEMU wait timing out, so powering off would make a broken
+    # disk look like a successful build.
+    - |
+      { echo '===== ADARE: install FAILED — curtin/apt detail ====='; \
+        for f in /var/log/installer/curtin-install.log /var/log/curtin/install.log \
+                 /var/log/installer/subiquity-server-debug.log; do \
+          [ -f "$f" ] && { echo "--- $f"; tail -n 60 "$f"; }; \
+        done; \
+        echo '--- apt complaints'; \
+        grep -ahiE '^(E|W): |404 |Unable to |broken|conflict|held' \
+             /var/log/installer/*.log /var/log/curtin/*.log 2>/dev/null | tail -40; \
+        echo '===== ADARE: end of failure detail ====='; } > /dev/console 2>&1 || true
+  late-commands:
+    # Focal only: install every package here rather than via `packages:`.
+    # Subiquity's postinstall runs apt with its pty logging on, and focal's
+    # curtin leaves /dev/pts unmounted in /target -> "Can not write log (Is
+    # /dev/pts mounted?) - posix_openpt" and apt exits 100. `apt: conf:` cannot
+    # fix it either: curtin deletes its own /etc/apt/apt.conf.d/94curtin-config
+    # before the package step. Passing -o Dpkg::Use-Pty=false on the command
+    # line is the one place the setting survives.
+    - curtin in-target -- apt-get update
+    - curtin in-target -- env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Use-Pty=false kubuntu-desktop cifs-utils openssh-server curl wget git
+    {% if setup_level >= 1 %}
+    - curtin in-target -- env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Use-Pty=false qemu-guest-agent
+    {% endif %}
+    {% if setup_level >= 2 %}
+    - curtin in-target -- env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Use-Pty=false imagemagick maim xdotool python3-pip python3-tk
+    {% endif %}
+    # Passwordless sudo for adare user
+    - echo "adare ALL=(ALL) NOPASSWD:ALL" > /target/etc/sudoers.d/adare
+    - chmod 440 /target/etc/sudoers.d/adare
+    # SDDM autologin into the X11 Plasma session (`plasma.desktop` is X11 on Plasma 5)
+    - mkdir -p /target/etc/sddm.conf.d
+    - |
+      printf '[Autologin]\nUser=adare\nSession=plasma.desktop\nRelogin=false\n\n[General]\nDisplayServer=x11\n' > /target/etc/sddm.conf.d/autologin.conf
+    # Disable unattended upgrades to prevent interference during experiments
+    - curtin in-target -- systemctl disable unattended-upgrades || true
+    - curtin in-target -- apt-get remove -y unattended-upgrades || true
+    # Disable APT periodic update/upgrade timers
+    - curtin in-target -- systemctl disable apt-daily.timer || true
+    - curtin in-target -- systemctl disable apt-daily-upgrade.timer || true
+    - curtin in-target -- systemctl mask apt-daily.service || true
+    - curtin in-target -- systemctl mask apt-daily-upgrade.service || true
+    # Disable APT periodic updates via config
+    - 'echo "APT::Periodic::Update-Package-Lists \"0\";" > /target/etc/apt/apt.conf.d/99disable-auto-updates'
+    - 'echo "APT::Periodic::Unattended-Upgrade \"0\";" >> /target/etc/apt/apt.conf.d/99disable-auto-updates'
+    - 'echo "APT::Periodic::Download-Upgradeable-Packages \"0\";" >> /target/etc/apt/apt.conf.d/99disable-auto-updates'
+    # Disable snap auto-refresh
+    - mkdir -p /target/etc/snap
+    - 'echo "refresh.hold: forever" > /target/etc/snap/snapd.conf || true'
+    - curtin in-target -- snap set system refresh.hold="$(date -d '+100 years' +%Y-%m-%dT%H:%M:%S%:z)" || true
+    {% if setup_level >= 1 %}
+    # Enable QEMU Guest Agent
+    - curtin in-target -- systemctl enable qemu-guest-agent
+    {% endif %}
+    # Ensure adare user exists in target (cloud-init creates it on first boot, but we need it now)
+    - curtin in-target -- id adare || curtin in-target -- useradd -m -u 1000 -G sudo -s /bin/bash adare
+    - curtin in-target -- mkdir -p /home/adare
+    - chown -R 1000:1000 /target/home/adare
+    # No conda: adarevm/adarelib wheels are installed into the SYSTEM python by
+    # the harness (`pip3 install ... <wheels>`). On PEP-668 releases (24.04+) that
+    # python is "externally managed" and pip refuses; the stock conda path sidesteps
+    # this via conda's own pip. Two measures, safe on a dedicated VM:
+    #   1. Remove the EXTERNALLY-MANAGED marker — pip refuses ONLY when it exists,
+    #      so removing it eliminates the check. This is the load-bearing fix.
+    #      (No-op on 20.04/22.04, which predate the marker.)
+    #   2. A global pip.conf flag as well (harmless when the key is ignored).
+    - curtin in-target -- sh -c 'rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED'
+    - 'printf "[global]\nbreak-system-packages = true\n" > /target/etc/pip.conf'
+    # Standalone uv (single binary, NOT conda) — `adare vm test` launches the shared
+    # adarevm source via `uv run adarevm`. Unconditional. miniforge_arch doubles as
+    # uv's target-triple arch component (aarch64 / x86_64).
+    - curtin in-target -- sh -c 'cd /tmp && curl -LsSf https://github.com/astral-sh/uv/releases/latest/download/uv-{{ miniforge_arch }}-unknown-linux-gnu.tar.gz | tar xz && mv uv-{{ miniforge_arch }}-unknown-linux-gnu/uv uv-{{ miniforge_arch }}-unknown-linux-gnu/uvx /usr/local/bin/'
+    - curtin in-target -- chown root:root /usr/local/bin/uv /usr/local/bin/uvx
+    - chown -R 1000:1000 /target/home/adare
+    # Disable screen locking and display power management for automated GUI testing
+    - mkdir -p /target/etc/xdg
+    - |
+      printf '[Daemon]\nAutolock=false\nLockOnResume=false\nLockGrace=0\nTimeout=0\n' > /target/etc/xdg/kscreenlockerrc
+    - |
+      printf '[AC][DPMSControl]\nidleTime=0\n\n[AC][DimDisplay]\nidleTime=0\n\n[AC][SuspendSession]\nidleTime=0\nsuspendType=0\n' > /target/etc/xdg/powermanagementprofilesrc
+  shutdown: poweroff

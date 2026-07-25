@@ -1,0 +1,26 @@
+name: kubuntu2404arm64
+display_name: "Kubuntu 24.04 (KDE Plasma on Ubuntu 24.04 Server base, ARM64)"
+platform: linux
+distribution: ubuntu
+distribution_label: "Noble Numbat"
+version: "24.04"
+architecture: aarch64
+requires_uefi: true
+# Kubuntu publishes no arm64 ISO. This guest is the Ubuntu 24.04 live-server ISO
+# installed via subiquity plus the `kubuntu-desktop` metapackage — same Plasma
+# desktop and KDE applications, different base. The display_name states it so the
+# divergence from a Kubuntu-ISO install stays visible in the environment metadata.
+# (The x86_64 kubuntu2404 profile installs the real Kubuntu ISO via gui-auto.)
+# Build with: --iso ubuntu-24.04.x-live-server-arm64.iso
+install_mode: auto
+installer: subiquity
+kernel_path_in_iso: /casper/vmlinuz
+initrd_path_in_iso: /casper/initrd
+kernel_cmdline: "autoinstall console={console} ---"
+seed_label: cidata
+iso_url: ""
+iso_sha256: ""
+iso_filename: ""
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0

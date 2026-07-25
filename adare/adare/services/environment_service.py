@@ -348,7 +348,7 @@ class EnvironmentService:
                 code='UnknownOsProfileError',
                 message=f'Unknown OS profile: {request.os_profile}',
                 solutions=[
-                    'Run: adare manage os-profile list',
+                    'Run: adare os-profile list',
                     'Check the os_profile value for typos',
                 ]
             )
