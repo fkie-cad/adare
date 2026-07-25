@@ -306,6 +306,7 @@ class PlaybookVMCreator(BaseVMCreator):
         which = int(step.get('index', 0))
         tries = int(step.get('tries', 10))
         interval = float(step.get('interval', 2.0))
+        optional = bool(step.get('optional', False))
         for attempt in range(tries):
             loc = self._find_text(q.dump(), text, mode, which)
             if loc:
@@ -313,6 +314,11 @@ class PlaybookVMCreator(BaseVMCreator):
                 q.tap(x + dx, y + dy, 1024, 768)
                 return
             time.sleep(interval)
+        if optional:
+            # A screen that only appears conditionally (e.g. the Ubuntu 24.04
+            # 'installer update available' prompt). Absent -> just move on.
+            print_step(f'    optional text {text!r} not present, skipping')
+            return
         raise PlaybookVMCreationError(f'on-screen text {text!r} not found after {tries} tries')
 
     @staticmethod
