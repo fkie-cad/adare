@@ -19,9 +19,11 @@ kernel_cmdline: >-
   automatic-ubiquity noprompt boot=casper console={console} ---
 # UNTESTED: x86_64 guests cannot be built on an Apple Silicon host (no TCG
 # fallback). Shipped for replication on Intel/AMD hosts.
-iso_url: ""
-iso_sha256: ""
-iso_filename: ""
+# Hash is the vendor SHA256SUMS entry (verified 2026-07-25); a mismatch
+# re-downloads rather than installing a wrong image.
+iso_url: "https://cdimage.ubuntu.com/kubuntu/releases/22.04/release/kubuntu-22.04.5-desktop-amd64.iso"
+iso_sha256: "a3e2c4b1bc190cebaa8083c0d23ea2555e223d86b885570474a423b6de818888"
+iso_filename: "kubuntu-22.04.5-desktop-amd64.iso"
 default_disk_size: "60G"
 default_ram_mb: 8192
 default_cpus: 0

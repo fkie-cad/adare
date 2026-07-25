@@ -4,20 +4,31 @@ platform: linux
 distribution: ubuntu
 distribution_label: "Focal Fossa"
 version: "20.04"
-# GUI-automated install of the genuine desktop edition: the vision agent drives
-# the graphical ubiquity installer and records a replayable playbook.
-install_mode: gui-auto
+architecture: x86_64
+# Deterministic replay of the graphical ubiquity installer: a hand-calibrated QMP
+# playbook (templates/qmpinstall_ubuntu2004.yaml) is replayed step by step, with
+# `wait_stable` frame-diffing instead of image recognition. No vision model and no
+# CV server, so this needs no ADARE_VLLM_* configuration. `install_mode: gui-auto`
+# remains the way to *record* a new playbook for a release we have no coords for.
+#
+# This is the *genuine desktop edition*. ubuntu2004arm64.yml is a different thing:
+# the server ISO plus a desktop metapackage, which is what an aarch64 host can build.
+install_mode: gui-script
 installer: gui
-# The desktop ISO must be supplied with --iso (gui-auto does not auto-download).
-#   https://releases.ubuntu.com/20.04/ubuntu-20.04.6-desktop-amd64.iso
-#   sha256: 510ce77afcb9537f198bc7daa0e5b503b6e67aaed68146943c231baeaab94df1
-iso_url: ""
-iso_sha256: ""
-iso_filename: ""
+# Hash is the vendor SHA256SUMS entry (verified 2026-07-25); a mismatch
+# re-downloads rather than installing a wrong image.
+iso_url: "https://releases.ubuntu.com/20.04/ubuntu-20.04.6-desktop-amd64.iso"
+iso_sha256: "510ce77afcb9537f198bc7daa0e5b503b6e67aaed68146943c231baeaab94df1"
+iso_filename: "ubuntu-20.04.6-desktop-amd64.iso"
 default_disk_size: "60G"
 default_ram_mb: 8192
 default_cpus: 0
-requires_uefi: true
-# Force a dedicated goal/spec + playbook (gui_ubuntu2004.*) so 20.04 and 18.04
-# do not share a recording (their ubiquity installers differ visually).
+# BIOS, not UEFI: the playbook's coordinates were calibrated on a SeaBIOS boot
+# (`firmware: bios` in qmpinstall_ubuntu2004.yaml). Switching to OVMF changes the
+# boot path and the early screens the replay counts on.
+requires_uefi: false
+# Force a dedicated playbook (qmpinstall_ubuntu2004.yaml) — 20.04's and 18.04's
+# ubiquity differ visually, so they must not share a recording.
 template: ubuntu2004
+# UNTESTED ON THIS HOST: x86_64 guests cannot be built on Apple Silicon (no TCG
+# fallback). The playbook itself was validated on an x86_64 host.
