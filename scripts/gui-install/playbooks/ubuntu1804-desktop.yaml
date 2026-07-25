@@ -3,10 +3,11 @@
 #   ./gui_install.py playbooks/ubuntu1804-desktop.yaml \
 #       --iso ubuntu-18.04.5-desktop-amd64.iso --vm-dir /vms
 #
-# 18.04's ubiquity differs from 20.04: the 'Download updates' checkbox is
-# disabled (Tab skips it) and the installation-type screen has Encrypt/LVM
-# checkboxes instead of 'Advanced features', so a couple of Tab counts differ.
-# Accepts the geoip default timezone.
+# Buttons are driven by MOUSE CLICKS (tap), not keyboard: a click both focuses
+# the installer window and activates the button, which is robust against the
+# non-deterministic window focus at live-session startup (keyboard-only driving
+# fails whenever ubiquity doesn't hold focus). Coords are for the 1024x768
+# installer frame that qxl renders. Accepts the geoip default timezone.
 name: ubuntu1804-desktop
 description: Ubuntu 18.04.5 Desktop via the graphical ubiquity installer
 credentials: "user 'adare' / password 'adare' / host 'ubuntu1804'"
@@ -19,53 +20,46 @@ vm:
   firmware: bios
 
 install:
-  - {action: wait_stable, settle: 6, timeout: 360, min: 120, shot: welcome, note: "live session + Welcome dialog (min skips early-boot plymouth)"}
-  - {action: key, keys: [ret], note: "Welcome: 'Install Ubuntu' (dialog default)"}
+  - {action: wait_stable, settle: 6, timeout: 360, min: 120, shot: welcome, note: "live session + Welcome (min skips early-boot plymouth)"}
+  - {action: tap, coords: [763, 434, 1024, 768], note: "click 'Install Ubuntu'"}
 
   - {action: wait_stable, settle: 4, timeout: 120, shot: keyboard}
-  - {action: key, keys: [ret], note: "Keyboard layout English(US): Continue"}
+  - {action: tap, coords: [924, 566, 1024, 768], note: "Keyboard layout English(US): Continue"}
 
   - {action: wait_stable, settle: 4, timeout: 120, shot: updates}
-  # 'Download updates' is disabled here and Tab skips it; leave defaults.
-  - {action: key, keys: [tab], repeat: 4, note: "-> Continue (third-party, Quit, Back)"}
-  - {action: key, keys: [ret], note: "Continue"}
+  - {action: tap, coords: [924, 566, 1024, 768], note: "Updates/other software: Continue (leave defaults)"}
 
   - {action: wait_stable, settle: 6, timeout: 180, shot: installtype}
-  - {action: key, keys: [tab], repeat: 5, note: "'Erase disk' -> Install Now (past Encrypt/LVM/Quit/Back)"}
-  - {action: key, keys: [ret], note: "Install Now"}
+  - {action: tap, coords: [924, 566, 1024, 768], note: "'Erase disk' (default): Install Now"}
 
   - {action: wait_stable, settle: 4, timeout: 120, shot: writeconfirm}
-  - {action: key, keys: [tab], note: "'Write changes?' dialog: -> Continue"}
-  - {action: key, keys: [ret], note: "commit partitioning (point of no return)"}
+  - {action: tap, coords: [897, 497, 1024, 768], note: "'Write changes?' dialog: Continue (point of no return)"}
 
   - {action: wait_stable, settle: 6, timeout: 180, shot: timezone}
-  # Timezone: accept the geoip default. The city entry traps focus on 18.04;
-  # esc closes autocomplete and End deselects before Tabbing to Continue.
-  - {action: key, keys: [esc]}
-  - {action: key, keys: [end]}
-  - {action: key, keys: [tab], note: "-> Continue (Back is disabled here)"}
-  - {action: key, keys: [ret], note: "Continue"}
+  - {action: tap, coords: [924, 566, 1024, 768], note: "Timezone: Continue (geoip default; mouse avoids the city-entry focus trap)"}
 
   - {action: wait_stable, settle: 6, timeout: 120, shot: whoami}
+  - {action: tap, coords: [594, 261, 1024, 768], note: "click 'Your name' field to focus the form"}
   - {action: type, text: "adare", note: "Your name"}
-  - {action: key, keys: [tab], note: "-> computer name"}
-  - {action: key, keys: [ctrl, a]}
+  - {action: key, keys: [tab], note: "-> computer name (auto-filled ugly value)"}
+  - {action: key, keys: [ctrl, a], note: "select all"}
   - {action: type, text: "ubuntu1804", note: "computer name"}
-  - {action: key, keys: [tab], repeat: 2, note: "-> password (skip username)"}
+  - {action: key, keys: [tab], repeat: 2, note: "-> password (skip auto-filled username)"}
   - {action: type, text: "adare", note: "password"}
   - {action: key, keys: [tab], note: "-> confirm password"}
   - {action: type, text: "adare"}
   - {action: shot, name: user-filled}
-  - {action: key, keys: [tab], repeat: 3, note: "-> Continue (past login radios, Back; no AD on 18.04)"}
-  - {action: key, keys: [ret], note: "Continue -> start install"}
+  - {action: tap, coords: [924, 566, 1024, 768], note: "Continue -> start install"}
 
+  # Slideshow + progress keep the screen changing until the installer is idle;
+  # it only settles when the 'Installation Complete' dialog appears.
   - {action: wait_stable, settle: 45, timeout: 3600, shot: complete, note: "wait for install to finish"}
 
 reboot_from_disk: true
 
 verify:
   - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login, note: "GDM login screen (min skips reboot/boot)"}
-  - {action: key, keys: [ret], note: "select the 'adare' user"}
+  - {action: tap, coords: [505, 368, 1024, 768], note: "click the 'adare' user -> password prompt"}
   - {action: wait, seconds: 2}
   - {action: type, text: "adare", note: "password"}
   - {action: key, keys: [ret]}

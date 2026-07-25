@@ -106,12 +106,17 @@ Any step may add `shot: name` to snapshot **after** it, and `note:` for logging.
 
 ### Caveats worth knowing
 
-- **Keyboard-driven, so Tab counts are installer-version-specific.** Multi-widget
-  screens (updates, installation-type, "who are you") depend on the exact widget
-  layout; the saved screenshots are there to verify/adjust when adapting.
-- **The timezone screen is the fragile one** — its city entry can trap keyboard
-  focus. The playbooks `esc` (and `End`) to break out, then Tab to Continue, and
-  accept the geoip default. If it stalls, check the `timezone` screenshot.
-- **Video/mouse:** `qxl` maps the installer cleanly; with `-vga std` the usb-tablet
-  has a 2× coordinate-scaling quirk (right half of the screen unreachable), which
-  is why the playbooks navigate by keyboard rather than mouse clicks.
+- **Buttons are driven by mouse `tap`, not keyboard.** A click both focuses the
+  installer window and activates the button, which is robust against the
+  non-deterministic window focus at live-session startup (keyboard-only driving
+  fails whenever ubiquity doesn't hold focus, and the timezone screen's city
+  entry traps keyboard focus outright). Text fields are filled by clicking the
+  first field, then typing and Tabbing within the now-focused form.
+- **`tap` coords assume the 1024×768 installer frame** that qxl renders. If your
+  guest renders at a different resolution, re-capture the button positions (the
+  per-step screenshots make this easy) and update the coords.
+- **Video/mouse:** `qxl` maps the usb-tablet 1:1 (verified — a click reaches the
+  right half of the screen). Do **not** use `-vga std`: its tablet has a 2×
+  coordinate-scaling quirk that leaves the right half of the screen unreachable.
+  Note qxl draws a hardware cursor that `screendump` does not capture, so the
+  pointer is invisible in screenshots (the clicks still land).
