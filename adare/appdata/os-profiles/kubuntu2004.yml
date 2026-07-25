@@ -8,16 +8,15 @@ architecture: x86_64
 requires_uefi: true
 # Installed from the Kubuntu 20.04 ISO, which still runs ubiquity (Calamares only
 # arrives with Kubuntu 23.04). ubiquity has no OEMDRV-style seed auto-detect, so
-# ADARE serves the rendered preseed over HTTP and points casper's network-preseed
-# at it (10.0.2.2:{seed_port}).
+# `seed_transport: http` serves the rendered preseed from the host and casper's
+# network-preseed fetches it from the url= spliced into the kernel cmdline.
 install_mode: auto
 installer: ubiquity
+seed_transport: http
 kernel_path_in_iso: /casper/vmlinuz
 initrd_path_in_iso: /casper/initrd
 kernel_cmdline: >-
-  automatic-ubiquity noprompt boot=casper
-  url=http://10.0.2.2:{seed_port}/preseed.cfg
-  console={console} ---
+  automatic-ubiquity noprompt boot=casper console={console} ---
 # UNTESTED: x86_64 guests cannot be built on an Apple Silicon host (no TCG
 # fallback). Shipped for replication on Intel/AMD hosts.
 iso_url: ""

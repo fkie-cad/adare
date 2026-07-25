@@ -17,7 +17,7 @@ from adare.config.configdirectory import QEMU_CACHE_DIR
 from adare.console import console, print_section, print_step
 from adare.helperfunctions.web.download import download
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
-from adare.hypervisor.qemu.vm_creator.autoinstall import write_autoinstall_dir
+from adare.hypervisor.qemu.vm_creator.autoinstall import seed_filename, write_autoinstall_dir
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
 from adare.hypervisor.qemu.vm_creator.iso_utils import (
     ISOExtractionError,
@@ -28,7 +28,7 @@ from adare.hypervisor.qemu.vm_creator.iso_utils import (
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
 from adare.hypervisor.qemu.vm_creator.progress import wait_for_qemu_exit
 from adare.hypervisor.qemu.vm_creator.qmp_utils import qemu_params_for_arch
-from adare.hypervisor.qemu.vm_creator.seed_http import SeedHTTPServer, serves_seed_over_http
+from adare.hypervisor.qemu.vm_creator.seed_http import SeedHTTPServer
 
 log = logging.getLogger(__name__)
 
@@ -164,25 +164,23 @@ class LinuxVMCreator(BaseVMCreator):
             except (OSError, ValueError) as e:
                 raise LinuxVMCreationError(f'Kernel extraction failed: {e}') from e
 
-            # ubiquity has no labelled-drive auto-detect; it fetches the preseed
-            # from the host over HTTP (see seed_http). Attaching a seed drive in
-            # that case would only add a second disk for partman to trip over.
-            seed_path: Path | None = None
-            if serves_seed_over_http(self.os_def.kernel_cmdline):
-                print_step(
-                    'Serving autoinstall seed over HTTP for the installer: '
-                    f'[dim]{autoinstall_dir}[/dim]'
-                )
-            else:
-                seed_path = create_seed_iso(
-                    autoinstall_dir,
-                    tmpdir_path / 'seed.iso',
-                    label=self.os_def.seed_label,
-                )
-                print_step(
-                    f'Created seed ISO ([dim]{self.os_def.seed_label}[/dim]) for '
-                    f'autoinstall: [dim]{seed_path}[/dim]'
-                )
+            # The seed CD-ROM is attached unconditionally, including when
+            # ``seed_transport == 'http'``. It looks redundant there — ubiquity and
+            # 18.04's d-i fetch the answer file from ``url=`` and never read the
+            # label — but this is the configuration the 18.04 install was actually
+            # validated against, so it stays. If you are ever chasing a partman
+            # complaint about an ambiguous target, note that the extra drive is a
+            # second block device the recipe can see: pin ``partman-auto/disk`` to
+            # ``/dev/vda`` in the preseed rather than detaching the seed here.
+            seed_path = create_seed_iso(
+                autoinstall_dir,
+                tmpdir_path / 'seed.iso',
+                label=self.os_def.seed_label,
+            )
+            print_step(
+                f'Created seed ISO ([dim]{self.os_def.seed_label}[/dim]) for '
+                f'autoinstall: [dim]{seed_path}[/dim]'
+            )
 
             try:
                 _run_qemu_installation(
@@ -260,7 +258,7 @@ def _run_qemu_installation(
     iso_path: Path,
     kernel_path: Path,
     initrd_path: Path,
-    seed_path: Path | None,
+    seed_path: Path,
     disk_path: Path,
     os_def: OsDefinition,
     ram_mb: int,
@@ -277,10 +275,11 @@ def _run_qemu_installation(
     debian-installer / Anaconda) while the cmdline carries any extra hints
     (``inst.ks=``, ``autoyast=``, ``auto=true preseed/file=...``).
 
-    ubiquity (Ubuntu / Kubuntu desktop ISOs) has no labelled-drive auto-detect,
-    so it declares ``{seed_port}`` in its cmdline instead: ``seed_dir`` is then
-    served over HTTP on an ephemeral host port for the duration of the install
-    and ``seed_path`` is ``None``.
+    Installers that cannot auto-load their answer file from a labelled drive
+    (Ubuntu 18.04's debian-installer, ubiquity on the desktop ISOs) declare
+    ``seed_transport: http``: ``seed_dir`` is then also served over HTTP on an
+    ephemeral host port for the duration of the install and a ``url=`` fetch hint
+    is spliced into the kernel command line.
     """
     arch_params = qemu_params_for_arch(os_def)
     needs_uefi = os_def.requires_uefi or os_def.architecture == 'aarch64'
@@ -289,24 +288,27 @@ def _run_qemu_installation(
     install_log = disk_path.parent / (disk_path.stem + '_install.log')
 
     seed_server: SeedHTTPServer | None = None
-    if serves_seed_over_http(os_def.kernel_cmdline):
+    if os_def.seed_transport == 'http':
         if seed_dir is None:
             raise LinuxVMCreationError(
-                f'{os_def.name} fetches its seed over HTTP but no seed directory '
+                f'{os_def.name} declares seed_transport: http but no seed directory '
                 f'was rendered'
             )
         seed_server = SeedHTTPServer(seed_dir).start()
-        print_step(
-            f'Seed HTTP server listening on port [dim]{seed_server.port}[/dim] '
-            f'(guest reaches it at 10.0.2.2)'
-        )
 
     try:
-        # Unused keys are ignored by str.format, so profiles only declare what they need.
-        kernel_cmdline = os_def.kernel_cmdline.format(
-            console=console_dev,
-            seed_port=seed_server.port if seed_server is not None else 0,
-        )
+        kernel_cmdline = os_def.kernel_cmdline.format(console=console_dev)
+
+        if seed_server is not None:
+            # QEMU user-mode networking always maps the host to 10.0.2.2.
+            seed_url = f'http://10.0.2.2:{seed_server.port}/{seed_filename(os_def)}'
+            # `---` separates installer args from args handed to the installed
+            # kernel, so the fetch hint has to land before it.
+            if '---' in kernel_cmdline:
+                kernel_cmdline = kernel_cmdline.replace('---', f'url={seed_url} ---', 1)
+            else:
+                kernel_cmdline = f'{kernel_cmdline} url={seed_url}'
+            print_step(f'Serving the seed over HTTP for the installer: [dim]{seed_url}[/dim]')
 
         cmd = [
             arch_params['exe'],
@@ -335,12 +337,11 @@ def _run_qemu_installation(
             '-device', 'virtio-rng-pci',
             # Serial console for installer log output
             '-serial', f'file:{install_log}',
+            # Seed ISO — auto-detected by volume label (cidata / OEMDRV / ...)
+            '-drive', f'file={seed_path},format=raw,if=virtio,readonly=on',
             # Exit QEMU on guest reboot (Subiquity reboots after install)
             '-no-reboot',
         ]
-        if seed_path is not None:
-            # Seed ISO — auto-detected by volume label (cidata / OEMDRV / ...)
-            cmd.extend(['-drive', f'file={seed_path},format=raw,if=virtio,readonly=on'])
         cmd.extend(arch_params['vga_args'])
 
         if needs_uefi and nvram_path is not None:
