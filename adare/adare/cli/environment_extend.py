@@ -53,6 +53,7 @@ def exec_environment_extend(arguments):
         ram=arguments.ram,
         cpus=arguments.cpus,
         disk_name=arguments.disk_name,
+        compress=arguments.compress,
         description=arguments.description,
         tags=list(arguments.tag),
         force=arguments.force,

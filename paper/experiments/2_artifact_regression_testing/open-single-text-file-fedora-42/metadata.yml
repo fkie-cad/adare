@@ -1,6 +1,12 @@
-name: "open-single-text-file-fedora-42"
-description: "Open a single text file"
+# No 'name:' key -- ExperimentMetadata does not define one and cattrs drops it silently.
+description: "Open one document and validate that recently-used.xbel is created (belongs to paper 5.1, see README)"
 
 environments:
-  - "fedora-42"
+  - fedora-42
 
+tags:
+  - xbel
+  - recently-used
+  - xdg
+  - regression
+  - misfiled

@@ -269,6 +269,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
                 vm_cpus=arguments.vm_cpus,
                 diff=getattr(arguments, 'diff', None),
                 diff_mode=getattr(arguments, 'diff_mode', 'auto'),
+                allow_emulation=getattr(arguments, 'allow_emulation', False),
             )
             env_file_log_level = getattr(arguments, 'file_log_level', None)
             if env_file_log_level is not None:
@@ -428,6 +429,7 @@ def exec_experiment_run(arguments):
                     test_exec_mode=getattr(arguments, 'test_mode', None),
                     diff=getattr(arguments, 'diff', None),
                     diff_mode=getattr(arguments, 'diff_mode', 'auto'),
+                    allow_emulation=getattr(arguments, 'allow_emulation', False),
                 )
                 file_log_level = getattr(arguments, 'file_log_level', None)
                 if file_log_level is not None:
@@ -541,6 +543,7 @@ def exec_experiment_run(arguments):
                 test_exec_mode=getattr(arguments, 'test_mode', None),
                 diff=getattr(arguments, 'diff', None),
                 diff_mode=getattr(arguments, 'diff_mode', 'auto'),
+                allow_emulation=getattr(arguments, 'allow_emulation', False),
             )
             file_log_level = getattr(arguments, 'file_log_level', None)
             if file_log_level is not None:
@@ -604,6 +607,104 @@ def exec_experiment_run(arguments):
                 set_console_log_level(original_console_level)
     else:
         raise NoProjectFoundError(log, message='no project directory found')
+
+def exec_experiment_replicate(arguments):
+    """Download a published experiment bundle and run it, end to end.
+
+    Orchestrates the existing download/load/run facade calls in sequence:
+    download_bundle -> environment.load -> experiment.load -> experiment run.
+    Stops with a clear error if any stage fails.
+    """
+    from types import SimpleNamespace
+
+    from adare.core.dto.environment import EnvironmentLoadRequest
+    from adare.core.dto.web import DownloadBundleRequest
+    from adare.exceptions import LoggedErrorException
+
+    project_directory = get_project_path(arguments)
+
+    api = AdareAPI()
+
+    print(f'Downloading experiment bundle {arguments.ulid}...')
+    download_result = api.web.download_bundle(DownloadBundleRequest(
+        project_path=project_directory,
+        ulid=arguments.ulid,
+    ))
+    if not download_result.success:
+        handle_api_error(download_result)
+        return
+
+    bundle = download_result.data
+    experiment_name = bundle.experiment_name
+    environment_names = bundle.environment_names
+    print(f'Downloaded experiment "{experiment_name}" '
+          f'({len(environment_names)} environment(s), {len(bundle.testfunction_names)} testfunction set(s))')
+
+    if arguments.environment:
+        env_name = arguments.environment
+        if env_name not in environment_names:
+            raise LoggedErrorException(log,
+                f'Environment "{env_name}" is not part of experiment "{experiment_name}"\'s bundle',
+                possible_solutions=[f'Available environments: {", ".join(environment_names)}']
+            )
+    elif len(environment_names) == 1:
+        env_name = environment_names[0]
+    else:
+        raise LoggedErrorException(log,
+            f'Experiment "{experiment_name}" has {len(environment_names)} environments; '
+            'specify which one to use with -e/--environment',
+            possible_solutions=[f'Available environments: {", ".join(environment_names)}']
+        )
+
+    print(f'Loading environment "{env_name}" (fetching and verifying VM disk)...')
+    env_result = api.environment.load(EnvironmentLoadRequest(
+        environment=env_name,
+        force=False,
+        no_copy=False,
+    ))
+    if not env_result.success:
+        handle_api_error(env_result)
+        return
+    env_name = env_result.data.name
+
+    print(f'Loading experiment "{experiment_name}"...')
+    load_result = api.experiment.load(ExperimentLoadRequest(
+        project_path=project_directory,
+        name=experiment_name,
+        force=False,
+        silent=True,
+    ))
+    if not load_result.success:
+        handle_api_error(load_result)
+        return
+
+    if arguments.skip_run:
+        print_success_message(
+            title=f'Experiment "{experiment_name}" downloaded and loaded (environment "{env_name}" ready)',
+            next_steps=[f'adare experiment run {experiment_name} -e {env_name}'],
+        )
+        return
+
+    print(f'Running experiment "{experiment_name}" on environment "{env_name}"...')
+    run_args = SimpleNamespace(
+        experiment=experiment_name,
+        environment=env_name,
+        test=arguments.test,
+        debug_screenshots=False,
+        preserve_snapshot=False,
+        runlog=True,
+        vm_memory=None,
+        vm_cpus=None,
+        gui_mode=None,
+        test_mode=None,
+        diff=None,
+        diff_mode='auto',
+        project=arguments.project,
+        verbose=False,
+        very_verbose=False,
+    )
+    exec_experiment_run(run_args)
+
 
 def exec_experiment_test(arguments):
     """Run experiment tests (dry-run) using AdareAPI."""

@@ -53,6 +53,12 @@ unattend). Defaults: **recipe** for Windows, **baked** for Linux; `--arch
 `--relearn`/`--display`/`--template`. Full matrix in `references/create-recipes.md`.
 **Windows-ARM64 has real traps — read `references/win11-arm-gotchas.md` first.**
 
+`--setup [bare|base|full|agent]` controls what is baked (default `full` = guest tools +
+Miniforge3/`pyadare`; `agent` is not implemented). The ADARE agent itself is **not**
+installed at create time — it installs itself on the first experiment/dev-session start,
+and conda-vs-system-python is auto-detected at run time, so there is nothing to ask the
+user about.
+
 Always `adare vm test <name>` a fresh VM before building environments on it.
 
 ## 3. Build an environment

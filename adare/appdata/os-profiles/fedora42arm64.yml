@@ -1,0 +1,30 @@
+name: fedora42arm64
+display_name: "Fedora 42 Workstation (GNOME, ARM64)"
+platform: linux
+distribution: fedora
+distribution_label: "Workstation"
+version: "42"
+architecture: aarch64
+requires_uefi: true
+# Unattended Anaconda install driven by the shared kickstart template.
+install_mode: auto
+installer: kickstart
+kernel_path_in_iso: /images/pxeboot/vmlinuz
+initrd_path_in_iso: /images/pxeboot/initrd.img
+# Installed from Fedora-Everything-netinst-aarch64-42 rather than the aarch64
+# Workstation Live ISO: direct kernel boot of live media needs a per-release
+# `root=live:CDLABEL=...`, and netinst is the same method fedora41arm64 must use
+# (no aarch64 live media for 41) — keeping both versions method-identical for
+# cross-version comparison. Fedora 42 is EOL, so its metalink no longer resolves
+# to a mirror; inst.repo pins the archive tree, which also serves stage2.
+kernel_cmdline: >-
+  inst.ks=hd:LABEL=OEMDRV:/ks.cfg
+  inst.repo=https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/42/Everything/aarch64/os/
+  inst.text console={console}
+seed_label: OEMDRV
+iso_url: ""
+iso_sha256: ""
+iso_filename: ""
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0

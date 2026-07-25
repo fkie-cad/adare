@@ -10,7 +10,10 @@ declarative recipe it was produced from:
     iso_sha256    -- expected SHA256 of the installer ISO (nullable)
     profile_name  -- OS profile the disk was built from (nullable)
 
-Run this script manually if you have an existing ADARE installation:
+This is a *global*-scoped migration: it is applied automatically when the global
+database is opened (see ``adare.database.migrations.runner``). Run it explicitly
+with:
+    adare db migrate
     python -m adare.database.migrations.add_recipe_provenance_to_vm
 
 For new installations, the columns are created automatically from the model.
@@ -33,35 +36,41 @@ _NEW_COLUMNS = {
 }
 
 
+def upgrade(conn) -> None:
+    """Add the recipe provenance columns to the vm table on ``conn`` (idempotent)."""
+    existing = {row[1] for row in conn.execute(text("PRAGMA table_info(vm)"))}
+
+    if not existing:
+        # Table not present (very old / partial database) — create_all owns it.
+        print("· Table 'vm' not present, skipping.")
+        return
+
+    added = []
+    for column, ddl in _NEW_COLUMNS.items():
+        if column in existing:
+            print(f"✓ Column '{column}' already exists, skipping.")
+            continue
+        print(f"Adding column '{column}' to vm table...")
+        conn.execute(text(f"ALTER TABLE vm ADD COLUMN {column} {ddl}"))
+        added.append(column)
+
+    # Index on recipe_hash for fast cache lookups (get_vm_by_recipe_hash).
+    if 'recipe_hash' in added or 'recipe_hash' in existing:
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_vm_recipe_hash ON vm (recipe_hash)"
+        ))
+
+
 def run_migration() -> bool:
-    """Add recipe provenance columns to the vm table if they don't exist."""
+    """Manual entry point: run :func:`upgrade` against the global database."""
     from adare.database.api.vm import VmApi
 
     print("Running migration: add_recipe_provenance_to_vm")
 
     try:
         with VmApi() as api:
-            engine = api.engine
-            with engine.begin() as conn:
-                existing = {
-                    row[1]
-                    for row in conn.execute(text("PRAGMA table_info(vm)"))
-                }
-
-                added = []
-                for column, ddl in _NEW_COLUMNS.items():
-                    if column in existing:
-                        print(f"✓ Column '{column}' already exists, skipping.")
-                        continue
-                    print(f"Adding column '{column}' to vm table...")
-                    conn.execute(text(f"ALTER TABLE vm ADD COLUMN {column} {ddl}"))
-                    added.append(column)
-
-                # Index on recipe_hash for fast cache lookups (get_vm_by_recipe_hash).
-                if 'recipe_hash' in added or 'recipe_hash' not in existing:
-                    conn.execute(text(
-                        "CREATE INDEX IF NOT EXISTS ix_vm_recipe_hash ON vm (recipe_hash)"
-                    ))
+            with api.engine.begin() as conn:
+                upgrade(conn)
 
         print("✓ Migration completed successfully!")
         print("\nIMPORTANT:")

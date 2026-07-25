@@ -551,10 +551,14 @@ class GlobalDatabaseApi(EnhancedDatabaseApi):
         self._ensure_global_database()
 
     def _ensure_global_database(self):
-        """Ensure global database schema exists."""
+        """Ensure global database schema exists and is migrated to the current shape."""
         try:
+            from adare.database.migrations.runner import apply_pending
             from adare.database.models.global_models import GlobalBase
             GlobalBase.metadata.create_all(self.engine)
+            # create_all builds missing tables but never ALTERs existing ones —
+            # heal schema drift from model changes on already-installed databases.
+            apply_pending(self.engine, 'global')
             log.debug("Global database schema ensured")
         except (SQLAlchemyError, ImportError) as e:
             log.error(f"Failed to create global database schema: {e}")
@@ -584,10 +588,14 @@ class ProjectDatabaseApi(EnhancedDatabaseApi):
         self._ensure_project_database()
 
     def _ensure_project_database(self):
-        """Ensure project database schema exists."""
+        """Ensure project database schema exists and is migrated to the current shape."""
         try:
+            from adare.database.migrations.runner import apply_pending
             from adare.database.models.project_models import ProjectBase
             ProjectBase.metadata.create_all(self.engine)
+            # create_all builds missing tables but never ALTERs existing ones —
+            # heal schema drift from model changes on already-installed databases.
+            apply_pending(self.engine, 'project')
             log.debug(f"Project database schema ensured for {self.project_path}")
         except (SQLAlchemyError, ImportError) as e:
             log.error(f"Failed to create project database schema: {e}")

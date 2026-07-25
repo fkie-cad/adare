@@ -760,35 +760,21 @@ async def create_qemu_vm_for_test(context):
     """Build a QEMUVM for the test and back it with an overlay disk.
 
     Mirrors QEMULifecycleStrategy.prepare_vm_for_experiment (arch/machine/accel
-    selection + Apple-Silicon guard) but without any DB/environment lookups.
-    The base disk stays immutable: all writes go to the experiment overlay.
+    selection via the shared resolve_accel chokepoint) but without any
+    DB/environment lookups. The base disk stays immutable: all writes go to
+    the experiment overlay.
     """
-    import platform as _platform
-
     from adare.config import get_vm_credentials
-    from adare.hypervisor.exceptions import HypervisorException
+    from adare.hypervisor.qemu.accel import resolve_accel
     from adare.hypervisor.qemu.manager import QEMUManager
     from adare.hypervisor.qemu.vm import QEMUVM
 
     log.info("Phase 1 - Preparing QEMU VM for test...")
 
     vm_architecture = context.guest_architecture or 'x86_64'
-
-    # Block x86_64 guests on Apple Silicon (no hardware acceleration)
-    if _platform.system() == 'Darwin' and _platform.machine() == 'arm64' and vm_architecture != 'aarch64':
-        raise HypervisorException(
-            f"QEMU cannot hardware-accelerate {vm_architecture} guests on Apple Silicon (ARM). "
-            "Only aarch64 guests are supported on Apple Silicon with HVF. "
-            "Use VirtualBox instead (supports x86 via Rosetta)."
-        )
-
-    # Compute architecture-appropriate machine type and accelerator
-    if vm_architecture == 'aarch64':
-        vm_machine = 'virt'
-        vm_accel = 'hvf' if _platform.system() == 'Darwin' else 'kvm'
-    else:
-        vm_machine = 'pc'
-        vm_accel = 'hvf' if _platform.system() == 'Darwin' else 'kvm'
+    allow_emulation = getattr(context.config, 'allow_emulation', False)
+    vm_accel = resolve_accel(vm_architecture, allow_emulation)
+    vm_machine = 'virt' if vm_architecture == 'aarch64' else 'pc'
 
     qemu_manager = QEMUManager()
     username, password = get_vm_credentials(context.guest_platform)

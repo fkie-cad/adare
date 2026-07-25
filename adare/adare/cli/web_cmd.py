@@ -10,6 +10,52 @@ import click
 logger = logging.getLogger(__name__)
 
 
+def _provision_virtualspice(console, *, force: bool = False) -> bool:
+    """Download + verify the VirtualSpice binary with a Rich progress bar.
+
+    Returns True on success (or already-cached), False on any provisioning
+    failure. Never raises — failures are reported and VM features degrade.
+    """
+    from rich.progress import (
+        BarColumn,
+        DownloadColumn,
+        Progress,
+        TextColumn,
+        TransferSpeedColumn,
+    )
+
+    from adare.webapi import virtualspice_release as vsr
+
+    if not vsr.is_platform_supported():
+        console.print(
+            "[yellow]No VirtualSpice release asset for this platform; "
+            "build from source or set VIRTUALSPICE_BINARY.[/yellow]"
+        )
+        return False
+
+    with Progress(
+        TextColumn("[blue]Downloading VirtualSpice[/blue]"),
+        BarColumn(),
+        DownloadColumn(),
+        TransferSpeedColumn(),
+        console=console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task("download", total=None)
+
+        def _cb(downloaded: int, total: int) -> None:
+            progress.update(task, completed=downloaded, total=total or None)
+
+        try:
+            path = vsr.ensure_binary(progress_cb=_cb, force=force)
+        except vsr.VirtualSpiceProvisionError as exc:
+            console.print(f"[red]VirtualSpice provisioning failed: {exc}[/red]")
+            return False
+
+    console.print(f"[green]VirtualSpice binary ready:[/green] [dim]{path}[/dim]")
+    return True
+
+
 @click.command("start")
 @click.option("--port", default=8089, help="Main server port")
 @click.option("--host", default="127.0.0.1", help="Host to bind to")
@@ -28,6 +74,15 @@ def web_start(ctx, port, host, dev, no_browser, spice_port):
 
     vs_manager = VirtualSpiceManager(port=spice_port)
 
+    # Auto-provision from the pinned GitHub release if no binary was found by any
+    # local tier (env var, ~/.local/bin, dev target, managed cache, PATH).
+    if not vs_manager.available:
+        console.print(
+            "[yellow]VirtualSpice binary not found; attempting download...[/yellow]"
+        )
+        if _provision_virtualspice(console):
+            vs_manager = VirtualSpiceManager(port=spice_port)
+
     if vs_manager.available:
         console.print(
             f"[green]Starting VirtualSpice on port {spice_port}...[/green]"
@@ -41,12 +96,12 @@ def web_start(ctx, port, host, dev, no_browser, spice_port):
             )
     else:
         console.print(
-            "[yellow]VirtualSpice binary not found. "
+            "[yellow]VirtualSpice unavailable. "
             "VM features will be unavailable.[/yellow]"
         )
         console.print(
-            "[dim]Set VIRTUALSPICE_BINARY env var or "
-            "install virtualspice to PATH.[/dim]"
+            "[dim]Set VIRTUALSPICE_BINARY env var, run 'adare web "
+            "install-spice', or build from source.[/dim]"
         )
 
     # Open browser
@@ -223,3 +278,25 @@ def web_services(port, spice_port):
         )
 
     console.print(table)
+
+
+@click.command("install-spice")
+@click.option(
+    "--force", is_flag=True, help="Re-download even if already cached."
+)
+def web_install_spice(force):
+    """Download and verify the VirtualSpice (spice-client) binary."""
+    from rich.console import Console
+
+    console = Console()
+
+    from adare.webapi import virtualspice_release as vsr
+
+    console.print(
+        f"[blue]VirtualSpice {vsr.VIRTUALSPICE_VERSION} "
+        f"({vsr.VIRTUALSPICE_REPO})[/blue]"
+    )
+    if _provision_virtualspice(console, force=force):
+        console.print("[green]Done.[/green]")
+    else:
+        raise SystemExit(1)

@@ -1,0 +1,153 @@
+{# adare-template
+schema: 1
+id: kubuntu-lts
+description: Kubuntu 22.04 / 24.04 (KDE Plasma on an Ubuntu live-server autoinstall base, no conda + uv)
+maintainer: ADARE
+revision: 2026-07-25
+supports:
+  - kubuntu2204arm64
+  - kubuntu2404arm64
+-#}
+{# Kubuntu does not publish an arm64 ISO, so ARM64 "Kubuntu" guests are built from
+   the Ubuntu live-server ISO of the matching version plus the `kubuntu-desktop`
+   metapackage from the Ubuntu archive. The result is the same Plasma desktop and
+   the same KDE applications (Dolphin, KWrite, ...) that a Kubuntu-ISO install
+   gives, but the base is Ubuntu Server — the profile display_name says so, since
+   the difference has to stay visible in the environment metadata.
+
+   Same recipe as autoinstall_ubuntu_lts.yaml except: kubuntu-desktop instead of
+   ubuntu-desktop-minimal, SDDM autologin instead of GDM3, and standalone `uv`
+   instead of Miniforge (matching the recipe the existing 24.04 ARM64 environment
+   was built with, so all paper ARM64 guests stay method-identical). #}
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  # Match the interface by pattern, never by name. ADARE runs experiments with the
+  # NIC pinned to a different PCI address than the installer used, so the guest's
+  # predictable name changes between install and run (enp0s1 -> enp0s31). A config
+  # naming one interface leaves the guest with no address at all, which costs a
+  # 120s systemd-networkd-wait-online timeout on every boot and breaks the SLIRP
+  # SMB share at 10.0.2.4. See hypervisor/qemu/guest_network.py.
+  network:
+    version: 2
+    # renderer: NetworkManager is what Canonical's own live-server -> Desktop
+    # recipe uses, and it is why Fedora and Ubuntu 24.04 survive the PCI-address
+    # change while Kubuntu / 22.04 / 20.04 do not: NetworkManager claims any
+    # ethernet device regardless of its name, whereas systemd-networkd only
+    # configures what its config names. It also leaves these server-ISO builds
+    # closer to a genuine desktop install, which is the point of the profile.
+    renderer: NetworkManager
+    ethernets:
+      adare-any:
+        match:
+          name: "e*"
+        dhcp4: true
+  storage:
+    layout:
+      name: lvm
+      sizing-policy: all
+  identity:
+    hostname: {{ hostname }}
+    username: adare
+    password: {{ password_hash }}
+  ssh:
+    install-server: true
+    allow-pw: true
+  packages:
+    - kubuntu-desktop
+    # cifs-utils: ADARE mounts its host share with `mount -t cifs //10.0.2.4/qemu
+    # /adare`. Without mount.cifs that mount fails and the host falls back to
+    # per-file QGA writes, which is orders of magnitude slower and times out.
+    - cifs-utils
+    {% if setup_level >= 1 %}
+    - qemu-guest-agent
+    {% endif %}
+    {% if setup_level >= 2 %}
+    - imagemagick
+    - maim
+    - xdotool
+    - python3-pip
+    - python3-tk
+    {% endif %}
+    - openssh-server
+    - curl
+    - wget
+    - git
+  error-commands:
+    # Subiquity swallows apt/curtin output into the installer journal, so a failed
+    # in-target package install shows up on the host as nothing but
+    # "returned non-zero exit status 100" — undiagnosable. Dump the relevant logs
+    # to /dev/console, which is the serial port ADARE captures to
+    # <vm>_install.log. Deliberately no `poweroff` here: ADARE detects a failed
+    # install by the QEMU wait timing out, so powering off would make a broken
+    # disk look like a successful build.
+    - |
+      { echo '===== ADARE: install FAILED — curtin/apt detail ====='; \
+        for f in /var/log/installer/curtin-install.log /var/log/curtin/install.log \
+                 /var/log/installer/subiquity-server-debug.log; do \
+          [ -f "$f" ] && { echo "--- $f"; tail -n 60 "$f"; }; \
+        done; \
+        echo '--- apt complaints'; \
+        grep -ahiE '^(E|W): |404 |Unable to |broken|conflict|held' \
+             /var/log/installer/*.log /var/log/curtin/*.log 2>/dev/null | tail -40; \
+        echo '===== ADARE: end of failure detail ====='; } > /dev/console 2>&1 || true
+  late-commands:
+    # Passwordless sudo for adare user
+    - echo "adare ALL=(ALL) NOPASSWD:ALL" > /target/etc/sudoers.d/adare
+    - chmod 440 /target/etc/sudoers.d/adare
+    # SDDM autologin into the X11 Plasma session (Wayland breaks PyAutoGUI/xdotool).
+    # On Plasma 5 (20.04 / 22.04 / 24.04) `plasma.desktop` *is* the X11 session;
+    # the Wayland one is `plasmawayland.desktop`.
+    - mkdir -p /target/etc/sddm.conf.d
+    - |
+      printf '[Autologin]\nUser=adare\nSession=plasma.desktop\nRelogin=false\n\n[General]\nDisplayServer=x11\n' > /target/etc/sddm.conf.d/autologin.conf
+    # Disable unattended upgrades to prevent interference during experiments
+    - curtin in-target -- systemctl disable unattended-upgrades || true
+    - curtin in-target -- apt-get remove -y unattended-upgrades || true
+    # Disable APT periodic update/upgrade timers
+    - curtin in-target -- systemctl disable apt-daily.timer || true
+    - curtin in-target -- systemctl disable apt-daily-upgrade.timer || true
+    - curtin in-target -- systemctl mask apt-daily.service || true
+    - curtin in-target -- systemctl mask apt-daily-upgrade.service || true
+    # Disable APT periodic updates via config
+    - 'echo "APT::Periodic::Update-Package-Lists \"0\";" > /target/etc/apt/apt.conf.d/99disable-auto-updates'
+    - 'echo "APT::Periodic::Unattended-Upgrade \"0\";" >> /target/etc/apt/apt.conf.d/99disable-auto-updates'
+    - 'echo "APT::Periodic::Download-Upgradeable-Packages \"0\";" >> /target/etc/apt/apt.conf.d/99disable-auto-updates'
+    # Disable snap auto-refresh
+    - mkdir -p /target/etc/snap
+    - 'echo "refresh.hold: forever" > /target/etc/snap/snapd.conf || true'
+    - curtin in-target -- snap set system refresh.hold="$(date -d '+100 years' +%Y-%m-%dT%H:%M:%S%:z)" || true
+    {% if setup_level >= 1 %}
+    # Enable QEMU Guest Agent
+    - curtin in-target -- systemctl enable qemu-guest-agent
+    {% endif %}
+    # Ensure adare user exists in target (cloud-init creates it on first boot, but we need it now)
+    - curtin in-target -- id adare || curtin in-target -- useradd -m -u 1000 -G sudo -s /bin/bash adare
+    - curtin in-target -- mkdir -p /home/adare
+    - chown -R 1000:1000 /target/home/adare
+    # No conda: adarevm/adarelib wheels are installed into the SYSTEM python by
+    # the harness (`pip3 install ... <wheels>`). On PEP-668 releases (24.04+) that
+    # python is "externally managed" and pip refuses; the stock conda path sidesteps
+    # this via conda's own pip. Two measures, safe on a dedicated VM:
+    #   1. Remove the EXTERNALLY-MANAGED marker — pip refuses ONLY when it exists,
+    #      so removing it eliminates the check. This is the load-bearing fix.
+    #      (No-op on 20.04/22.04, which predate the marker.)
+    #   2. A global pip.conf flag as well (harmless when the key is ignored).
+    - curtin in-target -- sh -c 'rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED'
+    - 'printf "[global]\nbreak-system-packages = true\n" > /target/etc/pip.conf'
+    # Standalone uv (single binary, NOT conda) — `adare vm test` launches the shared
+    # adarevm source via `uv run adarevm`. Unconditional. miniforge_arch doubles as
+    # uv's target-triple arch component (aarch64 / x86_64).
+    - curtin in-target -- sh -c 'cd /tmp && curl -LsSf https://github.com/astral-sh/uv/releases/latest/download/uv-{{ miniforge_arch }}-unknown-linux-gnu.tar.gz | tar xz && mv uv-{{ miniforge_arch }}-unknown-linux-gnu/uv uv-{{ miniforge_arch }}-unknown-linux-gnu/uvx /usr/local/bin/'
+    - curtin in-target -- chown root:root /usr/local/bin/uv /usr/local/bin/uvx
+    - chown -R 1000:1000 /target/home/adare
+    # Disable screen locking and display power management for automated GUI testing
+    - mkdir -p /target/etc/xdg
+    - |
+      printf '[Daemon]\nAutolock=false\nLockOnResume=false\nLockGrace=0\nTimeout=0\n' > /target/etc/xdg/kscreenlockerrc
+    - |
+      printf '[AC][DPMSControl]\nidleTime=0\n\n[AC][DimDisplay]\nidleTime=0\n\n[AC][SuspendSession]\nidleTime=0\nsuspendType=0\n' > /target/etc/xdg/powermanagementprofilesrc
+  shutdown: poweroff

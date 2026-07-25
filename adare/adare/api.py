@@ -261,6 +261,10 @@ class ManageAPI:
         """Repair the database system."""
         return self._service.repair_db()
 
+    def migrate_db(self, quiet=False):
+        """Apply pending schema migrations to global + project databases."""
+        return self._service.migrate_db(quiet=quiet)
+
     def clean_install_db(self, force=False):
         """Perform clean database installation."""
         return self._service.clean_install_db(force=force)
@@ -303,10 +307,13 @@ class EnvironmentAPI:
         """Create a new environment."""
         return self._service.create(request)
 
-    def publish_prepare(self, project_path, name, vm_url, vm_format=None, verify_url=False):
+    def publish_prepare(
+        self, project_path, name, vm_url, vm_format=None, verify_url=False, compress=False,
+    ):
         """Convert a local-path baked environment into a publish-ready URL one."""
         return self._service.publish_prepare(
-            project_path, name, vm_url, vm_format=vm_format, verify_url=verify_url,
+            project_path, name, vm_url, vm_format=vm_format,
+            verify_url=verify_url, compress=compress,
         )
 
     def delete(self, identifier, force=False):

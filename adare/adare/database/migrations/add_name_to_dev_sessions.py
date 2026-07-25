@@ -6,7 +6,10 @@ This migration adds the optional ``name`` field so dev sessions can carry a
 human-friendly label that ``-s``/``--session`` accepts in place of a ULID.
 The column is not unique — collisions are resolved at lookup time.
 
-Run this script manually if you have an existing ADARE installation:
+This is a *global*-scoped migration: it is applied automatically when the global
+database is opened (see ``adare.database.migrations.runner``). Run it explicitly
+with:
+    adare db migrate
     python -m adare.database.migrations.add_name_to_dev_sessions
 
 For new installations, the column will be created automatically.
@@ -21,42 +24,44 @@ from sqlalchemy.exc import SQLAlchemyError
 log = logging.getLogger(__name__)
 
 
-def run_migration():
-    """Add name column to dev_sessions table if it doesn't exist."""
+def upgrade(conn) -> None:
+    """Add the name column to dev_sessions on ``conn`` (idempotent)."""
+    columns = {row[1] for row in conn.execute(text("PRAGMA table_info(dev_sessions)"))}
+
+    if not columns:
+        # Table not present (very old / partial database) — create_all owns it.
+        print("· Table 'dev_sessions' not present, skipping.")
+        return
+
+    if 'name' in columns:
+        print("✓ Column 'name' already exists. No migration needed.")
+        return
+
+    print("Adding column 'name' to dev_sessions table...")
+    conn.execute(text("ALTER TABLE dev_sessions ADD COLUMN name VARCHAR(255) NULL"))
+
+
+def run_migration() -> bool:
+    """Manual entry point: run :func:`upgrade` against the global database."""
     from adare.database.api.devmode import DevModeApi
 
     print("Running migration: add_name_to_dev_sessions")
 
     try:
         with DevModeApi() as api:
-            # SQLAlchemy 2.0: DDL/DML runs through a connection, not the engine.
-            with api.engine.connect() as conn:
-                # Check if column exists
-                result = conn.execute(text("PRAGMA table_info(dev_sessions)"))
-                columns = [row[1] for row in result]
+            with api.engine.begin() as conn:
+                upgrade(conn)
 
-                if 'name' in columns:
-                    print("✓ Column 'name' already exists. No migration needed.")
-                    return True
-
-                # Add the column
-                print("Adding column 'name' to dev_sessions table...")
-                conn.execute(text(
-                    "ALTER TABLE dev_sessions ADD COLUMN name VARCHAR(255) NULL"
-                ))
-                conn.commit()
-
-            print("✓ Migration completed successfully!")
-            print("\nIMPORTANT:")
-            print("- Existing dev sessions will have NULL name")
-            print("- Start a session with a label: adare dev start -e <env> --name <name>")
-            print("- Select by name: adare dev <command> -s <name>")
-
-            return True
+        print("✓ Migration completed successfully!")
+        print("\nIMPORTANT:")
+        print("- Existing dev sessions will have NULL name")
+        print("- Start a session with a label: adare dev start -e <env> --name <name>")
+        print("- Select by name: adare dev <command> -s <name>")
+        return True
 
     except (SQLAlchemyError, OSError) as e:
         print(f"✗ Migration failed: {e}", file=sys.stderr)
-        log.error(f"Migration failed: {e}", exc_info=True)
+        log.error("Migration failed: %s", e, exc_info=True)
         return False
 
 

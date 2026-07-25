@@ -33,8 +33,8 @@ class QEMUManager(AbstractHypervisorManager):
 
         qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
 
-        # Apple Silicon note: aarch64 guests use HVF acceleration.
-        # x86_64 guests on Apple Silicon are blocked in lifecycle.py (per-VM check).
+        # Apple Silicon note: aarch64 guests use HVF acceleration. x86_64 guests
+        # need --allow-emulation (QEMU TCG) — see hypervisor/qemu/accel.py.
         if platform.system() == 'Darwin' and platform.machine() == 'arm64':
             log.info("QEMU on Apple Silicon — HVF acceleration available for aarch64 guests")
 

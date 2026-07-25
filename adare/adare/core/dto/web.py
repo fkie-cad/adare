@@ -169,4 +169,12 @@ class DownloadBundleRequest:
     """Request to download an experiment bundle."""
     project_path: Path
     ulid: str
-    include_disk_images: bool = False
+
+
+@dataclass
+class DownloadBundleResult:
+    """Result of a bundle download, listing what was fetched."""
+    experiment_name: str
+    environment_names: list[str]
+    testfunction_names: list[str]
+    message: str = ""

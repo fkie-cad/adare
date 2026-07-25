@@ -154,6 +154,13 @@ def db_repair():
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_repair_db, args)
 
+@db.command(name='migrate')
+def db_migrate():
+    """Apply pending database schema migrations (global + all projects)."""
+    from adare.cli.manage import exec_manage_migrate_db
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_manage_migrate_db, args)
+
 @db.command(name='clean-install')
 @click.option('--force', '-f', is_flag=True, help='Force clean installation without confirmation')
 def db_clean_install(force):
@@ -342,9 +349,10 @@ def create(name, project, with_vm):
 @click.argument('name')
 @click.option('--vm-url', required=True, help='Published http(s) URL where the disk image is hosted (any host, incl. owncloud/Nextcloud share links)')
 @click.option('--vm-format', type=click.Choice(['qcow2', 'ova', 'vmdk', 'vdi', 'img', 'raw']), help='Disk format hint (inferred from the local disk extension when omitted; required if neither the local disk nor the URL names a recognized format)')
-@click.option('--verify-url', is_flag=True, help='Download the hosted URL and confirm its bytes hash-match the local disk (catches a wrong/HTML share link or a changed upload)')
+@click.option('--verify-url', is_flag=True, help='Download the hosted URL and confirm its bytes hash-match the published disk (catches a wrong/HTML share link or a changed upload)')
+@click.option('--compress', is_flag=True, help='qcow2 only: zstd-compress the disk into a "<name>-published.qcow2" sibling file before hashing, and publish that instead (transparent to readers, typically ~30-50% smaller; upload the compressed file, not the original)')
 @click.option('--project', '-p', help='Name of the project')
-def publish_prepare(name, vm_url, vm_format, verify_url, project):
+def publish_prepare(name, vm_url, vm_format, verify_url, compress, project):
     """Prepare a local baked environment for sharing (local disk -> URL + sha256).
 
     Hashes the local disk referenced by the environment's "vm:" field, then
@@ -357,7 +365,7 @@ def publish_prepare(name, vm_url, vm_format, verify_url, project):
     from adare.cli.environment import exec_environment_publish_prepare
     args = SimpleNamespace(
         name=name, vm_url=vm_url, vm_format=vm_format,
-        verify_url=verify_url, project=project,
+        verify_url=verify_url, compress=compress, project=project,
     )
     exec_with_error_printing(exec_environment_publish_prepare, args)
 
@@ -373,12 +381,13 @@ def publish_prepare(name, vm_url, vm_format, verify_url, project):
 @click.option('--ram', type=int, help='[interactive mode] RAM in MB for the boot window')
 @click.option('--cpus', type=int, help='[interactive mode] CPU count for the boot window')
 @click.option('--disk-name', help='[interactive mode] Name for the new flattened disk (defaults to --name)')
+@click.option('--compress/--no-compress', 'compress', default=True, help='[interactive mode] Zstd-compress the flattened disk. Default: on.')
 @click.option('--description', '-d', help='Description for the new environment')
 @click.option('--tag', '-t', multiple=True, help='Tag to attach to the new environment (repeatable)')
 @click.option('--force', '-f', is_flag=True, help='Force overwrite if the new name already exists')
 @click.option('--project', '-p', help='Name of the project')
 def extend(source, name, install, from_file, shell, cwd, interactive, console,
-           ram, cpus, disk_name, description, tag, force, project):
+           ram, cpus, disk_name, compress, description, tag, force, project):
     """Extend an environment (or VM) into a new environment that reuses the same base disk.
 
     SOURCE can be an environment name, environment ULID, or VM name.
@@ -400,8 +409,8 @@ def extend(source, name, install, from_file, shell, cwd, interactive, console,
     args = SimpleNamespace(
         source=source, name=name, install=install, from_file=from_file,
         shell=shell, cwd=cwd, interactive=interactive, console=console,
-        ram=ram, cpus=cpus, disk_name=disk_name, description=description,
-        tag=tag, force=force, project=project,
+        ram=ram, cpus=cpus, disk_name=disk_name, compress=compress,
+        description=description, tag=tag, force=force, project=project,
     )
     exec_with_error_printing(exec_environment_extend, args)
 
@@ -664,11 +673,17 @@ from adare.cli.groups.web_commands import register as register_web_commands
 web = register_web_commands(cli, AliasedGroup, exec_with_error_printing)
 
 # Web UI commands (start, build, services)
-from adare.cli.web_cmd import web_build, web_services, web_start
+from adare.cli.web_cmd import (
+    web_build,
+    web_install_spice,
+    web_services,
+    web_start,
+)
 
 web.add_command(web_start, "start")
 web.add_command(web_build, "build")
 web.add_command(web_services, "services")
+web.add_command(web_install_spice, "install-spice")
 
 
 # ------------------------------

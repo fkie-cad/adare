@@ -1,0 +1,235 @@
+# Paper section 5.2 -- Artifact Regression Testing, Ubuntu 22.04 (GNOME / Nautilus).
+#
+# Identical interaction to the Ubuntu 24.04 variant: the only thing that varies across
+# the section 5.2 experiments is the distro/version, which is what makes the comparison
+# a regression test.
+#
+# GUI crops in img/ were copied from the Ubuntu 24.04 variant and MUST be re-taken
+# against a live Ubuntu 22.04 VM (Yaru icon theme differs between releases).
+#
+# Interaction: create a document, open it exactly once, then validate the XDG
+# recently-used artifact against the known ground truth.
+# Expected outcome for this distro/version: artifact PRESENT and CORRECT.
+
+settings:
+  idle: 2.0
+  timeout: 600
+  screenshot:
+    format: "png"
+    quality: 95
+
+variables:
+  filename:
+    type: string
+    value: "adare.txt"
+    description: "Name of the document that gets created and opened once"
+
+  text_file:
+    type: path
+    value: "{{ adare_user_documents }}/{{ filename }}"
+    description: "Full path of the document that gets opened"
+
+  xbel_file:
+    type: path
+    value: "{{ adare_user_home }}/.local/share/recently-used.xbel"
+    description: "XDG recently-used artifact under test"
+
+  icon_filemanager_taskbar:
+    type: string
+    value: "filemanager-app.png"
+    description: "Taskbar icon of the GNOME file manager (Nautilus)"
+
+  file_content:
+    type: string
+    value: "This is test text"
+    description: "Document content, also used as the on-screen proof that the editor opened it"
+
+
+tests:
+  # --- pre-conditions: the artifact must be created BY the interaction ---
+  - name: xbel_absent_before
+    description: 'Verify the recently-used artifact is absent before the interaction'
+    function: standard.file_does_not_exist
+    parameter:
+      dst: '{{ xbel_file }}'
+
+  - name: text_file_created
+    description: 'Verify the document to be opened exists before the interaction'
+    function: standard.file_exists
+    parameter:
+      dst: '{{ text_file }}'
+
+  # --- paper claim: "validate whether recently-used.xbel exists" ---
+  - name: xbel_exists
+    description: 'Verify the recently-used artifact was created by opening the document'
+    function: standard.file_exists
+    parameter:
+      dst: '{{ xbel_file }}'
+
+  # --- paper claim: access metadata -- which file, how many entries ---
+  - name: xbel_bookmark_count
+    description: 'Exactly one bookmark entry after opening exactly one document'
+    function: xml.element_count
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark'
+      expected_count: 1
+      comparison_type: 'equals'
+
+  - name: xbel_bookmark_href
+    description: 'The single bookmark entry points at the document that was opened'
+    function: xml.element_exists
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark[@href="file://{{ text_file }}"]'
+
+  # --- paper claim: access metadata -- counts ---
+  - name: xbel_visit_count
+    description: 'The registering application recorded exactly one visit (document opened once)'
+    function: xml.attribute_matches
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark:applications/bookmark:application'
+      attribute: 'count'
+      expected_value: '1'
+      namespaces:
+        bookmark: "http://www.freedesktop.org/standards/desktop-bookmarks"
+        mime: "http://www.freedesktop.org/standards/shared-mime-info"
+
+  # --- paper claim: access metadata -- timestamps match the interaction time ---
+  # The xbel attributes are UTC with a trailing 'Z', so the format string carries the
+  # literal Z and '| localtime' is deliberately NOT applied: the host side of the
+  # comparison is a UTC epoch from save_timestamp, and adding '| localtime' would make
+  # basictest._parse_timestamp_with_format read the guest's UTC wall time as local wall
+  # time, skewing the comparison by the host's UTC offset. See README ("UTC, not localtime").
+  - name: xbel_visited_timestamp
+    description: 'visited timestamp matches the moment the document was opened (+/-5s)'
+    function: xml.attribute_matches
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark'
+      attribute: 'visited'
+      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -5) }}"
+
+  - name: xbel_modified_timestamp
+    description: 'modified timestamp matches the moment the document was opened (+/-5s)'
+    function: xml.attribute_matches
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark'
+      attribute: 'modified'
+      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -5) }}"
+
+  - name: xbel_added_timestamp
+    description: 'added timestamp matches the moment the document was opened (+/-5s)'
+    function: xml.attribute_matches
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark'
+      attribute: 'added'
+      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -5) }}"
+
+  # --- paper claim: timestamp precision improved after Ubuntu 20.04 ---
+  # Executable form of the precision-drift finding: 20.04 stores second-level precision,
+  # later versions store fractional seconds (GLib >= 2.66 writes GDateTime ISO-8601 with
+  # microseconds instead of the old time_t seconds).
+  - name: xbel_visited_subsecond_precision
+    description: 'visited timestamp carries fractional seconds (higher precision than Ubuntu 20.04)'
+    function: xml.attribute_matches
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark'
+      attribute: 'visited'
+      expected_value: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z$'
+      regex_match: true
+
+  # --- proof that the interaction really reached the document ---
+  # atime was reset to 2000-01-01 immediately before the opening click, so any recent
+  # access time can only come from the document actually being read afterwards.
+  - name: text_file_accessed
+    description: 'The document was read after the opening click (access time no longer the reset value)'
+    function: standard.file_timestamps
+    parameter:
+      dst: '{{ text_file }}'
+      timestamp_type: 'accessed'
+      comparison_type: 'within_last'
+      within_duration: '30m'
+
+
+actions:
+  - command:
+      name: "Ensure recently-used.xbel is absent"
+      description: "Start from a state in which the artifact under test does not exist"
+      command: "rm -f {{ xbel_file }}"
+  - test: xbel_absent_before
+
+  - command:
+      name: "Create text file to be opened"
+      description: "Create the document that will be opened exactly once"
+      command: "echo '{{ file_content }}' > {{ text_file }}"
+      shell: true
+  - test: text_file_created
+
+  - click:
+      target:
+        image: "{{ icon_filemanager_taskbar }}"
+      description: "Open the GNOME file manager (Nautilus)"
+  - wait_until:
+      condition:
+        exists:
+          text: "Documents"
+      description: "Wait for the file manager sidebar to be usable"
+
+  - click:
+      target:
+        text: "Documents"
+        strategy:
+          SweepStrategy:
+            index: 2
+      description: "Navigate to the Documents folder"
+  - wait_until:
+      condition:
+        exists:
+          text: "{{ filename }}"
+      description: "Wait for the document to be listed"
+
+  # Reset atime AFTER navigation so that file-manager previewing/thumbnailing cannot be
+  # mistaken for the opening read.
+  - command:
+      name: "Reset access time of the document"
+      description: "Pin atime to 2000-01-01 so a later access time proves the document was opened"
+      command: "touch -a -t 200001010000 {{ text_file }}"
+
+  - save_timestamp:
+      variable: open_timestamp
+      description: "Reference time for the xbel access metadata, captured immediately before opening"
+  - click:
+      type: "double"
+      target:
+        text: "{{ filename }}"
+      description: "Open the document exactly once"
+
+  - wait_until:
+      condition:
+        exists:
+          text: "{{ file_content }}"
+      timeout: 60.0
+      description: "Editor shows the document content -- runtime proof that the open succeeded"
+  - idle:
+      duration: 5
+      description: "Let the editor flush the recently-used artifact to disk"
+
+  - test: xbel_exists
+  - test: xbel_bookmark_count
+  - test: xbel_bookmark_href
+  - test: xbel_visit_count
+  - test: xbel_visited_timestamp
+  - test: xbel_modified_timestamp
+  - test: xbel_added_timestamp
+  - test: xbel_visited_subsecond_precision
+  - test: text_file_accessed
+
+  - pull:
+      description: "pull the recently-used.xbel for offline inspection"
+      src: "{{ xbel_file }}"
+      dst: "recently-used.xbel"

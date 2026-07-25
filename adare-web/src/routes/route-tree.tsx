@@ -12,6 +12,7 @@ import EnvironmentDetailPage from '@/pages/environment-detail'
 import VmsListPage from '@/pages/vms-list'
 import VmDetailPage from '@/pages/vm-detail'
 import WorkbenchPage from '@/pages/workbench'
+import VmWatchPage from '@/pages/vm-watch'
 
 interface RouterContext {
   queryClient: QueryClient
@@ -99,6 +100,23 @@ const developRoute = createRoute({
   },
 })
 
+const vmWatchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/vm/watch',
+  component: VmWatchPage,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { name?: string; viewOnly?: boolean } => {
+    const rawName = search.name
+    const name = typeof rawName === 'string' && rawName.length > 0 ? rawName : undefined
+    // Accept either `view_only` (from CLI/pop-out URLs) or `viewOnly`.
+    const rawViewOnly = search.view_only ?? search.viewOnly
+    const viewOnly =
+      rawViewOnly === true || rawViewOnly === 'true' || rawViewOnly === '1'
+    return name ? { name, viewOnly } : { viewOnly }
+  },
+})
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   runsRoute,
@@ -111,4 +129,5 @@ export const routeTree = rootRoute.addChildren([
   vmsRoute,
   vmDetailRoute,
   developRoute,
+  vmWatchRoute,
 ])
