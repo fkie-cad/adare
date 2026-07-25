@@ -42,6 +42,7 @@ def exec_vm_create(arguments):
     env_name = getattr(arguments, 'env_name', None)
     interactive = getattr(arguments, 'interactive', False)
     arch = getattr(arguments, 'arch', None)
+    compress = getattr(arguments, 'compress', True)
     recipe_flag = getattr(arguments, 'recipe', None)
     bare = getattr(arguments, 'bare', False)
     setup_arg = getattr(arguments, 'setup_level', None)
@@ -168,6 +169,7 @@ def exec_vm_create(arguments):
             force=force,
             vm_dir=vm_dir,
             setup_level=setup_level,
+            compress=compress,
         )
     elif os_def.install_mode == 'gui-auto':
         if iso_path is None:
@@ -191,6 +193,7 @@ def exec_vm_create(arguments):
             force=force,
             vm_dir=vm_dir,
             setup_level=setup_level,
+            compress=compress,
             record=gui_record,
             relearn=gui_relearn,
             display=gui_display,
@@ -212,6 +215,7 @@ def exec_vm_create(arguments):
             force=force,
             vm_dir=vm_dir,
             setup_level=setup_level,
+            compress=compress,
             template=gui_template,
             keep_running=gui_display,
         )
@@ -228,6 +232,7 @@ def exec_vm_create(arguments):
             force=force,
             vm_dir=vm_dir,
             setup_level=setup_level,
+            compress=compress,
         )
     elif os_def.platform == 'windows':
         if iso_path is None:
@@ -252,6 +257,7 @@ def exec_vm_create(arguments):
             force=force,
             vm_dir=vm_dir,
             setup_level=setup_level,
+            compress=compress,
         )
     else:
         print_error_message(title=f"Unsupported platform: {os_def.platform}")
