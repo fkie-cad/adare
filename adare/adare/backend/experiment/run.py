@@ -128,7 +128,7 @@ def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_succe
     return success, diagnostics
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', file_log_level: int = logging.INFO, run_ulid: str | None = None):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', allow_emulation: bool = False, file_log_level: int = logging.INFO, run_ulid: str | None = None):
     import signal
 
     log.info(f"Starting experiment run {experiment_name} in project {project_path}")
@@ -141,6 +141,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         preserve_snapshot=preserve_snapshot,
         runlog=runlog,
         test_mode=test,
+        allow_emulation=allow_emulation,
         file_log_level=file_log_level
     )
 

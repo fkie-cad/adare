@@ -68,9 +68,10 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--test-mode', type=click.Choice(['auto', 'agent', 'host']), help='Test execution mode: auto (default), agent (WebSocket), or host (QGA for QEMU only)')
     @click.option('--diff/--no-diff', default=None, help='Enable/disable filesystem diff (overrides playbook setting)')
     @click.option('--diff-mode', type=click.Choice(['auto', 'guest', 'host']), default='auto', help='Diff mode: auto (smart selection), guest (VM-based), host (QEMU virt-diff)')
+    @click.option('--allow-emulation', is_flag=True, default=False, help='Allow QEMU TCG software emulation when the environment guest architecture does not match the host CPU (slow; hardware acceleration is used otherwise). Also honored via hypervisor_config.allow_emulation in the environment YAML.')
     @click.option('--project', help='Name of the project')
     @click.pass_context
-    def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, gui_mode, test_mode, diff, diff_mode, project):
+    def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, gui_mode, test_mode, diff, diff_mode, allow_emulation, project):
         """Run an experiment in a given environment or all environments if none specified.
 
         By default, runs in TEST mode (creates fake runs, skips integrity checks, allows modifications).
@@ -100,6 +101,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             test_mode=test_mode,
             diff=diff,
             diff_mode=diff_mode,
+            allow_emulation=allow_emulation,
             project=project,
             verbose=ctx.obj.verbose,
             very_verbose=ctx.obj.very_verbose
@@ -276,6 +278,36 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         )
         exec_with_error_printing(exec_experiment_clone, args)
 
+
+    @experiment.command()
+    @click.argument('ulid')
+    @click.option('-e', '--environment', help='Name of the environment to use (required if the bundle has more than one)')
+    @click.option('--project', '-p', help='Name of the project')
+    @click.option('--production', '--prod', is_flag=True, help='Run the experiment in production mode (default: test mode)')
+    @click.option('--skip-run', is_flag=True, help="Download and load only, don't execute")
+    def replicate(ulid, environment, project, production, skip_run):
+        """Download a published experiment bundle and run it, end to end.
+
+        Downloads the experiment (+ its testfunction sets), loads the
+        environment (fetching and verifying the VM disk), loads the
+        experiment into the project, and runs it.
+
+        ULID is the published experiment's ULID.
+
+        Examples:
+        - adare experiment replicate 01HXYZ...
+        - adare experiment replicate 01HXYZ... -e ubuntu24 --production
+        - adare experiment replicate 01HXYZ... --skip-run
+        """
+        from adare.cli.experiment import exec_experiment_replicate
+        args = SimpleNamespace(
+            ulid=ulid,
+            environment=environment,
+            project=project,
+            test=not production,
+            skip_run=skip_run,
+        )
+        exec_with_error_printing(exec_experiment_replicate, args)
 
     @experiment.command()
     @click.argument('experiment', type=click.Path(exists=False))

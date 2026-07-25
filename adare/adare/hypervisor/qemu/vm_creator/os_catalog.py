@@ -56,14 +56,19 @@ class OsDefinition:
     kernel_path_in_iso: str = ''    # Path to vmlinuz inside ISO (Linux only)
     initrd_path_in_iso: str = ''    # Path to initrd inside ISO (Linux only)
     extra_packages: list[str] = field(default_factory=list)
-    install_mode: str = 'auto'  # 'auto' (unattended), 'manual' (interactive VNC),
-    #                            or 'gui-auto' (vision-LLM-driven GUI automation)
+    install_mode: str = 'auto'  # 'auto' (unattended seed file), 'manual'
+    #   (interactive window), 'gui-auto' (vision-LLM drives the GUI installer),
+    #   or 'gui-script' (deterministic QMP playbook replay, no model). See
+    #   _INSTALL_MODES.
     architecture: str = 'x86_64'  # 'x86_64' or 'aarch64'
     template: str = ''  # Custom template filename (empty = use default lookup)
     # Installer family — selects how the rendered template is laid out on the
-    # seed medium. One of: 'subiquity' | 'preseed' | 'kickstart' | 'autoyast'
-    # | 'archinstall-cloudinit' | 'manual' | 'gui'. 'gui' writes no seed file;
-    # the installer is driven through its own GUI. The default keeps Ubuntu working.
+    # seed medium. One of: 'subiquity' | 'preseed' | 'ubiquity' | 'kickstart'
+    # | 'autoyast' | 'archinstall-cloudinit' | 'manual' | 'gui'. 'gui' writes no
+    # seed file; the installer is driven through its own GUI. 'ubiquity' (Ubuntu /
+    # Kubuntu *desktop* ISOs) renders a d-i preseed but has no labelled-drive
+    # auto-detect, so it must be paired with seed_transport: 'http'.
+    # The default keeps Ubuntu working.
     installer: str = 'subiquity'
     # Kernel command line passed via QEMU `-append`. Supports {console}
     # substitution (ttyS0/ttyAMA0). Distros like Anaconda or AutoYaST need
@@ -77,9 +82,9 @@ class OsDefinition:
     # rendered seed as a labeled second CD-ROM, auto-detected by the installer.
     # 'http' additionally serves the seed directory over a short-lived local HTTP
     # server (reachable from the guest at 10.0.2.2 via QEMU user-mode net) and
-    # appends a fetch URL to the kernel cmdline. Needed for older debian-installer
-    # releases (e.g. Ubuntu 18.04) that do not auto-load a preseed from an OEMDRV
-    # volume.
+    # splices a `url=` fetch hint into the kernel cmdline. Needed for older
+    # debian-installer releases (e.g. Ubuntu 18.04) that do not auto-load a preseed
+    # from an OEMDRV volume, and for ubiquity, which has no auto-detect at all.
     seed_transport: str = 'cdrom'  # 'cdrom' | 'http'
     # Deterministic, LLM-free GUI-installer playbook (install_mode == 'playbook').
     # Each step is a dict driving the graphical installer via the host-side QMP
@@ -325,6 +330,32 @@ _KICKSTART_CMDLINE = (
     'inst.ks=hd:LABEL=OEMDRV:/ks.cfg inst.text console={console}'
 )
 
+
+def _fedora_archive_cmdline(release: str, arch: str = 'x86_64') -> str:
+    """Kickstart cmdline with ``inst.repo`` pinned to the Fedora *archive*.
+
+    An Everything-netinst ISO carries no packages; Anaconda resolves them through
+    the mirror metalink. Once a release goes EOL the metalink resolves to nothing
+    and the install dies at dependency resolution, so an EOL release must name the
+    archive mirror explicitly. Every release ADARE ships for replication is or will
+    be EOL, hence the pin.
+    """
+    return (
+        f'inst.ks=hd:LABEL=OEMDRV:/ks.cfg '
+        f'inst.repo=https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/'
+        f'{release}/Everything/{arch}/os/ '
+        f'inst.text console={{console}}'
+    )
+
+
+# Fedora 41 and 42 are both permanently EOL, so their metalink is dead — see
+# _fedora_archive_cmdline. The Workstation profiles below are pinned to the
+# archive; fedora41kde / fedora42kde share the defect and are NOT pinned, because
+# no one has verified a KDE-spin build against the archive repo (their kickstart
+# selects a different package group). Pin them the same way once verified.
+_FEDORA_41_CMDLINE = _fedora_archive_cmdline('41')
+_FEDORA_42_CMDLINE = _fedora_archive_cmdline('42')
+
 FEDORA_41_WORKSTATION = OsDefinition(
     name='fedora41',
     display_name='Fedora 41 Workstation (GNOME)',
@@ -332,16 +363,18 @@ FEDORA_41_WORKSTATION = OsDefinition(
     distribution='fedora',
     distribution_label='Workstation',
     version='41',
-    iso_url='',
-    iso_sha256='',
-    iso_filename='',
+    iso_url=(
+        'https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/iso/Fedora-Everything-netinst-x86_64-41-1.4.iso'
+    ),
+    iso_sha256='bc943f6b426ef8db9587715d87d6361c4048146f3aadd36a9dcbab2b33fe320e',
+    iso_filename='Fedora-Everything-netinst-x86_64-41-1.4.iso',
     default_disk_size='60G',
     default_ram_mb=8192,
     default_cpus=0,
     kernel_path_in_iso='/images/pxeboot/vmlinuz',
     initrd_path_in_iso='/images/pxeboot/initrd.img',
     installer='kickstart',
-    kernel_cmdline=_KICKSTART_CMDLINE,
+    kernel_cmdline=_FEDORA_41_CMDLINE,
     seed_label='OEMDRV',
 )
 
@@ -372,16 +405,18 @@ FEDORA_42_WORKSTATION = OsDefinition(
     distribution='fedora',
     distribution_label='Workstation',
     version='42',
-    iso_url='',
-    iso_sha256='',
-    iso_filename='',
+    iso_url=(
+        'https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/42/Everything/x86_64/iso/Fedora-Everything-netinst-x86_64-42-1.1.iso'
+    ),
+    iso_sha256='1bd6ab4798983c2fe4a210f9c4ca135fed453d6142ba852c1f8d5fba22e113ab',
+    iso_filename='Fedora-Everything-netinst-x86_64-42-1.1.iso',
     default_disk_size='60G',
     default_ram_mb=8192,
     default_cpus=0,
     kernel_path_in_iso='/images/pxeboot/vmlinuz',
     initrd_path_in_iso='/images/pxeboot/initrd.img',
     installer='kickstart',
-    kernel_cmdline=_KICKSTART_CMDLINE,
+    kernel_cmdline=_FEDORA_42_CMDLINE,
     seed_label='OEMDRV',
 )
 
@@ -736,6 +771,13 @@ _BUILTIN_CATALOG: dict[str, OsDefinition] = {
 
 _REQUIRED_YAML_FIELDS = {'name', 'platform', 'distribution', 'version'}
 
+# Recognised install_mode values. 'auto' is the unattended seed-file path;
+# 'manual' opens a QEMU window for a human; 'gui-auto' lets a vision-LLM agent
+# drive the graphical installer; 'gui-script' replays a hand-calibrated QMP
+# playbook against it with no model involved; 'playbook' replays a CV-driven
+# playbook that locates installer buttons by on-screen label via the cv-server.
+_INSTALL_MODES = frozenset({'auto', 'manual', 'gui-auto', 'gui-script', 'playbook'})
+
 
 def _load_yaml_profiles() -> dict[str, OsDefinition]:
     """Load OS profiles from YAML files in the os-profiles directory."""
@@ -763,11 +805,10 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     continue
 
                 install_mode = data.get('install_mode', 'auto')
-                if install_mode not in ('auto', 'manual', 'gui-auto', 'playbook'):
+                if install_mode not in _INSTALL_MODES:
                     log.warning(
-                        'Skipping %s: install_mode must be "auto", "manual", "gui-auto" '
-                        'or "playbook", got "%s"',
-                        yml_file, install_mode,
+                        'Skipping %s: install_mode must be one of %s, got "%s"',
+                        yml_file, ', '.join(sorted(_INSTALL_MODES)), install_mode,
                     )
                     continue
 
@@ -851,7 +892,7 @@ def get_os_definition(os_name: str) -> OsDefinition:
         available = ', '.join(sorted(OS_CATALOG.keys()))
         raise KeyError(
             f"Unknown OS '{os_name}'. Available: {available}\n"
-            f"Run 'adare manage os-profile list' to see all profiles."
+            f"Run 'adare os-profile list' to see all profiles."
         )
     return OS_CATALOG[os_name]
 

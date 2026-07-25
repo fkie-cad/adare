@@ -1,4 +1,4 @@
-"""CLI handlers for `adare manage os-profile` commands."""
+"""CLI handlers for `adare os-profile` commands."""
 
 import logging
 import shutil
@@ -38,7 +38,7 @@ def exec_os_profile_show(arguments):
         print_error_message(
             title=f"Unknown OS profile: '{name}'",
             next_steps=[
-                'Run: adare manage os-profile list',
+                'Run: adare os-profile list',
                 f'Available: {", ".join(sorted(OS_CATALOG.keys()))}',
             ],
         )
@@ -101,6 +101,26 @@ def _resolve_template_path(os_def):
 
     if os_def.install_mode == 'manual':
         return '(manual install -- no template)', None, '(n/a)'
+
+    if os_def.installer == 'gui':
+        # GUI profiles use a stem-picked file rather than a frontmatter-selected
+        # answer-file template. Which file depends on the mode: 'gui-script'
+        # replays qmpinstall_<stem>.yaml, 'gui-auto' reads the goal/spec
+        # gui_<stem>.yaml. Reporting the gui-auto spec for a gui-script profile
+        # would name a file that is never opened.
+        from adare.hypervisor.qemu.vm_creator.gui_creator import (
+            _BUNDLED_TEMPLATES_DIR as GUI_TEMPLATES_DIR,
+            _template_stems,
+        )
+        prefix = 'qmpinstall_' if os_def.install_mode == 'gui-script' else 'gui_'
+        stems = _template_stems(os_def, None)
+        for stem in stems:
+            for root, label in ((VM_TEMPLATES_DIR, f'user ({VM_TEMPLATES_DIR})'),
+                                (GUI_TEMPLATES_DIR, f'built-in ({GUI_TEMPLATES_DIR})')):
+                candidate = Path(root) / f'{prefix}{stem}.yaml'
+                if candidate.is_file():
+                    return str(candidate), None, label
+        return f'{prefix}<{"|".join(stems)}>.yaml (not found on disk)', None, '(missing)'
 
     template_meta = None
     if os_def.platform == 'linux':
@@ -167,7 +187,7 @@ def exec_os_profile_add(arguments):
         location=str(dest),
         next_steps=[
             f'Create a VM: adare vm create {name}',
-            'List profiles: adare manage os-profile list',
+            'List profiles: adare os-profile list',
         ],
     )
 
@@ -181,7 +201,7 @@ def exec_os_profile_remove(arguments):
         print_error_message(
             title=f'No custom profile found: {name}',
             next_steps=[
-                'Run: adare manage os-profile list',
+                'Run: adare os-profile list',
                 'Only custom profiles can be removed (not built-in ones)',
             ],
         )
@@ -192,5 +212,5 @@ def exec_os_profile_remove(arguments):
 
     print_success_message(
         title=f'OS profile "{name}" removed successfully',
-        next_steps=['Run: adare manage os-profile list'],
+        next_steps=['Run: adare os-profile list'],
     )

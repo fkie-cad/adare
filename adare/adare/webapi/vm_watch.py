@@ -58,12 +58,12 @@ def build_display_path(uuid: str, name: str, view_only: bool) -> str:
 
 @router.get("/api/vm-watch-url")
 def vm_watch_url(name: str, view_only: bool = True):
-    """Resolve an ADARE VM name to a VirtualSpice display-page path.
+    """Resolve an ADARE VM name to the live-display connection info.
 
-    The frontend builds the absolute URL as
-    ``http://${location.hostname}:{spice_port}${path}`` (used both by the
-    pop-out tab and the in-app ``<iframe>`` embed). Returns 404 when the VM
-    name cannot be resolved (VirtualSpice down or no matching domain).
+    The ADARE-owned viewer connects to the returned same-origin ``ws_path``
+    (``/ws/vm/{uuid}``), which ADARE proxies to VirtualSpice internally — the
+    browser never contacts ``:8081`` directly. Returns 404 when the VM name
+    cannot be resolved (VirtualSpice down or no matching domain).
     """
     uuid = resolve_vm_uuid(name, spice_port=DEFAULT_SPICE_PORT)
     if uuid is None:
@@ -72,6 +72,9 @@ def vm_watch_url(name: str, view_only: bool = True):
             detail=f"No running VM named '{name}' found in VirtualSpice",
         )
     return {
-        "path": build_display_path(uuid, name, view_only),
+        "uuid": uuid,
+        "name": name,
+        "view_only": view_only,
         "spice_port": DEFAULT_SPICE_PORT,
+        "ws_path": f"/ws/vm/{uuid}",
     }

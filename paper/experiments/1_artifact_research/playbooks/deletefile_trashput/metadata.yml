@@ -1,0 +1,12 @@
+environments:
+  - ubuntu-1804
+  - ubuntu-2004
+  - ubuntu-2204
+  - ubuntu-2404
+  - fedora-41
+  - fedora-42
+
+tags: [trash, deletion, xdg, fred]
+
+description: >-
+  Delete a file from three home subdirectories with 'trash-put' from trash-cli and verify the resulting XDG trash can artifacts.

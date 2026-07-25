@@ -1,0 +1,30 @@
+name: kubuntu2004
+display_name: "Kubuntu 20.04 LTS (Focal Fossa)"
+platform: linux
+distribution: ubuntu
+distribution_label: "Focal Fossa"
+version: "20.04"
+architecture: x86_64
+requires_uefi: true
+# Installed from the Kubuntu 20.04 ISO, which still runs ubiquity (Calamares only
+# arrives with Kubuntu 23.04). ubiquity has no OEMDRV-style seed auto-detect, so
+# `seed_transport: http` serves the rendered preseed from the host and casper's
+# network-preseed fetches it from the url= spliced into the kernel cmdline.
+install_mode: auto
+installer: ubiquity
+seed_transport: http
+kernel_path_in_iso: /casper/vmlinuz
+initrd_path_in_iso: /casper/initrd
+kernel_cmdline: >-
+  automatic-ubiquity noprompt boot=casper console={console} ---
+# UNTESTED: x86_64 guests cannot be built on an Apple Silicon host (no TCG
+# fallback). Shipped for replication on Intel/AMD hosts.
+# Kubuntu 20.04.5 has already been pruned from cdimage; only .6 remains.
+# Hash is the vendor SHA256SUMS entry (verified 2026-07-25); a mismatch
+# re-downloads rather than installing a wrong image.
+iso_url: "https://cdimage.ubuntu.com/kubuntu/releases/20.04/release/kubuntu-20.04.6-desktop-amd64.iso"
+iso_sha256: "96f765d63302ec15615287afcb910f2e539301d753fd65c13c7300064e795b0a"
+iso_filename: "kubuntu-20.04.6-desktop-amd64.iso"
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0

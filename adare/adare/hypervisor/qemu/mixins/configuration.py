@@ -284,6 +284,15 @@ class ConfigurationMixin:
                 config.boot_mode = expected_boot_mode
                 config_updated = True
 
+            # Sync accel: a config built on one host (e.g. hvf on Apple Silicon)
+            # must not silently persist onto a different host (e.g. kvm on Linux,
+            # or tcg under cross-arch emulation) that reopens it.
+            current_accel = getattr(self, 'accel', None)
+            if current_accel and config.accel != current_accel:
+                log.info(f"Updating accel in VM config: {config.accel} → {current_accel}")
+                config.accel = current_accel
+                config_updated = True
+
             # Apply live-installer boot settings passed to the constructor
             # (e.g. a GUI-automated install re-attaching its ISO).
             requested_iso = getattr(self, '_iso_path', '')

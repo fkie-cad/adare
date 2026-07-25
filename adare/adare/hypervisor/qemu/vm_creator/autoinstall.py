@@ -381,9 +381,29 @@ _INSTALLER_LAYOUTS: dict[str, tuple[str, tuple[str, ...]]] = {
     'subiquity': ('user-data', ('meta-data',)),
     'archinstall-cloudinit': ('user-data', ('meta-data',)),
     'preseed': ('preseed.cfg', ()),
+    # ubiquity (Ubuntu / Kubuntu *desktop* ISOs) reads the same d-i answer file,
+    # but has no OEMDRV auto-detect — it is fetched over HTTP via `url=` on the
+    # kernel command line (declare `seed_transport: http`; see seed_http).
+    'ubiquity': ('preseed.cfg', ()),
     'kickstart': ('ks.cfg', ()),
     'autoyast': ('autoinst.xml', ()),
 }
+
+
+def seed_filename(os_def: OsDefinition) -> str:
+    """Name of the rendered answer file inside the seed directory.
+
+    Lets callers that hand the seed to the guest by path (rather than by volume
+    label) build the URL without re-deriving the layout — see
+    ``seed_transport: http`` in ``linux_creator``.
+    """
+    layout = _INSTALLER_LAYOUTS.get(os_def.installer)
+    if layout is None:
+        raise ValueError(
+            f"Unknown installer family '{os_def.installer}' for {os_def.name}. "
+            f'Known: {sorted(_INSTALLER_LAYOUTS)}'
+        )
+    return layout[0]
 
 
 def write_autoinstall_dir(os_def: OsDefinition, vm_name: str, output_dir: Path, setup_level: int = SetupLevel.FULL) -> Path:

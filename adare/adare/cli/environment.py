@@ -88,6 +88,7 @@ def exec_environment_publish_prepare(arguments):
         vm_url=arguments.vm_url,
         vm_format=getattr(arguments, 'vm_format', None),
         verify_url=getattr(arguments, 'verify_url', False),
+        compress=getattr(arguments, 'compress', False),
     )
 
     if result.success:

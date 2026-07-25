@@ -30,6 +30,7 @@ from adare.hypervisor.exceptions import (
     VMAlreadyRunningException,
     VMStartException,
 )
+from adare.hypervisor.qemu.accel import native_accel
 from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
 from adare.hypervisor.qemu.manager import QEMUManager
 from adare.hypervisor.qemu.mixins.commands import CommandExecutionMixin
@@ -61,7 +62,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         cpus: int = 2,
         ram: int = 2048,
         machine: str = 'pc',
-        accel: str = 'kvm',
+        accel: str | None = None,
         drive_format: str = 'qcow2',
         disk_path: str | None = None,
         architecture: str = 'x86_64',
@@ -78,7 +79,10 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         self.cpus = cpus
         self.ram = ram
         self.machine = machine
-        self.accel = accel
+        # Callers that don't resolve accel explicitly (OVA import, dev-session
+        # restore) get the host's native accelerator rather than a hardcoded
+        # 'kvm' that would be wrong on Darwin — see accel.py.
+        self.accel = accel if accel is not None else native_accel()
         self.drive_format = drive_format
         self.host_os = platform.system().lower()
         self.manager = manager
@@ -520,6 +524,34 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     if not silent:
                         log.debug(f"{message}")
                     return 0
+                if state != libvirt.VIR_DOMAIN_SHUTOFF:
+                    # Paused / crashed / pmsuspended leftovers from an aborted run.
+                    # These are still 'active' to libvirt, so create() below would
+                    # fail with an opaque "End of file while reading data" error.
+                    # Resuming is not an option either: this start already redefined
+                    # the domain onto a fresh overlay, so the leftover's disk state
+                    # is gone. Destroy it and boot cleanly.
+                    log.warning(
+                        f"VM '{self.vm_name}' was left in libvirt state {state} by an "
+                        f"earlier run; destroying it before a clean start"
+                    )
+                    try:
+                        self._libvirt_domain.destroy()
+                    except libvirt.libvirtError as e:
+                        # "cannot acquire state change lock" means libvirtd has a
+                        # wedged job on this domain — usually its QEMU died without
+                        # libvirtd noticing, leaving a phantom 'paused' entry that
+                        # neither destroy nor domjobabort can clear. Nothing in-process
+                        # can fix that, so say what will.
+                        log.error(
+                            f"Could not destroy leftover domain '{self.vm_name}': {e}\n"
+                            f"If this is a state-change-lock timeout, libvirtd holds a "
+                            f"wedged job on a domain whose QEMU process is already gone. "
+                            f"The start below will fail. Clear it by restarting the "
+                            f"session libvirt daemon (no running guests are lost if "
+                            f"'virsh -c qemu:///session list' shows none):\n"
+                            f"  pkill -f 'libvirtd -f' && virsh -c qemu:///session list --all"
+                        )
             except libvirt.libvirtError as e:
                 log.warning(f"Could not check domain state: {e}")
 

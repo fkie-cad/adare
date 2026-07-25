@@ -2,7 +2,6 @@
 
 import json
 import logging
-import platform
 import socket
 import subprocess
 import sys
@@ -10,24 +9,28 @@ import threading
 import time
 from pathlib import Path
 
-from adare.config import HYPERVISOR_CONFIGS
 from adare.console import console, print_step
+from adare.hypervisor.qemu.accel import resolve_accel
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 
 log = logging.getLogger(__name__)
 
 
-def qemu_params_for_arch(os_def: OsDefinition) -> dict:
-    """Return architecture-specific QEMU parameters.
+def qemu_params_for_arch(os_def: OsDefinition, allow_emulation: bool = False) -> dict:
+    """Return architecture-specific QEMU parameters for the GUEST architecture.
+
+    The binary and accelerator are derived from `os_def.architecture`, never
+    from the host: on a non-matching host this resolves to the guest's own
+    `qemu-system-<arch>` binary under TCG (requires `allow_emulation=True`).
 
     Returns a dict with keys: exe, machine, cpu, vga_args.
     """
-    host_os = platform.system().lower()
+    accel = resolve_accel(os_def.architecture, allow_emulation)
+    exe = f'qemu-system-{os_def.architecture}'
 
     if os_def.architecture == 'aarch64':
-        accel = 'hvf' if host_os == 'darwin' else 'kvm'
         return {
-            'exe': 'qemu-system-aarch64',
+            'exe': exe,
             'machine': f'virt,accel={accel}',
             'cpu': 'host' if accel == 'hvf' else 'max',
             # ramfb for UEFI boot + virtio-gpu-device for viogpudo (UTM guest tools driver).
@@ -35,9 +38,8 @@ def qemu_params_for_arch(os_def: OsDefinition) -> dict:
             'vga_args': ['-device', 'ramfb', '-device', 'virtio-gpu-device'],
         }
     # x86_64
-    accel = HYPERVISOR_CONFIGS['qemu']['default_accel']
     return {
-        'exe': HYPERVISOR_CONFIGS['qemu']['qemu_system_exe'],
+        'exe': exe,
         'machine': f'type=q35,accel={accel}',
         'cpu': 'max',
         'vga_args': ['-vga', 'std'],

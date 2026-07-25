@@ -190,45 +190,68 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--cpus', type=int, default=None, help='CPU count')
     @click.option('--force', is_flag=True, default=False, help='Overwrite existing VM disk image')
     @click.option('--vm-dir', type=click.Path(), default=None, help='Directory for VM disk image (default: ~/.adare/state/vms/)')
-    @click.option('--bare', is_flag=True, default=False, help='Skip ADARE agent software (Miniforge3, qemu-guest-agent)')
+    @click.option('--setup', 'setup_level', type=click.Choice(['bare', 'base', 'full', 'agent']),
+                  default=None,
+                  help='What to install during creation: bare (OS only), base (+ guest tools), '
+                       'full (+ Python env, default), agent (+ pre-installed adarevm, '
+                       'not implemented).')
+    @click.option('--bare', is_flag=True, default=False,
+                  help='Deprecated alias for --setup bare.')
     @click.option('--env-name', default=None, help='Environment file name (defaults to VM name)')
     @click.option('--interactive', is_flag=True, default=False, help='Boot VM after install for manual software installation')
     @click.option('--arch', type=click.Choice(['x86_64', 'aarch64']), default=None, help='Override CPU architecture (default: from OS profile)')
+    @click.option('--allow-emulation', is_flag=True, default=False, help='Allow QEMU TCG software emulation when --arch does not match the host CPU (slow; hardware acceleration is used otherwise).')
     @click.option('--recipe/--no-recipe', 'recipe', default=None, help='Emit a declarative recipe environment (build on load) instead of a baked disk. Default: recipe for Windows, baked for Linux.')
     @click.option('--record', is_flag=True, default=False, help='GUI-auto: record a fresh playbook with the vision agent even if a cached one exists.')
     @click.option('--relearn', is_flag=True, default=False, help='GUI-auto: discard the cached playbook and re-record from scratch.')
     @click.option('--display', is_flag=True, default=False, help='GUI-auto: show the VM window while the agent drives the installer.')
     @click.option('--template', default=None, help='GUI-auto: explicit goal/spec template name (default: gui_<distribution>).')
-    def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, bare, env_name, interactive, arch, recipe, record, relearn, display, template):
+    @click.option('--compress/--no-compress', 'compress', default=True, help='Zstd-compress the finished base disk (~30-50% smaller, transparent to readers). Default: on.')
+    def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, setup_level, bare, env_name, interactive, arch, allow_emulation, recipe, record, relearn, display, template, compress):
         """Create a new ADARE-ready VM from scratch.
 
-        OS_NAME is the target OS. Run `adare manage os-profile list` to see all entries.
+        OS_NAME is the target OS. Run `adare os-profile list` to see all entries.
 
         \b
         Common targets:
-          Ubuntu (autoinstall):  ubuntu2204, ubuntu2404, ubuntu2510, ubuntu2604
+          Ubuntu (autoinstall):  ubuntu2004, ubuntu2204, ubuntu2404, ubuntu2510, ubuntu2604
+          Ubuntu/Kubuntu ARM64:  ubuntu2004arm64, ubuntu2204arm64, ubuntu2404arm64,
+                                 kubuntu2004arm64, kubuntu2204arm64, kubuntu2404arm64
+          Kubuntu x86_64:        kubuntu2004, kubuntu2204 (ubiquity), kubuntu2404 (GUI-auto)
           Debian (preseed):      debian12, debian13, kali
-          Fedora/RHEL (kickstart): fedora44, fedora44kde, fedora43, fedora43kde, fedora42, fedora42kde, fedora41, fedora41kde, rocky9, alma9
+          Fedora/RHEL (kickstart): fedora44, fedora44kde, fedora43, fedora43kde, fedora42,
+                                 fedora42arm64, fedora42kde, fedora41, fedora41arm64,
+                                 fedora41kde, rocky9, alma9
           openSUSE (autoyast):   opensuseleap156, opensusetumbleweed
           GUI manual install:    mint, popos, nixos, elementary
           Windows (unattend):    windows10, windows11, windows11arm64
 
         \b
+        Neither Ubuntu nor Kubuntu publishes an arm64 desktop ISO, so every
+        *arm64 profile installs the live-server ISO of the matching version and
+        pulls in the desktop metapackage (ubuntu-desktop-minimal / kubuntu-desktop).
+        The x86_64 kubuntu2004/kubuntu2204 profiles ship untested — see
+        docs "VM image creation".
+
+        \b
         Examples:
           adare vm create ubuntu2404
           adare vm create debian12 --iso /path/to/debian-12-netinst.iso
+          adare vm create fedora42arm64 --iso /path/to/Fedora-Everything-netinst-aarch64-42.iso
+          adare vm create kubuntu2204arm64 --iso /path/to/ubuntu-22.04.5-live-server-arm64.iso
           adare vm create fedora41 --iso /path/to/Fedora-Workstation-Live.iso
           adare vm create kali --iso /path/to/kali-linux-installer.iso
           adare vm create mint --iso /path/to/linuxmint.iso       # manual install
           adare vm create kubuntu2404 --iso /path/to/kubuntu.iso  # GUI-automated (record then replay)
           adare vm create ubuntu2404 --bare
+          adare vm create ubuntu2404 --setup base
           adare vm create ubuntu2404 --interactive
           adare vm create windows11 --iso /path/to/Win11.iso
           adare vm create ubuntu2404 --iso /path/to/ubuntu.iso --recipe
           adare vm create ubuntu2204 --name my-ubuntu --disk-size 100G --ram 8192
         """
         from adare.cli.vm_create import exec_vm_create
-        args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, bare=bare, env_name=env_name, interactive=interactive, arch=arch, recipe=recipe, record=record, relearn=relearn, display=display, template=template)
+        args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, setup_level=setup_level, bare=bare, env_name=env_name, interactive=interactive, arch=arch, allow_emulation=allow_emulation, recipe=recipe, record=record, relearn=relearn, display=display, template=template, compress=compress)
         exec_with_error_printing(exec_vm_create, args)
 
     @vm.command(name='gui-doctor')

@@ -133,6 +133,7 @@ class WindowsVMCreator(BaseVMCreator):
                     cpus=self.cpus,
                     has_tpm=shutil.which('swtpm') is not None,
                     legacy_boot_iso=legacy_boot_iso,
+                    allow_emulation=self.allow_emulation,
                 )
             except (TimeoutError, subprocess.CalledProcessError) as e:
                 raise WindowsVMCreationError(str(e)) from e
@@ -148,6 +149,8 @@ def create_windows_vm(
     force: bool = False,
     vm_dir: Path | None = None,
     setup_level: SetupLevel = SetupLevel.FULL,
+    compress: bool = True,
+    allow_emulation: bool = False,
 ) -> Path:
     """Create a fully configured Windows VM from a user-supplied ISO.
 
@@ -163,6 +166,8 @@ def create_windows_vm(
         vm_dir=vm_dir,
         iso_path=iso_path,
         setup_level=setup_level,
+        compress=compress,
+        allow_emulation=allow_emulation,
     )
     return creator.create()
 
@@ -480,6 +485,7 @@ def _run_windows_installation(
     has_tpm: bool = False,
     utm_iso_path: Path | None = None,
     legacy_boot_iso: Path | None = None,
+    allow_emulation: bool = False,
 ) -> None:
     """Boot QEMU with UEFI + Windows ISO + virtio-win + Autounattend media and wait for install.
 
@@ -512,6 +518,7 @@ def _run_windows_installation(
             no_reboot=True,
             phase_label='Phase 1/2: WinPE',
             legacy_boot_iso=legacy_boot_iso,
+            allow_emulation=allow_emulation,
         )
         print_section('Installation (Phase 2/2)')
         print_step('Completing setup (OOBE + drivers) [dim](this may take 30-60 minutes)[/dim]')
@@ -529,6 +536,7 @@ def _run_windows_installation(
             boot_from_disk=True,
             no_reboot=False,
             phase_label='Phase 2/2: OOBE',
+            allow_emulation=allow_emulation,
         )
     else:
         print_section('Installation')
@@ -547,6 +555,7 @@ def _run_windows_installation(
             boot_from_disk=False,
             no_reboot=False,
             phase_label='Windows installation',
+            allow_emulation=allow_emulation,
         )
 
 
@@ -565,6 +574,7 @@ def _run_qemu_install_phase(
     no_reboot: bool,
     phase_label: str,
     legacy_boot_iso: Path | None = None,
+    allow_emulation: bool = False,
 ) -> None:
     """Run a single QEMU install phase.
 
@@ -575,7 +585,7 @@ def _run_qemu_install_phase(
         phase_label: Label for log messages and status display.
         legacy_boot_iso: aarch64 legacy-boot override ISO to attach (Phase 1 only).
     """
-    arch_params = qemu_params_for_arch(os_def)
+    arch_params = qemu_params_for_arch(os_def, allow_emulation)
     machine = arch_params['machine']
 
     # aarch64 + HVF: keep device MMIO/ECAM/GIC regions below 4 GB so edk2

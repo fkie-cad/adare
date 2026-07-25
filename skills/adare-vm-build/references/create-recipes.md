@@ -20,7 +20,7 @@ is the live source of truth. Common targets:
 | `--ram INTEGER` / `--cpus INTEGER` | Resources. |
 | `--force` | Overwrite an existing VM disk image. |
 | `--vm-dir PATH` | Disk image directory (default `~/.adare/state/vms/`). |
-| `--bare` | Skip ADARE agent software (Miniforge3, qemu-guest-agent). |
+| `--setup [bare\|base\|full\|agent]` | What to install at create time. **Default `full`** = guest tools + Miniforge3/`pyadare` (`qemu-guest-agent` on Linux). `base` = guest tools only, `bare` = OS only, `agent` is **not implemented** (rejected). `--bare` is the deprecated alias for `--setup bare`. |
 | `--env-name TEXT` | Environment file name (defaults to VM name). |
 | `--interactive` | Boot after install for manual software installation. |
 | `--arch [x86_64\|aarch64]` | Override the profile's architecture. |
@@ -50,6 +50,15 @@ is the live source of truth. Common targets:
   version control, rebuilt from source. Windows default (Windows disks are large and
   license-sensitive).
 
+### The ADARE agent is not installed at create time
+
+`vm create` bakes only the OS, guest tools and (at `--setup full`) a Python stack. The
+`adarevm`/`adarelib` wheels install themselves on the first experiment or dev-session
+start, and whether that uses the baked conda env or the system interpreter is
+auto-detected at run time. There is no conda-vs-system-python decision to ask the user
+about — Windows-ARM64 simply gets plain CPython 3.11 instead of Miniforge because no
+Miniforge build exists for it.
+
 ## OS profiles
 
 ```sh
@@ -73,9 +82,11 @@ adare vm test <name> --keep-vm                  # leave the test VM up for inspe
 
 `vm test` prepares the VM (OVA import or a QEMU overlay off the base disk), mounts
 shared dirs, starts adarevm, connects over WebSocket, takes a screenshot, does a test
-click, and cleans up. The registered-VM QEMU test needs a uv-based guest (runs `uv
-run python -m adarevm.server` from source in the guest). Always test before building
-environments.
+click, and cleans up. The guest needs *either* the baked `pyadare` conda env (the
+default, `--setup full`) *or* — on a non-conda guest with no prebuilt wheels under
+`/adare/vm/wheels` — `uv` installed in the guest, because `install/install.sh` does not
+build wheels and the editable fallback runs `uv sync` / `uv run adarevm`. Always test
+before building environments.
 
 ## Architecture note
 

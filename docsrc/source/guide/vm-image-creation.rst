@@ -211,6 +211,16 @@ per-screen script, in ``gui_<distro>.yaml`` (bundled, or overridden in
      visual:
        - "a Kubuntu/KDE SDDM login or desktop for user adare is shown"
 
+The stem is derived from the profile name with trailing digits stripped
+(``kubuntu2404`` → ``kubuntu``), so **all** versions of a distribution share one
+goal file *and one cached* ``gui_<stem>.play.yaml`` by default. When two versions
+ship different installers — Kubuntu 20.04/22.04 run ubiquity, 24.04 runs
+Calamares — pin the version by setting ``template:`` to the bare stem in the
+profile (the loader prepends ``gui_``), as ``kubuntu2404.yml`` does with
+``template: kubuntu2404`` → ``gui_kubuntu2404.yaml`` +
+``gui_kubuntu2404.play.yaml``. Without it, a Calamares recording would be
+replayed against ubiquity.
+
 The ``acceptance`` block is the single place "what success looks like" lives:
 after the installed disk reboots, ADARE runs **acceptance checks** (a visual
 check via the model plus structural checks — domain running, disk grew) and
@@ -221,6 +231,131 @@ capable grounding model; step / stall / wall-clock budgets bound it. Disk
 partitioning during install is destructive but sandboxed — the blast radius is
 only the throwaway VM disk. Replay is deterministic; self-heal recovers from
 minor drift but a heavily redesigned installer may need ``--relearn``.
+
+
+Scripted GUI installation (``gui-script``) — deterministic, no model
+--------------------------------------------------------------------
+
+``install_mode: gui-script`` replays a hand-calibrated QMP playbook against the
+installer's GUI. It is the *no-model* sibling of ``gui-auto``: **no vision model,
+no CV server, no** ``ADARE_VLLM_*`` **configuration**, and the same playbook
+produces the same disk on any host with QEMU.
+
+.. code-block:: bash
+
+   adare vm create ubuntu1804      # ISO auto-downloads (iso_url is baked in)
+   adare vm create ubuntu2004
+
+.. list-table:: ``gui-auto`` vs ``gui-script``
+   :header-rows: 1
+   :widths: 22 39 39
+
+   * -
+     - ``gui-auto``
+     - ``gui-script``
+   * - Targets a screen by
+     - image/text matching (CV), model on miss
+     - fixed pixel coordinates
+   * - Needs a vision model
+     - yes to record or self-heal
+     - never
+   * - Needs the CV server
+     - yes
+     - no
+   * - Waits by
+     - CV target appearing
+     - ``wait_stable`` frame diffing
+   * - Recovers from UI drift
+     - yes (self-heal, re-crop)
+     - no — coords must be recalibrated
+   * - Use it to
+     - **record** a route for a new release
+     - **replay** a route that is already proven
+
+**How the waiting works.** The primitive that makes replay robust is
+``wait_stable`` (:mod:`adare.hypervisor.qemu.vm_creator.qmp_replay`): successive
+``screendump`` frames are diffed *as raw bytes* until the screen stops changing
+for a settle period. There is no template matching, no OCR and no model, so a
+step never waits on a fixed sleep that is too short on a slow host or wastefully
+long on a fast one. During the copy phase the progress bar keeps the frame
+changing, so the wait only returns once the installer is genuinely idle on its
+"Installation Complete" dialog. A ``min:`` floor skips the static early-boot
+plymouth screens, which are otherwise perfectly stable before any UI exists.
+
+**Two constraints, both learned by breaking them.** The creator asserts the
+first and the playbooks depend on the second:
+
+- **``-vga qxl``, never ``-vga std``.** The std adapter's tablet applies a 2x
+  coordinate scaling, so absolute clicks land at double the intended offset and
+  the right half of the screen is simply unreachable.
+- **Click buttons with ``tap``, not the keyboard.** ubiquity does not reliably
+  hold keyboard focus at live-session start, and its timezone screen traps focus
+  in the city-entry field. A mouse click both focuses the window and activates
+  the button.
+
+**Playbooks.** They live beside the other templates as
+``qmpinstall_<stem>.yaml`` (override in ``~/.adare/vm-templates/``) and are
+resolved by the same stem lookup ``gui-auto`` uses, so ``template: ubuntu1804``
+keeps per-version isolation — 18.04's and 20.04's ubiquity differ visually and
+must not share a recording. Steps are ``key`` / ``type`` / ``tap`` / ``wait`` /
+``wait_stable`` / ``shot``:
+
+.. code-block:: yaml
+
+   vm:
+     ram_mb: 4096
+     cpus: 4
+     disk_size: "60G"
+     vga: qxl
+     firmware: bios
+     frame:            # the frame the tap coords were calibrated at
+       width: 1024
+       height: 768
+
+   install:
+     - {action: wait_stable, settle: 6, timeout: 360, min: 120, shot: welcome}
+     - {action: tap, coords: [763, 434, 1024, 768], note: "click 'Install Ubuntu'"}
+     - {action: type, text: "adare"}
+     - {action: key, keys: [tab], repeat: 2}
+
+   reboot_from_disk: true
+
+   verify:
+     - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
+
+Every ``tap`` carries the frame its coordinates belong to, and the creator
+**rejects** a playbook whose coords disagree with the declared ``frame`` or fall
+outside it. A coordinate recorded at another resolution otherwise mis-clicks
+silently, which is far more expensive to diagnose after a 40-minute install. A
+screenshot is written per step (``<vm>_gui-script/``) and stays on by default —
+it is the only useful debugging aid when a click lands wrong.
+
+**Calibrating a new playbook.** ``scripts/gui-install/`` is the authoring tool
+and shares this playbook format. Boot the installer with ``--keep-running`` and
+poke at it interactively to read coordinates off the screen:
+
+.. code-block:: bash
+
+   cd scripts/gui-install
+   ./gui_install.py playbooks/ubuntu2004-desktop.yaml \
+       --iso ubuntu-20.04.6-desktop-amd64.iso --vm-dir /vms --keep-running
+   ./qmp_drive.py --sock /tmp/gui-install/qmp.sock shot /tmp/now.png
+   ./qmp_drive.py --sock /tmp/gui-install/qmp.sock tap 924 566 1024 768
+
+Once the coordinates are proven, copy the playbook to
+``adare/adare/hypervisor/qemu/vm_creator/templates/qmpinstall_<stem>.yaml`` and
+flip the profile to ``install_mode: gui-script``.
+
+**Limitations.** Coordinate-fragile by construction: a different guest
+resolution silently mis-clicks, and a redesigned installer needs recalibration
+(there is no self-heal). Use ``gui-auto`` to record a route for a release nobody
+has coordinates for, and ``gui-script`` to replay one that is proven.
+
+.. warning::
+
+   The 18.04 / 20.04 playbooks are **x86_64 desktop** installs and have not been
+   replayed by us on this Apple Silicon host — x86_64 guests cannot be built
+   there (no TCG fallback). See :ref:`replicating-on-x86-64`.
 
 
 Options
@@ -243,7 +378,9 @@ Options
    * - ``--cpus N``
      - CPU core count (default: half of host cores, clamped 2--8)
    * - ``--setup LEVEL``
-     - Setup level: ``bare`` (OS only), ``base`` (+ guest tools), ``full`` (+ Python, default), ``agent`` (+ adarevm, deferred)
+     - Setup level: ``bare`` (OS only), ``base`` (+ guest tools), ``full`` (+ Python, default), ``agent`` (not implemented -- rejected)
+   * - ``--bare``
+     - Deprecated alias for ``--setup bare``
    * - ``--interactive``
      - Boot the VM after automated install for manual customization
    * - ``--force``
@@ -288,14 +425,28 @@ Each level is cumulative -- it includes everything from the levels below it.
      - Python environment (Miniforge3 + ``pyadare`` conda env)
      - Standard ADARE experiments
    * - ``agent``
-     - Pre-installed ``adarevm`` guest agent (deferred)
-     - Zero-overhead experiment runs
+     - **Not implemented** -- the CLI rejects ``--setup agent``
+     - Documented placeholder only
+
+**What ``full`` actually bakes:**
+
+- **Linux and Windows x86_64** -- Miniforge3 plus a ``pyadare`` conda environment
+- **Windows ARM64** -- plain CPython 3.11 (no conda; there is no Miniforge build for
+  Windows on ARM64), which is by design
+- **``gui-auto`` and ``manual`` installs** -- no Python environment at all; the level
+  therefore has little effect for those profiles
 
 **Guest tools per platform:**
 
 - **Linux** -- ``qemu-guest-agent``
 - **Windows x86_64** -- ``virtio-win-guest-tools.exe`` (VirtIO drivers, QGA, SPICE) + firewall rule for port 18765
 - **Windows ARM64 (UTM)** -- UTM guest tools + firewall rule for port 18765
+
+**Conda vs. system Python is never a create-time choice.** The guest's Python stack is
+auto-detected at run time (a baked conda env is used if present, otherwise the system
+interpreter, with a create-the-env recovery path). Likewise the ``adarevm``/``adarelib``
+wheels are *not* installed during ``vm create`` -- they install themselves on the first
+experiment or dev-session start.
 
 
 .. _recipe-environments:
@@ -386,8 +537,9 @@ Use ``--recipe`` / ``--no-recipe`` to override the platform default:
 Profile System
 ==============
 
-ADARE ships with built-in profiles for Ubuntu 22.04, 24.04, 25.10, Windows 10,
-Windows 11, and Windows 11 ARM64. You can add custom profiles for other
+ADARE ships profiles for Ubuntu 20.04–26.04, Kubuntu 20.04–24.04 (both
+architectures), Debian, Kali, Fedora, RHEL rebuilds, openSUSE, Windows 10,
+Windows 11 and Windows 11 ARM64. You can add custom profiles for other
 distributions.
 
 Listing profiles
@@ -395,14 +547,14 @@ Listing profiles
 
 .. code-block:: bash
 
-   adare manage os-profile list
+   adare os-profile list
 
 Showing profile details
 -----------------------
 
 .. code-block:: bash
 
-   adare manage os-profile show ubuntu2404
+   adare os-profile show ubuntu2404
 
 Adding a custom profile
 -----------------------
@@ -417,7 +569,7 @@ Create a YAML file (e.g. ``my-distro.yml``):
    distribution: ubuntu         # distribution family
    version: '1.0'
    architecture: x86_64         # 'x86_64' or 'aarch64'
-   install_mode: auto           # 'auto', 'manual', or 'gui-auto'
+   install_mode: auto           # 'auto', 'manual', 'gui-auto', or 'gui-script'
 
    # Optional -- omit for manual installs or when using --iso
    iso_url: https://example.com/my-distro.iso
@@ -449,14 +601,14 @@ Then add it:
 
 .. code-block:: bash
 
-   adare manage os-profile add my-distro.yml
+   adare os-profile add my-distro.yml
 
 Removing a custom profile
 --------------------------
 
 .. code-block:: bash
 
-   adare manage os-profile remove my-distro
+   adare os-profile remove my-distro
 
 YAML field reference
 --------------------
@@ -488,7 +640,10 @@ YAML field reference
      - ``x86_64`` (default) or ``aarch64``
    * - ``install_mode``
      - No
-     - ``auto`` (default), ``manual``, or ``gui-auto`` (vision-LLM-driven GUI automation)
+     - ``auto`` (default, unattended answer file), ``manual`` (a human clicks
+       through a QEMU window), ``gui-auto`` (a vision-LLM drives the GUI
+       installer and records a playbook), or ``gui-script`` (deterministic QMP
+       playbook replay -- no model, no CV server)
    * - ``template``
      - No
      - Jinja2 template filename for unattended install (empty = default lookup)
@@ -525,6 +680,353 @@ YAML field reference
    * - ``extra_packages``
      - No
      - List of additional packages to install
+   * - ``installer``
+     - No
+     - Installer family, i.e. how the rendered answer file reaches the installer:
+       ``subiquity`` (default), ``preseed``, ``ubiquity``, ``kickstart``,
+       ``autoyast``, ``archinstall-cloudinit``, ``manual``, ``gui``. See
+       *Installer families* below.
+   * - ``kernel_cmdline``
+     - No
+     - Kernel command line passed to QEMU's ``-append`` on the direct kernel boot.
+       Default ``autoinstall console={console} ---``. ``{console}`` expands to
+       ``ttyAMA0`` on aarch64 / ``ttyS0`` on x86_64. With
+       ``seed_transport: http`` ADARE additionally splices a ``url=`` fetch hint
+       in before the ``---`` separator; the profile does not write it itself.
+   * - ``seed_label``
+     - No
+     - Volume label of the seed ISO attached as the second drive; the installer
+       auto-detects the answer file by it. ``cidata`` (default) for cloud-init /
+       Subiquity, ``OEMDRV`` for debian-installer and Anaconda. Ignored by
+       ``ubiquity`` (which reads no label) and by ``gui`` / ``manual``.
+   * - ``seed_transport``
+     - No
+     - How the answer file reaches the guest. ``cdrom`` (default) attaches the
+       rendered seed as the labelled second drive and lets the installer
+       auto-detect it. ``http`` *additionally* serves the seed directory from the
+       host on an ephemeral port for the duration of the install
+       (:mod:`adare.hypervisor.qemu.vm_creator.seed_http`) and splices
+       ``url=http://10.0.2.2:<port>/<answer-file>`` into ``kernel_cmdline``.
+       Needed for installers with no labelled-drive auto-detect: ``ubiquity``,
+       and older debian-installer releases such as Ubuntu 18.04's.
+
+Installer families
+------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 20 58
+
+   * - ``installer``
+     - Rendered file
+     - How the installer finds it
+   * - ``subiquity``
+     - ``user-data`` (+ empty ``meta-data``)
+     - cloud-init NoCloud auto-detects the ``cidata``-labelled seed drive;
+       ``autoinstall`` on the cmdline enables it. Ubuntu **live-server** ISOs.
+   * - ``archinstall-cloudinit``
+     - ``user-data`` (+ empty ``meta-data``)
+     - Same NoCloud mechanism.
+   * - ``preseed``
+     - ``preseed.cfg``
+     - debian-installer auto-loads ``/preseed.cfg`` from any ``OEMDRV``-labelled
+       drive. Debian / Kali **netinst** ISOs.
+   * - ``ubiquity``
+     - ``preseed.cfg``
+     - Ubuntu / Kubuntu **desktop** ISOs. ubiquity has *no* labelled-drive
+       auto-detect: casper's network-preseed script fetches the file from the
+       ``url=`` on the cmdline. ADARE serves the seed directory over HTTP on an
+       ephemeral host port for the duration of the install
+       (:mod:`adare.hypervisor.qemu.vm_creator.seed_http`); under QEMU user-mode
+       networking the guest reaches the host at ``10.0.2.2``. Declare it with
+       ``seed_transport: http`` and ADARE adds the ``url=`` itself::
+
+         installer: ubiquity
+         seed_transport: http
+         kernel_cmdline: >-
+           automatic-ubiquity noprompt boot=casper console={console} ---
+
+       The labelled seed drive is still attached, because that is the
+       configuration the 18.04 install was validated against. It means the guest
+       has a second block device, so pin ``partman-auto/disk string /dev/vda`` in
+       the preseed rather than relying on there being only one disk.
+   * - ``kickstart``
+     - ``ks.cfg``
+     - Anaconda reads it from the ``OEMDRV`` drive when given
+       ``inst.ks=hd:LABEL=OEMDRV:/ks.cfg``. Fedora / RHEL-family netinst + DVD.
+   * - ``autoyast``
+     - ``autoinst.xml``
+     - AutoYaST auto-loads it from ``OEMDRV`` with ``autoyast=default``.
+   * - ``gui`` / ``manual``
+     - (none)
+     - No answer file is written; the installer is driven by the vision agent
+       (``gui-auto``) or by a human (``manual``).
+
+Desktop guests on aarch64
+-------------------------
+
+Desktop ISO availability on arm64 is uneven, and it is what bounds the options:
+
+- **Ubuntu** publishes an arm64 desktop ISO from **24.04.3 onwards**
+  (``ubuntu-24.04.4-desktop-arm64.iso``). Earlier LTS releases (22.04, 20.04) do
+  not — those trees carry only server, ppc64el and s390x images.
+- **Kubuntu** publishes ``desktop-amd64`` **exclusively**, for every release.
+  There is no arm64 Kubuntu desktop ISO to install.
+- **Fedora** published no aarch64 Workstation *Live* image before release 42.
+
+The rule ADARE follows:
+
+- **x86_64** — install the real desktop ISO where one exists (Ubuntu Desktop,
+  Kubuntu) through the ``ubiquity`` family, or Calamares through ``gui-auto``
+  for Kubuntu 24.04+.
+- **aarch64** — install the **live-server ISO** of the matching version through
+  ``subiquity`` and pull in the desktop metapackage
+  (``ubuntu-desktop-minimal`` / ``kubuntu-desktop``). This is the route that
+  produced the existing 24.04 ARM64 environments, and the only route available
+  for Kubuntu and for Ubuntu 22.04 / 20.04 on arm64.
+
+The two are *not* byte-identical installs, so the divergence is stated in the
+profile's ``display_name`` — e.g. "Kubuntu 22.04 (KDE Plasma on Ubuntu 22.04
+Server base, ARM64)" — and therefore in the environment metadata of every
+experiment run against it.
+
+.. warning::
+
+   The **x86_64** profiles ``ubuntu2004``, ``kubuntu2004`` and ``kubuntu2204``
+   ship **untested**. They cannot be built on an Apple Silicon host: the guest
+   architecture is guarded for non-aarch64 guests and QEMU is invoked as
+   ``qemu-system-<host arch>`` with ``accel=hvf``, and ADARE deliberately has no
+   TCG fallback. A green ``adare os-profile list`` row is *not* a verification —
+   treat these as recipes for replication on Intel/AMD hosts.
+
+Paper-replication profiles
+--------------------------
+
+The profiles behind the case studies, and the ISO each one expects:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 12 62
+
+   * - Profile
+     - Installer
+     - ISO to pass with ``--iso``
+   * - ``ubuntu2004arm64``
+     - subiquity
+     - ``ubuntu-20.04.5-live-server-arm64.iso``
+   * - ``ubuntu2204arm64``
+     - subiquity
+     - ``ubuntu-22.04.5-live-server-arm64.iso``
+   * - ``ubuntu2404arm64``
+     - subiquity
+     - ``ubuntu-24.04.x-live-server-arm64.iso`` (a genuine
+       ``ubuntu-24.04.4-desktop-arm64.iso`` also exists — 24.04 is the only
+       release on this list for which an arm64 *desktop* ISO is published)
+   * - ``kubuntu2004arm64``
+     - subiquity
+     - ``ubuntu-20.04.5-live-server-arm64.iso`` (+ ``kubuntu-desktop``)
+   * - ``kubuntu2204arm64``
+     - subiquity
+     - ``ubuntu-22.04.5-live-server-arm64.iso`` (+ ``kubuntu-desktop``)
+   * - ``kubuntu2404arm64``
+     - subiquity
+     - ``ubuntu-24.04.x-live-server-arm64.iso`` (+ ``kubuntu-desktop``)
+   * - ``fedora41arm64``
+     - kickstart
+     - ``Fedora-Everything-netinst-aarch64-41-1.4.iso``
+   * - ``fedora42arm64``
+     - kickstart
+     - ``Fedora-Everything-netinst-aarch64-42-1.1.iso``
+   * - ``ubuntu1804`` (x86_64)
+     - gui-script
+     - auto-downloads ``ubuntu-18.04.5-desktop-amd64.iso``
+   * - ``ubuntu2004`` (x86_64)
+     - gui-script
+     - auto-downloads ``ubuntu-20.04.6-desktop-amd64.iso``
+   * - ``kubuntu2004`` / ``kubuntu2204`` (x86_64)
+     - ubiquity
+     - auto-downloads ``kubuntu-20.04.6`` / ``22.04.5-desktop-amd64.iso``
+   * - ``kubuntu2404`` (x86_64)
+     - gui (Calamares)
+     - ``kubuntu-24.04.x-desktop-amd64.iso``
+   * - ``fedora41`` / ``fedora42`` (x86_64)
+     - kickstart
+     - auto-downloads ``Fedora-Everything-netinst-x86_64-4{1,2}-1.x.iso``
+
+Both Fedora profiles install from **Everything-netinst** rather than the
+Workstation Live ISO: Fedora 41 has no aarch64 live image at all, so netinst is
+the only route that keeps 41 and 42 method-identical, and directly kernel-booting
+live media would additionally need a per-release ``root=live:CDLABEL=...``. Both
+releases are EOL, so their metalink no longer resolves to a mirror — the profiles
+pin ``inst.repo`` at ``dl.fedoraproject.org/pub/archive/...``, which also serves
+stage2. The shared kickstart template's ``%post`` repoints dnf at the same
+archive if the installed system's metalink fails, then installs the ADARE extras
+— which also covers live media, where Anaconda ignores ``%packages`` entirely.
+
+.. note::
+
+   **Ubuntu 20.04 (focal) needs two extra autoinstall keys**, both in
+   ``autoinstall_ubuntu_focal.yaml`` / ``autoinstall_kubuntu_focal.yaml``:
+
+   - **No ``packages:`` block.** Focal's curtin leaves ``devpts`` unmounted inside
+     ``/target``, so apt's pty logging fails with *"Can not write log (Is /dev/pts
+     mounted?) - posix_openpt (19: No such device)"* and subiquity's in-target
+     package step exits 100 — after which subiquity drops to a rescue shell and the
+     unattended install hangs until ADARE's timeout. Setting ``apt: conf:
+     'Dpkg::Use-Pty "false";'`` does **not** help: curtin writes that to
+     ``/etc/apt/apt.conf.d/94curtin-config`` and deletes it again before the package
+     step runs. Focal therefore installs everything from ``late-commands`` with
+     ``apt-get install -y -o Dpkg::Use-Pty=false``, the one place the setting
+     survives. Jammy and noble ship a curtin that mounts devpts, so they keep using
+     ``packages:``.
+   - ``shutdown: poweroff`` works on focal — a 20.04.**5** ISO carries subiquity
+     snap rev 3704 (2022-era), not the 2020 original, because point releases refresh
+     the installer. ``sizing-policy: all`` is accepted but *ignored* by it: the root
+     LV still lands at half the PV (measured 28.5 GiB of 57 GiB on a 60 GB disk),
+     which is ample for a desktop guest.
+
+   Every new template also declares ``error-commands`` that dump the curtin/apt
+   logs to ``/dev/console`` (captured into ``<vm>_install.log``). Without it a
+   failed in-target package install reaches the host as nothing more than
+   ``returned non-zero exit status 100``. Those commands deliberately do **not**
+   power the guest off: ADARE infers install success from QEMU exiting, so a
+   poweroff-on-error would present a half-installed disk as a finished build.
+   A ``<disk>_install.log`` scan for installer failure markers runs after every
+   Linux build for the same reason — QEMU exits ``0`` on SIGTERM and on a closed
+   QEMU window too.
+
+.. warning::
+
+   **Fedora guests run with SELinux in permissive mode.** ADARE drives Linux
+   guests through the QEMU guest agent, and Fedora confines that agent to the
+   ``virt_qemu_ga_t`` domain — confined so tightly that it cannot stat
+   ``/usr/bin/sudo``. Probing a stock enforcing install through the agent gives
+   ``ls -l /usr/bin/sudo`` → *Permission denied*, ``command -v sudo`` → not found,
+   ``systemctl`` → *Access denied*, so every ADARE setup step fails even though
+   every package is installed. ``kickstart_fedora_workstation.yaml`` therefore
+   sets ``selinux --permissive``.
+
+   Permissive, not disabled: files are still labelled and AVCs are still audited,
+   so SELinux contexts and audit entries keep showing up in forensic diffs — only
+   the denials stop. It remains a deviation from a stock Fedora install and should
+   be stated wherever these environments are reported. Debian/Ubuntu guests are
+   unaffected (no SELinux confinement of the agent). The same one-line fix applies
+   to ``kickstart_fedora_kde.yaml`` and ``kickstart_rhel_workstation.yaml``, which
+   have not been changed.
+
+**Install timeout.** One unattended install is allowed
+``ADARE_VM_INSTALL_TIMEOUT_MINUTES`` minutes (default **150**) before it is
+treated as hung and the half-written disk is discarded. It is a hang detector,
+not a budget — a healthy install that runs long must not be killed. Measured on
+an M-series host: an Ubuntu live-server autoinstall lands well inside an hour,
+while a Fedora Workstation netinst needs longer (≈1900 RPMs fetched from the
+archive, then their scriptlets, before ``%post`` even starts) and a
+``kubuntu-desktop`` build pulls the whole Plasma set over the network. Raise it
+for a slow link:
+
+.. code-block:: bash
+
+   ADARE_VM_INSTALL_TIMEOUT_MINUTES=240 adare vm create fedora42arm64 --iso ...
+
+Register an environment under a name of your choosing with ``--env-name``, which
+is how the paper's hyphenated environment names are produced:
+
+.. code-block:: bash
+
+   adare vm create fedora42arm64 \
+       --iso ~/.adare/isos/Fedora-Everything-netinst-aarch64-42-1.1.iso \
+       --env-name fedora-42
+
+
+.. _replicating-on-x86-64:
+
+Replicating on x86_64
+---------------------
+
+.. important::
+
+   **The aarch64 disks are not portable to x86_64.** A qcow2 built by the
+   ``*arm64`` profiles contains an ARM64 kernel and userland; there is no
+   conversion. Replicating on an x86 host means *rebuilding* from the x86
+   profiles, which produces a different (though method-identical) artefact.
+
+**Host requirements.** Linux with **KVM**. ADARE selects the accelerator by host
+OS: ``hvf`` on Darwin, otherwise ``kvm``
+(:mod:`adare.hypervisor.qemu.vm_creator.qmp_utils`, ``config/__init__.py``).
+**Windows hosts are not covered** — WHPX is never selected, so a Windows host
+falls through to ``kvm`` and QEMU fails to start. Use Linux, or WSL2 with nested
+virtualisation.
+
+Each x86 profile bakes its ``iso_url`` + ``iso_sha256``, so no ``--iso`` is
+needed: the ISO is downloaded into the cache and hash-checked, and a mismatch
+re-downloads rather than installing a wrong image. One command per environment:
+
+.. code-block:: bash
+
+   # Ubuntu desktop, deterministic GUI replay (no vision model)
+   adare vm create ubuntu1804 --env-name ubuntu-1804
+   adare vm create ubuntu2004 --env-name ubuntu-2004
+
+   # Kubuntu desktop via ubiquity + an HTTP-served preseed
+   adare vm create kubuntu2004 --env-name kubuntu-2004
+   adare vm create kubuntu2204 --env-name kubuntu-2204
+
+   # Kubuntu 24.04 runs Calamares -> needs the vision agent (see gui-auto)
+   adare vm create kubuntu2404 --iso kubuntu-24.04.3-desktop-amd64.iso \
+       --env-name kubuntu-2404
+
+   # Fedora, Everything-netinst pinned to the archive mirror
+   adare vm create fedora41 --env-name fedora-41
+   adare vm create fedora42 --env-name fedora-42
+
+   # Ubuntu server-based x86 profiles (same method as the arm64 ones)
+   adare vm create ubuntu2204 --env-name ubuntu-2204
+   adare vm create ubuntu2404 --env-name ubuntu-2404
+
+Then load and verify each one, **sequentially** — a concurrent build starves the
+booting guest badly enough to time out the guest agent:
+
+.. code-block:: bash
+
+   adare env load ~/.adare/state/environments/<name>_*.yml -f
+   adare env verify <name>          # installs the agent and performs a GUI click
+
+.. warning::
+
+   **The x86 profiles are unverified by us.** This work was done on an Apple
+   Silicon host, which cannot build x86_64 guests at all (no TCG fallback), so
+   every x86 profile above is shipped on the strength of its template and — for
+   ``ubuntu1804`` / ``ubuntu2004`` — a playbook validated on someone else's x86
+   host. Treat the first run on x86 as a bring-up, not a regression test.
+
+   Vendor URLs for EOL images also rot: focal has already moved to
+   ``old-releases``, and Kubuntu 20.04.5 has already been pruned (only ``.6``
+   remains). The baked SHA-256 turns that rot into a loud failure rather than a
+   silently wrong image, but a 404 still needs the URL refreshed.
+
+The two warnings above apply to x86 exactly as they do to aarch64: **Fedora
+guests run with SELinux permissive**, and **Ubuntu 20.04 (focal) needs the
+``-o Dpkg::Use-Pty=false`` workaround** for its unmounted ``/dev/pts``.
+
+.. note::
+
+   **Images built before the interface-matching fix boot slowly and need the
+   run-time network repair.** Ubuntu/Kubuntu images whose autoinstall baked a
+   *named* interface (``enp0s1``) into netplan cannot configure their NIC at run
+   time, because ADARE gives it a different PCI address (``enp0s31``). Symptoms,
+   as measured on the eight paper-replication environments:
+
+   - every boot pays the full **120 s** ``systemd-networkd-wait-online`` timeout,
+     so ``VM is ready`` lands at 127-164 s instead of ~16 s;
+   - Kubuntu / Ubuntu 22.04 / 20.04 end up with no address at all, the
+     ``//10.0.2.4/qemu`` mount fails, and file transfer degrades to QGA;
+   - Ubuntu 24.04 is rescued by NetworkManager one second after the timeout, so it
+     passes but still pays the 120 s;
+   - Fedora is unaffected (NetworkManager manages any unnamed device).
+
+   ADARE repairs this after boot (see :ref:`guest-network-repair`), so these
+   images verify green as they are. Rebuilding them picks up the
+   ``match: {name: "e*"}`` seed and removes the 120 s penalty as well.
 
 
 Custom Templates
@@ -590,7 +1092,7 @@ Field reference:
 - ``schema`` (required, integer) -- Metadata schema version. Currently ``1``.
   Loading a template with an unknown schema raises an explicit error.
 - ``id`` (required, string) -- Stable identifier surfaced in
-  ``adare manage os-profile show``. Independent of filename.
+  ``adare os-profile show``. Independent of filename.
 - ``description`` (string) -- Human-readable summary.
 - ``maintainer`` (string) -- Name or handle responsible for the template.
 - ``revision`` (string) -- Free-form revision marker (date, version, etc.).
@@ -631,7 +1133,7 @@ Writing a custom template
 
    .. code-block:: bash
 
-      adare manage os-profile add my-ubuntu.yml
+      adare os-profile add my-ubuntu.yml
       adare vm create my-ubuntu
 
 

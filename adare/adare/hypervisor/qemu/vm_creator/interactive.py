@@ -63,6 +63,7 @@ def run_post_install_session(
     cpus: int,
     console_mode: bool = False,
     ask_store: bool = False,
+    allow_emulation: bool = False,
 ) -> tuple[bool, list[dict]]:
     """Boot a finished VM disk image for manual customization.
 
@@ -91,6 +92,8 @@ def run_post_install_session(
         console_mode: If True, attach the guest-agent console and record commands.
         ask_store: If True, prompt for a store/discard decision in the GUI-only
             branch (extend sessions); kept False for `vm create`.
+        allow_emulation: Permit QEMU TCG software emulation when the guest
+            architecture doesn't match the host (see --allow-emulation)
 
     Returns:
         Tuple of ``(store, recorded)``. In ``console_mode`` these are passed
@@ -99,7 +102,7 @@ def run_post_install_session(
         GUI-only branch ``recorded`` is always ``[]`` and ``store`` is the
         prompted decision when ``ask_store`` (else ``True``).
     """
-    arch_params = qemu_params_for_arch(os_def)
+    arch_params = qemu_params_for_arch(os_def, allow_emulation)
 
     # QMP socket for ACPI shutdown; QGA socket only when the console is used.
     qmp_sock_path = _interactive_socket(disk_path, 'qmp')

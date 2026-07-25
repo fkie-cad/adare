@@ -118,13 +118,11 @@ def exec_download_testfunction(arguments):
 def exec_download_bundle(arguments):
     """Download an experiment bundle (experiment + all dependencies)."""
     project_directory = get_project_path(arguments)
-    include_disk_images = getattr(arguments, 'include_disk_images', False)
 
     api = AdareAPI()
     result = api.web.download_bundle(DownloadBundleRequest(
         project_path=project_directory,
         ulid=arguments.ulid,
-        include_disk_images=include_disk_images
     ))
 
     if not result.success:

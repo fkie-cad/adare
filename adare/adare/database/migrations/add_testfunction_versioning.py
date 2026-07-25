@@ -14,7 +14,9 @@ version under a stable identity (instead of a destructive delete+recreate):
 Existing rows are backfilled to version=1 / is_current=1 and get a v1 history
 row using their current sha256hash.
 
-Run this script manually if you have an existing ADARE installation:
+This migration is applied automatically when the global database is opened
+(see ``adare.database.migrations.runner``). Run it explicitly with:
+    adare db migrate
     python -m adare.database.migrations.add_testfunction_versioning
 
 For new installations, the columns/tables are created automatically from the
@@ -36,7 +38,12 @@ def _existing_columns(conn, table: str) -> set[str]:
 
 
 def _add_column(conn, table: str, column: str, ddl: str) -> None:
-    if column in _existing_columns(conn, table):
+    columns = _existing_columns(conn, table)
+    if not columns:
+        # Table not present (very old / partial database) — create_all owns it.
+        print(f"· Table '{table}' not present, skipping.")
+        return
+    if column in columns:
         print(f"✓ Column '{table}.{column}' already exists, skipping.")
         return
     print(f"Adding column '{table}.{column}'...")
@@ -73,6 +80,10 @@ def _create_history_tables(conn) -> None:
 
 
 def _backfill(conn) -> None:
+    if not _existing_columns(conn, 'test_function_file') or not _existing_columns(conn, 'test_function'):
+        print("· Testfunction tables not present, nothing to backfill.")
+        return
+
     # Normalise version/is_current on any rows left NULL by the ALTER.
     conn.execute(text("UPDATE test_function_file SET version = 1 WHERE version IS NULL"))
     conn.execute(text("UPDATE test_function SET version = 1 WHERE version IS NULL"))
@@ -125,21 +136,25 @@ def _backfill(conn) -> None:
     print(f"✓ Backfilled {len(file_rows)} file version(s) and {len(method_rows)} method version(s).")
 
 
+def upgrade(conn) -> None:
+    """Add versioning columns + history tables on ``conn`` (idempotent)."""
+    _add_column(conn, 'test_function_file', 'version', "INTEGER NOT NULL DEFAULT 1")
+    _add_column(conn, 'test_function', 'version', "INTEGER NOT NULL DEFAULT 1")
+    _add_column(conn, 'test_function', 'is_current', "BOOLEAN NOT NULL DEFAULT 1")
+    _create_history_tables(conn)
+    _backfill(conn)
+
+
 def run_migration() -> bool:
-    """Add testfunction versioning columns + history tables to the global DB."""
+    """Manual entry point: run :func:`upgrade` against the global database."""
     from adare.database.api.base import GlobalDatabaseApi
 
     print("Running migration: add_testfunction_versioning")
 
     try:
         with GlobalDatabaseApi() as api:
-            engine = api.engine
-            with engine.begin() as conn:
-                _add_column(conn, 'test_function_file', 'version', "INTEGER NOT NULL DEFAULT 1")
-                _add_column(conn, 'test_function', 'version', "INTEGER NOT NULL DEFAULT 1")
-                _add_column(conn, 'test_function', 'is_current', "BOOLEAN NOT NULL DEFAULT 1")
-                _create_history_tables(conn)
-                _backfill(conn)
+            with api.engine.begin() as conn:
+                upgrade(conn)
 
         print("✓ Migration completed successfully!")
         print("\nIMPORTANT:")

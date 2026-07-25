@@ -12,7 +12,6 @@ Supported transfer modes (chosen automatically):
 """
 import logging
 import os
-import platform
 import shutil
 import subprocess
 import time
@@ -22,6 +21,7 @@ from adare.config import get_vm_credentials
 from adare.exceptions import LoggedException
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
 from adare.hypervisor.exceptions import GuestAgentTimeoutException, HypervisorException
+from adare.hypervisor.qemu.accel import resolve_accel
 from adare.hypervisor.qemu.disk_diff import DiskDiffComparator
 from adare.hypervisor.qemu.file_transfer import get_file_transfer_strategy
 from adare.hypervisor.qemu.guestfish_client import GuestfishClient
@@ -185,21 +185,15 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             vm_architecture = 'x86_64'
             log.warning("Guest architecture not set in environment — defaulting to x86_64")
 
-        # Block x86_64 guests on Apple Silicon (no hardware acceleration)
-        if platform.system() == 'Darwin' and platform.machine() == 'arm64' and vm_architecture != 'aarch64':
-            raise HypervisorException(
-                f"QEMU cannot hardware-accelerate {vm_architecture} guests on Apple Silicon (ARM). "
-                "Only aarch64 guests are supported on Apple Silicon with HVF. "
-                "Use VirtualBox instead (supports x86 via Rosetta)."
-            )
+        # Opt-in cross-arch emulation: CLI flag OR a persisted environment setting.
+        allow_emulation = getattr(context.config, 'allow_emulation', False) or (
+            bool(environment_metadata.hypervisor_config.get('allow_emulation', False))
+            if environment_metadata else False
+        )
+        vm_accel = resolve_accel(vm_architecture, allow_emulation)
 
-        # Compute architecture-appropriate machine type and accelerator
-        if vm_architecture == 'aarch64':
-            vm_machine = 'virt'
-            vm_accel = 'hvf' if platform.system() == 'Darwin' else 'kvm'
-        else:
-            vm_machine = 'pc'
-            vm_accel = 'hvf' if platform.system() == 'Darwin' else 'kvm'
+        # Compute architecture-appropriate machine type
+        vm_machine = 'virt' if vm_architecture == 'aarch64' else 'pc'
 
         # Create QEMU VM instance with optional external disk path
         username, password = get_vm_credentials(context.guest_platform)
@@ -404,18 +398,38 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         except ValueError:
             return 3
 
+    # Cap for the escalated readiness budget, so a genuinely dead VM cannot
+    # dead-wait indefinitely on the last attempt.
+    _READY_TIMEOUT_CAP = 600
+
     @staticmethod
     def _ready_timeout() -> int:
-        """Per-attempt guest-agent readiness budget (ADARE_VM_READY_TIMEOUT, default 90s).
+        """First-attempt guest-agent readiness budget (ADARE_VM_READY_TIMEOUT, default 90s).
 
-        A genuine success always reaches QGA well under this; a hang never does.
-        Kept far below the historical 360s so a failed attempt is abandoned fast
-        (~90s) rather than dead-waiting the full budget.
+        A hung Windows cold boot never reaches QGA, so the first attempt stays
+        short and is abandoned fast rather than dead-waiting the full budget.
+        Later attempts *extend* this — see ``_ready_timeout_for_attempt``.
         """
         try:
             return max(30, int(os.environ.get('ADARE_VM_READY_TIMEOUT', '90')))
         except ValueError:
             return 90
+
+    @classmethod
+    def _ready_timeout_for_attempt(cls, attempt: int) -> int:
+        """Readiness budget for boot attempt ``attempt`` (1-based), doubling each time.
+
+        Retries used to reuse one flat budget, but each retry *cold-boots afresh*
+        (``_reset_vm_for_boot_retry``), so N attempts of 90s never accumulate into
+        one long boot: a guest that genuinely needs 164s could never pass, no
+        matter how many attempts it got.
+
+        Doubling keeps the fast-fail property that motivated the short default —
+        attempt 1 still abandons a hung guest in 90s — while letting a slow but
+        healthy desktop boot succeed on attempt 2 (default 90s / 180s / 360s).
+        """
+        budget = cls._ready_timeout() * (2 ** (attempt - 1))
+        return min(budget, cls._READY_TIMEOUT_CAP)
 
     async def _reset_vm_for_boot_retry(self, context):
         """Return the VM to a clean, independent cold-boot state between boot attempts.
@@ -484,7 +498,8 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         from adare.types.stages import VMGuestAgentWaitStage, VMStartStage
 
         max_attempts = self._boot_attempts()
-        ready_timeout = self._ready_timeout()
+        # Budget escalates per attempt; total is what a full exhaustion costs.
+        attempt_budgets = [self._ready_timeout_for_attempt(a) for a in range(1, max_attempts + 1)]
 
         playbook_settings = context.playbook.settings if context.playbook and hasattr(context.playbook, 'settings') else None
         gui_mode = resolve_gui_execution_mode(context.vm, playbook_settings)
@@ -494,12 +509,14 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             if context.user_interrupt_event and context.user_interrupt_event.is_set():
                 raise LoggedException(log, 'VM boot cancelled by user')
 
+            ready_timeout = attempt_budgets[attempt - 1]
+
             # Between attempts: tear down to a clean, independent cold-boot state.
             if attempt > 1:
                 log.warning(
                     f"Boot attempt {attempt - 1}/{max_attempts} did not reach the guest "
-                    f"agent in {ready_timeout}s; tearing down and retrying "
-                    f"(attempt {attempt}/{max_attempts})"
+                    f"agent in {attempt_budgets[attempt - 2]}s; tearing down and retrying "
+                    f"(attempt {attempt}/{max_attempts}, budget {ready_timeout}s)"
                 )
                 await self._reset_vm_for_boot_retry(context)
 
@@ -533,8 +550,16 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 break
         else:
             raise GuestAgentTimeoutException(
-                context.vm.vm_name, max_attempts * ready_timeout
+                context.vm.vm_name, sum(attempt_budgets)
             )
+
+        # Repair guest networking before anything depends on it. ADARE pins the
+        # NIC to a PCI address that renames the interface away from the name the
+        # installer baked in, which leaves netplan guests with no address at all.
+        # See guest_network.py for the full mechanism.
+        from adare.hypervisor.qemu.guest_network import ensure_guest_network
+
+        await ensure_guest_network(context.vm, context.user_interrupt_event)
 
         # Stage 3: Post-boot file transfer (only if strategy needs it)
         if self.file_transfer.has_post_boot_transfer:
@@ -543,6 +568,10 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             stage = VMPostBootTransferStage()
             with StageCtxManager(stage, context.experiment_run_ulid, context.user_interrupt_event):
                 stage.sub_msg = self.file_transfer.post_boot_description
+                # Exposed so a strategy that degrades mid-transfer (SMB -> QGA) can
+                # relabel the stage instead of failing under a name describing a
+                # step that is no longer running.
+                context.vm_post_boot_stage = stage
                 await self.file_transfer.post_boot_transfer(context)
 
     async def retrieve_artifacts(self, context, post_interrupt: bool = False, force_stop: bool = False):

@@ -4,51 +4,31 @@ platform: linux
 distribution: ubuntu
 distribution_label: "Focal Fossa"
 version: "20.04"
-# Genuine desktop edition installed by replaying a deterministic playbook through
-# its graphical ubiquity installer — no LLM. Buttons are located by their on-screen
-# LABEL via ADARE's cv-server OCR (find_text), so the steps are independent of
-# window position / resolution / minor version differences.
-install_mode: playbook
+architecture: x86_64
+# Deterministic replay of the graphical ubiquity installer: a hand-calibrated QMP
+# playbook (templates/qmpinstall_ubuntu2004.yaml) is replayed step by step, with
+# `wait_stable` frame-diffing instead of image recognition. No vision model and no
+# CV server, so this needs no ADARE_VLLM_* configuration. `install_mode: gui-auto`
+# remains the way to *record* a new playbook for a release we have no coords for.
+#
+# This is the *genuine desktop edition*. ubuntu2004arm64.yml is a different thing:
+# the server ISO plus a desktop metapackage, which is what an aarch64 host can build.
+install_mode: gui-script
 installer: gui
+# Hash is the vendor SHA256SUMS entry (verified 2026-07-25); a mismatch
+# re-downloads rather than installing a wrong image.
 iso_url: "https://releases.ubuntu.com/20.04/ubuntu-20.04.6-desktop-amd64.iso"
 iso_sha256: "510ce77afcb9537f198bc7daa0e5b503b6e67aaed68146943c231baeaab94df1"
 iso_filename: "ubuntu-20.04.6-desktop-amd64.iso"
 default_disk_size: "60G"
 default_ram_mb: 8192
 default_cpus: 0
+# BIOS, not UEFI: the playbook's coordinates were calibrated on a SeaBIOS boot
+# (`firmware: bios` in qmpinstall_ubuntu2004.yaml). Switching to OVMF changes the
+# boot path and the early screens the replay counts on.
 requires_uefi: false
-
-install_steps:
-  - {action: wait_stable, settle: 6, timeout: 360, min: 120, note: "live session + Welcome"}
-  - {action: click_text, text: "Install Ubuntu", shot: welcome}
-  - {action: wait_stable, settle: 4, timeout: 120}
-  - {action: click_text, text: "Continue", shot: keyboard, note: "Keyboard layout"}
-  - {action: wait_stable, settle: 4, timeout: 120}
-  - {action: click_text, text: "Continue", shot: updates, note: "Updates/other software"}
-  - {action: wait_stable, settle: 6, timeout: 180}
-  - {action: click_text, text: "Install Now", shot: installtype, note: "Erase disk"}
-  - {action: wait_stable, settle: 4, timeout: 120}
-  - {action: click_text, text: "Continue", shot: writeconfirm, note: "Write changes dialog"}
-  - {action: wait_stable, settle: 6, timeout: 180}
-  - {action: click_text, text: "Continue", shot: timezone, note: "Timezone"}
-  - {action: wait_stable, settle: 6, timeout: 120, shot: whoami}
-  # 'Your name' is auto-focused on this screen; type + Tab through the form.
-  - {action: type, text: "adare", note: "Your name"}
-  - {action: key, keys: [tab]}
-  - {action: key, keys: [ctrl, a]}
-  - {action: type, text: "ubuntu2004", note: "computer name"}
-  - {action: key, keys: [tab], repeat: 2}
-  - {action: type, text: "adare", note: "password"}
-  - {action: key, keys: [tab]}
-  - {action: type, text: "adare", note: "confirm"}
-  - {action: shot, name: user-filled}
-  - {action: click_text, text: "Continue", note: "start install"}
-  - {action: wait_stable, settle: 45, timeout: 3600, shot: complete, note: "wait for install"}
-
-verify_steps:
-  - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
-  - {action: click_text, text: "adare", note: "select the adare user"}
-  - {action: wait, seconds: 2}
-  - {action: type, text: "adare", note: "password"}
-  - {action: key, keys: [ret]}
-  - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}
+# Force a dedicated playbook (qmpinstall_ubuntu2004.yaml) — 20.04's and 18.04's
+# ubiquity differ visually, so they must not share a recording.
+template: ubuntu2004
+# UNTESTED ON THIS HOST: x86_64 guests cannot be built on Apple Silicon (no TCG
+# fallback). The playbook itself was validated on an x86_64 host.
