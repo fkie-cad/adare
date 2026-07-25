@@ -1,13 +1,22 @@
 name: fedora41
-display_name: "Fedora 41 Workstation"
+display_name: "Fedora 41 Workstation (GNOME)"
 platform: linux
 distribution: fedora
+distribution_label: Workstation
 version: "41"
-install_mode: manual
-iso_url: ""
-iso_sha256: ""
-iso_filename: ""
+install_mode: auto
+installer: kickstart
+template: kickstart_fedora_workstation.yaml
+iso_url: "https://download.fedoraproject.org/pub/fedora/linux/releases/41/Everything/x86_64/iso/Fedora-Everything-netinst-x86_64-41-1.4.iso"
+iso_sha256: "bc943f6b426ef8db9587715d87d6361c4048146f3aadd36a9dcbab2b33fe320e"
+iso_filename: "Fedora-Everything-netinst-x86_64-41-1.4.iso"
+kernel_path_in_iso: /images/pxeboot/vmlinuz
+initrd_path_in_iso: /images/pxeboot/initrd.img
+kernel_cmdline: "inst.ks=hd:LABEL=OEMDRV:/ks.cfg inst.text console={console}"
+seed_label: OEMDRV
+seed_transport: cdrom
 default_disk_size: "60G"
-default_ram_mb: 4096
+default_ram_mb: 8192
 default_cpus: 0
-requires_uefi: true
+requires_uefi: false
+architecture: x86_64
