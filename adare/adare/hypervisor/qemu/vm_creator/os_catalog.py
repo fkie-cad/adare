@@ -58,7 +58,7 @@ class OsDefinition:
     extra_packages: list[str] = field(default_factory=list)
     install_mode: str = 'auto'  # 'auto' (unattended seed file), 'manual'
     #   (interactive window), 'gui-auto' (vision-LLM drives the GUI installer),
-    #   or 'gui-script' (deterministic QMP playbook replay, no model). See
+    #   or 'playbook' (deterministic CV/OCR-driven replay, no model). See
     #   _INSTALL_MODES.
     architecture: str = 'x86_64'  # 'x86_64' or 'aarch64'
     template: str = ''  # Custom template filename (empty = use default lookup)
@@ -773,10 +773,9 @@ _REQUIRED_YAML_FIELDS = {'name', 'platform', 'distribution', 'version'}
 
 # Recognised install_mode values. 'auto' is the unattended seed-file path;
 # 'manual' opens a QEMU window for a human; 'gui-auto' lets a vision-LLM agent
-# drive the graphical installer; 'gui-script' replays a hand-calibrated QMP
-# playbook against it with no model involved; 'playbook' replays a CV-driven
-# playbook that locates installer buttons by on-screen label via the cv-server.
-_INSTALL_MODES = frozenset({'auto', 'manual', 'gui-auto', 'gui-script', 'playbook'})
+# drive the graphical installer; 'playbook' replays a CV-driven playbook that
+# locates installer buttons by on-screen label via the cv-server (no model).
+_INSTALL_MODES = frozenset({'auto', 'manual', 'gui-auto', 'playbook'})
 
 
 def _load_yaml_profiles() -> dict[str, OsDefinition]:
