@@ -1,0 +1,28 @@
+# GUI-automation goal/spec for Ubuntu 20.04 Desktop (ubiquity installer).
+#
+# This is the record-run INPUT — a high-level goal, not a per-screen script.
+# The vision agent reads it, drives the installer, and emits a reusable
+# playbook (gui_ubuntu2004.play.yaml) that later installs replay with no LLM.
+
+goal: >
+  Install Ubuntu 20.04 to the whole disk (erase it completely). Proceed through
+  the graphical installer accepting sensible defaults. When asked for user
+  details, create a user with name "adare", username "adare", and password
+  "adare", set the computer name (hostname) to "ubuntu2004", and choose to log
+  in automatically. Let the system restart when the installation finishes.
+
+hints:
+  - "On the welcome screen choose English and click 'Install Ubuntu' — do NOT click 'Try Ubuntu'."
+  - "On 'Updates and other software', leave the default 'Normal installation'; you may UNCHECK 'Download updates while installing Ubuntu' to keep it offline and fast."
+  - "On 'Installation type' choose 'Erase disk and install Ubuntu' — do NOT choose 'Something else' or manual partitioning. Click 'Install Now' and confirm 'Continue' on the 'Write the changes to disks?' dialog."
+  - "Accept the default timezone/location and continue."
+  - "On 'Who are you?' set name/username/password all to 'adare', computer name 'ubuntu2004', and select 'Log in automatically'."
+  - "Advance with the Continue/Install button; the final screen offers 'Restart Now' — that means the install is done; report done."
+
+acceptance:
+  # The installer must have written a real system to the disk.
+  min_disk_bytes: 5000000000
+  # Visual expectations checked on the rebooted (installed) system.
+  visual:
+    - "the screen shows an Ubuntu GNOME desktop or a GDM login screen for the user 'adare', NOT the ubiquity installer or the live-session 'Try/Install' desktop"
+    - "the session or login is for the user 'adare'"

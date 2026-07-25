@@ -2,14 +2,16 @@
 
 Most installer families auto-detect their answer file from a labelled drive
 (``cidata`` for cloud-init, ``OEMDRV`` for debian-installer / Anaconda), so ADARE
-just attaches a seed ISO. **ubiquity** — the installer on the Ubuntu and Kubuntu
-*desktop* ISOs — has no such auto-detect: casper's network-preseed init script
-fetches the answer file from the ``url=`` given on the kernel command line.
+just attaches a seed ISO. Two do not: **ubiquity** — the installer on the Ubuntu
+and Kubuntu *desktop* ISOs, whose casper network-preseed init script fetches the
+answer file from the ``url=`` given on the kernel command line — and older
+**debian-installer** releases such as Ubuntu 18.04's, which ignore an OEMDRV
+volume entirely.
 
-Under QEMU user-mode networking the guest always reaches the host at ``10.0.2.2``,
-so serving the seed directory on an ephemeral host port for the duration of the
-install is enough. The port is substituted into ``OsDefinition.kernel_cmdline``
-via ``{seed_port}``.
+Those profiles declare ``seed_transport: http``. Under QEMU user-mode networking
+the guest always reaches the host at ``10.0.2.2``, so serving the seed directory
+on an ephemeral host port for the duration of the install is enough;
+``linux_creator`` splices the resulting ``url=`` into the kernel command line.
 """
 
 import logging
@@ -34,10 +36,12 @@ class SeedHTTPServer:
     Usable as a context manager::
 
         with SeedHTTPServer(seed_dir) as srv:
-            cmdline = tmpl.format(seed_port=srv.port)
+            cmdline += f' url=http://10.0.2.2:{srv.port}/preseed.cfg'
     """
 
     def __init__(self, seed_dir: Path, bind: str = '0.0.0.0'):
+        if not seed_dir.is_dir():
+            raise ValueError(f'seed directory does not exist: {seed_dir}')
         self.seed_dir = seed_dir
         handler = partial(_SeedRequestHandler, directory=str(seed_dir))
         self._httpd = ThreadingHTTPServer((bind, 0), handler)
@@ -74,13 +78,3 @@ class SeedHTTPServer:
 
     def __exit__(self, *_exc) -> None:
         self.stop()
-
-
-def serves_seed_over_http(kernel_cmdline: str) -> bool:
-    """True if ``kernel_cmdline`` expects a ``{seed_port}`` substitution.
-
-    Profiles that fetch their answer file over HTTP (the ``ubiquity`` family)
-    declare it by putting ``{seed_port}`` in their kernel command line; those get
-    a ``SeedHTTPServer`` instead of an attached seed ISO.
-    """
-    return '{seed_port}' in kernel_cmdline

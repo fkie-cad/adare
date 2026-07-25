@@ -12,8 +12,8 @@ supports:
    Kubuntu 23.04, which is why kubuntu2404 stays on the gui-auto path). ubiquity
    consumes the same debian-installer answer file as d-i but has no OEMDRV
    auto-detect: casper's network-preseed init script fetches it from the `url=` on
-   the kernel command line, which the profile points at ADARE's ephemeral seed HTTP
-   server (10.0.2.2:{seed_port}, see vm_creator/seed_http.py).
+   the kernel command line. The profile declares `seed_transport: http` and ADARE
+   splices in the URL of its ephemeral seed HTTP server (see vm_creator/seed_http.py).
 
    Same as preseed_ubuntu_ubiquity.yaml but SDDM autologin instead of GDM3.
 

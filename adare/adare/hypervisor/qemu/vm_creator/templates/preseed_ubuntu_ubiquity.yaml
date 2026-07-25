@@ -10,8 +10,8 @@ supports:
 {# ubiquity is the installer on the Ubuntu *Desktop* ISO. It consumes the same
    debian-installer answer file as d-i, but has no OEMDRV auto-detect: casper's
    network-preseed init script fetches it from the `url=` on the kernel command
-   line, which the profile points at ADARE's ephemeral seed HTTP server
-   (10.0.2.2:{seed_port}, see vm_creator/seed_http.py).
+   line. The profile declares `seed_transport: http` and ADARE splices in the
+   URL of its ephemeral seed HTTP server (see vm_creator/seed_http.py).
 
    x86_64 only, and shipped UNTESTED — this host is Apple Silicon and cannot boot
    x86_64 guests (see docs: "aarch64 has no desktop ISO"). If a screen still
