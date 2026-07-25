@@ -103,20 +103,24 @@ def _resolve_template_path(os_def):
         return '(manual install -- no template)', None, '(n/a)'
 
     if os_def.installer == 'gui':
-        # GUI-auto profiles use a goal/spec file (gui_<stem>.yaml), not an
-        # answer-file template, and pick it by stem — not by frontmatter.
+        # GUI profiles use a stem-picked file rather than a frontmatter-selected
+        # answer-file template. Which file depends on the mode: 'gui-script'
+        # replays qmpinstall_<stem>.yaml, 'gui-auto' reads the goal/spec
+        # gui_<stem>.yaml. Reporting the gui-auto spec for a gui-script profile
+        # would name a file that is never opened.
         from adare.hypervisor.qemu.vm_creator.gui_creator import (
             _BUNDLED_TEMPLATES_DIR as GUI_TEMPLATES_DIR,
             _template_stems,
         )
+        prefix = 'qmpinstall_' if os_def.install_mode == 'gui-script' else 'gui_'
         stems = _template_stems(os_def, None)
         for stem in stems:
             for root, label in ((VM_TEMPLATES_DIR, f'user ({VM_TEMPLATES_DIR})'),
                                 (GUI_TEMPLATES_DIR, f'built-in ({GUI_TEMPLATES_DIR})')):
-                candidate = Path(root) / f'gui_{stem}.yaml'
+                candidate = Path(root) / f'{prefix}{stem}.yaml'
                 if candidate.is_file():
                     return str(candidate), None, label
-        return f'gui_<{"|".join(stems)}>.yaml (not found on disk)', None, '(missing)'
+        return f'{prefix}<{"|".join(stems)}>.yaml (not found on disk)', None, '(missing)'
 
     template_meta = None
     if os_def.platform == 'linux':
