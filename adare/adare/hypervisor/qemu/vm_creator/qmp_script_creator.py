@@ -28,6 +28,7 @@ import subprocess
 from pathlib import Path
 
 import yaml
+from rich.markup import escape
 
 from adare.config.configdirectory import VM_TEMPLATES_DIR
 from adare.console import console, print_section, print_step
@@ -283,21 +284,30 @@ class QMPScriptVMCreator(BaseVMCreator):
         cmd = self._qemu_cmd(disk_path, nvram_path, iso_path, sock_path, serial_log)
         log.info('Starting QEMU for %s replay: %s', phase, ' '.join(cmd))
 
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # QEMU's own output goes to a file, not a pipe: an install runs for tens
+        # of minutes and nothing here drains a pipe, so a chatty QEMU would fill
+        # the buffer and block the guest mid-install.
+        qemu_log = disk_path.parent / f'{disk_path.stem}_qemu-{phase}.log'
         session: QMPReplaySession | None = None
-        try:
-            wait_for_qmp_socket(sock_path, process)
-            session = QMPReplaySession(sock_path)
-            return run_steps(
-                session, steps, shot_dir,
-                on_progress=lambda label, note: console.print(
-                    f'    [dim]{label:<20}[/dim] {note}'
-                ),
-            )
-        except QMPReplayError as e:
-            raise QMPScriptVMCreationError(f'{phase} replay failed: {e}') from e
-        finally:
-            self._shut_down(process, session, sock_path, phase)
+        with qemu_log.open('wb') as log_fh:
+            process = subprocess.Popen(cmd, stdout=log_fh, stderr=subprocess.STDOUT)
+            try:
+                wait_for_qmp_socket(sock_path, process, qemu_log=qemu_log)
+                session = QMPReplaySession(sock_path)
+                return run_steps(
+                    session, steps, shot_dir,
+                    # Playbook notes are free text; escape them so a stray '['
+                    # cannot crash a running install in rich's markup parser.
+                    on_progress=lambda label, note: console.print(
+                        f'    [dim]{escape(label):<20}[/dim] {escape(note)}'
+                    ),
+                )
+            except QMPReplayError as e:
+                raise QMPScriptVMCreationError(
+                    f'{phase} replay failed: {e} (QEMU log: {qemu_log})'
+                ) from e
+            finally:
+                self._shut_down(process, session, sock_path, phase)
 
     def _shut_down(self, process: subprocess.Popen, session: QMPReplaySession | None,
                    sock_path: Path, phase: str) -> None:
