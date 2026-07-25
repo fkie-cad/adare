@@ -166,6 +166,20 @@ def exec_vm_create(arguments):
             display=gui_display,
             template=gui_template,
         )
+    elif os_def.install_mode == 'playbook':
+        from adare.hypervisor.qemu.vm_creator.playbook_creator import create_playbook_vm
+
+        disk_path = create_playbook_vm(
+            os_def=os_def,
+            iso_path=iso_path,
+            vm_name=vm_name,
+            disk_size=disk_size,
+            ram_mb=ram,
+            cpus=cpus,
+            force=force,
+            vm_dir=vm_dir,
+            setup_level=setup_level,
+        )
     elif os_def.platform == 'linux':
         from adare.hypervisor.qemu.vm_creator.linux_creator import create_linux_vm
 

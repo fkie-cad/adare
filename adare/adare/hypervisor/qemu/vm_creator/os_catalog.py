@@ -81,6 +81,14 @@ class OsDefinition:
     # releases (e.g. Ubuntu 18.04) that do not auto-load a preseed from an OEMDRV
     # volume.
     seed_transport: str = 'cdrom'  # 'cdrom' | 'http'
+    # Deterministic, LLM-free GUI-installer playbook (install_mode == 'playbook').
+    # Each step is a dict driving the graphical installer via the host-side QMP
+    # GUI executor: {action: tap, coords: [x, y, w, h]} | {action: key, keys: [..]}
+    # | {action: type, text: ..} | {action: wait_stable, settle/min/timeout: ..} |
+    # {action: wait, seconds: ..} | {action: shot, name: ..}. install_steps drive
+    # the installer; verify_steps run after rebooting into the installed disk.
+    install_steps: list = field(default_factory=list)
+    verify_steps: list = field(default_factory=list)
 
 
 # Ubuntu 26.04 LTS (Resolute Raccoon) - Server ISO with autoinstall support
@@ -755,9 +763,10 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     continue
 
                 install_mode = data.get('install_mode', 'auto')
-                if install_mode not in ('auto', 'manual', 'gui-auto'):
+                if install_mode not in ('auto', 'manual', 'gui-auto', 'playbook'):
                     log.warning(
-                        'Skipping %s: install_mode must be "auto", "manual" or "gui-auto", got "%s"',
+                        'Skipping %s: install_mode must be "auto", "manual", "gui-auto" '
+                        'or "playbook", got "%s"',
                         yml_file, install_mode,
                     )
                     continue
@@ -798,6 +807,8 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     ),
                     seed_label=data.get('seed_label', 'cidata'),
                     seed_transport=data.get('seed_transport', 'cdrom'),
+                    install_steps=data.get('install_steps', []),
+                    verify_steps=data.get('verify_steps', []),
                 )
             except (OSError, yaml.YAMLError, TypeError, ValueError) as e:
                 log.warning('Skipping %s: %s', yml_file, e)
