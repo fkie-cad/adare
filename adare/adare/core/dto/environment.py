@@ -83,6 +83,7 @@ class EnvironmentExtendRequest:
     ram: int | None = None
     cpus: int | None = None
     disk_name: str | None = None
+    compress: bool = True
     description: str | None = None
     tags: list[str] = field(default_factory=list)
     force: bool = False

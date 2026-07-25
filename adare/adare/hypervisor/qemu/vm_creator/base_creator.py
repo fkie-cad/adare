@@ -5,6 +5,7 @@ while inheriting the shared orchestration, disk setup, cleanup, and UI logic.
 """
 
 import logging
+import os
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,9 @@ from adare.config.configdirectory import VMS_DIR
 from adare.console import console, print_section, print_step, print_vm_config_panel
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.firmware import create_nvram_for_vm
-from adare.hypervisor.qemu.vm_creator.disk_helpers import create_qcow2_disk
+from adare.hypervisor.qemu.vm_creator.disk_helpers import (
+    DiskCompressionError, compress_qcow2_zstd, create_qcow2_disk,
+)
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel, default_host_cpus
 from adare.hypervisor.qemu.vm_creator.prerequisites import check_prerequisites
 
@@ -55,6 +58,7 @@ class BaseVMCreator(ABC):
         vm_dir: Path | None = None,
         iso_path: Path | None = None,
         setup_level: SetupLevel = SetupLevel.FULL,
+        compress: bool = True,
     ):
         self.os_def = os_def
         self.vm_name = vm_name or self._default_vm_name()
@@ -65,6 +69,7 @@ class BaseVMCreator(ABC):
         self.vm_dir = vm_dir
         self.iso_path = iso_path
         self.setup_level = setup_level
+        self.compress = compress
 
     # ── Template method ──────────────────────────────────────────────
 
@@ -84,6 +89,8 @@ class BaseVMCreator(ABC):
             self._cleanup_on_failure(disk_path, nvram_path)
             raise
         self._validate_disk_after_install(disk_path)
+        if self.compress:
+            disk_path = self._compress_disk(disk_path)
         self._print_success(disk_path)
         return disk_path
 
@@ -194,6 +201,35 @@ class BaseVMCreator(ABC):
                 f'Disk image appears empty after installation ({size} bytes): {disk_path}\n'
                 f'QEMU may have failed to start or the installation did not complete.'
             )
+
+    def _compress_disk(self, disk_path: Path) -> Path:
+        """Zstd-compress the finished base disk in place, best-effort.
+
+        Compresses into a sibling temp file and atomically replaces
+        ``disk_path`` on success. Never raises: a compression failure warns
+        and returns the original, uncompressed disk unchanged, since the
+        install itself already succeeded and that work must not be lost.
+        """
+        tmp_path = disk_path.with_name(f'{disk_path.stem}.compressing.qcow2')
+        tmp_path.unlink(missing_ok=True)
+
+        original_size = disk_path.stat().st_size
+        try:
+            compress_qcow2_zstd(disk_path, tmp_path)
+        except (DiskCompressionError, OSError) as e:
+            log.warning('Disk compression failed, keeping uncompressed disk: %s', e)
+            print_step(f'[yellow]Disk compression failed, keeping uncompressed disk:[/yellow] {e}')
+            tmp_path.unlink(missing_ok=True)
+            return disk_path
+
+        compressed_size = tmp_path.stat().st_size
+        os.replace(tmp_path, disk_path)
+        saved_pct = 100 * (1 - compressed_size / original_size)
+        print_step(
+            f'Compressed disk image (zstd): [dim]{disk_path}[/dim] '
+            f'({saved_pct:.0f}% smaller)'
+        )
+        return disk_path
 
     def _cleanup_on_failure(self, disk_path: Path, nvram_path: Path | None) -> None:
         """Remove disk and NVRAM files after a failed installation."""

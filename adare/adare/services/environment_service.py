@@ -422,6 +422,7 @@ class EnvironmentService:
         vm_url: str,
         vm_format: str | None = None,
         verify_url: bool = False,
+        compress: bool = False,
     ) -> Result[EnvironmentInfo]:
         """Convert a local-path baked environment into a publish-ready URL one.
 
@@ -430,9 +431,14 @@ class EnvironmentService:
         ``vm_sha256: <hash of the exact local bytes>``. The sha computed here is
         the integrity anchor consumers re-verify after downloading from the URL.
 
+        With ``compress`` (qcow2 only) a zstd-compressed sibling copy of the disk
+        is produced first and hashed/published in place of the original — qcow2
+        compression is transparent to readers, so the compressed file is a
+        drop-in replacement at download time. Only that copy needs uploading.
+
         With ``verify_url`` the hosted object is downloaded and hashed, confirming
-        it matches the local disk — this catches a wrong/HTML share link or an
-        upload whose bytes differ from the local disk.
+        it matches the published disk (original or compressed) — this catches a
+        wrong/HTML share link or an upload whose bytes differ.
         """
         from adare.helperfunctions.file.hash import file_sha256_with_progress
         from adarelib.helper.yaml import dict_to_yaml, yaml_to_dict
@@ -442,8 +448,15 @@ class EnvironmentService:
             return target
         descriptor, metadata, disk, fmt = target.data
 
+        upload_disk = disk
+        if compress:
+            compress_result = self._compress_disk_for_publish(disk, fmt)
+            if not compress_result.success:
+                return compress_result
+            upload_disk = compress_result.data
+
         vm_sha256 = file_sha256_with_progress(
-            disk, description=f'Hashing local disk {disk.name}', silent=False,
+            upload_disk, description=f'Hashing {upload_disk.name}', silent=False,
         )
 
         if verify_url:
@@ -460,6 +473,24 @@ class EnvironmentService:
             raw['vm_format'] = fmt
         dict_to_yaml(descriptor, raw)
 
+        next_steps = [
+            f'Submit for sharing: adare web submit environment {name}',
+            f'Or load locally to verify: adare environment load {descriptor}',
+        ]
+        if compress:
+            saved_pct = 100 * (1 - upload_disk.stat().st_size / disk.stat().st_size)
+            next_steps.insert(0, f'Upload the compressed disk to {vm_url}: {upload_disk}')
+            tip = (
+                f'Descriptor rewritten to URL + vm_sha256 ({vm_sha256[:12]}…) of the '
+                f'compressed disk {upload_disk.name} ({saved_pct:.0f}% smaller than the '
+                'original). Upload that file, not the original, to vm_url.'
+            )
+        else:
+            tip = (
+                f'Descriptor rewritten to URL + vm_sha256 ({vm_sha256[:12]}…). '
+                'Consumers re-verify this hash after downloading.'
+            )
+
         return Result.ok(EnvironmentInfo(
             id='',
             name=name,
@@ -468,13 +499,48 @@ class EnvironmentService:
             hypervisor=metadata.hypervisor or 'qemu',
             os_platform=metadata.os.platform if metadata.os else None,
             file_path=descriptor,
-            next_steps=[
-                f'Submit for sharing: adare web submit environment {name}',
-                f'Or load locally to verify: adare environment load {descriptor}',
-            ],
-            tip=f'Descriptor rewritten to URL + vm_sha256 ({vm_sha256[:12]}…). '
-                'Consumers re-verify this hash after downloading.',
+            next_steps=next_steps,
+            tip=tip,
         ))
+
+    def _compress_disk_for_publish(self, disk: Path, fmt: str) -> "Result[Path]":
+        """Produce a zstd-compressed sibling copy of ``disk`` for upload.
+
+        qcow2 compression is transparent to readers (QEMU decompresses on
+        read), so the compressed copy is a correctness-equivalent drop-in
+        replacement for the original — only the upload step changes. Only
+        qcow2 supports this; other vm_formats aren't touched.
+        """
+        from adare.hypervisor.qemu.vm_creator.disk_helpers import (
+            DiskCompressionError, compress_qcow2_zstd,
+        )
+
+        if fmt != 'qcow2':
+            return Result.fail(
+                code='CompressionRequiresQcow2',
+                message=f'--compress only supports qcow2 disks (this one is {fmt!r}).',
+                solutions=['Drop --compress for non-qcow2 formats'],
+            )
+
+        compressed = disk.with_name(f'{disk.stem}-published.qcow2')
+        compressed.unlink(missing_ok=True)
+
+        try:
+            compress_qcow2_zstd(disk, compressed)
+        except DiskCompressionError as e:
+            if e.stage == 'check':
+                return Result.fail(
+                    code='CompressedDiskCorrupt',
+                    message=f'qemu-img check failed on the compressed output: {e}',
+                    solutions=['Re-run --compress'],
+                )
+            return Result.fail(
+                code='CompressionFailed',
+                message=str(e),
+                solutions=['Check this qemu-img build supports compression_type=zstd'],
+            )
+
+        return Result.ok(compressed)
 
     def _resolve_publish_target(
         self, project_path: Path, name: str, vm_url: str, vm_format: str | None,

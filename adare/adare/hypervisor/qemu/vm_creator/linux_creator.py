@@ -209,6 +209,7 @@ def create_linux_vm(
     force: bool = False,
     vm_dir: Path | None = None,
     setup_level: SetupLevel = SetupLevel.FULL,
+    compress: bool = True,
 ) -> Path:
     """Create a fully configured Linux VM from an installation ISO.
 
@@ -224,6 +225,7 @@ def create_linux_vm(
         vm_dir=vm_dir,
         iso_path=iso_path,
         setup_level=setup_level,
+        compress=compress,
     )
     return creator.create()
 
