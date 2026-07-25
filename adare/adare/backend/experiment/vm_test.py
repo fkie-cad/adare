@@ -236,7 +236,7 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
             # the junction resolves, then launch adarevm from that directory.
             log_path = r'C:\Windows\Temp'
             stderr_log = rf'{log_path}\adarevm_stderr.log'
-            run_cmd = 'uv run adarevm'
+            run_cmd = 'uv run --package adarevm adarevm'
             if getattr(context.vm.config, 'smb_share_path', None):
                 run_cmd = (
                     'reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services'
@@ -268,13 +268,27 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
                 f"{start_result.returncode}. stderr: {start_result.stderr}"
             )
 
-        # Linux: launch editable adarevm in the background from the source dir.
-        start_command = "cd /adare/vm && uv run adarevm &"
+        # Linux: mirror the real experiment launch (agent_command_builders).
+        # The workspace root is shared at /adare/vm; cd into the adarevm member so
+        # uv resolves its `adarelib = { workspace = true }` dependency. Pre-sync
+        # the venv (the slow first-run build; cached in the shared .venv after),
+        # grant the guest-agent (root) access to the autologin user's X display
+        # (DISPLAY/XAUTHORITY + `xhost +SI:localuser:root`), then run adarevm.
+        import asyncio
+        sync_command = "cd /adare/vm/adarevm && uv sync 2>&1 | tail -3"
+        log.info("Pre-syncing adarevm venv in guest (first run builds deps)...")
+        await context.vm.run_command(sync_command, stop_event=context.user_interrupt_event)
+        start_command = (
+            "export DISPLAY=:0; "
+            "export XAUTHORITY=$(ls /run/user/*/gdm/Xauthority /run/user/*/.mutter-Xwaylandauth.* "
+            "/home/adare/.Xauthority 2>/dev/null | head -1); "
+            "xhost +SI:localuser:root >/dev/null 2>&1 || true; "
+            "cd /adare/vm/adarevm && nohup uv run adarevm >/tmp/adarevm.log 2>&1 &"
+        )
         start_result = await context.vm.run_command(start_command, stop_event=context.user_interrupt_event)
         if start_result.returncode == 0:
             log.info("AdareVM server launched; waiting for it to initialize")
-            import asyncio
-            await asyncio.sleep(5.0)
+            await asyncio.sleep(6.0)
             return True, None
         log.warning(f"Failed to start adarevm server. Exit code: {start_result.returncode}")
         return False, f"Failed to start adarevm server. Exit code: {start_result.returncode}"
@@ -309,7 +323,7 @@ async def test_websocket_connection(context):
 async def test_screenshot_command(context):
     """Test screenshot command via WebSocket."""
     try:
-        result = await context.client.call_tool("take_screenshot", timeout=10.0)
+        result = await context.client.call_tool("screenshot", timeout=10.0)
         if result and not result.get('error'):
             log.info("Screenshot command successful")
             return True, None
@@ -833,7 +847,7 @@ async def setup_qemu_share_for_test(context):
 
     Other modes (qga, libguestfs) are not wired for the DB-free compat test.
     """
-    from adare.config.configdirectory import ADAREVM_DIR
+    from adare.config.configdirectory import ADARE_DIR
     from adare.hypervisor.exceptions import HypervisorException
     from adare.hypervisor.qemu.file_transfer import detect_file_transfer_mode
 
@@ -841,15 +855,21 @@ async def setup_qemu_share_for_test(context):
     base_mount = 'C:\\adare' if is_windows else '/adare'
     guest_mount = f'{base_mount}\\vm' if is_windows else f'{base_mount}/vm'
 
+    # Share the uv WORKSPACE ROOT (adare/adarevm/adarelib/adare-cv-server), not
+    # just the adarevm subdir: `uv run --package adarevm adarevm` needs the
+    # workspace so it can resolve adarevm's `adarelib = { workspace = true }`
+    # dependency. The share is writable so uv can create its .venv in-tree.
+    share_root = ADARE_DIR
+
     mode = detect_file_transfer_mode()
     log.info(f"Configuring test file share for adarevm ({mode} mode)...")
 
     if mode == 'virtiofs':
         shares = [{
             'tag': 'vm',
-            'host_path': str(ADAREVM_DIR),
+            'host_path': str(share_root),
             'guest_mount': guest_mount,
-            'readonly': True,
+            'readonly': False,
         }]
 
         context.vm.config.virtiofs_enabled = True
@@ -859,7 +879,7 @@ async def setup_qemu_share_for_test(context):
         # Also expose on context for post-boot mounting (mirrors virtiofs strategy)
         context.virtiofs_shares = shares
 
-        log.info(f"Configured virtio-fs share: {ADAREVM_DIR} -> {guest_mount}")
+        log.info(f"Configured virtio-fs share: {share_root} -> {guest_mount}")
         return
 
     if mode == 'smb':
@@ -871,7 +891,8 @@ async def setup_qemu_share_for_test(context):
         # directory in the share, so stage adarevm under a 'vm' subdir; it
         # becomes //10.0.2.4/qemu/vm -> C:\adare\vm (or /adare/vm on Linux).
         smb_dir = Path(tempfile.mkdtemp(prefix='adare_smb_test_'))
-        shutil.copytree(str(ADAREVM_DIR), str(smb_dir / 'vm'), dirs_exist_ok=True)
+        shutil.copytree(str(share_root), str(smb_dir / 'vm'), dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('.venv', '.git', '__pycache__'))
 
         context.vm.config.smb_share_path = str(smb_dir)
         context.vm.config.virtiofs_enabled = False
@@ -883,7 +904,7 @@ async def setup_qemu_share_for_test(context):
         context._test_smb_dir = str(smb_dir)
 
         log.info(
-            f"Configured QEMU SLIRP SMB share: {ADAREVM_DIR} -> "
+            f"Configured QEMU SLIRP SMB share: {share_root} -> "
             f"{smb_dir / 'vm'} -> {guest_mount}"
         )
         return

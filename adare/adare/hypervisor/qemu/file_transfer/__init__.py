@@ -181,6 +181,33 @@ def _smbd_available() -> bool:
     return False
 
 
+_VIRTIOFSD_KNOWN_PATHS = (
+    '/usr/lib/qemu/virtiofsd',       # Debian/Ubuntu qemu-system-common
+    '/usr/libexec/virtiofsd',        # Fedora/RHEL, upstream default
+    '/usr/lib/virtiofsd',
+    '/usr/local/libexec/virtiofsd',
+)
+
+
+def _ensure_virtiofsd_on_path() -> bool:
+    """Return True if virtiofsd is usable, making it discoverable via PATH.
+
+    Debian/Ubuntu ship virtiofsd at /usr/lib/qemu/virtiofsd, which is not on
+    PATH, so a bare ``shutil.which('virtiofsd')`` misses it and QEMU virtio-fs
+    silently degrades to the slower libguestfs/qga transfer. If we find it at a
+    known location, prepend that directory to PATH so this and every downstream
+    ``which('virtiofsd')`` (share setup, daemon spawn) resolves it.
+    """
+    if shutil.which('virtiofsd'):
+        return True
+    for cand in _VIRTIOFSD_KNOWN_PATHS:
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            os.environ['PATH'] = os.path.dirname(cand) + os.pathsep + os.environ.get('PATH', '')
+            log.info('Found virtiofsd at %s; added its directory to PATH', cand)
+            return True
+    return False
+
+
 def detect_file_transfer_mode() -> str:
     """Determine file transfer mode: 'virtiofs', 'smb', 'libguestfs', or 'qga'.
 
@@ -200,7 +227,7 @@ def detect_file_transfer_mode() -> str:
     if os.environ.get('QEMU_LIBGUESTFS', '').lower() in ('true', '1', 'yes'):
         return 'libguestfs'
 
-    if shutil.which('virtiofsd'):
+    if _ensure_virtiofsd_on_path():
         return 'virtiofs'
 
     # No virtiofsd -- check fallbacks
