@@ -765,9 +765,16 @@ Installer families
 Desktop guests on aarch64
 -------------------------
 
-Neither Ubuntu nor Kubuntu publishes an **arm64 desktop ISO**, and Fedora
-published no aarch64 Workstation *Live* image before release 42. The rule ADARE
-follows:
+Desktop ISO availability on arm64 is uneven, and it is what bounds the options:
+
+- **Ubuntu** publishes an arm64 desktop ISO from **24.04.3 onwards**
+  (``ubuntu-24.04.4-desktop-arm64.iso``). Earlier LTS releases (22.04, 20.04) do
+  not — those trees carry only server, ppc64el and s390x images.
+- **Kubuntu** publishes ``desktop-amd64`` **exclusively**, for every release.
+  There is no arm64 Kubuntu desktop ISO to install.
+- **Fedora** published no aarch64 Workstation *Live* image before release 42.
+
+The rule ADARE follows:
 
 - **x86_64** — install the real desktop ISO where one exists (Ubuntu Desktop,
   Kubuntu) through the ``ubiquity`` family, or Calamares through ``gui-auto``
@@ -775,7 +782,8 @@ follows:
 - **aarch64** — install the **live-server ISO** of the matching version through
   ``subiquity`` and pull in the desktop metapackage
   (``ubuntu-desktop-minimal`` / ``kubuntu-desktop``). This is the route that
-  produced the existing 24.04 ARM64 environments.
+  produced the existing 24.04 ARM64 environments, and the only route available
+  for Kubuntu and for Ubuntu 22.04 / 20.04 on arm64.
 
 The two are *not* byte-identical installs, so the divergence is stated in the
 profile's ``display_name`` — e.g. "Kubuntu 22.04 (KDE Plasma on Ubuntu 22.04
@@ -811,7 +819,9 @@ The profiles behind the case studies, and the ISO each one expects:
      - ``ubuntu-22.04.5-live-server-arm64.iso``
    * - ``ubuntu2404arm64``
      - subiquity
-     - ``ubuntu-24.04.x-live-server-arm64.iso``
+     - ``ubuntu-24.04.x-live-server-arm64.iso`` (a genuine
+       ``ubuntu-24.04.4-desktop-arm64.iso`` also exists — 24.04 is the only
+       release on this list for which an arm64 *desktop* ISO is published)
    * - ``kubuntu2004arm64``
      - subiquity
      - ``ubuntu-20.04.5-live-server-arm64.iso`` (+ ``kubuntu-desktop``)
@@ -997,6 +1007,26 @@ booting guest badly enough to time out the guest agent:
 The two warnings above apply to x86 exactly as they do to aarch64: **Fedora
 guests run with SELinux permissive**, and **Ubuntu 20.04 (focal) needs the
 ``-o Dpkg::Use-Pty=false`` workaround** for its unmounted ``/dev/pts``.
+
+.. note::
+
+   **Images built before the interface-matching fix boot slowly and need the
+   run-time network repair.** Ubuntu/Kubuntu images whose autoinstall baked a
+   *named* interface (``enp0s1``) into netplan cannot configure their NIC at run
+   time, because ADARE gives it a different PCI address (``enp0s31``). Symptoms,
+   as measured on the eight paper-replication environments:
+
+   - every boot pays the full **120 s** ``systemd-networkd-wait-online`` timeout,
+     so ``VM is ready`` lands at 127-164 s instead of ~16 s;
+   - Kubuntu / Ubuntu 22.04 / 20.04 end up with no address at all, the
+     ``//10.0.2.4/qemu`` mount fails, and file transfer degrades to QGA;
+   - Ubuntu 24.04 is rescued by NetworkManager one second after the timeout, so it
+     passes but still pays the 120 s;
+   - Fedora is unaffected (NetworkManager manages any unnamed device).
+
+   ADARE repairs this after boot (see :ref:`guest-network-repair`), so these
+   images verify green as they are. Rebuilding them picks up the
+   ``match: {name: "e*"}`` seed and removes the 120 s penalty as well.
 
 
 Custom Templates

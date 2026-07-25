@@ -172,8 +172,22 @@ class SMBStrategy(FileTransferStrategy):
                 await self._mount_smb_windows(context)
             else:
                 await self._mount_smb_linux(context)
-        except HypervisorException:
-            log.warning("SMB mount failed, falling back to QGA file transfer")
+        except HypervisorException as e:
+            # Never let this degrade quietly. QGA moves the same payload orders of
+            # magnitude slower and file-by-file, so a silent fallback turns a
+            # 1-second mount into a multi-minute transfer that then fails on an
+            # unrelated-looking QGA timeout — which is exactly how this defect
+            # survived two full verification passes.
+            log.warning(
+                'SMB mount FAILED - degrading to the much slower QGA file-by-file '
+                f'transfer. This is not normal and should be fixed. Cause: {e}'
+            )
+            if not is_windows:
+                log.warning(
+                    'Common causes on Linux guests: cifs-utils / mount.cifs missing '
+                    'in the image, or the guest has no IPv4 route to the SLIRP SMB '
+                    'server at 10.0.2.4 (check that the guest NIC actually came up).'
+                )
             await self._fallback_to_qga(context)
 
     async def retrieve_artifacts(self, context: Any) -> None:
@@ -394,6 +408,14 @@ class SMBStrategy(FileTransferStrategy):
         from adare.hypervisor.qemu.file_transfer.qga_strategy import QGAStrategy
 
         log.warning("Falling back to QGA file transfer strategy")
+
+        # Relabel the progress stage so the UI stops claiming "Mounting SMB shares"
+        # for work that is now a QGA upload; otherwise a failure here is reported
+        # under a step that already finished.
+        stage = getattr(context, 'vm_post_boot_stage', None)
+        if stage is not None:
+            stage.sub_msg = 'Uploading files via QGA (SMB mount failed)'
+
         qga = QGAStrategy()
         await qga.setup(context)
         await qga.post_boot_transfer(context)

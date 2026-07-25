@@ -538,7 +538,20 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     try:
                         self._libvirt_domain.destroy()
                     except libvirt.libvirtError as e:
-                        log.warning(f"Could not destroy leftover domain: {e}")
+                        # "cannot acquire state change lock" means libvirtd has a
+                        # wedged job on this domain — usually its QEMU died without
+                        # libvirtd noticing, leaving a phantom 'paused' entry that
+                        # neither destroy nor domjobabort can clear. Nothing in-process
+                        # can fix that, so say what will.
+                        log.error(
+                            f"Could not destroy leftover domain '{self.vm_name}': {e}\n"
+                            f"If this is a state-change-lock timeout, libvirtd holds a "
+                            f"wedged job on a domain whose QEMU process is already gone. "
+                            f"The start below will fail. Clear it by restarting the "
+                            f"session libvirt daemon (no running guests are lost if "
+                            f"'virsh -c qemu:///session list' shows none):\n"
+                            f"  pkill -f 'libvirtd -f' && virsh -c qemu:///session list --all"
+                        )
             except libvirt.libvirtError as e:
                 log.warning(f"Could not check domain state: {e}")
 
