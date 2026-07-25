@@ -392,26 +392,35 @@ def run_steps(
 
 
 def wait_for_qmp_socket(sock_path: Path, process: subprocess.Popen,
-                        timeout: float = 60.0) -> None:
+                        timeout: float = 60.0, qemu_log: Path | None = None) -> None:
     """Wait for QEMU to create its QMP socket, failing fast if QEMU died.
 
     Without the liveness check a bad command line turns into a full ``timeout``
-    of waiting for a socket that will never appear.
+    of waiting for a socket that will never appear. ``qemu_log`` is QEMU's own
+    stdout/stderr; its tail is quoted in the error because that is where a
+    rejected ``-device`` or a missing firmware file is reported.
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if sock_path.exists():
             return
         if process.poll() is not None:
-            stderr = b''
-            if process.stderr is not None:
-                stderr = process.stderr.read() or b''
             raise QMPReplayError(
                 f'QEMU exited with code {process.returncode} before opening its QMP '
-                f'socket: {stderr.decode(errors="replace").strip()}'
+                f'socket: {_tail(qemu_log)}'
             )
         time.sleep(0.2)
     raise QMPReplayError(f'QEMU did not create a QMP socket within {timeout:.0f}s')
+
+
+def _tail(path: Path | None, limit: int = 2000) -> str:
+    """Last ``limit`` characters of ``path``, for quoting in an error message."""
+    if path is None:
+        return '(no QEMU log)'
+    try:
+        return path.read_text(encoding='utf-8', errors='replace')[-limit:].strip() or '(empty)'
+    except OSError as e:
+        return f'(could not read {path}: {e})'
 
 
 def unlink_socket(sock_path: Path) -> None:
