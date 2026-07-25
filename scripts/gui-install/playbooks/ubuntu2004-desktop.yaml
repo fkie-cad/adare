@@ -1,0 +1,74 @@
+# LLM-free replay of a manual Ubuntu 20.04 desktop install (ubiquity installer).
+# Replay with:
+#   ./gui_install.py playbooks/ubuntu2004-desktop.yaml \
+#       --iso ubuntu-20.04.6-desktop-amd64.iso --vm-dir /vms
+#
+# Every step is deterministic keyboard input; wait_stable handles timing without
+# any image recognition. Screens with several widgets use fixed Tab counts that
+# are ubiquity-version-specific — each checkpoint saves a screenshot so you can
+# verify/adjust (see README.md). Accepts the geoip default timezone.
+name: ubuntu2004-desktop
+description: Ubuntu 20.04.6 Desktop via the graphical ubiquity installer
+credentials: "user 'adare' / password 'adare' / host 'ubuntu2004'"
+
+vm:
+  ram_mb: 8192
+  cpus: 4
+  disk_size: "60G"
+  vga: qxl
+  firmware: bios
+
+install:
+  - {action: wait_stable, settle: 6, timeout: 360, min: 120, shot: welcome, note: "wait for the live session + Welcome dialog (min skips early-boot plymouth)"}
+  - {action: key, keys: [ret], note: "Welcome: activate 'Install Ubuntu' (dialog default)"}
+
+  - {action: wait_stable, settle: 4, timeout: 120, shot: keyboard}
+  - {action: key, keys: [ret], note: "Keyboard layout English(US): Continue (default)"}
+
+  - {action: wait_stable, settle: 4, timeout: 120, shot: updates}
+  - {action: key, keys: [tab], note: "focus 'Download updates while installing'"}
+  - {action: key, keys: [spc], note: "uncheck download-updates (offline, faster)"}
+  - {action: key, keys: [tab], repeat: 4, note: "-> Continue (past third-party, Quit, Back)"}
+  - {action: key, keys: [ret], note: "Continue"}
+
+  - {action: wait_stable, settle: 6, timeout: 180, shot: installtype}
+  - {action: key, keys: [tab], repeat: 4, note: "'Erase disk' -> Install Now (past Advanced/Quit/Back)"}
+  - {action: key, keys: [ret], note: "Install Now"}
+
+  - {action: wait_stable, settle: 4, timeout: 120, shot: writeconfirm}
+  - {action: key, keys: [tab], note: "'Write changes?' dialog: Go Back -> Continue"}
+  - {action: key, keys: [ret], note: "commit partitioning (point of no return)"}
+
+  - {action: wait_stable, settle: 6, timeout: 180, shot: timezone}
+  # Timezone screen: accept the geoip default. Its city entry can trap focus, so
+  # esc closes any autocomplete first. Tab count is version-sensitive.
+  - {action: key, keys: [esc]}
+  - {action: key, keys: [tab], repeat: 3, note: "-> Continue"}
+  - {action: key, keys: [ret], note: "Continue"}
+
+  - {action: wait_stable, settle: 6, timeout: 120, shot: whoami}
+  - {action: type, text: "adare", note: "Your name"}
+  - {action: key, keys: [tab], note: "-> computer name (auto-filled ugly value)"}
+  - {action: key, keys: [ctrl, a], note: "select all"}
+  - {action: type, text: "ubuntu2004", note: "computer name"}
+  - {action: key, keys: [tab], repeat: 2, note: "-> password (skip auto-filled username)"}
+  - {action: type, text: "adare", note: "password"}
+  - {action: key, keys: [tab], note: "-> confirm password"}
+  - {action: type, text: "adare"}
+  - {action: shot, name: user-filled}
+  - {action: key, keys: [tab], repeat: 4, note: "-> Continue (past login radios, AD, Back)"}
+  - {action: key, keys: [ret], note: "Continue -> start install"}
+
+  # Slideshow + progress keep the screen changing until the installer is idle;
+  # it only settles when the 'Installation Complete' dialog appears.
+  - {action: wait_stable, settle: 45, timeout: 3600, shot: complete, note: "wait for install to finish"}
+
+reboot_from_disk: true
+
+verify:
+  - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login, note: "GDM login screen (min skips reboot/boot)"}
+  - {action: key, keys: [ret], note: "select the 'adare' user"}
+  - {action: wait, seconds: 2}
+  - {action: type, text: "adare", note: "password"}
+  - {action: key, keys: [ret]}
+  - {action: wait_stable, settle: 12, timeout: 180, shot: desktop, note: "GNOME desktop"}
