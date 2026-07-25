@@ -108,30 +108,64 @@ Downloading Bundles
 
    adare web download bundle <ulid>
 
-Downloads an experiment bundle, which includes the experiment and all its dependencies (test functions, environment configurations, shared resources). This is the easiest way to get a complete, runnable experiment.
+Downloads an experiment bundle: the experiment plus all its dependencies (testfunction sets and referenced environment configurations). Only descriptor/config files are downloaded — VM disk images are fetched later, on demand, when the environment is loaded (see below).
 
 .. code-block:: bash
 
-   # Download bundle without disk images
    adare web download bundle 01JQXYZ123ABC
-
-   # Include disk images (large download)
-   adare web download bundle 01JQXYZ123ABC --include-disk-images
 
 Options
 ^^^^^^^
-
-``--include-disk-images``
-   Also download the VM disk images. These can be very large (multiple GB). Without this flag, only the configuration files are downloaded.
 
 ``-p, --project``
    Target project name or path.
 
 
-Running Downloaded Experiments
-==============================
+Replicating an Experiment (one command)
+========================================
 
-After downloading, experiments appear in your project and can be run like any locally created experiment:
+To download a published experiment and immediately run it — the easiest way to reproduce a result end to end:
+
+.. code-block:: bash
+
+   adare experiment replicate <ulid>
+
+This downloads the bundle, loads the environment (fetching and verifying the VM disk via its ``sha256``), loads the experiment, and runs it in test mode.
+
+.. code-block:: bash
+
+   # Auto-selects the environment if the bundle has exactly one
+   adare experiment replicate 01JQXYZ123ABC
+
+   # Pick an environment when the bundle has more than one
+   adare experiment replicate 01JQXYZ123ABC -e ubuntu24043
+
+   # Run for real (production mode) instead of test mode
+   adare experiment replicate 01JQXYZ123ABC --production
+
+   # Only download and load, don't run
+   adare experiment replicate 01JQXYZ123ABC --skip-run
+
+Options
+^^^^^^^
+
+``-e, --environment``
+   Name of the environment to use. Required if the bundle has more than one; optional (auto-selected) if it has exactly one.
+
+``--production, --prod``
+   Run in production mode with full integrity checks (default: test mode).
+
+``--skip-run``
+   Download and load only, without starting a VM.
+
+``-p, --project``
+   Target project name or path.
+
+
+Running Downloaded Experiments Manually
+========================================
+
+You can also perform the download/load/run steps yourself instead of using ``adare experiment replicate``:
 
 .. code-block:: bash
 

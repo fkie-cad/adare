@@ -15,6 +15,7 @@ from adare.core.dto.web import (
     CheckRunRequest,
     CheckRunResult,
     DownloadBundleRequest,
+    DownloadBundleResult,
     DownloadEnvironmentRequest,
     DownloadExperimentRequest,
     DownloadResult,
@@ -224,15 +225,20 @@ class WebService:
                 solutions=['Check your internet connection', 'Verify the testfunction name']
             )
 
-    def download_bundle(self, request: DownloadBundleRequest) -> Result[DownloadResult]:
+    def download_bundle(self, request: DownloadBundleRequest) -> Result[DownloadBundleResult]:
         """
         Download an experiment bundle (experiment + all dependencies).
 
+        Walks the dependency graph via the already-working per-entity download
+        endpoints: fetches the experiment's own descriptor (which already nests
+        `environments` and `abstract_tests`), then downloads each referenced
+        environment and testfunction set.
+
         Args:
-            request: DownloadBundleRequest with project path, ULID, and flags
+            request: DownloadBundleRequest with project path and ULID
 
         Returns:
-            Result[DownloadResult] with download status.
+            Result[DownloadBundleResult] with the names of what was downloaded.
         """
         import requests
 
@@ -251,41 +257,47 @@ class WebService:
         try:
             webapp = WebappLogin()
             session = webapp.get_django_session()
-            bundle_url = f"{config_server.API_URL}bundle/experiment_{request.ulid}/"
+            download_url = f"{config_server.DOWNLOAD_API_URL}experiment_{request.ulid}/"
 
-            response = session.get(bundle_url)
+            response = session.get(download_url)
             if response.status_code != 200:
                 return Result.fail(
                     code="DownloadError",
-                    message=f"Failed to fetch bundle manifest: {response.status_code}",
+                    message=f"Failed to fetch experiment descriptor: {response.status_code}",
                     solutions=['Verify the experiment ULID']
                 )
 
-            bundle = response.json()
+            experiment_data = response.json()
             project_directory = ProjectDirectory(request.project_path)
 
             # Download experiment
-            download_experiment(request.ulid, project_directory.experiments)
+            experiment_name = download_experiment(request.ulid, project_directory.experiments)
             log.info(f"Downloaded experiment {request.ulid}")
 
-            # Download testfunction sets
-            for tfset in bundle.get('testfunction_sets', []):
-                tf_name = tfset['name']
+            # Download testfunction sets referenced by the experiment's abstract tests
+            testfunction_names = sorted({
+                at['testfunction']['set']
+                for at in experiment_data.get('abstract_tests', [])
+                if at.get('testfunction', {}).get('set')
+            })
+            for tf_name in testfunction_names:
                 tf_dir = project_directory.testfunctions / tf_name
                 if not tf_dir.exists():
                     download_testfunction(tf_name, tf_dir)
                     log.info(f"Downloaded testfunction {tf_name}")
 
             # Download environments
-            for env in bundle.get('environments', []):
-                env_name = env['name']
+            environment_names = [env['name'] for env in experiment_data.get('environments', [])]
+            for env_name in environment_names:
                 env_file = ENVIRONMENTS_DIR / f'{env_name}.yml'
                 if not env_file.exists():
                     download_environment(env_name, env_file)
                     log.info(f"Downloaded environment {env_name}")
 
-            return Result.ok(DownloadResult(
-                downloaded=True,
+            return Result.ok(DownloadBundleResult(
+                experiment_name=experiment_name,
+                environment_names=environment_names,
+                testfunction_names=testfunction_names,
                 message=f"Bundle for experiment '{request.ulid}' downloaded successfully"
             ))
 

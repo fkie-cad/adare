@@ -278,6 +278,36 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
 
     @experiment.command()
+    @click.argument('ulid')
+    @click.option('-e', '--environment', help='Name of the environment to use (required if the bundle has more than one)')
+    @click.option('--project', '-p', help='Name of the project')
+    @click.option('--production', '--prod', is_flag=True, help='Run the experiment in production mode (default: test mode)')
+    @click.option('--skip-run', is_flag=True, help="Download and load only, don't execute")
+    def replicate(ulid, environment, project, production, skip_run):
+        """Download a published experiment bundle and run it, end to end.
+
+        Downloads the experiment (+ its testfunction sets), loads the
+        environment (fetching and verifying the VM disk), loads the
+        experiment into the project, and runs it.
+
+        ULID is the published experiment's ULID.
+
+        Examples:
+        - adare experiment replicate 01HXYZ...
+        - adare experiment replicate 01HXYZ... -e ubuntu24 --production
+        - adare experiment replicate 01HXYZ... --skip-run
+        """
+        from adare.cli.experiment import exec_experiment_replicate
+        args = SimpleNamespace(
+            ulid=ulid,
+            environment=environment,
+            project=project,
+            test=not production,
+            skip_run=skip_run,
+        )
+        exec_with_error_printing(exec_experiment_replicate, args)
+
+    @experiment.command()
     @click.argument('experiment', type=click.Path(exists=False))
     @click.option('-e', '--environment', type=click.Path(exists=False), required=True,
                   help='Name of the environment (must be QEMU-based)')
