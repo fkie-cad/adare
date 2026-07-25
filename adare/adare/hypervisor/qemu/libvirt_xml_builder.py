@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from xml.dom import minidom
 
+from .accel import cpu_mode_and_model, native_accel
 from .firmware import create_nvram_for_vm, find_ovmf_firmware
 
 log = logging.getLogger(__name__)
@@ -120,6 +121,11 @@ class DomainXMLBuilder:
         self._is_virt = vm_config.machine == 'virt' or self._is_aarch64
         self._is_darwin = platform.system().lower() == 'darwin'
 
+        # Accelerator: trust an explicitly-resolved config.accel (hvf/kvm/tcg);
+        # fall back to the host's native accelerator for configs that predate
+        # this field or were never routed through the resolve_accel chokepoint.
+        self._accel = getattr(vm_config, 'accel', None) or native_accel()
+
         # Determine effective machine type
         if self._is_virt:
             self._effective_machine = 'virt'
@@ -145,7 +151,9 @@ class DomainXMLBuilder:
         """Build and return the complete domain XML string."""
         log.debug(f"Generating libvirt XML for VM: {self._config.vm_name}")
 
-        domain_type = 'hvf' if self._is_darwin else 'kvm'
+        # libvirt's 'qemu' domain type is the correct idiom for "no fixed
+        # accelerator" (TCG); hvf/kvm otherwise name the accelerator directly.
+        domain_type = 'qemu' if self._accel == 'tcg' else self._accel
         self._domain = ET.Element('domain', type=domain_type)
         self._domain.set('xmlns:qemu', QEMU_NAMESPACE)
 
@@ -241,8 +249,8 @@ class DomainXMLBuilder:
                 ET.SubElement(features, 'smm', state='on')
                 log.info(f"Enabled SMM for Windows VM {self._config.vm_name}")
 
-            # Hyper-V enlightenments (KVM-only, not available on macOS HVF)
-            if not self._is_darwin:
+            # Hyper-V enlightenments (KVM-only — not available under HVF or TCG)
+            if self._accel == 'kvm':
                 hyperv = ET.SubElement(features, 'hyperv')
                 ET.SubElement(hyperv, 'relaxed', state='on')
                 ET.SubElement(hyperv, 'vapic', state='on')
@@ -259,7 +267,7 @@ class DomainXMLBuilder:
                 log.info(f"Enabled Hyper-V enlightenments for Windows VM {self._config.vm_name}")
 
             # KVM-accelerated IOAPIC (KVM-only)
-            if not self._is_darwin:
+            if self._accel == 'kvm':
                 ET.SubElement(features, 'ioapic', driver='kvm')
 
             # Disable VMware backdoor port (x86-only, conflicts with Hyper-V)
@@ -267,8 +275,18 @@ class DomainXMLBuilder:
                 ET.SubElement(features, 'vmport', state='off')
 
     def _add_cpu_model(self) -> None:
-        """Add CPU model and topology."""
-        cpu = ET.SubElement(self._domain, 'cpu', mode='host-passthrough', check='none')
+        """Add CPU model and topology.
+
+        Under hardware acceleration, host-passthrough exposes the real host
+        CPU. Under TCG there is no host CPU to pass through (especially
+        cross-arch emulation), so a generic model is used instead.
+        """
+        cpu_mode, cpu_model = cpu_mode_and_model(self._accel, self._guest_arch)
+        if cpu_mode == 'host-passthrough':
+            cpu = ET.SubElement(self._domain, 'cpu', mode='host-passthrough', check='none')
+        else:
+            cpu = ET.SubElement(self._domain, 'cpu', mode='custom', match='exact')
+            ET.SubElement(cpu, 'model', fallback='allow').text = cpu_model
         ET.SubElement(cpu, 'topology', sockets='1', dies='1', cores=str(self._config.cpus), threads='1')
 
     def _add_clock(self) -> None:

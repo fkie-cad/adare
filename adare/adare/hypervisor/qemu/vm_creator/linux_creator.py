@@ -194,6 +194,7 @@ class LinuxVMCreator(BaseVMCreator):
                     ram_mb=self.ram_mb,
                     cpus=self.cpus,
                     nvram_path=nvram_path,
+                    allow_emulation=self.allow_emulation,
                 )
             except (TimeoutError, subprocess.CalledProcessError) as e:
                 raise LinuxVMCreationError(str(e)) from e
@@ -210,6 +211,7 @@ def create_linux_vm(
     vm_dir: Path | None = None,
     setup_level: SetupLevel = SetupLevel.FULL,
     compress: bool = True,
+    allow_emulation: bool = False,
 ) -> Path:
     """Create a fully configured Linux VM from an installation ISO.
 
@@ -226,6 +228,7 @@ def create_linux_vm(
         iso_path=iso_path,
         setup_level=setup_level,
         compress=compress,
+        allow_emulation=allow_emulation,
     )
     return creator.create()
 
@@ -267,6 +270,7 @@ def _run_qemu_installation(
     cpus: int,
     nvram_path: Path | None = None,
     seed_dir: Path | None = None,
+    allow_emulation: bool = False,
 ) -> None:
     """Boot QEMU with direct kernel boot + seed medium for unattended install.
 
@@ -283,7 +287,7 @@ def _run_qemu_installation(
     ephemeral host port for the duration of the install and a ``url=`` fetch hint
     is spliced into the kernel command line.
     """
-    arch_params = qemu_params_for_arch(os_def)
+    arch_params = qemu_params_for_arch(os_def, allow_emulation)
     needs_uefi = os_def.requires_uefi or os_def.architecture == 'aarch64'
     console_dev = 'ttyAMA0' if os_def.architecture == 'aarch64' else 'ttyS0'
 

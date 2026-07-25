@@ -59,6 +59,7 @@ class BaseVMCreator(ABC):
         iso_path: Path | None = None,
         setup_level: SetupLevel = SetupLevel.FULL,
         compress: bool = True,
+        allow_emulation: bool = False,
     ):
         self.os_def = os_def
         self.vm_name = vm_name or self._default_vm_name()
@@ -70,6 +71,7 @@ class BaseVMCreator(ABC):
         self.iso_path = iso_path
         self.setup_level = setup_level
         self.compress = compress
+        self.allow_emulation = allow_emulation
 
     # ── Template method ──────────────────────────────────────────────
 
@@ -142,6 +144,7 @@ class BaseVMCreator(ABC):
             iso_path=self.iso_path,
             vm_dir=self.vm_dir,
             disk_size=self.disk_size,
+            allow_emulation=self.allow_emulation,
         )
 
     def _create_disk(self) -> tuple[Path, Path | None]:

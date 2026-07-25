@@ -269,6 +269,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
                 vm_cpus=arguments.vm_cpus,
                 diff=getattr(arguments, 'diff', None),
                 diff_mode=getattr(arguments, 'diff_mode', 'auto'),
+                allow_emulation=getattr(arguments, 'allow_emulation', False),
             )
             env_file_log_level = getattr(arguments, 'file_log_level', None)
             if env_file_log_level is not None:
@@ -428,6 +429,7 @@ def exec_experiment_run(arguments):
                     test_exec_mode=getattr(arguments, 'test_mode', None),
                     diff=getattr(arguments, 'diff', None),
                     diff_mode=getattr(arguments, 'diff_mode', 'auto'),
+                    allow_emulation=getattr(arguments, 'allow_emulation', False),
                 )
                 file_log_level = getattr(arguments, 'file_log_level', None)
                 if file_log_level is not None:
@@ -541,6 +543,7 @@ def exec_experiment_run(arguments):
                 test_exec_mode=getattr(arguments, 'test_mode', None),
                 diff=getattr(arguments, 'diff', None),
                 diff_mode=getattr(arguments, 'diff_mode', 'auto'),
+                allow_emulation=getattr(arguments, 'allow_emulation', False),
             )
             file_log_level = getattr(arguments, 'file_log_level', None)
             if file_log_level is not None:

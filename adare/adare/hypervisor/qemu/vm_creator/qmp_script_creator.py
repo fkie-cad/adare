@@ -229,7 +229,7 @@ class QMPScriptVMCreator(BaseVMCreator):
 
     def _qemu_cmd(self, disk_path: Path, nvram_path: Path | None, iso_path: Path | None,
                   sock_path: Path, serial_log: Path) -> list[str]:
-        arch_params = qemu_params_for_arch(self.os_def)
+        arch_params = qemu_params_for_arch(self.os_def, self.allow_emulation)
         needs_uefi = self.os_def.requires_uefi or self.os_def.architecture == 'aarch64'
 
         cmd = [
@@ -351,6 +351,7 @@ def create_qmp_script_vm(
     vm_dir: Path | None = None,
     setup_level: SetupLevel = SetupLevel.FULL,
     compress: bool = True,
+    allow_emulation: bool = False,
     *,
     template: str | None = None,
     keep_running: bool = False,
@@ -368,6 +369,7 @@ def create_qmp_script_vm(
         iso_path=iso_path,
         setup_level=setup_level,
         compress=compress,
+        allow_emulation=allow_emulation,
         template=template,
         keep_running=keep_running,
         skip_verify=skip_verify,

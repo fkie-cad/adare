@@ -68,9 +68,10 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--test-mode', type=click.Choice(['auto', 'agent', 'host']), help='Test execution mode: auto (default), agent (WebSocket), or host (QGA for QEMU only)')
     @click.option('--diff/--no-diff', default=None, help='Enable/disable filesystem diff (overrides playbook setting)')
     @click.option('--diff-mode', type=click.Choice(['auto', 'guest', 'host']), default='auto', help='Diff mode: auto (smart selection), guest (VM-based), host (QEMU virt-diff)')
+    @click.option('--allow-emulation', is_flag=True, default=False, help='Allow QEMU TCG software emulation when the environment guest architecture does not match the host CPU (slow; hardware acceleration is used otherwise). Also honored via hypervisor_config.allow_emulation in the environment YAML.')
     @click.option('--project', help='Name of the project')
     @click.pass_context
-    def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, gui_mode, test_mode, diff, diff_mode, project):
+    def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, gui_mode, test_mode, diff, diff_mode, allow_emulation, project):
         """Run an experiment in a given environment or all environments if none specified.
 
         By default, runs in TEST mode (creates fake runs, skips integrity checks, allows modifications).
@@ -100,6 +101,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             test_mode=test_mode,
             diff=diff,
             diff_mode=diff_mode,
+            allow_emulation=allow_emulation,
             project=project,
             verbose=ctx.obj.verbose,
             very_verbose=ctx.obj.very_verbose

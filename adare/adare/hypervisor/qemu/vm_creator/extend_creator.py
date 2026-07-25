@@ -18,7 +18,6 @@ past the flatten; the runtime regenerates it on the immutable base.
 """
 
 import logging
-import platform
 import shutil
 import subprocess
 import tempfile
@@ -27,6 +26,7 @@ from pathlib import Path
 from adare.config import HYPERVISOR_CONFIGS
 from adare.console import print_step
 from adare.hypervisor.exceptions import HypervisorException
+from adare.hypervisor.qemu.accel import resolve_accel
 from adare.hypervisor.qemu.firmware import create_nvram_for_vm
 from adare.hypervisor.qemu.utilities.disk_utils import get_boot_mode_for_os
 from adare.hypervisor.qemu.vm_creator.disk_helpers import (
@@ -104,6 +104,7 @@ def run_interactive_extend(
     cpus: int | None,
     console: bool = False,
     compress: bool = True,
+    allow_emulation: bool = False,
 ) -> tuple[bool, list[dict]]:
     """Boot an overlay of *base_disk* interactively, then flatten to *dest_disk*.
 
@@ -127,6 +128,8 @@ def run_interactive_extend(
         compress: Zstd-compress the flattened disk (default True). On
             compression failure, falls back to a plain uncompressed flatten
             rather than losing the completed interactive session.
+        allow_emulation: Permit QEMU TCG software emulation when the guest
+            architecture doesn't match the host (see --allow-emulation)
 
     Returns:
         Tuple of ``(store, recorded)``. ``store`` is the user's decision from the
@@ -136,7 +139,7 @@ def run_interactive_extend(
 
     Raises:
         HypervisorException: On any validation, overlay, boot, or flatten
-            failure (including the QEMU-only Apple-Silicon guard).
+            failure (including the arch-vs-host accel guard).
         InteractiveSessionError: If the GUI QEMU session fails to boot.
     """
     base_disk = base_disk.resolve()
@@ -162,17 +165,9 @@ def run_interactive_extend(
 
     os_def, boot_mode = _synthesize_os_definition(os_block, ram_mb, cpu_count)
 
-    # Apple-Silicon guard: x86_64 guests can't be hardware-accelerated on ARM
-    # macOS. Mirror the runtime guard (hypervisor/qemu/lifecycle.py) and fail
-    # BEFORE booting rather than launching an unusable window.
-    if (platform.system() == 'Darwin' and platform.machine() == 'arm64'
-            and os_def.architecture != 'aarch64'):
-        raise HypervisorException(
-            f'QEMU cannot hardware-accelerate {os_def.architecture} guests on '
-            'Apple Silicon (ARM). Only aarch64 guests are supported on Apple '
-            'Silicon with HVF, so an x86_64 base cannot be extended '
-            'interactively on this host.'
-        )
+    # Fail BEFORE booting rather than launching an unusable window, unless the
+    # caller opted into (slow) TCG emulation.
+    resolve_accel(os_def.architecture, allow_emulation)
 
     qemu_img = HYPERVISOR_CONFIGS['qemu']['qemu_img_exe']
     work_dir = Path(tempfile.mkdtemp(prefix='adare-extend-'))
@@ -209,7 +204,7 @@ def run_interactive_extend(
         )
         store, recorded = run_post_install_session(
             work_overlay, work_nvram, os_def, ram_mb, cpu_count,
-            console_mode=console, ask_store=True,
+            console_mode=console, ask_store=True, allow_emulation=allow_emulation,
         )
 
         # 4. Flatten the overlay into a standalone qcow2 (no backing file) ONLY

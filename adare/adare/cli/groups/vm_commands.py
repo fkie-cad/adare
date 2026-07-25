@@ -200,13 +200,14 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--env-name', default=None, help='Environment file name (defaults to VM name)')
     @click.option('--interactive', is_flag=True, default=False, help='Boot VM after install for manual software installation')
     @click.option('--arch', type=click.Choice(['x86_64', 'aarch64']), default=None, help='Override CPU architecture (default: from OS profile)')
+    @click.option('--allow-emulation', is_flag=True, default=False, help='Allow QEMU TCG software emulation when --arch does not match the host CPU (slow; hardware acceleration is used otherwise).')
     @click.option('--recipe/--no-recipe', 'recipe', default=None, help='Emit a declarative recipe environment (build on load) instead of a baked disk. Default: recipe for Windows, baked for Linux.')
     @click.option('--record', is_flag=True, default=False, help='GUI-auto: record a fresh playbook with the vision agent even if a cached one exists.')
     @click.option('--relearn', is_flag=True, default=False, help='GUI-auto: discard the cached playbook and re-record from scratch.')
     @click.option('--display', is_flag=True, default=False, help='GUI-auto: show the VM window while the agent drives the installer.')
     @click.option('--template', default=None, help='GUI-auto: explicit goal/spec template name (default: gui_<distribution>).')
     @click.option('--compress/--no-compress', 'compress', default=True, help='Zstd-compress the finished base disk (~30-50% smaller, transparent to readers). Default: on.')
-    def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, setup_level, bare, env_name, interactive, arch, recipe, record, relearn, display, template, compress):
+    def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, setup_level, bare, env_name, interactive, arch, allow_emulation, recipe, record, relearn, display, template, compress):
         """Create a new ADARE-ready VM from scratch.
 
         OS_NAME is the target OS. Run `adare os-profile list` to see all entries.
@@ -250,7 +251,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
           adare vm create ubuntu2204 --name my-ubuntu --disk-size 100G --ram 8192
         """
         from adare.cli.vm_create import exec_vm_create
-        args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, setup_level=setup_level, bare=bare, env_name=env_name, interactive=interactive, arch=arch, recipe=recipe, record=record, relearn=relearn, display=display, template=template, compress=compress)
+        args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, setup_level=setup_level, bare=bare, env_name=env_name, interactive=interactive, arch=arch, allow_emulation=allow_emulation, recipe=recipe, record=record, relearn=relearn, display=display, template=template, compress=compress)
         exec_with_error_printing(exec_vm_create, args)
 
     @vm.command(name='gui-doctor')

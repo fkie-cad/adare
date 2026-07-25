@@ -51,6 +51,7 @@ class ManualVMCreator(BaseVMCreator):
             ram_mb=self.ram_mb,
             cpus=self.cpus,
             nvram_path=nvram_path,
+            allow_emulation=self.allow_emulation,
         )
 
 
@@ -65,6 +66,7 @@ def create_manual_vm(
     vm_dir: Path | None = None,
     setup_level: SetupLevel = SetupLevel.FULL,
     compress: bool = True,
+    allow_emulation: bool = False,
 ) -> Path:
     """Create a VM via interactive installation.
 
@@ -81,6 +83,7 @@ def create_manual_vm(
         iso_path=iso_path,
         setup_level=setup_level,
         compress=compress,
+        allow_emulation=allow_emulation,
     )
     return creator.create()
 
@@ -92,9 +95,10 @@ def _run_manual_installation(
     ram_mb: int,
     cpus: int,
     nvram_path: Path | None = None,
+    allow_emulation: bool = False,
 ) -> None:
     """Boot QEMU with native display for interactive OS installation."""
-    arch_params = qemu_params_for_arch(os_def)
+    arch_params = qemu_params_for_arch(os_def, allow_emulation)
     machine = arch_params['machine']
     needs_uefi = os_def.requires_uefi or os_def.architecture == 'aarch64'
 
