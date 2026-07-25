@@ -61,9 +61,13 @@ class OsDefinition:
     architecture: str = 'x86_64'  # 'x86_64' or 'aarch64'
     template: str = ''  # Custom template filename (empty = use default lookup)
     # Installer family — selects how the rendered template is laid out on the
-    # seed medium. One of: 'subiquity' | 'preseed' | 'kickstart' | 'autoyast'
-    # | 'archinstall-cloudinit' | 'manual' | 'gui'. 'gui' writes no seed file;
-    # the installer is driven through its own GUI. The default keeps Ubuntu working.
+    # seed medium. One of: 'subiquity' | 'preseed' | 'ubiquity' | 'kickstart'
+    # | 'autoyast' | 'archinstall-cloudinit' | 'manual' | 'gui'. 'gui' writes no
+    # seed file; the installer is driven through its own GUI. 'ubiquity' (Ubuntu /
+    # Kubuntu *desktop* ISOs) renders a d-i preseed but has no labelled-drive
+    # auto-detect: declare '{seed_port}' in kernel_cmdline and the preseed is
+    # served to the guest over HTTP at 10.0.2.2 instead of on a seed ISO.
+    # The default keeps Ubuntu working.
     installer: str = 'subiquity'
     # Kernel command line passed via QEMU `-append`. Supports {console}
     # substitution (ttyS0/ttyAMA0). Distros like Anaconda or AutoYaST need
@@ -831,7 +835,7 @@ def get_os_definition(os_name: str) -> OsDefinition:
         available = ', '.join(sorted(OS_CATALOG.keys()))
         raise KeyError(
             f"Unknown OS '{os_name}'. Available: {available}\n"
-            f"Run 'adare manage os-profile list' to see all profiles."
+            f"Run 'adare os-profile list' to see all profiles."
         )
     return OS_CATALOG[os_name]
 

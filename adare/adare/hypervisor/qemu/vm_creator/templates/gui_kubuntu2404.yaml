@@ -1,0 +1,33 @@
+# GUI-automation goal/spec for Kubuntu 24.04 (Calamares installer).
+#
+# Version-specific on purpose: _template_stems() strips trailing digits, so every
+# kubuntu* profile would otherwise share gui_kubuntu.yaml *and* the same cached
+# gui_kubuntu.play.yaml — and a Calamares recording replayed against Kubuntu
+# 20.04/22.04's ubiquity would click into the void. kubuntu2404.yml therefore sets
+# `template: kubuntu2404`, which pins this file and gui_kubuntu2404.play.yaml.
+#
+# This is the record-run INPUT — a high-level goal, not a per-screen script.
+# The vision agent reads it, drives the installer, and emits a reusable
+# playbook (gui_kubuntu2404.play.yaml) that later installs replay with no LLM.
+# The `acceptance` block is the single place "what success looks like" lives.
+
+goal: >
+  Install Kubuntu to the whole disk (erase it completely). When asked for user
+  details, create a user with full name "adare", username "adare", and password
+  "adare"; set the hostname to "kubuntu". Accept sensible defaults on every other
+  screen and let the system reboot when the installation finishes.
+
+hints:
+  - "Choose 'Erase disk' — do NOT choose 'Install alongside' or manual partitioning."
+  - "If prompted about third-party / proprietary software, leave defaults and continue."
+  - "Use name/username/password all set to 'adare'; do not enable automatic login unless it is the default."
+  - "Advance with the Next/Continue/Install button; confirm any 'Are you sure?' dialog that warns about erasing the disk."
+  - "The final screen offers to restart — that means the install is done; report done."
+
+acceptance:
+  # The installer must have written a real system to the disk.
+  min_disk_bytes: 5000000000
+  # Visual expectations checked on the rebooted (installed) system.
+  visual:
+    - "the screen shows a Kubuntu/KDE SDDM login screen or a KDE Plasma desktop, NOT the Calamares installer or the live-session desktop"
+    - "the login screen or session is for the user 'adare'"

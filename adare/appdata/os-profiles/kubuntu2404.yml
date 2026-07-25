@@ -9,6 +9,11 @@ version: "24.04"
 # reusable playbook on the first run, then it replays deterministically.
 install_mode: gui-auto
 installer: gui
+# Pin the goal/spec + recorded playbook to this version. _template_stems() strips
+# trailing digits, so without this every kubuntu* profile would share
+# gui_kubuntu.yaml and the same cached gui_kubuntu.play.yaml — replaying a
+# Calamares recording against 20.04/22.04's ubiquity. The loader prepends `gui_`.
+template: kubuntu2404
 # No bundled ISO — the user supplies it with --iso (like a manual install).
 iso_url: ""
 iso_sha256: ""
