@@ -464,7 +464,6 @@ Commands for integrating with the ADARE Web platform for sharing experiments and
   Download an experiment bundle (experiment plus all dependencies) from the web platform.
 
   Options:
-    * ``--include-disk-images`` - Also download disk images
     * ``--project, -p TEXT`` - Name of the project
 
 ``adare web publish <ulid>``
