@@ -1,0 +1,151 @@
+# Paper section 5.2 -- Artifact Regression Testing, Kubuntu 20.04 (KDE Plasma / Dolphin).
+#
+# Same interaction as every other section 5.2 experiment: create a document and open it
+# exactly once through the file manager.
+#
+# Expected outcome for this distro/version: the XDG recently-used artifact is ABSENT.
+# The paper reports that on Kubuntu the artifact is not written in 20.04 and 22.04, but
+# is written in 24.04 after the identical interaction.
+#
+# The absence claim is expressed positively (standard.file_does_not_exist) rather than via
+# expect_to_fail, and it is deliberately NOT trivial: the full interaction runs first, and
+# text_file_accessed proves the document really was read by an application afterwards, so
+# a missing artifact cannot be confused with a missing interaction.
+#
+# GUI icon img/dolphin_taskbar.png is reused from section 5.1
+# (paper/experiments/1_artifact_research/playbooks/deletefile_dolphin_by_click) and is a
+# rasterization of upstream KDE Breeze art, NOT a crop from a live VM. It MUST be re-taken
+# from a live Kubuntu 20.04 screenshot before the results are trusted.
+
+settings:
+  idle: 2.0
+  timeout: 600
+  screenshot:
+    format: "png"
+    quality: 95
+
+variables:
+  filename:
+    type: string
+    value: "adare.txt"
+    description: "Name of the document that gets created and opened once"
+
+  text_file:
+    type: path
+    value: "{{ adare_user_documents }}/{{ filename }}"
+    description: "Full path of the document that gets opened"
+
+  xbel_file:
+    type: path
+    value: "{{ adare_user_home }}/.local/share/recently-used.xbel"
+    description: "XDG recently-used artifact that is expected NOT to appear"
+
+  icon_filemanager_taskbar:
+    type: string
+    value: "dolphin_taskbar.png"
+    description: "Taskbar icon of the KDE file manager (Dolphin)"
+
+  file_content:
+    type: string
+    value: "This is test text"
+    description: "Document content, also used as the on-screen proof that the editor opened it"
+
+
+tests:
+  # --- pre-conditions ---
+  - name: xbel_absent_before
+    description: 'Verify the recently-used artifact is absent before the interaction'
+    function: standard.file_does_not_exist
+    parameter:
+      dst: '{{ xbel_file }}'
+
+  - name: text_file_created
+    description: 'Verify the document to be opened exists before the interaction'
+    function: standard.file_exists
+    parameter:
+      dst: '{{ text_file }}'
+
+  # --- paper claim: "on Kubuntu, the artifact was absent in 20.04 and 22.04" ---
+  - name: xbel_absent_after_open
+    description: 'REGRESSION EXPECTATION: opening a document on Kubuntu 20.04 does not create recently-used.xbel'
+    function: standard.file_does_not_exist
+    parameter:
+      dst: '{{ xbel_file }}'
+
+  # --- the absence must be attributable to the platform, not to a failed interaction ---
+  # atime was reset to 2000-01-01 immediately before the opening click, so a recent access
+  # time can only come from the document actually being read afterwards.
+  - name: text_file_accessed
+    description: 'The document was read after the opening click, so the absent artifact is a platform behaviour and not a missed interaction'
+    function: standard.file_timestamps
+    parameter:
+      dst: '{{ text_file }}'
+      timestamp_type: 'accessed'
+      comparison_type: 'within_last'
+      within_duration: '30m'
+
+
+actions:
+  - command:
+      name: "Ensure recently-used.xbel is absent"
+      description: "Start from a state in which the artifact under test does not exist"
+      command: "rm -f {{ xbel_file }}"
+  - test: xbel_absent_before
+
+  - command:
+      name: "Create text file to be opened"
+      description: "Create the document that will be opened exactly once"
+      command: "echo '{{ file_content }}' > {{ text_file }}"
+      shell: true
+  - test: text_file_created
+
+  - click:
+      target:
+        image: "{{ icon_filemanager_taskbar }}"
+      description: "Open the KDE file manager (Dolphin)"
+  - wait_until:
+      condition:
+        exists:
+          text: "Documents"
+      description: "Wait for the Dolphin Places panel to be usable"
+
+  - click:
+      target:
+        text: "Documents"
+        strategy:
+          SweepStrategy:
+            index: 2
+      description: "Navigate to the Documents folder"
+  - wait_until:
+      condition:
+        exists:
+          text: "{{ filename }}"
+      description: "Wait for the document to be listed"
+
+  # Reset atime AFTER navigation so that Dolphin's text preview cannot be mistaken for
+  # the opening read.
+  - command:
+      name: "Reset access time of the document"
+      description: "Pin atime to 2000-01-01 so a later access time proves the document was opened"
+      command: "touch -a -t 200001010000 {{ text_file }}"
+
+  - click:
+      type: "double"
+      target:
+        text: "{{ filename }}"
+      description: "Open the document exactly once"
+
+  - wait_until:
+      condition:
+        exists:
+          text: "{{ file_content }}"
+      timeout: 60.0
+      description: "Editor shows the document content -- runtime proof that the open succeeded"
+  - idle:
+      duration: 5
+      description: "Give the platform the same chance to write the artifact as on 24.04"
+
+  - test: xbel_absent_after_open
+  - test: text_file_accessed
+
+  # No pull action: there is no artifact to pull on this distro/version.

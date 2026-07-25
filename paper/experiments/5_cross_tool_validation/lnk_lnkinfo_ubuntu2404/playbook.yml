@@ -1,0 +1,264 @@
+# Experiment: Cross-Tool Validation — lnkinfo (liblnk-utils, Linux)
+# Paper: section 5.5, Table 1 row "lnkinfo / Ubuntu 24.04 / L1 ✓ L2 ✗ L3 ✗ / Verbosity: Medium"
+# Purpose: parse three LNK samples with lnkinfo and assert, per sample, the exact
+#          outcome the paper reports — including the two FAILURES.
+#
+# The ✗ cells are the point of this playbook. The paper says lnkinfo "failed due to
+# strict size constraints"; that constraint is liblnk's ExtraData block-size check in
+# liblnk_io_handle_read_data_blocks, which rejects a block whose declared size runs
+# past the end of the file. L2/L3 place their non-standard appended bytes exactly
+# where liblnk expects the next ExtraData block, so the first four bytes are read as
+# a block size and the open fails. Encoding that as an executable expectation is what
+# turns a table entry into a reproducible finding.
+#
+# Measured on lnkinfo 20181227 (the version Ubuntu 24.04 ships, and the version the
+# paper's Appendix A pins):
+#   L1 -> rc 0, full field dump
+#   L2 -> rc 1, stderr "liblnk_io_handle_read_data_blocks: data block size exceeds file size."
+#   L3 -> rc 1, same
+# See provisioning/README.md for the liblnk 20240423 caveat.
+
+settings:
+  idle: 1.0
+  timeout: 1200
+  screenshot:
+    format: "png"
+    quality: 95
+
+variables:
+  sample_dir:
+    type: path
+    value: "{{ adare_project_shared_data }}"
+    description: "Project-level shared data holding L1.lnk / L2.lnk / L3.lnk"
+
+  out_dir:
+    type: path
+    value: "{{ adare_user_home }}/adare_lnk_lnkinfo"
+    description: "In-guest scratch directory for parser output"
+
+  # `lnkinfo_version` is created at runtime by the `capture:` below.
+
+tests:
+  # --- tool provenance -------------------------------------------------------
+  - name: lnkinfo_version_recorded
+    description: "The captured lnkinfo version has a plausible shape, proving the capture worked"
+    function: standard.file_content_matches_regex
+    parameter:
+      dst: '{{ out_dir }}/tool_version.txt'
+      regex: 'lnkinfo\s+\d{8}'
+
+  - name: lnkinfo_version_matches_paper
+    description: >-
+      Pins the lnkinfo version to the one recorded in the paper's Appendix A (20181227,
+      which is what Ubuntu 24.04 ships as liblnk-utils). EXPECTED TO FAIL on any other
+      environment — deliberately, because liblnk 20240423 changed this tool's behaviour
+      on L2/L3 from a hard failure to a recoverable "Is corrupted" flag, which would
+      silently invalidate the two ✗ cells below.
+    function: standard.file_content_matches_regex
+    parameter:
+      dst: '{{ out_dir }}/tool_version.txt'
+      regex: 'lnkinfo\s+20181227'
+
+  # --- L1: structurally valid — Table 1 says ✓ -------------------------------
+  - name: l1_output_exists
+    description: "lnkinfo produced stdout for L1"
+    function: standard.file_exists
+    parameter:
+      dst: '{{ out_dir }}/lnkinfo_L1.txt'
+
+  - name: l1_exit_code_zero
+    description: "lnkinfo parsed L1 successfully (Table 1: ✓)"
+    function: standard.file_content_equals
+    parameter:
+      dst: '{{ out_dir }}/rc_L1.txt'
+      content: "0"
+
+  - name: l1_reports_local_path
+    description: "lnkinfo recovered the LinkInfo local path"
+    function: standard.file_content_contains
+    parameter:
+      dst: '{{ out_dir }}/lnkinfo_L1.txt'
+      content: 'Local path'
+
+  - name: l1_local_path_value
+    description: "The recovered local path is the expected target"
+    function: standard.file_content_matches_regex
+    parameter:
+      dst: '{{ out_dir }}/lnkinfo_L1.txt'
+      regex: 'Local path\s+:\s+C:\\+Windows\\+System32\\+notepad\.exe'
+
+  - name: l1_reports_working_directory
+    description: "lnkinfo recovered the WORKING_DIR string"
+    function: standard.file_content_matches_regex
+    parameter:
+      dst: '{{ out_dir }}/lnkinfo_L1.txt'
+      regex: 'Working directory\s+:\s+C:\\+Windows\\+System32'
+
+  - name: l1_reports_volume_label
+    description: "lnkinfo recovered the VolumeID label — part of its mid-level verbosity"
+    function: standard.file_content_contains
+    parameter:
+      dst: '{{ out_dir }}/lnkinfo_L1.txt'
+      content: 'ADARE-LAB'
+
+  - name: l1_stderr_empty
+    description: "A clean parse writes nothing to stderr"
+    function: standard.file_content_matches_regex
+    parameter:
+      dst: '{{ out_dir }}/lnkinfo_L1.err.txt'
+      regex: '\S'
+    expect_to_fail: true
+
+  # --- L2: valid link + 512 bytes appended — Table 1 says ✗ ------------------
+  - name: l2_exit_code_nonzero
+    description: "lnkinfo REFUSED to open L2 (Table 1: ✗). Exit code 1, not 0."
+    function: standard.file_content_equals
+    parameter:
+      dst: '{{ out_dir }}/rc_L2.txt'
+      content: "1"
+
+  - name: l2_rejects_on_size_constraint
+    description: >-
+      The failure is specifically the strict ExtraData size constraint the paper names,
+      not some unrelated error. The regex tolerates both the 20181227 wording
+      ("data block size exceeds file size") and the later 20240423 wording
+      ("invalid data block size value exceeds file size").
+    function: standard.file_content_matches_regex
+    parameter:
+      dst: '{{ out_dir }}/lnkinfo_L2.err.txt'
+      regex: 'data block size (value )?exceeds file size'
+
+  - name: l2_no_link_fields_recovered
+    description: >-
+      Because the open failed, lnkinfo recovered NO link fields for L2. Asserted with
+      expect_to_fail so the absence is a passing expectation rather than an untested gap
+      — this is the executable form of Table 1's ✗.
+    function: standard.file_content_contains
+    parameter:
+      dst: '{{ out_dir }}/lnkinfo_L2.txt'
+      content: 'Working directory'
+    expect_to_fail: true
+
+  - name: l2_no_local_path_recovered
+    description: "L2 yielded no local path either (executable form of Table 1's ✗)"
+    function: standard.file_content_contains
+    parameter:
+      dst: '{{ out_dir }}/lnkinfo_L2.txt'
+      content: 'Local path'
+    expect_to_fail: true
+
+  # --- L3: valid link + 4096 bytes appended — Table 1 says ✗ -----------------
+  - name: l3_exit_code_nonzero
+    description: "lnkinfo REFUSED to open L3 as well (Table 1: ✗) — payload size is irrelevant"
+    function: standard.file_content_equals
+    parameter:
+      dst: '{{ out_dir }}/rc_L3.txt'
+      content: "1"
+
+  - name: l3_rejects_on_size_constraint
+    description: "L3 fails on the same strict ExtraData size constraint as L2"
+    function: standard.file_content_matches_regex
+    parameter:
+      dst: '{{ out_dir }}/lnkinfo_L3.err.txt'
+      regex: 'data block size (value )?exceeds file size'
+
+  - name: l3_no_link_fields_recovered
+    description: "L3 yielded no link fields (executable form of Table 1's ✗)"
+    function: standard.file_content_contains
+    parameter:
+      dst: '{{ out_dir }}/lnkinfo_L3.txt'
+      content: 'Working directory'
+    expect_to_fail: true
+
+  - name: l3_no_local_path_recovered
+    description: "L3 yielded no local path either (executable form of Table 1's ✗)"
+    function: standard.file_content_contains
+    parameter:
+      dst: '{{ out_dir }}/lnkinfo_L3.txt'
+      content: 'Local path'
+    expect_to_fail: true
+
+actions:
+  # --- setup and tool provenance --------------------------------------------
+  - command:
+      name: "Prepare output directory"
+      command: "rm -rf {{ out_dir }} && mkdir -p {{ out_dir }}"
+      shell: true
+
+  - command:
+      name: "Record lnkinfo version"
+      description: "Capture the version so the run documents which parser produced Table 1"
+      command: "lnkinfo -V 2>&1 | head -n 1 | tee {{ out_dir }}/tool_version.txt"
+      shell: true
+      capture:
+        variable: lnkinfo_version
+        source: stdout
+
+  - test: lnkinfo_version_recorded
+  - test: lnkinfo_version_matches_paper
+
+  # --- L1 -------------------------------------------------------------------
+  # allow_failure is set on every invocation: for L2/L3 a non-zero exit is the
+  # EXPECTED result, and without it the run would abort before asserting anything.
+  - command:
+      name: "lnkinfo on L1"
+      command: "lnkinfo '{{ sample_dir }}/L1.lnk' > {{ out_dir }}/lnkinfo_L1.txt 2> {{ out_dir }}/lnkinfo_L1.err.txt; echo $? > {{ out_dir }}/rc_L1.txt"
+      shell: true
+      allow_failure: true
+      timeout: 120
+
+  - test: l1_output_exists
+  - test: l1_exit_code_zero
+  - test: l1_reports_local_path
+  - test: l1_local_path_value
+  - test: l1_reports_working_directory
+  - test: l1_reports_volume_label
+  - test: l1_stderr_empty
+
+  - pull:
+      description: "Collect L1 artifacts on the host for the Table 1 normalizer"
+      src:
+        - "{{ out_dir }}/lnkinfo_L1.txt"
+        - "{{ out_dir }}/lnkinfo_L1.err.txt"
+        - "{{ out_dir }}/rc_L1.txt"
+        - "{{ out_dir }}/tool_version.txt"
+
+  # --- L2 -------------------------------------------------------------------
+  - command:
+      name: "lnkinfo on L2"
+      command: "lnkinfo '{{ sample_dir }}/L2.lnk' > {{ out_dir }}/lnkinfo_L2.txt 2> {{ out_dir }}/lnkinfo_L2.err.txt; echo $? > {{ out_dir }}/rc_L2.txt"
+      shell: true
+      allow_failure: true
+      timeout: 120
+
+  - test: l2_exit_code_nonzero
+  - test: l2_rejects_on_size_constraint
+  - test: l2_no_link_fields_recovered
+  - test: l2_no_local_path_recovered
+
+  - pull:
+      description: "Collect L2 artifacts on the host"
+      src:
+        - "{{ out_dir }}/lnkinfo_L2.txt"
+        - "{{ out_dir }}/lnkinfo_L2.err.txt"
+        - "{{ out_dir }}/rc_L2.txt"
+
+  # --- L3 -------------------------------------------------------------------
+  - command:
+      name: "lnkinfo on L3"
+      command: "lnkinfo '{{ sample_dir }}/L3.lnk' > {{ out_dir }}/lnkinfo_L3.txt 2> {{ out_dir }}/lnkinfo_L3.err.txt; echo $? > {{ out_dir }}/rc_L3.txt"
+      shell: true
+      allow_failure: true
+      timeout: 120
+
+  - test: l3_exit_code_nonzero
+  - test: l3_rejects_on_size_constraint
+  - test: l3_no_link_fields_recovered
+  - test: l3_no_local_path_recovered
+
+  - pull:
+      description: "Collect L3 artifacts on the host"
+      src:
+        - "{{ out_dir }}/lnkinfo_L3.txt"
+        - "{{ out_dir }}/lnkinfo_L3.err.txt"
+        - "{{ out_dir }}/rc_L3.txt"

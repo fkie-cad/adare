@@ -1,0 +1,14 @@
+environments:
+  - win11
+
+description: >-
+  Cross-tool validation (paper section 5.5): parse three LNK samples with LECmd 1.5.1
+  on Windows 11 and assert the recovered link fields per sample. LECmd tolerates the
+  non-standard appended data in L2/L3 that lnkinfo rejects.
+
+tags:
+  - lnk
+  - cross-tool-validation
+  - tool:LECmd
+  - goal:tool-test
+  - windows
