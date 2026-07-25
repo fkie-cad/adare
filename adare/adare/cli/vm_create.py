@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 # Install modes that drive the OS installer's own GUI instead of handing it a
 # seed file. They bake no Python environment, and they need no post-install
 # interactive session because the install already ran in a driven window.
-_GUI_INSTALL_MODES = frozenset({'manual', 'gui-auto', 'gui-script'})
+_GUI_INSTALL_MODES = frozenset({'manual', 'gui-auto'})
 
 
 def _use_recipe(os_def: OsDefinition, recipe_flag: bool | None) -> bool:
@@ -48,7 +48,7 @@ def exec_vm_create(arguments):
     bare = getattr(arguments, 'bare', False)
     setup_arg = getattr(arguments, 'setup_level', None)
     # Resolve the setup level once, before branching, so every creator path
-    # (recipe, manual, gui-auto, gui-script, linux, windows) honours it. `--setup` wins;
+    # (recipe, manual, gui-auto, playbook, linux, windows) honours it. `--setup` wins;
     # `--bare` is the deprecated alias for `--setup bare`.
     if setup_arg is not None:
         setup_level = SetupLevel[setup_arg.upper()]
@@ -56,7 +56,7 @@ def exec_vm_create(arguments):
             log.warning('--bare is ignored because --setup %s was given explicitly', setup_arg)
     else:
         setup_level = SetupLevel.BARE if bare else SetupLevel.FULL
-    # GUI-automation options (gui-auto and gui-script install modes).
+    # GUI-automation options (gui-auto install mode).
     gui_record = getattr(arguments, 'record', False)
     gui_relearn = getattr(arguments, 'relearn', False)
     gui_display = getattr(arguments, 'display', False)
@@ -216,27 +216,6 @@ def exec_vm_create(arguments):
             vm_dir=vm_dir,
             setup_level=setup_level,
         )
-    elif os_def.install_mode == 'gui-script':
-        # Deterministic playbook replay — no vision model and no CV server, so
-        # unlike gui-auto this needs no ADARE_VLLM_* configuration. The ISO may
-        # come from --iso or from a baked iso_url on the profile.
-        from adare.hypervisor.qemu.vm_creator.qmp_script_creator import create_qmp_script_vm
-
-        disk_path = create_qmp_script_vm(
-            os_def=os_def,
-            iso_path=iso_path,
-            vm_name=vm_name,
-            disk_size=disk_size,
-            ram_mb=ram,
-            cpus=cpus,
-            force=force,
-            vm_dir=vm_dir,
-            setup_level=setup_level,
-            compress=compress,
-            allow_emulation=allow_emulation,
-            template=gui_template,
-            keep_running=gui_display,
-        )
     elif os_def.platform == 'linux':
         from adare.hypervisor.qemu.vm_creator.linux_creator import create_linux_vm
 
@@ -319,9 +298,10 @@ def exec_vm_create(arguments):
     if os_def.install_mode == 'gui-auto':
         tip = ('This VM was installed by the GUI agent. The generated playbook can be '
                'edited and replayed; see the install report for a screenshot walkthrough.')
-    elif os_def.install_mode == 'gui-script':
-        tip = ('This VM was installed by deterministic playbook replay (no vision model). '
-               'The per-step screenshots next to the disk show exactly what was clicked.')
+    elif os_def.install_mode == 'playbook':
+        tip = ('This VM was installed by deterministic playbook replay driven by '
+               'cv-server OCR (no vision LLM). The per-step screenshots next to the '
+               'disk show exactly what was clicked.')
     elif os_def.install_mode == 'manual':
         tip = 'This VM was installed manually. Configure SSH/guest agent access for full ADARE integration.'
     elif setup_level == SetupLevel.BARE:
