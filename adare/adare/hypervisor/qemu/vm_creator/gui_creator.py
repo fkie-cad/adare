@@ -140,6 +140,7 @@ class GUIVMCreator(BaseVMCreator):
     # -- driving ------------------------------------------------------------
 
     def _make_vm(self, disk_path: Path, boot_from_cdrom: bool):
+        from adare.hypervisor.qemu.accel import resolve_accel
         from adare.hypervisor.qemu.manager import QEMUManager
 
         manager = QEMUManager()
@@ -150,6 +151,8 @@ class GUIVMCreator(BaseVMCreator):
 
         from adare.hypervisor.qemu.vm import QEMUVM
 
+        accel = resolve_accel(self.os_def.architecture, self.allow_emulation)
+        machine = 'virt' if self.os_def.architecture == 'aarch64' else 'pc'
         vm = QEMUVM(
             vm_name=self.vm_name,
             guest_os=self.os_def.name,
@@ -159,6 +162,8 @@ class GUIVMCreator(BaseVMCreator):
             executables=manager.executables,
             cpus=self.cpus,
             ram=self.ram_mb,
+            machine=machine,
+            accel=accel,
             disk_path=str(disk_path),
             architecture=self.os_def.architecture,
             iso_path=str(self.iso_path),
@@ -274,6 +279,7 @@ def create_gui_vm(
     vm_dir: Path | None = None,
     setup_level: SetupLevel = SetupLevel.FULL,
     compress: bool = True,
+    allow_emulation: bool = False,
     *,
     record: bool = False,
     relearn: bool = False,
@@ -293,6 +299,7 @@ def create_gui_vm(
         iso_path=iso_path,
         setup_level=setup_level,
         compress=compress,
+        allow_emulation=allow_emulation,
         record=record,
         relearn=relearn,
         display=display,

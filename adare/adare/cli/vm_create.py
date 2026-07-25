@@ -42,6 +42,7 @@ def exec_vm_create(arguments):
     env_name = getattr(arguments, 'env_name', None)
     interactive = getattr(arguments, 'interactive', False)
     arch = getattr(arguments, 'arch', None)
+    allow_emulation = getattr(arguments, 'allow_emulation', False)
     compress = getattr(arguments, 'compress', True)
     recipe_flag = getattr(arguments, 'recipe', None)
     bare = getattr(arguments, 'bare', False)
@@ -170,6 +171,7 @@ def exec_vm_create(arguments):
             vm_dir=vm_dir,
             setup_level=setup_level,
             compress=compress,
+            allow_emulation=allow_emulation,
         )
     elif os_def.install_mode == 'gui-auto':
         if iso_path is None:
@@ -194,6 +196,7 @@ def exec_vm_create(arguments):
             vm_dir=vm_dir,
             setup_level=setup_level,
             compress=compress,
+            allow_emulation=allow_emulation,
             record=gui_record,
             relearn=gui_relearn,
             display=gui_display,
@@ -216,6 +219,7 @@ def exec_vm_create(arguments):
             vm_dir=vm_dir,
             setup_level=setup_level,
             compress=compress,
+            allow_emulation=allow_emulation,
             template=gui_template,
             keep_running=gui_display,
         )
@@ -233,6 +237,7 @@ def exec_vm_create(arguments):
             vm_dir=vm_dir,
             setup_level=setup_level,
             compress=compress,
+            allow_emulation=allow_emulation,
         )
     elif os_def.platform == 'windows':
         if iso_path is None:
@@ -258,6 +263,7 @@ def exec_vm_create(arguments):
             vm_dir=vm_dir,
             setup_level=setup_level,
             compress=compress,
+            allow_emulation=allow_emulation,
         )
     else:
         print_error_message(title=f"Unsupported platform: {os_def.platform}")
@@ -278,6 +284,7 @@ def exec_vm_create(arguments):
             os_def=os_def,
             ram_mb=ram or os_def.default_ram_mb,
             cpus=cpus or os_def.default_cpus or default_host_cpus(),
+            allow_emulation=allow_emulation,
         )
 
     final_name = vm_name or disk_path.stem

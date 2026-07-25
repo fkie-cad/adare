@@ -34,6 +34,7 @@ class ExperimentConfig:
     dev_mode: bool = False  # Track if running in dev mode
     installation_mode: str = "wheel"  # "wheel" (pip) or "editable" (Poetry)
     file_log_level: int = 20  # logging.INFO — level for adare.log file handler
+    allow_emulation: bool = False  # Allow QEMU TCG when guest arch != host arch (--allow-emulation)
 
 @dataclass
 class ExperimentRunCtx:
