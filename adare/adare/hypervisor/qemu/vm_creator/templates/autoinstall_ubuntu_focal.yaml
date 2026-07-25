@@ -30,6 +30,26 @@ autoinstall:
   locale: en_US.UTF-8
   keyboard:
     layout: us
+  # Match the interface by pattern, never by name. ADARE runs experiments with the
+  # NIC pinned to a different PCI address than the installer used, so the guest's
+  # predictable name changes between install and run (enp0s1 -> enp0s31). A config
+  # naming one interface leaves the guest with no address at all, which costs a
+  # 120s systemd-networkd-wait-online timeout on every boot and breaks the SLIRP
+  # SMB share at 10.0.2.4. See hypervisor/qemu/guest_network.py.
+  network:
+    version: 2
+    # renderer: NetworkManager is what Canonical's own live-server -> Desktop
+    # recipe uses, and it is why Fedora and Ubuntu 24.04 survive the PCI-address
+    # change while Kubuntu / 22.04 / 20.04 do not: NetworkManager claims any
+    # ethernet device regardless of its name, whereas systemd-networkd only
+    # configures what its config names. It also leaves these server-ISO builds
+    # closer to a genuine desktop install, which is the point of the profile.
+    renderer: NetworkManager
+    ethernets:
+      adare-any:
+        match:
+          name: "e*"
+        dhcp4: true
   storage:
     layout:
       name: lvm

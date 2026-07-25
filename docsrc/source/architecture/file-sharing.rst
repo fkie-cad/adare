@@ -82,6 +82,65 @@ directory to the guest at ``//10.0.2.4/qemu``.
 - **Cleanup**: performs a safety writeback and removes the temporary
   directory.
 
+.. note::
+
+   The fallback to QGA is logged as a **warning** and relabels the progress
+   stage. It is a large performance regression (QGA transfers file-by-file
+   through the guest agent), so it should never pass unnoticed. If you see it,
+   the two causes worth checking first are a guest image without
+   ``cifs-utils``/``mount.cifs``, and a guest with no IPv4 route to
+   ``10.0.2.4`` -- see :ref:`guest-network-repair`.
+
+.. _guest-network-repair:
+
+Guest network repair
+--------------------
+
+Every SMB mount depends on the guest actually having a working network, and
+that cannot be taken for granted, because **ADARE gives the NIC a different PCI
+address at run time than the installers use**:
+
+- the VM creators build a raw QEMU command line with an auto-assigned NIC
+  (``-device virtio-net-pci,netdev=net0``), which lands on ``pcie.0`` slot
+  ``0x01``, so the guest sees ``enp0s1`` -- and that is the name the installer
+  bakes into ``/etc/netplan/*.yaml``;
+- experiment runs go through
+  ``libvirt_xml_builder._add_network_commandline()``, which pins
+  ``bus=pcie.0,addr=0x1f``, so the same NIC enumerates as ``enp0s31``.
+
+That path is taken for *every* experiment, because ``_add_network()`` defers to
+the ``qemu:commandline`` builder whenever SMB **or** port forwarding is active,
+and the adarevm websocket forward is always active.
+
+A guest whose network config names one interface therefore ends up with only
+``lo``: ``systemd-networkd-wait-online`` burns its full **120 s** timeout on
+every boot, nothing can reach the SLIRP SMB server, and the adarevm websocket
+has no guest-side stack. NetworkManager-managed guests (Fedora) are unaffected,
+and Ubuntu 24.04 is rescued by NetworkManager *after* paying the 120 s.
+
+``hypervisor/qemu/guest_network.py`` repairs this after boot, before anything
+depends on the network. It is idempotent and best-effort:
+
+1. if any non-loopback interface already has an IPv4 address, do nothing;
+2. otherwise bring every non-loopback link up and give the guest's own DHCP
+   client a few seconds to claim it;
+3. if nothing claims it, assign SLIRP's fixed addressing directly --
+   ``10.0.2.15/24``, gateway ``10.0.2.2`` -- and point the resolver at
+   ``10.0.2.3`` via ``resolvectl`` (needed because the agent bootstrap installs
+   from PyPI).
+
+Nothing is written to the guest filesystem on the normal path -- only in-memory
+kernel and ``systemd-resolved`` state -- so guest disk state stays clean for
+forensic purposes. Only if ``resolvectl`` is unavailable does it fall back to
+writing ``/etc/resolv.conf``.
+
+The install-time half of the fix is in the ``autoinstall_*`` templates, which now
+match the interface **by pattern** (``match: {name: "e*"}``) instead of by name,
+so images built from here on are immune to the PCI address. Images built before
+that change still need the run-time repair, and still pay the 120 s
+``wait-online`` timeout on boot -- which is why the guest-agent readiness budget
+escalates per attempt (see ``lifecycle.py:_ready_timeout_for_attempt``).
+
 Libguestfs (Linux fallback)
 ----------------------------
 
@@ -109,6 +168,33 @@ every file is serialised and sent individually over the QGA channel.
 - **Post-boot**: uploads all files from the manifest via QGA guest-file
   operations.
 - **Retrieval**: downloads artifacts via QGA before VM shutdown.
+
+.. warning::
+
+   **Known limitation: QGA-via-libvirt is not a dependable bulk transport for the
+   aarch64 Ubuntu/Kubuntu desktop guests.** Partway through an upload the agent
+   stops answering even libvirt's 5-second ``guest-sync``
+   (``Guest agent is not responding: guest agent didn't respond to synchronization
+   within '5' seconds``), after which every ``guest-file-write`` trips
+   ``QGA_FILE_OP_TIMEOUT``. It fails on the ~2 MB tar first, then again on the
+   61,828-byte ``adarevm`` wheel that the per-file fallback retries — which is the
+   ``Failed to upload adarevm-*.whl`` error seen in ``adare env verify``.
+
+   The usual suspects have been measured out:
+
+   - **not throughput** — the identical 61,828-byte ``guest-file-write`` completes
+     in about **1 ms (45-53 MB/s)** on three of the same disks when written
+     straight to the QGA unix socket rather than through libvirt;
+   - **not the timeout** — the agent is unresponsive to a *5 s* sync, so a larger
+     ``QGA_FILE_OP_TIMEOUT`` changes nothing;
+   - **not the chunk size** — tested at both 16 KB (~22 KB base64) and 64 KB
+     (~85 KB); both wedge at the same point.
+
+   The root cause inside qemu-ga/libvirt has **not** been identified. The practical
+   consequence is that guests must be kept *off* this path: make sure the image has
+   ``cifs-utils``/``mount.cifs`` so the SMB strategy is used (~1 s for the same
+   payload). The autoinstall templates now install it; images built before that
+   change need a rebuild or an ``env extend``.
 
 
 Strategy Selection

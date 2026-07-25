@@ -42,6 +42,30 @@ class QGAFileTransfer:
 
     CHUNK_SIZE = 64 * 1024  # 64KB chunks — base64 expands to ~85KB, balanced throughput vs JSON overhead
 
+    # KNOWN LIMITATION — do not try to fix this by tuning the numbers above.
+    #
+    # On aarch64 Ubuntu/Kubuntu desktop guests, uploads through *libvirt's*
+    # guest-agent channel wedge partway: the agent stops answering even libvirt's
+    # 5s `guest-sync` ("Guest agent is not responding: guest agent didn't respond
+    # to synchronization within '5' seconds"), after which every guest-file-write
+    # trips QGA_FILE_OP_TIMEOUT. It fails on the ~2MB tar first, then again on the
+    # 61,828-byte wheel that the per-file fallback retries.
+    #
+    # Measured, so the usual suspects can be ruled out:
+    #   * NOT throughput — the identical 61,828-byte guest-file-write completes in
+    #     ~1ms (45-53 MB/s) on three of these same disks when written straight to
+    #     the QGA unix socket instead of via libvirt.
+    #   * NOT the 60s budget — the agent is unresponsive to a 5s sync, so a longer
+    #     deadline changes nothing.
+    #   * NOT the chunk size — tested at 16KB (~22KB base64) as well as 64KB; both
+    #     wedge at the same point.
+    #
+    # So QGA-via-libvirt is not a dependable bulk transport for these guests, and
+    # the real fix is to keep them off this path: ensure the image has
+    # cifs-utils/mount.cifs so SMB (~1s for the same payload) is used. The
+    # autoinstall templates now install it; images built before that need a rebuild
+    # or an `env extend`. See docsrc/source/architecture/file-sharing.rst.
+
     def __init__(self, vm):
         self.vm = vm
         self.is_windows = 'windows' in vm.guest_os.lower()
