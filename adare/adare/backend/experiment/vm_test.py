@@ -281,7 +281,7 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
         start_command = (
             "export DISPLAY=:0; "
             "export XAUTHORITY=$(ls /run/user/*/gdm/Xauthority /run/user/*/.mutter-Xwaylandauth.* "
-            "/home/adare/.Xauthority 2>/dev/null | head -1); "
+            "/run/sddm/* /run/user/*/xauth_* /home/adare/.Xauthority 2>/dev/null | head -1); "
             "xhost +SI:localuser:root >/dev/null 2>&1 || true; "
             "cd /adare/vm/adarevm && nohup uv run adarevm >/tmp/adarevm.log 2>&1 &"
         )
@@ -349,6 +349,130 @@ async def test_click_command(context):
     except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.warning(f"Click command error: {e}")
         return False, f"Click command error: {e}"
+
+
+def _get_host_gui_executor(context):
+    """Return a per-run QEMUHostGUIExecutor bound to the test VM.
+
+    Cached on the context so the screenshot check (which primes the VM's cached
+    screen resolution via update_screen_resolution) and the click check that
+    follows share the same instance -- the click's coordinate normalization
+    depends on the resolution the screenshot recorded.
+    """
+    executor = getattr(context, '_host_gui_executor', None)
+    if executor is None:
+        from adare.backend.experiment.execution.qemu_host_gui_executor import (
+            QEMUHostGUIExecutor,
+        )
+        executor = QEMUHostGUIExecutor(context.vm)
+        context._host_gui_executor = executor
+    return executor
+
+
+async def test_host_screenshot(context):
+    """Test host-side screenshot capture via QMP screendump.
+
+    This is the production-representative path for QEMU experiments (see
+    QEMUHostGUIExecutor): the host grabs the framebuffer over QMP, so it works
+    regardless of the guest's display server (native Wayland included). A
+    non-empty, non-uniform image also proves the autologin desktop actually
+    rendered (a black/blank frame means the greeter never handed off).
+
+    The autologin desktop takes time to paint after the guest agent first
+    responds, so a fresh boot can briefly return a uniform (black) frame. We
+    therefore poll: capture, and if the frame is uniform, nudge input (a
+    harmless SHIFT tap wakes any DPMS-blanked display without altering state)
+    and retry until the desktop renders or we time out.
+    """
+    import asyncio
+    import base64
+    import io
+
+    from PIL import Image
+
+    executor = _get_host_gui_executor(context)
+
+    # Poll up to ~90s for the desktop to render (fresh boot) / wake (blanked).
+    max_attempts = 18
+    poll_delay = 5.0
+    last_error = "no screenshot captured"
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            result = await executor.screenshot()
+
+            if not result or result.get('status') != 'success':
+                last_error = f"Host/QMP screenshot failed: {(result or {}).get('message', 'no result')}"
+            else:
+                image = result.get('image') or {}
+                data = image.get('data')
+                if not data:
+                    last_error = "Host/QMP screenshot returned no image data"
+                else:
+                    img = Image.open(io.BytesIO(base64.b64decode(data))).convert('RGB')
+                    if img.width < 1 or img.height < 1:
+                        last_error = f"Host/QMP screenshot has invalid size {img.width}x{img.height}"
+                    else:
+                        # A uniform frame (all-black/single-colour) means the
+                        # desktop has not painted yet (or the display is blanked).
+                        extrema = img.getextrema()  # ((rmin,rmax),(gmin,gmax),(bmin,bmax))
+                        if all(lo == hi for lo, hi in extrema):
+                            last_error = (
+                                f"Host/QMP screenshot is a uniform {img.width}x{img.height} "
+                                f"frame (desktop did not render)"
+                            )
+                        else:
+                            # Cache dimensions for the click check's safe coordinate.
+                            context._host_screen_size = (img.width, img.height)
+                            log.info(
+                                f"Host/QMP screenshot captured ({img.width}x{img.height}, "
+                                f"non-uniform) on attempt {attempt}"
+                            )
+                            return True, None
+        except (OSError, ValueError, ConnectionError, TimeoutError, RuntimeError) as e:
+            last_error = f"Host/QMP screenshot error: {e}"
+
+        if attempt < max_attempts:
+            log.info(f"Host/QMP screenshot attempt {attempt}: {last_error}; nudging + retrying")
+            # Wake a possibly DPMS-blanked display; SHIFT is inert (no text/action).
+            try:
+                await executor.keyboard('press', 'shift')
+            except (OSError, ConnectionError, TimeoutError, RuntimeError):
+                pass
+            await asyncio.sleep(poll_delay)
+
+    log.warning(last_error)
+    return False, last_error
+
+
+async def test_host_click(context):
+    """Test host-side mouse click via QMP input-send-event.
+
+    Reuses the executor from test_host_screenshot (which must run first so the
+    VM's cached resolution is set for absolute-coordinate normalization). Clicks
+    near the screen centre -- a safe spot unlikely to trigger a hot corner.
+    """
+    try:
+        executor = _get_host_gui_executor(context)
+
+        width, height = getattr(context, '_host_screen_size', (0, 0))
+        if width and height:
+            click_x, click_y = width // 2, height // 2
+        else:
+            # Screenshot didn't record a size; fall back to a modest coordinate.
+            click_x, click_y = 100, 100
+
+        result = await executor.click(click_x, click_y)
+        if result and result.get('status') == 'success':
+            log.info(f"Host/QMP click successful (clicked at {click_x}, {click_y})")
+            return True, None
+        msg = (result or {}).get('message', 'no result')
+        log.warning(f"Host/QMP click failed: {msg}")
+        return False, f"Host/QMP click failed: {msg}"
+
+    except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
+        log.warning(f"Host/QMP click error: {e}")
+        return False, f"Host/QMP click error: {e}"
 
 
 def _decode_clixml_xml(xml_block: str) -> str:
@@ -489,6 +613,8 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
     from adare.types.stages import (
         VMAdareServerTestStage,
         VMClickTestStage,
+        VMHostClickTestStage,
+        VMHostScreenshotTestStage,
         VMPythonTestStage,
         VMResponseTestStage,
         VMScreenshotTestStage,
@@ -499,6 +625,14 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
     from adare.backend.experiment.commands.manage import StageCtxManagerLite
 
     log.info("Testing VM compatibility with ADARE WebSocket server...")
+
+    # QEMU experiments default to host-side QMP GUI automation (Wayland-agnostic),
+    # so on QEMU the host/QMP screenshot+click are the gating, production-
+    # representative UI checks. The in-guest adarevm agent path (server/websocket/
+    # agent screenshot/click) is exercised too but is SECONDARY / non-fatal on QEMU
+    # -- a native-Wayland session may legitimately fail the X11-only agent capture.
+    # VirtualBox/OVA has no QMP, so there the agent path stays primary and gating.
+    is_qemu = getattr(context, 'hypervisor_type', None) == 'qemu'
 
     # Collected by _run_compat_substage: list of (stage_msg, summary, detail) for
     # failing sub-stages, printed as a parsed "Failure details" block after the
@@ -515,6 +649,10 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
         'screenshot_command': False,
         'click_command': False
     }
+    # Host/QMP results are only populated on QEMU (they gate the QEMU verdict).
+    if is_qemu:
+        compatibility_results['host_screenshot'] = False
+        compatibility_results['host_click'] = False
 
     try:
         # Test 1: Basic VM responsiveness with substage
@@ -528,6 +666,16 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
 
         # Test 4: uv availability with substage
         compatibility_results['uv_available'] = await _run_compat_substage(VMUvTestStage, flow_console, context, test_uv_availability)
+
+        # QEMU only: host-side QMP UI checks FIRST -- the gating, production-
+        # representative path. Run before the (slow, non-fatal on QEMU) agent
+        # server start so the screenshot lands on a freshly-rendered desktop
+        # rather than one that has idle-blanked during a long uv sync.
+        # Screenshot must precede click so the executor records the screen
+        # resolution the click's coordinate normalization needs.
+        if is_qemu:
+            compatibility_results['host_screenshot'] = await _run_compat_substage(VMHostScreenshotTestStage, flow_console, context, test_host_screenshot)
+            compatibility_results['host_click'] = await _run_compat_substage(VMHostClickTestStage, flow_console, context, test_host_click)
 
         # Test 5: Start adarevm WebSocket server with substage
         compatibility_results['adarevm_server_starts'] = await _run_compat_substage(VMAdareServerTestStage, flow_console, context, test_adarevm_server_start, guest_bind_port=guest_bind_port)
@@ -555,13 +703,35 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
         status = "PASS" if result else "FAIL"
         log.info(f"  - {test_name}: {status}")
 
-    # Return results instead of throwing exception - let flow console show the summary
-    success = passed_tests >= 6  # At least VM basics + server + websocket + one command
-
-    if success:
-        log.info("VM appears compatible with ADARE (WebSocket server working)")
+    if is_qemu:
+        # QEMU verdict: gated on QGA-responsive + shared folder + host/QMP
+        # screenshot + host/QMP click. The agent-mode results are reported above
+        # but are NON-FATAL here (native-Wayland sessions can't do in-guest
+        # X11 capture, yet the host/QMP path -- how real experiments run -- works).
+        gating = {
+            'vm_responsive': compatibility_results['vm_responsive'],
+            'shared_folders_working': compatibility_results['shared_folders_working'],
+            'host_screenshot': compatibility_results['host_screenshot'],
+            'host_click': compatibility_results['host_click'],
+        }
+        success = all(gating.values())
+        if not success:
+            failed = [k for k, v in gating.items() if not v]
+            log.warning(f"QEMU compatibility insufficient: failed gating checks: {failed}")
+        else:
+            log.info("VM appears compatible with ADARE (host/QMP GUI automation working)")
+        agent_ok = all(
+            compatibility_results[k] for k in
+            ('adarevm_server_starts', 'websocket_connection', 'screenshot_command', 'click_command')
+        )
+        log.info(f"Agent-mode (in-guest adarevm) checks: {'PASS' if agent_ok else 'FAIL (non-fatal on QEMU)'}")
     else:
-        log.warning(f"VM compatibility insufficient: only {passed_tests}/{total_tests} tests passed")
+        # VirtualBox/OVA: no QMP -- the in-guest agent path is primary and gating.
+        success = passed_tests >= 6  # At least VM basics + server + websocket + one command
+        if success:
+            log.info("VM appears compatible with ADARE (WebSocket server working)")
+        else:
+            log.warning(f"VM compatibility insufficient: only {passed_tests}/{total_tests} tests passed")
 
     return success
 
