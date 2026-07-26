@@ -656,6 +656,22 @@ class VMClickTestStage(Stage):
 
 @register_stage
 @attrs.define
+class VMHostScreenshotTestStage(Stage):
+    name: ClassVar[str] = 'vm_host_screenshot_test'
+    msg: ClassVar[str] = 'Testing screenshot capture (host/QMP)'
+    description: ClassVar[str] = 'Verify screenshot functionality via host-side QMP screendump'
+    parent: ClassVar[str] = 'vm_compatibility_test'
+
+@register_stage
+@attrs.define
+class VMHostClickTestStage(Stage):
+    name: ClassVar[str] = 'vm_host_click_test'
+    msg: ClassVar[str] = 'Testing mouse click (host/QMP)'
+    description: ClassVar[str] = 'Verify mouse click functionality via host-side QMP input-send-event'
+    parent: ClassVar[str] = 'vm_compatibility_test'
+
+@register_stage
+@attrs.define
 class VMFileTransferRetrievalStage(Stage):
     name: ClassVar[str] = 'vm_file_transfer_retrieval'
     msg: ClassVar[str] = 'Retrieving artifacts from VM'
