@@ -130,6 +130,7 @@ class GUIActionsMixin:
             try:
                 screenshot_base64, _ = await self.target_resolution.get_current_screenshot_with_path()
                 checker = MCPConditionChecker(self.target_resolution.target_resolver)
+                self.target_resolution.begin_resolution()
                 conditions_met = await checker.check_conditions(action.when, screenshot_base64)
                 if not conditions_met:
                     return ActionResult(success=True, message="Keyboard conditions not met, skipping")

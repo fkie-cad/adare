@@ -208,7 +208,9 @@ class Target:
     position: list[int] | None = None
     strategy: TargetStrategyType | None = None
     offset: Offset | None = None
-    use_cache: bool | None = None  # If True, use cached result from previous matching action
+    use_cache: bool | None = None  # If False, forces a fresh detection even when the
+                                    # immediately-preceding target resolution would
+                                    # otherwise be reused. Default (None/True): auto-reuse.
 
 
 @attrs.define
