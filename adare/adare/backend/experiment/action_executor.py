@@ -149,6 +149,10 @@ class ActionExecutor:
             ActionResult with execution details
         """
         try:
+            # Advance the action-generation counter used to scope use_cache reuse
+            # to strictly the next action after the one that populated the cache.
+            self.target_resolution.begin_action()
+
             # Set action prefix for find-step screenshots
             self.target_resolution.current_action_prefix = action_context
 
