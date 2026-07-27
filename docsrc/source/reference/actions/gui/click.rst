@@ -65,6 +65,11 @@ Target Options
 - ``text``: Text to find with optional ``text_match`` configuration
 - ``coordinates``: [x, y] pixel coordinates
 - ``strategy``: Selection strategy when multiple matches found (SweepStrategy, BestConfidenceStrategy, etc.)
+- ``use_cache``: bool, default ``false`` - reuse the match cached by the immediately
+  preceding action (e.g. ``wait_until``) on an identical target (same
+  image/text/position/strategy/offset), skipping a fresh screenshot + CV pass. Only
+  valid for the single next action after the one that populated the cache. See
+  `Reusing a wait_until Match (Performance)`_ below.
 
 Advanced Text Matching
 -----------------------
@@ -316,13 +321,45 @@ The ``max_distance`` parameter (in pixels):
                index: 2
          description: "Click the second occurrence of Documents"
 
+Reusing a wait_until Match (Performance)
+-----------------------------------------
+
+CV detection (image/text matching) can take anywhere from ~200ms to over a second per
+attempt. If a ``wait_until`` already confirmed a target is on screen, a following
+``click`` on the *identical* target can skip re-running detection entirely by setting
+``use_cache: true``:
+
+.. code-block:: yaml
+
+   actions:
+     - wait_until:
+         condition:
+           exists:
+             image: "save_button.png"
+         timeout: 30.0
+     - click:
+         target:
+           image: "save_button.png"
+           use_cache: true
+         description: "Click Save (reuses the wait_until match, skips re-detection)"
+
+**Caveat:** the cache is only valid for the single action immediately following the one
+that populated it (e.g. the ``wait_until`` right before this ``click``) - it is not a
+whole-run cache. If any other action runs in between, or the same target pattern
+(identical image/text/position/strategy/offset) is reused later in the playbook,
+detection reruns from scratch rather than returning a stale match. This is only safe
+when nothing on screen moves or changes between the ``wait_until`` success and the
+``click``, and it is never used implicitly - you must opt in with ``use_cache: true``
+on each target that should reuse it.
+
 Notes
 -----
 
 - Image files should be in the experiment directory
 - Text matching uses OCR (Tesseract)
 - Coordinates are relative to top-left corner
-- Use ``wait_until`` before clicking if element may not be immediately visible
+- Use ``wait_until`` before clicking if element may not be immediately visible - see
+  `Reusing a wait_until Match (Performance)`_ above to skip the redundant re-detection
 
 See Also
 --------
