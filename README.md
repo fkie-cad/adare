@@ -10,7 +10,7 @@ ADARE enables researchers and forensic analysts to create reproducible experimen
 
 ## Documentation
 
-Full documentation is available at **https://fkie-cad.github.io/adare/**.
+Full documentation is available at **https://adare.click/**.
 
 
 ## Development
