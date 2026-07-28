@@ -163,8 +163,11 @@ tests:
   # comparison is a UTC epoch from save_timestamp, and adding '| localtime' would make
   # basictest._parse_timestamp_with_format read the guest's UTC wall time as local wall
   # time, skewing the comparison by the host's UTC offset. See README ("UTC, not localtime").
-  # tolerance(5, -30) -- ASYMMETRIC on purpose, where the 22.04 / 24.04 variants use a
-  # symmetric +/-5s. The filter signature is tolerance(upper, lower) and the comparison
+  # tolerance(5, -30) -- ASYMMETRIC on purpose. The 22.04 variant now carries the same
+  # bound, for its own separately measured reason (CV find latency ahead of the click,
+  # ~13.5s on an idle host); only 24.04 still uses a symmetric +/-5s, because there the
+  # interaction completes in ~2.2s and needs no widening.
+  # The filter signature is tolerance(upper, lower) and the comparison
   # is diff = reference - actual (basictest.py:274), so the NEGATIVE bound is the one
   # that allows the artifact to be timestamped LATER than the reference.
   #
