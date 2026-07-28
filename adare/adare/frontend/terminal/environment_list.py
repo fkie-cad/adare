@@ -2,7 +2,6 @@
 import logging
 
 import pandas as pd
-from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 
@@ -92,8 +91,7 @@ def print_environment_list(formatter=None, output_file=None, dual_output=False):
 
             environments_df = pd.DataFrame(data)
 
-        console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = EnvironmentTablePanel(environments_df)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which reads
+        # as "those environments do not exist".
+        DefaultConsole().print(EnvironmentTablePanel(environments_df))

@@ -1,7 +1,6 @@
 # external imports
 import logging
 
-from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -50,10 +49,10 @@ def print_vm_list():
             console.print(Panel("[yellow]No VMs found[/yellow]", title="[b gold3]VMs[/b gold3]", border_style="blue"))
             return
 
-        layout = Layout(name="root")
-        panel = VMTablePanel(vms)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which reads
+        # as "those VMs do not exist".
+        console.print(VMTablePanel(vms))
 
     except Exception as e:
         log.error(f"Failed to list VMs: {e}")

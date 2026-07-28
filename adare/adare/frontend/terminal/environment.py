@@ -163,7 +163,7 @@ def print_environment(environment_name: str, formatter=None, output_file=None, d
             if not dual_output:
                 return
 
-        layout = Layout(name="root")
-        panel = EnvironmentPanel(environment)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops whatever overflows, so a short
+        # window hid fields without any indication they were there.
+        console.print(EnvironmentPanel(environment))

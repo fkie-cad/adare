@@ -2,7 +2,6 @@
 import logging
 
 import pandas as pd
-from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 
@@ -71,8 +70,7 @@ def print_experiment_list(formatter=None, output_file=None, dual_output=False):
             formatter.print_or_save({'experiments': experiment_list}, output_file, dual_output)
     else:
         # Use existing Rich formatting
-        console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = ExperimentTablePanel(experiments)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which reads
+        # as "those experiments do not exist".
+        DefaultConsole().print(ExperimentTablePanel(experiments))

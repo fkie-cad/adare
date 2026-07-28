@@ -124,7 +124,6 @@ def exec_dev_checkpoint_list(arguments):
         else:
             # Use Rich table panel for display
             import pandas as pd
-            from rich.layout import Layout
 
             from adare.frontend.terminal.console import DefaultConsole
             from adare.frontend.terminal.dev_session_list import DevCheckpointTablePanel
@@ -143,12 +142,10 @@ def exec_dev_checkpoint_list(arguments):
 
             df = pd.DataFrame(data)
 
-            # Print table
-            console = DefaultConsole()
-            layout = Layout(name="root")
-            panel = DevCheckpointTablePanel(df)
-            layout.update(panel)
-            console.print(layout)
+            # Printed directly, NOT wrapped in a Layout: a Layout crops its content
+            # to the terminal height and silently drops the overflowing rows, which
+            # reads as "those checkpoints do not exist".
+            DefaultConsole().print(DevCheckpointTablePanel(df))
     else:
         handle_api_error(result)
 

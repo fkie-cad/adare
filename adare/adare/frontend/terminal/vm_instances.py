@@ -7,7 +7,6 @@ statistics, and management operations.
 
 import logging
 
-from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 
@@ -51,10 +50,10 @@ def print_vm_instances_list():
 
         # Display using Rich console
         console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = Panel(table, title="[b gold3]VM Instances[/b gold3]", border_style="blue", title_align="left")
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which reads
+        # as "those instances do not exist".
+        console.print(Panel(table, title="[b gold3]VM Instances[/b gold3]", border_style="blue", title_align="left"))
         console.print(f"\nTotal instances: {len(instances)}")
 
     except Exception as e:
@@ -131,11 +130,12 @@ def print_vm_instance_info(instance_id: str, formatter=None, output_file=None, d
                 table.add_row("  File:", source_vm.file)
 
         # Display using Rich console
-        console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = Panel(table, title="[b gold3]VM Instance Details[/b gold3]", border_style="blue", title_align="left")
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops whatever overflows, so a short
+        # window hid detail rows without any indication they were there.
+        DefaultConsole().print(Panel(
+            table, title="[b gold3]VM Instance Details[/b gold3]", border_style="blue", title_align="left"
+        ))
 
     except Exception as e:
         log.error(f"Error getting VM instance info: {e}")

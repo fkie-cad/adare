@@ -94,9 +94,7 @@ def print_testfunction(dotnotation: str = None, testfunction_id: str = None, for
             if not dual_output:
                 return
 
-        console = DefaultConsole()
-        layout = Layout(name="root")
-
-        panel = TestfunctionPanel(dotnotation, testfunction, parameters)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops whatever overflows, so a short
+        # window hid parameters without any indication they were there.
+        DefaultConsole().print(TestfunctionPanel(dotnotation, testfunction, parameters))
