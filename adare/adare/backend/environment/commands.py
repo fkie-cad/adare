@@ -3,6 +3,7 @@ import hashlib
 
 # configure logging
 import logging
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -47,8 +48,22 @@ def _copy_environment_file(source_path: Path, environment_name: str, file_hash: 
         # Ensure global environments directory exists
         ENVIRONMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Generate target filename with environment name and hash prefix for uniqueness
+        # Generate target filename with environment name and hash prefix for uniqueness.
+        # Re-loading an ALREADY-MANAGED file would otherwise chain suffixes forever
+        # (ubuntu-2004_d01d78e5 -> ubuntu-2004_d01d78e5_d01d78e5 -> ...), and editing a
+        # managed file in place then re-loading chains a *different* hash on each pass
+        # (win11-autopsy-solr4_678b5723 -> ..._678b5723_1c005afe). Both produced the
+        # drifts of near-identical manifests in ENVIRONMENTS_DIR.
+        #
+        # Only strip when the source actually IS a managed copy, so a user-supplied file
+        # legitimately named e.g. "myenv_deadbeef.yml" keeps its name.
         hash_prefix = file_hash[:8]
+        try:
+            is_managed_copy = source_path.resolve().parent == ENVIRONMENTS_DIR.resolve()
+        except OSError:
+            is_managed_copy = False
+        if is_managed_copy:
+            environment_name = re.sub(r'(_[0-9a-f]{8})+$', '', environment_name)
         target_filename = f"{environment_name}_{hash_prefix}{source_path.suffix}"
         target_path = ENVIRONMENTS_DIR / target_filename
 
@@ -186,14 +201,23 @@ def environment_sync(environment_ulid: str):
     log.info(f'environment {environment_ulid} synced')
 
 
-def environment_load(environment: str, force: bool = False, no_copy: bool = False):
+def environment_load(environment: str, force: bool = False, no_copy: bool = False,
+                     iso_override: Path | None = None, reprovision: bool = False,
+                     allow_emulation: bool = False):
     """
     Load environment from YAML file.
 
     Args:
         environment: Environment name or path
-        force: Force reload even if already exists
+        force: Force reload even if already exists. For a recipe environment this
+            rebuilds both the base disk and the build-time provisioning stage.
         no_copy: Keep VM file at original location (local files only)
+        iso_override: Recipe only — a file, or a directory to search for the ISO.
+            How a consumer supplies the ISO for a BYO (``iso_name``) recipe.
+        reprovision: Recipe only — reuse the cached base disk but re-run
+            build-time provisioning from scratch.
+        allow_emulation: Recipe only — permit QEMU TCG when the recipe profile's
+            guest architecture does not match the host CPU.
 
     Returns:
         Tuple of (environment_ulid, created). ``created`` is False only on the
@@ -280,8 +304,13 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
     managed_environment_file = _copy_environment_file(environment_file, environment_name, environment_file_sha256)
     log.info(f'Environment file stored at: {managed_environment_file}')
 
-    # Early check - if environment already exists by hash, skip VM processing entirely
-    existing_environment_id = environment_database.get_environment_by_hash(environment_file_sha256, trigger_exception=False)
+    # Early check - if environment already exists by hash, skip VM processing entirely.
+    # Ask for the 'id' field explicitly: without ``fields`` this returns the full
+    # Environment object, and callers expect a ULID string.
+    existing_environment = environment_database.get_environment_by_hash(
+        environment_file_sha256, trigger_exception=False, fields=['id']
+    )
+    existing_environment_id = existing_environment['id'] if existing_environment else None
     if existing_environment_id:
         if not force:
             elapsed_time = time.time() - start_time
@@ -317,6 +346,9 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                 project_path=None,  # VMs are global
                 base_dir=environment_file.parent,
                 force=force,
+                reprovision=reprovision,
+                iso_override=iso_override,
+                allow_emulation=allow_emulation,
             )
             vm_id = recipe_result['vm_id']
             if not recipe_result['was_existing']:
@@ -383,12 +415,17 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                 )
                 expected_sha256 = environment_metadata.vm_sha256.lower()
                 if actual_sha256.lower() != expected_sha256:
+                    # Evict the stale cache entry so a subsequent load re-downloads instead
+                    # of hitting this same corrupt/mismatched file forever.
+                    if vm_path.exists():
+                        vm_path.unlink()
                     raise EnvironmentLoadFailed(
                         log,
                         f'VM integrity check failed for {environment_metadata.vm}: '
-                        f'expected vm_sha256 {expected_sha256} but downloaded file hashes to {actual_sha256}',
+                        f'expected vm_sha256 {expected_sha256} but downloaded file hashes to {actual_sha256}. '
+                        f'The cached file has been deleted; re-run the load to re-download.',
                         possible_solutions=[
-                            'The downloaded file may be corrupted or tampered with — re-download and retry',
+                            'Re-run "adare environment load" — the corrupt cache was deleted, so it will re-download',
                             'Verify the "vm_sha256" in the environment file matches the published disk',
                             'Contact the environment author if the mismatch persists',
                         ]

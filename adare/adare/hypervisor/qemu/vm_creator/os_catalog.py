@@ -94,6 +94,13 @@ class OsDefinition:
     # the installer; verify_steps run after rebooting into the installed disk.
     install_steps: list = field(default_factory=list)
     verify_steps: list = field(default_factory=list)
+    # Plain-text pointer telling a human where to obtain this ISO. Populated for
+    # the profiles that cannot ship a URL (Windows: the installer is licensed,
+    # not redistributable), and used as the fallback `recipe.iso_notes` for a
+    # consumer-supplied ("BYO") recipe whose publisher omitted it — so a consumer
+    # always has somewhere to go. Declared last because every field above the
+    # first default is positional, and OsDefinition is constructed by keyword.
+    iso_notes: str = ''
 
 
 # Ubuntu 26.04 LTS (Resolute Raccoon) - Server ISO with autoinstall support
@@ -707,6 +714,14 @@ WINDOWS_11 = OsDefinition(
     default_cpus=0,
     requires_uefi=True,
     requires_tpm=True,
+    # Microsoft media is licensed, not redistributable, so this profile ships no
+    # iso_url. These notes are the fallback download pointer a consumer sees when a
+    # recipe's own `iso_notes` is absent.
+    iso_notes=(
+        "Download from https://www.microsoft.com/software-download/windows11 - "
+        "\"Windows 11 (multi-edition ISO for x64 devices)\", English "
+        "(International). Requires a valid licence."
+    ),
 )
 
 # Windows 10 - User must supply ISO
@@ -724,6 +739,10 @@ WINDOWS_10 = OsDefinition(
     default_ram_mb=16384,
     default_cpus=0,
     requires_uefi=True,
+    iso_notes=(
+        "Download from https://www.microsoft.com/software-download/windows10 - "
+        "\"Windows 10\", English (International), 64-bit. Requires a valid licence."
+    ),
 )
 
 # Virtio-win drivers ISO for Windows guests
@@ -850,6 +869,7 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     seed_transport=data.get('seed_transport', 'cdrom'),
                     install_steps=data.get('install_steps', []),
                     verify_steps=data.get('verify_steps', []),
+                    iso_notes=data.get('iso_notes', ''),
                 )
             except (OSError, yaml.YAMLError, TypeError, ValueError) as e:
                 log.warning('Skipping %s: %s', yml_file, e)

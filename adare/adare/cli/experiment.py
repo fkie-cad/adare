@@ -72,14 +72,21 @@ def exec_experiment_load(arguments):
                 run_count = experiment_database.get_experiment_run_count(project_directory, experiment_ulid, exclude_fake=True)
                 has_productive_runs = run_count > 0
 
-            if not has_productive_runs:
-                # No productive runs - safe to overwrite
-                log.info(f'Overwriting experiment directory {target_path} with fresh copy from {external_source_path} (no productive runs found)')
+            # --force is the flag that authorises discarding existing runs, so it must
+            # also authorise refreshing the copied directory. Without this, the first
+            # productive run freezes the project copy: every later `experiment load -f`
+            # reports success while silently running the stale playbook.
+            if not has_productive_runs or arguments.force:
+                reason = 'no productive runs found' if not has_productive_runs else f'--force given ({run_count} productive runs)'
+                log.info(f'Overwriting experiment directory {target_path} with fresh copy from {external_source_path} ({reason})')
                 shutil.rmtree(target_path)
                 shutil.copytree(external_source_path, target_path)
                 copy_was_performed = True
             else:
-                log.info(f'Using existing experiment directory {target_path} (has {run_count} productive runs, not overwriting)')
+                log.warning(
+                    f'Using existing experiment directory {target_path} (has {run_count} productive runs, '
+                    f'not overwriting). Re-run with --force to refresh it from {external_source_path}.'
+                )
 
         # Use API for the actual load
         api = AdareAPI()

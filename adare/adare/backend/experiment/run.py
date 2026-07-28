@@ -407,12 +407,18 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 await step_runner.run_cleanup_step(step_shutdown_ws, experiment_run_context, post_interrupt=True)
 
                 if vm_manager:
-                    # Determine if force shutdown is needed (Windows on QEMU)
+                    # Force shutdown by default for QEMU guests: the overlay is discarded
+                    # on cleanup regardless (ephemeral run), so waiting up to 60s for a
+                    # graceful ACPI shutdown buys nothing -- except when --preserve-snapshot
+                    # keeps the overlay around, where a force-stop's guest-side
+                    # uncleanliness could actually persist into the saved artifact.
                     force_shutdown = False
-                    if (experiment_run_context.hypervisor_type == 'qemu' and
-                        experiment_run_context.guest_platform == 'windows'):
-                        force_shutdown = True
-                        log.info("Forcing shutdown for Windows VM on QEMU to prevent updates")
+                    if experiment_run_context.hypervisor_type == 'qemu':
+                        if experiment_run_context.config.preserve_snapshot:
+                            log.info("Preserving snapshot: using graceful shutdown for QEMU VM")
+                        else:
+                            force_shutdown = True
+                            log.info("Forcing shutdown for QEMU VM (ephemeral overlay, nothing to preserve)")
 
                     # Retrieve artifacts BEFORE stopping VM (critical for QGA/VirtioFS which need a running VM)
                     # The lifecycle strategy handles stop internally in the correct order per transfer mode

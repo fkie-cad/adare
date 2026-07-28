@@ -73,21 +73,34 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_dev_resume, args)
 
     @dev.command()
+    # Positional session id as well as -s: `dev start` and `dev stop` both *print*
+    # "Stop session: adare dev stop <id>" in their next-steps, and `dev resume`
+    # takes it positionally — so the bare form has to work, or the CLI contradicts
+    # its own instructions with "Got unexpected extra argument".
+    @click.argument('session_id_arg', required=False, metavar='[SESSION_ID]')
     @click.option('-s', '--session', 'session_id', default=None,
                   help='Session id or name (auto-detected if only one running)')
     @click.option('--rm', is_flag=True, help='Remove all resources (VM, snapshots, database entries)')
     @click.option('--all', 'all_sessions', is_flag=True, help='Stop every running session')
     @click.option('-y', '--yes', is_flag=True, help='Skip the confirmation prompt (with --all)')
-    def stop(session_id, rm, all_sessions, yes):
+    def stop(session_id_arg, session_id, rm, all_sessions, yes):
         """Stop a dev mode session.
+
+        SESSION_ID may be given positionally or with -s; omit it to auto-detect the
+        only running session.
 
         Without --rm: Stops the VM but keeps all resources for future restart.
         With --rm: Completely removes the session and all associated resources.
         With --all: Stops every running session (confirms first unless --yes).
         """
         from adare.cli.dev import exec_dev_stop
+        if session_id and session_id_arg and session_id != session_id_arg:
+            raise click.UsageError(
+                f'two different sessions given: {session_id_arg!r} positionally and '
+                f'{session_id!r} via -s. Pass one.'
+            )
         args = SimpleNamespace(
-            session_id=session_id, remove_resources=rm,
+            session_id=session_id or session_id_arg, remove_resources=rm,
             all_sessions=all_sessions, yes=yes
         )
         exec_with_error_printing(exec_dev_stop, args)

@@ -15,6 +15,7 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import backref, declarative_base, relationship
 from sqlalchemy_serializer import SerializerMixin
 
+from adare.database.models.sync_identity import RemoteIdentityMixin
 from adarelib.constants import StatusEnum, VmInstanceStatus
 
 # Create separate base for global models
@@ -144,7 +145,7 @@ class TestParameter(SerializerMixin, GlobalBase):
         return f"<TestParameter(name='{self.name}',dtype='{self.dtype}')>"
 
 
-class TestFunctionFile(SerializerMixin, GlobalBase):
+class TestFunctionFile(RemoteIdentityMixin, SerializerMixin, GlobalBase):
     """
     Represents a file containing one or more test functions, with metadata and hash.
     """
@@ -477,7 +478,7 @@ class VmInstance(SerializerMixin, GlobalBase):
         return VmInstanceStatus.from_string(self.status)
 
 
-class Environment(SerializerMixin, GlobalBase):
+class Environment(RemoteIdentityMixin, SerializerMixin, GlobalBase):
     """
     Environment definition stored globally.
     """

@@ -53,7 +53,11 @@ def kubuntu_def() -> OsDefinition:
 
 
 def test_template_stems_derives_kubuntu(kubuntu_def):
-    assert _template_stems(kubuntu_def, None) == ['kubuntu', 'ubuntu']
+    # Most specific first: the profile pins `template: kubuntu2404` precisely so it
+    # does NOT share gui_kubuntu.yaml (and its cached playbook) with 20.04/22.04 —
+    # those use ubiquity, 24.04 uses Calamares. Then the digit-stripped family stem,
+    # then the distribution.
+    assert _template_stems(kubuntu_def, None) == ['kubuntu2404', 'kubuntu', 'ubuntu']
     # An explicit override wins.
     assert _template_stems(kubuntu_def, 'custom')[0] == 'custom'
 
@@ -64,9 +68,11 @@ def test_bundled_kubuntu_template_loads(kubuntu_def):
     assert spec['goal']
     assert spec['acceptance']['visual']
     # No cached playbook yet → creator would record; write path is under user dir.
+    # Named for the pinned `template: kubuntu2404`, not the family stem, so the
+    # Calamares recording cannot be replayed against an ubiquity installer.
     path, cached = creator._resolve_playbook()
     assert cached is False
-    assert path.name == 'gui_kubuntu.play.yaml'
+    assert path.name == 'gui_kubuntu2404.play.yaml'
 
 
 def test_missing_iso_raises(kubuntu_def):

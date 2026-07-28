@@ -1,10 +1,13 @@
 """Shared QEMU utilities -- architecture params, QMP shutdown, and input/exit waiting."""
 
+import hashlib
 import json
 import logging
+import os
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -14,6 +17,51 @@ from adare.hypervisor.qemu.accel import resolve_accel
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 
 log = logging.getLogger(__name__)
+
+# A Unix-domain socket path lives in `sockaddr_un.sun_path`, which is 104 bytes on
+# macOS (108 on Linux) *including* the NUL terminator. Bind with a longer path and
+# Python raises `OSError: AF_UNIX path too long` before QEMU even starts.
+AF_UNIX_PATH_MAX = 103
+
+
+def install_qmp_socket_path(disk_stem: str) -> Path:
+    """Return a QMP socket path for an install-phase VM that fits AF_UNIX limits.
+
+    The obvious construction — ``gettempdir() / f'adare-qemu-install-{stem}.qmp'``
+    — overflows on macOS, where ``TMPDIR`` is a 48-character per-user folder
+    (``/var/folders/xx/…/T/``). A recipe base disk is named
+    ``<profile>-recipebase-<hash>.partial``, so the full path reached 116 characters
+    and every Stage 1 Windows build died with ``AF_UNIX path too long`` before QEMU
+    was launched.
+
+    Readability is preferred but not at the cost of working: the full name is used
+    when it fits, then a truncated stem plus a digest, then the digest alone, and
+    ``/tmp`` is tried as a shorter base directory before giving up. The digest keeps
+    concurrent builds of different disks on separate sockets.
+    """
+    digest = hashlib.sha256(disk_stem.encode()).hexdigest()[:10]
+    names = (
+        f'adare-qemu-install-{disk_stem}.qmp',
+        f'adare-qmp-{disk_stem[:16]}-{digest}.qmp',
+        f'adare-qmp-{digest}.qmp',
+    )
+    bases = [Path(tempfile.gettempdir())]
+    if Path('/tmp') not in bases:
+        bases.append(Path('/tmp'))
+
+    for base in bases:
+        if not (base.is_dir() and os.access(base, os.W_OK)):
+            continue
+        for name in names:
+            candidate = base / name
+            if len(str(candidate)) <= AF_UNIX_PATH_MAX:
+                return candidate
+
+    raise OSError(
+        f'no writable directory yields a QMP socket path within '
+        f'{AF_UNIX_PATH_MAX} characters (tried {[str(b) for b in bases]}). '
+        f'Set TMPDIR to a short path, e.g. TMPDIR=/tmp.'
+    )
 
 
 def qemu_params_for_arch(os_def: OsDefinition, allow_emulation: bool = False) -> dict:

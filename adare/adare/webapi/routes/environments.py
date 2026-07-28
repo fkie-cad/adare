@@ -9,6 +9,7 @@ import requests
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from adare.services.recipe_contract import ISO_NAME_RE, linux_url_hint, profile_platform
 from adare.webapi.adapters import result_to_response
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,12 @@ class EnvironmentCreateBody(BaseModel):
     ram_mb: int | None = None
     cpus: int | None = None
     setup_level: int | None = None
+    # Consumer-supplied ("BYO") ISO: a bare filename the consumer must have
+    # locally, plus a plain-text download pointer. Windows profiles ONLY -- a
+    # Windows installer ISO cannot lawfully be rehosted. Mutually exclusive with
+    # `iso_url`.
+    iso_name: str | None = None
+    iso_notes: str | None = None
 
 
 class CheckUrlBody(BaseModel):
@@ -136,15 +143,69 @@ async def create_environment(body: EnvironmentCreateBody):
     """Create a new environment descriptor from a published URL (baked or recipe)."""
     from adare.core.dto.environment import EnvironmentCreateRequest
 
-    # Enforce the publish contract on baked-URL creates before touching the
-    # service: http(s), a required 64-hex sha256, and a vm_format when the URL
-    # has no recognized disk extension. (Recipe ISO integrity is enforced by the
-    # service/backend, which already requires iso_sha256.)
+    # Enforce the publish contract before touching the service: http(s), a
+    # required 64-hex sha256, and a vm_format when the URL has no recognized disk
+    # extension. This is gate 2 -- the local web variant. It is NOT authoritative
+    # (gate 1, the publish preflight, and gate 5, consumer load, are), but it must
+    # never let the web dialog produce an unpublishable environment.
     if body.vm_url:
         reason = _validate_url_format(body.vm_url, body.vm_sha256, "vm", body.vm_format)
         if reason is not None:
             return {"success": False, "error": {
                 "code": "InvalidVmUrl", "message": reason, "solutions": [],
+            }}
+
+    # A recipe ISO URL was previously NOT format-checked here at all -- only
+    # `vm_url` was -- so the dialog could create a recipe env with a local path or
+    # a malformed sha, which then failed only at publish time. Check it now.
+    if body.iso_url:
+        if body.iso_name:
+            return {"success": False, "error": {
+                "code": "AmbiguousIsoSource",
+                "message": "Give exactly one ISO source: iso_url or iso_name.",
+                "solutions": ["Drop either iso_url or iso_name"],
+            }}
+        reason = _validate_url_format(body.iso_url, body.iso_sha256, "iso")
+        if reason is not None:
+            return {"success": False, "error": {
+                "code": "InvalidIsoUrl", "message": reason, "solutions": [],
+            }}
+
+    # BYO ISO is a Windows-only affordance. Rejecting it here (rather than only in
+    # the service) keeps the error close to the request that caused it.
+    if body.iso_name:
+        if not body.os_profile:
+            return {"success": False, "error": {
+                "code": "MissingOsProfile",
+                "message": "iso_name is a recipe field and requires os_profile.",
+                "solutions": ["Send os_profile alongside iso_name"],
+            }}
+        platform = profile_platform(body.os_profile)
+        if platform is None:
+            return {"success": False, "error": {
+                "code": "UnknownOsProfileError",
+                "message": f"Unknown OS profile: {body.os_profile}",
+                "solutions": ["GET /api/environments/os-profiles for the list"],
+            }}
+        if platform != "windows":
+            return {"success": False, "error": {
+                "code": "ByoIsoRequiresWindowsProfile",
+                "message": (
+                    f"Consumer-supplied ISOs ('iso_name') are allowed for Windows "
+                    f"profiles only; '{body.os_profile}' is a {platform} profile. A "
+                    f"Linux ISO is freely redistributable, so it must be published."
+                ),
+                "solutions": [linux_url_hint(body.os_profile).capitalize()],
+            }}
+        if not ISO_NAME_RE.match(body.iso_name.strip()):
+            return {"success": False, "error": {
+                "code": "InvalidIsoName",
+                "message": (
+                    f"iso_name must be a bare ISO filename (got {body.iso_name!r}): no "
+                    f"directory separators, no '..', no URL, no drive letter, must end "
+                    f"in '.iso'."
+                ),
+                "solutions": ["Use just the filename, e.g. 'Win11_25H2_English_Arm64_v2.iso'"],
             }}
 
     dto = EnvironmentCreateRequest(
@@ -160,6 +221,8 @@ async def create_environment(body: EnvironmentCreateBody):
         ram_mb=body.ram_mb,
         cpus=body.cpus,
         setup_level=body.setup_level,
+        iso_name=body.iso_name,
+        iso_notes=body.iso_notes,
     )
     result = _api().environment.create(dto)
     return result_to_response(result)

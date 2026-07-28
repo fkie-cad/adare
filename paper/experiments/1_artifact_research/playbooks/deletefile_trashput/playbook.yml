@@ -53,6 +53,17 @@ tests:
         DeletionDate={{ deletion_timestamp | localtime | format('%Y-%m-%dT%H:%M:%S') | tolerance(5, -5) }}
 
 actions:
+  # trash-cli is not part of any default desktop install (unlike `gio`, which ships
+  # with GLib), so install it before the Repeat phase or every iteration fails on a
+  # missing trash-put.
+  - command:
+      name: "Install trash-cli"
+      description: "Provide the trash-put implementation this experiment measures"
+      command: "DEBIAN_FRONTEND=noninteractive apt-get install -y trash-cli"
+      shell: true
+      admin: true
+      timeout: 600
+
   - loop:
       items: ["Documents", "Downloads", "Desktop"]
       item_var: target_dir

@@ -63,6 +63,13 @@ class FileToolsMixin:
             file_size = file_path.stat().st_size
             total_chunks = (file_size + chunk_size - 1) // chunk_size
 
+            # A 0-byte file yields zero chunks by the ceil-division above, which would
+            # make even chunk 0 "out of range" and fail the pull. Empty artifacts are
+            # legitimate evidence -- a parser that exits cleanly writes nothing to
+            # stderr -- so serve an empty file as a single empty chunk.
+            if file_size == 0:
+                total_chunks = 1
+
             # Validate chunk index
             if chunk_index >= total_chunks:
                 return {

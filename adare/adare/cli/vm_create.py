@@ -5,15 +5,16 @@ from dataclasses import replace
 from pathlib import Path
 
 from adare.console import print_error_message, print_success_message
+from adare.hypervisor.qemu.vm_creator.dispatch import (
+    GUI_INSTALL_MODES,
+    DispatchError,
+    GuiBuildOptions,
+    create_vm_disk,
+)
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel, default_host_cpus, get_os_definition
 from adare.services.environment_recipe import build_baked_environment_file, build_recipe_environment_file
 
 log = logging.getLogger(__name__)
-
-# Install modes that drive the OS installer's own GUI instead of handing it a
-# seed file. They bake no Python environment, and they need no post-install
-# interactive session because the install already ran in a driven window.
-_GUI_INSTALL_MODES = frozenset({'manual', 'gui-auto', 'gui-script'})
 
 
 def _use_recipe(os_def: OsDefinition, recipe_flag: bool | None) -> bool:
@@ -45,6 +46,8 @@ def exec_vm_create(arguments):
     allow_emulation = getattr(arguments, 'allow_emulation', False)
     compress = getattr(arguments, 'compress', True)
     recipe_flag = getattr(arguments, 'recipe', None)
+    byo_iso = getattr(arguments, 'byo_iso', False)
+    iso_notes = getattr(arguments, 'iso_notes', None)
     bare = getattr(arguments, 'bare', False)
     setup_arg = getattr(arguments, 'setup_level', None)
     # Resolve the setup level once, before branching, so every creator path
@@ -90,7 +93,7 @@ def exec_vm_create(arguments):
     if arch is not None:
         os_def = replace(os_def, architecture=arch)
 
-    if setup_level != SetupLevel.FULL and os_def.install_mode in _GUI_INSTALL_MODES:
+    if setup_level != SetupLevel.FULL and os_def.install_mode in GUI_INSTALL_MODES:
         log.warning(
             '--setup %s has little effect for %s installs: they bake no Python environment anyway',
             setup_level.name.lower(), os_def.install_mode,
@@ -116,6 +119,20 @@ def exec_vm_create(arguments):
             log.warning('--interactive is ignored for recipe environments (build is declarative)')
         if vm_dir is not None:
             log.warning('--vm-dir is ignored for recipe environments (built disks live in managed storage)')
+        # BYO ISO exists because Windows installer media cannot lawfully be
+        # rehosted. For Linux the ISO is freely redistributable, so a published URL
+        # is required instead -- refuse rather than emit an unpublishable env.
+        if byo_iso and os_def.platform != 'windows':
+            print_error_message(
+                title=f'--byo-iso is Windows-only ({os_name} is a {os_def.platform} profile)',
+                details='A Linux ISO is freely redistributable, so it must be published '
+                        'as an http(s) URL rather than left to the consumer.',
+                next_steps=[
+                    f'Drop --byo-iso: adare vm create {os_name} --iso {iso_path} --recipe',
+                    'Then publish with the catalog ISO URL for this profile',
+                ],
+            )
+            return
 
         from adare.helperfunctions.hash import hash_file_sha256
         from adare.console import print_step
@@ -134,7 +151,23 @@ def exec_vm_create(arguments):
             cpus=cpus,
             arch=arch,
             env_name=final_name,
+            byo_iso=byo_iso,
+            iso_notes=iso_notes,
         )
+        if byo_iso:
+            print_success_message(
+                title=f'Recipe environment "{final_name}" created (consumer-supplied ISO)!',
+                location=str(env_file_path),
+                next_steps=[
+                    f'Build the disk on load: adare environment load {env_file_path} '
+                    f'--iso {iso_path}',
+                    'Then: adare experiment load <playbook> && adare experiment run',
+                ],
+                tip=f'The descriptor names "{iso_path.name}" + its sha256 instead of a '
+                    f'path, so it is publishable. Consumers put that ISO in '
+                    f'~/.adare/isos/ (or pass --iso) and the disk is built there.',
+            )
+            return
         print_success_message(
             title=f'Recipe environment "{final_name}" created!',
             location=str(env_file_path),
@@ -147,20 +180,10 @@ def exec_vm_create(arguments):
         )
         return
 
-    # Dispatch to the right creator — check install_mode before platform
-    if os_def.install_mode == 'manual':
-        if iso_path is None:
-            print_error_message(
-                title=f'ISO required for manual install of {os_def.display_name}',
-                next_steps=[
-                    f'Provide the ISO: adare vm create {os_name} --iso /path/to/installer.iso',
-                ],
-            )
-            return
-
-        from adare.hypervisor.qemu.vm_creator.manual_creator import create_manual_vm
-
-        disk_path = create_manual_vm(
+    # Dispatch to the right creator. The install_mode-before-platform rule lives in
+    # vm_creator.dispatch, shared with recipe builds so the two cannot drift.
+    try:
+        disk_path = create_vm_disk(
             os_def=os_def,
             iso_path=iso_path,
             vm_name=vm_name,
@@ -172,120 +195,20 @@ def exec_vm_create(arguments):
             setup_level=setup_level,
             compress=compress,
             allow_emulation=allow_emulation,
+            gui=GuiBuildOptions(
+                record=gui_record,
+                relearn=gui_relearn,
+                display=gui_display,
+                template=gui_template,
+            ),
         )
-    elif os_def.install_mode == 'gui-auto':
-        if iso_path is None:
-            print_error_message(
-                title=f'ISO required for GUI-automated install of {os_def.display_name}',
-                next_steps=[
-                    f'Provide the ISO: adare vm create {os_name} --iso /path/to/installer.iso',
-                ],
-            )
-            return
-
-        from adare.hypervisor.qemu.vm_creator.gui_creator import create_gui_vm
-
-        disk_path = create_gui_vm(
-            os_def=os_def,
-            iso_path=iso_path,
-            vm_name=vm_name,
-            disk_size=disk_size,
-            ram_mb=ram,
-            cpus=cpus,
-            force=force,
-            vm_dir=vm_dir,
-            setup_level=setup_level,
-            compress=compress,
-            allow_emulation=allow_emulation,
-            record=gui_record,
-            relearn=gui_relearn,
-            display=gui_display,
-            template=gui_template,
-        )
-    elif os_def.install_mode == 'playbook':
-        from adare.hypervisor.qemu.vm_creator.playbook_creator import create_playbook_vm
-
-        disk_path = create_playbook_vm(
-            os_def=os_def,
-            iso_path=iso_path,
-            vm_name=vm_name,
-            disk_size=disk_size,
-            ram_mb=ram,
-            cpus=cpus,
-            force=force,
-            vm_dir=vm_dir,
-            setup_level=setup_level,
-        )
-    elif os_def.install_mode == 'gui-script':
-        # Deterministic playbook replay — no vision model and no CV server, so
-        # unlike gui-auto this needs no ADARE_VLLM_* configuration. The ISO may
-        # come from --iso or from a baked iso_url on the profile.
-        from adare.hypervisor.qemu.vm_creator.qmp_script_creator import create_qmp_script_vm
-
-        disk_path = create_qmp_script_vm(
-            os_def=os_def,
-            iso_path=iso_path,
-            vm_name=vm_name,
-            disk_size=disk_size,
-            ram_mb=ram,
-            cpus=cpus,
-            force=force,
-            vm_dir=vm_dir,
-            setup_level=setup_level,
-            compress=compress,
-            allow_emulation=allow_emulation,
-            template=gui_template,
-            keep_running=gui_display,
-        )
-    elif os_def.platform == 'linux':
-        from adare.hypervisor.qemu.vm_creator.linux_creator import create_linux_vm
-
-        disk_path = create_linux_vm(
-            os_def=os_def,
-            vm_name=vm_name,
-            disk_size=disk_size,
-            ram_mb=ram,
-            cpus=cpus,
-            iso_path=iso_path,
-            force=force,
-            vm_dir=vm_dir,
-            setup_level=setup_level,
-            compress=compress,
-            allow_emulation=allow_emulation,
-        )
-    elif os_def.platform == 'windows':
-        if iso_path is None:
-            print_error_message(
-                title=f'Windows ISO required for {os_def.display_name}',
-                next_steps=[
-                    f'Provide the ISO path: adare vm create {os_name} --iso /path/to/windows.iso',
-                    'Download from Microsoft (requires a valid license)',
-                ],
-            )
-            return
-
-        from adare.hypervisor.qemu.vm_creator.windows_creator import create_windows_vm
-
-        disk_path = create_windows_vm(
-            os_def=os_def,
-            iso_path=iso_path,
-            vm_name=vm_name,
-            disk_size=disk_size,
-            ram_mb=ram,
-            cpus=cpus,
-            force=force,
-            vm_dir=vm_dir,
-            setup_level=setup_level,
-            compress=compress,
-            allow_emulation=allow_emulation,
-        )
-    else:
-        print_error_message(title=f"Unsupported platform: {os_def.platform}")
+    except DispatchError as e:
+        print_error_message(title=e.title, next_steps=e.next_steps)
         return
 
     # Run interactive post-install session if requested (only for seed-based
     # automated installs — the manual/gui-* modes already drive the GUI directly).
-    if interactive and os_def.install_mode not in _GUI_INSTALL_MODES:
+    if interactive and os_def.install_mode not in GUI_INSTALL_MODES:
         from adare.hypervisor.qemu.vm_creator.interactive import run_post_install_session
 
         nvram_path = disk_path.with_name(disk_path.stem + '_VARS.fd')

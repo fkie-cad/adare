@@ -133,12 +133,26 @@ class OCRConstants:
     # recognizes tiny crops (e.g. a wrapped "4.17.0" desktop-icon label) poorly.
     # Upscaling the screenshot before predict() recovers small text; detection
     # boxes are rescaled back to original screenshot-pixel space so all
-    # downstream coordinates stay unchanged. 1.0 disables it.
+    # downstream coordinates stay unchanged.
+    #
+    # The upscale factor is chosen ADAPTIVELY per image: scale up only enough to
+    # reach OCR_TARGET_SIDE (the resolution PaddleOCR's detector performs best
+    # at), never beyond OCR_UPSCALE (the cap), and never at all if the image is
+    # already >= the target. A flat, unconditional upscale factor is unsafe: on
+    # a 1920x1080+ screenshot a flat 2x sends the image (already well above the
+    # detector's sweet spot) past the detection-side-length limit, which forces
+    # PaddleOCR to silently downscale it back down for detection - destroying
+    # recall on ordinary desktop UI text. Scaling only what actually needs it
+    # keeps small crops/labels (the original motivating case) fixed without
+    # regressing normal-sized screenshots.
     OCR_UPSCALE = float(os.environ.get("ADARE_OCR_UPSCALE", "2.0"))
+    OCR_TARGET_SIDE = int(os.environ.get("ADARE_OCR_TARGET_SIDE", "2048"))
 
-    # Detection-side length limit passed to PaddleOCR. Must be large enough that
-    # the upscaled image is NOT downscaled away for detection (which would defeat
-    # the upscale). With limit_type "max" this is the longest allowed side.
+    # Floor for the detection-side length passed to PaddleOCR. The effective
+    # value used at call time is max(this floor, the actual processed image's
+    # longest side) so the image we hand PaddleOCR is NEVER downscaled away for
+    # detection (which would silently defeat any upscaling above), regardless of
+    # source resolution. With limit_type "max" this is the longest allowed side.
     OCR_DET_LIMIT_SIDE_LEN = int(os.environ.get("ADARE_OCR_DET_LIMIT_SIDE_LEN", "2880"))
     OCR_DET_LIMIT_TYPE = os.environ.get("ADARE_OCR_DET_LIMIT_TYPE", "max")
 

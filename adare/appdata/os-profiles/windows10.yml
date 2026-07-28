@@ -11,3 +11,10 @@ default_disk_size: "80G"
 default_ram_mb: 16384
 default_cpus: 0
 requires_uefi: true
+# Where to obtain the ISO. Microsoft installer media is licensed, not
+# redistributable, so this profile ships no iso_url; a recipe environment for it
+# uses the consumer-supplied ("BYO") ISO form and falls back to these notes when
+# the publisher declares no recipe.iso_notes of its own.
+iso_notes: |
+  Download from https://www.microsoft.com/software-download/windows10 —
+  "Windows 10", English (International), 64-bit. Requires a valid licence.

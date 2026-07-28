@@ -26,7 +26,11 @@ from adare.hypervisor.qemu.vm_creator.iso_utils import (
     verify_iso_hash,
 )
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
-from adare.hypervisor.qemu.vm_creator.progress import wait_for_qemu_exit
+from adare.hypervisor.qemu.vm_creator.progress import (
+    QemuInstallTerminated,
+    terminate_qemu_on_exit,
+    wait_for_qemu_exit,
+)
 from adare.hypervisor.qemu.vm_creator.qmp_utils import qemu_params_for_arch
 from adare.hypervisor.qemu.vm_creator.seed_http import SeedHTTPServer
 
@@ -374,24 +378,30 @@ def _run_qemu_installation(
             stderr=subprocess.PIPE,
         )
 
+        label = f'{disk_path.stem} installation'
         try:
-            with console.status(f'  [cyan]{disk_path.stem}[/cyan] installing...', spinner='dots') as status:
-                wait_for_qemu_exit(
-                    process,
-                    timeout_minutes=timeout_minutes,
-                    label=f'{disk_path.stem} installation',
-                    status=status,
-                )
-            # A zero exit only means the guest powered down; confirm the
-            # installer actually got to the end before the disk is trusted.
-            _assert_install_succeeded(install_log)
+            # The context manager reaps QEMU on every exit path, signals
+            # included — a bare `kill` of this process used to leave the
+            # installer VM running as an orphan.
+            with terminate_qemu_on_exit(process, label=label):
+                with console.status(f'  [cyan]{disk_path.stem}[/cyan] installing...', spinner='dots') as status:
+                    wait_for_qemu_exit(
+                        process,
+                        timeout_minutes=timeout_minutes,
+                        label=label,
+                        status=status,
+                    )
+                # A zero exit only means the guest powered down; confirm the
+                # installer actually got to the end before the disk is trusted.
+                _assert_install_succeeded(install_log)
         except (TimeoutError, subprocess.CalledProcessError):
             raise
         except KeyboardInterrupt:
             console.print('\n  [bold red]Installation interrupted by user[/bold red]')
-            process.terminate()
-            process.wait(timeout=30)
             raise LinuxVMCreationError('Installation interrupted by user') from None
+        except QemuInstallTerminated as e:
+            console.print(f'\n  [bold red]Installation terminated:[/bold red] {e}')
+            raise LinuxVMCreationError(f'Installation terminated: {e}') from None
     finally:
         if seed_server is not None:
             seed_server.stop()

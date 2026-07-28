@@ -55,6 +55,101 @@ def _interactive_socket(disk_path: Path, kind: str) -> Path:
     return fallback
 
 
+def build_post_install_qemu_cmd(
+    disk_path: Path,
+    nvram_path: Path | None,
+    os_def: OsDefinition,
+    ram_mb: int,
+    cpus: int,
+    qmp_sock_path: Path,
+    qga_sock_path: Path | None = None,
+    allow_emulation: bool = False,
+    headless: bool = False,
+) -> list[str]:
+    """Build the QEMU argv that boots a *finished* disk (no ISO, no -no-reboot).
+
+    Single definition shared by the interactive post-install session and recipe
+    build-time provisioning. Both must boot a built disk *identically* — same boot
+    mode, same NVMe-vs-virtio controller choice, same display device — or a disk
+    that provisions cleanly could fail to boot interactively (or vice versa), and
+    the difference would be invisible until someone hit it.
+
+    Notably this does NOT apply the ``highmem-mmio/ecam/redists=off`` machine
+    properties that ``windows_creator._run_qemu_install_phase`` needs on aarch64:
+    those exist so edk2 can enumerate PCI/USB while running *Windows Setup*, and
+    a booted Windows kernel does not need them. Verified on the real
+    ``windows11arm64`` recipe disk — ``virtio-serial`` + ``virtserialport``
+    enumerate on plain ``virt``, and the guest agent answered in ~3 s.
+
+    Args:
+        qga_sock_path: When given, adds the guest-agent virtio-serial channel.
+        headless: Use ``-display none`` instead of a native window. Provisioning
+            turns this on when it is not attached to a TTY (CI, background runs),
+            where an unwatched window is pure overhead.
+
+    Returns:
+        The full QEMU argv.
+    """
+    arch_params = qemu_params_for_arch(os_def, allow_emulation)
+
+    cmd = [
+        arch_params['exe'],
+        '-machine', arch_params['machine'],
+        '-cpu', arch_params['cpu'],
+        '-m', str(ram_mb),
+        '-smp', str(cpus),
+    ]
+    # Boot from installed disk — per-arch controller matching installation
+    # (aarch64 NVMe / x86_64 virtio-blk) so Windows finds its boot driver.
+    cmd += disk_device_args(disk_path, os_def, bootindex=0)
+    # QMP for ACPI shutdown
+    cmd += ['-qmp', f'unix:{qmp_sock_path},server=on,wait=off']
+
+    # QEMU guest agent channel (virtio-serial) for the console / provisioning.
+    if qga_sock_path is not None:
+        cmd += [
+            '-chardev', f'socket,path={qga_sock_path},server=on,wait=off,id=qga0',
+            '-device', 'virtio-serial',
+            '-device', 'virtserialport,chardev=qga0,name=org.qemu.guest_agent.0',
+        ]
+
+    cmd += [
+        # Network
+        '-netdev', 'user,id=net0',
+        '-device', 'virtio-net-pci,netdev=net0',
+        # USB tablet/keyboard for native display
+        '-device', 'qemu-xhci',
+        '-device', 'usb-tablet',
+        '-device', 'usb-kbd',
+        # Virtio RNG
+        '-device', 'virtio-rng-pci',
+    ]
+
+    # VGA / display device (architecture-specific)
+    cmd.extend(arch_params['vga_args'])
+
+    # Native display (platform-specific)
+    if headless:
+        cmd.extend(['-display', 'none'])
+    elif platform.system() == 'Darwin':
+        cmd.extend(['-display', 'cocoa'])
+    else:
+        cmd.extend(['-display', 'gtk'])
+
+    # Add UEFI firmware if required
+    needs_uefi = os_def.requires_uefi or os_def.architecture == 'aarch64'
+    if needs_uefi and nvram_path is not None:
+        ovmf_code, _ = find_ovmf_firmware(os_def.architecture)
+        pflash_args = [
+            '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
+            '-drive', f'if=pflash,format=raw,file={nvram_path}',
+        ]
+        machine_idx = cmd.index('-machine') + 2
+        cmd[machine_idx:machine_idx] = pflash_args
+
+    return cmd
+
+
 def run_post_install_session(
     disk_path: Path,
     nvram_path: Path | None,
@@ -102,64 +197,16 @@ def run_post_install_session(
         GUI-only branch ``recorded`` is always ``[]`` and ``store`` is the
         prompted decision when ``ask_store`` (else ``True``).
     """
-    arch_params = qemu_params_for_arch(os_def, allow_emulation)
-
     # QMP socket for ACPI shutdown; QGA socket only when the console is used.
     qmp_sock_path = _interactive_socket(disk_path, 'qmp')
     qga_sock_path = _interactive_socket(disk_path, 'qga') if console_mode else None
 
-    cmd = [
-        arch_params['exe'],
-        '-machine', arch_params['machine'],
-        '-cpu', arch_params['cpu'],
-        '-m', str(ram_mb),
-        '-smp', str(cpus),
-    ]
-    # Boot from installed disk — per-arch controller matching installation
-    # (aarch64 NVMe / x86_64 virtio-blk) so Windows finds its boot driver.
-    cmd += disk_device_args(disk_path, os_def, bootindex=0)
-    # QMP for ACPI shutdown
-    cmd += ['-qmp', f'unix:{qmp_sock_path},server=on,wait=off']
-
-    # QEMU guest agent channel (virtio-serial) for the interactive console.
-    if console_mode:
-        cmd += [
-            '-chardev', f'socket,path={qga_sock_path},server=on,wait=off,id=qga0',
-            '-device', 'virtio-serial',
-            '-device', 'virtserialport,chardev=qga0,name=org.qemu.guest_agent.0',
-        ]
-
-    cmd += [
-        # Network
-        '-netdev', 'user,id=net0',
-        '-device', 'virtio-net-pci,netdev=net0',
-        # USB tablet/keyboard for native display
-        '-device', 'qemu-xhci',
-        '-device', 'usb-tablet',
-        '-device', 'usb-kbd',
-        # Virtio RNG
-        '-device', 'virtio-rng-pci',
-    ]
-
-    # VGA / display device (architecture-specific)
-    cmd.extend(arch_params['vga_args'])
-
-    # Native display (platform-specific)
-    if platform.system() == 'Darwin':
-        cmd.extend(['-display', 'cocoa'])
-    else:
-        cmd.extend(['-display', 'gtk'])
-
-    # Add UEFI firmware if required
-    needs_uefi = os_def.requires_uefi or os_def.architecture == 'aarch64'
-    if needs_uefi and nvram_path is not None:
-        ovmf_code, _ = find_ovmf_firmware(os_def.architecture)
-        pflash_args = [
-            '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
-            '-drive', f'if=pflash,format=raw,file={nvram_path}',
-        ]
-        machine_idx = cmd.index('-machine') + 2
-        cmd[machine_idx:machine_idx] = pflash_args
+    cmd = build_post_install_qemu_cmd(
+        disk_path, nvram_path, os_def, ram_mb, cpus,
+        qmp_sock_path=qmp_sock_path,
+        qga_sock_path=qga_sock_path,
+        allow_emulation=allow_emulation,
+    )
 
     log.info(f'Starting interactive post-install session: {" ".join(cmd)}')
 

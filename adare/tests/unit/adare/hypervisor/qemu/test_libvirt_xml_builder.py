@@ -270,8 +270,14 @@ class TestDomainXMLBuilderBasic:
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/opt/homebrew/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Darwin')
     def test_build_domain_type_hvf_on_darwin(self, mock_platform, mock_which):
-        """build() uses hvf domain type on macOS."""
-        config = make_linux_pc_config()
+        """build() uses the hvf domain type for an hvf-accelerated VM.
+
+        `accel`, not the host OS, decides the domain type: DomainXMLBuilder trusts
+        an explicitly-resolved `config.accel`, and `resolve_accel` is the single
+        chokepoint that returns 'hvf' on a Darwin host. So the config has to carry
+        it — a Darwin host with `accel='kvm'` correctly still emits type='kvm'.
+        """
+        config = make_linux_pc_config(accel='hvf')
         builder = DomainXMLBuilder(config)
         xml_str = builder.build()
         root = ET.fromstring(xml_str)
@@ -486,8 +492,12 @@ class TestDomainXMLBuilderWindows:
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/opt/homebrew/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Darwin')
     def test_windows_no_hyperv_on_darwin(self, mock_platform, mock_which, mock_firmware, mock_nvram):
-        """Windows VM on macOS has no Hyper-V enlightenments."""
-        config = make_windows_config()
+        """A Windows VM without KVM has no Hyper-V enlightenments.
+
+        The enlightenments are gated on `accel == 'kvm'`, not on the host OS, so the
+        config must say hvf — which is what `resolve_accel` returns on Darwin.
+        """
+        config = make_windows_config(accel='hvf')
         builder = DomainXMLBuilder(config)
         xml_str = builder.build()
         root = ET.fromstring(xml_str)
@@ -552,8 +562,12 @@ class TestDomainXMLBuilderQemuCommandline:
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/opt/homebrew/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Darwin')
     def test_hvf_domain_type_on_darwin(self, mock_platform, mock_which):
-        """HVF acceleration is set via domain type='hvf' on macOS (not -accel arg)."""
-        config = make_linux_pc_config()
+        """HVF acceleration is expressed as domain type='hvf', never an -accel arg.
+
+        Driven by `config.accel` rather than the host OS — see
+        `test_build_domain_type_hvf_on_darwin`.
+        """
+        config = make_linux_pc_config(accel='hvf')
         builder = DomainXMLBuilder(config)
         xml_str = builder.build()
         root = ET.fromstring(xml_str)

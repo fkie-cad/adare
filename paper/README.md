@@ -33,6 +33,7 @@ obtaining the missing piece.
 | All VM images | all | Multi-gigabyte disk images. | Built from OS profiles + `adare vm create` / `adare env extend`; §5.4's build runbook is in `experiments/4_autopsy_tool_regression_testing/provisioning/README.md`. |
 | Autopsy 4.22.0 | 5.4 | **Not a gap.** 4.22.0 is Figure 2's "Missing Version (X)" column — the version whose release notes the paper consulted, not one it ran. 24 playbooks + X = the figure's 25 columns. | — |
 | LECmd, PECmd binaries | 5.3, 5.5 | Third-party tools, provisioned into the environments' shared tools rather than vendored. | <https://ericzimmerman.github.io/> |
+| LECmd **1.5.1** specifically | 5.5 | Not obtainable: ericzimmermanstools.com serves only current builds and the tools have moved to date-based versioning, so no `1.x` release can be produced. `lecmd_version_matches_paper` was re-baselined to the measured 2026.5.0, with the reasoning in the playbook. Table 1's LECmd *behaviour* reproduces on 2026.5.0; the paper's exact binary does not. | `experiments/5_cross_tool_validation/README.md` |
 
 ## Missing OS profiles — the main barrier to a full replication
 
@@ -88,3 +89,15 @@ Two known limits are worth reading before trusting a green result:
 
 Neither is a defect in these artifacts, but both change how much a clean validation run
 proves, so they are recorded here rather than left for the next person to rediscover.
+
+One environment-level constraint applies to **every** Windows playbook that invokes a tool
+from the shared-tools mount, and it was found the hard way in §5.3 and §5.5 (2026-07-28):
+
+- **A Windows guest cannot execute a binary out of the shared-tools mount.** That mount is a
+  symlink to a QEMU/Samba share and its files carry read-only ACLs (`Everyone:(R)`, no
+  `(X)`), so `CreateProcess` fails with `Access is denied` (HRESULT `0x80131501`) and **no
+  process is created** — no stdout, no stderr, no exit code. The symptom is a tool that looks
+  like it ran and produced nothing, which is much harder to read than a normal error. Reading
+  data files from the share is fine; only execution is denied. Windows playbooks must copy the
+  binary to a local directory first and remove it again afterwards; `3_tool_validation/pecmd`
+  and `5_cross_tool_validation/lnk_lecmd_windows11` both show the pattern.

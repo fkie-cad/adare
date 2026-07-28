@@ -316,6 +316,11 @@ class EnvironmentAPI:
             verify_url=verify_url, compress=compress,
         )
 
+    def recipe_byo(self, project_path, name, iso_name=None, iso_notes=None):
+        """Convert a recipe environment's local ISO path into a consumer-supplied one."""
+        from adare.services.environment_recipe_byo import recipe_byo
+        return recipe_byo(project_path, name, iso_name=iso_name, iso_notes=iso_notes)
+
     def delete(self, identifier, force=False):
         """Delete an environment."""
         return self._service.delete(identifier, force=force)

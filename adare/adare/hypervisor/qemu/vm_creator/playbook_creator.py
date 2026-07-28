@@ -357,7 +357,11 @@ class PlaybookVMCreator(BaseVMCreator):
             from PIL import Image
             import io
             Image.open(io.BytesIO(data)).save(path)
-        except Exception:
+        except (ImportError, OSError):
+            # ImportError: no Pillow on this host. OSError: Pillow could not
+            # decode or write the frame — PIL.UnidentifiedImageError subclasses
+            # OSError, as do its write errors. Either way, keep the raw PPM so
+            # the frame is not lost.
             path.with_suffix('.ppm').write_bytes(data)
         print_step(f'    shot -> {path}')
 

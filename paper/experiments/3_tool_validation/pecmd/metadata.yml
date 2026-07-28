@@ -1,5 +1,5 @@
 environments:
-  - win11
+  - win11arm64-fresh
 
 description: >-
   Tool validation of PECmd (paper section 5.3): launch regedit ten times and, after each

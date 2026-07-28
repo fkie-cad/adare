@@ -54,6 +54,7 @@ def exec_environment_extend(arguments):
         cpus=arguments.cpus,
         disk_name=arguments.disk_name,
         compress=arguments.compress,
+        allow_emulation=getattr(arguments, 'allow_emulation', False),
         description=arguments.description,
         tags=list(arguments.tag),
         force=arguments.force,

@@ -1,0 +1,42 @@
+{
+  "content_hash": "03a667f1b3f28b55c82e87fb54a3cf479ce97bf6ef49dbbb55a3beb90d7f7a72",
+  "environment_ulid": "01JQENVREMOTE0000000000000",
+  "events": [
+    {
+      "action_data": "{\"command\": \"dir\", \"returncode\": 0}",
+      "action_id": "install-packages",
+      "action_type": "command",
+      "category": "action",
+      "error": "",
+      "event_group_id": "install-packages",
+      "event_type": "action_event",
+      "event_type_specific": "COMMAND_COMPLETE",
+      "execution_time": 1234,
+      "success": true,
+      "timestamp": "2026-07-27T10:00:00.000000",
+      "ulid": "01JQEVACTION00000000000000"
+    },
+    {
+      "abstract_test_ulid": "01JQTESTREMOTE000000000000",
+      "category": "test",
+      "error": "",
+      "event_group_id": "file_exists",
+      "event_type": "test_event",
+      "event_type_specific": "TEST_COMPLETE",
+      "execution_time": 42,
+      "result": {
+        "details": "file found",
+        "status": "success"
+      },
+      "success": true,
+      "timestamp": "2026-07-27T10:01:00.000000",
+      "ulid": "01JQEVTEST0000000000000000"
+    }
+  ],
+  "experiment_ulid": "01JQEXPREMOTE0000000000000",
+  "result_status": "success",
+  "status": "finished",
+  "timestamp_end": "2026-07-27T10:01:00.000000",
+  "timestamp_start": "2026-07-27T10:00:00.000000",
+  "ulid": "01JQRUN0000000000000000000"
+}

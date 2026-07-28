@@ -90,7 +90,12 @@ class SyncResult:
 
 @dataclass
 class UploadRunRequest:
-    """Request to upload an experiment run."""
+    """Request to upload an experiment run.
+
+    ``project_path`` is required: the run is a project-scoped record, so the
+    serializer has to open that project's database rather than the global one.
+    """
+    project_path: Path
     ulid: str
 
 

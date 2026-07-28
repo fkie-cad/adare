@@ -381,6 +381,12 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
 class LinuxAgentCommandBuilder(AgentCommandBuilder):
     """Linux-specific command builder."""
 
+    # Used only when the guest's system python is older than adarevm's requires-python
+    # (Ubuntu 20.04 focal ships 3.8). uv fetches this interpreter and the agent runs
+    # from the venv below instead of the system site-packages.
+    FALLBACK_AGENT_PYTHON = '3.12'
+    FALLBACK_AGENT_VENV = '/opt/adare-agent'
+
     async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> list[SetupCommand]:
         """Build Linux setup commands with per-command admin requirements."""
         commands = [
@@ -447,7 +453,36 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         if self.wheels_available:
             # Use find for reliable wheel discovery (works with QEMU guest agent)
             # --no-cache-dir avoids cache permission issues
-            cmd = 'find /adare/vm/wheels -name "*.whl" -exec pip3 install --no-cache-dir --force-reinstall {} +'
+            #
+            # --break-system-packages only exists from pip 23.0.1 on, where PEP 668
+            # marks the system interpreter externally-managed. Ubuntu 20.04 ships
+            # pip 20.0.2, which aborts with "no such option" and fails VM setup, so
+            # probe for the flag instead of assuming it.
+            #
+            # adarevm/adarelib declare requires-python >=3.10, but Ubuntu 20.04 (focal)
+            # ships Python 3.8 as its system interpreter and its autoinstall template
+            # deliberately provisions no conda -- "standalone uv plus the system
+            # python". Installing the wheels into a 3.8 system python therefore aborts
+            # with "Package 'adarevm' requires a different Python: 3.8.10 not in
+            # '>=3.10'". uv is present precisely to supply a modern interpreter, so on
+            # such guests build a uv-managed venv and symlink the entry point onto PATH
+            # (build_run_command invokes a bare `adarevm`, which the symlink satisfies).
+            cmd = (
+                'if pip3 install --help 2>/dev/null | grep -q -- --break-system-packages; '
+                'then BSP=--break-system-packages; else BSP=; fi; '
+                'PYV=$(python3 -c "import sys; print(sys.version_info[0]*100+sys.version_info[1])" '
+                '2>/dev/null || echo 0); '
+                'if [ "$PYV" -ge 310 ]; then '
+                'find /adare/vm/wheels -name "*.whl" -exec pip3 install --no-cache-dir '
+                '--force-reinstall --ignore-installed $BSP {} +; '
+                'else '
+                'UV=$(command -v uv || echo /usr/local/bin/uv); '
+                f'"$UV" venv --python {self.FALLBACK_AGENT_PYTHON} {self.FALLBACK_AGENT_VENV} && '
+                f'"$UV" pip install --python {self.FALLBACK_AGENT_VENV}/bin/python --no-cache '
+                '--reinstall /adare/vm/wheels/*.whl && '
+                f'ln -sf {self.FALLBACK_AGENT_VENV}/bin/adarevm /usr/local/bin/adarevm; '
+                'fi'
+            )
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd

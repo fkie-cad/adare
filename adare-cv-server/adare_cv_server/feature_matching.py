@@ -73,8 +73,11 @@ class SIFTMatcher:
                 center = HomographyCalculator.calculate_center_from_homography(
                     src_pts, dst_pts, icon_gray.shape, screenshot_shape=screenshot_shape
                 )
-                log.info(f"SIFT match found at center: {center}")
-                return FeatureMatchingResult([center], [float(len(good_matches))], "sift")
+                if center is None:
+                    log.info("SIFT homography center rejected (out of bounds), no match")
+                else:
+                    log.info(f"SIFT match found at center: {center}")
+                    return FeatureMatchingResult([center], [float(len(good_matches))], "sift")
             except HomographyCalculationError as e:
                 log.warning(f"{e}")
         else:

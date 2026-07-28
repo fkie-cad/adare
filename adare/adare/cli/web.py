@@ -147,8 +147,13 @@ def exec_web_sync(arguments):
 
 def exec_web_upload_experiment_run(arguments):
     """Upload experiment run to server using AdareAPI."""
+    project_directory = get_project_path(arguments)
+
     api = AdareAPI()
-    result = api.web.upload_run(UploadRunRequest(ulid=arguments.ulid))
+    result = api.web.upload_run(UploadRunRequest(
+        project_path=project_directory,
+        ulid=arguments.ulid
+    ))
 
     if not result.success:
         handle_api_error(result)

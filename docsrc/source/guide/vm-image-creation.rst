@@ -403,6 +403,33 @@ Options
      - GUI-auto only: explicit goal/spec template name (default: ``gui_<distribution>``).
 
 
+Interrupting a build
+====================
+
+``Ctrl-C`` and ``kill <pid>`` both abort a running install cleanly: the QEMU child
+is terminated (escalating to ``SIGKILL`` after 30 s) before ``adare`` exits, and
+the partial disk is cleaned up.
+
+This matters because the installer VM is started with ``Popen`` and nothing in the
+OS ties its lifetime to ours. Before ``SIGTERM`` was handled, ``kill``-ing a build
+— which is what scripted cleanup usually does — left a full installer VM running
+with ``ppid=1``, still appending to its ``-serial`` install log. Two such orphans
+once wrote to the *same* log for ~15 hours, interleaving output from different
+installs and making the failure they were supposed to document unreadable.
+
+Only ``SIGKILL`` on the ``adare`` process itself can still orphan the VM; there is
+no in-process defence against that. If it happens, find the stray process with
+``pgrep -f qemu-system`` and check for ``ppid=1``:
+
+.. code-block:: bash
+
+   ps -o pid,ppid,etime,command -p $(pgrep -f qemu-system-aarch64 | tr '\n' ',')
+
+Two QEMUs sharing one ``-serial file:`` path is the signature — kill them, and
+discard the disk and any log they both wrote to, since neither is a coherent
+record of a single install.
+
+
 Setup Levels
 ============
 
@@ -495,8 +522,14 @@ environment instead of building immediately:
        setup_level: 2            # 0=bare, 1=base, 2=full
        disk_size: 80G
        ram_mb: 16384
-   # Post-install steps reuse the existing environment field; they are folded
-   # into the recipe integrity hash and applied at experiment time as usual:
+     # Build-time provisioning: run ONCE while the disk is built (see below).
+     # provision:
+     #   - {name: my-tool, command: "msiexec /i ... /qn", timeout_minutes: 30}
+   # Per-RUN steps, unchanged: these execute inside every experiment run. Use
+   # them only for work that must be redone each run -- installing software here
+   # writes Prefetch/registry/MFT entries into the artifact set under
+   # measurement, which is a forensic contamination. For software installs, use
+   # `recipe.provision` above instead.
    # postsetupinstallations:
    #   - {name: my-tool, command: "...", description: "..."}
 
@@ -505,20 +538,289 @@ Build lifecycle
 
 On ``adare environment load`` the recipe flow:
 
-1. Verifies the ISO exists and ``hash(iso) == iso_sha256`` -- **hard-fails** on
-   mismatch.
-2. Computes the *recipe hash* from ``iso_sha256`` + the install template + the
-   params/profile/post-install identity.
-3. If a VM with that recipe hash already exists (and its cached disk is
+1. Enforces the ISO-source contract for a consumer (see
+   :ref:`byo-isos` below), resolves the ISO to a local file, and verifies
+   ``hash(iso) == iso_sha256`` -- **hard-fails** on mismatch.
+2. Expands and validates ``recipe.provision``, and checks free disk space. Every
+   cheap failure happens here, *before* any multi-hour install.
+3. Computes two hashes:
+
+   * ``base_hash`` -- ``iso_sha256`` + the install template + the
+     params/profile/post-install identity, **without** ``provision``.
+   * ``recipe_hash`` -- the same, **with** ``provision``.
+
+4. If a VM with that ``recipe_hash`` already exists (and its cached disk is
    present), reuses it -- **no rebuild** (build once, cache).
-4. Otherwise builds the disk with the normal creator machinery and registers it
-   with ``build_source='recipe'`` plus the recipe hash, ISO hash, and profile
-   name for provenance.
+5. Otherwise builds in two stages:
+
+   * **Stage 1 -- base disk.** The normal creator machinery installs the OS into
+     ``~/.adare/qemu/cache/recipe-bases/{profile}-recipebase-{base_hash}.qcow2``.
+     Already there? Cache hit, and the OS install is skipped entirely.
+   * **Stage 2 -- provisioning.** Only when ``provision`` is non-empty: boot a
+     throwaway overlay of the base, run the steps through the guest agent, shut
+     the guest down cleanly, and flatten the overlay into
+     ``~/.adare/state/vms/{profile}-{recipe_hash}.qcow2``.
+
+6. Registers the result with ``build_source='recipe'`` plus the recipe hash, ISO
+   hash, and profile name for provenance.
+
+With no provision steps ``base_hash == recipe_hash``, Stage 2 is skipped, and the
+result is identical to the pre-provisioning behaviour -- including the disk's name
+and location.
 
 Because the built disk is still hashed into ``Vm.hash``, it remains
 tamper-checked exactly like a baked disk. A recipe environment gains one
 recovery advantage a baked disk lacks: if the cached disk goes missing, integrity
 verification rebuilds it from the recipe instead of hard-failing.
+
+.. _build-time-provisioning:
+
+Build-time provisioning
+-----------------------
+
+``recipe.provision`` installs software **once, while the disk is being built**,
+through the QEMU guest agent. This is not a convenience: for forensic work it is
+the only correct place to do it. Installing an application writes Prefetch entries,
+registry keys and MFT records -- precisely the artifacts an experiment measures --
+so an install that ran inside every run would contaminate its own results.
+
+Contrast the two fields:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 40 40
+
+   * - 
+     - ``recipe.provision``
+     - ``postsetupinstallations``
+   * - Runs
+     - Once, at disk build time
+     - Inside every experiment run
+   * - Result
+     - Baked into the cached disk
+     - Re-applied to a fresh overlay each run
+   * - Use for
+     - Installing the software under test
+     - Per-run setup that must not persist
+   * - Transport
+     - QEMU guest agent (``guest-exec``)
+     - The ADARE guest agent, at run time
+
+Both are folded into the recipe hash, so changing either yields a new environment
+identity.
+
+Schema
+~~~~~~
+
+Each ``provision`` entry is either a single command or a repeated group:
+
+.. code-block:: yaml
+
+   provision:
+     # Single command.
+     - name: boot-hardening
+       description: Survive a hard power-off without Startup Repair
+       shell: cmd                    # powershell | cmd | bash | auto (default)
+       command: bcdedit /set {default} recoveryenabled No
+
+     # Repeated group: every step replays once per for_each item, with
+     # {{ item }} substituted through name, description, command, verify, cwd
+     # and log_files.
+     - name: autopsy
+       description: Autopsy {{ item }}
+       for_each: ["4.4.0", "4.4.1"]
+       steps:
+         - name: autopsy-{{ item }}-download
+           command: curl.exe -L -f -o "C:\Windows\Temp\a-{{ item }}.msi" https://...
+           timeout_minutes: 20
+         - name: autopsy-{{ item }}-install
+           command: msiexec /i "C:\Windows\Temp\a-{{ item }}.msi" /qn /norestart
+           allow_exit_codes: [0, 3010]     # 3010 = success, reboot required
+           verify: 'if (-not (Test-Path "C:\Program Files\Autopsy-{{ item }}")) { exit 1 }'
+           log_files: ['C:\Windows\Temp\a-{{ item }}-msi.log']
+           timeout_minutes: 45
+           reboot: false
+
+Fields on a command: ``name`` (required, must be unique after expansion),
+``command`` (required), ``description``, ``cwd``, ``shell``,
+``allow_exit_codes`` (default ``[0]``), ``verify``, ``log_files``,
+``timeout_minutes`` (default 30), ``reboot``. A group adds ``for_each`` and
+``steps``; exactly one of ``command`` / ``steps`` per entry.
+
+Three details worth knowing:
+
+* **Success is the exit code, never stderr.** A successful PowerShell command
+  routinely writes CLIXML progress records to stderr.
+* **``verify`` is how a step proves it worked.** An installer reporting exit 0 is
+  not evidence the files exist; a non-zero ``verify`` fails the build.
+* **``{{ item }}`` is strict.** An unknown variable (``{{ version }}`` for
+  ``{{ item }}``) is a hard error, not an empty string -- otherwise a typo yields a
+  plausible-but-wrong disk.
+
+``shell`` matters more than it looks. ``cmd`` exists because PowerShell parses
+``{default}`` in ``bcdedit /set {default} ...`` as a script block, so such a
+command has to reach ``cmd.exe`` verbatim.
+
+Requires ``setup_level`` 1 (base) or higher: the QEMU guest agent is what
+provisioning talks to, and level 0 (bare) does not install it.
+
+.. _provision-no-digest:
+
+Downloads inside a provision command are not digest-pinned
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+There is no ``sha256:`` field on a provision command, and this is a settled design
+decision rather than a missing feature. ``iso_sha256`` is the integrity boundary of
+a recipe: the ISO is the one input a *consumer* supplies from their own copy, so
+its digest is what makes two independent builds of the same recipe comparable.
+
+A URL fetched by a provision command (``curl.exe -L -f -o ... https://...``) points
+at an asset the upstream project controls. Pinning it would move the trust anchor
+from "the OS install is reproducible" to "upstream never re-cuts a tag" -- a
+property ADARE cannot enforce -- and would turn every legitimate upstream
+re-release into an apparent tampering event, fixable only by editing the recipe,
+which changes ``recipe_hash`` and forces a rebuild.
+
+The accepted consequence: if an upstream release is retagged, the same recipe hash
+can describe a different disk. What limits the damage is already in the model --
+the recipe records the exact version list, ``verify`` asserts each install's own
+target exists, and ``log_files`` are pulled on failure, so a substituted installer
+surfaces as a changed artifact set rather than a silent pass. Reproducing a
+*specific historical* build therefore depends on upstream tag stability; the
+published disk hash, not the recipe, is the durable record of what was built.
+
+When a step fails
+~~~~~~~~~~~~~~~~~
+
+Provisioning **aborts on the first failure** and no environment is registered. A
+recipe hash must describe a disk where every step succeeded; a
+partially-provisioned disk that occupied that hash's cache slot would be a disk
+whose contents do not match its identity.
+
+On failure ADARE pulls each ``log_files`` entry from the guest to
+``~/.adare/qemu/build-logs/`` and names the failing step, its exit code and its
+output. The base disk is cached, so retrying is cheap:
+
+.. code-block:: bash
+
+   # Reuse the cached OS install, re-run provisioning from scratch.
+   adare env load myenv.yml --reprovision
+
+   # Rebuild both stages.
+   adare env load myenv.yml --force
+
+   # Keep the failed overlay for post-mortem.
+   ADARE_KEEP_FAILED_PROVISION=1 adare env load myenv.yml --reprovision
+
+Step-level resume is deliberately not offered: a half-installed MSI is not a clean
+resume point, and pretending otherwise produces disks whose contents do not match
+their hash. If one ``for_each`` item is at fault, bisect the list.
+
+A guest that will not shut down cleanly is also a hard failure. Flattening a dirty
+NTFS volume produces a disk that boots into Startup Repair on the consumer's
+machine -- and the recipe hash would vouch for it.
+
+Every command's name, interpreter, full text, exit code, wall time, stdout and
+stderr are recorded in ``~/.adare/qemu/build-logs/provision-<hash>.log``. That
+file is the complete account of what was done to the disk, and is worth attaching
+to a published artifact.
+
+Sharing one base across several recipes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Because ``base_hash`` excludes ``provision``, two recipes that declare an
+*identical* Stage 1 -- same ISO, same template, same ``params`` -- share one cached
+base disk. Build the first, and the second prints
+``Recipe base cache hit -- reusing ...`` and goes straight to its own provisioning.
+
+The corollary is a trap worth stating: any difference in ``params`` (even
+``disk_size``) forks the base hash and costs a second full OS install. Keep them
+byte-identical across sibling recipes.
+
+The base cache is swept by ``adare vm prune``, which reclaims any base no recipe
+environment still resolves to. Losing one only costs a rebuild.
+
+A cache entry is **published by an atomic rename**, never written in place: the OS
+installs into ``{profile}-recipebase-{hash}.partial.qcow2`` and is moved onto the
+real name only once the install completes. So the presence of
+``{profile}-recipebase-{hash}.qcow2`` *implies* a finished install, and an
+interrupted Stage 1 — Ctrl-C, a killed process, a host crash — leaves a
+``.partial`` file rather than an empty disk masquerading as a cached base. Without
+this, a build interrupted any time after the initial ``qemu-img create`` would
+poison the cache permanently: every later build would report a cache hit, skip the
+install, boot a disk with no operating system, and fail fifteen minutes later with
+"the guest agent did not respond" — a true statement that says nothing about the
+cause. ``adare vm prune`` reclaims ``.partial`` leftovers along with stale bases.
+
+.. _byo-isos:
+
+Consumer-supplied (BYO) ISOs -- Windows only
+--------------------------------------------
+
+A recipe is only shareable if the consumer can obtain its ISO. For Linux that is
+easy: the ISO is freely redistributable, so ``recipe.iso`` is a published
+``http(s)`` URL and publishing requires one. For **Windows** it is not: Microsoft
+installer media is licensed, not redistributable, and hosting it yourself is not an
+option.
+
+So a Windows recipe may instead name the file the consumer must already own:
+
+.. code-block:: yaml
+
+   recipe:
+     profile: windows11arm64
+     iso_name: Win11_25H2_English_Arm64_v2.iso
+     iso_sha256: 638aa2c8...adf0
+     iso_notes: |
+       Download from https://www.microsoft.com/software-download/windows11 --
+       "Windows 11 Arm64", English (International). Requires a valid licence.
+
+Exactly one of ``iso`` / ``iso_name``. ``iso_sha256`` is required in **both** forms
+and is the actual integrity boundary -- the Windows-only restriction on BYO is a
+quality rule about redistributability, not a security control.
+
+``iso_notes`` is plain text (never markdown or HTML) and is shown to a consumer who
+does not have the file. Omit it and ADARE falls back to the OS profile's own
+``iso_notes``, so a consumer always gets a download pointer.
+
+Supplying the ISO as a consumer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``environment load`` searches these locations by filename, first existing file
+wins:
+
+1. ``--iso PATH`` -- a file, or a directory to look inside.
+2. ``$ADARE_ISO_DIR/<iso_name>``
+3. ``~/.adare/isos/<iso_name>``
+4. the environment file's own directory
+5. ``~/.adare/qemu/cache/<iso_name>``
+
+.. code-block:: bash
+
+   cp Win11_25H2_English_Arm64_v2.iso ~/.adare/isos/
+   adare env load win11-autopsy-solr4.yml
+
+   # or, without moving anything:
+   adare env load win11-autopsy-solr4.yml --iso ~/Downloads/
+
+ADARE never *guesses*: a single unrelated ``*.iso`` sitting in the search path is
+not used, because silently building from the wrong ISO is the one failure that must
+never be silent. If the file is absent the error names the required filename, its
+sha256, the profile, the download pointer, and every path searched.
+
+Converting an existing recipe
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``adare vm create`` can emit the BYO form directly with ``--byo-iso``, and an
+existing recipe with a local ISO path is converted in place:
+
+.. code-block:: bash
+
+   adare vm create windows11arm64 --iso ~/ISO/Win11.iso --byo-iso
+   adare env recipe-byo win11-autopsy-solr4
+
+The recipe hash does **not** change: how a consumer obtained the ISO is not a build
+input, so any disk already built stays a cache hit. Only the descriptor changes.
 
 Choosing the mode
 -----------------

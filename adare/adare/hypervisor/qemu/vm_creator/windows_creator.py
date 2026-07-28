@@ -25,8 +25,13 @@ from adare.hypervisor.qemu.vm_creator.os_catalog import (
     OsDefinition,
     SetupLevel,
 )
-from adare.hypervisor.qemu.vm_creator.progress import wait_for_qemu_exit
+from adare.hypervisor.qemu.vm_creator.progress import (
+    QemuInstallTerminated,
+    terminate_qemu_on_exit,
+    wait_for_qemu_exit,
+)
 from adare.hypervisor.qemu.vm_creator.qmp_utils import (
+    install_qmp_socket_path,
     qemu_params_for_arch,
     repeatedly_send_keypress,
 )
@@ -683,8 +688,10 @@ def _run_qemu_install_phase(
     if no_reboot:
         cmd.append('-no-reboot')
 
-    # QMP socket for sending keypresses (needed for "Press any key to boot from CD")
-    qmp_sock = Path(tempfile.gettempdir()) / f'adare-qemu-install-{disk_path.stem}.qmp'
+    # QMP socket for sending keypresses (needed for "Press any key to boot from CD").
+    # Built by a helper because macOS's long TMPDIR plus a recipe base disk name
+    # (`<profile>-recipebase-<hash>.partial`) exceeds the AF_UNIX path limit.
+    qmp_sock = install_qmp_socket_path(disk_path.stem)
     if qmp_sock.exists():
         qmp_sock.unlink()
     cmd.extend(['-qmp', f'unix:{qmp_sock},server,nowait'])
@@ -716,18 +723,24 @@ def _run_qemu_install_phase(
     )
     keypress_thread.start()
 
+    label = f'{disk_path.stem} {phase_label}'
     try:
-        with console.status(f'  [cyan]{disk_path.stem}[/cyan] {phase_label}...', spinner='dots') as status:
+        # Reap QEMU on every exit path, signals included (see linux_creator).
+        with (
+            terminate_qemu_on_exit(process, label=label),
+            console.status(f'  [cyan]{disk_path.stem}[/cyan] {phase_label}...', spinner='dots') as status,
+        ):
             wait_for_qemu_exit(
                 process,
                 timeout_minutes=90,
-                label=f'{disk_path.stem} {phase_label}',
+                label=label,
                 status=status,
             )
     except (TimeoutError, subprocess.CalledProcessError):
         raise
     except KeyboardInterrupt:
         console.print('\n  [bold red]Installation interrupted by user[/bold red]')
-        process.terminate()
-        process.wait(timeout=30)
         raise WindowsVMCreationError('Installation interrupted by user') from None
+    except QemuInstallTerminated as e:
+        console.print(f'\n  [bold red]Installation terminated:[/bold red] {e}')
+        raise WindowsVMCreationError(f'Installation terminated: {e}') from None

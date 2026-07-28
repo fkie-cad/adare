@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Sharing" href="sharing.html"><link rel="prev" title="VM Image Creation" href="vm-image-creation.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Authoring Experiments with the MCP Server" href="mcp-authoring.html"><link rel="prev" title="VM Image Creation" href="vm-image-creation.html">
         <link rel="prefetch" href="../_static/logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.12.19 -->
@@ -215,6 +215,7 @@
 <li class="toctree-l1"><a class="reference internal" href="icon-library.html">Windows Icon Library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="vm-image-creation.html">VM Image Creation</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Dev Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp-authoring.html">Authoring Experiments with the MCP Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sharing.html">Sharing</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -332,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../architecture/file-sharing.html">File Sharing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/guest-agent.html">Guest Agent</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/cv-server.html">CV Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/database-migrations.html">Database Migrations</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
@@ -647,6 +649,97 @@ adare<span class="w"> </span>dev<span class="w"> </span>cleanup<span class="w"> 
 <p>This repackages the test files from the host and uploads them to the VM. The guest agent extracts them and uses the updated code for subsequent test executions.</p>
 </section>
 </section>
+<section id="gui-agent">
+<h2>GUI Agent<a class="headerlink" href="#gui-agent" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">agent</span></code> drives the running session VM toward a natural-language goal
+using a vision LLM: it screenshots the screen, asks the model for the next
+action, executes it over the VM’s input primitives, and (with <code class="docutils literal notranslate"><span class="pre">-o</span></code>) records a
+replayable playbook. It uses the configured vLLM endpoint (<code class="docutils literal notranslate"><span class="pre">ADARE_VLLM_*</span></code>;
+works with Ollama Cloud or a local Ollama model).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>agent<span class="w"> </span>--goal<span class="w"> </span><span class="s2">&quot;open the Files app and go to Documents&quot;</span>
+adare<span class="w"> </span>dev<span class="w"> </span>agent<span class="w"> </span>-s<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--goal<span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="w"> </span>-o<span class="w"> </span>experiments/files.play.yaml
+</pre></div>
+</div>
+<section id="agent-options">
+<h3>Agent Options<a class="headerlink" href="#agent-options" title="Link to this heading">¶</a></h3>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--goal</span></code> / <code class="docutils literal notranslate"><span class="pre">--goal-file</span></code></dt><dd><p>The natural-language goal, inline or read from a file.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-o,</span> <span class="pre">--out</span></code></dt><dd><p>Record a replayable playbook to this path. Per-step screenshots are also
+written live under <code class="docutils literal notranslate"><span class="pre">&lt;out-stem&gt;_run/steps/</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--max-steps</span></code> / <code class="docutils literal notranslate"><span class="pre">--stall-limit</span></code></dt><dd><p>Override the agent’s step budget and its “screen unchanged” stall budget.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--step</span></code> / <code class="docutils literal notranslate"><span class="pre">--interactive</span></code></dt><dd><p>Pause before each action to approve, skip, or stop it (see below).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-s,</span> <span class="pre">--session</span></code></dt><dd><p>Session ID. Auto-detected if only one session is running.</p>
+</dd>
+</dl>
+</section>
+<section id="interactive-step-through-step">
+<h3>Interactive Step-Through (<code class="docutils literal notranslate"><span class="pre">--step</span></code>)<a class="headerlink" href="#interactive-step-through-step" title="Link to this heading">¶</a></h3>
+<p>By default the agent runs the whole perceive → decide → act loop autonomously to
+completion. With <code class="docutils literal notranslate"><span class="pre">--step</span></code> (alias <code class="docutils literal notranslate"><span class="pre">--interactive</span></code>) it pauses <strong>after</strong> the
+model proposes each action and <strong>before</strong> it executes, showing the proposed
+action and prompting for a choice on the terminal:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>╭───────────────────── Confirm action ─────────────────────╮
+│ Step 3 — CLICK  &quot;the testfile.txt desktop icon&quot;  @ (725, 352) │
+│ reason: select the file icon before pressing Delete           │
+╰───────────────────────────────────────────────────────────────╯
+[a]pprove / [s]kip / [q]uit / [c]ontinue (run rest autonomously) &gt;
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong>approve</strong> (<code class="docutils literal notranslate"><span class="pre">Enter</span></code> or <code class="docutils literal notranslate"><span class="pre">a</span></code>) – execute the action and record it as normal.</p></li>
+<li><p><strong>skip</strong> (<code class="docutils literal notranslate"><span class="pre">s</span></code>) – do not execute or record; the agent is told it skipped and
+re-plans on the next step (so it tries something else).</p></li>
+<li><p><strong>quit</strong> (<code class="docutils literal notranslate"><span class="pre">q</span></code>) – finalize the playbook recorded so far and stop cleanly.</p></li>
+<li><p><strong>continue</strong> (<code class="docutils literal notranslate"><span class="pre">c</span></code>) – disable the gate and run the rest autonomously.</p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">done</span></code> action is gated too, so you stay in control of <em>when the goal is
+finished</em>: approve it to finish, or skip it to make the agent keep working.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>agent<span class="w"> </span>-s<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--step<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--goal<span class="w"> </span><span class="s2">&quot;Delete testfile.txt from the Desktop by selecting its icon and pressing Delete.&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-o<span class="w"> </span>experiments/delete-file.play.yaml
+</pre></div>
+</div>
+<p>This composes with everything else: approved clicks still get tightened crops
+from the optional grounding backend, and the recorded playbook still replays
+deterministically with no LLM.</p>
+</section>
+<section id="watching-the-vm-live">
+<h3>Watching the VM Live<a class="headerlink" href="#watching-the-vm-live" title="Link to this heading">¶</a></h3>
+<p>Interactive mode is most useful when you can <em>see</em> the desktop react. The dev VM
+already serves its screen over SPICE, so you can attach a passive viewer while
+the agent runs – look, but don’t touch (moving the host mouse or keyboard in
+that window fights the agent for control).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Find the SPICE display for the session VM</span>
+virsh<span class="w"> </span>-c<span class="w"> </span>qemu:///session<span class="w"> </span>domdisplay<span class="w"> </span>&lt;vm-domain&gt;
+
+<span class="c1"># Attach a viewer (either works):</span>
+virt-manager<span class="w"> </span>-c<span class="w"> </span>qemu:///session<span class="w">          </span><span class="c1"># then double-click the running domain</span>
+remote-viewer<span class="w"> </span>spice://127.0.0.1:5900<span class="w">     </span><span class="c1"># needs virt-viewer (brew install virt-viewer)</span>
+</pre></div>
+</div>
+<p>If you would rather follow along in files, the per-step screenshots under
+<code class="docutils literal notranslate"><span class="pre">&lt;out-stem&gt;_run/steps/step_NNN.png</span></code> are written as each step runs.</p>
+</section>
+<section id="optional-element-grounding">
+<h3>Optional: Element Grounding<a class="headerlink" href="#optional-element-grounding" title="Link to this heading">¶</a></h3>
+<p>When <code class="docutils literal notranslate"><span class="pre">ADARE_LOCATE_URL</span></code> points at a running LocateAnything grounding sidecar,
+approved click crops are tightened to the true element bounding box instead of a
+fixed box around the click point, making the recorded playbook more robust on
+replay. Grounding is best-effort – a miss falls back to the fixed crop and never
+aborts the run. Omit the variable to disable it.</p>
+</section>
+<section id="replaying-a-recorded-run">
+<h3>Replaying a Recorded Run<a class="headerlink" href="#replaying-a-recorded-run" title="Link to this heading">¶</a></h3>
+<p>A run recorded with <code class="docutils literal notranslate"><span class="pre">-o</span></code> replays deterministically – no LLM, no pauses:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>playbook<span class="w"> </span>-s<span class="w"> </span>&lt;id&gt;<span class="w"> </span>-f<span class="w"> </span>experiments/delete-file.play.yaml
+</pre></div>
+</div>
+</section>
+</section>
 <section id="batch-execution">
 <h2>Batch Execution<a class="headerlink" href="#batch-execution" title="Link to this heading">¶</a></h2>
 <p>Run multiple playbooks in sequence with automatic checkpoint restoration between each:</p>
@@ -739,6 +832,8 @@ adare<span class="w"> </span>dev<span class="w"> </span>state<span class="w"> </
 <dl class="simple">
 <dt><a class="reference internal" href="experiments.html"><span class="doc">Experiments</span></a></dt><dd><p>Experiment structure and configuration</p>
 </dd>
+<dt><a class="reference internal" href="mcp-authoring.html"><span class="doc">Authoring Experiments with the MCP Server</span></a></dt><dd><p>Author playbooks by natural language with an external harness (<code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">mcp</span></code>)</p>
+</dd>
 <dt><a class="reference internal" href="../reference/actions.html"><span class="doc">Actions</span></a></dt><dd><p>Available playbook actions</p>
 </dd>
 <dt><a class="reference internal" href="../reference/cli.html"><span class="doc">CLI Reference</span></a></dt><dd><p>Full CLI reference</p>
@@ -754,12 +849,12 @@ adare<span class="w"> </span>dev<span class="w"> </span>state<span class="w"> </
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="sharing.html">
+          <a class="next-page" href="mcp-authoring.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Sharing</div>
+                <div class="title">Authoring Experiments with the MCP Server</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -843,6 +938,14 @@ adare<span class="w"> </span>dev<span class="w"> </span>state<span class="w"> </
 <li><a class="reference internal" href="#stopping-sessions">Stopping Sessions</a></li>
 <li><a class="reference internal" href="#cleaning-up-stale-sessions">Cleaning Up Stale Sessions</a></li>
 <li><a class="reference internal" href="#updating-test-functions">Updating Test Functions</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui-agent">GUI Agent</a><ul>
+<li><a class="reference internal" href="#agent-options">Agent Options</a></li>
+<li><a class="reference internal" href="#interactive-step-through-step">Interactive Step-Through (<code class="docutils literal notranslate"><span class="pre">--step</span></code>)</a></li>
+<li><a class="reference internal" href="#watching-the-vm-live">Watching the VM Live</a></li>
+<li><a class="reference internal" href="#optional-element-grounding">Optional: Element Grounding</a></li>
+<li><a class="reference internal" href="#replaying-a-recorded-run">Replaying a Recorded Run</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#batch-execution">Batch Execution</a><ul>

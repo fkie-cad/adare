@@ -76,12 +76,14 @@ class ApiClient:
             )
         return self.login_handler.get_django_authenticated_request_header()
 
-    def publish_experiment_run(self, run_ulid: str) -> dict:
+    def publish_experiment_run(self, run_ulid: str, project_path: Path) -> dict:
         """
         Publish an experiment run to the server.
 
         Args:
             run_ulid: ULID of the experiment run to publish
+            project_path: project owning the run — its database is where the run
+                lives (ExperimentRun is a project-scoped model, not a global one)
 
         Returns:
             Dictionary containing the created run data from the server
@@ -93,9 +95,11 @@ class ApiClient:
             PublishPermissionError: If user lacks permission to publish
             ApiValidationError: If validation fails on server
             ApiConnectionError: If network/server error occurs
+            RunSerializationError: If the run cannot be serialized (e.g. its
+                experiment or environment has no server ULID recorded yet)
         """
         # Get serialized run data
-        with SerializeApi() as api:
+        with SerializeApi(project_path) as api:
             data, files = api.serialize_run_by_ulid(run_ulid)
 
         # Convert file paths to request format
@@ -297,18 +301,19 @@ class ApiClient:
 
 # Convenience functions for backward compatibility and simple usage
 
-def publish_experiment_run(run_ulid: str) -> dict:
+def publish_experiment_run(run_ulid: str, project_path: Path) -> dict:
     """
     Publish an experiment run to the server.
 
     Args:
         run_ulid: ULID of the experiment run to publish
+        project_path: project whose database holds the run
 
     Returns:
         Dictionary containing the created run data from the server
     """
     client = ApiClient()
-    return client.publish_experiment_run(run_ulid)
+    return client.publish_experiment_run(run_ulid, project_path)
 
 
 def check_experiment_exists(experiment_ulid: str) -> bool:

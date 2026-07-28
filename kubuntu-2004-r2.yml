@@ -1,0 +1,11 @@
+vm: /Users/miq/.adare/state/vms/kubuntu2004arm64-20260727.qcow2
+vm_type: path
+vm_sha256: f42441c1a6e1472ea84a873ecb895b6e0222b3615310e41685315d0881884314
+os:
+  os: Kubuntu 20.04 (KDE Plasma on Ubuntu 20.04 Server base, ARM64)
+  platform: linux
+  distribution: Focal Fossa
+  version: '20.04'
+  language: English
+  architecture: aarch64
+hypervisor: qemu

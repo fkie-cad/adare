@@ -8,7 +8,8 @@ import sqlalchemy
 
 # internal imports
 from adare.database.api.base import GlobalDatabaseApi
-from adare.database.models.global_models import Environment, OsInfo, PostSetupInstallation, Tag
+from adare.database.models.global_models import Environment, OsInfo, PostSetupInstallation, SyncMetadata, Tag
+from adare.database.models.sync_identity import apply_remote_identity
 from adare.types.environment import OsInfo as OsInfoAttrs
 from adare.types.environment import PostsetupInstallations as PostsetupInstallationsAttrs
 
@@ -208,9 +209,17 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         return self._session.query(Environment).filter_by(name=environment_name).first()
 
     def sync_environment(self, ulid: str, remote_ulid: str, remote_url: str, is_published: bool):
+        """Record where this environment lives on the server.
+
+        Writes the environment's SyncMetadata row — the same row
+        ``safe_get_sync_status`` reads for the published / in-request display.
+        ``remote_ulid`` etc. are read back through
+        :class:`~adare.database.models.sync_identity.RemoteIdentityMixin`.
+        """
         environment = self.get_environment_by_ulid(ulid)
-        environment.remote_ulid = remote_ulid
-        environment.remote_url = remote_url
-        environment.published = is_published
-        environment.in_request = bool(not is_published)
+        apply_remote_identity(
+            self._session, environment, SyncMetadata,
+            remote_ulid=remote_ulid, remote_url=remote_url, is_published=is_published,
+        )
         self._session.commit()
+        return environment

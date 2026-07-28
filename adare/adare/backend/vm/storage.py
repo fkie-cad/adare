@@ -92,6 +92,17 @@ def generate_vm_filename(name: str, source_path: Path, target_dir: Path) -> Path
     target_filename = f"{name}{source_path.suffix}"
     target_path = target_dir / target_filename
 
+    # The candidate IS the source: return it unchanged so `copy_vm_file`'s
+    # `samefile` shortcut fires and no copy happens. Without this the "already
+    # exists" branch below bumps to `<name>_1.qcow2`, which is a different path,
+    # so the shortcut never triggers and the disk is duplicated in full.
+    # `load_vm_file_for_environment` passes `name=vm_path.stem` for a disk already
+    # sitting in managed storage, so this is the normal case there — harmless for a
+    # 5 GB Ubuntu image, tens of gigabytes and several minutes for a provisioned
+    # Windows one.
+    if target_path.exists() and source_path.exists() and target_path.samefile(source_path):
+        return target_path
+
     # Generate unique name if target already exists
     if target_path.exists():
         counter = 1

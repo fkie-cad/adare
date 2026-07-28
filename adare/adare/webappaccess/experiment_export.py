@@ -6,6 +6,10 @@ import re
 from pathlib import Path
 
 from adare.backend.project.directory import ProjectDirectory
+from adare.services.recipe_contract import (
+    RecipeContractError,
+    check_recipe_publish_contract,
+)
 
 log = logging.getLogger(__name__)
 
@@ -13,6 +17,15 @@ log = logging.getLogger(__name__)
 # `check_file_validity` and webapi `_validate_url_format`): the same rules are
 # enforced here, client-side, so a local path or a missing sha256 is caught
 # BEFORE any Gitea branch/PR is created — never leak a local filesystem path.
+#
+# Case-INSENSITIVE here, and that is correct for the baked branch only: the
+# download-time check lowercases the declared value before comparing
+# (`backend/environment/commands.py`), so an uppercase `vm_sha256` verifies fine.
+# The recipe branch is different — `verify_iso_hash` compares case-SENSITIVELY,
+# so an uppercase `iso_sha256` would pass publish and then never build. That
+# branch therefore goes through `services.recipe_contract`, which normalizes to
+# lowercase and matches lowercase-only. The asymmetry is deliberate, not an
+# oversight.
 _SHA256_HEX_RE = re.compile(r'^[0-9a-f]{64}$', re.IGNORECASE)
 _DISK_EXTENSIONS = ('.ova', '.qcow2', '.vmdk', '.vdi', '.img')
 _VM_FORMATS = ('qcow2', 'ova', 'vmdk', 'vdi', 'img', 'raw')
@@ -44,19 +57,25 @@ def _preflight_environment(env_file: Path) -> None:
     if metadata is None:
         raise EnvironmentSubmissionError(f'Could not parse environment file: {env_file}')
 
-    # Recipe source: the disk is built on load; the ISO must be a published URL
-    # with a required sha256 (a local ISO path is not publishable).
+    # Recipe source: the disk is built on load. The ISO must be either a published
+    # http(s) URL, or — for a Windows profile only, where the installer cannot
+    # lawfully be rehosted — a consumer-supplied `iso_name`. `iso_sha256` is
+    # required either way. This is gate 1, and it is AUTHORITATIVE for publishing:
+    # the server's ingest check cannot resolve profile -> platform (it has no OS
+    # catalog), so this is the only place the full contract is enforced before a
+    # Gitea branch/PR exists.
     if metadata.is_recipe_environment:
-        recipe = metadata.recipe
-        if not _is_http_url(recipe.iso):
-            raise EnvironmentSubmissionError(
-                f"recipe 'iso' must be an http(s) URL to publish (got a local path: {recipe.iso!r}). "
-                "Host the ISO and reference its URL."
-            )
-        if not recipe.iso_sha256 or not _SHA256_HEX_RE.match(recipe.iso_sha256):
-            raise EnvironmentSubmissionError(
-                "recipe 'iso_sha256' is required and must be 64 hex characters to publish."
-            )
+        declared_platform = metadata.os.platform if metadata.os is not None else None
+        try:
+            check_recipe_publish_contract(metadata.recipe, declared_platform)
+        except RecipeContractError as e:
+            # Fold the solutions into the message: EnvironmentSubmissionError has no
+            # structured field for them, and "host the ISO" / "run env recipe-byo"
+            # is the part the publisher actually acts on.
+            detail = str(e)
+            if e.possible_solutions:
+                detail += '\n' + '\n'.join(f'  - {hint}' for hint in e.possible_solutions)
+            raise EnvironmentSubmissionError(detail) from e
         return
 
     # Legacy vagrantbox (owner/box) is verified by the server against Vagrant
