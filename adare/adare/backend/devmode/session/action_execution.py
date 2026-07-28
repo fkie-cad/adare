@@ -130,13 +130,13 @@ class DevModeActionExecutionMixin:
 
         log.info(f"Executing playbook with {len(playbook.actions)} actions")
 
-        # Update playbook reference in controller
-        self.playbook_controller.playbook = playbook
-        # Keep the test loader's playbook in sync so a playbook's inline `tests:`
-        # resolve in dev mode, where the file isn't staged as
-        # experiment_dir/playbook.yml (it has an arbitrary name / lives elsewhere).
-        if getattr(self.playbook_controller, 'test_loader', None) is not None:
-            self.playbook_controller.test_loader.playbook = playbook
+        # Update the playbook reference in the controller. set_playbook() merges the
+        # `adare_*` automatic variables into this playbook's registry — a plain
+        # `controller.playbook = playbook` left them out, so a variable whose value
+        # referenced a built-in ({{ adare_user_documents }}/x) silently resolved to `/x`.
+        # It also keeps the test loader's playbook in sync, which inline `tests:` need in
+        # dev mode (the file isn't staged as experiment_dir/playbook.yml).
+        self.playbook_controller.set_playbook(playbook)
 
         # Update variables if playbook has them
         if playbook.variables:

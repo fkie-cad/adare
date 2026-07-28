@@ -15,6 +15,66 @@ import httpx
 
 log = logging.getLogger(__name__)
 
+# The cv-server's own default (adare_cv_server.constants.DEFAULT_PORT). Duplicated
+# rather than imported because adare must not hard-depend on the cv-server package.
+DEFAULT_CV_PORT = 13109
+
+# How many consecutive ports to try when DEFAULT_CV_PORT is taken. A small window
+# keeps a pathological scan from wandering into unrelated services' territory while
+# still allowing a realistic number of concurrent runs on one host.
+CV_PORT_SCAN_WINDOW = 32
+
+
+def find_free_cv_port(preferred: int = DEFAULT_CV_PORT, window: int = CV_PORT_SCAN_WINDOW) -> int:
+    """Return the first bindable port at or above ``preferred``.
+
+    Concurrent ``adare experiment run`` invocations otherwise all land on
+    :data:`DEFAULT_CV_PORT`. Sharing one cv-server across runs is worse than it
+    looks: ``--debug-output-dir`` and the log file are fixed in the *spawned*
+    process's argv, so a second run that merely attaches writes its CV debug
+    images into the FIRST run's directory and leaves its own ``mcp_gui.log``
+    empty — silently attributing evidence to the wrong run. Giving each run its
+    own port keeps that per-run isolation intact.
+
+    Bind (not connect) is the right test here: ``connect_ex`` cannot distinguish
+    "free" from "bound but not listening yet", which is exactly the state a
+    sibling run's cv-server is in while it imports cv2/PaddleOCR.
+
+    Note the residual TOCTOU window — the socket is closed again before the
+    cv-server binds it, so two runs starting in the same instant can still pick
+    the same port. The loser attaches to the winner's server (``start()`` with
+    ``allow_existing=True``) rather than crashing.
+
+    Args:
+        preferred: First port to try.
+        window: How many consecutive ports to try before giving up.
+
+    Returns:
+        A port that was bindable at the moment of the check.
+
+    Raises:
+        LoggedException: If no port in the window is free.
+    """
+    from adare.helperfunctions.port import is_localhost_port_free
+
+    for port in range(preferred, preferred + window):
+        if is_localhost_port_free(port):
+            if port != preferred:
+                log.info(
+                    f"CV/OCR port {preferred} is in use (likely a concurrent run); "
+                    f"using {port} instead"
+                )
+            return port
+
+    from adare.exceptions import LoggedException
+    raise LoggedException(
+        log,
+        message=(
+            f"No free CV/OCR server port in range "
+            f"{preferred}-{preferred + window - 1}; is something holding these ports?"
+        ),
+    )
+
 
 class MCPServerManager:
     """
@@ -32,12 +92,14 @@ class MCPServerManager:
     STARTUP_PROBE_TIMEOUT = 60.0
     STARTUP_PROBE_INTERVAL = 1.0
 
-    def __init__(self, server_port: int = 13109, log_file: Path | None = None, debug: bool = False, debug_output_dir: Path | None = None):
+    def __init__(self, server_port: int = DEFAULT_CV_PORT, log_file: Path | None = None, debug: bool = False, debug_output_dir: Path | None = None):
         """
         Initialize MCP server manager.
 
         Args:
-            server_port: Port for MCP server (default: 13109)
+            server_port: Port for MCP server (default: DEFAULT_CV_PORT). Callers that
+                may run concurrently with another run should pass
+                ``find_free_cv_port()`` instead of relying on this default.
             log_file: Path to log file for MCP server output
             debug: Enable debug logging
             debug_output_dir: Directory for debug output images

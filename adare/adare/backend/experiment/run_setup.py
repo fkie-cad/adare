@@ -329,7 +329,7 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
             _ensure_and_copy_adare_log_to_run_directory(run_dir, file_log_level=context.config.file_log_level)
 
         # Initialize MCP server with log file
-        from adare.backend.experiment.mcp_server_manager import MCPServerManager
+        from adare.backend.experiment.mcp_server_manager import MCPServerManager, find_free_cv_port
 
         # Determine debug output directory
         debug_output_dir = None
@@ -339,11 +339,21 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
             run_dir.screenshots_directory.mkdir(parents=True, exist_ok=True)
             log.info(f"Enabled CV debug output to: {debug_output_dir}")
 
+        # Pick a free port rather than taking the fixed default: two concurrent
+        # `adare experiment run` invocations would otherwise share one cv-server, and
+        # the loser's CV debug images and mcp_gui.log would be written into the
+        # winner's run directory (both are fixed in the spawned process's argv).
+        # The chosen URL is handed to the PlaybookController in
+        # step_execute_experiment so the resolver talks to THIS run's server.
+        cv_port = find_free_cv_port()
+
         context.mcp_server = MCPServerManager(
+            server_port=cv_port,
             log_file=run_dir.mcp_gui_log_file,
             debug=context.config.dev_mode,
             debug_output_dir=debug_output_dir
         )
+        log.info(f"CV/OCR server for this run will use port {cv_port}")
 
 
 def _resolve_and_store_test_execution_mode(context: ExperimentRunCtx):
@@ -472,6 +482,15 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         # Get flow console for interactive actions like pause
         flow_console = flowconsolemanager.get_handler(context.experiment_run_ulid)
 
+        # Point the target resolver at THIS run's cv-server. Without this the
+        # controller falls back to its hardcoded http://localhost:13109/mcp default
+        # (playbook_controller.py / target_resolver.py), which under concurrency is a
+        # different run's server — or nothing at all. diff_run.py and the dev-session
+        # path already pass this; the production run path did not.
+        controller_kwargs = {}
+        if context.mcp_server is not None:
+            controller_kwargs['mcp_gui_url'] = context.mcp_server.server_url
+
         # Create playbook controller
         controller = PlaybookController(
             websocket_client=context.client,  # May be None in host mode
@@ -488,7 +507,8 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             vm_user=vm_user,
             flow_console=flow_console,
             test_mode=context.test_mode,
-            config=context.config
+            config=context.config,
+            **controller_kwargs,
         )
 
         # Set up host-mode test executor if in HOST test mode
