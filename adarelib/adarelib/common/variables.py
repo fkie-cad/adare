@@ -1001,6 +1001,34 @@ class VariableRegistry:
             resolved_value = self._resolve_nested_templates(base_value, resolution_context)
             return resolved_value
     
+    def _assert_automatic_references_resolvable(self, text: str, context: Optional[Dict[str, Any]] = None) -> None:
+        """Fail loudly when a value references an ``adare_*`` built-in that cannot resolve.
+
+        Jinja2's default Undefined renders a missing name as the empty string, so
+        ``{{ adare_user_documents }}/adare_lnk_lecmd`` would silently become
+        ``/adare_lnk_lecmd`` - a plausible but wrong path, which is a forensic-integrity
+        problem rather than a cosmetic one.
+
+        Only the ``adare_*`` namespace is checked: those built-ins are always created
+        up-front from the VM OS/user, so a missing one is always a wiring bug. Ordinary
+        variables may legitimately be absent here because they are created at runtime by
+        a ``capture:`` or a ``save_timestamp`` action.
+
+        Raises:
+            ValidationError: If an ``adare_*`` variable is referenced but unavailable
+        """
+        available = set(context) if context is not None else set(self.variables)
+        missing = sorted(
+            name for name in self._extract_template_variables(text)
+            if name.startswith('adare_') and name not in available
+        )
+        if missing:
+            raise ValidationError(
+                f"Automatic variable(s) {missing} referenced by '{text}' are not available "
+                f"in the variable registry. Resolving would silently yield an empty string "
+                f"and thus a wrong path. Available variables: {sorted(available)}"
+            )
+
     def _resolve_nested_templates(self, text: str, context: Dict[str, Any] = None) -> str:
         """Resolve nested template variables in a string value.
 
@@ -1010,6 +1038,10 @@ class VariableRegistry:
         """
         if not text or '{{' not in text:
             return text
+
+        # Raise before the try below - a raise inside it would be swallowed and the
+        # unresolvable value returned as-is.
+        self._assert_automatic_references_resolvable(text, context)
 
         try:
             import jinja2

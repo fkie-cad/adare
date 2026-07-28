@@ -201,26 +201,32 @@ class PlaybookController:
         self._auto_pull_files: list[str] = []
         self._auto_pull_executed: bool = False
 
+    def _merge_automatic_variables(self, variable_registry):
+        """Merge the OS/user-derived ``adare_*`` built-ins into a playbook variable registry.
+
+        Returns the merged registry (user variables win), or ``variable_registry``
+        unchanged when no VM OS/user is known and the built-ins cannot be derived.
+        """
+        if not (self.vm_os and self.vm_user):
+            return variable_registry
+
+        from adarelib.common.automatic_variables import AutomaticVariables
+        automatic_vars = AutomaticVariables.get_automatic_variables(self.vm_os, self.vm_user)
+        if variable_registry:
+            return AutomaticVariables.merge_with_user_variables(automatic_vars, variable_registry)
+        return automatic_vars
+
     def _initialize_modules(self):
         """Initialize specialized modules for clean separation of concerns."""
         # Get variable registry from playbook and add automatic variables
         variable_registry = getattr(self.playbook, 'variables', None) if self.playbook else None
+        variable_registry = self._merge_automatic_variables(variable_registry)
 
-        # Add automatic variables if we have VM information
-        if self.vm_os and self.vm_user and variable_registry:
-            from adarelib.common.automatic_variables import AutomaticVariables
-            automatic_vars = AutomaticVariables.get_automatic_variables(self.vm_os, self.vm_user)
-            # Merge automatic variables with existing user variables
-            variable_registry = AutomaticVariables.merge_with_user_variables(automatic_vars, variable_registry)
-            # Update playbook's variable registry with the merged one
+        # Update the playbook's registry with the merged one so that resolving a
+        # variable whose value references a built-in (e.g.
+        # `out_dir: "{{ adare_user_documents }}/x"`) sees the built-in.
+        if self.playbook and variable_registry:
             self.playbook.variables = variable_registry
-        elif self.vm_os and self.vm_user:
-            # No user variables, create registry with just automatic variables
-            from adarelib.common.automatic_variables import AutomaticVariables
-            variable_registry = AutomaticVariables.get_automatic_variables(self.vm_os, self.vm_user)
-            # Update playbook's variable registry
-            if self.playbook:
-                self.playbook.variables = variable_registry
 
         # Variable resolver for template processing
         self.variable_resolver = VariableResolver(
@@ -259,6 +265,39 @@ class PlaybookController:
 
         # Connect test loader to action executor (use setter method to ensure proper initialization)
         self.action_executor.set_test_loader(self.test_loader)
+
+    def set_playbook(self, playbook: Playbook):
+        """
+        Swap in a different playbook mid-session (dev mode) without losing the built-ins.
+
+        The ``adare_*`` automatic variables are merged into the playbook's registry in
+        ``_initialize_modules()``. A playbook assigned directly afterwards would carry
+        its own unmerged registry, so any variable whose *value* references a built-in
+        (``out_dir: "{{ adare_user_documents }}/x"``) would be resolved against a
+        registry that does not contain that built-in.
+
+        Args:
+            playbook: The playbook to execute from now on
+        """
+        self.playbook = playbook
+
+        merged_registry = self._merge_automatic_variables(getattr(playbook, 'variables', None))
+        if merged_registry:
+            playbook.variables = merged_registry
+
+        # Rebuild the resolver so its registry *and* its Jinja filters (which are bound
+        # to a registry) refer to the new playbook.
+        self.variable_resolver = VariableResolver(
+            variable_registry=merged_registry,
+            jinja_env=self._create_jinja_environment()
+        )
+
+        # Keep the components holding their own references in sync.
+        self.action_executor.playbook = playbook
+        self.action_executor.test_actions.playbook = playbook
+        if self.test_loader is not None:
+            self.test_loader.playbook = playbook
+            self.test_loader.variable_resolver = self.variable_resolver
 
     def update_experiment_directory(self, experiment_dir: Path):
         """
