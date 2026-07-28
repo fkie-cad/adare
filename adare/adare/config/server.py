@@ -24,7 +24,7 @@ def get_cookie_file():
     return APPDATA_DIR / 'adare.cookies'
 
 
-WEBSERVER_URL = 'https://adare.seclab-bonn.de/'
+WEBSERVER_URL = 'https://adare.click/'
 # WEBSERVER_URL = 'http://localhost:8000/'
 API_URL = f'{WEBSERVER_URL}api/'
 DOWNLOAD_API_URL = f'{API_URL}download/'
@@ -202,7 +202,7 @@ PORT_OAUTH2_REDIRECT = [
     14445
 ]
 GITEA_CLIENT_ID = '9afe946b-d67f-46ac-8362-4ef479a8e11c'
-GITEA_URL = 'https://adare.seclab-bonn.de/git/'
+GITEA_URL = 'https://adare.click/git/'
 GITEA_API_URL = f'{GITEA_URL}api/v1/'
 GITEA_EXPERIMENTS_REPO = 'adareTEST'
 GITEA_EXPERIMENTS_REPO_OWNER = 'miq'
