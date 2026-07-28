@@ -102,6 +102,7 @@ def exec_dev_agent(arguments):
     planning = getattr(arguments, 'planning', None)
     grounding = getattr(arguments, 'grounding', None)
     video = getattr(arguments, 'video', None)
+    video_backend = getattr(arguments, 'video_backend', None)
     # Progress defaults to on only when stdout is an interactive terminal, so a
     # piped / redirected run stays silent as before.
     progress = getattr(arguments, 'progress', None)
@@ -156,6 +157,7 @@ def exec_dev_agent(arguments):
                 progress=progress,
                 reasoning=getattr(arguments, 'reasoning', True),
                 video=video,
+                video_backend=video_backend,
             ))
         except KeyboardInterrupt:
             # Fallback only: the service installs a cooperative SIGINT handler

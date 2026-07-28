@@ -174,13 +174,25 @@ AGENT_SUBGOAL_STALL_LIMIT = int(os.environ.get('ADARE_AGENT_SUBGOAL_STALL_LIMIT'
 #                    this config value is the fallback for non-CLI callers (API/web).
 #   AGENT_VIDEO      record the whole run to <run_dir>/run.mp4 via ffmpeg (off by
 #                    default; needs the ffmpeg binary — `--video` fails clearly without it).
-#   AGENT_VIDEO_FPS  poll rate of the QMP screendump -> ffmpeg pipe. Kept low (2)
-#                    so the recorder does not contend with the agent's per-step screenshots.
+#   AGENT_VIDEO_BACKEND  'screendump' (default, QMP-polling QemuVideoRecorder) or
+#                    'spice' (push-driven SpiceVideoRecorder — higher fps/quality,
+#                    needs SpiceClientGLib bindings, and is mutually exclusive with
+#                    a live VirtualSpice viewer on the same VM).
+#   AGENT_VIDEO_FPS  screendump backend: poll rate of the QMP screendump -> ffmpeg
+#                    pipe, kept low (2) to avoid contending with per-step screenshots.
+#                    spice backend: an advisory max capture rate (frames are
+#                    push-driven, not polled, so this only caps a burst of invalidates).
 #   FFMPEG           ffmpeg executable (name on PATH or absolute path).
 AGENT_PROGRESS = os.environ.get('ADARE_AGENT_PROGRESS', '1').lower() in ('1', 'true', 'yes', 'on')
 AGENT_VIDEO = os.environ.get('ADARE_AGENT_VIDEO', '0').lower() in ('1', 'true', 'yes', 'on')
+AGENT_VIDEO_BACKEND = os.environ.get('ADARE_AGENT_VIDEO_BACKEND', 'screendump').lower()
 AGENT_VIDEO_FPS = int(os.environ.get('ADARE_AGENT_VIDEO_FPS', '2'))
 FFMPEG = os.environ.get('ADARE_FFMPEG', 'ffmpeg')
+
+# Whole-experiment recording for `adare experiment run` (off by default — no CLI
+# flag yet, opt in via env while the SPICE backend's GObject-introspection surface
+# gets validated interactively). Reuses AGENT_VIDEO_BACKEND/AGENT_VIDEO_FPS/FFMPEG.
+EXPERIMENT_VIDEO = os.environ.get('ADARE_EXPERIMENT_VIDEO', '0').lower() in ('1', 'true', 'yes', 'on')
 
 # Port the `adare dev mcp` GUI-automation MCP server binds. An external harness
 # (OpenCode / Claude Code / any MCP client) connects here to author playbooks.

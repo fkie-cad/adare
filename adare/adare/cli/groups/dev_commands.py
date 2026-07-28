@@ -309,13 +309,20 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--video/--no-video', 'video', default=None,
                   help='Record the whole run to <run_dir>/run.mp4 via ffmpeg '
                        '(default: ADARE_AGENT_VIDEO; off). Needs the ffmpeg binary.')
+    @click.option('--video-backend', 'video_backend', default=None,
+                  type=click.Choice(['screendump', 'spice']),
+                  help='How --video captures frames (default: ADARE_AGENT_VIDEO_BACKEND; '
+                       '"screendump"). "spice" connects directly to the VM\'s SPICE display '
+                       'for real push-driven frames (higher fps/quality) but needs the '
+                       'SpiceClientGLib bindings and is mutually exclusive with a live '
+                       'browser viewer on the same VM.')
     @click.option('--as-experiment', 'as_experiment', default=None, metavar='NAME',
                   help='Scaffold experiments/NAME/ and record the run into it '
                        '(playbook.yml + img/ crops + metadata.yml). Files only — no DB '
                        'load; run `adare experiment load NAME` later. Excludes -o/--out.')
     def agent(session_id, environment, keep, verify, goal, goal_file, output, max_steps,
               stall_limit, interactive, planning, grounding, progress, reasoning, video,
-              as_experiment):
+              video_backend, as_experiment):
         """Drive a VM toward a goal with the vision-LLM GUI agent.
 
         Uses the configured vLLM endpoint (ADARE_VLLM_*; works with Ollama Cloud).
@@ -347,6 +354,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             progress=progress,
             reasoning=reasoning,
             video=video,
+            video_backend=video_backend,
             as_experiment=as_experiment,
         )
         exec_with_error_printing(exec_dev_agent, args)

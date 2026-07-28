@@ -134,6 +134,7 @@ class GuiAgentMixin:
             AGENT_SUBGOAL_MAX_STEPS,
             AGENT_SUBGOAL_STALL_LIMIT,
             AGENT_VIDEO,
+            AGENT_VIDEO_BACKEND,
             AGENT_VIDEO_FPS,
             FFMPEG,
             GUI_AGENT_DECISION_RETRIES,
@@ -193,8 +194,17 @@ class GuiAgentMixin:
         # fall back to a temp dir when neither -o nor a run directory gave us one.
         effective_progress = request.progress if request.progress is not None else AGENT_PROGRESS
         want_video = request.video if request.video is not None else AGENT_VIDEO
+        video_backend = request.video_backend or AGENT_VIDEO_BACKEND
         if want_video:
-            QemuVideoRecorder.ensure_ffmpeg(FFMPEG)  # fail fast — before grounding/VM work
+            # Fail fast — before grounding/VM work — on whichever backend was picked.
+            if video_backend == 'spice':
+                from adare.backend.experiment.execution.spice_video_recorder import (
+                    SpiceVideoRecorder,
+                )
+                SpiceVideoRecorder.ensure_ffmpeg(FFMPEG)
+                SpiceVideoRecorder.ensure_spice_client()
+            else:
+                QemuVideoRecorder.ensure_ffmpeg(FFMPEG)
         # A video run needs a directory for run.mp4; a web run (event_sink) needs
         # one so per-step screenshots are persisted for the browser to fetch.
         if (want_video or event_sink is not None) and run_dir is None:
@@ -271,8 +281,15 @@ class GuiAgentMixin:
         video_recorder = None
         video_path: Path | None = None
         if want_video:
-            video_recorder = QemuVideoRecorder(
-                vm, run_dir / 'run.mp4', fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
+            if video_backend == 'spice':
+                from adare.backend.experiment.execution.spice_video_recorder import (
+                    SpiceVideoRecorder,
+                )
+                video_recorder = SpiceVideoRecorder(
+                    vm, run_dir / 'run.mp4', fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
+            else:
+                video_recorder = QemuVideoRecorder(
+                    vm, run_dir / 'run.mp4', fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
 
         # Cooperative graceful Ctrl-C: SIGINT flips the agent's stop flag AND
         # cancels the in-flight run task, so a step blocked on a slow VLM call,

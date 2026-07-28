@@ -151,6 +151,7 @@ class DevGuiAgentRequest:
     progress: bool | None = None  # None -> config AGENT_PROGRESS; live per-step display
     reasoning: bool = True  # show the model's per-step reasoning panel under the progress table
     video: bool | None = None  # None -> config AGENT_VIDEO; record run.mp4 via ffmpeg
+    video_backend: str | None = None  # None -> config AGENT_VIDEO_BACKEND; 'screendump' or 'spice'
 
 
 @dataclass
