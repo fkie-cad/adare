@@ -95,6 +95,11 @@ MIGRATIONS: list[Migration] = [
         scope='project',
         module=f'{_PACKAGE}.add_remote_identity_to_project_db',
     ),
+    Migration(
+        name='add_unique_active_websocket_port_to_vm_instance',
+        scope='global',
+        module=f'{_PACKAGE}.add_unique_active_websocket_port_to_vm_instance',
+    ),
 ]
 
 # Applied-migration names per database URL. Keeps auto-apply at one SELECT per

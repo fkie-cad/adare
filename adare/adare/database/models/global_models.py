@@ -425,6 +425,12 @@ class VmInstance(SerializerMixin, GlobalBase):
         Index('idx_vm_instance_vm_status', 'vm_id', 'status'),
         Index('idx_vm_instance_experiment', 'current_experiment_run_id', 'status'),
         Index('idx_vm_instance_port', 'websocket_port', 'status'),
+        # Enforces at the DB layer (the only thing atomic across separate OS
+        # processes/connections) that no two *active* instances share a port.
+        # Scoped to status='active' so releasing a port (websocket_port=None)
+        # or stale values on non-active rows never trips the constraint.
+        Index('idx_vm_instance_active_websocket_port', 'websocket_port', unique=True,
+              sqlite_where=(status == 'active')),
     )
 
     def __str__(self):

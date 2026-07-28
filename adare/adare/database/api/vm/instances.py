@@ -8,7 +8,7 @@ or previously-run copies of VM templates.
 import logging
 from datetime import UTC, datetime
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
 from adare.database.models.global_models import Vm, VmInstance
@@ -65,6 +65,11 @@ class VmInstanceMixin:
 
                 log.info(f"Created VM instance: {instance_name} (ID: {instance.id})")
                 return instance
+        except IntegrityError:
+            # Let a unique-constraint violation (instance_name or the active
+            # websocket_port index) reach reserve_port_atomically() unwrapped
+            # so it can roll back and retry the next candidate port/name.
+            raise
         except SQLAlchemyError as e:
             self._session.rollback()
             raise VMLoadError(log, f"Database error while creating VM instance: {e}") from e
@@ -172,6 +177,52 @@ class VmInstanceMixin:
         except SQLAlchemyError as e:
             self._session.rollback()
             raise VMLoadError(log, f"Database error while updating VM instance: {e}") from e
+
+    def claim_available_vm_instance(self, instance_id: str, experiment_run_id: str,
+                                     websocket_port: int) -> bool:
+        """
+        Atomically claim an available VM instance for an experiment.
+
+        Performs a single conditional UPDATE (status='available' -> 'active')
+        so that two processes racing to reuse the same instance cannot both
+        succeed: whichever commits first flips the row, and the loser's WHERE
+        clause no longer matches.
+
+        Args:
+            instance_id: VM instance ID to claim
+            experiment_run_id: Experiment run ID claiming the instance
+            websocket_port: Freshly allocated websocket port for the instance
+
+        Returns:
+            True if this call claimed the instance, False if it was no longer available
+        """
+        try:
+            with self:
+                updated_count = self._session.query(VmInstance).filter_by(
+                    id=instance_id, status='available'
+                ).update({
+                    'status': 'active',
+                    'current_experiment_run_id': experiment_run_id,
+                    'websocket_port': websocket_port,
+                    'last_used_at': datetime.now(UTC)
+                }, synchronize_session=False)
+
+                self._session.commit()
+
+                claimed = updated_count == 1
+                if claimed:
+                    log.info(f"Claimed VM instance {instance_id} for experiment {experiment_run_id}")
+                else:
+                    log.info(f"Failed to claim VM instance {instance_id} - no longer available")
+                return claimed
+        except IntegrityError:
+            # A port collision on the reuse-claim path — let it surface
+            # unwrapped so the caller's retry-over-ports loop can catch it.
+            self._session.rollback()
+            raise
+        except SQLAlchemyError as e:
+            self._session.rollback()
+            raise VMLoadError(log, f"Database error while claiming VM instance: {e}") from e
 
     def delete_vm_instance(self, instance_id: str) -> bool:
         """
