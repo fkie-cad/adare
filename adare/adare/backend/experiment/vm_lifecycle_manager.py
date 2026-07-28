@@ -28,6 +28,43 @@ from adare.types.stages import (
 log = logging.getLogger(__name__)
 
 
+def _undefine_keeping_nvram(domain) -> None:
+    """Undefine a libvirt domain while preserving its UEFI NVRAM varstore.
+
+    libvirt refuses a flagless ``undefine()`` on a domain that declares ``<nvram/>``
+    ("Cannot undefine domain with NVRAM/varstore"), which is every UEFI guest and
+    therefore every aarch64 guest. That refusal used to leave the domain defined but
+    shut off forever, one stale entry per run in ``virsh list --all``.
+
+    ``KEEP_NVRAM`` rather than ``NVRAM`` because the varstore is INSTANCE-scoped, not
+    run-scoped: ``libvirt_xml_builder`` points ``<nvram/>`` at
+    ``<disk_dir>/<instance_name>-nvram.fd`` (``firmware.get_nvram_path_for_vm``), beside
+    the instance's base disk, and the caller of this function releases that instance for
+    reuse by the next experiment. The file carries the guest's UEFI boot entries -
+    including the aarch64 Shell-boot pre-population from
+    ``firmware._prepare_nvram_for_shell_boot`` - so deleting it here would silently reset
+    a reusable instance's firmware state. Only ``QEMUVM.cleanup_base_disk()``, on
+    instance removal, may delete it.
+
+    For a BIOS domain with no ``<nvram/>`` the flag is inert, so x86 guests are
+    unaffected.
+
+    Args:
+        domain: libvirt virDomain object to undefine
+
+    Raises:
+        libvirt.libvirtError: Propagated to the caller, which decides how to report it
+    """
+    import libvirt
+
+    try:
+        domain.undefineFlags(libvirt.VIR_DOMAIN_UNDEFINE_KEEP_NVRAM)
+    except AttributeError:
+        # undefineFlags is absent only on a very old libvirt-python; a flagless
+        # undefine still works for BIOS domains, which is better than nothing.
+        domain.undefine()
+
+
 class VMLifecycleManager:
     """Manages the complete lifecycle of VMs for experiments using hypervisor-specific strategies."""
 
@@ -726,7 +763,7 @@ class VMLifecycleManager:
                             # Only undefine if domain is not running
                             state, _ = context.vm._libvirt_domain.state()
                             if state == libvirt.VIR_DOMAIN_SHUTOFF:
-                                context.vm._libvirt_domain.undefine()
+                                _undefine_keeping_nvram(context.vm._libvirt_domain)
                                 log.info(f"Undefined libvirt domain '{context.vm.vm_name}'")
                             else:
                                 log.warning(
@@ -734,8 +771,16 @@ class VMLifecycleManager:
                                     f"still running (state: {state}). Domain will be undefined on next start."
                                 )
                         except libvirt.libvirtError as e:
-                            # Domain might already be undefined or in invalid state
-                            log.debug(f"Could not undefine domain: {e}")
+                            # A domain that is already gone is the normal case; anything
+                            # else means the definition just leaked and stays visible in
+                            # `virsh list --all` forever, so do not bury it at debug.
+                            if e.get_error_code() == libvirt.VIR_ERR_NO_DOMAIN:
+                                log.debug(f"Domain already undefined: {e}")
+                            else:
+                                log.warning(
+                                    f"Could not undefine domain '{context.vm.vm_name}' - its "
+                                    f"definition will leak (see `virsh list --all`): {e}"
+                                )
                         finally:
                             # Always clear cached domain object to force redefinition
                             context.vm._libvirt_domain = None
