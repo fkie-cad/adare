@@ -102,32 +102,72 @@ tests:
   # comparison is a UTC epoch from save_timestamp, and adding '| localtime' would make
   # basictest._parse_timestamp_with_format read the guest's UTC wall time as local wall
   # time, skewing the comparison by the host's UTC offset. See README ("UTC, not localtime").
+  #
+  # tolerance(5, -30) -- ASYMMETRIC, and identical in form to the 20.04 variant, so the
+  # three releases stay structurally comparable. The filter signature is
+  # tolerance(upper, lower) and the comparison is diff = reference - actual
+  # (basictest.py:274), so the NEGATIVE bound is the one that allows the artifact to be
+  # timestamped LATER than the reference.
+  #
+  # Only that direction is physically reachable. open_timestamp is captured immediately
+  # BEFORE the opening click and the xbel is written only once the document opens, so the
+  # artifact is always later. A symmetric +/-30s would additionally accept an artifact up
+  # to 30s EARLIER than the reference, which this interaction cannot produce and which
+  # would mean a stale artifact or a genuinely skewed guest clock -- something that should
+  # fail loudly rather than be absorbed by slack. The +5s upper bound is left untouched as
+  # host/guest jitter allowance.
+  #
+  # WHY 22.04 NEEDS IT, and why the cause is not host load. The offset is CV latency baked
+  # into action ordering: savetimestamp fires BEFORE the click on 'adare.txt', and on this
+  # release that click cost 11.21s (the CV text find alone 11.00s) followed by a 15.09s
+  # wait_until. Two measurements, deliberately taken under opposite load conditions:
+  #
+  #   -13.498694s  run 01KYN8VGDGA8YQHFR8595MEKQG, verified-idle host (0 other VMs,
+  #                0 foreign runs)
+  #   -14.777347s  earlier run with THREE VMs running concurrently
+  #
+  # Contention accounts for 1.28s of a ~14s offset, i.e. under 10%. An earlier hypothesis
+  # held that the only 22.04 failure was the contended -14.777347s and that the tolerance
+  # therefore must NOT be widened; the idle measurement disproves it. The effect is
+  # structural and reproducible across load conditions -- the same evidence class that
+  # justified 20.04's tolerance(5, -30).
+  #
+  # REJECTED ALTERNATIVE: moving savetimestamp after the click would address the root
+  # cause, but 22.04 would then measure a different interval than 20.04 and 24.04, quietly
+  # breaking the cross-version comparison this section exists to make. Widening the bound
+  # keeps all three playbooks measuring the same thing.
+  #
+  # The assertion's purpose survives: it still shows the artifact was written by THIS
+  # interaction rather than being a leftover, because xbel_absent_before proves the file
+  # did not exist beforehand and text_file_accessed proves the document was read
+  # afterwards. And it stays live in the direction that matters -- a +25s difference still
+  # fails, where a symmetric +/-30s would have swallowed it.
   - name: xbel_visited_timestamp
-    description: 'visited timestamp matches the moment the document was opened (+/-5s)'
+    description: 'visited timestamp matches the moment the document was opened (+/-30s -- CV find latency before the click)'
     function: xml.attribute_matches
     parameter:
       dst: '{{ xbel_file }}'
       xpath: '//bookmark'
       attribute: 'visited'
-      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -5) }}"
+      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -30) }}"
 
   - name: xbel_modified_timestamp
-    description: 'modified timestamp matches the moment the document was opened (+/-5s)'
+    description: 'modified timestamp matches the moment the document was opened (+/-30s -- CV find latency before the click)'
     function: xml.attribute_matches
     parameter:
       dst: '{{ xbel_file }}'
       xpath: '//bookmark'
       attribute: 'modified'
-      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -5) }}"
+      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -30) }}"
 
   - name: xbel_added_timestamp
-    description: 'added timestamp matches the moment the document was opened (+/-5s)'
+    description: 'added timestamp matches the moment the document was opened (+/-30s -- CV find latency before the click)'
     function: xml.attribute_matches
     parameter:
       dst: '{{ xbel_file }}'
       xpath: '//bookmark'
       attribute: 'added'
-      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -5) }}"
+      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%S.%fZ') | tolerance(5, -30) }}"
 
   # --- paper claim: timestamp precision improved after Ubuntu 20.04 ---
   # Executable form of the precision-drift finding: 20.04 stores second-level precision,
