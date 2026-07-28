@@ -84,11 +84,19 @@ REGEDIT.EXE-DAB4D60B.pf          written  2026-07-28T19:00:38.876Z  (10888 bytes
                                           -> 10.213 s after process start
 ```
 
-A 10 s idle therefore left well under a second of slack and lost the race. A longer constant
-would still be a race, so the idle was replaced by an explicit poll: the `.pf`'s mtime is
-recorded *before* the launch and the wait returns as soon as it advances. Waiting for mere
-existence would be wrong from iteration 2 onwards, where the previous iteration's file is
-already present and PECmd would read a stale `RunCount`.
+A 10 s idle therefore expires at or inside the flush latency. A longer constant would only be
+a slower race, so the idle was replaced by an explicit poll: the `.pf`'s mtime is recorded
+*before* the launch and the wait returns as soon as it advances. Waiting for mere existence
+would be wrong from iteration 2 onwards, where the previous iteration's file is already
+present and PECmd would read a stale `RunCount`.
+
+One thing the failing run's log does **not** settle: whether that iteration lost the flush
+race or never launched regedit at all. The original playbook allowed only the 1 s default
+pause between Win+R and typing, which is thin for the Run dialog to appear and take focus on
+an emulated aarch64 guest, and a miss there is silent — the keystrokes land nowhere and the
+failure surfaces later as a missing `.pf`. Both paths are now closed: the poll removes the
+race, and an explicit 3 s settle after Win+R (the value the in-guest probe launched reliably
+with) removes the focus gamble.
 
 ## Why the loop works even though regedit is single-instance
 

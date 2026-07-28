@@ -34,21 +34,30 @@
 #      (`pecmd_tool_dir`) and every invocation uses the staged copy. The same fix is in
 #      5_cross_tool_validation/lnk_lecmd_windows11 for LECmd.
 #
-#   2. A fixed `idle: 10` after the launch is NOT ENOUGH, and that is why
-#      `check_regedit_pf_exists` failed on run 01KYJCP6FBC3GBTMS9MRR0AF9V. Prefetch and
-#      SysMain are fully enabled in this image (SysMain Running/Automatic,
-#      `EnablePrefetcher=3`, 144 pre-existing .pf files), regedit really does launch, and
-#      the .pf really is written — but the prefetcher traces the first ~10 seconds of a
-#      process's life before flushing, so for a process that stays open the file appears
-#      only AFTER that window closes. Measured: regedit started 19:00:28.663 UTC,
-#      REGEDIT.EXE-DAB4D60B.pf was written 19:00:38.876 UTC — 10.213 s later, i.e. about
-#      0.5 s of slack against a 10 s idle. The loop was losing a coin flip, not hitting a
-#      disabled prefetcher.
-#      A longer fixed idle would still be a race. The `idle` is therefore replaced by an
-#      explicit poll that waits for THIS launch's flush: the .pf's mtime is recorded before
-#      the launch and the wait returns as soon as the mtime advances past it. Waiting for
-#      mere existence would be wrong from iteration 2 onwards, where the previous
-#      iteration's file is already present and PECmd would read a stale RunCount.
+#   2. A fixed `idle: 10` after the launch cannot be relied on, which is what
+#      `check_regedit_pf_exists` was tripping over on run 01KYJCP6FBC3GBTMS9MRR0AF9V. The
+#      two obvious suspects were both ruled out: Prefetch and SysMain are fully enabled in
+#      this image (SysMain Running/Automatic, `EnablePrefetcher=3`, 144 pre-existing .pf
+#      files, the newest written seconds before the check), and regedit really does launch —
+#      a screenshot 5 s after Enter shows the Registry Editor window open, with no UAC
+#      prompt in the way.
+#      What the .pf waits for is the prefetcher's trace window. It traces roughly the first
+#      10 seconds of a process's life and only then flushes, so for a process that stays
+#      open the file cannot appear before that window closes. Measured: regedit started
+#      19:00:28.663 UTC, REGEDIT.EXE-DAB4D60B.pf was written 19:00:38.876 UTC — 10.213 s
+#      later. A 10 s idle therefore expires at or inside the flush latency; it is a race, and
+#      a bigger constant would only be a slower race.
+#      The `idle` is therefore replaced by an explicit poll that waits for THIS launch's
+#      flush: the .pf's mtime is recorded before the launch and the wait returns as soon as
+#      the mtime advances past it. Waiting for mere existence would be wrong from iteration 2
+#      onwards, where the previous iteration's file is already present and PECmd would read a
+#      stale RunCount.
+#      NOT proven from the failing run's log: whether that particular iteration lost the
+#      flush race or never launched regedit at all, because a 1 s default pause is thin for
+#      the Run dialog to appear and take focus on an emulated aarch64 guest, and nothing in
+#      the log distinguishes "typed into no window" from "checked too early". Both are now
+#      closed — the poll removes the race, and an explicit 3 s settle after Win+R (the value
+#      the successful in-guest probe used) removes the focus gamble.
 #
 # Also measured, and why the loop still works even though regedit is single-instance:
 # iterations 2..10 do NOT leave a second regedit process behind — the newly started
@@ -164,6 +173,15 @@ actions:
 
         - keyboard:
             combination: ["win", "r"]
+
+        # The Run dialog has to exist and hold focus before the text goes anywhere. The 1 s
+        # default pause is thin for that on an emulated aarch64 guest, and a miss is silent —
+        # the keystrokes land nowhere, regedit never starts, and the failure surfaces much
+        # later as a missing .pf. 3 s is the value the in-guest probe launched reliably with.
+        - idle:
+            duration: 3
+            description: "Let the Run dialog appear and take keyboard focus"
+
         - keyboard:
             text: "regedit"
         - keyboard:
@@ -173,10 +191,10 @@ actions:
             variable: last_timestamp
             description: "Externally recorded execution time for this iteration"
 
-        # Replaces a fixed `idle: 10`, which sat ~0.5 s inside the prefetcher's ~10.2 s
-        # flush latency and therefore failed roughly half the time (see the header).
-        # Exits as soon as the .pf's mtime passes the marker, so iterations 2..10 — whose
-        # short-lived regedit flushes sub-second — cost almost nothing.
+        # Replaces a fixed `idle: 10`, which expired at or inside the prefetcher's measured
+        # ~10.2 s flush latency (see the header). Exits as soon as the .pf's mtime passes the
+        # marker, so iterations 2..10 — whose short-lived regedit flushes sub-second — cost
+        # almost nothing, while a slow first launch gets as long as it needs.
         - command:
             name: "Wait until Windows has flushed this launch's Prefetch trace"
             description: >-
