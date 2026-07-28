@@ -266,16 +266,78 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     # Add the user interrupt event to the context so step functions can use it
     experiment_run_context.user_interrupt_event = user_interrupt_event
 
-    def handle_sigint():
-        log.info("Ctrl-C detected. Stopping experiment run...")
-        user_interrupt_event.set()  # Signal user interruption
-        experiment_run_context.stop_event.set()  # Signal the context's stop event.
-        stop_event.set()  # Signal the asyncio stop event.
-        log.info('hanlde: send stop events')
+    # Number of termination signals seen so far. The first asks for a graceful
+    # wind-down; the second gives up on it and destroys the guest outright.
+    termination_signals = 0
 
-    # Register the signal handler for SIGINT.
+    def handle_termination_signal(signum: int):
+        """Wind the run down on SIGINT/SIGTERM/SIGHUP.
+
+        Registering SIGTERM and SIGHUP here (not just SIGINT) is the whole point:
+        with their default disposition the interpreter dies immediately, the
+        ``finally`` below never runs, ``vm_manager.stop_vm`` is never reached, and
+        the guest's QEMU — forked by libvirt, never a child of ours — simply
+        reparents to PID 1 and keeps running. That was observed directly: SIGTERM
+        killed a run's CLI in under 2 s and left its VM live.
+
+        SIGHUP for the same reason one step removed: a closed terminal or a killed
+        parent shell would otherwise leak a VM per session.
+        """
+        nonlocal termination_signals
+        termination_signals += 1
+        name = signal.Signals(signum).name
+
+        if termination_signals == 1:
+            log.info(f"{name} received. Stopping experiment run...")
+            user_interrupt_event.set()  # Signal user interruption
+            experiment_run_context.stop_event.set()  # Signal the context's stop event.
+            stop_event.set()  # Signal the asyncio stop event.
+            log.info('handle: send stop events')
+            return
+
+        # Second signal: the operator is not waiting any longer, and the next one
+        # may well be SIGKILL — which we cannot intercept at all. Destroy the
+        # domain NOW so the guest cannot outlive us.
+        #
+        # Deliberately not done on the first signal: the graceful path is still
+        # inside retrieve_artifacts / perform_host_diff, both of which need the
+        # guest alive (QGA and VirtioFS pull files out of a running VM). Killing it
+        # there would trade a leaked VM for a run with no evidence — strictly
+        # worse for a forensic tool. So: first signal collects the artifacts,
+        # second signal forfeits them.
+        log.warning(
+            f"Second {name} received — skipping graceful wind-down and destroying "
+            f"the VM domain immediately"
+        )
+        from adare.backend.experiment.vm_lifecycle_manager import destroy_domain_by_name
+        destroy_domain_by_name(experiment_run_context.vm_name)
+
+        # Hand the signal back to the default handler so a third one, or an
+        # unwinding that is itself wedged, still terminates the process.
+        try:
+            loop.remove_signal_handler(signum)
+        except (RuntimeError, ValueError) as e:
+            log.debug(f"Could not restore default disposition for {name}: {e}")
+
+    # Register the handler for every signal a supervisor, shell or operator might
+    # realistically use to stop the run. SIGKILL is intentionally absent: it cannot
+    # be caught, which is exactly why the second-signal destroy above exists.
+    #
+    # SIGHUP via getattr because it does not exist on Windows; a missing signal is
+    # simply one fewer leak vector to cover, not an error.
     loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGINT, handle_sigint)
+    installed_signals: list[int] = []
+    for _sig in (signal.SIGINT, signal.SIGTERM, getattr(signal, 'SIGHUP', None)):
+        if _sig is None:
+            continue
+        try:
+            loop.add_signal_handler(_sig, handle_termination_signal, _sig)
+            installed_signals.append(_sig)
+        except (NotImplementedError, RuntimeError, ValueError) as e:
+            # Not the main thread, or the platform has no such signal. A run that
+            # cannot install a handler is still a valid run — it just loses the
+            # emergency VM teardown, so say so rather than failing.
+            log.warning(f"Could not install handler for signal {_sig}: {e}")
 
     # Create and start the flow console.
     flow_console = create_and_start_flow_console(experiment_run_context.experiment_run_ulid, disable_printing, user_interrupt_event)
@@ -535,6 +597,24 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             except Exception as cleanup_error:
                 # Intentionally broad: last-resort cleanup must not raise.
                 log.error(f"Error stopping stage coordinator during error cleanup: {cleanup_error}", exc_info=True)
+
+        # Un-register our signal handlers. Necessary because experiment_run() is
+        # NOT only a CLI entry point: batch_runner.py and the webapi service layer
+        # both await it in-process, and a handler left behind would keep firing
+        # into THIS run's closed-over context long after it finished — a batch's
+        # second experiment would be stopped by setting the first one's events.
+        #
+        # Caveat worth knowing: asyncio's remove_signal_handler restores the
+        # DEFAULT disposition, not whatever was installed before us. A host
+        # process that had its own handler (uvicorn's graceful shutdown) does not
+        # get it back. That is strictly better than the alternative — the process
+        # stays killable — but it means the webapi should ultimately run
+        # experiments out-of-process rather than in its own loop.
+        for _sig in installed_signals:
+            try:
+                loop.remove_signal_handler(_sig)
+            except (RuntimeError, ValueError) as e:
+                log.debug(f"Could not remove handler for signal {_sig}: {e}")
 
     # Resolve the success verdict. For smoke/verify runs (test=False AND no
     # abstract tests on the experiment) trust the playbook completion signal.

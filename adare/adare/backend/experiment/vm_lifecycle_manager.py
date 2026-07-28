@@ -65,6 +65,98 @@ def _undefine_keeping_nvram(domain) -> None:
         domain.undefine()
 
 
+def destroy_domain_by_name(vm_name: str | None) -> bool:
+    """Force-stop and undefine the libvirt domain called ``vm_name``. Best-effort.
+
+    The emergency counterpart to the ordinary teardown at the end of
+    :func:`adare.backend.experiment.run.run_experiment`. That path needs a live
+    ``VMLifecycleManager`` plus a populated run context; this one needs only a name,
+    so it can be called from a signal handler after a second SIGTERM, when the
+    caller has given up on unwinding gracefully and only wants the guest gone.
+
+    ``destroy()`` (not ``shutdown()``) on purpose: a second termination signal means
+    the operator wants out now, and the run overlay is discarded anyway.
+
+    Note this cannot be expressed with the existing reaping helpers in
+    ``hypervisor/qemu/vm_creator/progress.py``: those are ``subprocess.Popen``-shaped,
+    and on the *run* path ADARE never owns the QEMU process — libvirt forks it from
+    ``defineXML`` + ``create()``, so PPID 1 is its normal, healthy state. There is no
+    child to reap; there is only a domain to destroy.
+
+    Idempotent and silent by design — an absent domain, an unreachable libvirtd, or a
+    missing libvirt-python must not turn a shutdown into a traceback.
+
+    Args:
+        vm_name: libvirt domain name. This is the VM *instance* name
+            (``context.vm_name``), which is what ``QEMUVM`` records as
+            ``config.libvirt_domain_name`` when it defines the domain (vm.py).
+            ``None`` is accepted and is a no-op, because a signal can arrive before
+            an instance has been allocated.
+
+    Returns:
+        True if a running domain was destroyed, False in every other case
+        (nothing to do, or the attempt failed).
+    """
+    if not vm_name:
+        return False
+
+    try:
+        import libvirt
+
+        from adare.config import HYPERVISOR_CONFIGS
+        from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
+
+        qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
+        libvirt_uri = qemu_config.get('libvirt_uri', 'qemu:///session')
+
+        conn = libvirt.open(libvirt_uri)
+        if not conn:
+            log.warning(f"Emergency stop: no libvirt connection, cannot destroy '{vm_name}'")
+            return False
+
+        log_file = get_experiment_log_file()
+        destroyed = False
+        try:
+            with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                domain = conn.lookupByName(vm_name)
+
+            if domain.isActive():
+                with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                    domain.destroy()
+                log.info(f"Emergency stop: destroyed libvirt domain '{vm_name}'")
+                destroyed = True
+            else:
+                log.debug(f"Emergency stop: domain '{vm_name}' is already shut off")
+
+            # Undefining as well keeps `virsh list --all` from filling up with one
+            # stale shut-off entry per interrupted run. KEEP_NVRAM because the
+            # varstore is instance-scoped and the instance is reused — see
+            # _undefine_keeping_nvram.
+            try:
+                with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                    _undefine_keeping_nvram(domain)
+            except libvirt.libvirtError as e:
+                log.debug(f"Emergency stop: could not undefine '{vm_name}': {e}")
+
+        except libvirt.libvirtError as e:
+            # Domain absent is the common case (never created, or already cleaned up).
+            log.debug(f"Emergency stop: domain '{vm_name}' not actionable: {e}")
+        finally:
+            try:
+                conn.close()
+            except libvirt.libvirtError:
+                pass
+
+        return destroyed
+
+    except ImportError:
+        log.debug("Emergency stop: libvirt-python not installed; nothing to destroy")
+        return False
+    except OSError as e:
+        log.warning(f"Emergency stop: error destroying domain '{vm_name}': {e}")
+        return False
+
+
 class VMLifecycleManager:
     """Manages the complete lifecycle of VMs for experiments using hypervisor-specific strategies."""
 
