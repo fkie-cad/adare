@@ -387,9 +387,46 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
     FALLBACK_AGENT_PYTHON = '3.12'
     FALLBACK_AGENT_VENV = '/opt/adare-agent'
 
+    # Runtime-only firewalld exception for the adarevm WebSocket port.
+    #
+    # The Windows builder has always opened port 18765 (see
+    # WindowsAgentCommandBuilder.build_setup_commands); Linux never did, because the
+    # Debian/Ubuntu family ships ufw inactive, so nothing blocked the port. Fedora
+    # does not: firewalld runs by default, and its `public` zone drops inbound
+    # traffic on the external interface while leaving loopback open. That produces a
+    # failure that looks like a broken agent rather than a blocked port — adarevm
+    # starts fine, `ss` shows it LISTENing on 0.0.0.0:18765, the guest's own
+    # /dev/tcp/localhost/18765 probe reports "Port reachable", and only the host's
+    # SLIRP-forwarded connection is dropped, so the run dies at "Connecting to
+    # Agent: All 6 connection attempts failed".
+    #
+    # Deliberately NOT --permanent: `firewall-cmd --add-port` without it changes
+    # only firewalld's in-memory state, so nothing is written under /etc/firewalld
+    # and the guest's on-disk configuration is unchanged for forensic diffing.
+    # Preferred over stopping firewalld outright for the same reason — the smaller
+    # deviation from the stock image is the one to make.
+    #
+    # A no-op on guests without firewalld (the whole Debian/Ubuntu family), which is
+    # why it is safe to add unconditionally: `command -v firewall-cmd` fails there.
+    _FIREWALLD_OPEN_AGENT_PORT = (
+        'if command -v firewall-cmd >/dev/null 2>&1 '
+        '&& systemctl is-active --quiet firewalld; then '
+        'firewall-cmd --add-port=18765/tcp >/dev/null 2>&1 '
+        '&& echo ADARE_FIREWALLD_PORT_OPENED '
+        '|| echo ADARE_FIREWALLD_OPEN_FAILED; '
+        'else echo ADARE_FIREWALLD_ABSENT; fi'
+    )
+
     async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> list[SetupCommand]:
         """Build Linux setup commands with per-command admin requirements."""
         commands = [
+            # Open the agent's WebSocket port before anything tries to connect to it.
+            # See _FIREWALLD_OPEN_AGENT_PORT for why this is needed and why it is
+            # runtime-only.
+            SetupCommand(
+                command=self._FIREWALLD_OPEN_AGENT_PORT,
+                requires_admin=True
+            ),
             # Add project-wide tools to PATH (user bashrc)
             # Ensure /home/adare exists and has correct ownership before modifying .bashrc (QGA runs as root)
             SetupCommand(

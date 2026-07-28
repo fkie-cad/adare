@@ -22,6 +22,24 @@ rootpw --iscrypted --lock {{ password_hash }}
 user --name=adare --password={{ password_hash }} --iscrypted --groups=wheel --gecos="ADARE User"
 
 # Services
+#
+# NOTE on firewalld: `--disabled=firewalld` below does NOT take effect on this
+# spin. Measured on both built images (fedora-41-kde, fedora-42-kde):
+# `systemctl is-enabled firewalld` reports "enabled" and `is-active` reports
+# "active", with the `public` zone bound to the external interface. The mechanism
+# is not established — do not assume this line works.
+#
+# ADARE does not depend on it. The only inbound port a run needs is the adarevm
+# WebSocket port, and LinuxAgentCommandBuilder opens it at run time, in
+# firewalld's in-memory state only (see _FIREWALLD_OPEN_AGENT_PORT in
+# backend/experiment/agent_command_builders.py). Everything else ADARE uses is
+# outbound (PyPI, the SLIRP SMB share at 10.0.2.4) or not network at all (QGA
+# rides a virtio-serial channel), and firewalld permits all of that.
+#
+# The line is kept rather than removed because a stock-as-shipped firewall is the
+# better forensic baseline: leaving the guest's on-disk configuration untouched
+# keeps artifact diffs attributable to the experiment rather than to the image
+# build. Before relying on firewalld being off here, verify it in-guest.
 services --enabled=sshd --disabled=firewalld
 
 # SELinux
