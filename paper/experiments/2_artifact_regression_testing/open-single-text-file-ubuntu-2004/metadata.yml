@@ -3,6 +3,10 @@ description: "Paper 5.2: open one document on Ubuntu 20.04 and pin the known 'vi
 
 environments:
   - ubuntu-2004
+  # ubuntu-2004-r2 is the rebuilt image; -gis is that image with GNOME's first-login
+  # wizard suppressed, which is the one the timestamp assertions are actually run against.
+  - ubuntu-2004-r2
+  - ubuntu-2004-gis
 
 tags:
   - xbel

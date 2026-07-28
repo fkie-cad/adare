@@ -14,8 +14,30 @@
 #
 # GUI icon img/dolphin_taskbar.png is reused from section 5.1
 # (paper/experiments/1_artifact_research/playbooks/deletefile_dolphin_by_click) and is a
-# rasterization of upstream KDE Breeze art, NOT a crop from a live VM. It MUST be re-taken
-# from a live Kubuntu 20.04 screenshot before the results are trusted.
+# rasterization of upstream KDE Breeze art, NOT a crop from a live VM. On kubuntu-2404 it
+# matched the live Plasma panel launcher at 0.915 confidence without being re-taken, so the
+# crop is probably good enough here too; a failing first click is the signal to re-take it.
+#
+# THE OPEN IS 'select, then Enter', NOT `click: {type: double}` -- a QMP-synthesised double
+# click does not reach Qt item views as a double click. Measured on kubuntu-2404 (Plasma
+# 5.27.12/X11) on 2026-07-28: run 01KYM8ZT5DW75R6TAFCYHJDW8Z selected the document but never
+# opened it, its access time stayed at the pinned 2000-01-01 and no artifact appeared; a dev
+# session replay behaved the same; and three hand-rolled QMP double clicks sent straight down
+# the monitor socket (ADARE's own timings, the same without re-sending the position between
+# clicks, and the whole down/up/down/up in ONE input-send-event) all selected without
+# activating. The same `type: double` works on GNOME/Nautilus (Ubuntu 24.04 run
+# 01KYDKKQ3CNVJGWQNREN1), so this is a Qt-side limitation, not a broken playbook.
+# Enter activates the selected item exactly once, which is the interaction the paper means.
+# This matters MORE here than on 24.04: the absence claim below is only meaningful if the
+# document really was opened, which is what text_file_accessed checks.
+#
+# NOTE for 20.04 specifically: Plasma 5.18 is often described as defaulting to SINGLE-click
+# activation, which would make the selecting click open the document and Enter open it a
+# second time. That is NOT what this image does. Measured on kubuntu-2004-r2 2026-07-28: in run
+# 01KYMJBGA6D0YQZB0RPD1AW1VH a single click on the "Documents" folder label only selected it
+# (Dolphin stayed in Home, status bar "Documents (folder)"), so this release is in double-click
+# mode too and 'exactly once' does hold. The absence claim below would survive either way --
+# it only needs the document to have been read at all -- but the count is trustworthy here.
 
 settings:
   idle: 2.0
@@ -99,23 +121,48 @@ actions:
       shell: true
   - test: text_file_created
 
-  - click:
-      target:
-        image: "{{ icon_filemanager_taskbar }}"
-      description: "Open the KDE file manager (Dolphin)"
+  # Dolphin is opened through the Application Launcher, NOT through a panel icon: this image's
+  # panel has no Dolphin launcher to click. Measured on kubuntu-2004-r2, 2026-07-28 -- the
+  # panel holds only the Kickoff button and the system tray
+  # (~/.config/plasma-org.kde.plasma.desktop-appletsrc has no `launchers` entry at all), so
+  # `click: {target: {image: dolphin_taskbar.png}}` had nothing to hit: run
+  # 01KYMH5MNPMPQ3SPJ6Z8DM9ZGZ scored only 0.752 and clicked (1834, 935), empty desktop next
+  # to a "Ubuntu 22.04.5 LTS upgrade available" notification, and "Documents" never appeared.
+  # The variable icon_filemanager_taskbar is kept but unused, so the 22.04/24.04 variants stay
+  # diffable against this file.
+  - keyboard:
+      key: "super"
+      description: "Open the Plasma Application Launcher (Kickoff)"
+  - keyboard:
+      text: "dolphin"
+      description: "Type the file manager's name into Kickoff's search box"
+  - keyboard:
+      key: down
+      description: "Highlight the first result -- Kickoff on Plasma 5.18 does not pre-highlight it, so a bare Enter does nothing"
+  - keyboard:
+      key: enter
+      description: "Launch the KDE file manager (Dolphin)"
   - wait_until:
       condition:
         exists:
           text: "Documents"
       description: "Wait for the Dolphin Places panel to be usable"
 
+  # index 1, not the 2 the other variants use. OCR sees THREE "Documents" on this release's
+  # Dolphin -- the Places entry at (52, 154), the folder label in the icon view at (399, 187),
+  # and a "Search For > Documents" row at (52, 410) that Plasma 5.18 puts in the sidebar and
+  # later releases do not. Sweep indices are 1-based over the matches sorted top-to-bottom, so
+  # index 2 picks the icon-view LABEL here, and clicking a label only selects: run
+  # 01KYMJBGA6D0YQZB0RPD1AW1VH left Dolphin in Home with "Documents (folder)" in the status bar
+  # and never listed adare.txt. index 1 is the Places sidebar entry, which navigates on a single
+  # click -- the same element the 24.04 variant ends up hitting with its index 2.
   - click:
       target:
         text: "Documents"
         strategy:
           SweepStrategy:
-            index: 2
-      description: "Navigate to the Documents folder"
+            index: 1
+      description: "Navigate to the Documents folder via the Places sidebar"
   - wait_until:
       condition:
         exists:
@@ -130,10 +177,12 @@ actions:
       command: "touch -a -t 200001010000 {{ text_file }}"
 
   - click:
-      type: "double"
       target:
         text: "{{ filename }}"
-      description: "Open the document exactly once"
+      description: "Select the document (see 'select, then Enter' at the top)"
+  - keyboard:
+      key: enter
+      description: "Open the document"
 
   - wait_until:
       condition:

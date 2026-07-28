@@ -1,4 +1,27 @@
+# Belongs to paper section 5.1, not 5.2 -- see the section 5.2 README ("Misfiled experiment").
+#
+# FIRST-RUN WELCOME DIALOG: every run resets this environment to its base snapshot, and that
+# snapshot still has GNOME's first-run welcome dialog pending. It blocks the experiment --
+# run 01KYMGRAJEJT4XVQY2NB0JHZ2E (2026-07-28): the Nautilus launcher WAS located correctly in
+# the dash (image match at (880, 1018), confidence 0.942) but the modal swallowed the click,
+# so "Documents" never appeared and the wait_until timed out after 60s.
+#
+# It is dismissed with the Escape key. Two other routes were tried and rejected, in order:
+#   * `pkill -x gnome-tour` -- did nothing (run 01KYMH40T22D3TPC2R04HFFM0Y: the command
+#     reported success in 0.03s and the dialog was still on screen five checks later). Since
+#     GNOME 41 the "Welcome to ..." dialog is drawn by gnome-shell itself and gnome-tour only
+#     starts if you pick "Take Tour", so there is no such process to kill.
+#   * clicking the "Skip" button -- OCR cannot find it (run 01KYMHA42QXVCTHH5DJZSX6WFK:
+#     "Could not resolve target: Target(text='Skip')"); the label is small light-on-dark text
+#     inside the dark modal.
+# Escape was then verified in a dev session on this environment: the dialog disappears and
+# the dash stays reachable. It also leaves no state behind in the guest, unlike writing the
+# gsettings key that suppresses the dialog permanently.
 actions:
+  - keyboard:
+      key: esc
+      description: "Dismiss GNOME's first-run welcome dialog, which is modal on a freshly-restored snapshot"
+
   - command:
       name: "Ensure recently-used.xbel is absent"
       command: "rm -f {{ xbel_file }}"

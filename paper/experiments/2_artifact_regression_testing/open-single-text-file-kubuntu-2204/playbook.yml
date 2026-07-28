@@ -14,8 +14,22 @@
 #
 # GUI icon img/dolphin_taskbar.png is reused from section 5.1
 # (paper/experiments/1_artifact_research/playbooks/deletefile_dolphin_by_click) and is a
-# rasterization of upstream KDE Breeze art, NOT a crop from a live VM. It MUST be re-taken
-# from a live Kubuntu 22.04 screenshot before the results are trusted.
+# rasterization of upstream KDE Breeze art, NOT a crop from a live VM. On kubuntu-2404 it
+# matched the live Plasma panel launcher at 0.915 confidence without being re-taken, so the
+# crop is probably good enough here too; a failing first click is the signal to re-take it.
+#
+# THE OPEN IS 'select, then Enter', NOT `click: {type: double}` -- a QMP-synthesised double
+# click does not reach Qt item views as a double click. Measured on kubuntu-2404 (Plasma
+# 5.27.12/X11) on 2026-07-28: run 01KYM8ZT5DW75R6TAFCYHJDW8Z selected the document but never
+# opened it, its access time stayed at the pinned 2000-01-01 and no artifact appeared; a dev
+# session replay behaved the same; and three hand-rolled QMP double clicks sent straight down
+# the monitor socket (ADARE's own timings, the same without re-sending the position between
+# clicks, and the whole down/up/down/up in ONE input-send-event) all selected without
+# activating. The same `type: double` works on GNOME/Nautilus (Ubuntu 24.04 run
+# 01KYDKKQ3CNVJGWQNREN1), so this is a Qt-side limitation, not a broken playbook.
+# Enter activates the selected item exactly once, which is the interaction the paper means.
+# This matters MORE here than on 24.04: the absence claim below is only meaningful if the
+# document really was opened, which is what text_file_accessed checks.
 
 settings:
   idle: 2.0
@@ -86,6 +100,24 @@ tests:
 
 
 actions:
+  # This image needs an explicit readiness gate; the other §5.2 variants do not.
+  # Measured 2026-07-28: on a freshly-restored base snapshot the Plasma session is not up when
+  # the playbook starts. Runs 01KYMH535EDHZVPEXS1NBVYT83 and 01KYMJ616JEN81903CKQB5HBZE both
+  # died on the very first `echo ... > {{ text_file }}` with exit 1 because
+  # {{ adare_user_documents }} did not exist yet, and every screenshot up to that point was
+  # black (mean luma 0.1, QEMU's "Display output is not active") -- ~2.9 minutes after the VM
+  # was started. The XDG user directories are created by xdg-user-dirs-update on first
+  # graphical login, so their absence and the black screen are the same fact. In a dev session
+  # on the same environment, given ~8 minutes, sddm, Xorg and plasmashell were all running and
+  # ~/Documents existed, which is why this is a gate and not a `mkdir -p`: waiting keeps the
+  # precondition honest instead of papering over a desktop that is not there yet.
+  - command:
+      name: "Wait for the Plasma session to be up"
+      description: "Block until plasmashell is running, so the XDG user directories exist and the GUI can be driven"
+      command: "for i in $(seq 1 90); do pgrep -x plasmashell >/dev/null && exit 0; sleep 5; done; echo 'plasmashell never started' >&2; exit 1"
+      shell: true
+      timeout: 480
+
   - command:
       name: "Ensure recently-used.xbel is absent"
       description: "Start from a state in which the artifact under test does not exist"
@@ -130,9 +162,11 @@ actions:
       command: "touch -a -t 200001010000 {{ text_file }}"
 
   - click:
-      type: "double"
       target:
         text: "{{ filename }}"
+      description: "Select the document (see 'select, then Enter' at the top)"
+  - keyboard:
+      key: enter
       description: "Open the document exactly once"
 
   - wait_until:
