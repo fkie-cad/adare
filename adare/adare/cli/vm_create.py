@@ -51,7 +51,7 @@ def exec_vm_create(arguments):
     bare = getattr(arguments, 'bare', False)
     setup_arg = getattr(arguments, 'setup_level', None)
     # Resolve the setup level once, before branching, so every creator path
-    # (recipe, manual, gui-auto, gui-script, linux, windows) honours it. `--setup` wins;
+    # (recipe, manual, gui-auto, playbook, linux, windows) honours it. `--setup` wins;
     # `--bare` is the deprecated alias for `--setup bare`.
     if setup_arg is not None:
         setup_level = SetupLevel[setup_arg.upper()]
@@ -59,7 +59,7 @@ def exec_vm_create(arguments):
             log.warning('--bare is ignored because --setup %s was given explicitly', setup_arg)
     else:
         setup_level = SetupLevel.BARE if bare else SetupLevel.FULL
-    # GUI-automation options (gui-auto and gui-script install modes).
+    # GUI-automation options (gui-auto install mode).
     gui_record = getattr(arguments, 'record', False)
     gui_relearn = getattr(arguments, 'relearn', False)
     gui_display = getattr(arguments, 'display', False)
@@ -242,9 +242,10 @@ def exec_vm_create(arguments):
     if os_def.install_mode == 'gui-auto':
         tip = ('This VM was installed by the GUI agent. The generated playbook can be '
                'edited and replayed; see the install report for a screenshot walkthrough.')
-    elif os_def.install_mode == 'gui-script':
-        tip = ('This VM was installed by deterministic playbook replay (no vision model). '
-               'The per-step screenshots next to the disk show exactly what was clicked.')
+    elif os_def.install_mode == 'playbook':
+        tip = ('This VM was installed by deterministic playbook replay driven by '
+               'cv-server OCR (no vision LLM). The per-step screenshots next to the '
+               'disk show exactly what was clicked.')
     elif os_def.install_mode == 'manual':
         tip = 'This VM was installed manually. Configure SSH/guest agent access for full ADARE integration.'
     elif setup_level == SetupLevel.BARE:
