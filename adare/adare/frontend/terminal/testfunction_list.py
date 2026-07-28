@@ -2,7 +2,6 @@
 import logging
 
 import pandas as pd
-from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 
@@ -131,8 +130,7 @@ def print_testfunction_list(testfunction_file: str = None, formatter=None, outpu
                 if file_column:
                     testfunctions = testfunctions[testfunctions[file_column] == testfunction_file]
 
-            console = DefaultConsole()
-            layout = Layout(name="root")
-            panel = TestfunctionListPanel(testfunctions, testfunction_file)
-            layout.update(panel)
-            console.print(layout)
+            # Printed directly, NOT wrapped in a Layout: a Layout crops its content
+            # to the terminal height and silently drops the overflowing rows, which
+            # reads as "those testfunctions do not exist".
+            DefaultConsole().print(TestfunctionListPanel(testfunctions, testfunction_file))

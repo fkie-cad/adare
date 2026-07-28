@@ -63,7 +63,6 @@ def _parse_filter(arguments) -> tuple:
 def exec_show_runs(arguments):
     """Show runs in the configured output format."""
     import pandas as pd
-    from rich.layout import Layout
 
     from adare.frontend.terminal.console import DefaultConsole
     from adare.frontend.terminal.run_list import RunListPanel
@@ -107,11 +106,10 @@ def exec_show_runs(arguments):
         else:
             runs_df = pd.DataFrame()
 
-        console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = RunListPanel(runs_df, project=project)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which reads
+        # as "those runs do not exist".
+        DefaultConsole().print(RunListPanel(runs_df, project=project))
 
 
 def exec_show_run(arguments):
@@ -139,7 +137,6 @@ def exec_show_run(arguments):
 def exec_show_testfunctions(arguments):
     """Show testfunctions in the configured output format."""
     import pandas as pd
-    from rich.layout import Layout
 
     from adare.frontend.terminal.console import DefaultConsole
     from adare.frontend.terminal.testfunction_list import TestfunctionTablePanel
@@ -177,11 +174,10 @@ def exec_show_testfunctions(arguments):
         else:
             tf_df = pd.DataFrame()
 
-        console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = TestfunctionTablePanel(tf_df)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which reads
+        # as "those testfunctions do not exist".
+        DefaultConsole().print(TestfunctionTablePanel(tf_df))
 
 
 def exec_show_testfunction(arguments):
@@ -220,7 +216,6 @@ def exec_show_experiment(arguments):
 def exec_show_experiments(arguments):
     """Show experiments in the configured output format."""
     import pandas as pd
-    from rich.layout import Layout
 
     from adare.frontend.terminal.console import DefaultConsole
     from adare.frontend.terminal.experiment_list import ExperimentTablePanel
@@ -263,17 +258,15 @@ def exec_show_experiments(arguments):
         else:
             exp_df = pd.DataFrame()
 
-        console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = ExperimentTablePanel(exp_df)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which reads
+        # as "those experiments do not exist".
+        DefaultConsole().print(ExperimentTablePanel(exp_df))
 
 
 def exec_show_projects(arguments):
     """Show projects in the configured output format."""
     import pandas as pd
-    from rich.layout import Layout
 
     from adare.frontend.terminal.console import DefaultConsole
     from adare.frontend.terminal.project_list import ProjectTablePanel
@@ -307,11 +300,10 @@ def exec_show_projects(arguments):
         else:
             proj_df = pd.DataFrame()
 
-        console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = ProjectTablePanel(proj_df)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which reads
+        # as "those projects do not exist".
+        DefaultConsole().print(ProjectTablePanel(proj_df))
 
 
 def exec_show_environments(arguments):

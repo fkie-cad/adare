@@ -310,8 +310,6 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
 
 
 def testfunction_list(testfunction_set: str = None):
-    from rich.layout import Layout
-
     from adare.database.api.frontend import DataRetrievalApi
     from adare.frontend.terminal.console import DefaultConsole
     from adare.frontend.terminal.testfunction_list import TestfunctionListPanel
@@ -345,11 +343,11 @@ def testfunction_list(testfunction_set: str = None):
             testfunctions_df = testfunctions_df[mask]
 
     if not testfunctions_df.empty:
-        console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = TestfunctionListPanel(testfunctions_df, testfunction_file=None)  # None means show all files
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which reads
+        # as "those testfunctions do not exist".
+        # testfunction_file=None means show all files
+        DefaultConsole().print(TestfunctionListPanel(testfunctions_df, testfunction_file=None))
     else:
         filter_msg = f" for set '{testfunction_set}'" if testfunction_set else ""
         print(f"No testfunctions found{filter_msg}")
