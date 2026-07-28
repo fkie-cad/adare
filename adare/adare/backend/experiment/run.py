@@ -358,6 +358,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
     # --- Execution Flow ---
     vm_manager = None
+    video_recorder = None
 
     try:
 
@@ -391,6 +392,41 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 await step_runner.run_async_step(vm_manager.setup_file_transfer, experiment_run_context)
                 await step_runner.run_async_step(vm_manager.setup_networking, experiment_run_context)
                 await step_runner.run_async_step(vm_manager.start_vm, experiment_run_context)
+
+        # Whole-run MP4 via ffmpeg (opt-in, ADARE_EXPERIMENT_VIDEO — no CLI flag
+        # yet). QEMU-only: SPICE/QMP screendump are QEMU-specific capture paths.
+        # Best-effort: a capture failure (missing ffmpeg/SpiceClientGLib, or the
+        # SPICE display already busy) logs a warning and the experiment proceeds
+        # unrecorded rather than failing the whole run.
+        if not stop_event.is_set() and experiment_run_context.hypervisor_type == 'qemu':
+            from adare.config.server import (
+                AGENT_VIDEO_BACKEND,
+                AGENT_VIDEO_FPS,
+                EXPERIMENT_VIDEO,
+                FFMPEG,
+            )
+            if EXPERIMENT_VIDEO and experiment_run_context.vm is not None:
+                from adare.backend.experiment.execution.qemu_video_recorder import (
+                    VideoUnavailable,
+                )
+                video_out = experiment_run_context.experiment_run_directory.path / 'run.mp4'
+                try:
+                    if AGENT_VIDEO_BACKEND == 'spice':
+                        from adare.backend.experiment.execution.spice_video_recorder import (
+                            SpiceVideoRecorder,
+                        )
+                        video_recorder = SpiceVideoRecorder(
+                            experiment_run_context.vm, video_out, fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
+                    else:
+                        from adare.backend.experiment.execution.qemu_video_recorder import (
+                            QemuVideoRecorder,
+                        )
+                        video_recorder = QemuVideoRecorder(
+                            experiment_run_context.vm, video_out, fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
+                    await video_recorder.start()
+                except VideoUnavailable as exc:
+                    log.warning(f"Could not start experiment video recording: {exc}")
+                    video_recorder = None
 
         # Resolve test execution mode after VM is created
         if not stop_event.is_set():
@@ -492,6 +528,10 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 await step_runner.run_cleanup_step(step_finalize, experiment_run_context, post_interrupt=True)
                 await step_runner.run_cleanup_step(step_shutdown_mcp_server, experiment_run_context, post_interrupt=True)
                 await step_runner.run_cleanup_step(step_shutdown_ws, experiment_run_context, post_interrupt=True)
+
+                # Finalize the video (idempotent) before the VM goes away.
+                if video_recorder is not None:
+                    await video_recorder.stop()
 
                 if vm_manager:
                     # Force shutdown by default for QEMU guests: the overlay is discarded

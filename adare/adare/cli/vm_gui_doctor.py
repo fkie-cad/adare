@@ -143,9 +143,30 @@ def exec_vm_gui_doctor(arguments):
         console.print('[yellow]! ffmpeg not found[/yellow] — `--video` will error; '
                       'install ffmpeg or set ADARE_FFMPEG')
 
+    # SpiceClientGLib bindings for `--video-backend=spice` (informational — this
+    # backend is opt-in, so missing bindings must not fail the doctor).
+    spice_client_ok = False
+    try:
+        import gi
+        gi.require_version('SpiceClientGLib', '2.0')
+        from gi.repository import SpiceClientGLib  # noqa: F401
+        spice_client_ok = True
+    except (ImportError, ValueError):
+        spice_client_ok = False
+    if spice_client_ok:
+        console.print('[green]✓ SpiceClientGLib found[/green] (for `--video-backend=spice`)')
+    else:
+        console.print('[yellow]! SpiceClientGLib not found[/yellow] — '
+                      '`--video-backend=spice` will error; install the spice-gtk '
+                      "GObject-introspection typelib (e.g. Debian/Ubuntu: "
+                      "'apt install gir1.2-spice-client-glib-2.0 python3-gi')")
+
     next_steps = []
     if not ffmpeg_path:
         next_steps.append('For `adare dev agent --video`: install ffmpeg or set ADARE_FFMPEG')
+    if not spice_client_ok:
+        next_steps.append('For `--video-backend=spice`: install gir1.2-spice-client-glib-2.0 '
+                          '(or your distro\'s spice-gtk GObject-introspection package)')
     if detected and detected != VLLM_COORD_SPACE:
         next_steps.append(
             f'Set the coordinate space to match the model: '
