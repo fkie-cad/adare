@@ -95,6 +95,8 @@ def exec_environment_publish_prepare(arguments):
         vm_format=getattr(arguments, 'vm_format', None),
         verify_url=getattr(arguments, 'verify_url', False),
         compress=getattr(arguments, 'compress', False),
+        source_profile=getattr(arguments, 'source_profile', None),
+        source_iso_sha256=getattr(arguments, 'source_iso_sha256', None),
     )
 
     if result.success:

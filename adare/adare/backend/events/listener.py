@@ -103,6 +103,31 @@ def _queue_db_operation(operation_type: str, **kwargs):
         log.warning(f"Database operation queue full, dropping {operation_type} operation")
 
 
+def drain_db_operations(timeout: float = 15.0) -> bool:
+    """Block until every queued database write has been executed.
+
+    Event rows are persisted by a batching worker thread, so a reader that runs
+    right after the last event was emitted can still see an incomplete picture.
+    The run summary is recomputed from those rows (see
+    :mod:`adare.backend.experiment.run_tally`), so it has to wait for the queue.
+
+    Returns True if the queue drained within *timeout*.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with _db_batch_lock:
+            processor_idle = not _db_batch_processor_running
+        if processor_idle and _db_operation_queue.empty():
+            return True
+        time.sleep(0.02)
+
+    log.warning(
+        f"Queued database operations did not drain within {timeout}s "
+        f"({_db_operation_queue.qsize()} still pending)"
+    )
+    return False
+
+
 def _ensure_db_batch_processor():
     """Ensure the database batch processor is running."""
     global _db_batch_processor_running

@@ -4,7 +4,7 @@ Two callers need this decision: `adare vm create` (:mod:`adare.cli.vm_create`)
 and recipe builds (:mod:`adare.backend.vm.recipe`). They used to each carry their
 own if/elif chain, and they drifted: the recipe copy dispatched on ``manual`` and
 then fell through to *platform*, so a recipe over a ``gui-auto`` /
-``gui-script`` / ``playbook`` profile silently built via the seed-file
+``playbook`` profile silently built via the seed-file
 ``linux_creator`` — which cannot install those guests at all.
 
 The rule the chain encodes, in order:
@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 # handing it a seed file. They bake no Python environment, and they need no
 # post-install interactive session because the install already ran in a driven
 # window.
-GUI_INSTALL_MODES = frozenset({'manual', 'gui-auto', 'gui-script'})
+GUI_INSTALL_MODES = frozenset({'manual', 'gui-auto'})
 
 
 class DispatchError(Exception):
@@ -53,7 +53,7 @@ class UnsupportedInstallTarget(DispatchError):
 
 @dataclass(frozen=True)
 class GuiBuildOptions:
-    """Options only the GUI-driven creators (`gui-auto`, `gui-script`) accept."""
+    """Options only the GUI-driven creators (`gui-auto`) accept."""
 
     record: bool = False
     relearn: bool = False
@@ -127,19 +127,6 @@ def create_vm_disk(
         from adare.hypervisor.qemu.vm_creator.playbook_creator import create_playbook_vm
 
         return create_playbook_vm(iso_path=iso_path, **common)
-
-    if os_def.install_mode == 'gui-script':
-        # Deterministic playbook replay — no vision model and no CV server, so
-        # unlike gui-auto this needs no ADARE_VLLM_* configuration. The ISO may
-        # come from --iso or from a baked iso_url on the profile.
-        from adare.hypervisor.qemu.vm_creator.qmp_script_creator import create_qmp_script_vm
-
-        return create_qmp_script_vm(
-            iso_path=iso_path,
-            template=gui.template,
-            keep_running=gui.display,
-            **hostable,
-        )
 
     # 2. Seed-file modes, keyed on platform.
     if os_def.platform == 'linux':

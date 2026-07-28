@@ -75,6 +75,8 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
   const [vmUrl, setVmUrl] = useState('')
   const [vmSha256, setVmSha256] = useState('')
   const [vmFormat, setVmFormat] = useState<string>('qcow2')
+  const [sourceProfile, setSourceProfile] = useState('')
+  const [sourceIsoSha256, setSourceIsoSha256] = useState('')
   const [osProfile, setOsProfile] = useState('')
   const [isoSource, setIsoSource] = useState<IsoSource>('url')
   const [isoUrl, setIsoUrl] = useState('')
@@ -96,6 +98,8 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
       setVmUrl('')
       setVmSha256('')
       setVmFormat('qcow2')
+      setSourceProfile('')
+      setSourceIsoSha256('')
       setOsProfile('')
       setIsoSource('url')
       setIsoUrl('')
@@ -165,6 +169,7 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
   // --- Client-side format validation (mirrors the publish contract) ---
   const vmUrlTrimmed = vmUrl.trim()
   const vmSha256Trimmed = vmSha256.trim()
+  const sourceIsoSha256Trimmed = sourceIsoSha256.trim()
   const isoUrlTrimmed = isoUrl.trim()
   const isoNameTrimmed = isoName.trim()
   const isoSha256Trimmed = isoSha256.trim()
@@ -179,6 +184,13 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
     vmSha256Trimmed.length === 0
       ? null
       : !SHA256_RE.test(vmSha256Trimmed)
+        ? 'Must be 64 lowercase hex characters.'
+        : null
+  // Optional provenance -- never gates `bakedValid`, only shown as a hint.
+  const sourceIsoSha256Error =
+    sourceIsoSha256Trimmed.length === 0
+      ? null
+      : !SHA256_RE.test(sourceIsoSha256Trimmed)
         ? 'Must be 64 lowercase hex characters.'
         : null
   const isoUrlError =
@@ -271,7 +283,15 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
         project_path: submittedProjectPath,
         name: name.trim(),
         ...(mode === 'baked'
-          ? { vm_url: vmUrlTrimmed, vm_sha256: vmSha256Trimmed, vm_format: vmFormat }
+          ? {
+              vm_url: vmUrlTrimmed,
+              vm_sha256: vmSha256Trimmed,
+              vm_format: vmFormat,
+              // Optional provenance -- omitted rather than sent empty, same as
+              // the recipe params below.
+              source_profile: sourceProfile.trim() || undefined,
+              source_iso_sha256: sourceIsoSha256Trimmed || undefined,
+            }
           : {
               os_profile: osProfile,
               // Exactly one of `iso_url` / `iso_name` — the unused one is omitted
@@ -407,6 +427,48 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
               </FormField>
 
               {renderUrlCheck()}
+
+              <div className="rounded-md border border-input p-3 space-y-4">
+                <p className="text-xs text-muted-foreground">
+                  Optional provenance: which OS profile (and, if known, the source
+                  installer ISO) this disk was built from. Informational only — it
+                  is never validated and does not make the environment rebuildable.
+                </p>
+
+                <FormField
+                  label="Source OS profile"
+                  htmlFor="env-source-profile"
+                  hint="Optional. Not checked against a server-side catalog."
+                >
+                  <select
+                    id="env-source-profile"
+                    value={sourceProfile}
+                    onChange={(e) => setSourceProfile(e.target.value)}
+                    className={selectClassName}
+                  >
+                    <option value="">Not recorded</option>
+                    {osProfilesQuery.data?.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <FormField
+                  label="Source ISO sha256"
+                  htmlFor="env-source-iso-sha256"
+                  error={sourceIsoSha256Error ?? undefined}
+                  hint="Optional. SHA256 of the installer ISO used to build this disk, if still known (64 lowercase hex chars)."
+                >
+                  <Input
+                    id="env-source-iso-sha256"
+                    value={sourceIsoSha256}
+                    onChange={(e) => setSourceIsoSha256(e.target.value)}
+                    placeholder="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  />
+                </FormField>
+              </div>
             </>
           )}
 

@@ -313,6 +313,8 @@ class EnvironmentService:
             env_name=request.name,
             project_path=request.project_path,
             vm_format=request.vm_format,
+            source_profile=request.source_profile,
+            source_iso_sha256=request.source_iso_sha256,
         )
 
         next_steps = [
@@ -480,6 +482,8 @@ class EnvironmentService:
         vm_format: str | None = None,
         verify_url: bool = False,
         compress: bool = False,
+        source_profile: str | None = None,
+        source_iso_sha256: str | None = None,
     ) -> Result[EnvironmentInfo]:
         """Convert a local-path baked environment into a publish-ready URL one.
 
@@ -496,6 +500,10 @@ class EnvironmentService:
         With ``verify_url`` the hosted object is downloaded and hashed, confirming
         it matches the published disk (original or compressed) — this catches a
         wrong/HTML share link or an upload whose bytes differ.
+
+        ``source_profile``/``source_iso_sha256`` are optional install-profile
+        provenance (see ``EnvironmentMetadata.source_profile``): informational
+        only, never validated as authoritative, and never required to publish.
         """
         from adare.helperfunctions.file.hash import file_sha256_with_progress
         from adarelib.helper.yaml import dict_to_yaml, yaml_to_dict
@@ -528,6 +536,10 @@ class EnvironmentService:
         raw['vm_sha256'] = vm_sha256
         if fmt is not None:
             raw['vm_format'] = fmt
+        if source_profile:
+            raw['source_profile'] = source_profile
+        if source_iso_sha256:
+            raw['source_iso_sha256'] = source_iso_sha256
         dict_to_yaml(descriptor, raw)
 
         next_steps = [

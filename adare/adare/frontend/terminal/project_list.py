@@ -18,8 +18,8 @@ class ProjectTablePanel:
 
     def __rich__(self) -> Panel:
         table = Table(expand=True)
-        table.add_column("name", style="cyan", no_wrap=True)
-        table.add_column("path", style="cyan", no_wrap=True)
+        table.add_column("name", style="cyan", no_wrap=True, max_width=30)
+        table.add_column("path", style="cyan", no_wrap=False, max_width=60)
 
         for _i, row in self.projects.iterrows():
             table.add_row(

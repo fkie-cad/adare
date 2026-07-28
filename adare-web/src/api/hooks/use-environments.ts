@@ -22,6 +22,10 @@ export interface Environment {
   vm?: string
   vm_type?: string
   vm_sha256?: string
+  // Optional install-profile provenance for a baked source (informational
+  // only -- see CreateEnvironmentRequest.source_profile).
+  source_profile?: string
+  source_iso_sha256?: string
   recipe?: RecipeInfo | null
   [key: string]: unknown
 }
@@ -34,6 +38,11 @@ export interface CreateEnvironmentRequest {
   vm_url?: string
   vm_sha256?: string
   vm_format?: string
+  // Optional install-profile provenance for a baked source: which OS profile
+  // the disk was built from, and (if still known) the source ISO's sha256.
+  // Informational only -- never validated, never required.
+  source_profile?: string
+  source_iso_sha256?: string
   // Recipe source: OS profile + the installer ISO + its sha256, plus params.
   // Exactly one of `iso_url` (published http(s) ISO) or `iso_name` (BYO: a bare
   // filename the consumer supplies locally, Windows profiles only) is sent;

@@ -179,6 +179,8 @@ def build_baked_url_environment_file(
     project_path: Path | None = None,
     os_def: OsDefinition | None = None,
     vm_format: str | None = None,
+    source_profile: str | None = None,
+    source_iso_sha256: str | None = None,
 ) -> Path:
     """Generate an environment YAML for a baked VM hosted at a published URL.
 
@@ -192,6 +194,10 @@ def build_baked_url_environment_file(
     the download cache file and picks the validator/hypervisor for URLs that
     carry no disk extension (owncloud/Nextcloud share links).
 
+    ``source_profile``/``source_iso_sha256`` are optional install-profile
+    provenance (see ``EnvironmentMetadata.source_profile``): informational only,
+    never validated, never required.
+
     When no ``os_def`` is given a placeholder ``os:`` block is emitted (baked
     create has never collected OS details), which the analyst edits afterwards.
     """
@@ -204,6 +210,10 @@ def build_baked_url_environment_file(
     }
     if vm_format:
         env_content['vm_format'] = vm_format
+    if source_profile:
+        env_content['source_profile'] = source_profile
+    if source_iso_sha256:
+        env_content['source_iso_sha256'] = source_iso_sha256
 
     env_path = _target_env_path(env_name, project_path)
     dict_to_yaml(env_path, env_content)

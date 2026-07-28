@@ -738,19 +738,61 @@ The corollary is a trap worth stating: any difference in ``params`` (even
 byte-identical across sibling recipes.
 
 The base cache is swept by ``adare vm prune``, which reclaims any base no recipe
-environment still resolves to. Losing one only costs a rebuild.
+environment still resolves to. Losing one only costs a rebuild. It deliberately
+skips ``.partial-*`` files: one of those may belong to an install running right
+now, and unlinking it would drop a live QEMU onto an unlinked inode — the install
+would run to completion and the disk would simply be gone, with no error anywhere.
+Leftovers from dead attempts are reclaimed instead by the next build of the same
+base, which does it while holding that base's lock (below).
 
 A cache entry is **published by an atomic rename**, never written in place: the OS
-installs into ``{profile}-recipebase-{hash}.partial.qcow2`` and is moved onto the
-real name only once the install completes. So the presence of
+installs into ``{profile}-recipebase-{hash}.partial-{pid}-{token}.qcow2`` and is
+moved onto the real name only once the install completes. So the presence of
 ``{profile}-recipebase-{hash}.qcow2`` *implies* a finished install, and an
 interrupted Stage 1 — Ctrl-C, a killed process, a host crash — leaves a
-``.partial`` file rather than an empty disk masquerading as a cached base. Without
+``.partial-*`` file rather than an empty disk masquerading as a cached base. Without
 this, a build interrupted any time after the initial ``qemu-img create`` would
 poison the cache permanently: every later build would report a cache hit, skip the
 install, boot a disk with no operating system, and fail fifteen minutes later with
 "the guest agent did not respond" — a true statement that says nothing about the
-cause. ``adare vm prune`` reclaims ``.partial`` leftovers along with stale bases.
+cause.
+
+.. _recipe-base-lock:
+
+One builder per base disk
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The rename is atomic for *readers*. It gives no exclusion between *writers*, and
+the writers all aim at the same hash-derived name on purpose — so two concurrent
+``environment load`` calls over the same base used to start two QEMU processes
+against one disk, one serial log and one UEFI variable store. Observed for real:
+five concurrent installs on a single inode, each one's ``--force`` unlinking the
+disk the others were still installing into.
+
+Stage 1 therefore holds an exclusive ``flock`` on
+``~/.adare/qemu/cache/recipe-bases/{profile}-recipebase-{hash}.lock`` — the *cache
+key*, not the process, is the unit of exclusion. What that means in practice:
+
+* The second build **waits** and prints ``Another ADARE process is already building
+  this base disk``, then reuses the finished base as a cache hit. It does not
+  install a second copy: the cache check is re-run after the lock is acquired,
+  precisely so a queue of waiters collapses into one install plus (N-1) hits.
+* A **cache hit takes no lock at all** — that path only reads.
+* ``--force`` queues like any other builder but never accepts the re-check's cache
+  hit, because it means "this base is not to be trusted"; taking a base that another
+  build had just published would turn the flag into a silent no-op.
+* The lock is advisory and released by the kernel when the holder dies, so a killed
+  build cannot wedge the cache. The lock file itself is empty and is never deleted:
+  the exclusion belongs to the inode, so unlinking the file would silently end it.
+* Each attempt installs under its own ``.partial-{pid}-{token}`` name, which also
+  gives it its own ``_install.log`` (QEMU's serial console), its own NVRAM and its
+  own QMP socket — all three are derived from the disk name, and all three used to
+  collide. The successful attempt's log is published as
+  ``{profile}-recipebase-{hash}_install.log``; a failed attempt's log is kept for
+  post-mortem while its multi-GB partial disk is reclaimed.
+
+This does not make concurrent *unrelated* builds serial — the lock is per base
+hash, so two different bases still build at the same time.
 
 .. _byo-isos:
 
@@ -1179,8 +1221,12 @@ archive if the installed system's metalink fails, then installs the ADARE extras
      ``/etc/apt/apt.conf.d/94curtin-config`` and deletes it again before the package
      step runs. Focal therefore installs everything from ``late-commands`` with
      ``apt-get install -y -o Dpkg::Use-Pty=false``, the one place the setting
-     survives. Jammy and noble ship a curtin that mounts devpts, so they keep using
-     ``packages:``.
+     survives. **Jammy (22.04) hits the same bug, but only sometimes** — builds
+     from the identical template and ISO have completed with no ``posix_openpt``
+     line at all, so a green build is not evidence of immunity. The jammy
+     templates therefore take the focal route as well and install their package
+     set from ``late-commands``; noble (24.04) keeps ``packages:``, and its
+     rendered answer file is deliberately left unchanged.
    - ``shutdown: poweroff`` works on focal — a 20.04.**5** ISO carries subiquity
      snap rev 3704 (2022-era), not the 2020 original, because point releases refresh
      the installer. ``sizing-policy: all`` is accepted but *ignored* by it: the root
@@ -1196,6 +1242,24 @@ archive if the installed system's metalink fails, then installs the ADARE extras
    A ``<disk>_install.log`` scan for installer failure markers runs after every
    Linux build for the same reason — QEMU exits ``0`` on SIGTERM and on a closed
    QEMU window too.
+
+.. note::
+
+   **Ubuntu 22.04 / 24.04 are served by two different built-in templates**, split
+   by architecture through their ``supports:`` blocks:
+
+   - ``autoinstall_ubuntu_lts.yaml`` — ``ubuntu2204`` / ``ubuntu2404`` (x86_64).
+     Installs Miniforge and creates the ``pyadare`` conda environment at setup
+     level 2.
+   - ``autoinstall_ubuntu_lts_noconda.yaml`` — ``ubuntu2204arm64`` /
+     ``ubuntu2404arm64``. No conda: it clears pip's PEP-668 guard so the harness
+     can install the ``adarevm`` wheels into the system Python, and bakes in the
+     standalone ``uv`` binary that ``adare vm test`` needs. This is the variant
+     the paper's aarch64 images are built from.
+
+   The two cannot both claim the same OS name — within one template directory
+   that is a discovery error. Adding an aarch64 profile to the conda variant
+   therefore means removing it from the no-conda one, and vice versa.
 
 .. warning::
 
@@ -1357,6 +1421,29 @@ Available template variables
 - ``password_hash`` -- SHA-512 crypt hash for the ``adare`` user
 - ``miniforge_arch`` -- ``x86_64`` or ``aarch64`` (for Miniforge download URL)
 - ``setup_level`` -- integer (0=bare, 1=base, 2=full); use ``{% if setup_level >= 1 %}`` conditionals
+- ``os_name`` -- OS profile name being installed (e.g. ``ubuntu2204arm64``)
+- ``os_version`` -- release string from the profile (e.g. ``22.04``)
+- ``distribution`` -- ``ubuntu``, ``fedora``, ``debian``, ...
+- ``architecture`` -- ``x86_64`` or ``aarch64``
+
+The last four mirror the OS-profile fields and exist because one template
+routinely serves several releases -- ``autoinstall_ubuntu_lts.yaml`` covers
+22.04 and 24.04 -- and release-specific installer bugs then have to be worked
+around inside it. Branch on ``os_version``, never on the presence of some other
+variable:
+
+.. code-block:: jinja
+
+   {%- set apt_pty_broken = os_version == '22.04' -%}
+   {%- if not apt_pty_broken %}
+     packages:
+       - ubuntu-desktop-minimal
+   {%- endif %}
+
+Note the ``{%-`` / ``-%}`` whitespace control: without it, a conditional wrapped
+around a block leaves stray blank lines in the rendered answer file for *every*
+release, including the ones the branch was not meant to affect. ``#cloud-config``
+in particular must stay the first line.
 
 **Windows (Autounattend XML)**:
 

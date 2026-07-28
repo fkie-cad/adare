@@ -22,12 +22,12 @@ class RunListPanel:
     def __rich__(self) -> Panel:
         title = '[b gold3]runs[/b gold3]'
         table = Table()
-        table.add_column("ulid", justify="left", style="cyan", no_wrap=True)
-        table.add_column("experiment", justify="left", style="cyan", no_wrap=True)
-        table.add_column("type", justify="left", style="cyan", no_wrap=True)
-        table.add_column("flow status", justify="left", style="cyan", no_wrap=True)
-        table.add_column("tests status", justify="left", style="cyan", no_wrap=True)
-        table.add_column("duration", justify="left", style="cyan", no_wrap=True)
+        table.add_column("ulid", justify="left", style="cyan", no_wrap=True, max_width=26)
+        table.add_column("experiment", justify="left", style="cyan", no_wrap=False, max_width=40)
+        table.add_column("type", justify="left", style="cyan", no_wrap=True, max_width=10)
+        table.add_column("flow status", justify="left", style="cyan", no_wrap=True, max_width=14)
+        table.add_column("tests status", justify="left", style="cyan", no_wrap=True, max_width=14)
+        table.add_column("duration", justify="left", style="cyan", no_wrap=True, max_width=12)
 
         for _, row in self.runs.iterrows():
             # Determine if run is fake or real

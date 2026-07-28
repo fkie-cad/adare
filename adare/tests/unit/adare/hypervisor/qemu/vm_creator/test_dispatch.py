@@ -2,7 +2,7 @@
 
 `adare vm create` and `backend/vm/recipe.py::_build_disk` each used to carry their
 own if/elif chain, and they drifted: the recipe copy dispatched on ``manual`` and
-then fell through to *platform*, so a recipe over a ``gui-auto`` / ``gui-script`` /
+then fell through to *platform*, so a recipe over a ``gui-auto`` /
 ``playbook`` profile silently built via the seed-file ``linux_creator`` — which
 cannot install those guests at all. Both now call
 :func:`vm_creator.dispatch.create_vm_disk`; these tests pin the rule it encodes.
@@ -29,7 +29,6 @@ CREATORS = {
     'manual_creator': 'create_manual_vm',
     'gui_creator': 'create_gui_vm',
     'playbook_creator': 'create_playbook_vm',
-    'qmp_script_creator': 'create_qmp_script_vm',
     'linux_creator': 'create_linux_vm',
     'windows_creator': 'create_windows_vm',
 }
@@ -91,7 +90,6 @@ class TestInstallModeBeatsPlatform:
 
     @pytest.mark.parametrize('install_mode,expected', [
         ('gui-auto', 'gui_creator'),
-        ('gui-script', 'qmp_script_creator'),
         ('playbook', 'playbook_creator'),
         ('manual', 'manual_creator'),
     ])
@@ -101,7 +99,6 @@ class TestInstallModeBeatsPlatform:
 
     @pytest.mark.parametrize('install_mode,expected', [
         ('gui-auto', 'gui_creator'),
-        ('gui-script', 'qmp_script_creator'),
         ('playbook', 'playbook_creator'),
         ('manual', 'manual_creator'),
     ])
@@ -139,10 +136,9 @@ class TestIsoRequirement:
             _build(_os_def(**os_def_kwargs), iso_path=None)
         assert calls == []
 
-    @pytest.mark.parametrize('install_mode', ['playbook', 'gui-script'])
-    def test_iso_optional_where_the_profile_can_supply_it(self, calls, install_mode):
-        """playbook / gui-script may take the ISO from a baked iso_url."""
-        _build(_os_def(install_mode=install_mode), iso_path=None)
+    def test_iso_optional_where_the_profile_can_supply_it(self, calls):
+        """playbook may take the ISO from a baked iso_url."""
+        _build(_os_def(install_mode='playbook'), iso_path=None)
         assert len(calls) == 1
 
     def test_linux_auto_tolerates_no_iso(self, calls):
@@ -169,15 +165,6 @@ class TestArgumentForwarding:
         assert kwargs['record'] is True
         assert kwargs['relearn'] is True
         assert kwargs['display'] is True
-        assert kwargs['template'] == 't.yml'
-
-    def test_gui_script_maps_display_to_keep_running(self, calls):
-        _build(
-            _os_def(install_mode='gui-script'),
-            gui=GuiBuildOptions(display=True, template='t.yml'),
-        )
-        _, kwargs = calls[0]
-        assert kwargs['keep_running'] is True
         assert kwargs['template'] == 't.yml'
 
     def test_playbook_creator_gets_no_host_only_kwargs(self, calls):
@@ -241,5 +228,5 @@ class TestRecipeUsesTheSameDispatch:
 def test_gui_install_modes_constant_matches_the_dispatch_branches():
     """`GUI_INSTALL_MODES` drives CLI behaviour (setup-level warning, skipping the
     post-install session); it must stay in step with the modes handled above."""
-    assert GUI_INSTALL_MODES == frozenset({'manual', 'gui-auto', 'gui-script'})
+    assert GUI_INSTALL_MODES == frozenset({'manual', 'gui-auto'})
     assert dispatch.GUI_INSTALL_MODES is GUI_INSTALL_MODES

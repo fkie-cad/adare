@@ -266,3 +266,40 @@ def test_vagrantbox_is_left_to_the_server(tmp_path):
     """owner/box is verified against Vagrant Cloud; nothing local to leak."""
     env = {'vagrantbox': 'ubuntu/jammy64', 'hypervisor': 'virtualbox', 'os': _LINUX_OS}
     _preflight_environment(_write(tmp_path, env))
+
+
+# --- baked branch: optional source-profile provenance (informational only) ---
+
+def test_baked_with_source_profile_and_iso_sha256_passes(tmp_path):
+    env = _baked_env(source_profile='ubuntu2404', source_iso_sha256='b' * 64)
+    _preflight_environment(_write(tmp_path, env))
+
+
+def test_baked_malformed_source_iso_sha256_is_rejected(tmp_path):
+    env = _baked_env(source_iso_sha256='not-a-valid-hash')
+    with pytest.raises(EnvironmentSubmissionError, match='source_iso_sha256'):
+        _preflight_environment(_write(tmp_path, env))
+
+
+def test_baked_uppercase_source_iso_sha256_is_accepted_and_normalized(tmp_path):
+    """Mirrors iso_sha256, not vm_sha256: normalized via recipe_contract before matching."""
+    env = _baked_env(source_iso_sha256='B' * 64)
+    _preflight_environment(_write(tmp_path, env))
+
+
+def test_baked_unknown_source_profile_warns_but_does_not_block(tmp_path, caplog):
+    """A host-local custom profile may simply not resolve on this machine -- warn, don't reject."""
+    env = _baked_env(source_profile='some-custom-profile-not-in-any-catalog')
+    _preflight_environment(_write(tmp_path, env))
+    assert 'not a known OS profile' in caplog.text
+
+
+def test_baked_without_source_provenance_nudges_but_does_not_block(tmp_path, capsys):
+    _preflight_environment(_write(tmp_path, _baked_env()))
+    assert 'publish-prepare' in capsys.readouterr().out
+
+
+def test_baked_with_source_profile_only_suppresses_the_nudge(tmp_path, capsys):
+    env = _baked_env(source_profile='ubuntu2404')
+    _preflight_environment(_write(tmp_path, env))
+    assert 'publish-prepare' not in capsys.readouterr().out

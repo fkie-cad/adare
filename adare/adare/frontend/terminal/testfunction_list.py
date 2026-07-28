@@ -31,12 +31,12 @@ class TestfunctionListPanel:
 
         # Add file column if not filtering by specific file
         if not self.testfunction_file:
-            table.add_column("file", justify="left", style="cyan", no_wrap=True)
+            table.add_column("file", justify="left", style="cyan", no_wrap=True, max_width=24)
 
-        table.add_column("testfunction", justify="left", style="cyan", no_wrap=True)
-        table.add_column("version", justify="left", style="cyan", no_wrap=True)
-        table.add_column("description", justify="left", style="cyan", no_wrap=True)
-        table.add_column("#parameters", justify="left", style="cyan", no_wrap=True)
+        table.add_column("testfunction", justify="left", style="cyan", no_wrap=True, max_width=30)
+        table.add_column("version", justify="left", style="cyan", no_wrap=True, max_width=14)
+        table.add_column("description", justify="left", style="cyan", no_wrap=False, max_width=50)
+        table.add_column("#parameters", justify="left", style="cyan", no_wrap=True, max_width=12)
 
         for _, row in self.testfunctions.iterrows():
             # For name, use smart display name when available, otherwise fall back to existing logic
