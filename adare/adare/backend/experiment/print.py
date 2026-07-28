@@ -15,6 +15,34 @@ from adarelib.constants import StatusEnum
 log = logging.getLogger(__name__)
 
 
+def _plural(count: int, singular: str) -> str:
+    return f"{count} {singular}" if count == 1 else f"{count} {singular}s"
+
+
+def format_nesting_detail(top_level: int, nested: int, loops = ()) -> str:
+    """Describe how a tally splits between top-level and loop/block bodies.
+
+    Returns markup like ``" (4 top-level + 130 in a loop of 10 iterations)"``, or an
+    empty string when nothing ran nested — the whole point is that a ten-iteration
+    loop must not read as the single ``loop:`` line it occupies in the playbook.
+    """
+    if not nested:
+        return ""
+
+    iterated = [loop for loop in loops if loop.iterations_completed]
+    if iterated:
+        completed = sum(loop.iterations_completed for loop in iterated)
+        planned = sum(loop.iterations_planned or loop.iterations_completed for loop in iterated)
+        iterations = _plural(completed, "iteration") if completed >= planned else f"{completed}/{planned} iterations"
+        where = f"a loop of {iterations}" if len(iterated) == 1 else f"{_plural(len(iterated), 'loop')}, {iterations}"
+    elif loops:
+        where = _plural(len(loops), "loop")
+    else:
+        where = "nested blocks"
+
+    return f" [dim]({top_level} top-level + {nested} in {where})[/dim]"
+
+
 class ExperimentFlowConsole:
     console: Console
     stop_event: threading.Event
@@ -386,7 +414,15 @@ class ExperimentFlowConsole:
             self.state.log_multi_experiment_summary(complete_message)
 
 
-    def log_experiment_summary(self, ulid: str, success: bool, total_actions: int = 0, successful_actions: int = 0, failed_actions: int = 0, total_tests: int = 0, successful_tests: int = 0, failed_tests: int = 0, duration: float = None, level: int = 0, was_interrupted: bool = False):
+    def log_experiment_summary(self, ulid: str, success: bool, total_actions: int = 0, successful_actions: int = 0, failed_actions: int = 0, total_tests: int = 0, successful_tests: int = 0, failed_tests: int = 0, duration: float = None, level: int = 0, was_interrupted: bool = False, breakdown = None):
+        """Render the closing run summary.
+
+        ``breakdown`` is an optional :class:`~adare.backend.experiment.run_tally.ExperimentTally`.
+        When present the tally's structure is appended to the action/test lines, so
+        a ten-iteration loop reads as such instead of collapsing into its single
+        top-level ``loop:`` entry. The plain counters stay authoritative for the
+        numbers themselves, which keeps the legacy callers working unchanged.
+        """
 
         # Formatting Logic locally
         def get_status_header(success, interrupted):
@@ -424,7 +460,12 @@ class ExperimentFlowConsole:
         # Actions
         action_summary_txt = format_action_summary(successful_actions, total_actions, failed_actions)
         if total_actions > 0:
-            summary_parts.append(f"{indent}📊 {action_summary_txt}")
+            action_detail = format_nesting_detail(
+                getattr(breakdown, 'top_level_actions', 0),
+                getattr(breakdown, 'nested_actions', 0),
+                getattr(breakdown, 'loops', ()),
+            ) if breakdown is not None else ""
+            summary_parts.append(f"{indent}📊 {action_summary_txt}{action_detail}")
         elif not success:
             msg = "No actions executed (experiment was interrupted)" if was_interrupted else "No actions executed (experiment failed during setup)"
             summary_parts.append(f"{indent}📊 {msg}")
@@ -432,7 +473,19 @@ class ExperimentFlowConsole:
         # Tests
         test_summary_txt = format_test_summary(successful_tests, total_tests, failed_tests)
         if total_tests > 0:
-            summary_parts.append(f"{indent}🧪 {test_summary_txt}")
+            test_detail = format_nesting_detail(
+                getattr(breakdown, 'top_level_tests', 0),
+                getattr(breakdown, 'nested_tests', 0),
+                getattr(breakdown, 'loops', ()),
+            ) if breakdown is not None else ""
+            summary_parts.append(f"{indent}🧪 {test_summary_txt}{test_detail}")
+
+        # Started but never reported completion: never let this hide behind a count.
+        incomplete = (getattr(breakdown, 'incomplete_actions', 0) + getattr(breakdown, 'incomplete_tests', 0)) if breakdown is not None else 0
+        if incomplete > 0:
+            summary_parts.append(
+                f"{indent}⚠️  [bold yellow]{incomplete}[/bold yellow] step(s) started but never reported completion"
+            )
 
         summary_parts.extend([f"{indent}🆔 Run ID: [dim]{ulid}[/dim]"])
         summary_parts.extend(["", separator])

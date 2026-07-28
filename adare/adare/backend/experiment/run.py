@@ -128,6 +128,31 @@ def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_succe
     return success, diagnostics
 
 
+async def _recompute_run_tally(experiment_run_context):
+    """Rebuild the executed-work tally for a finished run from its event rows.
+
+    Waits for the batching DB writer to drain first, otherwise the last few events
+    of the run may not be readable yet. Both the drain and the query are pushed to
+    a worker thread so the event loop is not blocked. Returns ``None`` when the
+    tally cannot be produced, leaving the caller on the in-memory counters.
+    """
+    from adare.backend.events.listener import drain_db_operations
+    from adare.backend.experiment.run_tally import tally_from_database
+
+    project_path = experiment_run_context.project_directory.path
+    run_ulid = experiment_run_context.experiment_run_ulid
+
+    def _drain_and_tally():
+        drain_db_operations()
+        return tally_from_database(project_path, run_ulid)
+
+    try:
+        return await asyncio.get_running_loop().run_in_executor(None, _drain_and_tally)
+    except (AttributeError, OSError, RuntimeError, ValueError) as e:
+        log.warning(f"Could not recompute the run tally for {run_ulid}: {e}")
+        return None
+
+
 async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', allow_emulation: bool = False, file_log_level: int = logging.INFO, run_ulid: str | None = None):
     import signal
 
@@ -445,7 +470,29 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             if hasattr(experiment_run_context, 'timestamp_start'):
                 total_duration = (datetime.now(UTC) - experiment_run_context.timestamp_start).total_seconds()
 
-            if execution_result:
+            # Recompute the tally from the persisted events rather than from the
+            # in-memory counters. execution_result only knows top-level actions —
+            # a loop/block body, and every assertion inside it, is invisible there
+            # (flow_control keeps child results locally and returns one aggregate
+            # ActionResult), so a ten-iteration loop reported "Tests: 1/1 passed".
+            # The event rows are also what an auditor would query.
+            tally = await _recompute_run_tally(experiment_run_context)
+
+            if tally is not None and tally.has_executions:
+                flow_console.log_experiment_summary(
+                    ulid=experiment_run_context.experiment_run_ulid,
+                    success=bool(getattr(execution_result, 'success', False)) and tally.all_passed,
+                    total_actions=tally.total_actions,
+                    successful_actions=tally.successful_actions,
+                    failed_actions=tally.failed_actions,
+                    total_tests=tally.total_tests,
+                    successful_tests=tally.successful_tests,
+                    failed_tests=tally.failed_tests,
+                    duration=total_duration,
+                    was_interrupted=user_interrupt_event.is_set(),
+                    breakdown=tally,
+                )
+            elif execution_result:
                 flow_console.log_experiment_summary(
                     ulid=experiment_run_context.experiment_run_ulid,
                     success=execution_result.success,

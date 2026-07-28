@@ -314,7 +314,11 @@ class EventManager:
 
     def _create_loop_start_event(self, action, event_data):
         """Create start event for LoopAction."""
-        iteration_count = action.times if action.times is not None else (len(action.items) if action.items else None)
+        # Only a materialised list has a known length here; `items` may still be an
+        # unresolved template string, whose len() would be its character count and
+        # would make the summary claim a wrong number of planned iterations.
+        items = getattr(action, 'items', None)
+        iteration_count = action.times if action.times is not None else (len(items) if isinstance(items, list) else None)
         return LoopActionStartEvent(
             iteration_count=iteration_count,
             items=action.items if hasattr(action, 'items') else None,
