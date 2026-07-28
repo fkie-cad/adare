@@ -3,13 +3,33 @@ schema: 1
 id: ubuntu-lts
 description: Ubuntu 22.04 / 24.04 LTS desktop (server ISO autoinstall)
 maintainer: ADARE
-revision: 2026-05-06
+revision: 2026-07-28
 supports:
   - ubuntu2204
   - ubuntu2204arm64
   - ubuntu2404
   - ubuntu2404arm64
 -#}
+{#- Ubuntu 22.04 (jammy) cannot use subiquity's `packages:` list. Jammy's curtin
+    leaves devpts unmounted inside /target, so the postinstall apt run cannot
+    allocate a pty for its log and dies part-way through ubuntu-desktop-minimal:
+
+      E: Can not write log (Is /dev/pts mounted?) - posix_openpt (19: No such device)
+      dpkg-preconfigure: unable to re-open stdin:
+      curtin system-install ... returned non-zero exit status 100
+
+    It is a RACE, not deterministic: 22.04 builds from this same template and ISO
+    have completed with zero posix_openpt lines, so a green build is not evidence
+    of immunity. `apt: conf:` cannot fix it either — curtin deletes its own
+    /etc/apt/apt.conf.d/94curtin-config before the package step. The one place
+    the setting survives is the apt-get command line, so jammy installs the whole
+    package set from late-commands with `-o Dpkg::Use-Pty=false`, exactly as
+    autoinstall_ubuntu_focal.yaml does for the identical bug on 20.04.
+
+    24.04 (noble) keeps `packages:`: its curtin mounts devpts, that path is in
+    production use for the paper images, and its rendered user-data is
+    deliberately left byte-for-byte unchanged by this branch. #}
+{%- set apt_pty_broken = os_version == '22.04' -%}
 #cloud-config
 autoinstall:
   version: 1
@@ -50,6 +70,7 @@ autoinstall:
   ssh:
     install-server: true
     allow-pw: true
+{%- if not apt_pty_broken %}
   packages:
     - ubuntu-desktop-minimal
     {% if setup_level >= 1 %}
@@ -71,6 +92,7 @@ autoinstall:
     - curl
     - wget
     - git
+{%- endif %}
   error-commands:
     # Subiquity keeps apt/curtin output in the installer journal and never puts it
     # on the serial console, so a failed in-target package install reaches the host
@@ -93,6 +115,22 @@ autoinstall:
              /var/log/installer/*.log /var/log/curtin/*.log 2>/dev/null | tail -40; \
         echo '===== ADARE: end of failure detail ====='; } > /dev/console 2>&1 || true
   late-commands:
+{%- if apt_pty_broken %}
+    # 22.04 only: the whole package set is installed here instead of via
+    # `packages:`, because -o Dpkg::Use-Pty=false only survives on the command
+    # line. See the note at the top of this file. cifs-utils is load-bearing:
+    # ADARE mounts its host share with `mount -t cifs //10.0.2.4/qemu /adare`,
+    # and without mount.cifs the host silently degrades to the far slower QGA
+    # file-by-file transfer.
+    - curtin in-target -- apt-get update
+    - curtin in-target -- env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Use-Pty=false ubuntu-desktop-minimal cifs-utils openssh-server curl wget git
+    {% if setup_level >= 1 %}
+    - curtin in-target -- env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Use-Pty=false qemu-guest-agent
+    {% endif %}
+    {% if setup_level >= 2 %}
+    - curtin in-target -- env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Use-Pty=false gnome-screenshot maim xdotool python3-pip python3-tk
+    {% endif %}
+{%- endif %}
     # Passwordless sudo for adare user
     - echo "adare ALL=(ALL) NOPASSWD:ALL" > /target/etc/sudoers.d/adare
     - chmod 440 /target/etc/sudoers.d/adare

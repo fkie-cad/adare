@@ -363,11 +363,21 @@ def generate_user_data(os_def: OsDefinition, vm_name: str, setup_level: int = Se
     # Miniforge uses 'aarch64' for ARM and 'x86_64' for Intel in its download URLs
     miniforge_arch = 'aarch64' if os_def.architecture == 'aarch64' else 'x86_64'
 
+    # Identity of the OS being installed. Exposed to every template, not just
+    # the ones that need it today: one template routinely serves several
+    # releases (autoinstall_ubuntu_lts.yaml covers 22.04 and 24.04), and
+    # release-specific installer bugs have to be worked around inside it — see
+    # the jammy /dev/pts note at the top of that file. Names mirror the
+    # OsDefinition fields so a template author can read the catalog entry.
     user_data = template.render(
         hostname=hostname,
         password_hash=password_hash,
         miniforge_arch=miniforge_arch,
         setup_level=setup_level,
+        os_name=os_def.name,
+        os_version=os_def.version,
+        distribution=os_def.distribution,
+        architecture=os_def.architecture,
     )
 
     log.info(f'Generated autoinstall user-data for {os_def.display_name} (hostname: {hostname})')
