@@ -1,5 +1,6 @@
 # external imports
 import logging
+from pathlib import Path
 
 import pandas as pd
 from rich.panel import Panel
@@ -24,6 +25,11 @@ class EnvironmentTablePanel:
         table.add_column("file path", style="yellow", no_wrap=False, min_width=14, max_width=40)
         table.add_column("vm", style="cyan", no_wrap=False, min_width=10, max_width=22)
         table.add_column("os", style="cyan", no_wrap=False, min_width=10, max_width=24)
+        # The disk a run would actually boot. Distinct from "file path", which is the
+        # environment's YAML descriptor and survives the qcow2 being pruned -- without
+        # this column a dangling environment is indistinguishable from a working one
+        # until a run fails at VM setup.
+        table.add_column("disk", style="cyan", no_wrap=True, min_width=7, max_width=9)
         table.add_column("web status", style="cyan", no_wrap=True, min_width=12, max_width=14)
 
         for _i, row in self.environments.iterrows():
@@ -35,12 +41,23 @@ class EnvironmentTablePanel:
             if in_request:
                 web_status = 'in request'
 
+            # None means there was no local path to check (e.g. a URL-baked env), which
+            # must not be reported as either present or missing.
+            disk_present = row.get('disk_present') if hasattr(row, 'get') else None
+            if disk_present is None:
+                disk_status = '[dim]-[/dim]'
+            elif disk_present:
+                disk_status = '[green]ok[/green]'
+            else:
+                disk_status = '[bold red]MISSING[/bold red]'
+
             table.add_row(
                 row['display_name'],
                 row['id'],
                 row['file'] if 'file' in row and row['file'] else 'N/A',
                 row['vm_name'] if 'vm_name' in row and row['vm_name'] else 'No VM',
                 row['osinfo'] if 'osinfo' in row and row['osinfo'] else 'Unknown',
+                disk_status,
                 web_status,
             )
         return Panel(table, title="[b gold3]environments[/b gold3]", border_style="blue", title_align="left")
@@ -79,6 +96,14 @@ def print_environment_list(formatter=None, output_file=None, dual_output=False):
                     published = str(env.sync_metadata.is_synced)
                     in_request = str(env.sync_metadata.needs_sync)
 
+                # Same check as ShowService.list_environments: stat the disk a run would
+                # boot, not the environment YAML. None where there is no local path.
+                disk_present = (
+                    Path(vm.file).is_file()
+                    if vm and vm.file and '://' not in vm.file
+                    else None
+                )
+
                 data.append({
                     'display_name': env.name,
                     'id': env.id,
@@ -87,6 +112,7 @@ def print_environment_list(formatter=None, output_file=None, dual_output=False):
                     'osinfo': str(osinfo) if osinfo else 'Unknown',
                     'published': published,
                     'in_request': in_request,
+                    'disk_present': disk_present,
                 })
 
             environments_df = pd.DataFrame(data)

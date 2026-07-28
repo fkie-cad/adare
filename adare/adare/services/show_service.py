@@ -380,15 +380,33 @@ class ShowService:
         Returns:
             Result[List[EnvironmentListItem]] with list of environments.
         """
+        from pathlib import Path
+
+        from adare.database.api.base import GlobalDatabaseApi
+        from adare.database.models.global_models import Vm
         from adare.database.api.structured_data import StructuredDataApi
 
         try:
             with StructuredDataApi() as api:
                 environments = api.get_environments_structured()
 
+            # Registered disk per VM, so each environment can be checked against the
+            # file a run would actually boot. Fetched in one query rather than per
+            # environment because several environments share a VM.
+            with GlobalDatabaseApi() as db:
+                vm_files = {vm_row.id: vm_row.file for vm_row in db._session.query(Vm).all()}
+
             items = []
             for env in environments:
                 vm, vm_type, vm_sha256, _source_profile, _source_iso_sha256 = _parse_env_source(env.file)
+                disk_path = vm_files.get(env.vm_id) or ''
+                # Only a local path can be stat'ed; a URL-baked env has nothing to check
+                # here, which is reported as unknown rather than as missing.
+                disk_present = (
+                    Path(disk_path).is_file()
+                    if disk_path and '://' not in disk_path
+                    else None
+                )
                 items.append(EnvironmentListItem(
                     ulid=env.ulid,
                     name=env.name,
@@ -410,6 +428,8 @@ class ShowService:
                     vm=vm,
                     vm_type=vm_type,
                     vm_sha256=vm_sha256,
+                    disk_path=disk_path,
+                    disk_present=disk_present,
                 ))
 
             return Result.ok(items)
@@ -448,6 +468,23 @@ class ShowService:
                 )
 
             vm, vm_type, vm_sha256, source_profile, source_iso_sha256 = _parse_env_source(env.file)
+
+            # Same disk check as list_environments, so `env info` cannot report an
+            # environment as healthy when the qcow2 a run would boot has been pruned.
+            from pathlib import Path
+
+            from adare.database.api.base import GlobalDatabaseApi
+            from adare.database.models.global_models import Vm
+
+            with GlobalDatabaseApi() as db:
+                vm_row = db._session.query(Vm).filter_by(id=env.vm_id).first() if env.vm_id else None
+            disk_path = (vm_row.file if vm_row else '') or ''
+            disk_present = (
+                Path(disk_path).is_file()
+                if disk_path and '://' not in disk_path
+                else None
+            )
+
             detail = EnvironmentDetail(
                 ulid=env.ulid,
                 name=env.name,
@@ -471,6 +508,8 @@ class ShowService:
                 vm_sha256=vm_sha256,
                 source_profile=source_profile,
                 source_iso_sha256=source_iso_sha256,
+                disk_path=disk_path,
+                disk_present=disk_present,
             )
 
             return Result.ok(detail)

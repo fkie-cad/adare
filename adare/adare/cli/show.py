@@ -343,6 +343,7 @@ def exec_show_environments(arguments):
                 'file': env.file,
                 'published': str(env.published),
                 'in_request': str(env.in_request),
+                'disk_present': env.disk_present,
             } for env in environments]
             env_df = pd.DataFrame(env_data)
         else:
