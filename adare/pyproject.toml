@@ -93,11 +93,20 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--strict-markers --disable-warnings"
+# -m "not live_vm" is a DEFAULT, not a ban: `pytest adare/tests/unit` must never
+# boot a real VM. The one test that does (test_overlay_integration.py::
+# test_full_recipe_flow_on_a_linux_guest) runs a full ~30 min, 4 GB distro
+# install, and two sessions have started one by accident simply by running the
+# unit suite. A command-line `-m live_vm` (or any other -m) overrides this,
+# because argparse keeps the LAST -m and addopts are prepended, so the opt-in
+# path stays a single flag away.
+addopts = "--strict-markers --disable-warnings -m \"not live_vm\""
 markers = [
     "slow: marks tests as slow",
     "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests"
+    "unit: marks tests as unit tests",
+    "requires_qemu: needs a real qemu-img / qemu-system binary on PATH",
+    "live_vm: boots a real VM (needs hardware acceleration and lots of time)"
 ]
 
 [tool.coverage.run]

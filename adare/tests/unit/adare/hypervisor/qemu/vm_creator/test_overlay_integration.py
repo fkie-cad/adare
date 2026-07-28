@@ -9,6 +9,18 @@ T16 is the load-bearing verification of the whole feature: a real QEMU boot, a
 real guest agent, real `guest-exec`, a real clean shutdown and a real flatten,
 against an Ubuntu guest that installs unattended in ~15 minutes. Once it passes,
 Windows is only needed for Windows-*specific* behaviour.
+
+T16 is marked `live_vm` and is therefore **deselected by default** — `addopts` in
+both pyproject.toml files carries `-m "not live_vm"`. That is not a soft
+convention: in practice it downloads and installs a 4 GB distro for ~30 minutes,
+and it has been started by accident more than once simply by running the unit
+suite. Opt in explicitly, and only on an idle host (ADARE's VM budget is one VM
+at a time):
+
+    pytest adare/tests/unit -m live_vm
+
+Any command-line `-m` overrides the default, because argparse keeps the last `-m`
+and addopts are prepended.
 """
 
 import json
