@@ -487,6 +487,16 @@ def exec_vm_prune(arguments):
     if RECIPE_BASE_CACHE_DIR.is_dir():
         live_base_hashes = _live_recipe_base_hashes()
         for base_file in sorted(RECIPE_BASE_CACHE_DIR.glob('*-recipebase-*.qcow2')):
+            # Never touch an in-progress install. This glob also matches the
+            # per-attempt `<hash>.partial-<pid>-<token>.qcow2` a running Stage 1 is
+            # installing into, and its "hash" then reads as `<hash>.partial-…`,
+            # which can never be in `live_base_hashes` — so EVERY running install
+            # used to be classified stale and unlinked, dropping its QEMU onto an
+            # unlinked inode and losing a 30-minute install with no error anywhere.
+            # Leftovers from dead attempts are reclaimed by the next build of the
+            # same base, which does it while holding that base's lock.
+            if '.partial' in base_file.name:
+                continue
             short_hash = base_file.stem.rsplit('-recipebase-', 1)[-1]
             if short_hash in live_base_hashes:
                 continue

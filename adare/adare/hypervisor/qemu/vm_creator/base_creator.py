@@ -13,7 +13,7 @@ from pathlib import Path
 from adare.config.configdirectory import VMS_DIR
 from adare.console import console, print_section, print_step, print_vm_config_panel
 from adare.hypervisor.exceptions import HypervisorException
-from adare.hypervisor.qemu.firmware import create_nvram_for_vm
+from adare.hypervisor.qemu.firmware import create_nvram_for_vm, get_nvram_path_for_vm
 from adare.hypervisor.qemu.vm_creator.disk_helpers import (
     DiskCompressionError, compress_qcow2_zstd, create_qcow2_disk,
 )
@@ -165,7 +165,12 @@ class BaseVMCreator(ABC):
             if self.force:
                 print_step(f'[yellow]Removing existing disk image[/yellow]: [dim]{disk_path}[/dim]')
                 disk_path.unlink()
-                nvram_file = target_dir / f'{self.vm_name}_VARS.fd'
+                # Ask `firmware` for the name instead of spelling it out: this was
+                # `{vm_name}_VARS.fd` while the writer used `{vm_name}-nvram.fd`,
+                # so the unlink never matched anything and a rebuilt disk silently
+                # inherited the previous install's UEFI variables — including its
+                # boot entries, which point at a filesystem that no longer exists.
+                nvram_file = Path(get_nvram_path_for_vm(self.vm_name, target_dir))
                 if nvram_file.exists():
                     nvram_file.unlink()
             else:
