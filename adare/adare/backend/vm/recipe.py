@@ -64,6 +64,7 @@ environment identity.
 import hashlib
 import logging
 import os
+import secrets
 import shutil
 from dataclasses import replace
 from pathlib import Path
@@ -86,6 +87,7 @@ from adare.config.configdirectory import (
     VMS_DIR,
 )
 from adare.console import console, print_section, print_step
+from adare.helperfunctions.file.lock import exclusive_lock
 from adare.helperfunctions.hash import hash_file_sha256, hash_recipe, hash_string_sha256
 from adare.helperfunctions.web.download import download
 from adare.hypervisor.qemu.vm_creator.os_catalog import (
@@ -440,7 +442,7 @@ def _build_disk(os_def: OsDefinition, recipe: Recipe, iso_path: Path,
     Creator selection is delegated to :func:`vm_creator.dispatch.create_vm_disk`,
     the same function `adare vm create` uses. It must be shared: this function
     once dispatched on ``manual`` and then fell through to *platform*, so a recipe
-    over a ``gui-auto`` / ``gui-script`` / ``playbook`` profile silently built via
+    over a ``gui-auto`` / ``playbook`` profile silently built via
     the seed-file ``linux_creator``.
     """
     from adare.hypervisor.qemu.vm_creator.dispatch import DispatchError, create_vm_disk
@@ -538,43 +540,27 @@ def _preflight_provision(recipe: Recipe, os_def: OsDefinition,
         )
 
 
-def _build_base_disk(environment_metadata: EnvironmentMetadata, os_def: OsDefinition,
-                     iso_path: Path, base_hash: str, force: bool,
-                     allow_emulation: bool) -> Path:
-    """Stage 1 — return the cached base disk, building it only if absent.
+def _cached_base_is_usable(base_path: Path, may_discard: bool) -> bool:
+    """Report whether *base_path* is a cache hit, printing the reason either way.
 
-    Cached by ``base_hash`` in :data:`RECIPE_BASE_CACHE_DIR`, keyed on the recipe
-    identity *without* provisioning. That is what lets two recipes over the same
-    OS install share one build: the second one prints a cache-hit line and goes
-    straight to Stage 2.
+    Returns True only for a cache entry that may be reused as-is, in which case the
+    cache-hit line has been printed and the caller must skip Stage 1 entirely.
 
-    **The cache entry is published by an atomic rename, never written in place.**
-    The install runs against ``{base_name}.partial.qcow2`` and is moved onto the
-    real cache name only after the creator returns successfully, so the presence of
-    ``{base_name}.qcow2`` *implies* a completed OS install.
-
-    Without that, an interrupted Stage 1 poisons the cache permanently: the very
-    first thing the creator does is ``qemu-img create``, so a build killed at any
-    point afterwards (SIGKILL, host crash, a failure outside the creator's own
-    ``_cleanup_on_failure``) leaves an OS-less qcow2 sitting at exactly the path
-    every later build treats as a hit. Those builds then skip the install, boot a
-    disk with no operating system, and fail 15 minutes later with "the guest agent
-    did not respond" — which is true, and says nothing about the real cause.
-    Observed for real: a killed build left a 196 KB "base" that two later runs
-    happily reused.
+    ``may_discard`` gates the one *mutating* branch — unlinking a truncated entry —
+    so this can be called both on the cheap unlocked fast path (``False``) and
+    again under the cache-key lock (``True``), where deleting somebody else's file
+    is no longer possible. The check itself is read-only.
     """
-    recipe = environment_metadata.recipe
-    base_name = f'{recipe.profile}-recipebase-{base_hash[:12]}'
-    base_path = RECIPE_BASE_CACHE_DIR / f'{base_name}.qcow2'
+    if not base_path.is_file():
+        return False
 
-    print_section('Base disk (Stage 1/2)')
-    if base_path.is_file() and not force:
-        size = base_path.stat().st_size
-        # Defence in depth for caches poisoned before the rename existed: the same
-        # floor `BaseVMCreator._validate_disk_after_install` uses for "QEMU never
-        # wrote to it". Cheap, and it cannot false-positive — no real OS install
-        # fits in 1 MB.
-        if size < 1_000_000:
+    size = base_path.stat().st_size
+    # Defence in depth for caches poisoned before the rename existed: the same
+    # floor `BaseVMCreator._validate_disk_after_install` uses for "QEMU never
+    # wrote to it". Cheap, and it cannot false-positive — no real OS install
+    # fits in 1 MB.
+    if size < 1_000_000:
+        if may_discard:
             console.print(
                 f'  [yellow]Discarding an unusable cached base disk[/yellow] '
                 f'({size} bytes — no OS install could fit): {base_path}'
@@ -582,19 +568,81 @@ def _build_base_disk(environment_metadata: EnvironmentMetadata, os_def: OsDefini
             log.warning('Discarding truncated recipe base disk %s (%d bytes)',
                         base_path, size)
             base_path.unlink()
-        else:
-            console.print(
-                f'  [green]Recipe base cache hit — reusing {base_path}[/green] '
-                f'({size / (1024 ** 3):.1f} GB)'
-            )
-            console.print('  [dim]Skipping the OS install entirely.[/dim]')
-            return base_path
+        return False
 
-    RECIPE_BASE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    console.print(
+        f'  [green]Recipe base cache hit — reusing {base_path}[/green] '
+        f'({size / (1024 ** 3):.1f} GB)'
+    )
+    console.print('  [dim]Skipping the OS install entirely.[/dim]')
+    return True
+
+
+def _discard_stale_partial_builds(base_name: str) -> None:
+    """Remove leftover ``.partial-*`` disks and NVRAM for *base_name*.
+
+    **Only safe with the cache-key lock held.** That is the entire reason this
+    exists as a separate step instead of the ``force=True`` the creator used to be
+    handed: ``force`` made the creator unlink whatever sat at its own disk path,
+    which under concurrency was another live QEMU's disk — the process kept writing
+    to an unlinked inode and its 30-minute install evaporated. Under the lock,
+    every ``.partial-*`` file for this base necessarily belongs to a build that is
+    no longer running, so it is a corpse and reclaiming it is correct.
+
+    Reclaiming matters because each attempt now uses its own partial name: without
+    this, a base that fails repeatedly would accumulate a multi-GB disk per attempt.
+
+    Install logs are deliberately kept. They are small, they are the only account of
+    why the previous attempt failed, and nothing reads them by name.
+    """
+    for leftover in sorted(RECIPE_BASE_CACHE_DIR.glob(f'{base_name}.partial*')):
+        if leftover.suffix != '.qcow2' and not leftover.name.endswith('-nvram.fd'):
+            continue
+        try:
+            leftover.unlink()
+        except OSError as e:
+            log.warning('Could not remove the leftover partial build %s: %s', leftover, e)
+        else:
+            log.info('Removed a leftover partial base build artifact: %s', leftover)
+
+
+def _install_base_disk(os_def: OsDefinition, recipe: Recipe, iso_path: Path,
+                       base_name: str, base_path: Path, force: bool,
+                       allow_emulation: bool) -> Path:
+    """Run the OS install for *base_name* and publish it at *base_path*.
+
+    **Must be called with the cache-key lock held** (see :func:`_build_base_disk`).
+
+    The install runs against a *per-attempt* name,
+    ``{base_name}.partial-{pid}-{token}``, and only the successful result is renamed
+    onto the cache name. Per-attempt rather than a single shared ``.partial``
+    because everything the installer derives from the disk name is thereby
+    per-attempt too — and each of those was an observed collision:
+
+    * ``{stem}_install.log``, handed to QEMU as ``-serial file:…``. N processes held
+      write fds at independent offsets on one inode, so the log became interleaved
+      soup — and ``_assert_install_succeeded`` greps that log, so its verdict on
+      whether the install finished was a coin flip. A per-attempt log is what makes
+      a failure diagnosable at all, which is the point even when the lock makes the
+      collision impossible: it is the log that survives to be read.
+    * ``{stem}-nvram.fd``, mapped as writable pflash. ``create_nvram_for_vm`` only
+      writes the file when absent, so concurrent builds shared one UEFI variable
+      store.
+    * The install-phase QMP socket, derived from the disk stem in
+      ``install_qmp_socket_path``.
+
+    The random token, not just the pid, so two attempts in one process (a retry)
+    also get distinct logs; the pid, so a file on disk names the process to look for.
+    """
     console.print(f'  Building the base OS install (this takes a while): {base_name}')
-    partial_name = f'{base_name}.partial'
+    _discard_stale_partial_builds(base_name)
+    partial_name = f'{base_name}.partial-{os.getpid()}-{secrets.token_hex(2)}'
+    # `force` is the caller's, no longer a hardcoded True: with a per-attempt
+    # partial name and the sweep above, nothing can pre-exist at the creator's disk
+    # path, so its "already exists — use --force" guard costs a legitimate rebuild
+    # nothing and stays armed as a second line of defence if this ever runs unlocked.
     built = _build_disk(
-        os_def, recipe, iso_path, partial_name, force=True,
+        os_def, recipe, iso_path, partial_name, force=force,
         vm_dir=RECIPE_BASE_CACHE_DIR, allow_emulation=allow_emulation,
     )
     # Same directory, therefore the same filesystem, therefore atomic: a reader
@@ -606,6 +654,94 @@ def _build_base_disk(environment_metadata: EnvironmentMetadata, os_def: OsDefini
             os.replace(sibling, RECIPE_BASE_CACHE_DIR / f'{base_name}{suffix}')
     log.info('Published recipe base disk: %s', base_path)
     return base_path
+
+
+def _build_base_disk(environment_metadata: EnvironmentMetadata, os_def: OsDefinition,
+                     iso_path: Path, base_hash: str, force: bool,
+                     allow_emulation: bool) -> Path:
+    """Stage 1 — return the cached base disk, building it only if absent.
+
+    Cached by ``base_hash`` in :data:`RECIPE_BASE_CACHE_DIR`, keyed on the recipe
+    identity *without* provisioning. That is what lets two recipes over the same
+    OS install share one build: the second one prints a cache-hit line and goes
+    straight to Stage 2.
+
+    **The cache entry is published by an atomic rename, never written in place.**
+    The install runs against ``{base_name}.partial-{pid}-{token}.qcow2`` and is
+    moved onto the real cache name only after the creator returns successfully, so
+    the presence of ``{base_name}.qcow2`` *implies* a completed OS install.
+
+    Without that, an interrupted Stage 1 poisons the cache permanently: the very
+    first thing the creator does is ``qemu-img create``, so a build killed at any
+    point afterwards (SIGKILL, host crash, a failure outside the creator's own
+    ``_cleanup_on_failure``) leaves an OS-less qcow2 sitting at exactly the path
+    every later build treats as a hit. Those builds then skip the install, boot a
+    disk with no operating system, and fail 15 minutes later with "the guest agent
+    did not respond" — which is true, and says nothing about the real cause.
+    Observed for real: a killed build left a 196 KB "base" that two later runs
+    happily reused.
+
+    Concurrency: one builder per cache key
+    ======================================
+
+    The rename is atomic for *readers* only. It gives no exclusion at all between
+    *writers*, and the writers all aim at the same derived name — so a second
+    ``environment load`` of the same base used to start a second QEMU against the
+    same disk, log and NVRAM. Observed for real: five concurrent installs on one
+    inode, each one's ``--force`` unlinking the disk the others were installing into.
+
+    So Stage 1's mutating region is serialized under an exclusive
+    :func:`~adare.helperfunctions.file.lock.exclusive_lock` on
+    ``{base_name}.lock`` — the *cache key*, not the process, is the unit of
+    exclusion. Deliberately not a unique per-invocation path: that removes the
+    collision by removing the cache, leaving N builders to each perform the same
+    30-minute, multi-GB install so that N-1 results can be discarded by the last
+    rename.
+
+    Two consequences worth stating:
+
+    * **The cache-hit check is re-run after the lock is acquired.** Without that,
+      every process that queued behind a build would inherit its turn and reinstall
+      an OS that is now sitting in the cache — the pile-up the lock is meant to
+      collapse into one build plus (N-1) cache hits.
+    * **A cache hit needs no lock.** The fast path below is read-only, so a healthy
+      cache entry is returned without touching the lock file at all; only the paths
+      that would write take it.
+
+    ``force`` interacts with both: it means "the cached base is not to be trusted",
+    so it skips the fast path *and* the re-check, and rebuilds unconditionally once
+    it holds the lock. It still queues like any other builder rather than
+    interrupting one — it cannot be starved, because every holder either publishes
+    or fails in bounded time and ``flock`` hands the lock on. What it must not do is
+    take the re-check's cache hit, which would silently turn ``--force`` into a
+    no-op the moment another build had just finished.
+    """
+    recipe = environment_metadata.recipe
+    base_name = f'{recipe.profile}-recipebase-{base_hash[:12]}'
+    base_path = RECIPE_BASE_CACHE_DIR / f'{base_name}.qcow2'
+
+    print_section('Base disk (Stage 1/2)')
+    if not force and _cached_base_is_usable(base_path, may_discard=False):
+        return base_path
+
+    RECIPE_BASE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _announce_wait() -> None:
+        console.print(
+            f'  [yellow]Another ADARE process is already building this base disk'
+            f'[/yellow]: {base_name}'
+        )
+        console.print(
+            '  [dim]Waiting for it to finish — it will then be reused as a cache '
+            'hit, not installed twice. This can take as long as an OS install.[/dim]'
+        )
+
+    with exclusive_lock(RECIPE_BASE_CACHE_DIR / f'{base_name}.lock',
+                        on_contention=_announce_wait):
+        if not force and _cached_base_is_usable(base_path, may_discard=True):
+            return base_path
+        return _install_base_disk(os_def, recipe, iso_path, base_name, base_path,
+                                  force, allow_emulation)
 
 
 def _provision_disk(base_path: Path, os_def: OsDefinition, recipe: Recipe,

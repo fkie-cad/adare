@@ -139,7 +139,6 @@ def test_an_interrupted_build_does_not_poison_the_cache(recipe_env):
     agent did not respond".
     """
     base = _base_path(recipe_env)
-    partial = base.with_name(base.name.replace('.qcow2', '.partial.qcow2'))
 
     def _killed_mid_install(**kwargs):
         # What the creator has done by the time it is interrupted.
@@ -152,7 +151,9 @@ def test_an_interrupted_build_does_not_poison_the_cache(recipe_env):
             _run(recipe_env)
 
     assert not base.exists(), 'an interrupted build published a cache entry'
-    assert partial.exists(), 'the partial build should remain for inspection'
+    # The partial name carries a per-attempt suffix, so match it by shape.
+    partials = list(recipe_env['base_cache'].glob('*.partial-*.qcow2'))
+    assert partials, 'the partial build should remain for inspection'
 
 
 def test_the_installer_writes_to_a_partial_path_not_the_cache_name(recipe_env):
@@ -175,11 +176,11 @@ def test_the_installer_writes_to_a_partial_path_not_the_cache_name(recipe_env):
     ):
         _run(recipe_env)
 
-    assert seen['vm_name'].endswith('.partial')
-    # ... and after a successful build the cache entry exists under the real name.
+    assert '.partial-' in seen['vm_name']
+    # ... and after a successful build the cache entry exists under the real name,
+    # with no partial left behind — the rename moved it.
     assert _base_path(recipe_env).is_file()
-    assert not _base_path(recipe_env).with_name(
-        _base_path(recipe_env).name.replace('.qcow2', '.partial.qcow2')).exists()
+    assert not list(recipe_env['base_cache'].glob('*.partial-*.qcow2'))
 
 
 def test_a_truncated_cached_base_is_discarded_and_rebuilt(recipe_env):
