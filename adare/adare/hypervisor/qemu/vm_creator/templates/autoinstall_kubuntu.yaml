@@ -3,7 +3,7 @@ schema: 1
 id: kubuntu-lts
 description: Kubuntu 22.04 / 24.04 (KDE Plasma on an Ubuntu live-server autoinstall base, no conda + uv)
 maintainer: ADARE
-revision: 2026-07-25
+revision: 2026-07-28
 supports:
   - kubuntu2204arm64
   - kubuntu2404arm64
@@ -19,6 +19,36 @@ supports:
    ubuntu-desktop-minimal, SDDM autologin instead of GDM3, and standalone `uv`
    instead of Miniforge (matching the recipe the existing 24.04 ARM64 environment
    was built with, so all paper ARM64 guests stay method-identical). #}
+{# NOTE for editors: this comment opens with a bare `{#`, NOT `{#-`. The comment
+   block above it ends without a trailing dash, so the newline between the two is
+   literal text that becomes a blank line ahead of `#cloud-config` in every
+   rendered file. That blank line has been there since this template was written
+   and every Kubuntu image in use was built with it, so it is preserved
+   deliberately: a `{#-` here would strip it and change 24.04's output.
+
+   Ubuntu 22.04 (jammy) cannot use subiquity's `packages:` list. Jammy's curtin
+    leaves devpts unmounted inside /target, so the postinstall apt run cannot
+    allocate a pty for its log and dies part-way through the desktop metapackage:
+
+      E: Can not write log (Is /dev/pts mounted?) - posix_openpt (19: No such device)
+      dpkg-preconfigure: unable to re-open stdin:
+      curtin system-install ... returned non-zero exit status 100
+
+    It is a RACE, not deterministic: jammy builds have completed from an unpatched
+    template with zero posix_openpt lines, so a green build is not evidence of
+    immunity. `apt: conf:` cannot fix it either — curtin deletes its own
+    /etc/apt/apt.conf.d/94curtin-config before the package step. The one place the
+    setting survives is the apt-get command line, so jammy installs the whole
+    package set from late-commands with `-o Dpkg::Use-Pty=false`, exactly as
+    autoinstall_kubuntu_focal.yaml does for the identical bug on 20.04. Losing a
+    build here is expensive: kubuntu-desktop is a much larger download than
+    ubuntu-desktop-minimal.
+
+    24.04 (noble) keeps `packages:`: its curtin mounts devpts, kubuntu-2404 is the
+    environment behind the paper's §5.2 subsecond-precision finding, and its
+    rendered user-data is deliberately left byte-for-byte unchanged by this
+    branch. Mirrors autoinstall_ubuntu_lts.yaml. #}
+{%- set apt_pty_broken = os_version == '22.04' -%}
 #cloud-config
 autoinstall:
   version: 1
@@ -59,6 +89,7 @@ autoinstall:
   ssh:
     install-server: true
     allow-pw: true
+{%- if not apt_pty_broken %}
   packages:
     - kubuntu-desktop
     # cifs-utils: ADARE mounts its host share with `mount -t cifs //10.0.2.4/qemu
@@ -79,6 +110,7 @@ autoinstall:
     - curl
     - wget
     - git
+{%- endif %}
   error-commands:
     # Subiquity swallows apt/curtin output into the installer journal, so a failed
     # in-target package install shows up on the host as nothing but
@@ -98,6 +130,22 @@ autoinstall:
              /var/log/installer/*.log /var/log/curtin/*.log 2>/dev/null | tail -40; \
         echo '===== ADARE: end of failure detail ====='; } > /dev/console 2>&1 || true
   late-commands:
+{%- if apt_pty_broken %}
+    # 22.04 only: the whole package set is installed here instead of via
+    # `packages:`, because -o Dpkg::Use-Pty=false only survives on the command
+    # line. See the note at the top of this file. cifs-utils is load-bearing:
+    # ADARE mounts its host share with `mount -t cifs //10.0.2.4/qemu /adare`,
+    # and without mount.cifs the host falls back to per-file QGA writes, which is
+    # orders of magnitude slower and times out.
+    - curtin in-target -- apt-get update
+    - curtin in-target -- env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Use-Pty=false kubuntu-desktop cifs-utils openssh-server curl wget git
+    {% if setup_level >= 1 %}
+    - curtin in-target -- env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Use-Pty=false qemu-guest-agent
+    {% endif %}
+    {% if setup_level >= 2 %}
+    - curtin in-target -- env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Use-Pty=false imagemagick maim xdotool python3-pip python3-tk
+    {% endif %}
+{%- endif %}
     # Passwordless sudo for adare user
     - echo "adare ALL=(ALL) NOPASSWD:ALL" > /target/etc/sudoers.d/adare
     - chmod 440 /target/etc/sudoers.d/adare
