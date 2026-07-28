@@ -393,17 +393,39 @@ class MCPServerManager:
         return pids
 
     def _is_our_cv_server(self, pid: int, port: int) -> bool:
-        """Is ``pid`` an ``adare-cv-server`` serving ``port``?
+        """Is ``pid`` the ``adare-cv-server`` **we own** on ``port``?
 
-        Identity is established from the process's own command line, never from
-        ``ppid``: the server is spawned with ``start_new_session=True``, so being
-        reparented to init is the DESIGNED state and says nothing about ownership.
+        Ownership requires a recorded PID. Identity is then established from the
+        process's own command line, never from ``ppid``: the server is spawned
+        with ``start_new_session=True``, so being reparented to init is the
+        DESIGNED state and says nothing about ownership.
 
-        When :attr:`known_server_pid` is set (we spawned it, or a resumed session
-        recorded it) the PID must match that too — so a port that was recycled by
-        an unrelated cv-server cannot be mistaken for ours.
+        A missing :attr:`known_server_pid` is a hard NO, not a fall-back to
+        "any ``adare-cv-server`` on this port". That fall-back had a live hole:
+        :meth:`start` returns True *without* recording a PID whenever the port
+        was already in use and ``allow_existing=True`` (the default, used by
+        ``run_setup.step_start_mcp_server``), which happens whenever two runs
+        lose the ``find_free_cv_port`` TOCTOU race. Dev-session teardown then
+        calls ``stop(force_external=True)``, and the name+port match would
+        cheerfully SIGTERM a *concurrent run's* server mid-experiment.
+
+        The trade-off is deliberate and asymmetric: with this gate we may LEAK
+        our own server — a ``cv_server.json`` written before pid recording, or
+        any record whose ``pid`` field is absent, now yields "left running"
+        instead of a kill. Leaking your own process costs one stale port in a
+        32-port scan window and is reclaimed by the next
+        :func:`find_free_cv_port`; killing someone else's costs them a
+        half-finished forensic experiment. Leak, never kill.
         """
-        if self.known_server_pid is not None and pid != self.known_server_pid:
+        if self.known_server_pid is None:
+            log.warning(
+                f"Refusing to touch PID {pid} on port {port}: this manager has no "
+                f"recorded cv-server PID, so it cannot prove the listener is its "
+                f"own (a concurrent run's server looks identical). Leaving it alone"
+            )
+            return False
+
+        if pid != self.known_server_pid:
             log.warning(
                 f"Refusing to touch PID {pid} on port {port}: this manager owns "
                 f"PID {self.known_server_pid}, so {pid} belongs to someone else"
