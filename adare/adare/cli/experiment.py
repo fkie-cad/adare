@@ -39,11 +39,21 @@ def exec_experiment_load(arguments):
 
     if ('/' in original_input or '\\' in original_input):
         input_path = Path(original_input)
-        if input_path.is_absolute() or not (Path.cwd() / input_path).is_relative_to(project_dir_obj.experiments):
+        # "External" means outside the project's own experiments/ directory, and that is
+        # decided by where the path POINTS, not by whether it was typed absolute. The
+        # previous `input_path.is_absolute() or ...` short-circuited the containment test,
+        # so an absolute path to an experiment already inside the project was classified
+        # external -- which made target_path equal external_source_path, and the
+        # rmtree/copytree pair below then deleted the directory it was about to copy from.
+        # Both sides are resolved so symlinks and '..' cannot defeat the comparison.
+        resolved_input = (
+            input_path if input_path.is_absolute() else Path.cwd() / input_path
+        ).resolve()
+        if not resolved_input.is_relative_to(project_dir_obj.experiments.resolve()):
             # This is an external path
             if input_path.exists() and input_path.is_dir():
                 is_external_path = True
-                external_source_path = input_path.resolve()
+                external_source_path = resolved_input
                 potential_copied_name = input_path.name
 
     # Track whether a copy was actually performed during path resolution
@@ -76,7 +86,17 @@ def exec_experiment_load(arguments):
             # also authorise refreshing the copied directory. Without this, the first
             # productive run freezes the project copy: every later `experiment load -f`
             # reports success while silently running the stale playbook.
-            if not has_productive_runs or arguments.force:
+            if external_source_path.resolve() == target_path.resolve():
+                # Source and destination are the same directory, so there is nothing to
+                # copy -- and rmtree would destroy the experiment outright. Reachable via
+                # any future path-classification slip, so it is guarded here rather than
+                # only at the point where is_external_path is decided: losing a playbook
+                # and its GUI crops is not an acceptable outcome for a load command.
+                log.info(
+                    f'Experiment directory {target_path} is itself the source; '
+                    f'loading in place without copying.'
+                )
+            elif not has_productive_runs or arguments.force:
                 reason = 'no productive runs found' if not has_productive_runs else f'--force given ({run_count} productive runs)'
                 log.info(f'Overwriting experiment directory {target_path} with fresh copy from {external_source_path} ({reason})')
                 shutil.rmtree(target_path)
