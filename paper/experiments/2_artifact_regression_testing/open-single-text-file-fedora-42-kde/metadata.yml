@@ -1,0 +1,9 @@
+environments:
+- fedora-42-kde
+description: 'Paper 5.2: open one document on Kubuntu 24.04 and validate the recently-used.xbel
+  access metadata'
+tags:
+- xbel
+- recently-used
+- xdg
+- regression
