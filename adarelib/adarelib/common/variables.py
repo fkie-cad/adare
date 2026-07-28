@@ -1131,9 +1131,11 @@ class VariableRegistry:
         # unresolvable value returned as-is.
         self._assert_automatic_references_resolvable(text, context)
 
-        try:
-            import jinja2
+        # Imported outside the try: the except clause names jinja2, so a failed import
+        # there would surface as UnboundLocalError instead of the real ImportError.
+        import jinja2
 
+        try:
             result = text
             max_iterations = 10  # Prevent infinite loops
             previous_results = set()  # Track previous results to detect cycles
@@ -1168,6 +1170,7 @@ class VariableRegistry:
                 # Apply template resolution
                 template = jinja2.Template(result)
                 new_result = template.render(simple_context)
+                self._warn_on_empty_substitutions(result, simple_context, new_result)
                 log.debug(f"Nested template resolution iteration {i+1}: '{result}' -> '{new_result}'")
                 
                 # If no change occurred, break to avoid infinite loops
@@ -1183,10 +1186,67 @@ class VariableRegistry:
             log.debug(f"Final nested template resolution: '{text}' -> '{result}'")
             return result
             
-        except Exception as e:
+        # Fail soft only for the errors a malformed template can actually produce, so that
+        # a bad template does not hide unrelated bugs (and cannot swallow the
+        # ValidationError raised above). Determined by probing bare Template().render():
+        #   jinja2.TemplateError - covers TemplateSyntaxError (unclosed / bad expression),
+        #       TemplateAssertionError (unknown filter or test - this bare Template has no
+        #       custom filters registered, so `| win_path` lands here) and UndefinedError
+        #       (an undefined name being called, indexed or used in arithmetic)
+        #   TypeError  - mismatched operand types, e.g. `{{ name + 1 }}` or a bad `%` format
+        #   ValueError - failed string operations / conversions, e.g. `.index()` finding
+        #       nothing (UnicodeDecodeError is a ValueError subclass and is covered too)
+        # Anything else (a missing jinja2, ZeroDivisionError, LookupError, RecursionError)
+        # is not something a variable value should be able to cause, so it now propagates
+        # instead of being silently reported as "unresolved".
+        except (jinja2.TemplateError, TypeError, ValueError) as e:
             log.warning(f"Failed to resolve nested template '{text}': {e}")
             return text
-    
+
+    def _warn_on_empty_substitutions(self, template_str: str, context: Dict[str, Any],
+                                     rendered: str) -> None:
+        """Log a WARNING for each ``{{ name }}`` in ``template_str`` that rendered empty.
+
+        Deliberately a warning and not an error. Unlike the ``adare_*`` built-ins - which
+        _assert_automatic_references_resolvable() raises on, because their absence is always
+        a wiring bug - an ordinary name may be legitimately absent here: the ``capture:`` or
+        ``save_timestamp`` action that creates it has not run yet. But an unnoticed empty
+        substitution builds a plausible *wrong* value (``/adare_lnk_lecmd`` in place of a
+        real path), so it has to be visible in the log even when it is expected.
+
+        Warns once per (variable, template) pair for the lifetime of the registry: values
+        are re-resolved for every action, test and loop iteration, and repeating the same
+        line hundreds of times would bury it.
+
+        Args:
+            template_str: The template that was just rendered
+            context: The context it was rendered with
+            rendered: The resulting string
+        """
+        if not hasattr(self, '_empty_substitution_warnings'):
+            self._empty_substitution_warnings = set()
+
+        for name in sorted(self._extract_template_variables(template_str)):
+            # A present, non-empty value substituted fine. None renders as 'None' rather
+            # than empty, and 0 renders as '0', so neither counts as an empty substitution.
+            if name in context and str(context[name]) != '':
+                continue
+
+            key = (name, template_str)
+            if key in self._empty_substitution_warnings:
+                continue
+            self._empty_substitution_warnings.add(key)
+
+            if name in context:
+                reason = "it is defined but empty"
+            else:
+                reason = ("it is not in the resolution context - created at runtime by a "
+                          "capture:/save_timestamp action, or misspelled")
+            log.warning(
+                f"Variable '{name}' resolved to an empty string in template "
+                f"'{template_str}' -> '{rendered}' because {reason}"
+            )
+
     def _has_test_specific_filters(self, var: 'Variable') -> bool:
         """Check if variable has test-specific filters that require placeholder resolution."""
         log.debug(f"Checking test-specific filters for variable '{var.name}', has metadata: {var.structured_metadata is not None}")
