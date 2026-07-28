@@ -21,8 +21,10 @@ from adare.database.models.project_models import (
     ExperimentRun,
     ExperimentRunFiles,
     LogFile,
+    SyncMetadata,
     TestParameterEntry,
 )
+from adare.database.models.sync_identity import apply_remote_identity
 from adare.exceptions import TestSetFormatError
 from adarelib.constants import StatusEnum
 from adarelib.testset.type import Test as FTest
@@ -512,13 +514,20 @@ class ExperimentApi(ProjectDatabaseApi):
             self._session.commit()
 
     def sync_experiment(self, ulid: str, remote_ulid: str, abstract_tests_ulids: dict, remote_url: str, is_published: bool):
+        """Record where this experiment and its tests live on the server.
+
+        The experiment's remote identity goes into its SyncMetadata row (read back
+        via :class:`~adare.database.models.sync_identity.RemoteIdentityMixin`); each
+        test's server ULID goes into ``AbstractTest.remote_ulid``. Both are mapped
+        columns — publishing a run needs them after this session closes.
+        """
         # Retrieve the experiment by its ULID
         experiment = self.get_experiment_by_ulid(ulid)
 
-        # Update the experiment properties
-        experiment.remote_ulid = remote_ulid
-        experiment.remote_url = remote_url
-        experiment.published = is_published
+        apply_remote_identity(
+            self._session, experiment, SyncMetadata,
+            remote_ulid=remote_ulid, remote_url=remote_url, is_published=is_published,
+        )
 
         # Iterate through the abstract tests ULIDs and update each corresponding AbstractTest object
         for test_name, test_ulid in abstract_tests_ulids.items():

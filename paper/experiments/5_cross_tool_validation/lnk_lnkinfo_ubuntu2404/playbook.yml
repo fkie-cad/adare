@@ -186,6 +186,17 @@ actions:
       shell: true
 
   - command:
+      name: "Install liblnk-utils"
+      description: >-
+        The base image carries no LNK parser, so install the one the paper pins.
+        Noble ships liblnk-utils 20181227, which is exactly the Appendix A version —
+        see the version caveat in provisioning/README.md.
+      command: "DEBIAN_FRONTEND=noninteractive apt-get install -y liblnk-utils"
+      shell: true
+      admin: true
+      timeout: 600
+
+  - command:
       name: "Record lnkinfo version"
       description: "Capture the version so the run documents which parser produced Table 1"
       command: "lnkinfo -V 2>&1 | head -n 1 | tee {{ out_dir }}/tool_version.txt"

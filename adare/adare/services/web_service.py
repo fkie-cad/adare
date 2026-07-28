@@ -356,15 +356,26 @@ class WebService:
         Returns:
             Result[PublishResult] with upload status.
         """
+        from adare.database.api.serialize import RunSerializationError
         from adare.webappaccess.upload import publish_experiment_run
 
         try:
-            publish_experiment_run(request.ulid)
+            publish_experiment_run(request.ulid, request.project_path)
             return Result.ok(PublishResult(
                 published=True,
                 message=f"Run '{request.ulid}' uploaded successfully"
             ))
 
+        except RunSerializationError as e:
+            # The run itself is the problem (unpublished experiment/environment,
+            # unmappable status, ...). Reporting a network hint here sent users
+            # chasing the wrong thing for a purely local error.
+            log.error(f"Cannot serialize run for upload: {e}")
+            return Result.fail(
+                code="RunSerializationError",
+                message=f"Cannot upload run: {e}",
+                solutions=['adare web submit experiment <name>', 'adare web sync']
+            )
         except (ConnectionError, OSError, SQLAlchemyError) as e:
             log.error(f"Failed to upload run: {e}")
             return Result.fail(
@@ -384,6 +395,7 @@ class WebService:
             Result[PublishResult] with publish status.
         """
         from adare.backend.experiment.commands import publish_run_command
+        from adare.database.api.serialize import RunSerializationError
 
         try:
             publish_run_command(request.project_path, request.ulid)
@@ -392,6 +404,14 @@ class WebService:
                 message=f"Run '{request.ulid}' published successfully"
             ))
 
+        except RunSerializationError as e:
+            # A local shape problem, not a connectivity one — say so.
+            log.error(f"Cannot serialize run for publish: {e}")
+            return Result.fail(
+                code="RunSerializationError",
+                message=f"Cannot publish run: {e}",
+                solutions=['adare web submit experiment <name>', 'adare web sync']
+            )
         except (ConnectionError, OSError, SQLAlchemyError) as e:
             log.error(f"Failed to publish run: {e}")
             return Result.fail(

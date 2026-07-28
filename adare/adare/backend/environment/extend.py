@@ -239,6 +239,7 @@ def _interactive_extend(request, source_view: dict, installations: list[dict],
     store, recorded = run_interactive_extend(
         base_disk, dest, source_view['os'], request.ram, request.cpus,
         console=request.console, compress=request.compress,
+        allow_emulation=getattr(request, 'allow_emulation', False),
     )
 
     # User discarded the session: nothing was flattened or written. Signal "no

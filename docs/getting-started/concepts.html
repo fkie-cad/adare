@@ -215,6 +215,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../guide/icon-library.html">Windows Icon Library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/vm-image-creation.html">VM Image Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/dev-mode.html">Dev Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../guide/mcp-authoring.html">Authoring Experiments with the MCP Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/sharing.html">Sharing</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -332,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../architecture/file-sharing.html">File Sharing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/guest-agent.html">Guest Agent</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/cv-server.html">CV Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/database-migrations.html">Database Migrations</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
@@ -406,12 +408,20 @@
 <p>An <strong>environment</strong> is a configured virtual machine paired with an operating system definition. It is expressed as a YAML file that points to a disk image and describes the OS inside it.</p>
 <p>An environment definition specifies:</p>
 <ul class="simple">
-<li><p>The path to the VM image file (<code class="docutils literal notranslate"><span class="pre">.ova</span></code>, <code class="docutils literal notranslate"><span class="pre">.ovf</span></code>, or other supported formats)</p></li>
+<li><p>Its VM source: either a disk image (<code class="docutils literal notranslate"><span class="pre">.qcow2</span></code>, <code class="docutils literal notranslate"><span class="pre">.ova</span></code>, or another supported format) or a build recipe</p></li>
 <li><p>The operating system platform, distribution, and version</p></li>
 <li><p>Any post-setup installations or configuration steps</p></li>
 <li><p>Tags for organization and filtering</p></li>
 </ul>
 <p>Environments are the “where” of an experiment – they define the system under test. The same experiment can target multiple environments to compare forensic behavior across OS versions or configurations.</p>
+<p>An environment can be anchored in one of two ways:</p>
+<ul class="simple">
+<li><p><strong>Baked disk</strong> – the YAML points at a pre-built disk image and integrity is anchored on that disk’s hash. This is the default for Linux.</p></li>
+<li><p><strong>Recipe</strong> – the YAML declares the <em>build inputs</em> (OS profile, installer ISO + its expected SHA256, build params, and optional build-time provisioning steps) and the disk is built on load. Integrity is anchored on the inputs, which makes the environment rebuildable – the default for Windows, where evaluation editions and activation expire. See <a class="reference internal" href="../guide/vm-image-creation.html#recipe-environments"><span class="std std-ref">Recipe Environments</span></a>.</p></li>
+</ul>
+<p>Two consequences of the recipe model are worth knowing early.</p>
+<p><strong>Software under test is installed at build time, not per run.</strong> A recipe’s <code class="docutils literal notranslate"><span class="pre">provision</span></code> block runs once, while the disk is being built. That matters for forensic work specifically: installing an application writes Prefetch entries, registry keys and MFT records – exactly the artifacts an experiment measures – so an install repeated inside every run would contaminate its own results. The older <code class="docutils literal notranslate"><span class="pre">postsetupinstallations</span></code> field still runs per run and remains the right place for setup that must <em>not</em> persist. See <a class="reference internal" href="../guide/vm-image-creation.html#build-time-provisioning"><span class="std std-ref">Build-time provisioning</span></a>.</p>
+<p><strong>A recipe ships as text, so the ISO has to come from somewhere.</strong> For Linux the installer ISO is freely redistributable and the recipe carries its URL. For Windows it is licensed and cannot be rehosted, so a recipe instead names the file and its SHA256 and the <em>consumer</em> supplies it. A ~110-line YAML then replaces tens of gigabytes of disk image that could not have been shared at all. See <a class="reference internal" href="../guide/vm-image-creation.html#byo-isos"><span class="std std-ref">Consumer-supplied (BYO) ISOs – Windows only</span></a>.</p>
 <p>See <a class="reference internal" href="../guide/environments.html"><span class="doc">Environments</span></a> for VM configuration and setup.</p>
 </section>
 <section id="experiments">

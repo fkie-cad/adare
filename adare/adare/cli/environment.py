@@ -14,13 +14,19 @@ def exec_environment_load(arguments):
     """
     Load an environment from YAML file using the AdareAPI.
     """
+    from pathlib import Path
+
     api = AdareAPI()
     no_copy = getattr(arguments, 'no_copy', False)
+    iso_arg = getattr(arguments, 'iso', None)
 
     result = api.environment.load(EnvironmentLoadRequest(
         environment=arguments.environment,
         force=arguments.force,
-        no_copy=no_copy
+        no_copy=no_copy,
+        iso=Path(iso_arg) if iso_arg else None,
+        reprovision=getattr(arguments, 'reprovision', False),
+        allow_emulation=getattr(arguments, 'allow_emulation', False),
     ))
 
     if result.success:
@@ -94,6 +100,31 @@ def exec_environment_publish_prepare(arguments):
     if result.success:
         print_success_message(
             title=f'Environment "{result.data.name}" prepared for sharing!',
+            location=str(result.data.file_path) if result.data.file_path else None,
+            next_steps=result.data.next_steps,
+            tip=result.data.tip,
+        )
+    else:
+        handle_api_error(result)
+
+
+def exec_environment_recipe_byo(arguments):
+    """
+    Convert a recipe environment's local ISO path into a consumer-supplied ISO.
+    """
+    project_directory = get_project_path(arguments)
+
+    api = AdareAPI()
+    result = api.environment.recipe_byo(
+        project_path=project_directory,
+        name=arguments.name,
+        iso_name=getattr(arguments, 'iso_name', None),
+        iso_notes=getattr(arguments, 'iso_notes', None),
+    )
+
+    if result.success:
+        print_success_message(
+            title=f'Environment "{result.data.name}" now uses a consumer-supplied ISO',
             location=str(result.data.file_path) if result.data.file_path else None,
             next_steps=result.data.next_steps,
             tip=result.data.tip,

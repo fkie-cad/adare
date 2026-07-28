@@ -591,8 +591,31 @@ def _build_tools_iso_pycdlib(source_dir: Path, output_path: Path) -> None:
     iso.close()
 
 
+def iso_sha256(iso_path: Path) -> str:
+    """Return the SHA256 hex digest of an ISO file.
+
+    Exists so a mismatch error can name the *actual* digest alongside the
+    declared one without hashing a multi-gigabyte file a second time in the
+    caller. :func:`verify_iso_hash` only answers yes/no.
+    """
+    digest = hashlib.sha256()
+    with open(iso_path, 'rb') as f:
+        while True:
+            chunk = f.read(8192)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def verify_iso_hash(iso_path: Path, expected_sha256: str) -> bool:
     """Verify the SHA256 hash of an ISO file.
+
+    Note the comparison is case-SENSITIVE, which is why every caller normalizes
+    the declared digest through
+    :func:`adare.services.recipe_contract.normalized_iso_sha256` first: an
+    uppercase digest that slipped past a case-insensitive gate would otherwise
+    describe an environment that can never build.
 
     Args:
         iso_path: Path to the ISO file

@@ -15,9 +15,9 @@ into Table 1.
 
 | Directory | Environment | Tool | Paper's Table 1 row |
 |---|---|---|---|
-| `lnk_lecmd_windows11/` | `win11` | LECmd 1.5.1 | L1 ✓ L2 ✓ L3 ✓ — Verbosity High |
-| `lnk_exiftool_ubuntu2404/` | `ubuntu24043` | ExifTool 12.76 | L1 ✓ L2 ✓ L3 ✓ — Verbosity Low |
-| `lnk_lnkinfo_ubuntu2404/` | `ubuntu24043` | lnkinfo 20181227 | L1 ✓ L2 **✗** L3 **✗** — Verbosity Medium |
+| `lnk_lecmd_windows11/` | `win11arm64-fresh` | LECmd 2026.5.0 (paper: 1.5.1, see below) | L1 ✓ L2 ✓ L3 ✓ — Verbosity High |
+| `lnk_exiftool_ubuntu2404/` | `ubuntu-2404` | ExifTool 12.76 | L1 ✓ L2 ✓ L3 ✓ — Verbosity Low |
+| `lnk_lnkinfo_ubuntu2404/` | `ubuntu-2404` | lnkinfo 20181227 | L1 ✓ L2 **✗** L3 **✗** — Verbosity Medium |
 
 All three are CLI tool-validation playbooks built from `command` actions, the same shape as
 `3_tool_validation/pecmd`. Assertions are interleaved after each invocation rather than
@@ -46,7 +46,7 @@ rather than reported observations. Every cell has a test behind it:
 | …**specifically on a strict size constraint** | `l2_rejects_on_size_constraint`, `l3_rejects_on_size_constraint` (regex over the parser's stderr) | `lnk_lnkinfo_ubuntu2404` |
 | …**recovering no link fields** | `l2_no_link_fields_recovered`, `l2_no_local_path_recovered`, and the L3 pair — all `expect_to_fail: true` | `lnk_lnkinfo_ubuntu2404` |
 | ExifTool tolerates the appended data | `l2_exit_code_zero`, `l2_local_path`, `l2_working_directory`, and the L3 set | `lnk_exiftool_ubuntu2404` |
-| …**and says so rather than failing** | `l2_reports_appended_data`, `l3_reports_appended_data`; `l1_no_overlay_warning` is the negative control | `lnk_exiftool_ubuntu2404` |
+| …**silently, without saying so** | `l2_appended_data_not_reported`, `l3_appended_data_not_reported` (both `expect_to_fail: true`); `l1_no_overlay_warning` is the matching control | `lnk_exiftool_ubuntu2404` |
 | LECmd tolerates the appended data | `l2_local_path`, `l2_working_directory`, and the L3 set | `lnk_lecmd_windows11` |
 | Verbosity ordering | measured by `provisioning/normalize_lnk_outputs.py`, not by a test | — |
 | Appendix A tool versions | `*_version_matches_paper` in all three | all three |
@@ -68,10 +68,98 @@ same name. `provisioning/README.md` has the details.
 Each playbook also carries a companion `*_version_recorded` test that only checks the
 version *shape*, so a run always confirms the capture itself worked.
 
-## What is verified and what is not
+## Verification status
 
-Verified on the authoring host against real tool builds — the full measurement table is in
-`provisioning/README.md`:
+**First execution against live VMs: 2026-07-27** (aarch64, QEMU/HVF on macOS). Before this
+date none of the three playbooks had ever run.
+
+| Experiment | Environment | Result | Run ID |
+|---|---|---|---|
+| `lnk_lnkinfo_ubuntu2404` | `ubuntu-2404` | **green — 17/17 tests, 23/23 actions** | `01KYJ83KJSVPF1F9HYA0AGG554` |
+| `lnk_exiftool_ubuntu2404` | `ubuntu-2404` | **green — 21/21 tests, 30/30 actions** | `01KYJ8JTZTGE44RS2V9D2FT0Z7` |
+| `lnk_lecmd_windows11` | `win11arm64-fresh` | **green — 16/16 tests, 26/26 actions** (2026-07-28) | `01KYMG9Y8EW6GME08PRFNBA81X` |
+
+Confirmed by those two runs:
+
+- **Table 1's parse-success columns reproduce exactly**: `lnkinfo` ✓ ✗ ✗ and ExifTool
+  ✓ ✓ ✓, with the L2/L3 rejections carrying liblnk's own
+  `data block size exceeds file size` wording.
+- **The Appendix-A versions really are what noble ships**: `lnkinfo_version_matches_paper`
+  (20181227) and `exiftool_version_matches_paper` (12.76) both pass unmodified, so the
+  version pins are satisfied rather than merely tolerated.
+- `provisioning/normalize_lnk_outputs.py` folds both runs into Table 1 as designed.
+
+Two corrections the runs forced:
+
+- **ExifTool's tolerance is SILENT.** `provisioning/README.md` predicted
+  `Warning: Truncated extra data` for L2/L3. On ExifTool 12.76 there is no `Warning` key
+  and stderr is empty for *all three* samples, so ExifTool's output for L2/L3 is
+  indistinguishable from clean L1. `l2_reports_appended_data` / `l3_reports_appended_data`
+  were therefore re-baselined into `l*_appended_data_not_reported` with
+  `expect_to_fail: true`. This strengthens rather than weakens the case study: ExifTool
+  cannot detect the very anomaly lnkinfo rejects on.
+- **The playbooks did not install their own tools.** Neither `exiftool` nor `lnkinfo` is in
+  the base image; both playbooks now `apt-get install` the pinned packages
+  (`libimage-exiftool-perl`, `liblnk-utils`) before the version capture.
+
+### What `lnk_lecmd_windows11`'s first green run took (2026-07-28)
+
+Four things, all measured in-guest on `win11arm64-fresh` (Windows 11 Pro 26200 ARM64,
+.NET Framework 4.8.09221 / Release 533509):
+
+1. **`LECmd.exe` must be invoked by absolute path.** A bare `LECmd.exe` does not resolve,
+   because `CommandAction.tool` is declarative provenance and does not put the shared tools
+   directory on the Windows guest's PATH.
+2. **`LECmd.exe` cannot be *executed* from the shared-tools mount at all** — the cause of
+   the empty `tool_version.txt` that failed `lecmd_version_recorded` on the first run. The
+   mount is a symlink to a QEMU/Samba share (`C:\adare\project_shared` →
+   `\\10.0.2.4\qemu\project_shared`) and `icacls` reports read-only ACLs on the file
+   (`S-1-22-1-501:(R,W)`, `S-1-22-2-20:(R)`, `Everyone:(R)` — no `(X)`), so `CreateProcess`
+   returns ERROR_ACCESS_DENIED:
+
+   ```
+   EX_TYPE=System.Management.Automation.ApplicationFailedException
+   EX_MSG=Program 'LECmd.exe' failed to run: Access is denied
+   EX_HRESULT=0x80131501
+   FQID=NativeCommandFailed
+   ```
+
+   No process is created, so there is no stdout, no stderr and no `$LASTEXITCODE` — which is
+   why the failure looked like "the tool runs and prints nothing". Reading from the share is
+   fine; the identical bytes copied to a local directory run and exit 0 with a 2406-byte
+   banner. **Both Windows playbooks now stage their parser to a local disk first and delete
+   it again at the end of the run.** The same applies to `3_tool_validation/pecmd` (PECmd
+   fails identically from the share) and to any future Windows tool-validation playbook.
+3. **`--jsonf` does not exist in LECmd** (it does in PECmd). LECmd answers
+   `'--jsonf' was not matched. Did you mean one of the following? --json` and falls back to
+   its usage screen. `--json <dir>` auto-names the file `<yyyyMMddHHmmss>_LECmd_Output.json`,
+   so each invocation writes into a scratch directory and the single produced file is renamed
+   to the `lecmd_L<n>.json` the normalizer expects.
+4. **Both host-unverifiable assumptions hold.** `--json` writes one JSON object on one line
+   (so `jsonl.line_matches` is right), and LECmd exits 0 on all three samples — Table 1's
+   LECmd row ✓ ✓ ✓ reproduces, with `LocalPath`, `WorkingDirectory` and `VolumeLabel` all
+   recovered for L2/L3 as claimed. Caveat recorded in the playbook: LECmd also exits 0 on a
+   *usage* error, so `l*_exit_code_zero` is necessary but not sufficient.
+
+### `lecmd_version_matches_paper` was re-baselined 1.5.1 → 2026.5.0
+
+**LECmd 1.5.1 is no longer distributed.** ericzimmermanstools.com serves only current builds,
+there is no version archive, and the tools have since moved from semantic to date-based
+versioning — the obtainable binary self-reports `LECmd version 2026.5.0` (FileVersion
+`2026.5.0.0`, informational version `2026.5.0+def1fc2686af4684d06a889b1315f225187ac8f7`).
+Under that scheme a `1.x` release cannot be produced any more, so a pin on 1.5.1 was not a
+drift detector but a permanently red test that no obtainable binary could ever satisfy.
+
+The pin was therefore re-baselined to the version this case study was actually measured
+against, with the reasoning written into the playbook next to the test. Its purpose is
+unchanged — it still goes red on any other build, so a future LECmd that changes its L2/L3
+tolerance cannot silently change what Table 1 means. What does **not** reproduce is the
+paper's exact binary: that is now recorded here as an unreproducible detail rather than
+hidden behind a green test. Table 1's *behaviour* for LECmd does reproduce on 2026.5.0.
+
+### Verified earlier on the authoring host
+
+The full measurement table is in `provisioning/README.md`:
 
 - The L1/L2/L3 behaviour split for `lnkinfo` 20181227 and ExifTool 12.76, including the
   exact stderr wording the regex assertions match.
@@ -80,13 +168,14 @@ Verified on the authoring host against real tool builds — the full measurement
   confirm the assertion can actually fail.
 - The normalizer reproducing Table 1's parse-success columns.
 
-Not verified, and flagged in the playbook itself:
+Since resolved by the 2026-07-28 in-guest run:
 
-- **LECmd's output format and exit-code convention.** It is a Windows/.NET tool and the
-  authoring host is macOS. The playbook assumes `--json` writes newline-delimited JSON
-  (as its sibling PECmd does, per `3_tool_validation/pecmd/playbook.yml`) and that LECmd
-  exits 0 on success. If either differs, `l*_exit_code_zero` and the `jsonl.line_matches`
-  tests are the ones to re-baseline; the pulled artifacts make that a one-minute check.
+- ~~**LECmd's output format and exit-code convention.**~~ Both measured and confirmed — see
+  point 4 above. `--json` is newline-delimited JSON and LECmd exits 0 on success, so neither
+  `l*_exit_code_zero` nor the `jsonl.line_matches` tests needed re-baselining.
+
+Still not verified:
+
 - **Table 1's Verbosity column against the benign stand-ins.** It does not reproduce, for
   a documented structural reason — see `provisioning/README.md`.
 
@@ -97,9 +186,9 @@ Not verified, and flagged in the playbook itself:
 python3 provisioning/make_lnk_samples.py --output-dir <project>/shared/data
 
 # 2. one experiment per OS
-adare experiment run lnk_exiftool_ubuntu2404 --environment ubuntu24043
-adare experiment run lnk_lnkinfo_ubuntu2404  --environment ubuntu24043
-adare experiment run lnk_lecmd_windows11     --environment win11
+adare experiment run lnk_exiftool_ubuntu2404 --environment ubuntu-2404 --production
+adare experiment run lnk_lnkinfo_ubuntu2404  --environment ubuntu-2404 --production
+adare experiment run lnk_lecmd_windows11     --environment win11arm64-fresh --production
 
 # 3. fold the three outputs into Table 1
 python3 provisioning/normalize_lnk_outputs.py --artifacts <runs_root> \

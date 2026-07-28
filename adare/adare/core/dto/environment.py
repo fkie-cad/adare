@@ -14,6 +14,13 @@ class EnvironmentLoadRequest:
     environment: str  # Path or name
     force: bool = False
     no_copy: bool = False
+    # Recipe-only. `iso` is a file or a directory to search, and is how a consumer
+    # supplies the ISO for a BYO recipe. `reprovision` reuses the cached base disk
+    # but re-runs build-time provisioning — the retry path after a failed step,
+    # minutes instead of a full OS reinstall.
+    iso: Path | None = None
+    reprovision: bool = False
+    allow_emulation: bool = False
 
 
 @dataclass
@@ -38,6 +45,12 @@ class EnvironmentCreateRequest:
     iso_path: Path | None = None
     iso_url: str | None = None
     iso_sha256: str | None = None
+    # Consumer-supplied ("BYO") ISO: a bare filename the consumer must have
+    # locally, plus a plain-text download pointer. Windows profiles only — a
+    # Windows installer ISO cannot lawfully be rehosted. Mutually exclusive with
+    # `iso_path` / `iso_url`; enforced by `services.recipe_contract`.
+    iso_name: str | None = None
+    iso_notes: str | None = None
     disk_size: str | None = None
     ram_mb: int | None = None
     cpus: int | None = None
@@ -48,10 +61,10 @@ class EnvironmentCreateRequest:
     def is_recipe(self) -> bool:
         """True when enough recipe inputs were given to build a recipe env.
 
-        A recipe needs an OS profile plus an ISO source — either a local path
-        (CLI) or a published URL (web).
+        A recipe needs an OS profile plus an ISO source — a local path (CLI), a
+        published URL (web), or a consumer-supplied filename (BYO, Windows only).
         """
-        return bool(self.os_profile and (self.iso_path or self.iso_url))
+        return bool(self.os_profile and (self.iso_path or self.iso_url or self.iso_name))
 
 
 @dataclass
@@ -84,6 +97,10 @@ class EnvironmentExtendRequest:
     cpus: int | None = None
     disk_name: str | None = None
     compress: bool = True
+    # Interactive mode only: permit QEMU TCG when the base disk's guest
+    # architecture does not match the host. Without this the cross-arch
+    # interactive extend died inside `resolve_accel` with no way to opt in.
+    allow_emulation: bool = False
     description: str | None = None
     tags: list[str] = field(default_factory=list)
     force: bool = False

@@ -19,21 +19,17 @@ past the flatten; the runtime regenerates it on the immutable base.
 
 import logging
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 
-from adare.config import HYPERVISOR_CONFIGS
 from adare.console import print_step
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.accel import resolve_accel
 from adare.hypervisor.qemu.firmware import create_nvram_for_vm
 from adare.hypervisor.qemu.utilities.disk_utils import get_boot_mode_for_os
-from adare.hypervisor.qemu.vm_creator.disk_helpers import (
-    DiskCompressionError, compress_qcow2_zstd,
-)
 from adare.hypervisor.qemu.vm_creator.interactive import run_post_install_session
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
+from adare.hypervisor.qemu.vm_creator.overlay import create_work_overlay, flatten_overlay
 
 log = logging.getLogger(__name__)
 
@@ -169,24 +165,14 @@ def run_interactive_extend(
     # caller opted into (slow) TCG emulation.
     resolve_accel(os_def.architecture, allow_emulation)
 
-    qemu_img = HYPERVISOR_CONFIGS['qemu']['qemu_img_exe']
     work_dir = Path(tempfile.mkdtemp(prefix='adare-extend-'))
     work_overlay = work_dir / f'{_WORK_NAME}.qcow2'
 
     try:
-        # 1. Create the work overlay backed by the immutable base (absolute
-        #    backing path -- mirrors hypervisor/qemu/mixins/disk.py for the
-        #    cross-directory / external case).
-        create_cmd = [
-            qemu_img, 'create', '-f', 'qcow2', '-F', 'qcow2',
-            '-b', str(base_disk), str(work_overlay),
-        ]
-        log.info('Creating interactive-extend work overlay: %s', ' '.join(create_cmd))
-        result = subprocess.run(create_cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise HypervisorException(
-                f'Failed to create work overlay: {result.stderr.strip()}'
-            )
+        # 1. Create the work overlay backed by the immutable base. Shared with
+        #    recipe build-time provisioning (see vm_creator/overlay.py) so the
+        #    two cannot drift on backing-file flags.
+        create_work_overlay(base_disk, work_overlay)
 
         # 2. Fresh work NVRAM only when UEFI is needed. Mirrors the runtime,
         #    which regenerates NVRAM per run rather than persisting it.
@@ -215,27 +201,7 @@ def run_interactive_extend(
             print_step('Session discarded -- no environment will be created.')
             return False, []
 
-        if compress:
-            try:
-                compress_qcow2_zstd(work_overlay, dest_disk)
-                print_step(f'Flattened + compressed new standalone disk: [dim]{dest_disk}[/dim]')
-                return True, recorded
-            except DiskCompressionError as e:
-                log.warning('Disk compression failed, falling back to plain flatten: %s', e)
-                print_step(f'[yellow]Disk compression failed, falling back to plain flatten:[/yellow] {e}')
-                dest_disk.unlink(missing_ok=True)
-
-        convert_cmd = [
-            qemu_img, 'convert', '-O', 'qcow2', str(work_overlay), str(dest_disk),
-        ]
-        log.info('Flattening interactive-extend overlay: %s', ' '.join(convert_cmd))
-        result = subprocess.run(convert_cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise HypervisorException(
-                f'Failed to flatten overlay into standalone disk: '
-                f'{result.stderr.strip()}'
-            )
-        print_step(f'Flattened new standalone disk: [dim]{dest_disk}[/dim]')
+        flatten_overlay(work_overlay, dest_disk, compress=compress)
         return True, recorded
     finally:
         # 5. Delete the work overlay + NVRAM + temp dir. No guest state leaks.

@@ -6,6 +6,7 @@ from pathlib import Path
 from adare.api import AdareAPI
 from adare.cli.utils import handle_api_error
 from adare.console import print_error_message, print_success_message
+from adare.exceptions import DataStructuringError
 
 log = logging.getLogger(__name__)
 
@@ -376,15 +377,58 @@ def _physical_size(path: Path) -> int:
     return blocks * 512
 
 
+def _live_recipe_base_hashes() -> set[str]:
+    """Short base hashes still wanted by some registered recipe environment.
+
+    A cached recipe base disk is never referenced by a ``Vm`` row (only the
+    provisioned output is registered), so staleness cannot be read from the
+    database. Instead every recipe environment on this host is re-hashed and its
+    base hash collected; anything else in the cache is reclaimable.
+
+    Deliberately conservative on error: an environment whose recipe can no longer
+    be hashed (deleted file, unknown profile, edited provision block) contributes
+    nothing, so at worst its base is reclaimed and the next load rebuilds it.
+    """
+    from adare.backend.environment.exceptions import EnvironmentLoadFailed
+    from adare.backend.vm.recipe import compute_base_hash
+    from adare.database.api.environment import EnvironmentDbApi
+    from adare.types.environment import parse_environment_file
+
+    with EnvironmentDbApi() as db:
+        env_files = [env.file for env in db.get_environments() if env.file]
+
+    hashes: set[str] = set()
+    for env_file_str in env_files:
+        env_file = Path(env_file_str)
+        if not env_file.is_file():
+            continue
+        try:
+            metadata = parse_environment_file(env_file)
+        except (DataStructuringError, OSError, ValueError) as e:
+            log.debug('vm prune: skipping unparsable environment %s: %s', env_file, e)
+            continue
+        if metadata is None or metadata.recipe is None:
+            continue
+        try:
+            hashes.add(compute_base_hash(metadata)[:12])
+        except (EnvironmentLoadFailed, KeyError, OSError) as e:
+            log.debug('vm prune: could not hash recipe %s: %s', env_file, e)
+    return hashes
+
+
 def exec_vm_prune(arguments):
     """Reclaim orphaned QEMU base disks / NVRAM (and optionally dead sockets).
 
     Mirrors the validated manual sweep: an orphan is a managed '-base.qcow2'
     (plus its '-nvram.fd' sibling) whose instance/VM is no longer registered
-    in the database. Deletes nothing unless --force is given.
+    in the database. Also sweeps cached recipe BASE disks
+    (`~/.adare/qemu/cache/recipe-bases`) that no recipe environment still wants —
+    those are pure cache, so reclaiming one only costs a rebuild.
+    Deletes nothing unless --force is given.
     """
     import click
 
+    from adare.config.configdirectory import RECIPE_BASE_CACHE_DIR
     from adare.database.api.vm import VmApi
     from adare.hypervisor.qemu.mixins.configuration import (
         find_stale_sockets,
@@ -434,6 +478,21 @@ def exec_vm_prune(arguments):
             continue
         _add(nvram_file)
 
+    # 2b. Cached recipe BASE disks (Stage 1 of a recipe build). These are pure
+    #     cache: they are never referenced by a VM row — only the *provisioned*
+    #     disk is registered — so "orphaned" cannot be decided from the database.
+    #     Instead, a base is reclaimable once no recipe environment currently
+    #     resolves to its base hash. Losing one only costs a rebuild.
+    stale_bases: list[Path] = []
+    if RECIPE_BASE_CACHE_DIR.is_dir():
+        live_base_hashes = _live_recipe_base_hashes()
+        for base_file in sorted(RECIPE_BASE_CACHE_DIR.glob('*-recipebase-*.qcow2')):
+            short_hash = base_file.stem.rsplit('-recipebase-', 1)[-1]
+            if short_hash in live_base_hashes:
+                continue
+            _add(base_file)
+            stale_bases.append(base_file)
+
     # 3. Optionally scan for crash-orphaned dead sockets (no running QEMU owns
     #    them). find_stale_sockets() cross-checks live libvirt domains, so a
     #    live-but-occupied QGA socket is never flagged.
@@ -448,7 +507,8 @@ def exec_vm_prune(arguments):
 
     total_bytes = 0
     if orphan_files:
-        click.echo("\nOrphaned base disks / NVRAM:")
+        click.echo("\nOrphaned base disks / NVRAM"
+                   + (" + stale recipe base cache" if stale_bases else "") + ":")
         click.echo(f"  {'SIZE':>12}  FILE")
         for path in orphan_files:
             size = _physical_size(path)

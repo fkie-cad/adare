@@ -25,6 +25,8 @@ is the live source of truth. Common targets:
 | `--interactive` | Boot after install for manual software installation. |
 | `--arch [x86_64\|aarch64]` | Override the profile's architecture. |
 | `--recipe / --no-recipe` | Declarative recipe (build on load) vs baked disk. **Default: recipe for Windows, baked for Linux.** |
+| `--byo-iso` | [recipe, **Windows only**] Emit `iso_name` instead of the local `iso` path, so the *consumer* supplies the ISO. Makes a Windows recipe publishable without rehosting licensed media. |
+| `--iso-notes TEXT` | [`--byo-iso`] Plain-text download pointer (defaults to the OS profile's own `iso_notes`). |
 | `--record` | GUI-auto: record a fresh install playbook even if one is cached. |
 | `--relearn` | GUI-auto: discard the cached playbook, re-record from scratch. |
 | `--display` | GUI-auto: show the VM window while the agent drives the installer. |
@@ -49,6 +51,83 @@ is the live source of truth. Common targets:
 - **Recipe** — a declarative descriptor built on `env load`. Smaller to keep in
   version control, rebuilt from source. Windows default (Windows disks are large and
   license-sensitive).
+
+### Recipe: build-time provisioning (`recipe.provision`)
+
+Installs software **once, while the disk is built**, over the QEMU guest agent. Not a
+convenience — for forensic work it is the only correct place: installing an app writes
+Prefetch/registry/MFT entries, exactly the artifacts under measurement, so a per-run
+install contaminates its own results.
+
+`recipe.provision` (build time, baked in) vs `postsetupinstallations` (every
+experiment run, unchanged behaviour). Both are folded into the recipe hash.
+
+```yaml
+recipe:
+  params: {setup_level: 2, disk_size: 160G}   # setup_level >= 1 REQUIRED (ships the agent)
+  provision:
+    - name: boot-hardening
+      shell: cmd                              # powershell | cmd | bash | auto
+      command: bcdedit /set {default} recoveryenabled No
+    - name: autopsy
+      description: Autopsy {{ item }}
+      for_each: ["4.4.0", "4.4.1"]
+      steps:
+        - name: autopsy-{{ item }}-install
+          command: msiexec /i "C:\Windows\Temp\a-{{ item }}.msi" /qn /norestart
+          allow_exit_codes: [0, 3010]         # 3010 = success, reboot required
+          verify: 'if (-not (Test-Path "C:\Program Files\Autopsy-{{ item }}")) { exit 1 }'
+          log_files: ['C:\Windows\Temp\a-{{ item }}-msi.log']
+          timeout_minutes: 45
+```
+
+Gotchas that cost real time:
+
+- **`shell: cmd` for `bcdedit /set {default} ...`** — PowerShell parses `{default}` as
+  a script block.
+- **The guest agent runs as `NT AUTHORITY\SYSTEM`**, so `$env:TEMP` is
+  `C:\Windows\TEMP` and `$env:USERPROFILE` is
+  `C:\Windows\system32\config\systemprofile` — *not* the `adare` user's dirs. Use
+  absolute paths in `log_files` or the host can never pull them.
+- **Success is the exit code, never stderr** — a successful PowerShell command writes
+  CLIXML progress records to stderr.
+- **`{{ item }}` is strict** — `{{ version }}` is a hard error, not an empty string.
+  Include `{{ item }}` in each step's `name` or the expanded names collide.
+- **Aborts on first failure**, and nothing is registered. The base OS install is
+  cached, so retry with `--reprovision` (minutes) rather than `--force` (hours).
+  `ADARE_KEEP_FAILED_PROVISION=1` keeps the overlay for post-mortem.
+- **Two recipes sharing a base** must have byte-identical `params` — any difference
+  (even `disk_size`) forks the base hash and costs a second full OS install.
+
+Per-command provenance (exit code, wall time, stdout, stderr) lands in
+`~/.adare/qemu/build-logs/provision-<hash>.log`.
+
+### Recipe: consumer-supplied (BYO) ISOs — Windows only
+
+A Windows ISO cannot lawfully be rehosted, so a Windows recipe may name the file
+instead of a URL. Linux ISOs are redistributable and must be published as an
+`http(s)` URL.
+
+```yaml
+recipe:
+  iso_name: Win11_25H2_English_Arm64_v2.iso   # bare filename; no paths, no URL
+  iso_sha256: 638aa2c8...adf0                 # REQUIRED, lowercase — the integrity boundary
+  iso_notes: |
+    Download from https://www.microsoft.com/software-download/windows11 —
+    "Windows 11 Arm64", English (International). Requires a valid licence.
+```
+
+Exactly one of `iso` / `iso_name`. Consumer search order, first hit wins:
+`--iso PATH` (file or dir) → `$ADARE_ISO_DIR` → `~/.adare/isos/` → the env file's dir
+→ `~/.adare/qemu/cache/`. ADARE never guesses from a lone unrelated `*.iso`.
+
+```sh
+adare env recipe-byo <name>              # convert an existing local-path recipe
+adare env load <env>.yml --iso ~/ISOs/   # supply the ISO as a consumer
+```
+
+Converting is **hash-neutral** — how the ISO was obtained is not a build input, so an
+already-built disk stays a cache hit.
 
 ### The ADARE agent is not installed at create time
 

@@ -77,5 +77,10 @@ class TestDevResetResult:
 
 class TestDevCleanupResult:
     def test_construction(self):
-        r = DevCleanupResult(sessions_removed=3, removed_session_ids=["a", "b", "c"])
-        assert len(r.removed_session_ids) == 3
+        # Cleanup reconciles rather than removes: a 'running' session whose VM is
+        # gone becomes 'stopped' (still resumable) instead of being deleted, so
+        # sessions_removed/removed_session_ids became sessions_reconciled/
+        # reconciled_session_ids.
+        r = DevCleanupResult(sessions_reconciled=3, reconciled_session_ids=["a", "b", "c"])
+        assert len(r.reconciled_session_ids) == 3
+        assert r.sessions_left_running == 0

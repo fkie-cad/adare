@@ -1,0 +1,11 @@
+vm: /Users/miq/.adare/state/vms/ubuntu2204arm64-20260727.qcow2
+vm_type: path
+vm_sha256: 53c39b6779a13117c2ea687a814cfb679a219b1e98285c8e07fb28f1c7f66205
+os:
+  os: Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64)
+  platform: linux
+  distribution: Jammy Jellyfish
+  version: '22.04'
+  language: English
+  architecture: aarch64
+hypervisor: qemu

@@ -398,6 +398,23 @@ def publish_run_command(project_directory: Path, run_ulid: str):
                 f'Experiment associated with run {run_ulid} not found.',
                 possible_solutions=['Check database integrity']
             )
+        # Read the identity fields while the session is open — the objects are
+        # detached afterwards. The *server's* ULID is what the server can be asked
+        # about; the local one is meaningless to it.
+        experiment_name = experiment.name
+        experiment_local_ulid = experiment.id
+        experiment_remote_ulid = experiment.remote_ulid
+
+    if not experiment_remote_ulid:
+        raise ExperimentNotFoundError(
+            log,
+            f'Experiment {experiment_name} (local ULID: {experiment_local_ulid}) has no '
+            f'server ULID recorded, so it has not been published from this machine.',
+            possible_solutions=[
+                'Publish the experiment first: adare web submit experiment <name>',
+                'Already published elsewhere? Fetch its server identity: adare web sync',
+            ]
+        )
 
     # Create API client
     client = ApiClient()
@@ -410,18 +427,24 @@ def publish_run_command(project_directory: Path, run_ulid: str):
         TaskProgressColumn(),
         console=console,
     ) as progress:
-        # Task 1: Check experiment exists on server
+        # Task 1: Check experiment exists on server — by its REMOTE ULID. Asking
+        # about the local one always answered "no", which is what made publish
+        # abort with "not published on the server" for published experiments.
         task1 = progress.add_task("[cyan]Checking experiment on server...", total=1)
         try:
-            exp_exists = client.check_experiment_exists(experiment.id)
+            exp_exists = client.check_experiment_exists(experiment_remote_ulid)
             if not exp_exists:
                 progress.update(task1, completed=1)
                 raise ExperimentNotFoundError(
                     log,
-                    f'Experiment {experiment.name} (ULID: {experiment.id}) is not published on the server.',
-                    possible_solutions=['Publish the experiment first with: adare web publish <experiment>']
+                    f'Experiment {experiment_name} (server ULID: {experiment_remote_ulid}) is not '
+                    f'published on the server.',
+                    possible_solutions=[
+                        'Publish the experiment first with: adare web submit experiment <name>',
+                        'Refresh the local view of the server: adare web sync',
+                    ]
                 )
-            progress.update(task1, completed=1, description=f"[green]Experiment {experiment.name} verified on server")
+            progress.update(task1, completed=1, description=f"[green]Experiment {experiment_name} verified on server")
         except ApiConnectionError:
             progress.update(task1, completed=1)
             raise
@@ -442,7 +465,7 @@ def publish_run_command(project_directory: Path, run_ulid: str):
         # Task 3: Upload run
         task3 = progress.add_task("[cyan]Uploading experiment run...", total=1)
         try:
-            result = client.publish_experiment_run(run_ulid)
+            result = client.publish_experiment_run(run_ulid, project_directory)
             progress.update(task3, completed=1, description="[green]Run published successfully")
 
             # Update local database to mark as published
@@ -450,7 +473,7 @@ def publish_run_command(project_directory: Path, run_ulid: str):
                 exp_api.mark_run_as_published(run_ulid)
 
             console.print(f"\n[green]Successfully published run {run_ulid}![/green]")
-            console.print(f"Experiment: {experiment.name}")
+            console.print(f"Experiment: {experiment_name}")
             console.print(f"Server ULID: {result.get('ulid', run_ulid)}")
 
         except RunAlreadyExistsError:

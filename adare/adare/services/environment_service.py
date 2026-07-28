@@ -50,6 +50,7 @@ from adare.services.environment_recipe import (
     build_baked_url_environment_file,
     build_recipe_environment_file,
 )
+from adare.services.recipe_contract import ISO_NAME_RE, linux_url_hint
 
 log = logging.getLogger(__name__)
 
@@ -80,7 +81,10 @@ class EnvironmentService:
             environment_ulid, created = backend_environment_load(
                 request.environment,
                 force=request.force,
-                no_copy=request.no_copy
+                no_copy=request.no_copy,
+                iso_override=request.iso,
+                reprovision=request.reprovision,
+                allow_emulation=request.allow_emulation,
             )
             reused_existing = not created
 
@@ -365,10 +369,60 @@ class EnvironmentService:
         else:
             setup_level = SetupLevel.FULL
 
-        # Determine the ISO source + its sha256. A URL is the web variant's
-        # publish-ready model: nothing local to hash, so the analyst-supplied
-        # sha256 is required and the ISO is verified after download on load.
-        if request.iso_url:
+        # Determine the ISO source + its sha256. Three shapes:
+        #  * URL      - the web variant's publish-ready model: nothing local to
+        #               hash, so the analyst-supplied sha256 is required and the
+        #               ISO is verified after download on load.
+        #  * BYO name - the consumer supplies the ISO; also nothing local to hash,
+        #               so the sha256 is required. Windows profiles only.
+        #  * local path - hashed here.
+        byo_iso = bool(request.iso_name)
+        if byo_iso:
+            if os_def.platform != 'windows':
+                return Result.fail(
+                    code='ByoIsoRequiresWindowsProfile',
+                    message=(
+                        f"Consumer-supplied ISOs ('iso_name') are allowed for Windows "
+                        f"profiles only; '{request.os_profile}' is a "
+                        f"{os_def.platform} profile. A Linux ISO is freely "
+                        f"redistributable, so it must be published as a URL."
+                    ),
+                    solutions=[
+                        'Use iso_url with the published ISO URL instead',
+                        linux_url_hint(request.os_profile).capitalize(),
+                    ],
+                )
+            if request.iso_url or request.iso_path:
+                return Result.fail(
+                    code='AmbiguousIsoSource',
+                    message="Give exactly one ISO source: iso_name, iso_url, or a local iso_path.",
+                    solutions=['Drop either iso_name or the URL/path'],
+                )
+            if not request.iso_sha256:
+                return Result.fail(
+                    code='MissingIsoSha256Error',
+                    message=(
+                        'A consumer-supplied ISO requires an explicit iso_sha256: it is '
+                        'the only handle the consumer has on the correct file.'
+                    ),
+                    solutions=[
+                        'Provide the SHA256 of the ISO',
+                        'Compute it with: shasum -a 256 <iso>',
+                    ],
+                )
+            if not ISO_NAME_RE.match(request.iso_name.strip()):
+                return Result.fail(
+                    code='InvalidIsoName',
+                    message=(
+                        f"iso_name must be a bare ISO filename (got "
+                        f"{request.iso_name!r}): no directory separators, no '..', no "
+                        f"URL, no drive letter, must end in '.iso'."
+                    ),
+                    solutions=["Use just the filename, e.g. 'Win11_25H2_English_Arm64_v2.iso'"],
+                )
+            iso_source: str | Path | None = None
+            iso_sha256 = request.iso_sha256
+        elif request.iso_url:
             if not request.iso_sha256:
                 return Result.fail(
                     code='MissingIsoSha256Error',
@@ -378,7 +432,7 @@ class EnvironmentService:
                         'Compute it with: shasum -a 256 <iso>',
                     ],
                 )
-            iso_source: str | Path = request.iso_url
+            iso_source = request.iso_url
             iso_sha256 = request.iso_sha256
         else:
             iso_source = request.iso_path
@@ -396,6 +450,9 @@ class EnvironmentService:
             arch=request.arch,
             env_name=request.name,
             project_path=request.project_path,
+            byo_iso=byo_iso,
+            iso_name=request.iso_name,
+            iso_notes=request.iso_notes,
         )
 
         next_steps = [
@@ -817,6 +874,12 @@ class EnvironmentService:
                 'default_disk_size': os_def.default_disk_size,
                 'default_ram_mb': os_def.default_ram_mb,
                 'default_cpus': os_def.default_cpus,
+                # The web dialog prefills these for a Linux profile (whose ISO is
+                # published) and shows iso_notes for a Windows one (whose ISO the
+                # consumer must supply).
+                'iso_url': os_def.iso_url,
+                'iso_sha256': os_def.iso_sha256,
+                'iso_notes': os_def.iso_notes,
             }
             for os_def in list_os_definitions()
         ]

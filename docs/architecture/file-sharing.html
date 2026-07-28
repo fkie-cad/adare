@@ -215,6 +215,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../guide/icon-library.html">Windows Icon Library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/vm-image-creation.html">VM Image Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/dev-mode.html">Dev Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../guide/mcp-authoring.html">Authoring Experiments with the MCP Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/sharing.html">Sharing</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -332,6 +333,7 @@
 <li class="toctree-l2 current"><a class="current reference internal" href="#">File Sharing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="guest-agent.html">Guest Agent</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cv-server.html">CV Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="database-migrations.html">Database Migrations</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="hypervisors.html">Hypervisor Abstraction</a></li>
@@ -390,21 +392,22 @@ tooling.</p>
 <nav class="contents local" id="on-this-page">
 <p class="topic-title">On this page</p>
 <ul class="simple">
-<li><p><a class="reference internal" href="#the-filetransferstrategy-interface" id="id1">The FileTransferStrategy Interface</a></p></li>
-<li><p><a class="reference internal" href="#strategies" id="id2">Strategies</a></p>
+<li><p><a class="reference internal" href="#the-filetransferstrategy-interface" id="id2">The FileTransferStrategy Interface</a></p></li>
+<li><p><a class="reference internal" href="#strategies" id="id3">Strategies</a></p>
 <ul>
-<li><p><a class="reference internal" href="#virtiofs-linux-default" id="id3">VirtioFS (Linux default)</a></p></li>
-<li><p><a class="reference internal" href="#smb-macos-default" id="id4">SMB (macOS default)</a></p></li>
-<li><p><a class="reference internal" href="#libguestfs-linux-fallback" id="id5">Libguestfs (Linux fallback)</a></p></li>
-<li><p><a class="reference internal" href="#qga-final-fallback" id="id6">QGA (final fallback)</a></p></li>
+<li><p><a class="reference internal" href="#virtiofs-linux-default" id="id4">VirtioFS (Linux default)</a></p></li>
+<li><p><a class="reference internal" href="#smb-macos-default" id="id5">SMB (macOS default)</a></p></li>
+<li><p><a class="reference internal" href="#guest-network-repair" id="id6">Guest network repair</a></p></li>
+<li><p><a class="reference internal" href="#libguestfs-linux-fallback" id="id7">Libguestfs (Linux fallback)</a></p></li>
+<li><p><a class="reference internal" href="#qga-final-fallback" id="id8">QGA (final fallback)</a></p></li>
 </ul>
 </li>
-<li><p><a class="reference internal" href="#strategy-selection" id="id7">Strategy Selection</a></p></li>
-<li><p><a class="reference internal" href="#what-gets-shared" id="id8">What Gets Shared</a></p></li>
+<li><p><a class="reference internal" href="#strategy-selection" id="id9">Strategy Selection</a></p></li>
+<li><p><a class="reference internal" href="#what-gets-shared" id="id10">What Gets Shared</a></p></li>
 </ul>
 </nav>
 <section id="the-filetransferstrategy-interface">
-<h2><a class="toc-backref" href="#id1" role="doc-backlink">The FileTransferStrategy Interface</a><a class="headerlink" href="#the-filetransferstrategy-interface" title="Link to this heading">¶</a></h2>
+<h2><a class="toc-backref" href="#id2" role="doc-backlink">The FileTransferStrategy Interface</a><a class="headerlink" href="#the-filetransferstrategy-interface" title="Link to this heading">¶</a></h2>
 <p>All strategies implement the abstract base class
 <code class="docutils literal notranslate"><span class="pre">adare.hypervisor.qemu.file_transfer.base.FileTransferStrategy</span></code>.
 The lifecycle calls three methods in order:</p>
@@ -429,9 +432,9 @@ output.</p></li>
 </ul>
 </section>
 <section id="strategies">
-<h2><a class="toc-backref" href="#id2" role="doc-backlink">Strategies</a><a class="headerlink" href="#strategies" title="Link to this heading">¶</a></h2>
+<h2><a class="toc-backref" href="#id3" role="doc-backlink">Strategies</a><a class="headerlink" href="#strategies" title="Link to this heading">¶</a></h2>
 <section id="virtiofs-linux-default">
-<h3><a class="toc-backref" href="#id3" role="doc-backlink">VirtioFS (Linux default)</a><a class="headerlink" href="#virtiofs-linux-default" title="Link to this heading">¶</a></h3>
+<h3><a class="toc-backref" href="#id4" role="doc-backlink">VirtioFS (Linux default)</a><a class="headerlink" href="#virtiofs-linux-default" title="Link to this heading">¶</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">VirtioFSStrategy</span></code> – the fastest option. Uses the <code class="docutils literal notranslate"><span class="pre">virtiofsd</span></code> daemon and
 the kernel <code class="docutils literal notranslate"><span class="pre">virtiofs</span></code> driver to expose host directories directly inside the
 guest. No file copying is needed; the guest reads and writes the host
@@ -448,7 +451,7 @@ verifies and copies log files to the expected locations.</p></li>
 </ul>
 </section>
 <section id="smb-macos-default">
-<h3><a class="toc-backref" href="#id4" role="doc-backlink">SMB (macOS default)</a><a class="headerlink" href="#smb-macos-default" title="Link to this heading">¶</a></h3>
+<h3><a class="toc-backref" href="#id5" role="doc-backlink">SMB (macOS default)</a><a class="headerlink" href="#smb-macos-default" title="Link to this heading">¶</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">SMBStrategy</span></code> – uses QEMU’s built-in SLIRP SMB support. On macOS,
 <code class="docutils literal notranslate"><span class="pre">virtiofsd</span></code> is typically unavailable, but Samba can be installed via
 Homebrew. QEMU starts an embedded <code class="docutils literal notranslate"><span class="pre">smbd</span></code> process that serves a host
@@ -467,9 +470,62 @@ to the original host paths (the writeback step), then verifies artifacts.</p></l
 <li><p><strong>Cleanup</strong>: performs a safety writeback and removes the temporary
 directory.</p></li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The fallback to QGA is logged as a <strong>warning</strong> and relabels the progress
+stage. It is a large performance regression (QGA transfers file-by-file
+through the guest agent), so it should never pass unnoticed. If you see it,
+the two causes worth checking first are a guest image without
+<code class="docutils literal notranslate"><span class="pre">cifs-utils</span></code>/<code class="docutils literal notranslate"><span class="pre">mount.cifs</span></code>, and a guest with no IPv4 route to
+<code class="docutils literal notranslate"><span class="pre">10.0.2.4</span></code> – see <a class="reference internal" href="#guest-network-repair"><span class="std std-ref">Guest network repair</span></a>.</p>
+</div>
+</section>
+<section id="guest-network-repair">
+<span id="id1"></span><h3><a class="toc-backref" href="#id6" role="doc-backlink">Guest network repair</a><a class="headerlink" href="#guest-network-repair" title="Link to this heading">¶</a></h3>
+<p>Every SMB mount depends on the guest actually having a working network, and
+that cannot be taken for granted, because <strong>ADARE gives the NIC a different PCI
+address at run time than the installers use</strong>:</p>
+<ul class="simple">
+<li><p>the VM creators build a raw QEMU command line with an auto-assigned NIC
+(<code class="docutils literal notranslate"><span class="pre">-device</span> <span class="pre">virtio-net-pci,netdev=net0</span></code>), which lands on <code class="docutils literal notranslate"><span class="pre">pcie.0</span></code> slot
+<code class="docutils literal notranslate"><span class="pre">0x01</span></code>, so the guest sees <code class="docutils literal notranslate"><span class="pre">enp0s1</span></code> – and that is the name the installer
+bakes into <code class="docutils literal notranslate"><span class="pre">/etc/netplan/*.yaml</span></code>;</p></li>
+<li><p>experiment runs go through
+<code class="docutils literal notranslate"><span class="pre">libvirt_xml_builder._add_network_commandline()</span></code>, which pins
+<code class="docutils literal notranslate"><span class="pre">bus=pcie.0,addr=0x1f</span></code>, so the same NIC enumerates as <code class="docutils literal notranslate"><span class="pre">enp0s31</span></code>.</p></li>
+</ul>
+<p>That path is taken for <em>every</em> experiment, because <code class="docutils literal notranslate"><span class="pre">_add_network()</span></code> defers to
+the <code class="docutils literal notranslate"><span class="pre">qemu:commandline</span></code> builder whenever SMB <strong>or</strong> port forwarding is active,
+and the adarevm websocket forward is always active.</p>
+<p>A guest whose network config names one interface therefore ends up with only
+<code class="docutils literal notranslate"><span class="pre">lo</span></code>: <code class="docutils literal notranslate"><span class="pre">systemd-networkd-wait-online</span></code> burns its full <strong>120 s</strong> timeout on
+every boot, nothing can reach the SLIRP SMB server, and the adarevm websocket
+has no guest-side stack. NetworkManager-managed guests (Fedora) are unaffected,
+and Ubuntu 24.04 is rescued by NetworkManager <em>after</em> paying the 120 s.</p>
+<p><code class="docutils literal notranslate"><span class="pre">hypervisor/qemu/guest_network.py</span></code> repairs this after boot, before anything
+depends on the network. It is idempotent and best-effort:</p>
+<ol class="arabic simple">
+<li><p>if any non-loopback interface already has an IPv4 address, do nothing;</p></li>
+<li><p>otherwise bring every non-loopback link up and give the guest’s own DHCP
+client a few seconds to claim it;</p></li>
+<li><p>if nothing claims it, assign SLIRP’s fixed addressing directly –
+<code class="docutils literal notranslate"><span class="pre">10.0.2.15/24</span></code>, gateway <code class="docutils literal notranslate"><span class="pre">10.0.2.2</span></code> – and point the resolver at
+<code class="docutils literal notranslate"><span class="pre">10.0.2.3</span></code> via <code class="docutils literal notranslate"><span class="pre">resolvectl</span></code> (needed because the agent bootstrap installs
+from PyPI).</p></li>
+</ol>
+<p>Nothing is written to the guest filesystem on the normal path – only in-memory
+kernel and <code class="docutils literal notranslate"><span class="pre">systemd-resolved</span></code> state – so guest disk state stays clean for
+forensic purposes. Only if <code class="docutils literal notranslate"><span class="pre">resolvectl</span></code> is unavailable does it fall back to
+writing <code class="docutils literal notranslate"><span class="pre">/etc/resolv.conf</span></code>.</p>
+<p>The install-time half of the fix is in the <code class="docutils literal notranslate"><span class="pre">autoinstall_*</span></code> templates, which now
+match the interface <strong>by pattern</strong> (<code class="docutils literal notranslate"><span class="pre">match:</span> <span class="pre">{name:</span> <span class="pre">&quot;e*&quot;}</span></code>) instead of by name,
+so images built from here on are immune to the PCI address. Images built before
+that change still need the run-time repair, and still pay the 120 s
+<code class="docutils literal notranslate"><span class="pre">wait-online</span></code> timeout on boot – which is why the guest-agent readiness budget
+escalates per attempt (see <code class="docutils literal notranslate"><span class="pre">lifecycle.py:_ready_timeout_for_attempt</span></code>).</p>
 </section>
 <section id="libguestfs-linux-fallback">
-<h3><a class="toc-backref" href="#id5" role="doc-backlink">Libguestfs (Linux fallback)</a><a class="headerlink" href="#libguestfs-linux-fallback" title="Link to this heading">¶</a></h3>
+<h3><a class="toc-backref" href="#id7" role="doc-backlink">Libguestfs (Linux fallback)</a><a class="headerlink" href="#libguestfs-linux-fallback" title="Link to this heading">¶</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">LibguestfsStrategy</span></code> – manipulates the guest disk offline using the
 <code class="docutils literal notranslate"><span class="pre">guestfish</span></code> CLI. This is the fallback on Linux when <code class="docutils literal notranslate"><span class="pre">virtiofsd</span></code> is not
 installed, or when the <code class="docutils literal notranslate"><span class="pre">QEMU_LIBGUESTFS</span></code> environment variable is set.</p>
@@ -483,7 +539,7 @@ artifacts from the disk via guestfish.</p></li>
 </ul>
 </section>
 <section id="qga-final-fallback">
-<h3><a class="toc-backref" href="#id6" role="doc-backlink">QGA (final fallback)</a><a class="headerlink" href="#qga-final-fallback" title="Link to this heading">¶</a></h3>
+<h3><a class="toc-backref" href="#id8" role="doc-backlink">QGA (final fallback)</a><a class="headerlink" href="#qga-final-fallback" title="Link to this heading">¶</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">QGAStrategy</span></code> – transfers files through QEMU Guest Agent
 <code class="docutils literal notranslate"><span class="pre">guest-file-*</span></code> operations. This is the fallback on macOS when neither
 <code class="docutils literal notranslate"><span class="pre">virtiofsd</span></code> nor Samba is available. It is the slowest strategy because
@@ -495,10 +551,36 @@ upload is deferred because QGA requires a running VM.</p></li>
 operations.</p></li>
 <li><p><strong>Retrieval</strong>: downloads artifacts via QGA before VM shutdown.</p></li>
 </ul>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><strong>Known limitation: QGA-via-libvirt is not a dependable bulk transport for the
+aarch64 Ubuntu/Kubuntu desktop guests.</strong> Partway through an upload the agent
+stops answering even libvirt’s 5-second <code class="docutils literal notranslate"><span class="pre">guest-sync</span></code>
+(<code class="docutils literal notranslate"><span class="pre">Guest</span> <span class="pre">agent</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">responding:</span> <span class="pre">guest</span> <span class="pre">agent</span> <span class="pre">didn't</span> <span class="pre">respond</span> <span class="pre">to</span> <span class="pre">synchronization</span>
+<span class="pre">within</span> <span class="pre">'5'</span> <span class="pre">seconds</span></code>), after which every <code class="docutils literal notranslate"><span class="pre">guest-file-write</span></code> trips
+<code class="docutils literal notranslate"><span class="pre">QGA_FILE_OP_TIMEOUT</span></code>. It fails on the ~2 MB tar first, then again on the
+61,828-byte <code class="docutils literal notranslate"><span class="pre">adarevm</span></code> wheel that the per-file fallback retries — which is the
+<code class="docutils literal notranslate"><span class="pre">Failed</span> <span class="pre">to</span> <span class="pre">upload</span> <span class="pre">adarevm-*.whl</span></code> error seen in <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">env</span> <span class="pre">verify</span></code>.</p>
+<p>The usual suspects have been measured out:</p>
+<ul class="simple">
+<li><p><strong>not throughput</strong> — the identical 61,828-byte <code class="docutils literal notranslate"><span class="pre">guest-file-write</span></code> completes
+in about <strong>1 ms (45-53 MB/s)</strong> on three of the same disks when written
+straight to the QGA unix socket rather than through libvirt;</p></li>
+<li><p><strong>not the timeout</strong> — the agent is unresponsive to a <em>5 s</em> sync, so a larger
+<code class="docutils literal notranslate"><span class="pre">QGA_FILE_OP_TIMEOUT</span></code> changes nothing;</p></li>
+<li><p><strong>not the chunk size</strong> — tested at both 16 KB (~22 KB base64) and 64 KB
+(~85 KB); both wedge at the same point.</p></li>
+</ul>
+<p>The root cause inside qemu-ga/libvirt has <strong>not</strong> been identified. The practical
+consequence is that guests must be kept <em>off</em> this path: make sure the image has
+<code class="docutils literal notranslate"><span class="pre">cifs-utils</span></code>/<code class="docutils literal notranslate"><span class="pre">mount.cifs</span></code> so the SMB strategy is used (~1 s for the same
+payload). The autoinstall templates now install it; images built before that
+change need a rebuild or an <code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">extend</span></code>.</p>
+</div>
 </section>
 </section>
 <section id="strategy-selection">
-<h2><a class="toc-backref" href="#id7" role="doc-backlink">Strategy Selection</a><a class="headerlink" href="#strategy-selection" title="Link to this heading">¶</a></h2>
+<h2><a class="toc-backref" href="#id9" role="doc-backlink">Strategy Selection</a><a class="headerlink" href="#strategy-selection" title="Link to this heading">¶</a></h2>
 <p>The factory function <code class="docutils literal notranslate"><span class="pre">get_file_transfer_strategy()</span></code> in
 <code class="docutils literal notranslate"><span class="pre">adare.hypervisor.qemu.file_transfer</span></code> calls <code class="docutils literal notranslate"><span class="pre">detect_file_transfer_mode()</span></code>
 to choose a strategy. The decision logic:</p>
@@ -523,7 +605,7 @@ ADARE checks whether that exact path exists and is executable. If Homebrew’s
 Samba is installed at a different path, ADARE logs a symlink instruction.</p>
 </section>
 <section id="what-gets-shared">
-<h2><a class="toc-backref" href="#id8" role="doc-backlink">What Gets Shared</a><a class="headerlink" href="#what-gets-shared" title="Link to this heading">¶</a></h2>
+<h2><a class="toc-backref" href="#id10" role="doc-backlink">What Gets Shared</a><a class="headerlink" href="#what-gets-shared" title="Link to this heading">¶</a></h2>
 <p>All strategies share the same set of host-to-guest directory mappings,
 built by <code class="docutils literal notranslate"><span class="pre">build_share_list()</span></code> in <code class="docutils literal notranslate"><span class="pre">adare.hypervisor.qemu.file_transfer.shares</span></code>.
 The standard shares are:</p>
@@ -573,6 +655,28 @@ The standard shares are:</p>
 </div>
 <p>User-defined shared directories from the experiment configuration are
 appended to this list.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p><strong>Write experiment outputs to the run share.</strong> Only the <code class="docutils literal notranslate"><span class="pre">run</span></code> share is
+read-write, and it maps directly onto the host experiment run directory, so
+anything a playbook writes there is retrieved back to the host on <strong>every</strong>
+backend. In a playbook, target it through the automatic variable
+<code class="docutils literal notranslate"><span class="pre">adare_run_dir</span></code> (<code class="docutils literal notranslate"><span class="pre">C:\adare\run</span></code> / <code class="docutils literal notranslate"><span class="pre">/adare/run</span></code>) – for example, copy a
+generated report to <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">adare_run_dir</span> <span class="pre">}}\artifacts\report.xlsx</span></code>. The
+<code class="docutils literal notranslate"><span class="pre">artifacts</span></code> and <code class="docutils literal notranslate"><span class="pre">logs</span></code> subdirectories are created automatically. The
+host-to-guest <strong>input</strong> channels (<code class="docutils literal notranslate"><span class="pre">adare_shared_data</span></code>,
+<code class="docutils literal notranslate"><span class="pre">adare_project_shared_data</span></code>, etc.) are the wrong destination for outputs.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><strong>The read-only modes above are not enforced uniformly across backends.</strong>
+Read-only is honoured under <strong>SMB</strong> (writes to a read-only share are
+discarded on cleanup and never reach the host) but <strong>not</strong> under
+<strong>virtiofs</strong> (the guest can write through to the host path). A playbook that
+writes outputs to <code class="docutils literal notranslate"><span class="pre">adare_shared_data</span></code> therefore appears to “work” on Linux
+(virtiofs) yet silently loses those files on macOS (SMB). Do not rely on
+writes to any read-only share – always write outputs to <code class="docutils literal notranslate"><span class="pre">adare_run_dir</span></code>.</p>
+</div>
 <p>A <code class="docutils literal notranslate"><span class="pre">config.json</span></code> file is written to the run directory before boot. It tells
 the <code class="docutils literal notranslate"><span class="pre">adarevm</span></code> agent where to find tools, data files, and where to write
 its log:</p>
@@ -656,6 +760,7 @@ lifecycle.</p>
 <li><a class="reference internal" href="#strategies">Strategies</a><ul>
 <li><a class="reference internal" href="#virtiofs-linux-default">VirtioFS (Linux default)</a></li>
 <li><a class="reference internal" href="#smb-macos-default">SMB (macOS default)</a></li>
+<li><a class="reference internal" href="#guest-network-repair">Guest network repair</a></li>
 <li><a class="reference internal" href="#libguestfs-linux-fallback">Libguestfs (Linux fallback)</a></li>
 <li><a class="reference internal" href="#qga-final-fallback">QGA (final fallback)</a></li>
 </ul>

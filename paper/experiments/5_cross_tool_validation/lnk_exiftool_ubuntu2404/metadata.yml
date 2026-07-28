@@ -1,5 +1,5 @@
 environments:
-  - ubuntu24043
+  - ubuntu-2404
 
 description: >-
   Cross-tool validation (paper section 5.5): parse three LNK samples with ExifTool 12.76

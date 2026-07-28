@@ -179,7 +179,8 @@ class TestVisualExists:
         result = await test.test(mock_visual_context)
 
         assert_test_error(result)
-        assert "Either text or image parameter required" in result.details[0]
+        # `icon` joined text/image as an accepted search parameter; the message names all three.
+        assert "One of text, image, or icon parameter required" in result.details[0]
 
     @pytest.mark.asyncio
     async def test_visual_exists_with_window_parameter(self, mock_visual_context):
@@ -291,7 +292,8 @@ class TestVisualNotExists:
         result = await test.test(mock_visual_context)
 
         assert_test_error(result)
-        assert "Either text or image parameter required" in result.details[0]
+        # `icon` joined text/image as an accepted search parameter; the message names all three.
+        assert "One of text, image, or icon parameter required" in result.details[0]
 
     @pytest.mark.asyncio
     async def test_visual_not_exists_with_window_parameter(self, mock_visual_context):
@@ -430,7 +432,8 @@ class TestVisualCountEquals:
         result = await test.test(mock_visual_context)
 
         assert_test_error(result)
-        assert "Either text or image parameter required" in result.details[0]
+        # `icon` joined text/image as an accepted search parameter; the message names all three.
+        assert "One of text, image, or icon parameter required" in result.details[0]
 
 
 # ============================================================================
@@ -703,7 +706,8 @@ class TestVisualCountMax:
         result = await test.test(mock_visual_context)
 
         assert_test_error(result)
-        assert "Either text or image parameter required" in result.details[0]
+        # `icon` joined text/image as an accepted search parameter; the message names all three.
+        assert "One of text, image, or icon parameter required" in result.details[0]
 
 
 # ============================================================================

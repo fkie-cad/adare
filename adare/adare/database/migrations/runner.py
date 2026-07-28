@@ -90,6 +90,11 @@ MIGRATIONS: list[Migration] = [
         scope='project',
         module=f'{_PACKAGE}.add_testfunction_pins_to_tests',
     ),
+    Migration(
+        name='add_remote_identity_to_project_db',
+        scope='project',
+        module=f'{_PACKAGE}.add_remote_identity_to_project_db',
+    ),
 ]
 
 # Applied-migration names per database URL. Keeps auto-apply at one SELECT per

@@ -34,7 +34,7 @@ An **environment** is a configured virtual machine paired with an operating syst
 
 An environment definition specifies:
 
-- The path to the VM image file (``.ova``, ``.ovf``, or other supported formats)
+- Its VM source: either a disk image (``.qcow2``, ``.ova``, or another supported format) or a build recipe
 - The operating system platform, distribution, and version
 - Any post-setup installations or configuration steps
 - Tags for organization and filtering
@@ -44,7 +44,13 @@ Environments are the "where" of an experiment -- they define the system under te
 An environment can be anchored in one of two ways:
 
 - **Baked disk** -- the YAML points at a pre-built disk image and integrity is anchored on that disk's hash. This is the default for Linux.
-- **Recipe** -- the YAML declares the *build inputs* (OS profile, installer ISO + its expected SHA256, and build params) and the disk is built on load. Integrity is anchored on the inputs, which makes the environment rebuildable -- the default for Windows, where evaluation editions and activation expire. See :ref:`recipe-environments`.
+- **Recipe** -- the YAML declares the *build inputs* (OS profile, installer ISO + its expected SHA256, build params, and optional build-time provisioning steps) and the disk is built on load. Integrity is anchored on the inputs, which makes the environment rebuildable -- the default for Windows, where evaluation editions and activation expire. See :ref:`recipe-environments`.
+
+Two consequences of the recipe model are worth knowing early.
+
+**Software under test is installed at build time, not per run.** A recipe's ``provision`` block runs once, while the disk is being built. That matters for forensic work specifically: installing an application writes Prefetch entries, registry keys and MFT records -- exactly the artifacts an experiment measures -- so an install repeated inside every run would contaminate its own results. The older ``postsetupinstallations`` field still runs per run and remains the right place for setup that must *not* persist. See :ref:`build-time-provisioning`.
+
+**A recipe ships as text, so the ISO has to come from somewhere.** For Linux the installer ISO is freely redistributable and the recipe carries its URL. For Windows it is licensed and cannot be rehosted, so a recipe instead names the file and its SHA256 and the *consumer* supplies it. A ~110-line YAML then replaces tens of gigabytes of disk image that could not have been shared at all. See :ref:`byo-isos`.
 
 See :doc:`/guide/environments` for VM configuration and setup.
 

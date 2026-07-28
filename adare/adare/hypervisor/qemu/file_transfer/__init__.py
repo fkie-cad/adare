@@ -191,7 +191,9 @@ def detect_file_transfer_mode() -> str:
        - smbd available -> 'smb' (QEMU SLIRP SMB, mount-based)
        - guestfish available AND appliance works -> 'libguestfs'
        - otherwise -> 'qga'
-    4. Linux without virtiofsd -> 'libguestfs'
+    4. Linux without virtiofsd:
+       - guestfish available AND appliance works -> 'libguestfs'
+       - otherwise -> 'qga'
 
     Returns:
         One of 'virtiofs', 'smb', 'libguestfs', 'qga'

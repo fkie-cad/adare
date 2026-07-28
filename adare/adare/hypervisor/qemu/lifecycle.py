@@ -402,21 +402,41 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
     # dead-wait indefinitely on the last attempt.
     _READY_TIMEOUT_CAP = 600
 
-    @staticmethod
-    def _ready_timeout() -> int:
-        """First-attempt guest-agent readiness budget (ADARE_VM_READY_TIMEOUT, default 90s).
-
-        A hung Windows cold boot never reaches QGA, so the first attempt stays
-        short and is abandoned fast rather than dead-waiting the full budget.
-        Later attempts *extend* this — see ``_ready_timeout_for_attempt``.
-        """
-        try:
-            return max(30, int(os.environ.get('ADARE_VM_READY_TIMEOUT', '90')))
-        except ValueError:
-            return 90
+    # First-attempt readiness budgets, per guest platform. Windows keeps the
+    # short fail-fast budget the retry loop was built around; Linux gets a
+    # budget above its slowest observed healthy boot (see below).
+    _READY_TIMEOUT_DEFAULT = 90
+    _READY_TIMEOUT_LINUX = 180
 
     @classmethod
-    def _ready_timeout_for_attempt(cls, attempt: int) -> int:
+    def _ready_timeout(cls, guest_platform: str | None = None) -> int:
+        """First-attempt guest-agent readiness budget, in seconds.
+
+        ``ADARE_VM_READY_TIMEOUT`` wins outright when set. Otherwise the budget
+        is platform-dependent, because the two platforms fail differently:
+
+        - **Windows (90s, unchanged).** A hung cold boot never reaches QGA at
+          all, so a short first attempt is a feature: it is abandoned fast and
+          retried as an independent cold boot rather than dead-waiting.
+        - **Linux (180s).** Linux guests do not exhibit that hang, so there is
+          nothing for a short budget to catch — it only mis-fires. Healthy
+          Ubuntu 24.04 images reach QGA at 107-129s (a slow in-guest unit, not
+          host load; 25.10 does it in ~10s), which a 90s budget kills mid-boot.
+          Every such run then paid a doomed 90s attempt *plus* a full teardown +
+          overlay recreate before succeeding on attempt 2. 180s clears the
+          observed range, so attempt 1 succeeds and the retry path stays a
+          last-resort net for a genuinely dead guest.
+
+        Later attempts *extend* this — see ``_ready_timeout_for_attempt``.
+        """
+        default = cls._READY_TIMEOUT_LINUX if guest_platform == 'linux' else cls._READY_TIMEOUT_DEFAULT
+        try:
+            return max(30, int(os.environ.get('ADARE_VM_READY_TIMEOUT', str(default))))
+        except ValueError:
+            return default
+
+    @classmethod
+    def _ready_timeout_for_attempt(cls, attempt: int, guest_platform: str | None = None) -> int:
         """Readiness budget for boot attempt ``attempt`` (1-based), doubling each time.
 
         Retries used to reuse one flat budget, but each retry *cold-boots afresh*
@@ -424,11 +444,12 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         one long boot: a guest that genuinely needs 164s could never pass, no
         matter how many attempts it got.
 
-        Doubling keeps the fast-fail property that motivated the short default —
-        attempt 1 still abandons a hung guest in 90s — while letting a slow but
-        healthy desktop boot succeed on attempt 2 (default 90s / 180s / 360s).
+        Doubling keeps the fast-fail property that motivated the short Windows
+        default — attempt 1 still abandons a hung Windows guest in 90s (then
+        180s / 360s) — while a Linux guest starts from a budget that already
+        covers a healthy slow boot (180s / 360s / 600s, capped).
         """
-        budget = cls._ready_timeout() * (2 ** (attempt - 1))
+        budget = cls._ready_timeout(guest_platform) * (2 ** (attempt - 1))
         return min(budget, cls._READY_TIMEOUT_CAP)
 
     async def _reset_vm_for_boot_retry(self, context):
@@ -499,7 +520,10 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         max_attempts = self._boot_attempts()
         # Budget escalates per attempt; total is what a full exhaustion costs.
-        attempt_budgets = [self._ready_timeout_for_attempt(a) for a in range(1, max_attempts + 1)]
+        attempt_budgets = [
+            self._ready_timeout_for_attempt(a, context.guest_platform)
+            for a in range(1, max_attempts + 1)
+        ]
 
         playbook_settings = context.playbook.settings if context.playbook and hasattr(context.playbook, 'settings') else None
         gui_mode = resolve_gui_execution_mode(context.vm, playbook_settings)

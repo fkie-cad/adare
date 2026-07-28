@@ -43,6 +43,7 @@ adare vm create <os>                                  # e.g. ubuntu2404, debian1
 adare vm create <os> --iso /path/to/os.iso            # ISO required for Windows
 adare vm create <os> --interactive                    # boot after install for manual software setup
 adare vm create <os> --recipe                         # declarative recipe (build on load), not a baked disk
+adare vm create <os> --iso ... --byo-iso               # recipe whose ISO the CONSUMER supplies (Windows only)
 adare vm test <vm-or-ova> [--platform linux|windows]  # verify ADARE compatibility
 ```
 
@@ -81,17 +82,34 @@ adare env verify <name>                                          # run the built
 - **`env verify`** runs the shipped `verify_vm` experiment against the env — do this
   before relying on or publishing it. Details in `references/env-extend-publish.md`.
 
+For a **recipe** environment, don't reach for `extend --interactive`: declare the work
+as `recipe.provision` in the env YAML instead. It runs once at build time over the QEMU
+guest agent, is reproducible from the text alone, aborts on the first failed step, and
+logs every command to `~/.adare/qemu/build-logs/`. Crucially it also keeps installs
+*out* of the per-run artifact set — a `postsetupinstallations` install writes
+Prefetch/registry/MFT entries into the very data being measured. Retry a failed build
+with `--reprovision` (reuses the cached OS install) rather than `--force`. Schema and
+gotchas in `references/create-recipes.md`.
+
 ## 4. Publish an environment for sharing
 
 ```sh
-adare env publish-prepare <name> --vm-url <https-url> [--vm-format qcow2] [--verify-url]
+adare env publish-prepare <name> --vm-url <https-url> [--vm-format qcow2] [--verify-url]   # baked
+adare env recipe-byo <name>                                                                 # recipe, Windows
 ```
 
-Rewrites the env descriptor from a local disk to a hosted **URL + required sha256**
-(any host, incl. owncloud/Nextcloud share links). Consumers re-verify the hash after
-download. `--verify-url` downloads the URL and confirms the bytes hash-match the
-local disk (catches a wrong/HTML share link). Publish = **YAML + external disk URL +
-required sha256** — the sha256 is mandatory, enforced at multiple layers.
+**Baked**: rewrites the env descriptor from a local disk to a hosted **URL + required
+sha256** (any host, incl. owncloud/Nextcloud share links). Consumers re-verify the hash
+after download. `--verify-url` downloads the URL and confirms the bytes hash-match the
+local disk (catches a wrong/HTML share link).
+
+**Recipe**: the descriptor is already the artifact, so publishing means making its ISO
+obtainable. Linux → `recipe.iso` must be an `http(s)` URL. Windows → `recipe.iso_name`
++ `iso_notes` lets the consumer supply media that cannot lawfully be rehosted;
+`env recipe-byo` converts a local path into that form, hash-neutrally.
+
+Either way the **sha256 is mandatory** and enforced at multiple layers: publish is
+always YAML + a verifiable external artifact, never bytes with no anchor.
 
 ## 5. Manage images
 

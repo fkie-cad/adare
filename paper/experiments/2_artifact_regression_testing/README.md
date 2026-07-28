@@ -103,6 +103,25 @@ Note that GLib omits the fractional part when the microsecond field happens to b
 `0`. That is a ~1-in-10⁶ flake for `xbel_visited_subsecond_precision`; if it is ever
 observed, re-run rather than loosening the regex.
 
+## Verification status
+
+**As of 2026-07-27, no §5.2 experiment has ever been executed.** All seven are now loaded
+into the project (`adare experiment load` against each directory), which they previously
+were not — only `open-single-text-file-fedora-42` and `-ubuntu-2404` had database rows, and
+the `-ubuntu-2404` row held a superseded **3-assertion** playbook
+(`recently_used_xbel_exists` / `_has_correct_href` / `_has_recent_timestamp`) rather than
+this directory's 11-assertion version. That copy has been refreshed.
+
+Execution is currently blocked on the environments rather than on the playbooks: the
+`ubuntu-2004` and `ubuntu-2204` images were unusable as built (missing `cifs-utils`;
+Python 3.8 vs `adarevm`'s `requires-python >=3.10`) and are being rebuilt. `kubuntu-*` and
+`fedora-42` are usable and awaiting the CV iteration described below.
+
+The crop debt below was **re-confirmed by hash** on 2026-07-27, not merely assumed:
+`filemanager-app.png` is byte-identical (`eaf1b9d1…`, 10 513 B) across all three Ubuntu
+variants, and `dolphin_taskbar.png` is byte-identical (`a046199e…`, 1 443 B, 48×48 RGBA)
+across all three Kubuntu variants.
+
 ## GUI crop caveat
 
 **None of the `img/*.png` template crops in this directory have been verified against a live

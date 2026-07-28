@@ -115,7 +115,10 @@ class VMLifecycleManager:
             adarelib_wheel_time = adarelib_wheel[0].stat().st_mtime
             adarevm_wheel_time = adarevm_wheel[0].stat().st_mtime
 
-            adarelib_source_time = self._get_latest_mtime(adarevm_source)
+            # Compare each wheel against its OWN source tree. Deriving both times from
+            # adarevm_source meant an adarelib-only change never rebuilt any wheel, so
+            # the guest kept running a stale adarelib indefinitely.
+            adarelib_source_time = self._get_latest_mtime(adarelib_source)
             adarevm_source_time = self._get_latest_mtime(adarevm_source)
 
             if (adarelib_source_time > adarelib_wheel_time or

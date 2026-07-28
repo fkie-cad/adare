@@ -50,11 +50,25 @@ hand. Default is a GUI-only window; `--console` also opens a terminal REPL that
 (overlay is flattened into a new standalone disk, registered as a NEW base VM + env)
 or discard. May be combined with `--install`.
 
-Shared flags: `-d/--description`, `-t/--tag` (repeatable), `-f/--force`, `-p/--project`.
+Shared flags: `-d/--description`, `-t/--tag` (repeatable), `-f/--force`, `-p/--project`,
+`--allow-emulation` (interactive mode; needed when the base disk's guest arch differs
+from the host — without it `resolve_accel` refuses to boot).
 
 **Prefer declarative** — it's reproducible and disk-sharing. Use interactive only
 when the software has no scriptable install (GUI-only setup wizard). Either way, keep
 the guest minimal — no logs/markers left behind (no-VM-remnants rule).
+
+### Not the right tool for a *recipe* environment
+
+`env extend --interactive` produces a **baked** disk: whatever you install by hand is
+frozen into an image that has to be shipped as bytes and whose provenance is a human's
+memory. For a recipe environment, declare the work as `recipe.provision` instead — it
+runs at build time over the QEMU guest agent, is reproducible from the YAML alone, and
+logs every command's exit code and output to
+`~/.adare/qemu/build-logs/provision-<hash>.log`. See `create-recipes.md`.
+
+The Autopsy case study is the worked example: two ~110-line recipe YAMLs replaced ~97
+GB of interactively-built, unshippable disk.
 
 ## Verify
 
@@ -66,7 +80,34 @@ Idempotently registers the shipped `verify_vm` example experiment, attaches the
 environment, and runs it in the foreground with live progress. **Verify before you
 rely on or publish an environment.**
 
-## Publish (local disk → URL + sha256)
+## Publish a recipe environment
+
+A recipe ships as text, so "publishing" means making its **ISO** obtainable. Which
+form is required depends on the platform:
+
+| Profile platform | Required form |
+| --- | --- |
+| Linux | `recipe.iso` = an `http(s)` URL + `recipe.iso_sha256`. Linux ISOs are freely redistributable, so a published URL is required. |
+| Windows | Either a URL, or the BYO form: `recipe.iso_name` (bare filename) + `recipe.iso_sha256` + optional plain-text `recipe.iso_notes`. Microsoft media cannot lawfully be rehosted. |
+
+```sh
+adare env recipe-byo <name> [--iso-name Win11_25H2_English_Arm64_v2.iso] [--iso-notes "..."]
+```
+
+Rewrites a local-ISO-path recipe into the BYO form. **Hash-neutral** — how a consumer
+obtained the ISO is not a build input, so an already-built disk stays a cache hit.
+Only the descriptor changes.
+
+`iso_sha256` is required in both forms (it is the integrity boundary) and must be
+**canonical lowercase**: the server stores it verbatim and other clients compare it
+case-sensitively, so an uppercase digest publishes an environment nobody can build.
+The declared `os.platform` must also match what the profile actually builds, in both
+directions.
+
+Consumers supply a BYO ISO via `~/.adare/isos/`, `$ADARE_ISO_DIR`, or
+`adare env load <env>.yml --iso <path-or-dir>`.
+
+## Publish a baked environment (local disk → URL + sha256)
 
 ```sh
 adare env publish-prepare <name> --vm-url <https-url> [--vm-format qcow2|ova|vmdk|vdi|img|raw] [--verify-url]

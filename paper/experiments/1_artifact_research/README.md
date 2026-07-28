@@ -125,6 +125,31 @@ is the approach to follow.
 
 ## Verification status
 
+**First execution against live VMs: 2026-07-27** (aarch64, QEMU/HVF on macOS). The two
+command-line playbooks are green end-to-end; the five GUI playbooks have still never run.
+
+| Playbook | Environment | Result | Run ID |
+|---|---|---|---|
+| `deletefile_gio_trash` | `ubuntu-2404` | **green — 12/12 tests** (3 dirs × 4 assertions) | `01KYJ59MGQBS05EYRXRQ99NZS7` |
+| `deletefile_trashput` | `ubuntu-2404` | **green — 12/12 tests** | `01KYJ6YG9A778KDRHB84B2C5TT` |
+
+Both confirm the whole assertion set against real XDG trash state, not synthetic state:
+the file leaves its original path, `Trash/files/<name>` and `Trash/info/<name>.trashinfo`
+both appear, and the `DeletionDate` inside the `.trashinfo` matches the externally recorded
+deletion timestamp within the ±5 s tolerance — for `Documents`, `Downloads` and `Desktop`
+alike, which is the FRED Repeat phase actually repeating.
+
+One correction the first run forced: **`deletefile_trashput` never installed trash-cli.**
+`trash-put` is in no default desktop install (unlike `gio`, which ships with GLib), so every
+iteration failed on a missing binary. The playbook now installs `trash-cli` before the loop.
+
+Still unverified on Ubuntu 20.04 / 22.04: both images turned out to be unusable as built
+(22.04 missing `cifs-utils`, so the SMB mount fails and file transfer degrades to a
+thrashing QGA fallback; 20.04 shipping Python 3.8 against `adarevm`'s `requires-python
+>=3.10`). Both are being rebuilt; the host-side Python-version fallback is already in place.
+
+### Test functions, previously verified against synthetic host state
+
 The five test functions **were** executed, against synthetic trash state on the host, each
 with a negative control:
 
@@ -138,7 +163,8 @@ That last row settles two things that were open: `| tolerance(5, -5)` really doe
 range comparison rather than a literal string match, and the trailing newline the YAML `|`
 block scalar adds is harmless (`file_content_equals` strips both sides).
 
-Everything below is **not** verified — none of it can be without a live Fedora KDE VM.
+Everything below concerns the **GUI** playbooks and is **not** verified — the KDE rows need a
+live Fedora KDE VM, which does not exist yet (both built Fedora images are Workstation/GNOME).
 
 ## Runtime risks on the first KDE run
 

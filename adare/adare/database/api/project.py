@@ -57,11 +57,18 @@ class ProjectDbApi(GlobalDatabaseApi):
         self.expunge_all()
         return projects
 
-    def get_project(self, name: str) -> Project | None:
-        """Get a project by name, or None if not found."""
+    def get_project(self, name: str, silent: bool = False) -> Project | None:
+        """Get a project by name, or None if not found.
+
+        ``silent`` suppresses the error log for callers that treat a miss as one
+        candidate among several — ``determine_projectdirectory`` tries the name
+        first and then the path, and logging an error for the name attempt made a
+        successful path resolution look like a failure.
+        """
         project = self._session.query(Project).filter(Project.name == name).first()
         if not project:
-            log.error(f"Project '{name}' not found in database")
+            if not silent:
+                log.error(f"Project '{name}' not found in database")
             return None
         return project
 

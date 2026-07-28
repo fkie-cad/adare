@@ -584,6 +584,24 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
     # Tests will be converted by cattrs when structuring the Playbook object
     # No need to convert them here
 
+    converter = build_playbook_converter()
+
+    playbook = converter.structure(data, Playbook)
+
+    # Validate playbook (variable definitions, etc.)
+    from adare.types.playbook_validators import validate_playbook
+    validate_playbook(playbook)
+
+    return playbook
+
+
+def build_playbook_converter() -> cattrs.Converter:
+    """Build the cattrs converter that structures playbook YAML into action objects.
+
+    Extracted from ``parse_playbook`` so callers that structure a *single* action
+    outside a playbook (dev mode's ``adare dev action``) can reuse the exact same
+    hook set instead of reaching for ``_structure_action`` with no converter.
+    """
     converter = cattrs.Converter()
 
     # Configure converter to forbid extra keys - fail on unknown fields
@@ -684,60 +702,100 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
     # Register strict structure hooks for all main classes to validate fields
     _register_strict_hooks(converter)
 
-    playbook = converter.structure(data, Playbook)
+    return converter
 
-    # Validate playbook (variable definitions, etc.)
-    from adare.types.playbook_validators import validate_playbook
-    validate_playbook(playbook)
 
-    return playbook
+def structure_action(obj) -> ActionType:
+    """Structure one standalone action mapping (e.g. ``{'command': {...}}``).
+
+    Dev mode executes single actions that never pass through ``parse_playbook``,
+    so they need their own entry point into the same converter.
+    """
+    return _structure_action(obj, build_playbook_converter())
+
+
+# YAML action key -> the attrs class it structures into. Insertion order is the
+# resolution order, matching the if/elif chain this replaced. Kept as one table so
+# the sibling-`description` handling below cannot silently miss an action type.
+_ACTION_CLASSES = {
+    'click': ClickAction,
+    'drag': DragAction,
+    'keyboard': KeyboardAction,
+    'idle': IdleAction,
+    'scroll': ScrollAction,
+    'goto': GotoAction,
+    'block': BlockAction,
+    'test': ActionTestAction,
+    'command': CommandAction,
+    'screenshot': ScreenshotAction,
+    'save_timestamp': SaveTimestampAction,
+    'save_variable': SaveVariableAction,
+    'pull': PullAction,
+    'pause': PauseAction,
+    'wait_until': WaitUntilAction,
+    'loop': LoopAction,
+    'stop': StopAction,
+    'continue': ContinueAction,
+    'snapshot_filesystem': SnapshotFilesystemAction,
+    'pull_changed_files': PullChangedFilesAction,
+}
+
+# Step-level annotation written *beside* the action key rather than inside it:
+#
+#     - keyboard:
+#         key: enter
+#       description: 'Case Information: Next'
+#
+# This is the documented spelling and the one the Autopsy playbooks use (352
+# occurrences across 42 files). It used to be discarded outright: only
+# ``obj['<action_key>']`` was structured, so the sibling never reached the action,
+# and ``converter.forbid_extra_keys`` guards the *inner* dict so nothing flagged it.
+DESCRIPTION_KEY = 'description'
+
 
 def _structure_action(obj, converter):
-    if 'click' in obj:
-        return converter.structure(obj['click'], ClickAction)
-    if 'drag' in obj:
-        return converter.structure(obj['drag'], DragAction)
-    if 'keyboard' in obj:
-        return converter.structure(obj['keyboard'], KeyboardAction)
-    if 'idle' in obj:
-        return converter.structure(obj['idle'], IdleAction)
-    if 'scroll' in obj:
-        return converter.structure(obj['scroll'], ScrollAction)
-    if 'goto' in obj:
-        return converter.structure(obj['goto'], GotoAction)
-    if 'block' in obj:
-        return converter.structure(obj['block'], BlockAction)
-    if 'test' in obj:
-        if isinstance(obj['test'], str):
-            # Handle inline test format: - test: testname
-            return ActionTestAction(name=obj['test'])
-        # Handle full test format with description
-        return converter.structure(obj['test'], ActionTestAction)
-    if 'command' in obj:
-        return converter.structure(obj['command'], CommandAction)
-    if 'screenshot' in obj:
-        return converter.structure(obj['screenshot'], ScreenshotAction)
-    if 'save_timestamp' in obj:
-        return converter.structure(obj['save_timestamp'], SaveTimestampAction)
-    if 'save_variable' in obj:
-        return converter.structure(obj['save_variable'], SaveVariableAction)
-    if 'pull' in obj:
-        return converter.structure(obj['pull'], PullAction)
-    if 'pause' in obj:
-        return converter.structure(obj['pause'], PauseAction)
-    if 'wait_until' in obj:
-        return converter.structure(obj['wait_until'], WaitUntilAction)
-    if 'loop' in obj:
-        return converter.structure(obj['loop'], LoopAction)
-    if 'stop' in obj:
-        return converter.structure(obj['stop'], StopAction)
-    if 'continue' in obj:
-        return converter.structure(obj['continue'], ContinueAction)
-    if 'snapshot_filesystem' in obj:
-        return converter.structure(obj['snapshot_filesystem'], SnapshotFilesystemAction)
-    if 'pull_changed_files' in obj:
-        return converter.structure(obj['pull_changed_files'], PullChangedFilesAction)
-    raise ValueError(f"Unknown action: {obj}")
+    action_key = next((key for key in _ACTION_CLASSES if key in obj), None)
+    if action_key is None:
+        raise ValueError(f"Unknown action: {obj}")
+
+    body = obj[action_key]
+    if action_key == 'test' and isinstance(body, str):
+        # Inline test format: - test: testname
+        action = ActionTestAction(name=body)
+    else:
+        action = converter.structure(body, _ACTION_CLASSES[action_key])
+
+    return _apply_sibling_description(obj, action_key, action)
+
+
+def _apply_sibling_description(obj, action_key, action):
+    """Move a step-level ``description:`` sibling onto the structured action.
+
+    Raises rather than dropping it: a description that vanishes is invisible, and
+    these strings are what makes a 40-step GUI playbook readable.
+    """
+    if DESCRIPTION_KEY not in obj:
+        return action
+
+    description = obj[DESCRIPTION_KEY]
+    if not attrs.has(type(action)) or DESCRIPTION_KEY not in {
+        field.name for field in attrs.fields(type(action))
+    }:
+        raise ValueError(
+            f"action '{action_key}' has no 'description' field, so the "
+            f"description {description!r} written beside it cannot be stored. "
+            f"Remove it, or move it inside the '{action_key}:' mapping if that "
+            f"action supports one."
+        )
+
+    existing = getattr(action, DESCRIPTION_KEY, '')
+    if existing and existing != description:
+        raise ValueError(
+            f"action '{action_key}' has two different descriptions: {existing!r} "
+            f"inside the mapping and {description!r} beside it. Keep one."
+        )
+    setattr(action, DESCRIPTION_KEY, description)
+    return action
 
 def _structure_condition(obj, converter):
     if 'exists' in obj:

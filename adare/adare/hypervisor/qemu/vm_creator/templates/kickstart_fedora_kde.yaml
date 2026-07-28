@@ -24,6 +24,21 @@ user --name=adare --password={{ password_hash }} --iscrypted --groups=wheel --ge
 # Services
 services --enabled=sshd --disabled=firewalld
 
+# SELinux
+#
+# ADARE controls Linux guests through the QEMU guest agent (guest-exec). Fedora
+# confines that agent to the `virt_qemu_ga_t` domain, which may not even stat
+# /usr/bin/sudo: on a stock enforcing install `command -v sudo` reports "not
+# found" and `systemctl` reports "Access denied", so every setup step fails with
+# a misleading "sudo: command not found" even though sudo is installed.
+#
+# Permissive rather than disabled: files keep getting labelled and AVCs are still
+# audited, so SELinux contexts and audit entries remain present in forensic
+# diffs — only the denials stop. Mirrors kickstart_fedora_workstation.yaml, which
+# has always carried this; its absence here would have failed the KDE builds
+# after the full ~90-150 min install.
+selinux --permissive
+
 # Disk
 clearpart --all --initlabel
 autopart --type=lvm --noswap

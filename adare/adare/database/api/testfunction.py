@@ -16,12 +16,14 @@ from adare.database.exceptions import (
 )
 from adare.database.models.global_models import (
     Project,
+    SyncMetadata,
     TestFunction,
     TestFunctionFile,
     TestFunctionFileVersion,
     TestFunctionVersion,
     TestParameter,
 )
+from adare.database.models.sync_identity import apply_remote_identity
 from adare.exceptions import TestfunctionParameterClassMissingError
 from adare.helperfunctions.hash import combine_hashes, hash_file_sha256, hash_string_sha256
 from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
@@ -378,10 +380,19 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         return testfunction_file.sha256hash
 
     def sync_testfunction_file(self, testfunction_id: int, remote_id: int, remote_url: str, is_published: bool):
+        """Record where this testfunction file lives on the server.
+
+        Same fix as sync_experiment / sync_environment: ``remote_id``,
+        ``remote_url`` and ``published`` are not mapped columns on
+        TestFunctionFile, so assigning them wrote nothing. The file already has a
+        ``sync_metadata`` relationship — that is the row that persists.
+        """
         testfunction_obj = self.get_testfunction_file(testfunction_id)
-        testfunction_obj.remote_id = remote_id
-        testfunction_obj.remote_url = remote_url
-        testfunction_obj.published = is_published
+        apply_remote_identity(
+            self._session, testfunction_obj, SyncMetadata,
+            remote_ulid=str(remote_id) if remote_id is not None else None,
+            remote_url=remote_url, is_published=is_published,
+        )
         self._session.commit()
         return testfunction_obj
 

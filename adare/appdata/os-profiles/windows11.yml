@@ -12,3 +12,11 @@ default_ram_mb: 16384
 default_cpus: 0
 requires_uefi: true
 requires_tpm: true
+# Where to obtain the ISO. Microsoft installer media is licensed, not
+# redistributable, so this profile ships no iso_url; a recipe environment for it
+# uses the consumer-supplied ("BYO") ISO form and falls back to these notes when
+# the publisher declares no recipe.iso_notes of its own.
+iso_notes: |
+  Download from https://www.microsoft.com/software-download/windows11 —
+  "Windows 11 (multi-edition ISO for x64 devices)", English (International).
+  Requires a valid licence.

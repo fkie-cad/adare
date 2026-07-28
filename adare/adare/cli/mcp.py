@@ -82,7 +82,7 @@ class MCPServerManager:
             async with Client(self.server_url):
                 # Try to list tools to verify server is responding
                 return True
-        except OSError:
+        except (OSError, RuntimeError):
             return False
 
     def stop_server(self):

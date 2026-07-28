@@ -1,0 +1,11 @@
+vm: /Users/miq/.adare/state/vms/ubuntu2004arm64-20260727.qcow2
+vm_type: path
+vm_sha256: 0e16516c23354b5538372c4ed0aacffe30893b682793b4ed893fe910fc9706e5
+os:
+  os: Ubuntu 20.04 LTS (Focal Fossa, ARM64)
+  platform: linux
+  distribution: Focal Fossa
+  version: '20.04'
+  language: English
+  architecture: aarch64
+hypervisor: qemu

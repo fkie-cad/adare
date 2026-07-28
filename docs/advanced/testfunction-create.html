@@ -215,6 +215,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../guide/icon-library.html">Windows Icon Library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/vm-image-creation.html">VM Image Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/dev-mode.html">Dev Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../guide/mcp-authoring.html">Authoring Experiments with the MCP Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/sharing.html">Sharing</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -332,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../architecture/file-sharing.html">File Sharing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/guest-agent.html">Guest Agent</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/cv-server.html">CV Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/database-migrations.html">Database Migrations</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
@@ -387,7 +389,7 @@
 <h2>Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading">¶</a></h2>
 <p>The fastest way to create a test function is with the <code class="docutils literal notranslate"><span class="pre">&#64;testfunction</span></code> decorator:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># /path/to/your/testfunctions/mycollection/mycollection.py</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset</span><span class="w"> </span><span class="kn">import</span> <span class="n">testfunction</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset.api</span><span class="w"> </span><span class="kn">import</span> <span class="n">testfunction</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset.basictest</span><span class="w"> </span><span class="kn">import</span> <span class="n">HostModeCategory</span>
 
 <span class="nd">@testfunction</span><span class="p">(</span>
@@ -420,8 +422,19 @@ touch<span class="w"> </span>/path/to/your/testfunctions/mycollection/mycollecti
 touch<span class="w"> </span>/path/to/your/testfunctions/mycollection/requirements.txt
 </pre></div>
 </div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">.py</span></code> file <strong>must be named exactly like its directory</strong>
+(<code class="docutils literal notranslate"><span class="pre">mycollection/mycollection.py</span></code>). A collection is loaded from
+<code class="docutils literal notranslate"><span class="pre">&lt;dir&gt;/&lt;dir&gt;.py</span></code>; if the names differ, the directory is skipped on load
+(<code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">test</span> <span class="pre">validate</span></code> warns about this — see below).</p>
+</div>
+<p>Validate the collection offline first (no VM required):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span><span class="nb">test</span><span class="w"> </span>validate<span class="w"> </span>/path/to/your/testfunctions/mycollection
+</pre></div>
+</div>
 <p>Load into ADARE:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>testfunction<span class="w"> </span>load<span class="w"> </span>/path/to/your/testfunctions
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span><span class="nb">test</span><span class="w"> </span>load<span class="w"> </span>/path/to/your/testfunctions/mycollection
 </pre></div>
 </div>
 <p>Use in a playbook:</p>
@@ -433,6 +446,59 @@ touch<span class="w"> </span>/path/to/your/testfunctions/mycollection/requiremen
 <span class="w">      </span><span class="nt">word</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ERROR&quot;</span>
 <span class="w">      </span><span class="nt">case_sensitive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 </pre></div>
+</div>
+</section>
+<section id="updating-a-library">
+<h3>Updating a Library<a class="headerlink" href="#updating-a-library" title="Link to this heading">¶</a></h3>
+<p>To change a loaded library, edit its source and re-load it — there is no
+separate <code class="docutils literal notranslate"><span class="pre">update</span></code> command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># edit /path/to/your/testfunctions/mycollection/mycollection.py</span>
+adare<span class="w"> </span><span class="nb">test</span><span class="w"> </span>validate<span class="w"> </span>/path/to/your/testfunctions/mycollection
+adare<span class="w"> </span><span class="nb">test</span><span class="w"> </span>load<span class="w">     </span>/path/to/your/testfunctions/mycollection
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">test</span> <span class="pre">load</span></code> now <strong>refreshes the loaded copy</strong> and <strong>bumps the version</strong>
+whenever the content changed. (Previously this was a silent no-op: the file was
+only copied if it did not already exist, so edits to an already-loaded library
+never propagated.) A load that finds no changes leaves the version untouched.</p>
+<p>Each changed method’s version is bumped independently, and the whole collection
+(file) gets its own version number too. A method that you remove from the source
+is <strong>not deleted</strong> — it is marked <em>not current</em> so experiments that referenced it
+still resolve; new experiments simply can’t bind it anymore. If you later add the
+method back under the same name, it is reactivated (same identity, next version).</p>
+</section>
+<section id="versioning-and-reproducibility">
+<h3>Versioning and Reproducibility<a class="headerlink" href="#versioning-and-reproducibility" title="Link to this heading">¶</a></h3>
+<p>ADARE treats a testfunction’s <strong>identity</strong> (its <code class="docutils literal notranslate"><span class="pre">collection.function</span></code>
+dotnotation, backed by a stable internal id) separately from its <strong>version</strong>:</p>
+<ul class="simple">
+<li><p><strong>Identity is stable.</strong> Updating a library never changes the identity an
+experiment is bound to, so prior experiments never end up with dangling
+references.</p></li>
+<li><p><strong>Versions are immutable and retained.</strong> Every content change appends a new
+version (<code class="docutils literal notranslate"><span class="pre">v1</span></code>, <code class="docutils literal notranslate"><span class="pre">v2</span></code>, …) and keeps an on-disk snapshot under
+<code class="docutils literal notranslate"><span class="pre">&lt;state&gt;/testfunctions/&lt;name&gt;/versions/v&lt;N&gt;/</span></code>. Old versions are <strong>never
+pruned</strong> — snapshots are cheap <code class="docutils literal notranslate"><span class="pre">.py</span></code> files and this is a forensic tool.</p></li>
+</ul>
+<p>Inspect the history:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span><span class="nb">test</span><span class="w"> </span>versions<span class="w"> </span>mycollection<span class="w">                     </span><span class="c1"># file (collection) history</span>
+adare<span class="w"> </span><span class="nb">test</span><span class="w"> </span>versions<span class="w"> </span>mycollection.file_contains_word<span class="w">  </span><span class="c1"># per-method history</span>
+</pre></div>
+</div>
+<p>The current version is also shown by <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">test</span> <span class="pre">list</span></code> and <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">test</span> <span class="pre">info</span></code>.</p>
+<p><strong>Reproducibility = drift detection.</strong> When an experiment is created, ADARE pins
+the collection version + hash and the method version + hash it was built against.
+Every run records the file name + file version/hash and method version/hash of
+the code that <strong>actually executed</strong>, so a report reads e.g. <em>“used mycollection
+&#64; v3”</em>.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>ADARE <strong>always executes the current code</strong>. It does <strong>not</strong> re-run an old
+version. If the current code has drifted from the version an experiment was
+created against, the run emits a loud warning naming the pinned vs current
+versions and stamps the executed version/hash onto the run — but it still
+runs and reports with the current code. Re-running historical code is out of
+scope (the retained snapshots make it a possible future addition).</p>
 </div>
 </section>
 </section>
@@ -483,8 +549,15 @@ touch<span class="w"> </span>/path/to/your/testfunctions/mycollection/requiremen
 <span class="c1"># Return TestResult directly → passed through</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">my_test</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">success</span><span class="p">([</span><span class="s1">&#39;custom result&#39;</span><span class="p">])</span>
+
+<span class="c1"># Pass, but flag something noteworthy → reported as WARNING, not FAILED</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">my_test</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">TestResult</span><span class="o">.</span><span class="n">warning</span><span class="p">([</span><span class="s1">&#39;passed, but the file was nearly empty&#39;</span><span class="p">])</span>
 </pre></div>
 </div>
+<p><code class="docutils literal notranslate"><span class="pre">TestResult.warning([...])</span></code> is a <em>pass-with-warning</em>: it does not fail the
+experiment verdict, but is reported distinctly from a plain success (and never
+counted as a failure).</p>
 <p>Use <code class="docutils literal notranslate"><span class="pre">ctx.fail_if()</span></code> and <code class="docutils literal notranslate"><span class="pre">ctx.error_if()</span></code> for failure/error conditions — they raise exceptions that the decorator catches and converts to the appropriate <code class="docutils literal notranslate"><span class="pre">TestResult</span></code>.</p>
 <p>Uncaught exceptions are automatically converted to <code class="docutils literal notranslate"><span class="pre">TestResult.execution_error()</span></code>.</p>
 </section>
@@ -514,7 +587,7 @@ touch<span class="w"> </span>/path/to/your/testfunctions/mycollection/requiremen
 <section id="host-based-tests">
 <h2>Host-Based Tests<a class="headerlink" href="#host-based-tests" title="Link to this heading">¶</a></h2>
 <p>Some tests execute on the host machine rather than the analyzed system — for example, visual tests that take screenshots and perform image recognition. These use <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">def</span></code> and access host services through <code class="docutils literal notranslate"><span class="pre">ctx.host</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset</span><span class="w"> </span><span class="kn">import</span> <span class="n">testfunction</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset.api</span><span class="w"> </span><span class="kn">import</span> <span class="n">testfunction</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset.basictest</span><span class="w"> </span><span class="kn">import</span> <span class="n">HostModeCategory</span>
 
 <span class="nd">@testfunction</span><span class="p">(</span>
@@ -655,6 +728,35 @@ lxml&gt;=4.9.0
 requests&gt;=2.28.0
 </pre></div>
 </div>
+<p>When you run <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">test</span> <span class="pre">load</span></code>, a non-empty <code class="docutils literal notranslate"><span class="pre">requirements.txt</span></code> is installed
+into ADARE’s interpreter (via <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">pip</span> <span class="pre">install</span></code>, falling back to <code class="docutils literal notranslate"><span class="pre">pip</span></code>). If
+installation fails, <code class="docutils literal notranslate"><span class="pre">load</span></code> stops with an actionable error listing the exact
+command to run manually — dependencies are resolved <strong>at load time</strong>, not
+silently deferred to run time.</p>
+</section>
+<section id="validating-and-dry-running">
+<h3>Validating and Dry-Running<a class="headerlink" href="#validating-and-dry-running" title="Link to this heading">¶</a></h3>
+<p>Two commands let you check a collection offline before wiring it into an
+experiment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Report every authoring-contract violation (missing ctx, unannotated params,</span>
+<span class="c1"># duplicate testnames, filename≠dirname, import/dependency errors):</span>
+adare<span class="w"> </span><span class="nb">test</span><span class="w"> </span>validate<span class="w"> </span>/path/to/testfunctions/mycollection
+
+<span class="c1"># Execute one test against a local sample file (no VM):</span>
+adare<span class="w"> </span><span class="nb">test</span><span class="w"> </span>dry-run<span class="w"> </span>mycollection.file_contains_word<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--path<span class="w"> </span>/path/to/testfunctions/mycollection<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--file<span class="w"> </span>./sample.txt<span class="w"> </span>--param<span class="w"> </span><span class="nv">word</span><span class="o">=</span>ERROR
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">dry-run</span></code> structures <code class="docutils literal notranslate"><span class="pre">--param</span> <span class="pre">key=value</span></code> pairs through the same cattrs path
+used for playbooks, sets <code class="docutils literal notranslate"><span class="pre">--file</span></code> as the <code class="docutils literal notranslate"><span class="pre">dst</span></code> parameter, runs the test, and
+prints the resulting <code class="docutils literal notranslate"><span class="pre">TestResult</span></code>. It supports <code class="docutils literal notranslate"><span class="pre">FILE_BASED</span></code> / <code class="docutils literal notranslate"><span class="pre">FILE_CONTENT</span></code>
+tests only — host/async and QGA tests need a live <code class="docutils literal notranslate"><span class="pre">ctx.host</span></code> / guest and are
+out of scope for the offline harness.</p>
+<p>A copyable starter collection lives at <code class="docutils literal notranslate"><span class="pre">examples/testfunctions/example/</span></code> —
+copy it (the built-in collections under <code class="docutils literal notranslate"><span class="pre">appdata/testfunctions/</span></code> are
+integrity-protected and not meant to be edited in place), rename the directory
+<strong>and</strong> its <code class="docutils literal notranslate"><span class="pre">.py</span></code> file to match, then <code class="docutils literal notranslate"><span class="pre">validate</span></code> and <code class="docutils literal notranslate"><span class="pre">load</span></code>.</p>
 </section>
 </section>
 <section id="real-world-example">
@@ -663,7 +765,7 @@ requests&gt;=2.28.0
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># /path/to/your/testfunctions/api/api.py</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset</span><span class="w"> </span><span class="kn">import</span> <span class="n">testfunction</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset.api</span><span class="w"> </span><span class="kn">import</span> <span class="n">testfunction</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.testset.basictest</span><span class="w"> </span><span class="kn">import</span> <span class="n">HostModeCategory</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adarelib.event.event</span><span class="w"> </span><span class="kn">import</span> <span class="n">TestResult</span>
 
@@ -795,6 +897,8 @@ requests&gt;=2.28.0
 <li><a class="reference internal" href="#">Create your own testfunction set</a><ul>
 <li><a class="reference internal" href="#quick-start">Quick Start</a><ul>
 <li><a class="reference internal" href="#loading-and-using-custom-test-functions">Loading and Using Custom Test Functions</a></li>
+<li><a class="reference internal" href="#updating-a-library">Updating a Library</a></li>
+<li><a class="reference internal" href="#versioning-and-reproducibility">Versioning and Reproducibility</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#core-concepts">Core Concepts</a><ul>
@@ -814,6 +918,7 @@ requests&gt;=2.28.0
 <li><a class="reference internal" href="#module-organization">Module Organization</a><ul>
 <li><a class="reference internal" href="#directory-structure">Directory Structure</a></li>
 <li><a class="reference internal" href="#dependencies">Dependencies</a></li>
+<li><a class="reference internal" href="#validating-and-dry-running">Validating and Dry-Running</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#real-world-example">Real-World Example</a></li>

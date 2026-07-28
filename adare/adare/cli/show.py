@@ -317,7 +317,6 @@ def exec_show_projects(arguments):
 def exec_show_environments(arguments):
     """Show environments in the configured output format."""
     import pandas as pd
-    from rich.layout import Layout
 
     from adare.frontend.terminal.console import DefaultConsole
     from adare.frontend.terminal.environment_list import EnvironmentTablePanel
@@ -357,11 +356,11 @@ def exec_show_environments(arguments):
         else:
             env_df = pd.DataFrame()
 
-        console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = EnvironmentTablePanel(env_df)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows. With 22
+        # environments in an 11-row window this listed 10 of them with no
+        # indication, which reads as "those environments do not exist".
+        DefaultConsole().print(EnvironmentTablePanel(env_df))
 
 
 def exec_remove_run(arguments):

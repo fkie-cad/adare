@@ -1,5 +1,5 @@
 environments:
-  - win11
+  - win11arm64-fresh
 
 description: >-
   Cross-tool validation (paper section 5.5): parse three LNK samples with LECmd 1.5.1

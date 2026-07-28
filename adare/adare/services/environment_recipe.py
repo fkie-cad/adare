@@ -3,8 +3,12 @@ Environment Recipe Service - shared YAML builder for environment descriptors.
 
 Extracted from `adare.cli.vm_create` so both the CLI and the webapi can emit
 the same environment YAML (recipe or baked) without duplicating the assembly
-logic. Field names/types must match `CONTRACT.md` exactly — the publishing
-server validates against them byte-for-byte.
+logic. Field names/types must match `adare.types.environment.EnvironmentMetadata`
+exactly — the publishing server validates the emitted YAML against a mirror of
+those rules in `giteaeventmanager/action/environment_contract.py`.
+
+The shared *validator* for the recipe ISO contract lives alongside this shared
+*builder*, in :mod:`adare.services.recipe_contract`.
 """
 import logging
 from pathlib import Path
@@ -13,6 +17,7 @@ from adare.backend.project.directory import ProjectDirectory
 from adare.console import print_step
 from adare.helperfunctions.hash import hash_file_sha256
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
+from adare.services.recipe_contract import normalized_iso_sha256
 from adarelib.helper.yaml import dict_to_yaml
 
 log = logging.getLogger(__name__)
@@ -66,7 +71,7 @@ def build_recipe_environment_file(
     *,
     os_name: str,
     os_def: OsDefinition,
-    iso_path: Path | str,
+    iso_path: Path | str | None,
     iso_sha256: str,
     setup_level: SetupLevel,
     disk_size: str | None,
@@ -75,6 +80,9 @@ def build_recipe_environment_file(
     arch: str | None,
     env_name: str,
     project_path: Path | None = None,
+    byo_iso: bool = False,
+    iso_name: str | None = None,
+    iso_notes: str | None = None,
 ) -> Path:
     """Generate a declarative recipe environment YAML.
 
@@ -82,6 +90,16 @@ def build_recipe_environment_file(
     these inputs and caches it (keyed on the recipe hash). Only user-specified
     params are written so profile defaults keep flowing and the recipe identity
     stays host-independent.
+
+    Args:
+        byo_iso: Emit the consumer-supplied ISO form (``iso_name`` + ``iso_notes``)
+            instead of ``iso``. Windows profiles only — enforced by the gates in
+            :mod:`adare.services.recipe_contract`, not here.
+        iso_name: Bare ISO filename for the BYO form. Defaults to
+            ``iso_path``'s basename.
+        iso_notes: Plain-text download pointer. Defaults to the OS profile's
+            ``iso_notes``, so a publisher who says nothing still gives the
+            consumer somewhere to go.
     """
     params: dict = {'setup_level': int(setup_level)}
     if disk_size:
@@ -95,9 +113,18 @@ def build_recipe_environment_file(
 
     recipe_block: dict = {
         'profile': os_name,
-        'iso': str(iso_path),
-        'iso_sha256': iso_sha256,
+        # Normalize on write: `verify_iso_hash` compares case-sensitively, so an
+        # uppercase digest would pass every gate and then never build.
+        'iso_sha256': normalized_iso_sha256(iso_sha256),
     }
+    if byo_iso:
+        resolved_name = iso_name or (Path(iso_path).name if iso_path else '')
+        recipe_block['iso_name'] = resolved_name
+        notes = iso_notes if iso_notes is not None else os_def.iso_notes
+        if notes:
+            recipe_block['iso_notes'] = notes
+    else:
+        recipe_block['iso'] = str(iso_path)
     if os_def.template:
         recipe_block['template'] = os_def.template
     recipe_block['params'] = params

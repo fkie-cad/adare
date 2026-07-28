@@ -531,9 +531,6 @@ def get_environment_by_ulid(ulid: str, fields: list[str] = None) -> Environment 
     }
 
     with EnvironmentDbApi() as db:
-        # Start with base query
-        db._session.query(db._session.query(Environment).filter_by(id=ulid).first().__class__).filter_by(id=ulid)
-
         # Add eager loading based on requested fields
         if fields:
             needed_relationships = set()

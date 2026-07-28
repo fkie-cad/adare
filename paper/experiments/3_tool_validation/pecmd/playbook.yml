@@ -16,10 +16,47 @@
 # transitions are checked. Two parameterized tests are re-evaluated per iteration
 # against the current `run_number` / `last_timestamp`.
 #
-# The `idle` after each launch is the "short delay between runs" the paper describes:
+# The wait after each launch is the "short delay between runs" the paper describes:
 # the timestamp inside the Prefetch file can lag the externally recorded execution time
 # by a few microseconds, and back-to-back launches would otherwise produce ambiguous or
 # colliding last-run timestamps.
+#
+# MEASURED IN-GUEST 2026-07-28 on win11arm64-fresh (Windows 11 Pro 26200 ARM64), which
+# corrected two things that had made this playbook unrunnable:
+#
+#   1. PECmd.exe cannot be EXECUTED from the shared-tools mount. That mount is a symlink
+#      to a QEMU/Samba share (`C:\adare\project_shared` -> `\\10.0.2.4\qemu\project_shared`)
+#      whose files carry read-only ACLs (`Everyone:(R)`, no (X)), so CreateProcess returns
+#      ERROR_ACCESS_DENIED:
+#          Program 'PECmd.exe' failed to run: Access is denied
+#      No process is created, hence no output and no exit code. Reading from the share is
+#      fine; only execution is denied. PECmd is therefore STAGED to a local disk first
+#      (`pecmd_tool_dir`) and every invocation uses the staged copy. The same fix is in
+#      5_cross_tool_validation/lnk_lecmd_windows11 for LECmd.
+#
+#   2. A fixed `idle: 10` after the launch is NOT ENOUGH, and that is why
+#      `check_regedit_pf_exists` failed on run 01KYJCP6FBC3GBTMS9MRR0AF9V. Prefetch and
+#      SysMain are fully enabled in this image (SysMain Running/Automatic,
+#      `EnablePrefetcher=3`, 144 pre-existing .pf files), regedit really does launch, and
+#      the .pf really is written — but the prefetcher traces the first ~10 seconds of a
+#      process's life before flushing, so for a process that stays open the file appears
+#      only AFTER that window closes. Measured: regedit started 19:00:28.663 UTC,
+#      REGEDIT.EXE-DAB4D60B.pf was written 19:00:38.876 UTC — 10.213 s later, i.e. about
+#      0.5 s of slack against a 10 s idle. The loop was losing a coin flip, not hitting a
+#      disabled prefetcher.
+#      A longer fixed idle would still be a race. The `idle` is therefore replaced by an
+#      explicit poll that waits for THIS launch's flush: the .pf's mtime is recorded before
+#      the launch and the wait returns as soon as the mtime advances past it. Waiting for
+#      mere existence would be wrong from iteration 2 onwards, where the previous
+#      iteration's file is already present and PECmd would read a stale RunCount.
+#
+# Also measured, and why the loop still works even though regedit is single-instance:
+# iterations 2..10 do NOT leave a second regedit process behind — the newly started
+# regedit.exe activates the existing window and exits immediately. Windows still counts it
+# as a run (RunCount went 1 -> 2, LastRun advanced to the second launch), so the paper's
+# "run count increases in lockstep with the iteration number" holds. Because that second
+# process exits at once, its trace closes at once too and its .pf flush is sub-second
+# rather than ~10 s — another reason the wait must be a poll and not a constant.
 
 settings:
   # Default pause between actions (seconds)
@@ -59,6 +96,24 @@ variables:
     type: path
     value: "{{pecmd_output_dir}}/{{pecmd_output_file}}"
 
+  pecmd_tool_dir:
+    type: path
+    value: "{{pecmd_output_dir}}/adare_pecmd_tool"
+    description: >-
+      Local-disk staging directory for PECmd.exe. The shared-tools mount is a read-only
+      Samba share and Windows refuses to execute an image from it (see note 1 in the
+      header), so the binary is copied here first and removed again at the end of the run.
+
+  pf_marker_file:
+    type: path
+    value: "{{pecmd_output_dir}}/adare_pf_marker.txt"
+    description: >-
+      Holds the Prefetch file's LastWriteTimeUtc.Ticks as of just before the current
+      launch. The flush wait polls until the real mtime is greater than this, which is what
+      distinguishes "this iteration's trace has been written" from "the previous
+      iteration's file is still lying there". Kept in the guest rather than captured into a
+      host variable so no value has to survive template type inference. Removed at the end.
+
   # Set per iteration by save_variable. Declared here so the expected run count is a
   # visible part of the playbook's contract rather than an implicit runtime value.
   run_number:
@@ -77,6 +132,15 @@ actions:
 
   - test: check_regedit_pf_does_not_exists
 
+  - command:
+      name: "Stage PECmd.exe on a local disk"
+      description: >-
+        The shared-tools mount cannot be executed from (read-only Samba ACLs -> CreateProcess
+        ERROR_ACCESS_DENIED); copy the binary to a local directory and run it from there.
+      command: '$dst = "{{ pecmd_tool_dir | win_path }}"; New-Item -ItemType Directory -Force -Path $dst | Out-Null; Copy-Item "{{ adare_project_shared_tools | win_path }}\PECmd.exe" "$dst\PECmd.exe" -Force; "staged=$(Test-Path "$dst\PECmd.exe") bytes=$((Get-Item "$dst\PECmd.exe").Length)"'
+      shell: true
+      timeout: 120
+
   # Ten transitions. Each one launches regedit, records when, exports the Prefetch
   # state with PECmd, and asserts both expectations against that export.
   - loop:
@@ -87,6 +151,16 @@ actions:
             name: run_number
             value: "{{ index + 1 }}"
             description: "Expected RunCount for this iteration (index is 0-based)"
+
+        # Record where the Prefetch file stands BEFORE the launch, so the wait below can
+        # tell this iteration's flush from the previous iteration's leftover file.
+        # Ticks (not a formatted time) because the comparison must be exact; 0 when the
+        # file does not exist yet, which is the state of iteration 1.
+        - command:
+            name: "Mark the Prefetch state before this launch"
+            command: '$p = "{{ regedit_prefetch | win_path }}"; $t = 0; if (Test-Path $p) { $t = (Get-Item $p).LastWriteTimeUtc.Ticks }; [IO.File]::WriteAllText("{{ pf_marker_file | win_path }}", "$t"); "before_ticks=$t"'
+            shell: true
+            timeout: 60
 
         - keyboard:
             combination: ["win", "r"]
@@ -99,16 +173,28 @@ actions:
             variable: last_timestamp
             description: "Externally recorded execution time for this iteration"
 
-        - idle:
-            duration: 10
-            description: "Let the launch settle and keep consecutive last-run timestamps distinguishable"
+        # Replaces a fixed `idle: 10`, which sat ~0.5 s inside the prefetcher's ~10.2 s
+        # flush latency and therefore failed roughly half the time (see the header).
+        # Exits as soon as the .pf's mtime passes the marker, so iterations 2..10 — whose
+        # short-lived regedit flushes sub-second — cost almost nothing.
+        - command:
+            name: "Wait until Windows has flushed this launch's Prefetch trace"
+            description: >-
+              Poll until the Prefetch file's mtime advances past the pre-launch marker. A
+              non-zero exit here means the prefetcher never wrote the trace, which is a real
+              failure of the experiment's premise and must not be silently tolerated.
+            command: '$before = [int64]((Get-Content "{{ pf_marker_file | win_path }}" -Raw).Trim()); $p = "{{ regedit_prefetch | win_path }}"; $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt 150) { if ((Test-Path $p) -and ((Get-Item $p).LastWriteTimeUtc.Ticks -gt $before)) { "flushed after $([math]::Round(((Get-Date) - $t0).TotalSeconds, 2))s"; exit 0 }; Start-Sleep -Milliseconds 500 }; "TIMEOUT: prefetch trace not flushed within 150s (before_ticks=$before, exists=$(Test-Path $p))"; exit 1'
+            shell: true
+            timeout: 180
 
         - test: check_regedit_pf_exists
 
         - command:
             name: "pecmd"
             tool: PECmd.exe
-            command: 'PECmd.exe -q -d {{prefetch_dir}} --json {{pecmd_output_dir}} --jsonf {{pecmd_output_file}}; Start-Sleep -Seconds 15.0'
+            # The STAGED copy, by absolute path. `--jsonf` DOES exist in PECmd (it does not
+            # in LECmd) and was confirmed to name the output file exactly as asked.
+            command: '& "{{ pecmd_tool_dir | win_path }}\PECmd.exe" -q -d "{{ prefetch_dir | win_path }}" --json "{{ pecmd_output_dir | win_path }}" --jsonf {{pecmd_output_file}}; Start-Sleep -Seconds 15.0'
             timeout: 200
             admin: true
             shell: true
@@ -124,6 +210,18 @@ actions:
   - pull:
       src: "{{abs_pecmd_output_file}}"
       description: "Collect the final Prefetch export on the host"
+
+  # --- leave the guest as we found it ---------------------------------------
+  # The export is already on the host. Remove the staged parser and the marker file so the
+  # guest image does not accumulate a copy of a third-party tool run after run; forensic
+  # integrity of the image depends on it. The Prefetch directory itself is deliberately
+  # left as the experiment made it — that is the artifact under study.
+  - command:
+      name: "Remove the staged parser and the marker file"
+      command: 'Remove-Item -Recurse -Force "{{ pecmd_tool_dir | win_path }}" -ErrorAction SilentlyContinue; Remove-Item -Force "{{ pf_marker_file | win_path }}" -ErrorAction SilentlyContinue; "tool_gone=$(-not (Test-Path "{{ pecmd_tool_dir | win_path }}")) marker_gone=$(-not (Test-Path "{{ pf_marker_file | win_path }}"))"'
+      shell: true
+      allow_failure: true
+      timeout: 120
 
 
 tests:

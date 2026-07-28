@@ -62,8 +62,16 @@ Verified on the authoring host against real tool builds:
 | Sample | `lnkinfo` 20181227 | ExifTool 12.76 |
 |---|---|---|
 | L1 | exit 0, full field dump | exit 0, no warning |
-| L2 | **exit 1**, `liblnk_io_handle_read_data_blocks: data block size exceeds file size.` | exit 0, `Warning: Truncated extra data` |
-| L3 | **exit 1**, same message | exit 0, `Warning: Truncated extra data` |
+| L2 | **exit 1**, `liblnk_io_handle_read_data_blocks: data block size exceeds file size.` | exit 0, **no warning** (corrected) |
+| L3 | **exit 1**, same message | exit 0, **no warning** (corrected) |
+
+> **Corrected 2026-07-27 against a live VM.** The two ExifTool cells previously read
+> `Warning: Truncated extra data`. They do not reproduce: on ExifTool 12.76 (aarch64,
+> Ubuntu 24.04 noble, installed from `libimage-exiftool-perl`) L2 and L3 produce **no
+> `Warning` key in the JSON and an empty stderr**, exactly like clean L1, while still
+> recovering every link field. ExifTool's tolerance of the appended data is therefore
+> completely silent, and its output cannot be used to detect the anomaly at all.
+> Measured in run `01KYJ8JTZTGE44RS2V9D2FT0Z7`; the `lnkinfo` column reproduced as written.
 
 That is Table 1's `lnkinfo ✓ ✗ ✗` and `ExifTool ✓ ✓ ✓` reproduced exactly, and
 "failed due to strict size constraints" is liblnk's own wording for it. Because L1 carries
