@@ -18,9 +18,8 @@ def exec_status(arguments):
 
     # Current project
     try:
-        from adare.config.configdirectory import ConfigDirectory
-        config_dir = ConfigDirectory()
-        project_name = config_dir.get_current_project_name()
+        from adare.database.utils.display_helpers import get_current_project_name
+        project_name = get_current_project_name()
         if project_name:
             console.print(f"  Project:    [green]{project_name}[/green]")
         else:
@@ -30,7 +29,11 @@ def exec_status(arguments):
 
     # Active dev sessions
     try:
-        result = api.dev.list_sessions()
+        from adare.backend.basics import determine_projectdirectory
+        from adare.core.dto.devmode import DevSessionListRequest
+
+        project_directory = determine_projectdirectory(None, silent=True)
+        result = api.devmode.list_sessions(DevSessionListRequest(project_path=project_directory))
         if result.success and result.data:
             active = [s for s in result.data if s.status == 'running']
             stopped = [s for s in result.data if s.status == 'stopped']
@@ -52,9 +55,8 @@ def exec_status(arguments):
 
     # Database status
     try:
-        from adare.database.manager import DatabaseManager
-        db = DatabaseManager()
-        if db.is_initialized():
+        result = api.manage.get_db_status()
+        if result.success and result.data.valid:
             console.print("  Database:   [green]initialized[/green]")
         else:
             console.print("  Database:   [yellow]not initialized[/yellow]")

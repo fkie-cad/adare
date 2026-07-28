@@ -1,8 +1,22 @@
 # ADARE Experiment Playbook - Simple Template
 # Define the GUI automation steps for your experiment
 
+# settings:
+#   # Snapshot the VM disk before/after the run and write filesystem_diffs.json/.csv/.bodyfile
+#   enable_filesystem_diff: true
+
 actions:
-  # Run initial test to check starting conditions  
+  # Run a headless shell command and check its result (no GUI needed)
+  - command:
+      command: "echo hello"
+      shell: true
+      description: "Run a shell command"
+      capture:
+        variable: command_ok
+        source: returncode
+        parser: "output == 0"
+
+  # Run initial test to check starting conditions
   - test:
       name: "initial_check"
       description: "Verify initial state before experiment"
