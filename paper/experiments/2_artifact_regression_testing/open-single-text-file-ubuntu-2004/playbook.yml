@@ -163,23 +163,53 @@ tests:
   # comparison is a UTC epoch from save_timestamp, and adding '| localtime' would make
   # basictest._parse_timestamp_with_format read the guest's UTC wall time as local wall
   # time, skewing the comparison by the host's UTC offset. See README ("UTC, not localtime").
+  # tolerance(5, -30) -- ASYMMETRIC on purpose, where the 22.04 / 24.04 variants use a
+  # symmetric +/-5s. The filter signature is tolerance(upper, lower) and the comparison
+  # is diff = reference - actual (basictest.py:274), so the NEGATIVE bound is the one
+  # that allows the artifact to be timestamped LATER than the reference.
+  #
+  # Only that direction is physically reachable. open_timestamp is captured immediately
+  # BEFORE the opening click and the xbel is written only once the document opens, so
+  # the artifact is always later. A symmetric +/-30s would additionally accept an
+  # artifact up to 30s EARLIER than the reference, which cannot happen from this
+  # interaction and would mean a stale artifact or a genuinely skewed guest clock --
+  # exactly the sort of thing that should fail loudly rather than be absorbed by
+  # slack. The +5s upper bound is therefore left where it already is, as jitter
+  # allowance for host/guest clock disagreement.
+  #
+  # The -30s is a measured property of focal, not a nudge to make a red test green:
+  # gedit's cold start plus the xbel flush takes ~11s from the click on this release,
+  # versus ~2.2s on 24.04. Run 01KYN01D7824ZE0K6K87ZQ2B7H reported -12.601346s against
+  # +/-5s on a verified-idle host (no other VM, no other QEMU), and that failure
+  # aborted the run before the two precision assertions below could execute.
+  #
+  # It is latency, NOT clock skew, and the run's own timeline proves which: the guest
+  # wrote modified=2026-07-28T18:35:34Z, while the host clicked at 18:35:23 and saw the
+  # document content at 18:35:36. The guest stamp falls INSIDE that host interval, so
+  # the clocks agree; 12.6s of skew would have placed it at ~18:35:08, before the click.
+  # Do not "fix" this by adjusting the guest clock.
+  #
+  # The assertion's purpose survives: it still shows the artifact was written by THIS
+  # interaction rather than being a leftover, because xbel_absent_before proves the file
+  # did not exist beforehand and text_file_accessed proves the document was read
+  # afterwards.
   - name: xbel_modified_timestamp
-    description: 'modified timestamp matches the moment the document was opened (+/-5s)'
+    description: 'modified timestamp matches the moment the document was opened (+/-30s -- focal gedit cold start)'
     function: xml.attribute_matches
     parameter:
       dst: '{{ xbel_file }}'
       xpath: '//bookmark'
       attribute: 'modified'
-      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%SZ') | tolerance(5, -5) }}"
+      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%SZ') | tolerance(5, -30) }}"
 
   - name: xbel_added_timestamp
-    description: 'added timestamp matches the moment the document was opened (+/-5s)'
+    description: 'added timestamp matches the moment the document was opened (+/-30s -- focal gedit cold start)'
     function: xml.attribute_matches
     parameter:
       dst: '{{ xbel_file }}'
       xpath: '//bookmark'
       attribute: 'added'
-      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%SZ') | tolerance(5, -5) }}"
+      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%SZ') | tolerance(5, -30) }}"
 
   # --- paper claim: "timestamp precision improved over time: Ubuntu 20.04 stored only
   # second-level precision" -- executable form of the precision-drift finding. The regex
