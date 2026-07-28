@@ -642,6 +642,101 @@ class VariableRegistry:
 
         return context
 
+    # Upper bound on the transitive dependency walk below, mirroring the safety limit in
+    # extract_referenced_variables().
+    _MAX_DEPENDENCY_EXPANSION = 200
+
+    def _build_lazy_resolution_context(self, referenced_variables: set) -> Dict[str, str]:
+        """Build the context used to resolve nested templates on the lazy (test) path.
+
+        Resolves chained references - ``tool_dir`` -> ``out_dir`` ->
+        ``adare_user_documents`` - in dependency order until a fixed point is reached, so
+        a chain of any depth resolves. Seeding the context with leaf values only left every
+        second-level reference undefined, and Jinja2 renders an undefined name as the empty
+        string, so ``tool_dir`` silently became ``/tool``.
+
+        Variables created at runtime by a ``capture:`` or ``save_timestamp`` action are not
+        in the registry. They neither gate resolution nor raise; they keep resolving to
+        empty here exactly as before, because only the running experiment can supply them.
+
+        Args:
+            referenced_variables: Variable names referenced by the test being resolved
+
+        Returns:
+            Mapping of variable name to fully resolved string value
+
+        Raises:
+            ValidationError: If the referenced variables form a dependency cycle
+        """
+        resolution_context: Dict[str, str] = {}
+        pending: Dict[str, str] = {}
+
+        # Walk the dependency closure: a referenced variable's own references have to be
+        # resolved too, even when the caller did not list them.
+        to_visit = list(referenced_variables)
+        visited = set()
+        while to_visit and len(visited) < self._MAX_DEPENDENCY_EXPANSION:
+            name = to_visit.pop()
+            if name in visited:
+                continue
+            visited.add(name)
+
+            var = self.variables.get(name)
+            if var is None:
+                # Created at runtime, or a typo - not resolvable here either way.
+                continue
+
+            var_str = var.get_string_value()
+            if '{{' not in var_str:
+                # Leaf value (typically an automatic variable) - usable as-is.
+                resolution_context[name] = var_str
+            elif var.type != VariableType.TIMESTAMP:
+                # Timestamp values get their own parsing in _get_variable_resolved_value(),
+                # so keep them out of the plain string context.
+                pending[name] = var_str
+                to_visit.extend(self._extract_template_variables(var_str))
+
+        if len(visited) >= self._MAX_DEPENDENCY_EXPANSION:
+            log.warning(
+                f"Lazy variable dependency walk hit its limit ({self._MAX_DEPENDENCY_EXPANSION}); "
+                f"some nested references may resolve to empty"
+            )
+
+        # Only names reached by the walk can gate resolution. A dependency outside this set
+        # (runtime-created, or a templated timestamp) must not block, or a resolvable chain
+        # would be misreported as a cycle.
+        gateable = set(pending) | set(resolution_context)
+
+        # Fixed point: a variable becomes resolvable once every gateable dependency has a
+        # value. Each pass resolves at least one variable, so the pass count is bounded by
+        # the number of pending variables.
+        for _ in range(len(pending)):
+            ready = [
+                name for name, var_str in pending.items()
+                if all(
+                    dep in resolution_context
+                    for dep in self._extract_template_variables(var_str)
+                    if dep in gateable
+                )
+            ]
+            if not ready:
+                break
+            for name in ready:
+                resolution_context[name] = self._resolve_nested_templates(
+                    pending.pop(name), resolution_context
+                )
+
+        if pending:
+            # No pass made progress while variables remain: every one of them still waits
+            # on another unresolved variable, which is only possible in a cycle.
+            raise ValidationError(
+                f"Circular variable reference among {sorted(pending)} - each depends on "
+                f"another that is still unresolved, so no resolution order exists. "
+                f"Resolved before the cycle: {sorted(resolution_context)}"
+            )
+
+        return resolution_context
+
     def to_execution_context_lazy(self, referenced_variables: set = None, for_tests: bool = False) -> Dict[str, Any]:
         """Convert to execution context with lazy resolution - only process referenced variables.
 
@@ -658,16 +753,9 @@ class VariableRegistry:
         # Track metadata created during this specific call
         current_call_metadata = {}
 
-        # Build minimal resolution context for nested template resolution
-        # Include variables without nested templates (typically automatic variables)
-        resolution_context = {}
-        for name in referenced_variables:
-            if name in self.variables:
-                var = self.variables[name]
-                var_str = var.get_string_value()
-                # For automatic variables (no nested templates), add them to context
-                if '{{' not in var_str:
-                    resolution_context[name] = var_str
+        # Build the resolution context for nested template resolution, resolving chained
+        # references in dependency order (see _build_lazy_resolution_context).
+        resolution_context = self._build_lazy_resolution_context(referenced_variables)
         log.debug(f"Built resolution context with {len(resolution_context)} variables: {list(resolution_context.keys())}")
 
         # Only process variables that are actually referenced
