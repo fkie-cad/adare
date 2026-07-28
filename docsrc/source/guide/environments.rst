@@ -134,6 +134,29 @@ Managing Environments
    # Delete environment
    adare environment delete my-environment
 
+Checking that an environment can actually boot
+**********************************************
+
+``adare environment list`` shows a **disk** column and ``adare env info`` a
+**disk** row, both reporting the backing disk of the environment's registered VM:
+
+* ``ok`` / ``present`` -- the disk file exists
+* ``MISSING`` -- the environment is registered but its disk is gone, so any run
+  against it will fail during VM setup
+* ``-`` -- nothing local to check (for example a URL-baked environment)
+
+This is deliberately separate from the *file path* column, which is the
+environment's YAML descriptor under ``~/.adare/state/environments/``. That
+descriptor keeps existing after its qcow2 has been pruned, so an environment
+whose disk is gone otherwise looks completely healthy in every listing and only
+fails once a run reaches VM setup. Check the ``disk`` column, not the file path,
+before concluding that an environment is usable.
+
+An environment reported as ``MISSING`` can be removed with ``adare env remove``.
+Remove its name from any experiment that lists it first (``adare experiment
+remove-env``): without ``--force``, ``env remove`` refuses to orphan an
+experiment, and with ``--force`` it deletes the orphaned experiments too.
+
 VM Storage Options
 ******************
 

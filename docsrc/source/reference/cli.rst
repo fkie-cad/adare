@@ -75,10 +75,15 @@ Environments define virtual machine configurations and contain experiments that 
     * ``--project TEXT`` - Name of the project
 
 ``adare environment list``
-  List all environments in the current project.
+  List all environments in the current project. The **disk** column reports the
+  backing disk of each environment's registered VM: ``ok``, ``MISSING`` (registered
+  but the disk is gone, so a run will fail at VM setup), or ``-`` (nothing local to
+  check). Note this is not the *file path* column, which is the environment's YAML
+  descriptor and outlives the disk it points at.
 
 ``adare environment info <dotnotation>``
   Show detailed information about a specific environment using dotnotation (project.environment).
+  Includes a **disk** row with the backing disk path and whether it is present.
 
 Experiment Management
 =====================
