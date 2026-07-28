@@ -104,15 +104,14 @@ def _resolve_template_path(os_def):
 
     if os_def.installer == 'gui':
         # GUI profiles use a stem-picked file rather than a frontmatter-selected
-        # answer-file template. Which file depends on the mode: 'gui-script'
-        # replays qmpinstall_<stem>.yaml, 'gui-auto' reads the goal/spec
-        # gui_<stem>.yaml. Reporting the gui-auto spec for a gui-script profile
-        # would name a file that is never opened.
+        # answer-file template. 'gui-auto' reads the goal/spec gui_<stem>.yaml.
+        # ('playbook' profiles embed their steps inline, so there is no separate
+        # template file to report.)
         from adare.hypervisor.qemu.vm_creator.gui_creator import (
             _BUNDLED_TEMPLATES_DIR as GUI_TEMPLATES_DIR,
             _template_stems,
         )
-        prefix = 'qmpinstall_' if os_def.install_mode == 'gui-script' else 'gui_'
+        prefix = 'gui_'
         stems = _template_stems(os_def, None)
         for stem in stems:
             for root, label in ((VM_TEMPLATES_DIR, f'user ({VM_TEMPLATES_DIR})'),
