@@ -41,6 +41,11 @@ class EnvironmentCreateRequest:
     # Disk-image format hint for a baked URL source (qcow2/ova/vmdk/vdi/img/raw).
     # Required when the URL has no recognized disk extension (owncloud case).
     vm_format: str | None = None
+    # Optional install-profile provenance for a baked source (see
+    # `EnvironmentMetadata.source_profile`): informational only, never
+    # validated, never required.
+    source_profile: str | None = None
+    source_iso_sha256: str | None = None
     os_profile: str | None = None
     iso_path: Path | None = None
     iso_url: str | None = None

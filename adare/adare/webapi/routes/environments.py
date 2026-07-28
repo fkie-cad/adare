@@ -43,6 +43,11 @@ class EnvironmentCreateBody(BaseModel):
     vm_url: str | None = None
     vm_sha256: str | None = None
     vm_format: str | None = None
+    # Optional install-profile provenance for a baked source (informational
+    # only, never validated, never required -- see
+    # `EnvironmentMetadata.source_profile`).
+    source_profile: str | None = None
+    source_iso_sha256: str | None = None
     # Recipe source
     os_profile: str | None = None
     iso_url: str | None = None
@@ -214,6 +219,8 @@ async def create_environment(body: EnvironmentCreateBody):
         vm_url=body.vm_url,
         vm_sha256=body.vm_sha256,
         vm_format=body.vm_format,
+        source_profile=body.source_profile,
+        source_iso_sha256=body.source_iso_sha256,
         os_profile=body.os_profile,
         iso_url=body.iso_url,
         iso_sha256=body.iso_sha256,

@@ -74,13 +74,20 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--vm-format', type=click.Choice(['qcow2', 'ova', 'vmdk', 'vdi', 'img', 'raw']), help='Disk format hint (inferred from the local disk extension when omitted; required if neither the local disk nor the URL names a recognized format)')
     @click.option('--verify-url', is_flag=True, help='Download the hosted URL and confirm its bytes hash-match the published disk (catches a wrong/HTML share link or a changed upload)')
     @click.option('--compress', is_flag=True, help='qcow2 only: zstd-compress the disk into a "<name>-published.qcow2" sibling file before hashing, and publish that instead (transparent to readers, typically ~30-50% smaller; upload the compressed file, not the original)')
+    @click.option('--source-profile', help='Optional provenance: the OS profile this disk was built from. Informational only -- not validated, not used to rebuild the disk.')
+    @click.option('--source-iso-sha256', help='Optional provenance: sha256 of the installer ISO this disk was built from, if still known. Informational only.')
     @click.option('--project', '-p', help='Name of the project')
-    def publish_prepare(name, vm_url, vm_format, verify_url, compress, project):
+    def publish_prepare(name, vm_url, vm_format, verify_url, compress, source_profile, source_iso_sha256, project):
         """Prepare a local baked environment for sharing (local disk -> URL + sha256).
 
         Hashes the local disk referenced by the environment's "vm:" field, then
         rewrites the descriptor to reference VM_URL with vm_type=url, the disk format,
         and the computed vm_sha256. Consumers re-verify that hash after downloading.
+
+        --source-profile / --source-iso-sha256 attach optional install-profile
+        provenance (which OS profile and, if known, source ISO this disk was built
+        from) for audit/reproducibility purposes only -- they never make the
+        environment rebuildable and are never required.
 
         NAME is the environment name (its descriptor lives in the project's
         environments directory).
@@ -89,6 +96,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         args = SimpleNamespace(
             name=name, vm_url=vm_url, vm_format=vm_format,
             verify_url=verify_url, compress=compress, project=project,
+            source_profile=source_profile, source_iso_sha256=source_iso_sha256,
         )
         exec_with_error_printing(exec_environment_publish_prepare, args)
 

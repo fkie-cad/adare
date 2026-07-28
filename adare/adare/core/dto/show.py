@@ -212,6 +212,11 @@ class EnvironmentDetail:
     vm: str = ""
     vm_type: str = ""
     vm_sha256: str = ""
+    # Optional install-profile provenance for a baked source (informational
+    # only -- see EnvironmentMetadata.source_profile). Empty for most
+    # environments and always empty for a recipe environment.
+    source_profile: str = ""
+    source_iso_sha256: str = ""
 
 
 @dataclass

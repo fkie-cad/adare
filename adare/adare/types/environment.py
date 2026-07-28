@@ -268,6 +268,17 @@ class EnvironmentMetadata:
     # file and selects the validator/hypervisor without relying on a URL suffix.
     vm_format: Literal['qcow2', 'ova', 'vmdk', 'vdi', 'img', 'raw'] | None = None
 
+    # Informational provenance for a baked (`vm`) environment only: which OS
+    # profile the disk was originally built from, and (when the publisher still
+    # has it) the source installer ISO's sha256. Neither field is used to rebuild
+    # the disk, neither is validated as authoritative anywhere in this tree (the
+    # OS-profile catalog is client-side and host-extensible, so a name here may
+    # not even resolve on another machine), and both are meaningless once
+    # `recipe` is set -- a recipe already carries `profile`/`iso_sha256` as real
+    # build inputs, not just a record of the past.
+    source_profile: str | None = None
+    source_iso_sha256: str | None = None
+
     name: str | None = None
     postsetupinstallations: list[PostsetupInstallations] = attrs.Factory(list)
     tags: list[str] = attrs.Factory(list)

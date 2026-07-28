@@ -30,17 +30,21 @@ from adare.core.result import Result
 log = logging.getLogger(__name__)
 
 
-def _parse_env_source(file: str | None) -> tuple[str, str, str]:
-    """Read (vm, vm_type, vm_sha256) from an environment YAML file.
+def _parse_env_source(file: str | None) -> tuple[str, str, str, str, str]:
+    """Read (vm, vm_type, vm_sha256, source_profile, source_iso_sha256) from an
+    environment YAML file.
 
     Best-effort: a missing/unparseable file yields empty strings so the list
     still renders. Recipe environments have no baked ``vm`` and return empties.
+    The last two are optional, informational install-profile provenance (see
+    ``EnvironmentMetadata.source_profile``) and are empty for most environments.
     """
+    empty = ("", "", "", "", "")
     if not file:
-        return "", "", ""
+        return empty
     env_path = Path(file)
     if not env_path.exists():
-        return "", "", ""
+        return empty
     try:
         from adare.exceptions import DataStructuringError
         from adare.types.environment import parse_environment_file
@@ -48,10 +52,13 @@ def _parse_env_source(file: str | None) -> tuple[str, str, str]:
     except (OSError, ValueError, DataStructuringError) as e:
         # A single malformed file must never break the whole list.
         log.warning(f"Could not parse environment source from {env_path}: {e}")
-        return "", "", ""
+        return empty
     if metadata is None:
-        return "", "", ""
-    return (metadata.vm or "", metadata.vm_type or "", metadata.vm_sha256 or "")
+        return empty
+    return (
+        metadata.vm or "", metadata.vm_type or "", metadata.vm_sha256 or "",
+        metadata.source_profile or "", metadata.source_iso_sha256 or "",
+    )
 
 
 class ShowService:
@@ -381,7 +388,7 @@ class ShowService:
 
             items = []
             for env in environments:
-                vm, vm_type, vm_sha256 = _parse_env_source(env.file)
+                vm, vm_type, vm_sha256, _source_profile, _source_iso_sha256 = _parse_env_source(env.file)
                 items.append(EnvironmentListItem(
                     ulid=env.ulid,
                     name=env.name,
@@ -440,7 +447,7 @@ class ShowService:
                     solutions=['Use `adare show environments` to list available environments']
                 )
 
-            vm, vm_type, vm_sha256 = _parse_env_source(env.file)
+            vm, vm_type, vm_sha256, source_profile, source_iso_sha256 = _parse_env_source(env.file)
             detail = EnvironmentDetail(
                 ulid=env.ulid,
                 name=env.name,
@@ -462,6 +469,8 @@ class ShowService:
                 vm=vm,
                 vm_type=vm_type,
                 vm_sha256=vm_sha256,
+                source_profile=source_profile,
+                source_iso_sha256=source_iso_sha256,
             )
 
             return Result.ok(detail)

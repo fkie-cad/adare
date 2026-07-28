@@ -84,6 +84,17 @@ export default function EnvironmentDetailPage() {
                     </dd>
                   </div>
                 )}
+                {(env.source_profile || env.source_iso_sha256) && (
+                  <div className="space-y-1 sm:col-span-2">
+                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Source profile (provenance only)
+                    </dt>
+                    <dd className="text-sm font-mono break-all">
+                      {env.source_profile || '—'}
+                      {env.source_iso_sha256 ? ` · ISO sha256: ${env.source_iso_sha256}` : ''}
+                    </dd>
+                  </div>
+                )}
               </dl>
             </CardContent>
           </Card>

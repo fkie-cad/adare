@@ -7,8 +7,11 @@ from pathlib import Path
 
 from adare.backend.project.directory import ProjectDirectory
 from adare.services.recipe_contract import (
+    SHA256_HEX_RE,
     RecipeContractError,
     check_recipe_publish_contract,
+    normalized_iso_sha256,
+    profile_platform,
 )
 
 log = logging.getLogger(__name__)
@@ -106,6 +109,31 @@ def _preflight_environment(env_file: Path) -> None:
             "'vm_format' is required when the VM URL has no recognized disk extension "
             "(one of: " + ", ".join(_VM_FORMATS) + ")."
         )
+
+    # Optional install-profile provenance (informational only -- never blocks a
+    # publish, never used to rebuild the disk; see EnvironmentMetadata.source_profile).
+    if metadata.source_iso_sha256:
+        digest = normalized_iso_sha256(metadata.source_iso_sha256)
+        if not SHA256_HEX_RE.match(digest):
+            raise EnvironmentSubmissionError(
+                f"'source_iso_sha256' must be 64 hex characters (got {metadata.source_iso_sha256!r})."
+            )
+    if metadata.source_profile and profile_platform(metadata.source_profile) is None:
+        log.warning(
+            "'source_profile' %r is not a known OS profile on this host; publishing "
+            "anyway -- this field is informational and not validated as authoritative "
+            "(a host-local custom profile in ~/.adare/os-profiles/ may simply not "
+            "resolve here).",
+            metadata.source_profile,
+        )
+    if not metadata.source_profile and not metadata.source_iso_sha256:
+        declared_platform = metadata.os.platform if metadata.os is not None else None
+        if declared_platform != 'windows':
+            print(
+                "Note: no source install-profile/ISO hash attached -- consider "
+                "'adare environment publish-prepare --source-profile ... "
+                "--source-iso-sha256 ...' for provenance."
+            )
 
 
 def export_experiment_for_submission(project_path: Path, experiment_name: str) -> dict[str, bytes]:

@@ -18,9 +18,9 @@ class VMTablePanel:
 
     def __rich__(self) -> Panel:
         table = Table(expand=True)
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("ID", style="dim", no_wrap=True)
-        table.add_column("Description", style="dim")
+        table.add_column("Name", style="cyan", no_wrap=True, max_width=30)
+        table.add_column("ID", style="dim", no_wrap=True, max_width=26)
+        table.add_column("Description", style="dim", max_width=40)
 
         for vm in self.vms:
             # Truncate description if too long
@@ -119,10 +119,10 @@ def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=Fa
         # Create VM table
         if vms:
             vm_table = Table(expand=True)
-            vm_table.add_column("Name", style="cyan", no_wrap=True)
-            vm_table.add_column("ID", style="dim", no_wrap=True)
-            vm_table.add_column("Hypervisor", style="cyan", no_wrap=True)
-            vm_table.add_column("Description", style="dim")
+            vm_table.add_column("Name", style="cyan", no_wrap=True, max_width=30)
+            vm_table.add_column("ID", style="dim", no_wrap=True, max_width=26)
+            vm_table.add_column("Hypervisor", style="cyan", no_wrap=True, max_width=16)
+            vm_table.add_column("Description", style="dim", max_width=40)
 
             for vm in vms:
                 description = vm.get('description', '')
@@ -144,13 +144,13 @@ def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=Fa
         # Create instance table
         if instances:
             instance_table = Table(expand=True)
-            instance_table.add_column("Instance Name", style="cyan", no_wrap=True)
-            instance_table.add_column("ID", style="dim", no_wrap=True)
-            instance_table.add_column("Parent VM", style="cyan", no_wrap=True)
-            instance_table.add_column("Hypervisor", style="cyan", no_wrap=True)
-            instance_table.add_column("Status", style="cyan", no_wrap=True)
-            instance_table.add_column("Port", style="cyan", no_wrap=True)
-            instance_table.add_column("Last Used", style="dim", no_wrap=False)
+            instance_table.add_column("Instance Name", style="cyan", no_wrap=True, max_width=30)
+            instance_table.add_column("ID", style="dim", no_wrap=True, max_width=26)
+            instance_table.add_column("Parent VM", style="cyan", no_wrap=True, max_width=30)
+            instance_table.add_column("Hypervisor", style="cyan", no_wrap=True, max_width=16)
+            instance_table.add_column("Status", style="cyan", no_wrap=True, max_width=12)
+            instance_table.add_column("Port", style="cyan", no_wrap=True, max_width=10)
+            instance_table.add_column("Last Used", style="dim", no_wrap=False, max_width=20)
 
             for instance in instances:
                 last_used = instance.last_used_at.strftime("%Y-%m-%d %H:%M:%S") if instance.last_used_at else "Never"

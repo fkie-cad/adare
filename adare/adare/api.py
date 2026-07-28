@@ -17,6 +17,8 @@ Available API facades:
 All API methods return Result[T] objects for consistent error handling.
 """
 
+from functools import cached_property
+
 
 class DevModeAPI:
     """Dev mode operations API."""
@@ -309,11 +311,13 @@ class EnvironmentAPI:
 
     def publish_prepare(
         self, project_path, name, vm_url, vm_format=None, verify_url=False, compress=False,
+        source_profile=None, source_iso_sha256=None,
     ):
         """Convert a local-path baked environment into a publish-ready URL one."""
         return self._service.publish_prepare(
             project_path, name, vm_url, vm_format=vm_format,
             verify_url=verify_url, compress=compress,
+            source_profile=source_profile, source_iso_sha256=source_iso_sha256,
         )
 
     def recipe_byo(self, project_path, name, iso_name=None, iso_notes=None):
@@ -592,13 +596,38 @@ class AdareAPI:
     - api.web - Web integration and sync
     """
 
-    def __init__(self):
-        self.devmode = DevModeAPI()
-        self.testfunction = TestFunctionAPI()
-        self.experiment = ExperimentAPI()
-        self.manage = ManageAPI()
-        self.environment = EnvironmentAPI()
-        self.project = ProjectAPI()
-        self.show = ShowAPI()
-        self.vm = VMAPI()
-        self.web = WebAPI()
+    @cached_property
+    def devmode(self):
+        return DevModeAPI()
+
+    @cached_property
+    def testfunction(self):
+        return TestFunctionAPI()
+
+    @cached_property
+    def experiment(self):
+        return ExperimentAPI()
+
+    @cached_property
+    def manage(self):
+        return ManageAPI()
+
+    @cached_property
+    def environment(self):
+        return EnvironmentAPI()
+
+    @cached_property
+    def project(self):
+        return ProjectAPI()
+
+    @cached_property
+    def show(self):
+        return ShowAPI()
+
+    @cached_property
+    def vm(self):
+        return VMAPI()
+
+    @cached_property
+    def web(self):
+        return WebAPI()

@@ -91,6 +91,24 @@ Notes
 - Exactly one of ``times`` or ``items`` must be specified
 - Variables created in loop iterations persist to parent scope
 - Use ``continue`` action to skip remaining actions in current iteration
+- A failing action or test stops the loop at that iteration; the run summary reports
+  how many iterations completed
+
+Run Summary
+-----------
+
+Everything a loop executes is counted in the closing run summary, including the
+``test:`` entries inside the body. A ten-iteration loop with four assertions per
+iteration reports all forty of them, and the nesting is shown so the structure of
+the run stays readable::
+
+   📊 Actions: 134/134 passed (4 top-level + 130 in a loop of 10 iterations)
+   🧪 Tests: 41/41 passed (1 top-level + 40 in a loop of 10 iterations)
+
+The totals are recomputed from the run's persisted events (``action_events`` and
+``test_events`` in the project database), so they match what a query against the
+database reports. A failed assertion in any iteration is counted as a failure and
+the run summary is red, even when the surrounding top-level actions all succeeded.
 
 See Also
 --------
