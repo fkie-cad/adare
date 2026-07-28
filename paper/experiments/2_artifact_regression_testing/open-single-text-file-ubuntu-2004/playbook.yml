@@ -9,8 +9,54 @@
 # defect: xbel_visited_is_epoch_minus_one is expected to pass here and would fail on any
 # release that fixed the bug, which is exactly the drift the paper wants surfaced.
 #
-# GUI crops in img/ were copied from the Ubuntu 24.04 variant and MUST be re-taken
-# against a live Ubuntu 20.04 VM (Yaru icon theme differs between releases).
+# PROPOSED, NOT YET VERIFIED ON A LIVE RUN (authored 2026-07-28). Nautilus is opened through
+# the GNOME Activities overview, NOT by clicking the dock icon. Everything below the "route"
+# heading has never been executed on this release; the first run of it is the verification.
+#
+# Why the dock click had to go. The Yaru dock art differs per release, and the crop this
+# experiment shipped was a byte-identical copy of the 24.04 one (sha256 eaf1b9d1..., 10 513 B,
+# 256x256): run 01KYMQ1E3EMFPJV8Q3FPYJMXD1 (2026-07-28) aborted at action 5 with
+# "Could not resolve target: Target(image='filemanager-app.png')". Re-measured offline against
+# that run's own failure screenshot (multi-scale TM_CCOEFF_NORMED, 0.10-2.00 in 0.02 steps),
+# the shared crop peaks at 0.411 against a confidence_floor of 0.7
+# (adare/adare/backend/experiment/target_resolver.py:56) -- a genuine non-match, not a missing
+# CV server: that run's logs/mcp_gui.log is 3906 B, so the server was up and serving. The
+# 20.04 Yaru drawer icon has no crimson top flap; the 22.04/24.04 art does. The desktop itself
+# was healthy -- dock present with a Files launcher at (36, 130), top bar reading
+# "Activities" / "Jul 28 15:57", and screenshots 000/001/002 byte-identical, so the session had
+# fully settled long before the click. Nothing was wrong except the reference image.
+#
+# Why a keyboard route rather than a fresh crop. A re-crop was tried first and is kept as the
+# fallback below, but it is per-release, per-wallpaper and per-dock-layout: the Ubuntu Dock is
+# translucent (panel BGR [38,30,65] over wallpaper [61,34,152] at y=130, and the panel mean
+# varies with y), so any crop bakes in wallpaper-tinted background and would have to be
+# re-taken for ubuntu-2004 / ubuntu-2004-r2 / ubuntu-2004-gis separately. Note also that even
+# on their own releases the 22.04 and 24.04 crops clear the floor by only 0.075
+# (0.775 in runs 01KYMPVN952S2MXC2481JR205G and 01KYJ23VJY2B3P4DPCD3EES4WM) -- the dock-click
+# approach is marginal everywhere, not just here. The keyboard route is theme-, wallpaper- and
+# dock-layout-independent, and it is ADARE's own documented house rule: see rule 9 of
+# adare/adare/backend/experiment/vlm/authoring/authoring_prompt.md, "Launch apps with the
+# keyboard, not a dock click ... reserve a dock position click only if a keyboard launch is
+# truly impossible". The route mirrors gui_files_ops (env ubuntu2510-libre-20260714, run
+# 2026-07-20_15-09-55, all 19 steps green), which is the only GNOME launch path in this repo
+# known to work end to end.
+#
+# This is the same class of fix, and the same precedent, as the Kubuntu 20.04 variant: its
+# panel had no launchers at all, so it switched to Kickoff. Following that file's conventions,
+# the now-unused variable icon_filemanager_taskbar is KEPT so the 22.04/24.04 variants stay
+# line-for-line diffable against this one, and the failing run ID is recorded inline above.
+#
+# FALLBACK, if the keyboard route misses on GNOME 3.36: img/filemanager-app.png has already
+# been re-taken against this release (sha256 5e18118a..., 47x43 RGBA, cropped from the failure
+# screenshot at box (13, 109) - (60, 152), scoring 0.950 there, selected at (36, 130); the
+# next-best rival anywhere on screen is the app-grid button at 0.777, so
+# BestConfidenceStrategy is unambiguous). Swapping the four keyboard/wait_until actions back
+# for a single `click: {target: {image: "{{ icon_filemanager_taskbar }}"}}` restores the old
+# shape. That score is circular, though -- it is a pixel-exact crop of the very frame it was
+# cut from, so 0.950 proves the art is present at (36, 130), not that a fresh render matches.
+# Do NOT substitute ~/.adare/examples/*/img/nautilus_taskbar.png: it reaches 0.878 on this
+# frame but lands at (1046, 354) on bare wallpaper, i.e. it is an active false positive here.
+# The 22.04 and 24.04 variants still share the original crop and are deliberately untouched.
 
 settings:
   idle: 2.0
@@ -185,16 +231,46 @@ actions:
       shell: true
   - test: text_file_created
 
-  - click:
-      target:
-        image: "{{ icon_filemanager_taskbar }}"
-      description: "Open the GNOME file manager (Nautilus)"
+  # --- route: launch Nautilus from the Activities overview (see the header) ---
+  # Shaped on gui_files_ops, which is green on GNOME 49 (25.10), and on the Kubuntu 20.04
+  # Kickoff precedent -- but deliberately WITHOUT that file's `down` press: GNOME Shell
+  # pre-selects the first search result, so a bare Enter launches it, whereas Kickoff on
+  # Plasma 5.18 does not pre-highlight and needs the extra key. If a live run shows GNOME 3.36
+  # NOT pre-selecting, add `- keyboard: {key: down}` before the Enter -- but do not add it
+  # speculatively, because on a pre-selecting shell it would move to the SECOND result.
+  - keyboard:
+      key: super
+      description: "Open the GNOME Activities overview"
+  # GNOME 3.36 renders this placeholder as "Type to search..." with a Unicode ellipsis, and
+  # text matching is case-insensitive substring by default (docsrc/source/reference/actions/
+  # gui/click.rst:85), so the ellipsis does not need to be matched. If OCR on 3.36 mangles it,
+  # the documented escape hatch is text_match: {mode: fuzzy, allow_missing_chars: [".", "..."],
+  # max_missing: 3} (click.rst:120-135) -- verified as the string "Type to search" on 25.10.
+  - wait_until:
+      condition:
+        exists:
+          text: "Type to search"
+      description: "Wait for the overview search entry to be ready"
+  - keyboard:
+      text: "Files"
+      description: "Type the file manager's name into the overview search box"
+  - keyboard:
+      key: enter
+      description: "Launch the top (pre-selected) result -- the GNOME file manager (Nautilus)"
   - wait_until:
       condition:
         exists:
           text: "Documents"
       description: "Wait for the file manager sidebar to be usable"
 
+  # index 2 is carried over unchanged from the 22.04/24.04 variants and is the next plausible
+  # failure point: the aborted run never reached this action, so there is ZERO evidence about
+  # how many "Documents" hits OCR sees on Nautilus 3.36 or how they sort. This is the exact trap
+  # that bit the Kubuntu 20.04 variant, which needed index 1 because Plasma 5.18 showed three
+  # hits where later releases show two. Left at 2 because guessing 1 would be a second
+  # unverified change; if the run navigates into the icon-view label instead of the sidebar
+  # (symptom: Nautilus stays in Home and the next wait_until times out on {{ filename }}),
+  # drop it to 1.
   - click:
       target:
         text: "Documents"
