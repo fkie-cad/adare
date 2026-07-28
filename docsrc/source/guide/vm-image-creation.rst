@@ -1276,9 +1276,31 @@ archive if the installed system's metalink fails, then installs the ADARE extras
    so SELinux contexts and audit entries keep showing up in forensic diffs — only
    the denials stop. It remains a deviation from a stock Fedora install and should
    be stated wherever these environments are reported. Debian/Ubuntu guests are
-   unaffected (no SELinux confinement of the agent). The same one-line fix applies
-   to ``kickstart_fedora_kde.yaml`` and ``kickstart_rhel_workstation.yaml``, which
-   have not been changed.
+   unaffected (no SELinux confinement of the agent).
+
+   ``kickstart_fedora_kde.yaml`` now carries the same line, and it is confirmed to
+   have taken effect: ``getenforce`` reports ``Permissive`` in-guest on both
+   ``fedora-41-kde`` and ``fedora-42-kde``. ``kickstart_rhel_workstation.yaml``
+   still does not have it.
+
+.. warning::
+
+   **Fedora KDE guests run firewalld, and the kickstart does not stop them.**
+   ``services --disabled=firewalld`` does **not** take effect on the KDE spin:
+   measured on both built images, ``systemctl is-enabled firewalld`` reports
+   ``enabled`` and ``is-active`` reports ``active``, with the ``public`` zone bound
+   to the external interface. The mechanism is not established, so do not assume
+   that line works — verify in-guest if you depend on it.
+
+   ADARE does not depend on it. The only inbound port a run needs is the adarevm
+   WebSocket port, which is opened at run time in firewalld's in-memory state only
+   (see :doc:`../architecture/guest-agent`). Everything else is outbound (PyPI, the
+   SLIRP SMB share) or not network at all (QGA rides a virtio-serial channel).
+
+   The line is kept rather than made to work, because a stock-as-shipped firewall
+   is the better forensic baseline: the guest's on-disk configuration stays
+   untouched, so artifact diffs stay attributable to the experiment rather than to
+   the image build.
 
 **Install timeout.** One unattended install is allowed
 ``ADARE_VM_INSTALL_TIMEOUT_MINUTES`` minutes (default **150**) before it is
