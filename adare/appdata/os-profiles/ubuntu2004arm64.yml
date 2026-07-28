@@ -1,5 +1,5 @@
 name: ubuntu2004arm64
-display_name: "Ubuntu 20.04 LTS (Focal Fossa, ARM64)"
+display_name: "Ubuntu 20.04 LTS (Focal Fossa, ARM64, Desktop overlay on Server base)"
 platform: linux
 distribution: ubuntu
 distribution_label: "Focal Fossa"

@@ -162,7 +162,7 @@ UBUNTU_2404 = OsDefinition(
 # Ubuntu 24.04 LTS (Noble Numbat, ARM64) - User must supply ISO
 UBUNTU_2404_ARM64 = OsDefinition(
     name='ubuntu2404arm64',
-    display_name='Ubuntu 24.04 LTS (Noble Numbat, ARM64)',
+    display_name='Ubuntu 24.04 LTS (Noble Numbat, ARM64, Desktop overlay on Server base)',
     platform='linux',
     distribution='ubuntu',
     distribution_label='Noble Numbat',
@@ -238,7 +238,7 @@ UBUNTU_2204 = OsDefinition(
 # Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64) - User must supply ISO
 UBUNTU_2204_ARM64 = OsDefinition(
     name='ubuntu2204arm64',
-    display_name='Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64)',
+    display_name='Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64, Desktop overlay on Server base)',
     platform='linux',
     distribution='ubuntu',
     distribution_label='Jammy Jellyfish',

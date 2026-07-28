@@ -5,10 +5,13 @@ description: Ubuntu 22.04 / 24.04 LTS desktop (server ISO autoinstall)
 maintainer: ADARE
 revision: 2026-07-28
 supports:
+  # x86_64 only. The aarch64 profiles are served by
+  # autoinstall_ubuntu_lts_noconda.yaml, which is the variant the paper images are
+  # built from (system pip + standalone uv instead of Miniforge). They cannot be
+  # listed here as well: two templates in one directory claiming the same OS name
+  # is a discovery error (see discover_templates()).
   - ubuntu2204
-  - ubuntu2204arm64
   - ubuntu2404
-  - ubuntu2404arm64
 -#}
 {#- Ubuntu 22.04 (jammy) cannot use subiquity's `packages:` list. Jammy's curtin
     leaves devpts unmounted inside /target, so the postinstall apt run cannot
