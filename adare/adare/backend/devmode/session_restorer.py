@@ -271,13 +271,34 @@ async def restore_application_context(
 
         # 2. Initialize and start MCP server for target resolution (non-fatal)
         try:
-            from adare.backend.experiment.mcp_server_manager import MCPServerManager
+            from adare.backend.experiment.mcp_server_manager import (
+                MCPServerManager,
+                find_free_cv_port,
+                load_cv_state,
+            )
             from adare.backend.experiment.run import step_start_mcp_server
 
-            # Initialize MCP server object
+            # Reclaim the port this session already owns rather than re-scanning:
+            # its cv-server survives a CLI exit (start_new_session=True), so
+            # allocating a fresh port here would start a second server and leak the
+            # first — and shutdown would then force-kill a port this session no
+            # longer owns, which is how a foreign run's server used to die.
+            # A recorded PID additionally entitles us to stop that surviving server
+            # even though we have no Popen handle for it.
+            recorded_port, recorded_pid = load_cv_state(
+                session.experiment_ctx.experiment_run_directory.path
+            )
+            if recorded_port is None:
+                recorded_port = find_free_cv_port()
+                log.info(f"No recorded CV port for this session; allocated {recorded_port}")
+            else:
+                log.info(f"Reclaiming this session's CV port {recorded_port} (pid={recorded_pid})")
+
             session.experiment_ctx.mcp_server = MCPServerManager(
+                server_port=recorded_port,
                 log_file=session.experiment_ctx.experiment_run_directory.mcp_gui_log_file
             )
+            session.experiment_ctx.mcp_server.known_server_pid = recorded_pid
 
             # Start the server
             await step_start_mcp_server(session.experiment_ctx)

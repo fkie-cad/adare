@@ -148,10 +148,17 @@ class DevModeLifecycleMixin:
                 self._initialize_session_logging()
 
                 # 5. Start MCP server for target detection
-                # Force cleanup of any existing server to ensure we capture logs in this session
+                # Only our own child gets stopped here (force_external=False). The old
+                # force_external=True existed because every session shared port 13109,
+                # so a leftover server had to be evicted to capture logs in this
+                # session. step_prepare_run_environment now allocates this session a
+                # free port of its own, so there is nothing of ours to evict — and a
+                # force kill on a just-allocated port could only hit a CONCURRENT run
+                # that grabbed it in the interim, which is precisely the foreign-kill
+                # this change removes.
                 if self.experiment_ctx.mcp_server:
-                    log.info("Stopping any existing MCP server to ensure log capture")
-                    await self.experiment_ctx.mcp_server.stop(force_external=True)
+                    log.info("Stopping any MCP server this session already owns")
+                    await self.experiment_ctx.mcp_server.stop(force_external=False)
 
                 await step_start_mcp_server(self.experiment_ctx)
                 log.info("MCP server started")

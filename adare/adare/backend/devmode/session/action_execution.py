@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from adare.backend.experiment.exceptions import ExperimentException
-from adare.backend.experiment.mcp_server_manager import MCPServerManager
+from adare.backend.experiment.mcp_server_manager import (
+    MCPServerManager,
+    find_free_cv_port,
+    save_cv_state,
+)
 from adare.backend.experiment.websocket_client import WebSocketTimeoutError
 from adare.core.result import Result
 from adare.exceptions import LoggedErrorException
@@ -298,22 +302,47 @@ class DevModeActionExecutionMixin:
             if not log_file and self.experiment_ctx.experiment_run_directory:
                 log_file = self.experiment_ctx.experiment_run_directory.mcp_gui_log_file
 
+            # Port: re-bind the one this session already owns. Allocating a fresh
+            # port here would leave the just-stopped server's port unused and, worse,
+            # move the session off the port its recorded state names — so a later
+            # resume or shutdown would target a port it no longer owns. Only a
+            # session with no server yet needs an allocation.
+            if current_server is not None:
+                new_port = current_server.server_port
+                log.info(f"Re-binding this session's own CV port {new_port}")
+            else:
+                new_port = find_free_cv_port()
+                log.info(f"No existing CV server for this session; allocated port {new_port}")
+
             # 3. Create new manager
             log.info(f"Creating new MCP server manager (debug={new_debug}, output={new_debug_output_dir})")
             new_manager = MCPServerManager(
+                server_port=new_port,
                 log_file=log_file,
                 debug=new_debug,
                 debug_output_dir=new_debug_output_dir
             )
 
             # 4. Start new server
+            # allow_existing=False is deliberate: step 1 stopped OUR server, so the
+            # port must be free. If it is not, something we do not own holds it and
+            # failing loudly is right — starting elsewhere would orphan a server.
             try:
                 success = await new_manager.start(allow_existing=False)
                 if success:
                     self.experiment_ctx.mcp_server = new_manager
+                    if self.experiment_ctx.experiment_run_directory is not None:
+                        save_cv_state(
+                            self.experiment_ctx.experiment_run_directory.path,
+                            new_port,
+                            new_manager.known_server_pid,
+                        )
                     log.info("MCP GUI server restarted successfully")
                     return Result.ok(None)
-                log.error("Failed to start new MCP server")
+                log.error(
+                    f"Failed to start new MCP server on this session's port {new_port} "
+                    f"(is it held by something we do not own?)"
+                )
                 return Result.fail("MCP_START_FAILED", "Failed to start new MCP server")
             except (OSError, RuntimeError) as e:
                 log.error(f"Error restarting MCP server: {e}", exc_info=True)

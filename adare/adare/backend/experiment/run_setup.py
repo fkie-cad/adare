@@ -423,6 +423,17 @@ async def step_start_mcp_server(context: ExperimentRunCtx):
         success = await context.mcp_server.start()
         if success:
             log.info("MCP GUI server started successfully")
+            # Record which port/PID this run or dev session owns, so a resumed dev
+            # session reclaims its own server instead of allocating a second one and
+            # leaking the first. Written here rather than at each construction site
+            # so dev start, dev resume and production runs all record it identically.
+            if context.experiment_run_directory is not None:
+                from adare.backend.experiment.mcp_server_manager import save_cv_state
+                save_cv_state(
+                    context.experiment_run_directory.path,
+                    context.mcp_server.server_port,
+                    context.mcp_server.known_server_pid,
+                )
         else:
             from adare.exceptions import LoggedException
             raise LoggedException(log, "MCP GUI server failed to start - cannot proceed without target detection capabilities")
