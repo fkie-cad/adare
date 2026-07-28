@@ -122,15 +122,12 @@ class FlowControlExecutor:
                 break  # Break out of block action loop
 
             if not result.success:
-                # Handle testset-related errors specifically
-                if "No testset loaded" in result.message:
-                    return ActionResult(
-                        success=False,
-                        message=f"Block action failed: {result.message}"
-                    )
+                # 'actions_executed' so a failed block still reports how far it got
+                # (BlockActionCompleteEvent reads it; without it the event says 0).
                 return ActionResult(
                     success=False,
-                    message=f"Block action failed: {result.message}"
+                    message=f"Block action failed: {result.message}",
+                    data={'actions_executed': len(results)}
                 )
 
             # Apply custom delay between actions if specified
@@ -284,7 +281,16 @@ class FlowControlExecutor:
                             return ActionResult(
                                 success=False,
                                 message=f"Loop failed at iteration {i}, action {j}: {result.message}",
-                                data={'completed_iterations': i, 'total_iterations': iteration_count}
+                                data={
+                                    'completed_iterations': i,
+                                    'total_iterations': iteration_count,
+                                    # Same keys the success path emits, so the run summary
+                                    # can report "8/10 iterations" on a failed loop instead
+                                    # of an unknown iteration count (LoopActionCompleteEvent
+                                    # reads 'iterations' / 'actions_executed').
+                                    'iterations': i,
+                                    'actions_executed': len(results),
+                                }
                             )
 
                 finally:
