@@ -1,17 +1,16 @@
 {# adare-template
 schema: 1
-id: ubuntu-lts
-description: Ubuntu 22.04 / 24.04 LTS desktop (server ISO autoinstall)
+id: ubuntu-lts-noconda
+description: Ubuntu 22.04 / 24.04 LTS desktop (server ISO autoinstall) — no conda, uv baked in
 maintainer: ADARE
 revision: 2026-07-28
 supports:
-  # x86_64 only. The aarch64 profiles are served by
-  # autoinstall_ubuntu_lts_noconda.yaml, which is the variant the paper images are
-  # built from (system pip + standalone uv instead of Miniforge). They cannot be
-  # listed here as well: two templates in one directory claiming the same OS name
-  # is a discovery error (see discover_templates()).
-  - ubuntu2204
-  - ubuntu2404
+  # aarch64 only, and deliberately NOT also listed in autoinstall_ubuntu_lts.yaml
+  # -- two templates in one directory claiming the same OS name is a discovery
+  # error. The x86_64 profiles (ubuntu2204 / ubuntu2404) still use the Miniforge
+  # variant in that file; the paper's aarch64 images are built from this one.
+  - ubuntu2204arm64
+  - ubuntu2404arm64
 -#}
 {#- Ubuntu 22.04 (jammy) cannot use subiquity's `packages:` list. Jammy's curtin
     leaves devpts unmounted inside /target, so the postinstall apt run cannot
@@ -39,12 +38,9 @@ autoinstall:
   locale: en_US.UTF-8
   keyboard:
     layout: us
-  # Match the interface by pattern, never by name. ADARE runs experiments with the
-  # NIC pinned to a different PCI address than the installer used, so the guest's
-  # predictable name changes between install and run (enp0s1 -> enp0s31). A config
-  # naming one interface leaves the guest with no address at all, which costs a
-  # 120s systemd-networkd-wait-online timeout on every boot and breaks the SLIRP
-  # SMB share at 10.0.2.4. See hypervisor/qemu/guest_network.py.
+  # Match the interface by pattern, never by name -- ADARE pins the NIC to a
+  # different PCI address at run time than the installer used, so the predictable
+  # name changes between install and run. See hypervisor/qemu/guest_network.py.
   network:
     version: 2
     # Deliberately NO `renderer:` here. Subiquity applies this very section
@@ -86,10 +82,8 @@ autoinstall:
     - python3-pip
     - python3-tk
     {% endif %}
-    # cifs-utils: ADARE mounts its host share with `mount -t cifs //10.0.2.4/qemu
-    # /adare`. Without mount.cifs that mount fails with "bad option; ... you might
-    # need a /sbin/mount.<type> helper program" and the host silently degrades to
-    # the far slower QGA file-by-file transfer.
+    # cifs-utils: needed for `mount -t cifs //10.0.2.4/qemu /adare`; without it
+    # file transfer silently degrades to the far slower QGA path.
     - cifs-utils
     - openssh-server
     - curl
@@ -100,7 +94,7 @@ autoinstall:
     # Subiquity keeps apt/curtin output in the installer journal and never puts it
     # on the serial console, so a failed in-target package install reaches the host
     # as nothing but "returned non-zero exit status 100" — undiagnosable. That is
-    # exactly what happened to two 22.04 builds (one died on
+    # exactly what happened to two 22.04 builds on 2026-07-27 (one died on
     # ubuntu-desktop-minimal, one on python3-pip) with no apt line anywhere in
     # <vm>_install.log. Dump the relevant logs to /dev/console, which is the serial
     # port ADARE captures. Mirrors autoinstall_ubuntu_focal.yaml.
@@ -207,15 +201,29 @@ autoinstall:
     - curtin in-target -- id adare || curtin in-target -- useradd -m -u 1000 -G sudo -s /bin/bash adare
     - curtin in-target -- mkdir -p /home/adare
     - chown -R 1000:1000 /target/home/adare
-    {% if setup_level >= 2 %}
-    # Install Miniforge3 and conda env as root, then fix ownership
-    - curtin in-target -- wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-{{ miniforge_arch }}.sh -O /tmp/miniforge.sh
-    - curtin in-target -- chmod +x /tmp/miniforge.sh
-    - curtin in-target -- bash /tmp/miniforge.sh -b -p /home/adare/.miniforge3
-    - curtin in-target -- /home/adare/.miniforge3/bin/conda create -n pyadare python=3.10 pip -y
-    - rm -f /target/tmp/miniforge.sh
-    - chown -R 1000:1000 /target/home/adare
-    {% endif %}
+    # Allow system pip3 to install adarevm/adarelib wheels without conda.
+    # No-conda guests install adarevm into the SYSTEM python: the harness runs
+    #   `pip3 install --no-cache-dir --force-reinstall <wheels>`
+    # (agent_command_builders, wheels installation_mode). On a stock Ubuntu 24.04
+    # system python this hits TWO PEP-668-adjacent walls that the conda path
+    # (adarevm into a clean `pyadare` env) never sees. Both are fixed in pip.conf
+    # (dedicated VM only — this is a throwaway experiment guest):
+    #   1. PEP-668 externally-managed refusal. Load-bearing fix: remove the
+    #      EXTERNALLY-MANAGED marker (pip refuses ONLY when it exists;
+    #      path-independent, guaranteed). break-system-packages is belt-and-
+    #      suspenders in case a future pip re-checks via config.
+    #   2. `--force-reinstall` tries to UNINSTALL apt-managed deps (PyYAML,
+    #      python-dateutil, ...) that have no pip RECORD file, aborting with
+    #      "Cannot uninstall X, RECORD file not found ... installed by debian".
+    #      Fix: `ignore-installed = true` makes pip skip the uninstall step and
+    #      install the wheels over the apt packages. Validated in-guest: with
+    #      this flag the exact harness command shape succeeds (RC=0); without it
+    #      it fails on PyYAML. This covers ALL apt-overlapping deps, not just one.
+    - curtin in-target -- sh -c 'rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED'
+    - 'printf "[global]\nbreak-system-packages = true\nignore-installed = true\n" > /target/etc/pip.conf'
+    # Install standalone uv (single binary, NOT conda) — required by `adare vm test`,
+    # which launches the shared adarevm source via `uv run adarevm`. Unconditional.
+    - curtin in-target -- sh -c 'cd /tmp && curl -LsSf https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-unknown-linux-gnu.tar.gz | tar xz && mv uv-aarch64-unknown-linux-gnu/uv uv-aarch64-unknown-linux-gnu/uvx /usr/local/bin/'
     # Disable screen blanking and lock for automated GUI testing
     - curtin in-target -- sudo -u adare dbus-launch gsettings set org.gnome.desktop.session idle-delay 0 || true
     - curtin in-target -- sudo -u adare dbus-launch gsettings set org.gnome.desktop.screensaver lock-enabled false || true
