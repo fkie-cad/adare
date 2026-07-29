@@ -155,6 +155,11 @@ class SubmitRequest:
     project_path: Path
     name: str
     action: str = 'create'
+    # Experiments only: skip the client-side dependency pre-flight. The pre-flight
+    # reads the server's PUBLISHED catalog, so it cannot see a test function whose
+    # owning set is still unpublished even though ingest would resolve it. This is
+    # the escape hatch for that case; the server stays authoritative.
+    skip_dependency_check: bool = False
 
 
 @dataclass

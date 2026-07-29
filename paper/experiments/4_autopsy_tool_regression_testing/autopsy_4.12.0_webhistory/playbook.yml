@@ -302,7 +302,7 @@ actions:
         ClosestToStrategy:
           text: New Case
 - wait_until:
-    timeout: 180
+    timeout: 540
     initial_delay: 40
     check_interval: 20
     condition:
@@ -330,7 +330,7 @@ actions:
     condition:
       exists:
         text: Select Type
-    timeout: 90
+    timeout: 270
 - keyboard:
     key: enter
   description: Select Data Source Type Disk Image
@@ -390,7 +390,7 @@ actions:
     condition:
       exists:
         text: Web History
-    timeout: 180
+    timeout: 540
 - click:
     target:
       image: generate_report.png
