@@ -50,6 +50,23 @@ install set from the same sources. The build-time provisioning mechanism itself 
 exercised by the recipe-built `win11-autopsy-smoke` environment, which covers the risky
 part (`curl.exe` fetching a real MSI, `msiexec` installing it under Prism emulation).
 
+## `wait_until` timeouts were widened for host load (infrastructure, not measurement)
+
+Each playbook's `wait_until` steps carry six distinct `timeout:` values
+(15/30/90/120/180/600s). On 2026-07-29 these were scaled ~3x (600s left alone)
+after three runs failed identically -- an early `wait_until` (the 90s/120s ones)
+timing out with **zero tests executed**, against baselines of 44/44 and 47/47 --
+traced to host load from a concurrent VM in another session, not to Autopsy or to
+these playbooks. Observed legitimate waits reached 59.7s under that load, so the
+90s/120s budgets were too tight for a shared host, not wrong for the workflow
+they wait on.
+
+This is an **infrastructure tolerance, not a scientific parameter**: it changes
+how long ADARE is willing to wait for a GUI state that either does or does not
+appear, not what is measured once it does. It does, however, change each
+playbook's bytes and therefore its `sha256` -- the experiment identity used by
+the shared-repo submission and any already-open pull request for these files.
+
 ## Findings: the Recent Documents / report-sheet regression (measured 2026-07-22)
 
 The older versions' failures are the study's result, not a broken harness. Both runs
