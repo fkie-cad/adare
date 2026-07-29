@@ -5,6 +5,7 @@ import io
 import math
 import asyncio
 import re
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Any, Tuple, Union, Optional
 import numpy as np
@@ -20,30 +21,49 @@ log = logging.getLogger(__name__)
 class OCRProcessor:
     """Handles OCR processing operations using PaddleOCR."""
 
+    # PaddleOCR's constructor is expensive (model-availability checks that can
+    # involve network I/O) and was previously rebuilt on every single call, which
+    # is why a single find_text call could intermittently take 10s of minutes
+    # instead of its usual sub-second cost. Cache one instance for the process
+    # lifetime instead. Guarded by a lock since MAX_WORKERS callers can overlap
+    # across concurrent experiment runs even though each run's own executor is
+    # single-threaded.
+    _ocr_instance = None
+    _ocr_instance_lock = threading.Lock()
+
+    @classmethod
+    def _get_paddle_ocr(cls):
+        """Return the cached PaddleOCR instance, building it on first use."""
+        if cls._ocr_instance is None:
+            with cls._ocr_instance_lock:
+                if cls._ocr_instance is None:
+                    from paddleocr import PaddleOCR
+
+                    log.info("Initializing PaddleOCR (first use - cached for process lifetime)...")
+
+                    # Capture current logging level as PaddleOCR might change it
+                    root_logger = logging.getLogger()
+                    original_level = root_logger.getEffectiveLevel()
+
+                    cls._ocr_instance = PaddleOCR(
+                        use_doc_orientation_classify=False,
+                        use_doc_unwarping=False,
+                        use_textline_orientation=False,
+                        text_det_unclip_ratio=OCRConstants.OCR_DET_UNCLIP_RATIO,
+                        text_det_thresh=OCRConstants.OCR_DET_DB_THRESH,
+                        text_det_box_thresh=OCRConstants.OCR_DET_BOX_THRESH,
+                        lang='en' # Explicitly set language
+                    )
+
+                    # Restore logging level
+                    root_logger.setLevel(original_level)
+        return cls._ocr_instance
+
     @staticmethod
     def _run_paddle_ocr(screenshot_bytes: bytes) -> List[Tuple[List[List[float]], Tuple[str, float]]]:
         """Run PaddleOCR in a separate thread to avoid blocking."""
-        from paddleocr import PaddleOCR
-
         try:
-            log.info("Initializing PaddleOCR...")
-            
-            # Capture current logging level as PaddleOCR might change it
-            root_logger = logging.getLogger()
-            original_level = root_logger.getEffectiveLevel()
-            
-            ocr = PaddleOCR(
-                use_doc_orientation_classify=False,
-                use_doc_unwarping=False,
-                use_textline_orientation=False,
-                text_det_unclip_ratio=OCRConstants.OCR_DET_UNCLIP_RATIO,
-                text_det_thresh=OCRConstants.OCR_DET_DB_THRESH,
-                text_det_box_thresh=OCRConstants.OCR_DET_BOX_THRESH,
-                lang='en' # Explicitly set language
-            )
-
-            # Restore logging level
-            root_logger.setLevel(original_level)
+            ocr = OCRProcessor._get_paddle_ocr()
 
             log.info("Converting bytes to numpy array...")
 
