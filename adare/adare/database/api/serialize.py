@@ -119,7 +119,10 @@ class SerializeApi(ProjectDatabaseApi):
             'success': event.success,
             'event_group_id': event.event_group_id,
             'event_type_specific': event.event_type_specific or '',
-            'execution_time': event.execution_time,
+            # Column is typed Integer, but SQLite's dynamic typing lets floats slip
+            # in (e.g. a raw time.time() delta) — the server rejects anything but
+            # an int, so round at this boundary rather than trusting the storage.
+            'execution_time': round(event.execution_time) if event.execution_time is not None else None,
         }
         if event_type == 'action_event':
             event_dict['action_type'] = event.action_type

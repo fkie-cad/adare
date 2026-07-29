@@ -23,7 +23,7 @@ def sync_environments_all(project: Path = None):
 def sync_experiments_all(project: Path = None):
     ulids = get_experiments_ulids(project)
     for ulid in ulids:
-        experiment_sync(ulid)
+        experiment_sync(project, ulid)
 
 
 def sync_testfunctions_all(project: Path = None):
