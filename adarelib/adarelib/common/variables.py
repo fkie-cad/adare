@@ -642,6 +642,101 @@ class VariableRegistry:
 
         return context
 
+    # Upper bound on the transitive dependency walk below, mirroring the safety limit in
+    # extract_referenced_variables().
+    _MAX_DEPENDENCY_EXPANSION = 200
+
+    def _build_lazy_resolution_context(self, referenced_variables: set) -> Dict[str, str]:
+        """Build the context used to resolve nested templates on the lazy (test) path.
+
+        Resolves chained references - ``tool_dir`` -> ``out_dir`` ->
+        ``adare_user_documents`` - in dependency order until a fixed point is reached, so
+        a chain of any depth resolves. Seeding the context with leaf values only left every
+        second-level reference undefined, and Jinja2 renders an undefined name as the empty
+        string, so ``tool_dir`` silently became ``/tool``.
+
+        Variables created at runtime by a ``capture:`` or ``save_timestamp`` action are not
+        in the registry. They neither gate resolution nor raise; they keep resolving to
+        empty here exactly as before, because only the running experiment can supply them.
+
+        Args:
+            referenced_variables: Variable names referenced by the test being resolved
+
+        Returns:
+            Mapping of variable name to fully resolved string value
+
+        Raises:
+            ValidationError: If the referenced variables form a dependency cycle
+        """
+        resolution_context: Dict[str, str] = {}
+        pending: Dict[str, str] = {}
+
+        # Walk the dependency closure: a referenced variable's own references have to be
+        # resolved too, even when the caller did not list them.
+        to_visit = list(referenced_variables)
+        visited = set()
+        while to_visit and len(visited) < self._MAX_DEPENDENCY_EXPANSION:
+            name = to_visit.pop()
+            if name in visited:
+                continue
+            visited.add(name)
+
+            var = self.variables.get(name)
+            if var is None:
+                # Created at runtime, or a typo - not resolvable here either way.
+                continue
+
+            var_str = var.get_string_value()
+            if '{{' not in var_str:
+                # Leaf value (typically an automatic variable) - usable as-is.
+                resolution_context[name] = var_str
+            elif var.type != VariableType.TIMESTAMP:
+                # Timestamp values get their own parsing in _get_variable_resolved_value(),
+                # so keep them out of the plain string context.
+                pending[name] = var_str
+                to_visit.extend(self._extract_template_variables(var_str))
+
+        if len(visited) >= self._MAX_DEPENDENCY_EXPANSION:
+            log.warning(
+                f"Lazy variable dependency walk hit its limit ({self._MAX_DEPENDENCY_EXPANSION}); "
+                f"some nested references may resolve to empty"
+            )
+
+        # Only names reached by the walk can gate resolution. A dependency outside this set
+        # (runtime-created, or a templated timestamp) must not block, or a resolvable chain
+        # would be misreported as a cycle.
+        gateable = set(pending) | set(resolution_context)
+
+        # Fixed point: a variable becomes resolvable once every gateable dependency has a
+        # value. Each pass resolves at least one variable, so the pass count is bounded by
+        # the number of pending variables.
+        for _ in range(len(pending)):
+            ready = [
+                name for name, var_str in pending.items()
+                if all(
+                    dep in resolution_context
+                    for dep in self._extract_template_variables(var_str)
+                    if dep in gateable
+                )
+            ]
+            if not ready:
+                break
+            for name in ready:
+                resolution_context[name] = self._resolve_nested_templates(
+                    pending.pop(name), resolution_context
+                )
+
+        if pending:
+            # No pass made progress while variables remain: every one of them still waits
+            # on another unresolved variable, which is only possible in a cycle.
+            raise ValidationError(
+                f"Circular variable reference among {sorted(pending)} - each depends on "
+                f"another that is still unresolved, so no resolution order exists. "
+                f"Resolved before the cycle: {sorted(resolution_context)}"
+            )
+
+        return resolution_context
+
     def to_execution_context_lazy(self, referenced_variables: set = None, for_tests: bool = False) -> Dict[str, Any]:
         """Convert to execution context with lazy resolution - only process referenced variables.
 
@@ -658,16 +753,9 @@ class VariableRegistry:
         # Track metadata created during this specific call
         current_call_metadata = {}
 
-        # Build minimal resolution context for nested template resolution
-        # Include variables without nested templates (typically automatic variables)
-        resolution_context = {}
-        for name in referenced_variables:
-            if name in self.variables:
-                var = self.variables[name]
-                var_str = var.get_string_value()
-                # For automatic variables (no nested templates), add them to context
-                if '{{' not in var_str:
-                    resolution_context[name] = var_str
+        # Build the resolution context for nested template resolution, resolving chained
+        # references in dependency order (see _build_lazy_resolution_context).
+        resolution_context = self._build_lazy_resolution_context(referenced_variables)
         log.debug(f"Built resolution context with {len(resolution_context)} variables: {list(resolution_context.keys())}")
 
         # Only process variables that are actually referenced
@@ -1001,6 +1089,34 @@ class VariableRegistry:
             resolved_value = self._resolve_nested_templates(base_value, resolution_context)
             return resolved_value
     
+    def _assert_automatic_references_resolvable(self, text: str, context: Optional[Dict[str, Any]] = None) -> None:
+        """Fail loudly when a value references an ``adare_*`` built-in that cannot resolve.
+
+        Jinja2's default Undefined renders a missing name as the empty string, so
+        ``{{ adare_user_documents }}/adare_lnk_lecmd`` would silently become
+        ``/adare_lnk_lecmd`` - a plausible but wrong path, which is a forensic-integrity
+        problem rather than a cosmetic one.
+
+        Only the ``adare_*`` namespace is checked: those built-ins are always created
+        up-front from the VM OS/user, so a missing one is always a wiring bug. Ordinary
+        variables may legitimately be absent here because they are created at runtime by
+        a ``capture:`` or a ``save_timestamp`` action.
+
+        Raises:
+            ValidationError: If an ``adare_*`` variable is referenced but unavailable
+        """
+        available = set(context) if context is not None else set(self.variables)
+        missing = sorted(
+            name for name in self._extract_template_variables(text)
+            if name.startswith('adare_') and name not in available
+        )
+        if missing:
+            raise ValidationError(
+                f"Automatic variable(s) {missing} referenced by '{text}' are not available "
+                f"in the variable registry. Resolving would silently yield an empty string "
+                f"and thus a wrong path. Available variables: {sorted(available)}"
+            )
+
     def _resolve_nested_templates(self, text: str, context: Dict[str, Any] = None) -> str:
         """Resolve nested template variables in a string value.
 
@@ -1011,9 +1127,15 @@ class VariableRegistry:
         if not text or '{{' not in text:
             return text
 
-        try:
-            import jinja2
+        # Raise before the try below - a raise inside it would be swallowed and the
+        # unresolvable value returned as-is.
+        self._assert_automatic_references_resolvable(text, context)
 
+        # Imported outside the try: the except clause names jinja2, so a failed import
+        # there would surface as UnboundLocalError instead of the real ImportError.
+        import jinja2
+
+        try:
             result = text
             max_iterations = 10  # Prevent infinite loops
             previous_results = set()  # Track previous results to detect cycles
@@ -1048,6 +1170,7 @@ class VariableRegistry:
                 # Apply template resolution
                 template = jinja2.Template(result)
                 new_result = template.render(simple_context)
+                self._warn_on_empty_substitutions(result, simple_context, new_result)
                 log.debug(f"Nested template resolution iteration {i+1}: '{result}' -> '{new_result}'")
                 
                 # If no change occurred, break to avoid infinite loops
@@ -1063,10 +1186,67 @@ class VariableRegistry:
             log.debug(f"Final nested template resolution: '{text}' -> '{result}'")
             return result
             
-        except Exception as e:
+        # Fail soft only for the errors a malformed template can actually produce, so that
+        # a bad template does not hide unrelated bugs (and cannot swallow the
+        # ValidationError raised above). Determined by probing bare Template().render():
+        #   jinja2.TemplateError - covers TemplateSyntaxError (unclosed / bad expression),
+        #       TemplateAssertionError (unknown filter or test - this bare Template has no
+        #       custom filters registered, so `| win_path` lands here) and UndefinedError
+        #       (an undefined name being called, indexed or used in arithmetic)
+        #   TypeError  - mismatched operand types, e.g. `{{ name + 1 }}` or a bad `%` format
+        #   ValueError - failed string operations / conversions, e.g. `.index()` finding
+        #       nothing (UnicodeDecodeError is a ValueError subclass and is covered too)
+        # Anything else (a missing jinja2, ZeroDivisionError, LookupError, RecursionError)
+        # is not something a variable value should be able to cause, so it now propagates
+        # instead of being silently reported as "unresolved".
+        except (jinja2.TemplateError, TypeError, ValueError) as e:
             log.warning(f"Failed to resolve nested template '{text}': {e}")
             return text
-    
+
+    def _warn_on_empty_substitutions(self, template_str: str, context: Dict[str, Any],
+                                     rendered: str) -> None:
+        """Log a WARNING for each ``{{ name }}`` in ``template_str`` that rendered empty.
+
+        Deliberately a warning and not an error. Unlike the ``adare_*`` built-ins - which
+        _assert_automatic_references_resolvable() raises on, because their absence is always
+        a wiring bug - an ordinary name may be legitimately absent here: the ``capture:`` or
+        ``save_timestamp`` action that creates it has not run yet. But an unnoticed empty
+        substitution builds a plausible *wrong* value (``/adare_lnk_lecmd`` in place of a
+        real path), so it has to be visible in the log even when it is expected.
+
+        Warns once per (variable, template) pair for the lifetime of the registry: values
+        are re-resolved for every action, test and loop iteration, and repeating the same
+        line hundreds of times would bury it.
+
+        Args:
+            template_str: The template that was just rendered
+            context: The context it was rendered with
+            rendered: The resulting string
+        """
+        if not hasattr(self, '_empty_substitution_warnings'):
+            self._empty_substitution_warnings = set()
+
+        for name in sorted(self._extract_template_variables(template_str)):
+            # A present, non-empty value substituted fine. None renders as 'None' rather
+            # than empty, and 0 renders as '0', so neither counts as an empty substitution.
+            if name in context and str(context[name]) != '':
+                continue
+
+            key = (name, template_str)
+            if key in self._empty_substitution_warnings:
+                continue
+            self._empty_substitution_warnings.add(key)
+
+            if name in context:
+                reason = "it is defined but empty"
+            else:
+                reason = ("it is not in the resolution context - created at runtime by a "
+                          "capture:/save_timestamp action, or misspelled")
+            log.warning(
+                f"Variable '{name}' resolved to an empty string in template "
+                f"'{template_str}' -> '{rendered}' because {reason}"
+            )
+
     def _has_test_specific_filters(self, var: 'Variable') -> bool:
         """Check if variable has test-specific filters that require placeholder resolution."""
         log.debug(f"Checking test-specific filters for variable '{var.name}', has metadata: {var.structured_metadata is not None}")

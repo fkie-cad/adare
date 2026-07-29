@@ -1,9 +1,20 @@
 import logging
+import os
 
+from . import userconfig
 from .configdirectory import APPDATA_DIR
 from .exceptions import ConfigDirectoryError
 
 log = logging.getLogger(__name__)
+
+
+def _cfg(name, default):
+    """Resolve a setting: environment variable > user config file > default.
+
+    Lets ``adare vlm use ...`` persist a provider choice in ~/.adare/config.json
+    while a one-off ``ADARE_*=... adare ...`` still overrides it for a single run.
+    """
+    return os.environ.get(name) or userconfig.get(name) or default
 
 
 def get_cookie_file():
@@ -13,7 +24,7 @@ def get_cookie_file():
     return APPDATA_DIR / 'adare.cookies'
 
 
-WEBSERVER_URL = 'https://adare.seclab-bonn.de/'
+WEBSERVER_URL = 'https://adare.click/'
 # WEBSERVER_URL = 'http://localhost:8000/'
 API_URL = f'{WEBSERVER_URL}api/'
 DOWNLOAD_API_URL = f'{API_URL}download/'
@@ -29,6 +40,166 @@ PUBLISH_RUN_URL = f'{WEBSERVER_URL}api/run/publish/'
 
 TIMEOUT_SECONDS = 10
 
+# ── GUI-automation vision-LLM (vLLM) configuration ───────────────────────────
+# A grounding-capable vision model served over an OpenAI-compatible endpoint
+# (Qwen3-VL / Qwen2-VL / UI-TARS / Molmo-class). Used ONLY during a GUI-automation
+# *record* run, the *agent* (`adare dev agent`), and *self-heal* on a replay miss —
+# deterministic replay needs no LLM.
+#
+# Works with any OpenAI-compatible server, e.g. Ollama Cloud:
+#   ADARE_VLLM_BASE_URL=https://ollama.com/v1
+#   ADARE_VLLM_API_KEY=<key from ollama.com/settings/keys>
+#   ADARE_VLLM_MODEL=gemma4:31b                  # general multimodal — use with --ground
+#   ADARE_VLLM_COORD_SPACE=normalized_1000       # coord convention varies by model
+# Ollama Cloud retired the qwen3-vl GUI/computer-use line in 2026-06; gemma4 is a
+# general multimodal model (not coordinate-tuned), so keep `--ground` on for clicks.
+# Run `adare vm gui-doctor` to verify the endpoint and auto-detect the coord space.
+# Persist a provider without env vars: `adare vlm use ollama-cloud` / `... use local`
+# (env still overrides the saved config for a single run — see _cfg above).
+VLLM_BASE_URL = _cfg('ADARE_VLLM_BASE_URL', 'http://localhost:8000/v1')
+VLLM_MODEL = _cfg('ADARE_VLLM_MODEL', 'Qwen/Qwen2-VL-7B-Instruct')
+VLLM_API_KEY = _cfg('ADARE_VLLM_API_KEY', 'EMPTY')
+# Per-request timeout (seconds) for a vision-LLM decision POST. A remote,
+# heavily-loaded endpoint (e.g. Ollama Cloud) can legitimately take well over
+# the old 120 s httpx default on a large multi-modal prompt; a too-short budget
+# turns a slow-but-succeeding inference into a spurious ReadTimeout. The client
+# retries transport errors, but a longer ceiling avoids the retry entirely.
+VLLM_TIMEOUT = float(_cfg('ADARE_VLLM_TIMEOUT', '300'))
+
+# Text model the embedded `adare chat` REPL brain uses over the SAME
+# OpenAI-compatible endpoint (VLLM_BASE_URL / VLLM_API_KEY). The vlm default is
+# usually a *vision* model (poor at text tool-calling), so chat gets its own
+# override: ADARE_CHAT_MODEL wins, else it falls back to the vlm model.
+# `adare chat` re-reads this via _cfg so a freshly-`use`d profile is picked up.
+CHAT_MODEL = _cfg('ADARE_CHAT_MODEL', '') or VLLM_MODEL
+
+# Coordinate convention the model returns clicks in:
+#   'absolute'        — raw pixel coordinates of the image it was shown (default)
+#   'normalized_1000' — 0..1000 on both axes (rescaled to pixels by the client)
+VLLM_COORD_SPACE = _cfg('ADARE_VLLM_COORD_SPACE', 'absolute')
+
+# Optional open-vocabulary element-grounding backend for the GUI agent.
+# When set, `adare dev agent` grounds each click to the true element bounding
+# box (via the standalone LocateAnything sidecar, scripts/locate_anything_sidecar.py)
+# and records the tight icon crop instead of the fixed box around the click.
+# Empty (default) keeps the fixed ~220x90 crop. The sidecar is a separate
+# process holding the heavy model — no VLM deps enter the adare package.
+#   ADARE_LOCATE_URL=http://127.0.0.1:13111
+LOCATE_URL = os.environ.get('ADARE_LOCATE_URL', '')
+LOCATE_MODE = os.environ.get('ADARE_LOCATE_MODE', 'hybrid')
+# The recorded crop expands the grounded element box by this margin (px per side)
+# and is grown to at least this minimum size, keeping it centred on the element.
+# A bare element box can be tiny or a generic glyph (e.g. a document icon) that
+# collides with similar UI; a little context makes the crop robust for the CV
+# replay matcher while staying far tighter than the fixed ~220x90 fallback.
+LOCATE_CROP_MARGIN = int(os.environ.get('ADARE_LOCATE_CROP_MARGIN', '16'))
+LOCATE_CROP_MIN = int(os.environ.get('ADARE_LOCATE_CROP_MIN', '72'))
+# When on (and a grounding sidecar is configured), LocateAnything owns the click
+# coordinate: the VLM says WHAT to click ("describe") and LA locates the element,
+# then the agent clicks its centre — using the VLM's own point only as a
+# disambiguating hint and as the fallback on a miss/error. Default off keeps
+# today's behaviour (VLM point clicks; LA only tightens the recorded crop).
+LOCATE_CLICK = os.environ.get('ADARE_LOCATE_CLICK', '0').lower() in ('1', 'true', 'yes', 'on')
+
+# Native auto-start of the vendored LocateAnything grounding server (no external
+# project, no pre-running endpoint). `adare dev agent --ground` brings the server
+# up itself and tears it down at run end; ADARE_LOCATE_AUTOSTART=1 makes that the
+# default without the flag. If ADARE_LOCATE_URL is set, the agent attaches to it
+# instead of spawning (and never kills a server it didn't start).
+#   LOCATE_PORT         port the auto-started server binds (also the attach probe)
+#   LOCATE_MODEL_PATH   HF id or local dir for the weights (empty -> nvidia/LocateAnything-3B);
+#                       point at a local backup dir + HF_HUB_OFFLINE=1 to run fully offline
+#   LOCATE_PYTHON       interpreter to run the server with (empty -> adare's own, which
+#                       needs `uv sync --extra grounding`). Set to a venv that already has
+#                       torch + the model's trust_remote_code deps to skip installing the
+#                       heavy stack into adare (the server has no adare imports, so it is
+#                       launched by file path under a foreign interpreter).
+#   LOCATE_START_TIMEOUT seconds to wait for /health while the model loads. The
+#                       server now answers /health instantly (loading in a
+#                       background thread), so this whole budget is spent on the
+#                       actual load — a cold HF download or a cold MPS load of
+#                       the ~7 GB weights can legitimately exceed 180 s, hence
+#                       the 600 s default; a warm local backup loads in seconds.
+LOCATE_AUTOSTART = os.environ.get('ADARE_LOCATE_AUTOSTART', '0').lower() in ('1', 'true', 'yes', 'on')
+LOCATE_PORT = int(os.environ.get('ADARE_LOCATE_PORT', '13111'))
+LOCATE_MODEL_PATH = os.environ.get('ADARE_LOCATE_MODEL_PATH', '')
+LOCATE_PYTHON = os.environ.get('ADARE_LOCATE_PYTHON', '')
+LOCATE_START_TIMEOUT = int(os.environ.get('ADARE_LOCATE_START_TIMEOUT', '600'))
+
+# Bounded-autonomy budgets for the record run.
+GUI_AGENT_MAX_STEPS = int(os.environ.get('ADARE_GUI_AGENT_MAX_STEPS', '80'))
+GUI_AGENT_STALL_LIMIT = int(os.environ.get('ADARE_GUI_AGENT_STALL_LIMIT', '6'))
+GUI_AGENT_WALL_CLOCK_SECONDS = int(os.environ.get('ADARE_GUI_AGENT_WALL_CLOCK_SECONDS', '3600'))
+
+# Self-heal for a malformed / incomplete agent decision. A pure JSON-syntax
+# slip is fixed by a cheap text-only repair call (no screenshot re-sent); a
+# genuinely missing coordinate/choice costs a full vision re-ask. Recovery runs
+# for at most GUI_AGENT_DECISION_RETRIES attempts after the first decision
+# before the run fails honestly. If AGENT_REPAIR_MODEL is set, the cheap syntax
+# repair uses that (typically smaller/cheaper) model on the same endpoint;
+# empty (default) reuses the main VLLM model text-only.
+AGENT_REPAIR_MODEL = os.environ.get('ADARE_AGENT_REPAIR_MODEL', '')
+GUI_AGENT_DECISION_RETRIES = int(os.environ.get('ADARE_GUI_AGENT_DECISION_RETRIES', '2'))
+
+# Iterative build-verify-backtrack planning agent (PlanningAgent). Off by
+# default — `adare dev agent --plan` (or ADARE_AGENT_PLAN=1) turns a terse,
+# high-level goal into a decomposed plan, executes each sub-goal with the
+# reactive loop, verifies it with an independent checker, and resets the VM to a
+# prior checkpoint to retry / re-plan on a dead end, building the playbook out of
+# only the verified sub-goals.
+AGENT_PLAN = os.environ.get('ADARE_AGENT_PLAN', '0').lower() in ('1', 'true', 'yes', 'on')
+
+# The planner, executor and checker are all one model by default (the main
+# VLLM_* endpoint), each independently overridable to a different model/endpoint
+# (extends the AGENT_REPAIR_MODEL precedent). An unset per-role value falls back
+# to the main VLLM_* setting in the service layer.
+AGENT_PLANNER_MODEL = os.environ.get('ADARE_AGENT_PLANNER_MODEL', '')
+AGENT_PLANNER_BASE_URL = os.environ.get('ADARE_AGENT_PLANNER_BASE_URL', '')
+AGENT_PLANNER_API_KEY = os.environ.get('ADARE_AGENT_PLANNER_API_KEY', '')
+AGENT_CHECKER_MODEL = os.environ.get('ADARE_AGENT_CHECKER_MODEL', '')
+AGENT_CHECKER_BASE_URL = os.environ.get('ADARE_AGENT_CHECKER_BASE_URL', '')
+AGENT_CHECKER_API_KEY = os.environ.get('ADARE_AGENT_CHECKER_API_KEY', '')
+
+# Planning-agent budgets: retries of the current sub-goal before re-planning,
+# re-plans of the remainder before aborting, and the per-sub-goal reactive-loop
+# step / stall budgets (kept small — each sub-goal is checkpointed).
+AGENT_PLAN_RETRY_LIMIT = int(os.environ.get('ADARE_AGENT_PLAN_RETRY_LIMIT', '2'))
+AGENT_PLAN_REPLAN_LIMIT = int(os.environ.get('ADARE_AGENT_PLAN_REPLAN_LIMIT', '2'))
+AGENT_SUBGOAL_MAX_STEPS = int(os.environ.get('ADARE_AGENT_SUBGOAL_MAX_STEPS', '25'))
+AGENT_SUBGOAL_STALL_LIMIT = int(os.environ.get('ADARE_AGENT_SUBGOAL_STALL_LIMIT', '4'))
+
+# Observability + capture for `adare dev agent`.
+#   AGENT_PROGRESS   render a live per-step table while the agent runs. The CLI
+#                    resolves this to on when stdout is a TTY and off otherwise;
+#                    this config value is the fallback for non-CLI callers (API/web).
+#   AGENT_VIDEO      record the whole run to <run_dir>/run.mp4 via ffmpeg (off by
+#                    default; needs the ffmpeg binary — `--video` fails clearly without it).
+#   AGENT_VIDEO_BACKEND  'screendump' (default, QMP-polling QemuVideoRecorder) or
+#                    'spice' (push-driven SpiceVideoRecorder — higher fps/quality,
+#                    needs SpiceClientGLib bindings, and is mutually exclusive with
+#                    a live VirtualSpice viewer on the same VM).
+#   AGENT_VIDEO_FPS  screendump backend: poll rate of the QMP screendump -> ffmpeg
+#                    pipe, kept low (2) to avoid contending with per-step screenshots.
+#                    spice backend: an advisory max capture rate (frames are
+#                    push-driven, not polled, so this only caps a burst of invalidates).
+#   FFMPEG           ffmpeg executable (name on PATH or absolute path).
+AGENT_PROGRESS = os.environ.get('ADARE_AGENT_PROGRESS', '1').lower() in ('1', 'true', 'yes', 'on')
+AGENT_VIDEO = os.environ.get('ADARE_AGENT_VIDEO', '0').lower() in ('1', 'true', 'yes', 'on')
+AGENT_VIDEO_BACKEND = os.environ.get('ADARE_AGENT_VIDEO_BACKEND', 'screendump').lower()
+AGENT_VIDEO_FPS = int(os.environ.get('ADARE_AGENT_VIDEO_FPS', '2'))
+FFMPEG = os.environ.get('ADARE_FFMPEG', 'ffmpeg')
+
+# Whole-experiment recording for `adare experiment run` (off by default — no CLI
+# flag yet, opt in via env while the SPICE backend's GObject-introspection surface
+# gets validated interactively). Reuses AGENT_VIDEO_BACKEND/AGENT_VIDEO_FPS/FFMPEG.
+EXPERIMENT_VIDEO = os.environ.get('ADARE_EXPERIMENT_VIDEO', '0').lower() in ('1', 'true', 'yes', 'on')
+
+# Port the `adare dev mcp` GUI-automation MCP server binds. An external harness
+# (OpenCode / Claude Code / any MCP client) connects here to author playbooks.
+# Distinct from the CV/OCR server's 13109 so both can run against one session.
+GUI_MCP_PORT = int(os.environ.get('ADARE_GUI_MCP_PORT', '13110'))
+GUI_MCP_HOST = os.environ.get('ADARE_GUI_MCP_HOST', '127.0.0.1')
+
 # PORTS FOR OAuth2 Redirects
 PORT_OAUTH2_REDIRECT = [
     13331,
@@ -43,7 +214,7 @@ PORT_OAUTH2_REDIRECT = [
     14445
 ]
 GITEA_CLIENT_ID = '9afe946b-d67f-46ac-8362-4ef479a8e11c'
-GITEA_URL = 'https://adare.seclab-bonn.de/git/'
+GITEA_URL = 'https://adare.click/git/'
 GITEA_API_URL = f'{GITEA_URL}api/v1/'
 GITEA_EXPERIMENTS_REPO = 'adareTEST'
 GITEA_EXPERIMENTS_REPO_OWNER = 'miq'

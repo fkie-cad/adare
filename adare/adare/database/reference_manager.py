@@ -274,6 +274,7 @@ class ReferenceManager:
             with self._get_global_api() as api:
                 environment = api.get_by_ulid(Environment, environment_id)
                 if environment:
+                    _ = environment.sync_metadata  # force lazy-load before detaching
                     api.expunge(environment)  # Detach from session
                     self._cache_set(cache_key, environment)
                     return environment

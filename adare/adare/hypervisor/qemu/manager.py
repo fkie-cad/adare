@@ -33,8 +33,8 @@ class QEMUManager(AbstractHypervisorManager):
 
         qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
 
-        # Apple Silicon note: aarch64 guests use HVF acceleration.
-        # x86_64 guests on Apple Silicon are blocked in lifecycle.py (per-VM check).
+        # Apple Silicon note: aarch64 guests use HVF acceleration. x86_64 guests
+        # need --allow-emulation (QEMU TCG) — see hypervisor/qemu/accel.py.
         if platform.system() == 'Darwin' and platform.machine() == 'arm64':
             log.info("QEMU on Apple Silicon — HVF acceleration available for aarch64 guests")
 
@@ -45,14 +45,6 @@ class QEMUManager(AbstractHypervisorManager):
         self.default_machine = qemu_config.get('default_machine', 'pc')
         self.default_accel = qemu_config.get('default_accel', 'kvm')
         self.default_drive_format = qemu_config.get('default_drive_format', 'qcow2')
-
-        # Check for guestfish CLI tool
-        if shutil.which('guestfish'):
-            log.debug("guestfish CLI tool available.")
-        else:
-            log.warning("guestfish command not found. "
-                       "File operations when VM is stopped will not work. "
-                       "Install with: sudo apt install libguestfs-tools")
 
         # Initialize libvirt connection
         self.libvirt_conn = None
@@ -66,6 +58,8 @@ class QEMUManager(AbstractHypervisorManager):
                 # LibvirtStderrRedirect requires an experiment log file, which doesn't exist during manager init.
                 # If libvirtd is not running, we want the error to fail loudly.
                 self.libvirt_conn = libvirt.open(libvirt_uri)
+                from adare.hypervisor.qemu.libvirt_errors import install_libvirt_error_logger
+                install_libvirt_error_logger()
 
                 if not self.libvirt_conn:
                     from adare.hypervisor.exceptions import HypervisorException
@@ -204,7 +198,8 @@ class QEMUManager(AbstractHypervisorManager):
             username=username,
             password=password,
             executables=self.executables,
-            disk_path=disk_path  # Pass disk_path for external VMs
+            disk_path=disk_path,  # Pass disk_path for external VMs
+            hypervisor_config=None  # No hypervisor config for session mode
         )
 
         try:

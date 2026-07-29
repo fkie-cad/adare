@@ -8,7 +8,7 @@ to perform visual analysis of screenshots for text/icon detection.
 from pathlib import Path
 import logging
 
-from adarelib.testset import testfunction
+from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 
@@ -19,9 +19,16 @@ log = logging.getLogger(__name__)
 # Helper: find visual element (text or image) in a screenshot
 # =============================================================================
 
-async def _find_visual_element(ctx, text, image, window):
+async def _find_visual_element(ctx, text, image, window, icon=None):
     """
-    Take a screenshot and search for a text or image element.
+    Take a screenshot and search for a text, icon-library, or image element.
+
+    Exactly one of ``text``, ``icon``, or ``image`` selects the search mode:
+      - ``text``:  OCR search for a string.
+      - ``icon``:  a name from the Windows icon library (e.g. ``recycle_bin``).
+                   The correct icon is extracted from the target at runtime,
+                   cached, and matched -- no PNG is shipped in the playbook.
+      - ``image``: a PNG file path relative to the playbook directory.
 
     Returns:
         (locations, target_desc) - list of match locations and a human-readable description.
@@ -35,6 +42,14 @@ async def _find_visual_element(ctx, text, image, window):
         log.debug(f"Visual test: Searching for text '{text}'")
         locations = await ctx.host.cv.find_text(text, screenshot)
         target_desc = f"text '{text}'"
+    elif icon:
+        icon_result = await _resolve_icon_path(ctx, icon)
+        if isinstance(icon_result, TestResult):
+            return icon_result
+        icon_path = icon_result
+        log.debug(f"Visual test: Searching for icon '{icon}' ({icon_path.name})")
+        locations = await ctx.host.cv.find_icon(icon_path, screenshot)
+        target_desc = f"icon '{icon}'"
     else:
         image_path = Path(image)
         if not image_path.is_absolute():
@@ -53,6 +68,25 @@ async def _find_visual_element(ctx, text, image, window):
     return locations, target_desc
 
 
+async def _resolve_icon_path(ctx, icon):
+    """Resolve an icon-library term to a cached PNG path (extract on miss).
+
+    Returns the Path, or a TestResult.execution_error if the icon library is
+    unavailable or resolution fails.
+    """
+    from adare.backend.experiment.icon_library import IconLibraryError
+
+    if getattr(ctx.host, 'icons', None) is None:
+        return TestResult.execution_error(
+            RuntimeError("Icon library unavailable (no connected target/agent)"),
+            f"Cannot resolve icon '{icon}': icon library not available in this run mode",
+        )
+    try:
+        return await ctx.host.icons.resolve(icon)
+    except IconLibraryError as exc:
+        return TestResult.execution_error(exc, f"Icon '{icon}' could not be resolved: {exc}")
+
+
 # =============================================================================
 # Visual Test Functions
 # =============================================================================
@@ -63,10 +97,10 @@ async def _find_visual_element(ctx, text, image, window):
     category=HostModeCategory.HOST_NATIVE,
     execute_on_host=True,
 )
-async def visual_exists(ctx, text: str = None, image: str = None, window: str = None):
-    ctx.error_if(not text and not image, "Either text or image parameter required")
+async def visual_exists(ctx, text: str = None, image: str = None, icon: str = None, window: str = None):
+    ctx.error_if(not text and not image and not icon, "One of text, image, or icon parameter required")
 
-    result = await _find_visual_element(ctx, text, image, window)
+    result = await _find_visual_element(ctx, text, image, window, icon)
 
     # _find_visual_element returns TestResult on FileNotFoundError
     if isinstance(result, TestResult):
@@ -89,10 +123,10 @@ async def visual_exists(ctx, text: str = None, image: str = None, window: str = 
     category=HostModeCategory.HOST_NATIVE,
     execute_on_host=True,
 )
-async def visual_not_exists(ctx, text: str = None, image: str = None, window: str = None):
-    ctx.error_if(not text and not image, "Either text or image parameter required")
+async def visual_not_exists(ctx, text: str = None, image: str = None, icon: str = None, window: str = None):
+    ctx.error_if(not text and not image and not icon, "One of text, image, or icon parameter required")
 
-    result = await _find_visual_element(ctx, text, image, window)
+    result = await _find_visual_element(ctx, text, image, window, icon)
 
     if isinstance(result, TestResult):
         return result
@@ -114,11 +148,13 @@ async def visual_not_exists(ctx, text: str = None, image: str = None, window: st
     category=HostModeCategory.HOST_NATIVE,
     execute_on_host=True,
 )
-async def visual_count_equals(ctx, text: str = None, image: str = None, window: str = None, n: int = None):
-    ctx.error_if(not text and not image, "Either text or image parameter required")
+async def visual_count_equals(
+    ctx, text: str = None, image: str = None, icon: str = None, window: str = None, n: int = None,
+):
+    ctx.error_if(not text and not image and not icon, "One of text, image, or icon parameter required")
     ctx.error_if(n is None, "Parameter 'n' required for count_equals test")
 
-    result = await _find_visual_element(ctx, text, image, window)
+    result = await _find_visual_element(ctx, text, image, window, icon)
 
     if isinstance(result, TestResult):
         return result
@@ -141,11 +177,13 @@ async def visual_count_equals(ctx, text: str = None, image: str = None, window: 
     category=HostModeCategory.HOST_NATIVE,
     execute_on_host=True,
 )
-async def visual_count_min(ctx, text: str = None, image: str = None, window: str = None, min: int = None):
-    ctx.error_if(not text and not image, "Either text or image parameter required")
+async def visual_count_min(
+    ctx, text: str = None, image: str = None, icon: str = None, window: str = None, min: int = None,
+):
+    ctx.error_if(not text and not image and not icon, "One of text, image, or icon parameter required")
     ctx.error_if(min is None, "Parameter 'min' required for count_min test")
 
-    result = await _find_visual_element(ctx, text, image, window)
+    result = await _find_visual_element(ctx, text, image, window, icon)
 
     if isinstance(result, TestResult):
         return result
@@ -168,11 +206,13 @@ async def visual_count_min(ctx, text: str = None, image: str = None, window: str
     category=HostModeCategory.HOST_NATIVE,
     execute_on_host=True,
 )
-async def visual_count_max(ctx, text: str = None, image: str = None, window: str = None, max: int = None):
-    ctx.error_if(not text and not image, "Either text or image parameter required")
+async def visual_count_max(
+    ctx, text: str = None, image: str = None, icon: str = None, window: str = None, max: int = None,
+):
+    ctx.error_if(not text and not image and not icon, "One of text, image, or icon parameter required")
     ctx.error_if(max is None, "Parameter 'max' required for count_max test")
 
-    result = await _find_visual_element(ctx, text, image, window)
+    result = await _find_visual_element(ctx, text, image, window, icon)
 
     if isinstance(result, TestResult):
         return result

@@ -154,6 +154,13 @@ def db_repair():
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_repair_db, args)
 
+@db.command(name='migrate')
+def db_migrate():
+    """Apply pending database schema migrations (global + all projects)."""
+    from adare.cli.manage import exec_manage_migrate_db
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_manage_migrate_db, args)
+
 @db.command(name='clean-install')
 @click.option('--force', '-f', is_flag=True, help='Force clean installation without confirmation')
 def db_clean_install(force):
@@ -200,6 +207,38 @@ def os_profile_remove(name):
 
 os_profile.add_alias('l', 'list')
 os_profile.add_alias('rm', 'remove')
+
+
+# ------------------------------
+# Windows icon library commands
+# ------------------------------
+@cli.group(cls=AliasedGroup)
+def icons():
+    """Windows icon library: inspect the registry and dump icons from a target."""
+    pass
+
+@icons.command(name='list')
+@click.option('--os-key', default='windows', help='OS profile / build key (cache separation)')
+def icons_list(os_key):
+    """List every icon term in the registry with its resolver spec."""
+    from adare.cli.icons import exec_icons_list
+    exec_with_error_printing(exec_icons_list, SimpleNamespace(os_key=os_key))
+
+@icons.command(name='dump-all')
+@click.option('--host', default='localhost', help='adarevm host')
+@click.option('--port', default=18765, type=int, help='adarevm WebSocket port')
+@click.option('--os-key', default='windows', help='OS profile / build key (cache separation)')
+@click.option('--force', is_flag=True, help='Re-extract even if a cached PNG exists')
+def icons_dump_all(host, port, os_key, force):
+    """Resolve every registry term on a connected target; write PNGs + contact sheet."""
+    from adare.cli.icons import exec_icons_dump_all
+    exec_with_error_printing(
+        exec_icons_dump_all,
+        SimpleNamespace(host=host, port=port, os_key=os_key, force=force),
+    )
+
+icons.add_alias('l', 'list')
+icons.add_alias('dump', 'dump-all')
 
 
 # ------------------------------
@@ -263,100 +302,11 @@ project.add_alias('rm', 'remove')
 
 
 # ------------------------------
-# Environment commands
+# Environment commands (extracted to cli/groups/environment_commands.py)
 # ------------------------------
-@cli.group(name='env', cls=AliasedGroup)
-def env():
-    """Environment management commands."""
-    pass
+from adare.cli.groups.environment_commands import register as register_environment_commands
 
-@env.command()
-@click.argument('environment', type=click.Path(exists=False))
-@click.option('--project', '-p', help='Name of the project')
-@click.option('--force', '-f', is_flag=True, help='Force update of the environment')
-@click.option('--no-copy', is_flag=True, help='Keep VM file at original location instead of copying to managed storage (local files only). WARNING: Do not move or delete the original file!')
-def load(environment, project, force, no_copy):
-    """Load an environment.
-
-    ENVIRONMENT can be:
-    - Simple name: ubuntu24
-    - Relative path: environments/ubuntu24.yml
-    - Relative path: ./environments/ubuntu24.yaml
-
-    The --no-copy flag prevents copying VM files to managed storage (~/.adare/state/vms).
-    This is useful for large VMs or when disk space is limited.
-    Note: The VM file must remain at the original location for experiments to work.
-    """
-    from adare.cli.environment import exec_environment_load
-    args = SimpleNamespace(environment=environment, project=project, force=force, no_copy=no_copy)
-    exec_with_error_printing(exec_environment_load, args)
-
-@env.command()
-@click.argument('name', type=click.Path(exists=False))
-@click.option('--project', '-p', help='Name of the project')
-@click.option('--with-vm', type=click.Path(exists=True), help='VM file path (OVA) to load automatically during environment creation')
-def create(name, project, with_vm):
-    """Create an environment.
-
-    NAME can be:
-    - Simple name: ubuntu24
-    - Relative path: environments/ubuntu24
-    """
-    from adare.cli.environment import exec_environment_create
-    args = SimpleNamespace(name=name, project=project, with_vm=with_vm)
-    exec_with_error_printing(exec_environment_create, args)
-
-@env.command()
-@click.argument('name')
-@click.option('--project', '-p', help='Name of the project')
-def verify(name, project):
-    """Verify an environment by running the built-in verify_vm experiment.
-
-    Idempotently registers the verify_vm example experiment, attaches the
-    environment, and runs it in the foreground with live progress."""
-    from adare.cli.environment import exec_environment_verify
-    args = SimpleNamespace(name=name, project=project)
-    exec_with_error_printing(exec_environment_verify, args)
-
-
-@env.command()
-@click.argument('identifier')
-@click.option('--force', '-f', is_flag=True, help='Force deletion of the environment and any orphaned experiments')
-def remove(identifier, force):
-    """Remove an environment.
-
-    IDENTIFIER can be:
-    - Environment name: ubuntu24
-    - Environment ULID: 01K72Q25GDNHWMEZB97N9RDPG0
-
-    WARNING: If this environment is the only one used by experiments,
-    those experiments will become orphaned and be removed when using --force.
-    Without --force, removal will fail to prevent data loss."""
-    from adare.cli.environment import exec_environment_delete
-    args = SimpleNamespace(identifier=identifier, force=force)
-    exec_with_error_printing(exec_environment_delete, args)
-
-
-@env.command(name='list')
-def list_environments():
-    """List all environments in a project."""
-    from adare.cli.show import exec_show_environments
-    args = SimpleNamespace()
-    exec_with_error_printing(exec_show_environments, args)
-
-@env.command()
-@click.argument('environment_name')
-def info(environment_name):
-    """Show detailed information about a specific environment."""
-    from adare.cli.show import exec_show_environment
-    args = SimpleNamespace(
-        environment_name=environment_name,
-    )
-    exec_with_error_printing(exec_show_environment, args)
-
-# Add aliases for environment commands
-env.add_alias('l', 'list')
-env.add_alias('rm', 'remove')
+register_environment_commands(cli, AliasedGroup, exec_with_error_printing)
 
 
 # ------------------------------
@@ -373,6 +323,13 @@ register_experiment_commands(cli, AliasedGroup, exec_with_error_printing)
 from adare.cli.groups.dev_commands import register as register_dev_commands
 
 register_dev_commands(cli, AliasedGroup, exec_with_error_printing)
+
+# ------------------------------
+# VLM provider config (cli/groups/vlm_commands.py)
+# ------------------------------
+from adare.cli.groups.vlm_commands import register as register_vlm_commands
+
+register_vlm_commands(cli, AliasedGroup, exec_with_error_printing)
 
 # ------------------------------
 # Test commands (was: testfunction)
@@ -434,6 +391,34 @@ def sync():
     args = SimpleNamespace()
     exec_with_error_printing(exec_sync_testfunctions, args)
 
+@test.command()
+@click.argument('path', type=click.Path(exists=False))
+def validate(path):
+    """Validate a testfunction collection offline (no VM, no DB).
+
+    PATH is a collection directory (or .py file). Reports every authoring-contract
+    violation — filename≠dirname, missing 'ctx', unannotated params, duplicate
+    testnames, import/syntax errors, missing dependencies — with fix hints.
+    """
+    from adare.cli.testfunction import exec_validate_testfunction
+    args = SimpleNamespace(path=path)
+    exec_with_error_printing(exec_validate_testfunction, args)
+
+@test.command(name='dry-run')
+@click.argument('target')
+@click.option('--param', '-P', multiple=True, help='Parameter as key=value (repeatable)')
+@click.option('--file', '-f', 'file', help='Local sample file used as the dst parameter')
+@click.option('--path', help='Collection dir/.py to load (else resolved from known locations)')
+def dry_run(target, param, file, path):
+    """Execute one testfunction against a local sample file (no VM).
+
+    TARGET is <collection>.<function> (e.g. mycollection.file_contains_word).
+    Scope: FILE_BASED / FILE_CONTENT tests only.
+    """
+    from adare.cli.testfunction import exec_dry_run_testfunction
+    args = SimpleNamespace(target=target, param=param, file=file, path=path)
+    exec_with_error_printing(exec_dry_run_testfunction, args)
+
 
 @test.command(name='list')
 @click.option('--set', help='Filter testfunctions by set (e.g., standard)')
@@ -459,9 +444,22 @@ def info(dotnotation):
     args = SimpleNamespace(dotnotation=dotnotation)
     exec_with_error_printing(exec_show_testfunction, args)
 
+@test.command()
+@click.argument('target')
+def versions(target):
+    """List the version history of a testfunction library.
+
+    TARGET is a library name (e.g. mycollection) or <library>.<function>
+    (e.g. mycollection.file_contains_word) for per-method history.
+    """
+    from adare.cli.testfunction import exec_testfunction_versions
+    args = SimpleNamespace(target=target)
+    exec_with_error_printing(exec_testfunction_versions, args)
+
 # Add aliases for test commands
 test.add_alias('l', 'list')
 test.add_alias('rm', 'remove')
+test.add_alias('v', 'versions')
 
 
 # ------------------------------
@@ -516,11 +514,51 @@ from adare.cli.groups.web_commands import register as register_web_commands
 web = register_web_commands(cli, AliasedGroup, exec_with_error_printing)
 
 # Web UI commands (start, build, services)
-from adare.cli.web_cmd import web_build, web_services, web_start
+from adare.cli.web_cmd import (
+    web_build,
+    web_install_spice,
+    web_services,
+    web_start,
+)
 
 web.add_command(web_start, "start")
 web.add_command(web_build, "build")
 web.add_command(web_services, "services")
+web.add_command(web_install_spice, "install-spice")
+
+
+# ------------------------------
+# Control-plane MCP server (adare mcp serve)
+# ------------------------------
+@cli.group(name='mcp', cls=AliasedGroup)
+def mcp():
+    """ADARE control-plane MCP server (drive all of ADARE from an MCP client)."""
+    pass
+
+@mcp.command(name='serve')
+@click.option('--transport', type=click.Choice(['stdio', 'http']), default='stdio',
+              show_default=True, help='MCP transport: stdio (client launches this process) or http')
+@click.option('--host', default='127.0.0.1', show_default=True, help='[http] Bind host')
+@click.option('--port', type=int, default=13111, show_default=True, help='[http] Bind port')
+def mcp_serve(transport, host, port):
+    """Serve the whole ADARE lifecycle as MCP tools.
+
+    Exposes projects, environments, experiments, runs, VMs, dev sessions, and
+    LLM playbook authoring over MCP. Distinct from the session-scoped
+    `adare dev mcp`. Point Claude Code / Claude Desktop at it and drive ADARE
+    conversationally.
+
+    Examples:
+        adare mcp serve                       # stdio (for a client to launch)
+        adare mcp serve --transport http --port 13111
+
+    Client setup (Claude Code / OpenCode) and the playbook fix loop:
+        docs/mcp-clients.md   ·   skill: .claude/skills/adare-playbook/SKILL.md
+        Claude Code: claude mcp add adare -- adare mcp serve
+    """
+    from adare.cli.mcp_control import exec_mcp_serve
+    args = SimpleNamespace(transport=transport, host=host, port=port)
+    exec_with_error_printing(exec_mcp_serve, args)
 
 
 # ------------------------------
@@ -669,6 +707,43 @@ def start(port, host, dev):
     from adare.cli.webserver import exec_webserver_start
     args = SimpleNamespace(port=port, host=host, dev=dev)
     exec_with_error_printing(exec_webserver_start, args)
+
+
+# ------------------------------
+# Chat — embedded agentic REPL
+# ------------------------------
+@cli.command(name='chat')
+@click.option('--model', default=None,
+              help='Chat model id (default: $ADARE_CHAT_MODEL, else the vlm model)')
+@click.option('--base-url', default=None,
+              help='OpenAI-compatible endpoint (default: the active `adare vlm` provider)')
+@click.option('--tool-protocol', type=click.Choice(['native', 'json', 'auto']),
+              default='auto',
+              help='Tool-call protocol: native function-calling, JSON-in-text, or auto (default)')
+@click.option('--max-tokens', type=int, default=None, help='Max tokens per assistant turn')
+def cli_chat(model, base_url, tool_protocol, max_tokens):
+    """Control ADARE conversationally in an embedded agentic REPL.
+
+    A terminal console with its own agent loop and a provider-agnostic brain that
+    reuses whatever OpenAI-compatible endpoint you configured for `adare vlm`
+    (vLLM / Ollama-cloud / custom — select one with `adare vlm use`). It drives
+    ADARE by calling the same tool registry the MCP control server exposes:
+    environments, experiments, runs, VMs, dev sessions, and LLM playbook
+    authoring.
+
+    The default model is often a vision model; for the best tool-caller set a
+    tool-capable text model via `--model` or $ADARE_CHAT_MODEL. `--tool-protocol
+    auto` tries native function-calling and falls back to a JSON-in-text contract
+    when the endpoint rejects it.
+
+    Example:
+        adare vlm use ollama-cloud
+        adare chat
+    """
+    from adare.cli.chat import exec_chat
+    args = SimpleNamespace(model=model, base_url=base_url,
+                           tool_protocol=tool_protocol, max_tokens=max_tokens)
+    exec_with_error_printing(exec_chat, args)
 
 
 # ------------------------------

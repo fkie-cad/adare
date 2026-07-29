@@ -64,7 +64,8 @@ class VmCrudMixin:
                   os_platform: str = '', os_type: str = '', os_distribution: str = '',
                   os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
                   silent: bool = False, no_copy: bool = False, hypervisor: str = 'virtualbox',
-                  force: bool = False) -> Vm:
+                  force: bool = False, build_source: str = 'baked', recipe_hash: str | None = None,
+                  iso_sha256: str | None = None, profile_name: str | None = None) -> Vm:
         """
         Create a new VM entry in the database with file operations.
 
@@ -106,7 +107,9 @@ class VmCrudMixin:
                 log.info(f"VM '{name}' exists with matching hash - updating metadata due to --force")
                 return self._update_vm_metadata(
                     existing_vm_by_name.id, description, os_platform, os_type,
-                    os_distribution, os_version, os_language, os_architecture, hypervisor
+                    os_distribution, os_version, os_language, os_architecture, hypervisor,
+                    build_source=build_source, recipe_hash=recipe_hash,
+                    iso_sha256=iso_sha256, profile_name=profile_name,
                 )
             log.info(f"VM '{name}' already exists with matching hash - returning existing VM")
             return existing_vm_by_name
@@ -118,7 +121,9 @@ class VmCrudMixin:
                 return self._update_vm_file_and_metadata(
                     existing_vm_by_name.id, existing_vm_by_name.name, file_path, file_hash,
                     description, os_platform, os_type, os_distribution, os_version,
-                    os_language, os_architecture, no_copy, silent, hypervisor, project_path
+                    os_language, os_architecture, no_copy, silent, hypervisor, project_path,
+                    build_source=build_source, recipe_hash=recipe_hash,
+                    iso_sha256=iso_sha256, profile_name=profile_name,
                 )
             raise VMNameConflictError(
                 log,
@@ -171,7 +176,11 @@ class VmCrudMixin:
                     hash=file_hash,
                     description=description,
                     osinfo_id=osinfo.id,
-                    hypervisor=hypervisor
+                    hypervisor=hypervisor,
+                    build_source=build_source,
+                    recipe_hash=recipe_hash,
+                    iso_sha256=iso_sha256,
+                    profile_name=profile_name,
                 )
                 self._session.add(vm)
                 # Both commit together on context exit
@@ -216,6 +225,33 @@ class VmCrudMixin:
         from sqlalchemy.orm import joinedload
         with self:
             vm = self._session.query(Vm).options(joinedload(Vm.osinfo)).filter_by(hash=file_hash).first()
+            if vm:
+                self._session.expunge(vm)
+            return vm
+
+    def get_vm_by_recipe_hash(self, recipe_hash: str) -> Vm | None:
+        """
+        Get a recipe-built VM by its recipe integrity hash.
+
+        Used for build caching: an environment whose recipe inputs are unchanged
+        reuses the already-built disk instead of rebuilding.
+
+        Args:
+            recipe_hash: Recipe integrity anchor (see helperfunctions.hash.hash_recipe)
+
+        Returns:
+            VM instance if a recipe-built VM with this hash exists, None otherwise
+        """
+        if not recipe_hash:
+            return None
+        from sqlalchemy.orm import joinedload
+        with self:
+            vm = (
+                self._session.query(Vm)
+                .options(joinedload(Vm.osinfo))
+                .filter_by(recipe_hash=recipe_hash)
+                .first()
+            )
             if vm:
                 self._session.expunge(vm)
             return vm
@@ -359,7 +395,9 @@ class VmCrudMixin:
     def _update_vm_metadata(self, vm_id: str, description: str = '', os_platform: str = '',
                            os_type: str = '', os_distribution: str = '', os_version: str = '',
                            os_language: str = '', os_architecture: str = 'x86_64',
-                           hypervisor: str = 'virtualbox') -> Vm:
+                           hypervisor: str = 'virtualbox', build_source: str = 'baked',
+                           recipe_hash: str | None = None, iso_sha256: str | None = None,
+                           profile_name: str | None = None) -> Vm:
         """
         Update VM metadata without changing file or hash.
 
@@ -391,6 +429,10 @@ class VmCrudMixin:
                 vm.description = description
             if hypervisor:
                 vm.hypervisor = hypervisor
+            vm.build_source = build_source
+            vm.recipe_hash = recipe_hash
+            vm.iso_sha256 = iso_sha256
+            vm.profile_name = profile_name
 
             # Update or create OSInfo (inline - no separate transaction)
             if vm.osinfo_id:
@@ -427,7 +469,9 @@ class VmCrudMixin:
                                      os_distribution: str = '', os_version: str = '', os_language: str = '',
                                      os_architecture: str = 'x86_64', no_copy: bool = False,
                                      silent: bool = False, hypervisor: str = 'virtualbox',
-                                     project_path: Path = None) -> Vm:
+                                     project_path: Path = None, build_source: str = 'baked',
+                                     recipe_hash: str | None = None, iso_sha256: str | None = None,
+                                     profile_name: str | None = None) -> Vm:
         """
         Update VM to point to new file with new hash, preserving VM ID and relationships.
         CRITICAL: We update the existing VM record rather than delete/recreate to preserve FK relationships.
@@ -482,6 +526,10 @@ class VmCrudMixin:
             if description:
                 vm.description = description
             vm.hypervisor = hypervisor
+            vm.build_source = build_source
+            vm.recipe_hash = recipe_hash
+            vm.iso_sha256 = iso_sha256
+            vm.profile_name = profile_name
 
             # Update or create OSInfo (inline - no separate transaction)
             if vm.osinfo_id:

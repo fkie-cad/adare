@@ -12,6 +12,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
     <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=d5f4d14b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
     
     
@@ -211,8 +212,10 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../guide/experiments.html">Experiments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../guide/test-driven-analysis.html">Test-Driven Analysis</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../guide/diff-analysis.html">Diff Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guide/icon-library.html">Windows Icon Library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../guide/vm-image-creation.html">VM Image Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../guide/dev-mode.html">Dev Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guide/mcp-authoring.html">Authoring Experiments with the MCP Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../guide/sharing.html">Sharing</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -321,7 +324,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../advanced/testfunction-create.html">Create your own testfunction set</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
 <ul>
@@ -330,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../architecture/file-sharing.html">File Sharing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../architecture/guest-agent.html">Guest Agent</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../architecture/cv-server.html">CV Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../architecture/database-migrations.html">Database Migrations</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../../../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
@@ -449,6 +453,13 @@
 <li><p><code class="docutils literal notranslate"><span class="pre">text</span></code>: Text to find with optional <code class="docutils literal notranslate"><span class="pre">text_match</span></code> configuration</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">coordinates</span></code>: [x, y] pixel coordinates</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">strategy</span></code>: Selection strategy when multiple matches found (SweepStrategy, BestConfidenceStrategy, etc.)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">use_cache</span></code>: bool, default unset (auto-reuse) - a match cached by an earlier
+target resolution (e.g. a <code class="docutils literal notranslate"><span class="pre">wait_until</span></code> check) on an identical target (same
+image/text/position/strategy/offset) is reused automatically, skipping a fresh
+screenshot + CV pass, as long as no <em>other</em> target resolution has happened in
+between. Set explicitly to <code class="docutils literal notranslate"><span class="pre">false</span></code> to opt out and force a fresh detection for
+this target even when that condition holds. See
+<a class="reference internal" href="#reusing-a-wait-until-match-performance">Reusing a wait_until Match (Performance)</a> below.</p></li>
 </ul>
 </section>
 <section id="advanced-text-matching">
@@ -678,13 +689,59 @@
 </pre></div>
 </div>
 </section>
+<section id="reusing-a-wait-until-match-performance">
+<h2>Reusing a wait_until Match (Performance)<a class="headerlink" href="#reusing-a-wait-until-match-performance" title="Link to this heading">¶</a></h2>
+<p>CV detection (image/text matching) can take anywhere from ~200ms to over a second per
+attempt. If a <code class="docutils literal notranslate"><span class="pre">wait_until</span></code> already confirmed a target is on screen, a following
+<code class="docutils literal notranslate"><span class="pre">click</span></code> on the <em>identical</em> target automatically skips re-running detection - no flag
+needed:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_until</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;save_button.png&quot;</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;save_button.png&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Click</span><span class="nv"> </span><span class="s">Save</span><span class="nv"> </span><span class="s">(automatically</span><span class="nv"> </span><span class="s">reuses</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">wait_until</span><span class="nv"> </span><span class="s">match)&quot;</span>
+</pre></div>
+</div>
+<p><strong>Boundary:</strong> the cache is only valid for the single target-resolution attempt
+immediately following the one that populated it - it is not a whole-run cache. A
+target resolution is any <code class="docutils literal notranslate"><span class="pre">exists</span></code>/<code class="docutils literal notranslate"><span class="pre">not_exists</span></code> check inside a <code class="docutils literal notranslate"><span class="pre">wait_until</span></code> or
+any target lookup performed by an action like <code class="docutils literal notranslate"><span class="pre">click</span></code>. Non-resolving actions in
+between (keyboard input, a pause, a drag by fixed coordinate) do <strong>not</strong> invalidate
+the cache, since they never look at the screen for a target - only another target
+resolution does, whether or not it targets the same image/text/position/strategy/offset.</p>
+<p><strong>Opt out with</strong> <code class="docutils literal notranslate"><span class="pre">use_cache:</span> <span class="pre">false</span></code> <strong>when you know the screen changed without
+another find running in between</strong> - for example, a keyboard shortcut that closes the
+dialog the cached match was found in:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_until</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;save_button.png&quot;</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">hotkey</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;alt+f4&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Close</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">dialog</span><span class="nv"> </span><span class="s">without</span><span class="nv"> </span><span class="s">clicking</span><span class="nv"> </span><span class="s">Save&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;save_button.png&quot;</span>
+<span class="w">        </span><span class="nt">use_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Force</span><span class="nv"> </span><span class="s">fresh</span><span class="nv"> </span><span class="s">detection</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">dialog</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">gone,</span><span class="nv"> </span><span class="s">don&#39;t</span><span class="nv"> </span><span class="s">trust</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">stale</span><span class="nv"> </span><span class="s">match&quot;</span>
+</pre></div>
+</div>
+</section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p>Image files should be in the experiment directory</p></li>
 <li><p>Text matching uses OCR (Tesseract)</p></li>
 <li><p>Coordinates are relative to top-left corner</p></li>
-<li><p>Use <code class="docutils literal notranslate"><span class="pre">wait_until</span></code> before clicking if element may not be immediately visible</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">wait_until</span></code> before clicking if element may not be immediately visible - see
+<a class="reference internal" href="#reusing-a-wait-until-match-performance">Reusing a wait_until Match (Performance)</a> above to skip the redundant re-detection</p></li>
 </ul>
 </section>
 <section id="see-also">
@@ -758,6 +815,7 @@
 <li><a class="reference internal" href="#target-options">Target Options</a></li>
 <li><a class="reference internal" href="#advanced-text-matching">Advanced Text Matching</a></li>
 <li><a class="reference internal" href="#target-selection-strategies">Target Selection Strategies</a></li>
+<li><a class="reference internal" href="#reusing-a-wait-until-match-performance">Reusing a wait_until Match (Performance)</a></li>
 <li><a class="reference internal" href="#notes">Notes</a></li>
 <li><a class="reference internal" href="#see-also">See Also</a></li>
 </ul>
@@ -776,6 +834,7 @@
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>
 document.addEventListener('DOMContentLoaded', function() {
   if (!window.simpleDatatables) {

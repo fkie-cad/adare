@@ -139,8 +139,10 @@ Documentation Structure
    guide/experiments
    guide/test-driven-analysis
    guide/diff-analysis
+   guide/icon-library
    guide/vm-image-creation
    guide/dev-mode
+   guide/mcp-authoring
    guide/sharing
 
 .. toctree::

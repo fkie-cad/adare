@@ -154,6 +154,28 @@ class WebSocketManager:
             },
         )
 
+    async def send_agent_step(
+        self, session_id: str, data: dict[str, Any]
+    ) -> None:
+        """Send a GUI-agent per-step activity event (decided / executed / …)."""
+        await self.broadcast(
+            session_id,
+            {"type": "agent_step", "session_id": session_id, "data": data},
+        )
+
+    async def send_agent_status(
+        self, session_id: str, state: str, summary: str = ""
+    ) -> None:
+        """Send a GUI-agent run status event (running / finished / failed)."""
+        await self.broadcast(
+            session_id,
+            {
+                "type": "agent_status",
+                "session_id": session_id,
+                "data": {"state": state, "summary": summary},
+            },
+        )
+
     async def send_checkpoint_created(
         self, session_id: str, checkpoint_name: str
     ) -> None:

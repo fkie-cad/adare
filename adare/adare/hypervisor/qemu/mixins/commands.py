@@ -247,7 +247,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     f"$script = '{script_path}'; "
                     f"$st = (Get-Date).AddMinutes(2).ToString('HH:mm'); "
                     f"'{command}' | Out-File -FilePath $script -Encoding ascii; "
-                    f"$c = \"powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script\"; "
+                    f"$c = \"powershell.exe -NoProfile{' -WindowStyle Hidden' if hidden_window else ''} -ExecutionPolicy Bypass -File $script\"; "
                     f"schtasks /Create /TN $t /TR \"$c\" /SC ONCE /ST $st /RU $u /RP $p /RL {rl} /IT /F; "
                     f"schtasks /Run /TN $t; "
                     f"Start-Sleep -Seconds {delay}; "
@@ -1144,7 +1144,14 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 return json.loads(result)
 
             except libvirt.libvirtError as e:
-                log.error(f"Libvirt error sending QGA command: {e}")
+                # "guest agent is not responding / not connected" is the normal
+                # signal while the guest is still booting; callers poll and retry
+                # (and a real stall surfaces as GuestAgentTimeoutException), so
+                # log it at debug instead of shouting a red ERROR every attempt.
+                if 'guest agent is not' in str(e).lower():
+                    log.debug(f"QGA not ready yet: {e}")
+                else:
+                    log.error(f"Libvirt error sending QGA command: {e}")
                 return {"error": {"desc": f"Libvirt error: {e}"}}
             except json.JSONDecodeError as e:
                 log.error(f"Failed to parse QGA response: {e}")

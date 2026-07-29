@@ -152,7 +152,7 @@ def print_experiment(name: str = None, dotnotation: str = None, ulid: str = None
             if not dual_output:
                 return
 
-        layout = Layout(name="root")
-        panel = ExperimentPanel(experiment, abstract_tests)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops whatever overflows, so a short
+        # window hid tests without any indication they were there.
+        console.print(ExperimentPanel(experiment, abstract_tests))

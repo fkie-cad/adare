@@ -80,6 +80,39 @@ class TestContext:
         return self._test.variable_metadata
 
 
+def _validate_signature(func, testname: str, sig: inspect.Signature) -> None:
+    """Enforce the authoring contract on a decorated test function's signature.
+
+    Raised at decoration time (i.e. at module import/load) so a malformed
+    testfunction fails loudly with an actionable message rather than misbehaving
+    silently — e.g. an unannotated parameter would otherwise default to `str`
+    and structure wrong values from the playbook.
+    """
+    params = list(sig.parameters.values())
+    location = f"testfunction '{testname}' (function {func.__name__})"
+
+    if not params or params[0].name != 'ctx':
+        raise ValueError(
+            f"{location}: first parameter must be 'ctx' "
+            f"(got {params[0].name!r} — signature: def {func.__name__}(ctx, ...))"
+            if params else
+            f"{location}: must accept 'ctx' as its first parameter "
+            f"(signature: def {func.__name__}(ctx, ...))"
+        )
+
+    unannotated = [
+        p.name for p in params[1:]
+        if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+        and p.annotation is inspect.Parameter.empty
+    ]
+    if unannotated:
+        raise ValueError(
+            f"{location}: parameter(s) {', '.join(unannotated)} lack type annotations. "
+            f"Annotate every parameter (e.g. `dst: str`) — annotations drive cattrs "
+            f"validation of playbook `parameter:` blocks."
+        )
+
+
 def _build_type_annotation_map(sig: inspect.Signature) -> dict:
     """Extract parameter names, types, and defaults from a function signature (skipping 'ctx')."""
     params = []
@@ -206,6 +239,7 @@ def testfunction(name: str, description: str,
     """
     def decorator(func):
         sig = inspect.signature(func)
+        _validate_signature(func, name, sig)
         param_specs = _build_type_annotation_map(sig)
 
         param_cls = _make_parameter_class(func.__name__, param_specs)

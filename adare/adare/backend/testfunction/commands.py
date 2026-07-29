@@ -2,17 +2,95 @@
 # configure logging
 import logging
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 # internal imports
 import adare.backend.testfunction.database as testfunction_database
 from adare.backend.testfunction.directory import TestfunctionDirectory
-from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
+from adare.backend.testfunction.exceptions import (
+    TestfunctionDependencyError,
+    TestfunctionMissingFileError,
+)
 from adare.exceptions import NotLoggedInError
 from adare.webappaccess.download import download_testfunction, sync
 from adare.webappaccess.login import is_logged_in
 
 log = logging.getLogger(__name__)
+
+
+def _requirements_has_entries(requirements_file: Path) -> bool:
+    """True if requirements.txt lists at least one non-comment, non-blank dependency."""
+    if not requirements_file.exists():
+        return False
+    try:
+        for raw_line in requirements_file.read_text(encoding='utf-8').splitlines():
+            line = raw_line.strip()
+            if line and not line.startswith('#'):
+                return True
+    except OSError as e:
+        log.warning(f'Could not read requirements file {requirements_file}: {e}')
+    return False
+
+
+def _install_testfunction_requirements(requirements_file: Path, name: str) -> None:
+    """Install a testfunction collection's dependencies into the running interpreter.
+
+    Prefers `uv pip install` (this project uses uv); falls back to `pip`.
+    Raises TestfunctionDependencyError at load time (not run time) with the exact
+    command to run manually, so a missing dependency never fails silently later.
+    """
+    if not _requirements_has_entries(requirements_file):
+        log.debug(f'No dependencies to install for testfunction "{name}"')
+        return
+
+    # uv needs to target this interpreter's environment explicitly; pip is invoked
+    # via the interpreter itself so it always lands in the same env.
+    candidates = [
+        ['uv', 'pip', 'install', '--python', sys.executable, '-r', str(requirements_file)],
+        [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)],
+    ]
+    manual_cmd = f'uv pip install -r "{requirements_file}"'
+
+    last_error: str | None = None
+    for cmd in candidates:
+        try:
+            log.info(f'Installing dependencies for testfunction "{name}": {" ".join(cmd)}')
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            log.info(f'Dependencies for testfunction "{name}" installed')
+            return
+        except FileNotFoundError:
+            # Installer binary (e.g. uv) not on PATH — try the next candidate.
+            log.debug(f'Installer not found, trying fallback: {cmd[0]}')
+            continue
+        except subprocess.CalledProcessError as e:
+            error_text = (e.stderr or e.stdout or str(e)).strip()
+            log.warning(f'Dependency install command failed ({cmd[0]}): {error_text}')
+            # Keep the first real error (uv's resolution message is more useful
+            # than a subsequent "No module named pip" fallback failure).
+            if last_error is None:
+                last_error = error_text
+            continue
+        except OSError as e:
+            log.warning(f'Dependency install command errored ({cmd[0]}): {e}')
+            if last_error is None:
+                last_error = str(e)
+            continue
+
+    raise TestfunctionDependencyError(
+        log,
+        message=(
+            f'Failed to install dependencies for testfunction "{name}" from '
+            f'{requirements_file}'
+            + (f': {last_error}' if last_error else '')
+        ),
+        possible_solutions=[
+            f'Install them manually: {manual_cmd}',
+            'Make sure the package names/versions in requirements.txt are correct',
+            'Ensure `uv` or `pip` is available in the current environment',
+        ],
+    )
 
 
 def testfunction_sync(testfunction_id: int):
@@ -103,15 +181,25 @@ def testfunction_load(project_path: Path, name: str):
     manager = TestfunctionManager()
     manager.ensure_global_directory_exists()
 
-    # Install testfunction to global directory (copies files if they don't exist)
-    target_python_file, target_requirements_file = manager.install_testfunction(
-        source_python_file=testfunction_directory.pythonfile,
-        source_requirements_file=testfunction_directory.requirements,
-        name=name
+    # Refresh the global copy so source edits actually propagate. install_testfunction
+    # is a no-op when the target already exists, so an edited-and-reloaded custom lib
+    # would silently keep the old code otherwise.
+    target_python_file, target_requirements_file = _refresh_global_testfunction(
+        manager, testfunction_directory.pythonfile, testfunction_directory.requirements, name
     )
 
-    # Load testfunction using the global paths
-    testfunction_id = testfunction_database.load_testfunction_file(project_path, target_python_file, target_requirements_file)
+    # Install declared dependencies now (load time) so a missing package fails
+    # loudly here instead of silently at run time inside the guest.
+    _install_testfunction_requirements(target_requirements_file, name)
+
+    # Upsert by hash: create the file at v1, or bump its version (and retain a
+    # snapshot) when the content changed. This drives the versioned update path.
+    from adare.database.api.testfunction import TestfunctionDbApi
+    with TestfunctionDbApi() as api:
+        action, file_obj = api.upsert_testfunction_file_obj(target_python_file, target_requirements_file)
+        testfunction_id = file_obj.id
+        file_version = file_obj.version
+    log.info(f'Testfunction "{name}" {action} (file version {file_version})')
     testfunction_sync(testfunction_id)
 
     # Protect testfunction files after loading (protect the global copies)
@@ -191,15 +279,23 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
     manager = TestfunctionManager()
     manager.ensure_global_directory_exists()
 
-    # Install testfunction to global directory (copies files if they don't exist)
-    target_python_file, target_requirements_file = manager.install_testfunction(
-        source_python_file=python_file,
-        source_requirements_file=requirements_file,
-        name=testfunction_name
+    # Refresh the global copy so source edits actually propagate (install_testfunction
+    # is a no-op when the target exists), then upsert by hash below.
+    target_python_file, target_requirements_file = _refresh_global_testfunction(
+        manager, python_file, requirements_file, testfunction_name
     )
 
-    # Load the testfunction into the global database using global paths
-    testfunction_id = testfunction_database.load_testfunction_file(project_path, target_python_file, target_requirements_file)
+    # Install declared dependencies now (load time) so a missing package fails
+    # loudly here instead of silently at run time inside the guest.
+    _install_testfunction_requirements(target_requirements_file, testfunction_name)
+
+    # Upsert by hash: create at v1 or bump the version (retaining a snapshot) on change.
+    from adare.database.api.testfunction import TestfunctionDbApi
+    with TestfunctionDbApi() as api:
+        action, file_obj = api.upsert_testfunction_file_obj(target_python_file, target_requirements_file)
+        testfunction_id = file_obj.id
+        file_version = file_obj.version
+    log.info(f'Testfunction "{testfunction_name}" {action} (file version {file_version})')
     testfunction_sync(testfunction_id)
 
     # Protect testfunction files after loading (protect the global copies)
@@ -214,8 +310,6 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
 
 
 def testfunction_list(testfunction_set: str = None):
-    from rich.layout import Layout
-
     from adare.database.api.frontend import DataRetrievalApi
     from adare.frontend.terminal.console import DefaultConsole
     from adare.frontend.terminal.testfunction_list import TestfunctionListPanel
@@ -249,11 +343,11 @@ def testfunction_list(testfunction_set: str = None):
             testfunctions_df = testfunctions_df[mask]
 
     if not testfunctions_df.empty:
-        console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = TestfunctionListPanel(testfunctions_df, testfunction_file=None)  # None means show all files
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which reads
+        # as "those testfunctions do not exist".
+        # testfunction_file=None means show all files
+        DefaultConsole().print(TestfunctionListPanel(testfunctions_df, testfunction_file=None))
     else:
         filter_msg = f" for set '{testfunction_set}'" if testfunction_set else ""
         print(f"No testfunctions found{filter_msg}")

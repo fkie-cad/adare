@@ -53,14 +53,44 @@ class TestDetectFileTransferMode:
         assert result == 'libguestfs'
 
     def test_returns_libguestfs_on_linux_without_virtiofsd(self):
-        """Linux without virtiofsd -> libguestfs fallback."""
+        """Linux without virtiofsd but with a working guestfish -> libguestfs.
+
+        guestfish has to be *available*, not merely absent-virtiofsd: the Linux
+        branch is gated on `_guestfish_appliance_available()` and falls through to
+        QGA when libguestfs cannot actually run. Patching `which` to None for
+        everything therefore yields 'qga', which is correct — see
+        `test_returns_qga_on_linux_without_guestfish`.
+        """
+        def which_side_effect(name):
+            if name == 'virtiofsd':
+                return None
+            if name == 'guestfish':
+                return '/usr/bin/guestfish'
+            return None
+
+        mock_subprocess_result = MagicMock()
+        mock_subprocess_result.returncode = 0
+
+        with (
+            patch('adare.hypervisor.qemu.file_transfer.shutil.which', side_effect=which_side_effect),
+            patch('adare.hypervisor.qemu.file_transfer.platform.system', return_value='Linux'),
+            patch('adare.hypervisor.qemu.file_transfer.subprocess.run', return_value=mock_subprocess_result),
+            patch('adare.hypervisor.qemu.file_transfer.os.path.isdir', return_value=True),
+            patch('adare.hypervisor.qemu.file_transfer.os.listdir', return_value=['appliance']),
+            patch.dict('os.environ', {'QEMU_LIBGUESTFS': ''}, clear=False),
+        ):
+            result = detect_file_transfer_mode()
+        assert result == 'libguestfs'
+
+    def test_returns_qga_on_linux_without_guestfish(self):
+        """Linux with neither virtiofsd nor a usable libguestfs -> QGA fallback."""
         with (
             patch('adare.hypervisor.qemu.file_transfer.shutil.which', return_value=None),
             patch('adare.hypervisor.qemu.file_transfer.platform.system', return_value='Linux'),
             patch.dict('os.environ', {'QEMU_LIBGUESTFS': ''}, clear=False),
         ):
             result = detect_file_transfer_mode()
-        assert result == 'libguestfs'
+        assert result == 'qga'
 
     def test_returns_libguestfs_on_macos_with_guestfish(self):
         """macOS without virtiofsd but with guestfish -> libguestfs."""

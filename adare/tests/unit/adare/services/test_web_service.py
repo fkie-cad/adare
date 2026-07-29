@@ -39,9 +39,11 @@ def check_run_request():
 
 
 @pytest.fixture
-def upload_run_request():
+def upload_run_request(tmp_path):
     from adare.core.dto.web import UploadRunRequest
-    return UploadRunRequest(ulid="01RUN456")
+    # project_path is required: the run lives in that project's database, so the
+    # serializer has to be pointed at it rather than at the global one.
+    return UploadRunRequest(project_path=tmp_path, ulid="01RUN456")
 
 
 class TestWebServiceLogin:

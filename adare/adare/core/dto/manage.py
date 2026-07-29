@@ -18,6 +18,7 @@ class DbStatusResult:
     global_db_accessible: bool
     global_db_location: Path | None
     valid: bool
+    pending_migrations: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
 
@@ -34,6 +35,14 @@ class DbRepairResult:
     """Result of database repair."""
     repaired: bool
     actions_taken: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DbMigrateResult:
+    """Result of applying pending schema migrations."""
+    migrated: bool
+    applied: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
 

@@ -64,27 +64,79 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         args = SimpleNamespace()
         exec_with_error_printing(exec_vm_instance_usage, args)
 
+    @vm.command(name='prune')
+    @click.option('--dry-run/--force', 'dry_run', default=True,
+                  help='Dry-run (default) previews only; --force actually deletes.')
+    @click.option('--sockets', is_flag=True, default=False,
+                  help='Also reap crash-orphaned dead QMP/QGA sockets in run/.')
+    def vm_prune(dry_run, sockets):
+        """Reclaim orphaned QEMU base disks (and, with --sockets, dead sockets).
+
+        An orphan is a '<name>-base.qcow2' (plus its '-nvram.fd' sibling) whose
+        instance/VM is no longer registered in the database. This is the
+        garbage collector for debris left by older removal paths or crashes.
+
+        \b
+        Examples:
+          adare vm prune                    # preview orphans, delete nothing
+          adare vm prune --force            # reclaim orphaned base/nvram files
+          adare vm prune --force --sockets  # also reap dead QMP/QGA sockets
+        """
+        from adare.cli.vm import exec_vm_prune
+        args = SimpleNamespace(dry_run=dry_run, sockets=sockets)
+        exec_with_error_printing(exec_vm_prune, args)
+
+    @vm.command(name='watch')
+    @click.argument('name')
+    @click.option('--view-only/--interactive', 'view_only', default=True,
+                  help='Read-only view (default) or allow input. Toggle live from '
+                       "VirtualSpice's own toolbar either way.")
+    def vm_watch(name, view_only):
+        """Watch a running VM's live screen in the browser (via VirtualSpice).
+
+        NAME is the VM/instance name (run 'adare vm list' to see names). Opens
+        VirtualSpice's standalone display page pointed at that VM. Requires
+        VirtualSpice to be running (started by 'adare web start').
+
+        \b
+        Examples:
+          adare vm watch my-vm                 # read-only live view
+          adare vm watch my-vm --interactive   # allow input
+        """
+        from adare.cli.vm import exec_vm_watch
+        args = SimpleNamespace(name=name, view_only=view_only)
+        exec_with_error_printing(exec_vm_watch, args)
+
     @vm.command()
-    @click.argument('ova_file', type=click.Path(exists=True))
-    @click.option('--platform', '-p', required=True, type=click.Choice(['linux', 'windows']), help='VM platform (required)')
+    @click.argument('target')
+    @click.option('--platform', '-p', required=False, type=click.Choice(['linux', 'windows']), help='VM platform (required for OVA files; auto-derived for registered VMs)')
     @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output with detailed error information')
     @click.option('--keep-vm', is_flag=True, help='Keep the test VM after completion (for further testing)')
     @click.option('--remove-vm', is_flag=True, help='Automatically remove the test VM after completion')
-    def test(ova_file, platform, verbose, keep_vm, remove_vm):
-        """Test OVA file compatibility with ADARE.
+    def test(target, platform, verbose, keep_vm, remove_vm):
+        """Test ADARE compatibility of a VM.
 
-        This command validates an .ova file by:
-        - Importing the VM temporarily
+        TARGET may be either:
+        - a path to an .ova/.ovf file (VirtualBox OVA import test), or
+        - the name of a registered VM (run 'adare vm list' to see names).
+
+        The command validates the VM by:
+        - Preparing the VM (OVA import, or a QEMU overlay off the base disk)
         - Setting up shared directories and mounting them
-        - Installing dependencies and starting adarevm
-        - Establishing WebSocket connection
+        - Starting adarevm and establishing a WebSocket connection
         - Taking a screenshot and performing a test click
         - Cleaning up all temporary resources
 
-        Example: adare vm test ubuntu22.ova --platform linux
-        Example: adare vm test windows11.ova --platform windows --verbose
-        Example: adare vm test ubuntu22.ova --platform linux --keep-vm
-        Example: adare vm test ubuntu22.ova --platform linux --remove-vm
+        The registered-VM (QEMU) test requires a uv-based guest: it runs
+        'uv run python -m adarevm.server' from source inside the guest.
+
+        \b
+        Examples:
+          adare vm test ubuntu22.ova --platform linux
+          adare vm test windows11.ova --platform windows --verbose
+          adare vm test my-registered-vm            # platform auto-derived
+          adare vm test my-registered-vm --platform windows   # override
+          adare vm test my-registered-vm --keep-vm
         """
         # Handle cleanup options
         if keep_vm and remove_vm:
@@ -99,7 +151,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         from adare.cli.vm import exec_vm_test
         args = SimpleNamespace(
-            ova_file=ova_file,
+            target=target,
             platform=platform,
             verbose=verbose,
             vm_cleanup_mode=vm_cleanup_mode
@@ -138,39 +190,97 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--cpus', type=int, default=None, help='CPU count')
     @click.option('--force', is_flag=True, default=False, help='Overwrite existing VM disk image')
     @click.option('--vm-dir', type=click.Path(), default=None, help='Directory for VM disk image (default: ~/.adare/state/vms/)')
-    @click.option('--bare', is_flag=True, default=False, help='Skip ADARE agent software (Miniforge3, qemu-guest-agent)')
+    @click.option('--setup', 'setup_level', type=click.Choice(['bare', 'base', 'full', 'agent']),
+                  default=None,
+                  help='What to install during creation: bare (OS only), base (+ guest tools), '
+                       'full (+ Python env, default), agent (+ pre-installed adarevm, '
+                       'not implemented).')
+    @click.option('--bare', is_flag=True, default=False,
+                  help='Deprecated alias for --setup bare.')
     @click.option('--env-name', default=None, help='Environment file name (defaults to VM name)')
     @click.option('--interactive', is_flag=True, default=False, help='Boot VM after install for manual software installation')
     @click.option('--arch', type=click.Choice(['x86_64', 'aarch64']), default=None, help='Override CPU architecture (default: from OS profile)')
-    def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, bare, env_name, interactive, arch):
+    @click.option('--allow-emulation', is_flag=True, default=False, help='Allow QEMU TCG software emulation when --arch does not match the host CPU (slow; hardware acceleration is used otherwise).')
+    @click.option('--recipe/--no-recipe', 'recipe', default=None, help='Emit a declarative recipe environment (build on load) instead of a baked disk. Default: recipe for Windows, baked for Linux.')
+    @click.option('--byo-iso', is_flag=True, default=False, help='[recipe, Windows only] Emit "iso_name" instead of the local "iso" path, so consumers supply the ISO themselves. Makes the environment publishable without rehosting a Windows ISO you are not licensed to redistribute.')
+    @click.option('--iso-notes', default=None, help='[--byo-iso] Plain-text download pointer for the consumer (defaults to the OS profile\'s iso_notes).')
+    @click.option('--record', is_flag=True, default=False, help='GUI-auto: record a fresh playbook with the vision agent even if a cached one exists.')
+    @click.option('--relearn', is_flag=True, default=False, help='GUI-auto: discard the cached playbook and re-record from scratch.')
+    @click.option('--display', is_flag=True, default=False, help='GUI-auto: show the VM window while the agent drives the installer.')
+    @click.option('--template', default=None, help='GUI-auto: explicit goal/spec template name (default: gui_<distribution>).')
+    @click.option('--compress/--no-compress', 'compress', default=True, help='Zstd-compress the finished base disk (~30-50% smaller, transparent to readers). Default: on.')
+    def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, setup_level, bare, env_name, interactive, arch, allow_emulation, recipe, byo_iso, iso_notes, record, relearn, display, template, compress):
         """Create a new ADARE-ready VM from scratch.
 
-        OS_NAME is the target OS. Run `adare manage os-profile list` to see all entries.
+        OS_NAME is the target OS. Run `adare os-profile list` to see all entries.
 
         \b
         Common targets:
-          Ubuntu (autoinstall):  ubuntu2204, ubuntu2404, ubuntu2510, ubuntu2604
+          Ubuntu (autoinstall):  ubuntu2004, ubuntu2204, ubuntu2404, ubuntu2510, ubuntu2604
+          Ubuntu/Kubuntu ARM64:  ubuntu2004arm64, ubuntu2204arm64, ubuntu2404arm64,
+                                 kubuntu2004arm64, kubuntu2204arm64, kubuntu2404arm64
+          Kubuntu x86_64:        kubuntu2004, kubuntu2204 (ubiquity), kubuntu2404 (GUI-auto)
           Debian (preseed):      debian12, debian13, kali
-          Fedora/RHEL (kickstart): fedora44, fedora44kde, fedora43, fedora43kde, fedora42, fedora42kde, fedora41, fedora41kde, rocky9, alma9
+          Fedora/RHEL (kickstart): fedora44, fedora44kde, fedora43, fedora43kde, fedora42,
+                                 fedora42arm64, fedora42kde, fedora41, fedora41arm64,
+                                 fedora41kde, rocky9, alma9
           openSUSE (autoyast):   opensuseleap156, opensusetumbleweed
           GUI manual install:    mint, popos, nixos, elementary
           Windows (unattend):    windows10, windows11, windows11arm64
 
         \b
+        Kubuntu publishes no arm64 desktop ISO at all, and Ubuntu only from
+        24.04.3 on, so every *arm64 profile installs the live-server ISO of the
+        matching version and pulls in the desktop metapackage
+        (ubuntu-desktop-minimal / kubuntu-desktop).
+        The x86_64 kubuntu2004/kubuntu2204 profiles ship untested — see
+        docs "VM image creation".
+
+        \b
         Examples:
           adare vm create ubuntu2404
           adare vm create debian12 --iso /path/to/debian-12-netinst.iso
+          adare vm create fedora42arm64 --iso /path/to/Fedora-Everything-netinst-aarch64-42.iso
+          adare vm create kubuntu2204arm64 --iso /path/to/ubuntu-22.04.5-live-server-arm64.iso
           adare vm create fedora41 --iso /path/to/Fedora-Workstation-Live.iso
           adare vm create kali --iso /path/to/kali-linux-installer.iso
           adare vm create mint --iso /path/to/linuxmint.iso       # manual install
+          adare vm create kubuntu2404 --iso /path/to/kubuntu.iso  # GUI-automated (record then replay)
           adare vm create ubuntu2404 --bare
+          adare vm create ubuntu2404 --setup base
           adare vm create ubuntu2404 --interactive
           adare vm create windows11 --iso /path/to/Win11.iso
+          adare vm create ubuntu2404 --iso /path/to/ubuntu.iso --recipe
+          adare vm create windows11arm64 --iso /path/to/Win11_arm64.iso --byo-iso
           adare vm create ubuntu2204 --name my-ubuntu --disk-size 100G --ram 8192
         """
         from adare.cli.vm_create import exec_vm_create
-        args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, bare=bare, env_name=env_name, interactive=interactive, arch=arch)
+        args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, setup_level=setup_level, bare=bare, env_name=env_name, interactive=interactive, arch=arch, allow_emulation=allow_emulation, recipe=recipe, byo_iso=byo_iso, iso_notes=iso_notes, record=record, relearn=relearn, display=display, template=template, compress=compress)
         exec_with_error_printing(exec_vm_create, args)
+
+    @vm.command(name='gui-doctor')
+    def vm_gui_doctor():
+        """Preflight the vision-LLM used for GUI automation (ADARE_VLLM_*).
+
+        Confirms the endpoint (e.g. Ollama Cloud) is reachable and detects which
+        coordinate convention the model returns, recommending ADARE_VLLM_COORD_SPACE.
+        """
+        from adare.cli.vm_gui_doctor import exec_vm_gui_doctor
+        args = SimpleNamespace()
+        exec_with_error_printing(exec_vm_gui_doctor, args)
+
+    @vm.command(name='doctor')
+    def vm_doctor():
+        """Report on system-level QEMU/VM-creation tool availability.
+
+        Locates qemu-system/qemu-img, OVMF firmware, swtpm, the libvirt Python
+        binding, and (on Apple Silicon) the wimlib/7z/xorriso trio used for the
+        Win11-ARM64 legacy-boot workaround. Detect-and-report only — never
+        installs anything and always exits 0.
+        """
+        from adare.cli.vm_doctor import exec_vm_doctor
+        args = SimpleNamespace()
+        exec_with_error_printing(exec_vm_doctor, args)
 
     @vm.command(name='reset')
     @click.option('--force', '-f', is_flag=True, help='Force reset of all VMs (required for confirmation)')

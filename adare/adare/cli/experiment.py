@@ -6,7 +6,7 @@ from datetime import UTC
 from adare.api import AdareAPI
 from adare.backend.basics import determine_projectdirectory
 from adare.cli.utils import get_project_path, handle_api_error
-from adare.console import print_success_message
+from adare.console import print_error_message, print_success_message
 from adare.core.dto.experiment import (
     ExperimentCloneRequest,
     ExperimentCreateRequest,
@@ -39,11 +39,21 @@ def exec_experiment_load(arguments):
 
     if ('/' in original_input or '\\' in original_input):
         input_path = Path(original_input)
-        if input_path.is_absolute() or not (Path.cwd() / input_path).is_relative_to(project_dir_obj.experiments):
+        # "External" means outside the project's own experiments/ directory, and that is
+        # decided by where the path POINTS, not by whether it was typed absolute. The
+        # previous `input_path.is_absolute() or ...` short-circuited the containment test,
+        # so an absolute path to an experiment already inside the project was classified
+        # external -- which made target_path equal external_source_path, and the
+        # rmtree/copytree pair below then deleted the directory it was about to copy from.
+        # Both sides are resolved so symlinks and '..' cannot defeat the comparison.
+        resolved_input = (
+            input_path if input_path.is_absolute() else Path.cwd() / input_path
+        ).resolve()
+        if not resolved_input.is_relative_to(project_dir_obj.experiments.resolve()):
             # This is an external path
             if input_path.exists() and input_path.is_dir():
                 is_external_path = True
-                external_source_path = input_path.resolve()
+                external_source_path = resolved_input
                 potential_copied_name = input_path.name
 
     # Track whether a copy was actually performed during path resolution
@@ -69,17 +79,34 @@ def exec_experiment_load(arguments):
 
             has_productive_runs = False
             if experiment_ulid:
-                run_count = experiment_database.get_experiment_run_count(experiment_ulid, exclude_fake=True)
+                run_count = experiment_database.get_experiment_run_count(project_directory, experiment_ulid, exclude_fake=True)
                 has_productive_runs = run_count > 0
 
-            if not has_productive_runs:
-                # No productive runs - safe to overwrite
-                log.info(f'Overwriting experiment directory {target_path} with fresh copy from {external_source_path} (no productive runs found)')
+            # --force is the flag that authorises discarding existing runs, so it must
+            # also authorise refreshing the copied directory. Without this, the first
+            # productive run freezes the project copy: every later `experiment load -f`
+            # reports success while silently running the stale playbook.
+            if external_source_path.resolve() == target_path.resolve():
+                # Source and destination are the same directory, so there is nothing to
+                # copy -- and rmtree would destroy the experiment outright. Reachable via
+                # any future path-classification slip, so it is guarded here rather than
+                # only at the point where is_external_path is decided: losing a playbook
+                # and its GUI crops is not an acceptable outcome for a load command.
+                log.info(
+                    f'Experiment directory {target_path} is itself the source; '
+                    f'loading in place without copying.'
+                )
+            elif not has_productive_runs or arguments.force:
+                reason = 'no productive runs found' if not has_productive_runs else f'--force given ({run_count} productive runs)'
+                log.info(f'Overwriting experiment directory {target_path} with fresh copy from {external_source_path} ({reason})')
                 shutil.rmtree(target_path)
                 shutil.copytree(external_source_path, target_path)
                 copy_was_performed = True
             else:
-                log.info(f'Using existing experiment directory {target_path} (has {run_count} productive runs, not overwriting)')
+                log.warning(
+                    f'Using existing experiment directory {target_path} (has {run_count} productive runs, '
+                    f'not overwriting). Re-run with --force to refresh it from {external_source_path}.'
+                )
 
         # Use API for the actual load
         api = AdareAPI()
@@ -230,7 +257,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
             project_directory, experiment_name, trigger_error=False
         )
         if experiment_ulid:
-            run_count = experiment_database.get_experiment_run_count(experiment_ulid, exclude_fake=True)
+            run_count = experiment_database.get_experiment_run_count(project_directory, experiment_ulid, exclude_fake=True)
             if run_count > 0:
                 # In production mode with existing runs, load without force (strict integrity)
                 experiment_load(project_directory, experiment_name, force=False, silent=True)
@@ -269,6 +296,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
                 vm_cpus=arguments.vm_cpus,
                 diff=getattr(arguments, 'diff', None),
                 diff_mode=getattr(arguments, 'diff_mode', 'auto'),
+                allow_emulation=getattr(arguments, 'allow_emulation', False),
             )
             env_file_log_level = getattr(arguments, 'file_log_level', None)
             if env_file_log_level is not None:
@@ -428,6 +456,7 @@ def exec_experiment_run(arguments):
                     test_exec_mode=getattr(arguments, 'test_mode', None),
                     diff=getattr(arguments, 'diff', None),
                     diff_mode=getattr(arguments, 'diff_mode', 'auto'),
+                    allow_emulation=getattr(arguments, 'allow_emulation', False),
                 )
                 file_log_level = getattr(arguments, 'file_log_level', None)
                 if file_log_level is not None:
@@ -464,6 +493,19 @@ def exec_experiment_run(arguments):
             return
 
         # Single environment run (existing logic)
+        # When the flow console will own the terminal (not --verbose/--very-verbose),
+        # suppress console logging for the whole run so early validation and
+        # testfunction-load diagnostics ([!]/[-] lines) go to the run log file(s)
+        # only and cannot corrupt the live UI. Restored in the finally below.
+        from adare.setup_logging import set_console_log_level
+        original_console_level = None
+        if not disable_printing:
+            root_logger = logging.getLogger()
+            for handler in root_logger.handlers:
+                if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+                    original_console_level = handler.level
+                    break
+            set_console_log_level(logging.CRITICAL)
         try:
             # In production mode, use strict loading; in test mode, allow modifications
             if not arguments.test:  # Production mode
@@ -472,7 +514,7 @@ def exec_experiment_run(arguments):
                     project_directory, experiment_name, trigger_error=False
                 )
                 if experiment_ulid:
-                    run_count = experiment_database.get_experiment_run_count(experiment_ulid, exclude_fake=True)
+                    run_count = experiment_database.get_experiment_run_count(project_directory, experiment_ulid, exclude_fake=True)
                     if run_count > 0:
                         # Production mode with existing runs - strict integrity
                         experiment_load(project_directory, experiment_name, force=False, silent=True)
@@ -528,6 +570,7 @@ def exec_experiment_run(arguments):
                 test_exec_mode=getattr(arguments, 'test_mode', None),
                 diff=getattr(arguments, 'diff', None),
                 diff_mode=getattr(arguments, 'diff_mode', 'auto'),
+                allow_emulation=getattr(arguments, 'allow_emulation', False),
             )
             file_log_level = getattr(arguments, 'file_log_level', None)
             if file_log_level is not None:
@@ -585,8 +628,110 @@ def exec_experiment_run(arguments):
                 sys.exit(0)
         except KeyboardInterrupt:
             log.info("Keyboard interrupt received, shutting down gracefully...")
+        finally:
+            # Restore console logging level suppressed above for the flow-console run.
+            if original_console_level is not None:
+                set_console_log_level(original_console_level)
     else:
         raise NoProjectFoundError(log, message='no project directory found')
+
+def exec_experiment_replicate(arguments):
+    """Download a published experiment bundle and run it, end to end.
+
+    Orchestrates the existing download/load/run facade calls in sequence:
+    download_bundle -> environment.load -> experiment.load -> experiment run.
+    Stops with a clear error if any stage fails.
+    """
+    from types import SimpleNamespace
+
+    from adare.core.dto.environment import EnvironmentLoadRequest
+    from adare.core.dto.web import DownloadBundleRequest
+    from adare.exceptions import LoggedErrorException
+
+    project_directory = get_project_path(arguments)
+
+    api = AdareAPI()
+
+    print(f'Downloading experiment bundle {arguments.ulid}...')
+    download_result = api.web.download_bundle(DownloadBundleRequest(
+        project_path=project_directory,
+        ulid=arguments.ulid,
+    ))
+    if not download_result.success:
+        handle_api_error(download_result)
+        return
+
+    bundle = download_result.data
+    experiment_name = bundle.experiment_name
+    environment_names = bundle.environment_names
+    print(f'Downloaded experiment "{experiment_name}" '
+          f'({len(environment_names)} environment(s), {len(bundle.testfunction_names)} testfunction set(s))')
+
+    if arguments.environment:
+        env_name = arguments.environment
+        if env_name not in environment_names:
+            raise LoggedErrorException(log,
+                f'Environment "{env_name}" is not part of experiment "{experiment_name}"\'s bundle',
+                possible_solutions=[f'Available environments: {", ".join(environment_names)}']
+            )
+    elif len(environment_names) == 1:
+        env_name = environment_names[0]
+    else:
+        raise LoggedErrorException(log,
+            f'Experiment "{experiment_name}" has {len(environment_names)} environments; '
+            'specify which one to use with -e/--environment',
+            possible_solutions=[f'Available environments: {", ".join(environment_names)}']
+        )
+
+    print(f'Loading environment "{env_name}" (fetching and verifying VM disk)...')
+    env_result = api.environment.load(EnvironmentLoadRequest(
+        environment=env_name,
+        force=False,
+        no_copy=False,
+    ))
+    if not env_result.success:
+        handle_api_error(env_result)
+        return
+    env_name = env_result.data.name
+
+    print(f'Loading experiment "{experiment_name}"...')
+    load_result = api.experiment.load(ExperimentLoadRequest(
+        project_path=project_directory,
+        name=experiment_name,
+        force=False,
+        silent=True,
+    ))
+    if not load_result.success:
+        handle_api_error(load_result)
+        return
+
+    if arguments.skip_run:
+        print_success_message(
+            title=f'Experiment "{experiment_name}" downloaded and loaded (environment "{env_name}" ready)',
+            next_steps=[f'adare experiment run {experiment_name} -e {env_name}'],
+        )
+        return
+
+    print(f'Running experiment "{experiment_name}" on environment "{env_name}"...')
+    run_args = SimpleNamespace(
+        experiment=experiment_name,
+        environment=env_name,
+        test=arguments.test,
+        debug_screenshots=False,
+        preserve_snapshot=False,
+        runlog=True,
+        vm_memory=None,
+        vm_cpus=None,
+        gui_mode=None,
+        test_mode=None,
+        diff=None,
+        diff_mode='auto',
+        project=arguments.project,
+        verbose=False,
+        very_verbose=False,
+    )
+    exec_experiment_run(run_args)
+
 
 def exec_experiment_test(arguments):
     """Run experiment tests (dry-run) using AdareAPI."""
@@ -734,6 +879,102 @@ def exec_experiment_clone(arguments):
         )
     else:
         handle_api_error(result)
+
+
+def exec_playbook_show(arguments):
+    """Print an experiment's playbook YAML (disk, DB fallback)."""
+    from adare.core.dto.playbook import PlaybookReadRequest
+
+    project_directory = get_project_path(arguments)
+    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+
+    api = AdareAPI()
+    result = api.experiment.read_playbook(PlaybookReadRequest(
+        project_path=project_directory,
+        experiment=experiment_name,
+    ))
+
+    if not result.success:
+        handle_api_error(result)
+        return
+
+    if getattr(arguments, 'verbose', False) or getattr(arguments, 'very_verbose', False):
+        log.info('Playbook source: %s (%s)', result.data.path, result.data.source)
+    print(result.data.yaml)
+
+
+def exec_playbook_validate(arguments):
+    """Statically validate a playbook YAML file (no VM)."""
+    import sys
+    from pathlib import Path
+
+    from adare.core.dto.playbook import PlaybookValidateRequest
+
+    playbook_path = Path(arguments.file)
+    try:
+        yaml_content = playbook_path.read_text(encoding='utf-8')
+    except OSError as e:
+        print_error_message(title=f'Cannot read {playbook_path}: {e}')
+        sys.exit(1)
+
+    api = AdareAPI()
+    result = api.experiment.validate_playbook(PlaybookValidateRequest(yaml=yaml_content))
+
+    if not result.success:
+        handle_api_error(result)
+        return
+
+    if result.data.valid:
+        print_success_message(title=f'Playbook "{playbook_path}" is valid')
+    else:
+        print_error_message(
+            title=f'Playbook "{playbook_path}" is invalid',
+            next_steps=result.data.errors,
+        )
+        sys.exit(1)
+
+
+def exec_playbook_set(arguments):
+    """Validate then write a playbook YAML file to an experiment (DB re-ingest)."""
+    import sys
+    from pathlib import Path
+
+    from adare.core.dto.playbook import PlaybookWriteRequest
+
+    project_directory = get_project_path(arguments)
+    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+
+    source_path = Path(arguments.file)
+    try:
+        yaml_content = source_path.read_text(encoding='utf-8')
+    except OSError as e:
+        print_error_message(title=f'Cannot read {source_path}: {e}')
+        sys.exit(1)
+
+    api = AdareAPI()
+    result = api.experiment.write_playbook(PlaybookWriteRequest(
+        project_path=project_directory,
+        experiment=experiment_name,
+        yaml=yaml_content,
+        backup=arguments.backup,
+    ))
+
+    if not result.success:
+        handle_api_error(result)
+        return
+
+    next_steps = []
+    if result.data.backup_path:
+        next_steps.append(f'Previous playbook backed up to {result.data.backup_path}')
+    if result.data.db_ingested:
+        next_steps.append(f'Database re-ingested (playbook version {result.data.version})')
+    else:
+        next_steps.append('Experiment not loaded in DB — file written only; '
+                          f'run `adare experiment load {experiment_name}` to ingest')
+    print_success_message(
+        title=f'Playbook written to {result.data.path}',
+        next_steps=next_steps,
+    )
 
 
 def exec_experiment_validate(arguments):

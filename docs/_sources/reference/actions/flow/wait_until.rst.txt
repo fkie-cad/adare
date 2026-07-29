@@ -126,6 +126,21 @@ Control when wait_until checks for the target condition based on screen activity
 - ``strategy``: 'once' (latch) or 'continuous' (always enforce). Default: 'once'
 - ``idle``: Seconds to wait after constraint satisfied before checking condition
 
+Match Caching (Performance)
+---------------------------
+
+A successful ``exists``/``not_exists`` match is cached for reuse by exactly the next
+target-resolution attempt anywhere in the playbook - not for the rest of the run.
+That next attempt (e.g. a ``click`` on an identical target: same
+image/text/position/strategy/offset) automatically reuses the cached match instead of
+re-running CV detection - no flag needed. Actions that don't resolve a target
+(keyboard input, a pause, a fixed-coordinate drag) don't consume this slot; only
+another target resolution does - whether that's the consuming action itself or an
+unrelated ``wait_until`` check that runs first and claims the slot instead, causing
+the original cache entry to be dropped as stale. Set ``use_cache: false`` on a target
+to opt out of auto-reuse and force fresh detection. See :doc:`../gui/click` for the
+full pattern, the opt-out example, and the exact boundary condition.
+
 Notes
 -----
 

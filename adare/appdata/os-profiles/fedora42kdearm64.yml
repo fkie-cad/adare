@@ -1,0 +1,38 @@
+name: fedora42kdearm64
+display_name: "Fedora 42 KDE Plasma Spin (ARM64)"
+platform: linux
+distribution: fedora
+distribution_label: "KDE Plasma Spin"
+version: "42"
+architecture: aarch64
+requires_uefi: true
+# Unattended Anaconda install driven by the shared Fedora KDE kickstart template.
+install_mode: auto
+installer: kickstart
+# Selected explicitly rather than by the template's `supports:` list, which names only
+# the x86 fedora4*kde profiles. Without this, resolve_template() falls through to its
+# distribution-prefix fallback and picks max() over every discovered "fedora*" key,
+# which is arbitrary — it would silently install GNOME.
+template: kickstart_fedora_kde.yaml
+kernel_path_in_iso: /images/pxeboot/vmlinuz
+initrd_path_in_iso: /images/pxeboot/initrd.img
+# Installed from Fedora-Everything-netinst-aarch64-42 rather than an aarch64 KDE Live
+# ISO, keeping this method-identical to fedora41kdearm64 (which has no live media at
+# all) so the two versions stay comparable. The desktop comes from the kickstart's
+# @kde-desktop-environment group, verified present in comps-Everything.aarch64.xml.
+# Fedora 42 is EOL, so its metalink no longer resolves to a mirror — inst.repo is pinned
+# at the archive tree, which also serves stage2.
+#
+# NOTE: the built-in x86 fedora41kde/fedora42kde entries in os_catalog.py are
+# deliberately NOT archive-pinned; do not copy their kernel_cmdline here.
+kernel_cmdline: >-
+  inst.ks=hd:LABEL=OEMDRV:/ks.cfg
+  inst.repo=https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/42/Everything/aarch64/os/
+  inst.text console={console}
+seed_label: OEMDRV
+iso_url: ""
+iso_sha256: ""
+iso_filename: ""
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0

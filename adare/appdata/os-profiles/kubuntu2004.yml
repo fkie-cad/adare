@@ -1,0 +1,54 @@
+name: kubuntu2004
+display_name: "Kubuntu 20.04 LTS (Focal Fossa) Desktop"
+platform: linux
+distribution: ubuntu
+distribution_label: "Focal Fossa"
+version: "20.04"
+# Genuine Kubuntu (KDE Plasma) desktop installed by replaying a deterministic
+# playbook through its graphical ubiquity (KDE frontend) installer — no LLM.
+# Buttons are located by their on-screen LABEL via ADARE's cv-server OCR
+# (find_text), so the steps are independent of window position / resolution.
+install_mode: playbook
+installer: gui
+iso_url: "https://cdimage.ubuntu.com/kubuntu/releases/20.04/release/kubuntu-20.04.6-desktop-amd64.iso"
+iso_sha256: "96f765d63302ec15615287afcb910f2e539301d753fd65c13c7300064e795b0a"
+iso_filename: "kubuntu-20.04.6-desktop-amd64.iso"
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0
+requires_uefi: false
+
+install_steps:
+  - {action: wait_stable, settle: 6, timeout: 360, min: 120, note: "live session + Welcome"}
+  - {action: click_text, text: "Install Kubuntu", shot: welcome}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: keyboard, note: "Keyboard layout"}
+  - {action: wait_stable, settle: 5, timeout: 180}
+  # Wireless auto-completes on a wired link; this Continue lands on the
+  # 'Updates and other software' screen (Normal install, defaults kept).
+  - {action: click_text, text: "Continue", shot: software, note: "Updates/other software"}
+  - {action: wait_stable, settle: 5, timeout: 180}
+  - {action: click_text, text: "Install Now", shot: installtype, note: "Guided - use entire disk"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: writeconfirm, note: "Write changes dialog"}
+  - {action: wait_stable, settle: 6, timeout: 180}
+  - {action: click_text, text: "Continue", shot: timezone, note: "Timezone / Where are you"}
+  - {action: wait_stable, settle: 6, timeout: 120, shot: whoami}
+  - {action: click_text, text: "Your name", dy: 30, note: "Your name field"}
+  - {action: type, text: "adare"}
+  - {action: click_text, text: "Choose a password", dy: 30, note: "password field"}
+  - {action: type, text: "adare"}
+  - {action: key, keys: [tab]}
+  - {action: type, text: "adare", note: "confirm password"}
+  - {action: click_text, text: "Your computer", dy: 30, note: "computer name field"}
+  - {action: key, keys: [ctrl, a]}
+  - {action: type, text: "kubuntu2004"}
+  - {action: shot, name: user-filled}
+  - {action: click_text, text: "Continue", note: "start install"}
+  - {action: wait_stable, settle: 45, timeout: 3600, shot: complete, note: "wait for install"}
+
+verify_steps:
+  - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
+  - {action: type, text: "adare", note: "password (SDDM field is focused)"}
+  - {action: key, keys: [ret]}
+  - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}

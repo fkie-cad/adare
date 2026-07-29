@@ -2,7 +2,6 @@
 import logging
 
 import pandas as pd
-from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 
@@ -21,12 +20,12 @@ class ExperimentTablePanel:
 
     def __rich__(self) -> Panel:
         table = Table(expand=True)
-        table.add_column("name", style="cyan", no_wrap=True)
-        table.add_column("ulid", style="cyan", no_wrap=True)
-        table.add_column("environments", style="cyan", no_wrap=True)
-        table.add_column("description", style="cyan", no_wrap=True)
-        table.add_column("tags", style="magenta", no_wrap=False)
-        table.add_column("web status", style="cyan", no_wrap=True)
+        table.add_column("name", style="cyan", no_wrap=True, min_width=10, max_width=30)
+        table.add_column("ulid", style="cyan", no_wrap=True, min_width=10, max_width=26)
+        table.add_column("environments", style="cyan", no_wrap=False, min_width=14, max_width=40)
+        table.add_column("description", style="cyan", no_wrap=False, min_width=14, max_width=50)
+        table.add_column("tags", style="magenta", no_wrap=False, min_width=8, max_width=30)
+        table.add_column("web status", style="cyan", no_wrap=True, min_width=12, max_width=14)
 
         for _i, row in self.experiments.iterrows():
             published = row['published'] == 'True'
@@ -71,8 +70,7 @@ def print_experiment_list(formatter=None, output_file=None, dual_output=False):
             formatter.print_or_save({'experiments': experiment_list}, output_file, dual_output)
     else:
         # Use existing Rich formatting
-        console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = ExperimentTablePanel(experiments)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which reads
+        # as "those experiments do not exist".
+        DefaultConsole().print(ExperimentTablePanel(experiments))

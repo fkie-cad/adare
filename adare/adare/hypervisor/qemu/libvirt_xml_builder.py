@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from xml.dom import minidom
 
+from .accel import cpu_mode_and_model, native_accel
 from .firmware import create_nvram_for_vm, find_ovmf_firmware
 
 log = logging.getLogger(__name__)
@@ -46,8 +47,9 @@ class PCIBusAllocator:
         'disk': (0, 4),          # bus 0, slot 4
         'virtio_serial': (0, 5), # bus 0, slot 5
         'memballoon': (0, 6),    # bus 0, slot 6
+        'usb': (0, 7),           # bus 0, slot 7 (qemu-xhci)
     }
-    _PC_VIRTIOFS_BASE_SLOT = 7  # slots 7+ for virtiofs shares
+    _PC_VIRTIOFS_BASE_SLOT = 8  # slots 8+ for virtiofs shares
 
     def __init__(self, is_q35: bool):
         self.is_q35 = is_q35
@@ -119,6 +121,11 @@ class DomainXMLBuilder:
         self._is_virt = vm_config.machine == 'virt' or self._is_aarch64
         self._is_darwin = platform.system().lower() == 'darwin'
 
+        # Accelerator: trust an explicitly-resolved config.accel (hvf/kvm/tcg);
+        # fall back to the host's native accelerator for configs that predate
+        # this field or were never routed through the resolve_accel chokepoint.
+        self._accel = getattr(vm_config, 'accel', None) or native_accel()
+
         # Determine effective machine type
         if self._is_virt:
             self._effective_machine = 'virt'
@@ -130,6 +137,11 @@ class DomainXMLBuilder:
 
         self._guest_arch = 'aarch64' if self._is_aarch64 else 'x86_64'
 
+        # Live-installer CDROM boot (GUI-automated / manual installs). Read
+        # defensively so configs persisted before these fields existed still load.
+        self._iso_path = getattr(vm_config, 'iso_path', '') or ''
+        self._boot_from_cdrom = bool(getattr(vm_config, 'boot_from_cdrom', False))
+
         self._pci = PCIBusAllocator(self._is_q35)
 
         self._domain: ET.Element | None = None
@@ -139,7 +151,9 @@ class DomainXMLBuilder:
         """Build and return the complete domain XML string."""
         log.debug(f"Generating libvirt XML for VM: {self._config.vm_name}")
 
-        domain_type = 'hvf' if self._is_darwin else 'kvm'
+        # libvirt's 'qemu' domain type is the correct idiom for "no fixed
+        # accelerator" (TCG); hvf/kvm otherwise name the accelerator directly.
+        domain_type = 'qemu' if self._accel == 'tcg' else self._accel
         self._domain = ET.Element('domain', type=domain_type)
         self._domain.set('xmlns:qemu', QEMU_NAMESPACE)
 
@@ -211,12 +225,17 @@ class DomainXMLBuilder:
             nvram_elem = ET.SubElement(os_elem, 'nvram')
             nvram_elem.text = nvram_path
 
-            ET.SubElement(os_elem, 'boot', dev='hd')
+            # Per-device <boot order> (set in _add_disk/_add_cdrom) is mutually
+            # exclusive with a global <boot dev>. Only emit the global element
+            # when we are NOT booting from CDROM.
+            if not self._boot_from_cdrom:
+                ET.SubElement(os_elem, 'boot', dev='hd')
         else:
             log.info(f"Using BIOS boot for VM {self._config.vm_name} (guest_os={self._config.guest_os})")
             os_type = ET.SubElement(os_elem, 'type', arch='x86_64', machine=self._config.machine)
             os_type.text = 'hvm'
-            ET.SubElement(os_elem, 'boot', dev='hd')
+            if not self._boot_from_cdrom:
+                ET.SubElement(os_elem, 'boot', dev='hd')
 
     def _add_features(self) -> None:
         """Add CPU features: ACPI, APIC, SMM, Hyper-V enlightenments."""
@@ -230,8 +249,8 @@ class DomainXMLBuilder:
                 ET.SubElement(features, 'smm', state='on')
                 log.info(f"Enabled SMM for Windows VM {self._config.vm_name}")
 
-            # Hyper-V enlightenments (KVM-only, not available on macOS HVF)
-            if not self._is_darwin:
+            # Hyper-V enlightenments (KVM-only — not available under HVF or TCG)
+            if self._accel == 'kvm':
                 hyperv = ET.SubElement(features, 'hyperv')
                 ET.SubElement(hyperv, 'relaxed', state='on')
                 ET.SubElement(hyperv, 'vapic', state='on')
@@ -248,7 +267,7 @@ class DomainXMLBuilder:
                 log.info(f"Enabled Hyper-V enlightenments for Windows VM {self._config.vm_name}")
 
             # KVM-accelerated IOAPIC (KVM-only)
-            if not self._is_darwin:
+            if self._accel == 'kvm':
                 ET.SubElement(features, 'ioapic', driver='kvm')
 
             # Disable VMware backdoor port (x86-only, conflicts with Hyper-V)
@@ -256,8 +275,18 @@ class DomainXMLBuilder:
                 ET.SubElement(features, 'vmport', state='off')
 
     def _add_cpu_model(self) -> None:
-        """Add CPU model and topology."""
-        cpu = ET.SubElement(self._domain, 'cpu', mode='host-passthrough', check='none')
+        """Add CPU model and topology.
+
+        Under hardware acceleration, host-passthrough exposes the real host
+        CPU. Under TCG there is no host CPU to pass through (especially
+        cross-arch emulation), so a generic model is used instead.
+        """
+        cpu_mode, cpu_model = cpu_mode_and_model(self._accel, self._guest_arch)
+        if cpu_mode == 'host-passthrough':
+            cpu = ET.SubElement(self._domain, 'cpu', mode='host-passthrough', check='none')
+        else:
+            cpu = ET.SubElement(self._domain, 'cpu', mode='custom', match='exact')
+            ET.SubElement(cpu, 'model', fallback='allow').text = cpu_model
         ET.SubElement(cpu, 'topology', sockets='1', dies='1', cores=str(self._config.cpus), threads='1')
 
     def _add_clock(self) -> None:
@@ -273,7 +302,11 @@ class DomainXMLBuilder:
     def _add_power_management(self) -> None:
         """Add power management actions."""
         ET.SubElement(self._domain, 'on_poweroff').text = 'destroy'
-        ET.SubElement(self._domain, 'on_reboot').text = 'restart'
+        # GUI installers reboot when finished. Booting from CDROM with
+        # on_reboot=restart would re-enter the installer, so power off instead;
+        # the creator then boots the installed disk (boot_from_cdrom=False).
+        on_reboot = 'destroy' if self._boot_from_cdrom else 'restart'
+        ET.SubElement(self._domain, 'on_reboot').text = on_reboot
         ET.SubElement(self._domain, 'on_crash').text = 'destroy'
 
     def _add_security(self) -> None:
@@ -286,6 +319,7 @@ class DomainXMLBuilder:
 
         self._add_emulator()
         self._add_disk()
+        self._add_cdrom()
         self._add_network()
         self._add_guest_agent_channel()
         self._add_spice_channel()
@@ -324,9 +358,9 @@ class DomainXMLBuilder:
     def _add_disk(self) -> None:
         """Add disk configuration with iothread.
 
-        ARM64 uses NVMe (native Windows driver, matches installation).
-        NVMe is added via qemu:commandline since libvirt has no native NVMe
-        emulation support in <disk> elements.
+        ARM64 disks are added via qemu:commandline (see _add_qemu_commandline):
+        Windows uses NVMe (native driver, matches installation), Linux uses
+        virtio-blk (migratable, so savevm/loadvm checkpoints work).
         x86_64 uses virtio-blk (viostor loaded by Windows).
         """
         if self._is_aarch64:
@@ -341,12 +375,40 @@ class DomainXMLBuilder:
         ET.SubElement(disk, 'source', file=self._config.disk_path)
         ET.SubElement(disk, 'target', dev='vda', bus='virtio')
 
+        # When booting an installer from CDROM, the hard disk is the second boot
+        # device (per-device order; the CDROM gets order 1 in _add_cdrom).
+        if self._boot_from_cdrom:
+            ET.SubElement(disk, 'boot', order='2')
+
         if self._is_virt:
             pass  # libvirt auto-assigns addresses on virt machine
         elif self._is_q35:
             ET.SubElement(disk, 'address', **self._pci.address_for('disk'))
         else:
             ET.SubElement(disk, 'address', **self._pci.address_for('disk'))
+
+    def _add_cdrom(self) -> None:
+        """Attach an installer ISO as a read-only CDROM device.
+
+        Emitted only when the config carries an ``iso_path``. On q35 the CDROM
+        rides the built-in SATA controller (added by _add_q35_pcie_topology);
+        on plain i440FX ``pc`` it falls back to the IDE bus. aarch64 has no
+        <disk>-based path (NVMe/virtio via commandline) so the ISO is attached
+        in _add_qemu_commandline() instead — skip here.
+        """
+        if not self._iso_path or self._is_aarch64:
+            return
+
+        cdrom = ET.SubElement(self._devices, 'disk', type='file', device='cdrom')
+        ET.SubElement(cdrom, 'driver', name='qemu', type='raw')
+        ET.SubElement(cdrom, 'source', file=self._iso_path)
+        bus = 'sata' if self._is_q35 else 'ide'
+        ET.SubElement(cdrom, 'target', dev='sda', bus=bus)
+        ET.SubElement(cdrom, 'readonly')
+
+        # Boot the installer first; the disk (order 2) is the post-install target.
+        if self._boot_from_cdrom:
+            ET.SubElement(cdrom, 'boot', order='1')
 
     def _add_network(self) -> None:
         """Add network interface (unless port forwarding or SMB is via qemu:commandline)."""
@@ -411,7 +473,7 @@ class DomainXMLBuilder:
     def _add_usb_controller(self) -> None:
         """Add USB controller."""
         usb = ET.SubElement(self._devices, 'controller', type='usb', index='0', model='qemu-xhci')
-        if self._is_q35:
+        if not self._is_virt:
             ET.SubElement(usb, 'address', **self._pci.address_for('usb'))
 
     def _add_graphics(self) -> None:
@@ -426,6 +488,14 @@ class DomainXMLBuilder:
         graphics = ET.SubElement(self._devices, 'graphics', type='spice', autoport='yes')
         graphics.set('listen', '127.0.0.1')
         ET.SubElement(graphics, 'listen', type='address', address='127.0.0.1')
+        # Force a codec the ADARE-owned SPICE client fully decodes. The server emits
+        # LZ_RGB (image_type 101); if the client advertises SPICE_DISPLAY_CAP_LZ4 the
+        # server upgrades to LZ4 (109) — both have real decoders. This keeps QUIC/GLZ
+        # (unimplemented) off the wire. Localhost listen makes LZ4's larger frames free.
+        ET.SubElement(graphics, 'image', compression='lz')
+        # Disable MJPEG video streaming so no STREAM_* messages are emitted — the client
+        # has no stream parser and does not need one.
+        ET.SubElement(graphics, 'streaming', mode='off')
 
     def _add_vnc_graphics(self) -> None:
         """Add VNC graphics as fallback (e.g. Linux hosts without SPICE client)."""
@@ -468,10 +538,11 @@ class DomainXMLBuilder:
         video = ET.SubElement(self._devices, 'video')
         if self._is_aarch64:
             # type='none' tells libvirt not to create any video device.
-            # The actual GPU (virtio-gpu-device, MMIO) and boot framebuffer (ramfb)
-            # are added via qemu:commandline in _add_qemu_commandline().
-            # This prevents libvirt's video device from intercepting SPICE display
-            # channels — virtio-gpu-device auto-outputs to SPICE instead.
+            # The actual GPU (virtio-gpu-pci for Linux, virtio-gpu-device/MMIO for
+            # Windows) and boot framebuffer (ramfb) are added via qemu:commandline
+            # in _add_qemu_commandline(). This prevents libvirt's video device from
+            # intercepting SPICE display channels — the virtio-gpu auto-outputs to
+            # SPICE instead.
             model = ET.SubElement(video, 'model', type='none')
         elif self._is_windows and not self._is_darwin:
             model = ET.SubElement(video, 'model', type='virtio', heads='1', primary='yes', vram='262144')
@@ -479,7 +550,9 @@ class DomainXMLBuilder:
             model = ET.SubElement(video, 'model', type='qxl', ram='65536', vram='65536', vgamem='16384', heads='1', primary='yes')
 
         if not self._is_aarch64:  # type='none' doesn't support resolution hints
-            ET.SubElement(model, 'resolution', x='1920', y='1080')
+            rx = getattr(self._config, 'resolution_x', 1920)
+            ry = getattr(self._config, 'resolution_y', 1080)
+            ET.SubElement(model, 'resolution', x=str(rx), y=str(ry))
         if self._is_virt:
             pass
         elif self._is_q35:
@@ -492,9 +565,19 @@ class DomainXMLBuilder:
         if not self._is_windows:
             return
         if shutil.which('swtpm'):
-            tpm = ET.SubElement(self._devices, 'tpm', model='tpm-crb')
-            ET.SubElement(tpm, 'backend', type='emulator', version='2.0')
-            log.info(f"Added TPM 2.0 emulator for Windows VM {self._config.vm_name}")
+            # tpm-crb is an x86-only interface; aarch64 QEMU only provides the
+            # TIS device (tpm-tis-device). Advertising tpm-crb on aarch64 makes
+            # libvirt reject the domain ("does not support TPM model tpm-crb").
+            tpm_model = 'tpm-tis' if self._is_aarch64 else 'tpm-crb'
+            tpm = ET.SubElement(self._devices, 'tpm', model=tpm_model)
+            # persistent_state='yes' is load-bearing, not cosmetic: with it unset
+            # (the default), libvirt treats the swtpm state as ephemeral and
+            # deletes it on ANY undefine regardless of which undefineFlags are
+            # passed — so KEEP_TPM (adare.hypervisor.qemu.libvirt_undefine) has no
+            # effect without this attribute. See docsrc hypervisors.rst
+            # "Instance-scoped firmware state" for the full reasoning.
+            ET.SubElement(tpm, 'backend', type='emulator', version='2.0', persistent_state='yes')
+            log.info(f"Added TPM 2.0 emulator ({tpm_model}) for Windows VM {self._config.vm_name}")
         elif self._is_darwin:
             log.warning(
                 "swtpm not available — Windows 11 may not boot without TPM. "
@@ -574,8 +657,20 @@ class DomainXMLBuilder:
             _add_qemu_arg(qemu_commandline, '-d')
             _add_qemu_arg(qemu_commandline, 'guest_errors,cpu_reset,unimp')
 
-        # ARM64 NVMe disk — libvirt has no native NVMe emulation in <disk>,
-        # so we pass raw QEMU args. Matches the installation disk controller.
+        # ARM64 guest disk — attached via raw QEMU args because the controller
+        # lives on pcie.0 at a pinned high slot (kept clear of libvirt's
+        # auto-assigned pcie-root-ports). Controller choice depends on the guest:
+        #
+        #   * Windows aarch64 -> nvme. Windows ships a native NVMe driver and the
+        #     guest was installed on nvme; virtio-blk would need viostor.
+        #   * Linux aarch64   -> virtio-blk-pci. nvme is a NON-MIGRATABLE QEMU
+        #     device, which makes savevm/loadvm (dev-mode checkpoint/restore on
+        #     qemu:///session, where libvirt external snapshots are unavailable)
+        #     abort with "State blocked by non-migratable device". virtio-blk-pci
+        #     is fully migratable, so the VM RAM+device state can be captured into
+        #     an internal qcow2 snapshot. Linux's generic initramfs carries
+        #     virtio_blk and mounts by UUID, so the /dev/nvme0n1 -> /dev/vda
+        #     controller change does not affect boot.
         if self._is_aarch64:
             _add_qemu_arg(qemu_commandline, '-drive')
             disk_cache = 'writethrough' if self._is_darwin else 'none'
@@ -585,16 +680,79 @@ class DomainXMLBuilder:
                 f'if=none,id=hd0,cache={disk_cache},discard=unmap',
             )
             _add_qemu_arg(qemu_commandline, '-device')
-            _add_qemu_arg(qemu_commandline, 'nvme,drive=hd0,serial=disk0,bootindex=0,bus=pcie.0,addr=0x1e')
+            # When installing from an ISO the CDROM boots first (bootindex 0) and
+            # the target disk is bootindex 1; otherwise the disk boots first.
+            disk_bootindex = 1 if (self._iso_path and self._boot_from_cdrom) else 0
+            disk_model = 'nvme' if self._is_windows else 'virtio-blk-pci'
+            _add_qemu_arg(
+                qemu_commandline,
+                f'{disk_model},drive=hd0,serial=disk0,bootindex={disk_bootindex},'
+                f'bus=pcie.0,addr=0x1e',
+            )
 
-        # ramfb: firmware/boot framebuffer (no SPICE channels, no conflict).
-        # virtio-gpu-device (MMIO variant): auto-outputs to SPICE display channels;
-        # viogpudo from UTM guest tools takes over for resolution negotiation.
+        # aarch64 installer CDROM (libvirt <disk device='cdrom'> is skipped for
+        # aarch64 in _add_cdrom, so attach the ISO via raw QEMU args here).
+        if self._is_aarch64 and self._iso_path:
+            _add_qemu_arg(qemu_commandline, '-drive')
+            _add_qemu_arg(
+                qemu_commandline,
+                f'file={self._iso_path},format=raw,if=none,id=cd0,media=cdrom,readonly=on',
+            )
+            _add_qemu_arg(qemu_commandline, '-device')
+            cd_bootindex = 0 if self._boot_from_cdrom else 2
+            _add_qemu_arg(qemu_commandline, f'usb-storage,drive=cd0,bootindex={cd_bootindex}')
+
+        # aarch64 display device — transport differs per guest OS (see branches).
         if self._is_aarch64:
-            _add_qemu_arg(qemu_commandline, '-device')
-            _add_qemu_arg(qemu_commandline, 'ramfb')
-            _add_qemu_arg(qemu_commandline, '-device')
-            _add_qemu_arg(qemu_commandline, 'virtio-gpu-device')
+            rx = getattr(self._config, 'resolution_x', 1920)
+            ry = getattr(self._config, 'resolution_y', 1080)
+            if self._is_windows and not self._iso_path:
+                # Windows aarch64, running a baked env (no installer ISO): PCI
+                # virtio-gpu with NO ramfb, mirroring the Linux branch below. This is
+                # the default runtime path. edk2 VirtioGpuDxe provides the boot GOP,
+                # and viogpudo (VioGpuDod, shipped by UTM Guest Tools) binds to PCI
+                # virtio-gpu (DEV_1050) — a real display driver instead of the
+                # Microsoft Basic Display Driver. The MMIO virtio-gpu-device (install
+                # branch) otherwise lands on an ACPI\LNRO0005 virtio-mmio slot Windows
+                # has no bus driver for, so the display falls back to the Basic Display
+                # Driver over ramfb at 800x600.
+                #
+                # NOTE: viogpudo does NOT honour the advertised EDID/xres/yres at boot
+                # (live-tested: it comes up at its 1024x768 default). The configured
+                # resolution is applied at runtime by a guest-side ChangeDisplaySettings
+                # call in the console session — see agent_lifecycle._build_windows_set_
+                # resolution_command. edid=on is kept as it is harmless and advertises
+                # the intended mode.
+                _add_qemu_arg(qemu_commandline, '-device')
+                _add_qemu_arg(
+                    qemu_commandline,
+                    f'virtio-gpu-pci,edid=on,xres={rx},yres={ry},bus=pcie.0,addr=0x1d',
+                )
+            elif self._is_windows:
+                # Windows aarch64, installing (installer ISO attached): ramfb boot
+                # framebuffer + the MMIO virtio-gpu-device. PCI virtio-gpu risks the
+                # documented WinPE/boot BSOD on the ramfb->GPU handoff (see vm_creator/
+                # qmp_utils.py, windows_creator.py), and the resolution is irrelevant
+                # during install anyway. edid=on + xres/yres advertise the target mode.
+                _add_qemu_arg(qemu_commandline, '-device')
+                _add_qemu_arg(qemu_commandline, 'ramfb')
+                _add_qemu_arg(qemu_commandline, '-device')
+                _add_qemu_arg(qemu_commandline, f'virtio-gpu-device,edid=on,xres={rx},yres={ry}')
+            else:
+                # Linux aarch64: virtio-gpu-PCI ONLY, no ramfb. The Linux virtio_gpu
+                # driver probes it and honors the EDID/xres/yres, giving a single
+                # display at the configured resolution (edk2/AAVMF drives it as the
+                # boot GOP). ramfb must NOT be added here: it creates a competing
+                # 800x600 simple-framebuffer/simpledrm card (card0) that GNOME latches
+                # onto instead of the virtio-gpu card — the exact reason the guest was
+                # stuck at 800x600. Pin an explicit high slot on pcie.0 (like the
+                # NVMe/net devices at 0x1e/0x1f) so it doesn't collide with libvirt's
+                # auto-assigned pcie-root-ports on the low slots.
+                _add_qemu_arg(qemu_commandline, '-device')
+                _add_qemu_arg(
+                    qemu_commandline,
+                    f'virtio-gpu-pci,edid=on,xres={rx},yres={ry},bus=pcie.0,addr=0x1d',
+                )
 
         # Keyboards: qemu:commandline args are placed on the QEMU command line
         # BEFORE libvirt's own -device args. virtio-keyboard-device here therefore
@@ -649,8 +807,12 @@ class DomainXMLBuilder:
         _add_qemu_arg(qemu_commandline, '-device')
         if self._is_virt:
             _add_qemu_arg(qemu_commandline, 'virtio-net-pci,netdev=net0,bus=pcie.0,addr=0x1f')
+        elif self._is_q35:
+            # network root-port = PCIBusAllocator network slot (bus 1, slot 0)
+            _add_qemu_arg(qemu_commandline, 'virtio-net-pci,netdev=net0,bus=pci.1,addr=0x0')
         else:
-            _add_qemu_arg(qemu_commandline, 'virtio-net-pci,netdev=net0')
+            # PC/i440FX: PCIBusAllocator reserves bus 0 slot 3 for network
+            _add_qemu_arg(qemu_commandline, 'virtio-net-pci,netdev=net0,addr=0x3')
 
     def _prettify(self) -> str:
         """Convert the domain XML tree to a pretty-printed string."""

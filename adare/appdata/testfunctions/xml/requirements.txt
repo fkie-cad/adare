@@ -1,3 +1,16 @@
-# XML processing dependencies
-# Using lxml for full XPath support instead of ElementTree
-lxml==6.0.1
+# XML processing: no dependencies.
+#
+# xml.py uses the stdlib xml.etree.ElementTree ONLY, and lxml has been removed rather
+# than made optional. The reason is measurement consistency, not packaging taste:
+# these testfunctions produce evidence compared across OS versions, so the parser has
+# to be identical on every guest. An lxml-where-available arrangement would have put
+# lxml on 22.04/24.04 and ElementTree on 20.04 -- the parser varying along the very
+# axis under study.
+#
+# lxml==6.0.1 also could not be satisfied uniformly: focal (Python 3.8, aarch64) has
+# no wheel for it, and the resulting source build needs libxml2-dev/libxslt1-dev,
+# absent from a minimal server guest. The ModuleNotFoundError at import time made the
+# whole collection unavailable, so every xml.* assertion on 20.04 errored out.
+#
+# Do not reintroduce lxml here without also making it a hard requirement of every
+# guest image; a partial rollout silently re-splits the instrument.

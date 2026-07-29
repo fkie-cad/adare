@@ -1,0 +1,194 @@
+{# adare-template
+schema: 1
+id: ubuntu-focal
+description: Ubuntu 20.04 LTS desktop (live-server ISO autoinstall, focal-era subiquity, no conda + uv)
+maintainer: ADARE
+revision: 2026-07-25
+supports:
+  - ubuntu2004arm64
+-#}
+{# Focal variant of autoinstall_ubuntu_lts.yaml.
+
+   `shutdown: poweroff` works here — a 20.04.5 ISO carries subiquity snap rev
+   3704 (2022-era), not focal's original 2020 installer, because point releases
+   refresh it. `sizing-policy: all` is accepted but *ignored* by that installer:
+   measured on a 60 GB disk, the root LV still comes out at half the PV
+   (28.5 GiB of 57 GiB). It is kept for correctness on any refreshed installer;
+   28 GiB is ample for a desktop guest, so it is not worth working around.
+
+   One deliberate difference from the LTS template:
+
+   * no Miniforge — the Python environment is standalone `uv` plus the system
+     python, matching the recipe the existing 24.04 ARM64 environment was built
+     with, so all paper ARM64 guests stay method-identical.
+
+   Everything else mirrors autoinstall_ubuntu_lts.yaml so 20.04 / 22.04 / 24.04
+   guests come out of the same recipe. #}
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  # Match the interface by pattern, never by name. ADARE runs experiments with the
+  # NIC pinned to a different PCI address than the installer used, so the guest's
+  # predictable name changes between install and run (enp0s1 -> enp0s31). A config
+  # naming one interface leaves the guest with no address at all, which costs a
+  # 120s systemd-networkd-wait-online timeout on every boot and breaks the SLIRP
+  # SMB share at 10.0.2.4. See hypervisor/qemu/guest_network.py.
+  network:
+    version: 2
+    # Deliberately NO `renderer:` here. Subiquity applies this very section
+    # inside the LIVE INSTALLER, which has no NetworkManager, so
+    # `renderer: NetworkManager` makes the installer's own `netplan apply` fail
+    # and aborts the build with
+    #   Command '['netplan', 'apply']' returned non-zero exit status 1
+    #   An error occurred. Press enter to start a shell
+    # `match: {name: "e*"}` + dhcp4 is renderer-agnostic and already delivers
+    # the name-independence described above. NetworkManager is made the renderer
+    # of the INSTALLED system by the late-command that writes
+    # /etc/netplan/99-adare-nm.yaml.
+    ethernets:
+      adare-any:
+        match:
+          name: "e*"
+        dhcp4: true
+  storage:
+    layout:
+      name: lvm
+      sizing-policy: all
+  identity:
+    hostname: {{ hostname }}
+    username: adare
+    password: {{ password_hash }}
+  ssh:
+    install-server: true
+    allow-pw: true
+  error-commands:
+    # Subiquity swallows apt/curtin output into the installer journal, so a failed
+    # in-target package install shows up on the host as nothing but
+    # "returned non-zero exit status 100" — undiagnosable. Dump the relevant logs
+    # to /dev/console, which is the serial port ADARE captures to
+    # <vm>_install.log. Deliberately no `poweroff` here: ADARE detects a failed
+    # install by the QEMU wait timing out, so powering off would make a broken
+    # disk look like a successful build.
+    - |
+      { echo '===== ADARE: install FAILED — curtin/apt detail ====='; \
+        for f in /var/log/installer/curtin-install.log /var/log/curtin/install.log \
+                 /var/log/installer/subiquity-server-debug.log; do \
+          [ -f "$f" ] && { echo "--- $f"; tail -n 60 "$f"; }; \
+        done; \
+        echo '--- apt complaints'; \
+        grep -ahiE '^(E|W): |404 |Unable to |broken|conflict|held' \
+             /var/log/installer/*.log /var/log/curtin/*.log 2>/dev/null | tail -40; \
+        echo '===== ADARE: end of failure detail ====='; } > /dev/console 2>&1 || true
+  late-commands:
+    # Focal only: install every package here rather than via `packages:`.
+    # Subiquity's postinstall runs apt with its pty logging on, and focal's
+    # curtin leaves /dev/pts unmounted in /target -> "Can not write log (Is
+    # /dev/pts mounted?) - posix_openpt" and apt exits 100. `apt: conf:` cannot
+    # fix it either: curtin deletes its own /etc/apt/apt.conf.d/94curtin-config
+    # before the package step. Passing -o Dpkg::Use-Pty=false on the command
+    # line is the one place the setting survives.
+    - curtin in-target -- apt-get update
+    - curtin in-target -- env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Use-Pty=false ubuntu-desktop-minimal cifs-utils openssh-server curl wget git
+    {% if setup_level >= 1 %}
+    - curtin in-target -- env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Use-Pty=false qemu-guest-agent
+    {% endif %}
+    {% if setup_level >= 2 %}
+    - curtin in-target -- env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Use-Pty=false gnome-screenshot maim xdotool python3-pip python3-tk
+    {% endif %}
+    # Passwordless sudo for adare user
+    - echo "adare ALL=(ALL) NOPASSWD:ALL" > /target/etc/sudoers.d/adare
+    - chmod 440 /target/etc/sudoers.d/adare
+    # GDM autologin with X11 (disable Wayland for PyAutoGUI compatibility)
+    - mkdir -p /target/etc/gdm3
+    - |
+      printf '[daemon]\nAutomaticLoginEnable=true\nAutomaticLogin=adare\nWaylandEnable=false\n' > /target/etc/gdm3/custom.conf
+    # Disable the GNOME initial-setup welcome wizard. Without this the first login
+    # shows the fullscreen "Connect your accounts..." Online Accounts screen over the
+    # desktop, which breaks every GUI playbook: the dock is not reachable and OCR text
+    # matching hits that screen's copy instead of the app. Measured on a rebuilt
+    # ubuntu-2204 image (run 01KYJF8N54ZP04ZE1F7K2CDGEJ): the ONLY on-screen match for
+    # "Documents" was "...online calendar, documents," from that wizard.
+    # autoinstall_ubuntu_rolling.yaml has always done this, which is why the 25.10
+    # images run GUI experiments and the LTS images did not.
+    - mkdir -p /target/home/adare/.config
+    - echo "yes" > /target/home/adare/.config/gnome-initial-setup-done
+    - chown -R 1000:1000 /target/home/adare
+    # Hand the INSTALLED system's networking to NetworkManager. This cannot be
+    # done with `renderer:` in the autoinstall `network:` section -- subiquity
+    # applies that section in the live installer, which has no NetworkManager,
+    # and the resulting `netplan apply` failure aborts the whole install.
+    # NetworkManager claims any ethernet device regardless of its name, which is
+    # what survives ADARE re-pinning the NIC to a different PCI address between
+    # install and run (enp0s1 -> enp0s31); systemd-networkd only configures what
+    # its config names. 99- sorts after the installer's own netplan file, so this
+    # file's global `renderer` wins the merge.
+    - mkdir -p /target/etc/netplan
+    - |
+      printf 'network:\n  version: 2\n  renderer: NetworkManager\n  ethernets:\n    adare-any:\n      match:\n        name: "e*"\n      dhcp4: true\n' > /target/etc/netplan/99-adare-nm.yaml
+    - chmod 600 /target/etc/netplan/99-adare-nm.yaml
+    # Take systemd-networkd off the boot path. 99-adare-nm.yaml above
+    # means netplan emits ONLY NetworkManager connections, so networkd manages
+    # zero links -- but the server ISO leaves it and its wait-online unit enabled.
+    # systemd-networkd-wait-online then waits for "at least one managed link
+    # online", never gets one, and burns its FULL 120s timeout on EVERY boot.
+    # cloud-init.service is ordered After= it, sysinit.target after cloud-init,
+    # and qemu-guest-agent After=sysinit.target/basic.target -- so the guest agent,
+    # which is what ADARE waits on to call the VM ready, is held back 120s.
+    #
+    # Measured on ubuntu2404arm64-noconda (autoinstall_ubuntu_lts, same shape as
+    # this template): wait-online 2min 0.291s, sysinit.target @2min 1.1s, QGA at
+    # 123.5s. Disabling the two units in that same guest and rebooting took
+    # userspace from 4min 4.6s to 1.2s and QGA from 123.5s to 2.9s.
+    #
+    # NetworkManager-wait-online.service stays enabled and still satisfies
+    # network-online.target (235ms measured), so no ordering guarantee is lost.
+    - curtin in-target -- systemctl disable systemd-networkd-wait-online.service || true
+    - curtin in-target -- systemctl mask systemd-networkd-wait-online.service || true
+    - curtin in-target -- systemctl disable systemd-networkd.service systemd-networkd.socket || true
+    # Disable unattended upgrades to prevent interference during experiments
+    - curtin in-target -- systemctl disable unattended-upgrades || true
+    - curtin in-target -- apt-get remove -y unattended-upgrades || true
+    # Disable APT periodic update/upgrade timers
+    - curtin in-target -- systemctl disable apt-daily.timer || true
+    - curtin in-target -- systemctl disable apt-daily-upgrade.timer || true
+    - curtin in-target -- systemctl mask apt-daily.service || true
+    - curtin in-target -- systemctl mask apt-daily-upgrade.service || true
+    # Disable APT periodic updates via config
+    - 'echo "APT::Periodic::Update-Package-Lists \"0\";" > /target/etc/apt/apt.conf.d/99disable-auto-updates'
+    - 'echo "APT::Periodic::Unattended-Upgrade \"0\";" >> /target/etc/apt/apt.conf.d/99disable-auto-updates'
+    - 'echo "APT::Periodic::Download-Upgradeable-Packages \"0\";" >> /target/etc/apt/apt.conf.d/99disable-auto-updates'
+    # Disable snap auto-refresh
+    - mkdir -p /target/etc/snap
+    - 'echo "refresh.hold: forever" > /target/etc/snap/snapd.conf || true'
+    - curtin in-target -- snap set system refresh.hold="$(date -d '+100 years' +%Y-%m-%dT%H:%M:%S%:z)" || true
+    {% if setup_level >= 1 %}
+    # Enable QEMU Guest Agent
+    - curtin in-target -- systemctl enable qemu-guest-agent
+    {% endif %}
+    # Ensure adare user exists in target (cloud-init creates it on first boot, but we need it now)
+    - curtin in-target -- id adare || curtin in-target -- useradd -m -u 1000 -G sudo -s /bin/bash adare
+    - curtin in-target -- mkdir -p /home/adare
+    - chown -R 1000:1000 /target/home/adare
+    # No conda: adarevm/adarelib wheels are installed into the SYSTEM python by
+    # the harness (`pip3 install ... <wheels>`). On PEP-668 releases (24.04+) that
+    # python is "externally managed" and pip refuses; the stock conda path sidesteps
+    # this via conda's own pip. Two measures, safe on a dedicated VM:
+    #   1. Remove the EXTERNALLY-MANAGED marker — pip refuses ONLY when it exists,
+    #      so removing it eliminates the check. This is the load-bearing fix.
+    #      (No-op on 20.04/22.04, which predate the marker.)
+    #   2. A global pip.conf flag as well (harmless when the key is ignored).
+    - curtin in-target -- sh -c 'rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED'
+    - 'printf "[global]\nbreak-system-packages = true\n" > /target/etc/pip.conf'
+    # Standalone uv (single binary, NOT conda) — `adare vm test` launches the shared
+    # adarevm source via `uv run adarevm`. Unconditional. miniforge_arch doubles as
+    # uv's target-triple arch component (aarch64 / x86_64).
+    - curtin in-target -- sh -c 'cd /tmp && curl -LsSf https://github.com/astral-sh/uv/releases/latest/download/uv-{{ miniforge_arch }}-unknown-linux-gnu.tar.gz | tar xz && mv uv-{{ miniforge_arch }}-unknown-linux-gnu/uv uv-{{ miniforge_arch }}-unknown-linux-gnu/uvx /usr/local/bin/'
+    - curtin in-target -- chown root:root /usr/local/bin/uv /usr/local/bin/uvx
+    - chown -R 1000:1000 /target/home/adare
+    # Disable screen blanking and lock for automated GUI testing
+    - curtin in-target -- sudo -u adare dbus-launch gsettings set org.gnome.desktop.session idle-delay 0 || true
+    - curtin in-target -- sudo -u adare dbus-launch gsettings set org.gnome.desktop.screensaver lock-enabled false || true
+  shutdown: poweroff

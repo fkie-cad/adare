@@ -1,0 +1,23 @@
+name: fedora42
+display_name: "Fedora 42 Workstation (GNOME)"
+platform: linux
+distribution: fedora
+version: "42"
+# Fully unattended Anaconda kickstart install (no GUI driving, no LLM).
+# The Everything netinst ISO provides /images/pxeboot/{vmlinuz,initrd.img} for a
+# direct-kernel boot; packages (@workstation-product-environment) are pulled from
+# the network mirror. The kickstart (kickstart_fedora_workstation.yaml, matched by
+# its 'supports: fedora42' frontmatter) is delivered via an OEMDRV-labeled seed CD.
+install_mode: auto
+installer: kickstart
+iso_url: "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Everything/x86_64/iso/Fedora-Everything-netinst-x86_64-42-1.1.iso"
+iso_sha256: "1bd6ab4798983c2fe4a210f9c4ca135fed453d6142ba852c1f8d5fba22e113ab"
+iso_filename: "Fedora-Everything-netinst-x86_64-42-1.1.iso"
+kernel_path_in_iso: /images/pxeboot/vmlinuz
+initrd_path_in_iso: /images/pxeboot/initrd.img
+kernel_cmdline: "inst.ks=hd:LABEL=OEMDRV:/ks.cfg inst.text console={console}"
+seed_label: OEMDRV
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0
+requires_uefi: false

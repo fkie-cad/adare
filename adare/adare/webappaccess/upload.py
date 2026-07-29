@@ -25,10 +25,15 @@ def files_to_request_files(files: dict) -> dict:
     return request_files
 
 
-def publish_experiment_run(run_ulid: str):
+def publish_experiment_run(run_ulid: str, project_path: Path):
+    """Upload one run's metadata + logs to the server.
+
+    ``project_path`` is required: the run lives in that project's database, not in
+    the global one.
+    """
     if not is_logged_in():
         raise NotLoggedInError(log, 'You are not logged in. Please log in first.')
-    with SerializeApi() as api:
+    with SerializeApi(project_path) as api:
         data, files = api.serialize_run_by_ulid(run_ulid)
 
     files = files_to_request_files(files)

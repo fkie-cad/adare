@@ -1,0 +1,70 @@
+name: kubuntu2404
+display_name: "Kubuntu 24.04 LTS (Noble Numbat) Desktop"
+platform: linux
+distribution: ubuntu
+distribution_label: "Noble Numbat"
+version: "24.04"
+# Genuine Kubuntu (KDE Plasma) desktop installed by replaying a deterministic
+# playbook through the Calamares installer (Kubuntu switched from ubiquity to
+# Calamares in 23.04) — no LLM. Buttons are located by their on-screen LABEL via
+# ADARE's cv-server OCR (find_text), so the steps are independent of window
+# position / resolution.
+install_mode: playbook
+installer: gui
+iso_url: "https://cdimage.ubuntu.com/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso"
+iso_sha256: "02cda2568cb96c090b0438a31a7d2e7b07357fde16217c215e7c3f45263bcc49"
+iso_filename: "kubuntu-24.04.4-desktop-amd64.iso"
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0
+requires_uefi: false
+
+install_steps:
+  - {action: wait_stable, settle: 6, timeout: 400, min: 120, note: "live KDE session + welcome launcher"}
+  # KDE welcome launcher (language + internet preselected) -> launch Calamares.
+  - {action: click_text, text: "Install Kubuntu", shot: welcome}
+  - {action: wait_stable, settle: 5, timeout: 180}
+  # Calamares: Welcome(language) -> Location -> Keyboard -> Customize, all "Next".
+  - {action: click_text, text: "Next", shot: calamares_welcome, note: "Calamares Welcome"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: location, note: "Location (geoip)"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: keyboard, note: "Keyboard"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: customize, note: "Customize (Normal install)"}
+  - {action: wait_stable, settle: 4, timeout: 120, shot: partitions}
+  # Partitions: neither option is preselected — pick 'Erase disk', then Next.
+  - {action: click_text, text: "Erase disk", note: "select Erase disk"}
+  - {action: wait, seconds: 1}
+  - {action: click_text, text: "Next", note: "confirm partitioning"}
+  - {action: wait_stable, settle: 4, timeout: 120, shot: users}
+  # Users: name auto-fills login + computer name. Waits let each field focus
+  # before typing so no keystroke is dropped (breaks password confirmation).
+  - {action: click_text, text: "Your Full Name", note: "name field"}
+  - {action: wait, seconds: 1}
+  - {action: type, text: "adare"}
+  - {action: wait, seconds: 1}
+  - {action: click_text, text: "Password", note: "password field (exact match)"}
+  - {action: wait, seconds: 1}
+  - {action: type, text: "adare"}
+  - {action: wait, seconds: 1}
+  - {action: click_text, text: "Repeat Password"}
+  - {action: wait, seconds: 1}
+  - {action: type, text: "adare"}
+  - {action: wait, seconds: 1}
+  - {action: shot, name: user-filled}
+  - {action: click_text, text: "Next", note: "users -> summary"}
+  - {action: wait_stable, settle: 4, timeout: 120, shot: summary}
+  # 'Install' also appears as a sidebar step label; index 1 is the nav button.
+  - {action: click_text, text: "Install", index: 1, note: "Summary -> Install (nav button)"}
+  - {action: wait_stable, settle: 3, timeout: 60, shot: confirm}
+  # Calamares pops a 'Continue with Installation?' dialog — confirm it.
+  - {action: click_text, text: "Install Now", note: "confirm point-of-no-return dialog"}
+  - {action: wait_stable, settle: 45, timeout: 3600, shot: complete, note: "wait for install"}
+
+verify_steps:
+  # Reboots from disk into SDDM (KDE login manager); the password field is focused.
+  - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
+  - {action: type, text: "adare", note: "password (SDDM field is focused)"}
+  - {action: key, keys: [ret]}
+  - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}

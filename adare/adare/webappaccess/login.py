@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 class WebappLogin:
 
     def __init__(self):
+        self.__refresh_session()
         self.__remove_expired_sessions()
 
     async def __get_crsf_token(self, req_session: aiohttp.ClientSession):
@@ -33,6 +34,13 @@ class WebappLogin:
             log.error("CSRF token request failed due to timeout")
             # close the session to prevent errors
             return None
+
+    def __refresh_session(self, username=None):
+        # Renew tokens via the Gitea refresh token before any pruning would delete the
+        # session. HTTP/OAuth logic lives in the auth layer (adare.web.login); imported
+        # lazily to avoid a circular import at module load.
+        from adare.web.login import refresh_session_if_needed
+        refresh_session_if_needed(username)
 
     def __remove_expired_sessions(self):
         with UserSessionApi() as user_session_api:
@@ -49,6 +57,7 @@ class WebappLogin:
             user_session_api.remove_user_session(username=username)
 
     def get_user_session(self, username=None):
+        self.__refresh_session(username)
         self.__remove_expired_sessions()
         log.debug(f"Check if user {username if username else ''} is logged in")
         with UserSessionApi() as user_session_api:

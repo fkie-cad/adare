@@ -217,19 +217,35 @@ class TestLoader:
             log.error(f"Failed to import testfunction database module: {e}")
             return []
 
+    def _load_playbook_tests(self) -> list[dict[str, Any]]:
+        """Return the playbook's raw ``tests:`` entries as a list of dicts.
+
+        Full experiment runs stage the playbook at ``experiment_dir/playbook.yml``
+        and it is read from there (preserving custom YAML tags). Dev-mode and
+        MCP-authored runs execute a playbook file with an arbitrary name (e.g.
+        ``delete_file.play.yaml``), so when no ``playbook.yml`` is staged, fall
+        back to the parsed :class:`Playbook` this loader already holds. Returns an
+        empty list when no tests are available.
+        """
+        playbook_path = self.experiment_dir / "playbook.yml"
+        if playbook_path.exists():
+            from adarelib.testset.yaml.customloader import get_custom_loader
+            playbook_data = yaml.load(playbook_path.read_text(), Loader=get_custom_loader())
+            tests = (playbook_data or {}).get('tests')
+            if tests:
+                return tests
+        tests = getattr(self.playbook, 'tests', None)
+        if tests:
+            import attrs
+            return [attrs.asdict(t) if attrs.has(type(t)) else dict(t) for t in tests]
+        return []
+
     async def resolve_test_locally(self, test_name: str) -> dict[str, Any] | None:
         """Load and resolve a specific test locally with variable substitution."""
         try:
-            # Load tests from playbook instead of separate testset file
-            playbook_path = self.experiment_dir / "playbook.yml"
-            if not playbook_path.exists():
-                return None
-
-            from adarelib.testset.yaml.customloader import get_custom_loader
-            playbook_yaml = playbook_path.read_text()
-            playbook_data = yaml.load(playbook_yaml, Loader=get_custom_loader())
-
-            if 'tests' not in playbook_data:
+            # Load tests from the playbook (staged file or in-memory playbook)
+            tests_data = self._load_playbook_tests()
+            if not tests_data:
                 return None
 
             # Get execution context for test resolution
@@ -242,7 +258,7 @@ class TestLoader:
             log.debug(f"Execution context values: {formatted_context}")
 
             # Find the test by name
-            for test in playbook_data['tests']:
+            for test in tests_data:
                 if test.get('name') == test_name:
                     log.debug(f"Found test '{test_name}' raw data: {test}")
                     # Apply variable substitution to all string values in the test
@@ -264,16 +280,9 @@ class TestLoader:
     async def resolve_test_with_runtime_context(self, test_name: str, runtime_execution_context: dict[str, Any]) -> dict[str, Any] | None:
         """Load and resolve a specific test with runtime execution context for variables set during action execution."""
         try:
-            # Load tests from playbook
-            playbook_path = self.experiment_dir / "playbook.yml"
-            if not playbook_path.exists():
-                return None
-
-            from adarelib.testset.yaml.customloader import get_custom_loader
-            playbook_yaml = playbook_path.read_text()
-            playbook_data = yaml.load(playbook_yaml, Loader=get_custom_loader())
-
-            if 'tests' not in playbook_data:
+            # Load tests from the playbook (staged file or in-memory playbook)
+            tests_data = self._load_playbook_tests()
+            if not tests_data:
                 return None
 
             # Get combined execution context (existing + runtime)
@@ -289,7 +298,7 @@ class TestLoader:
             log.info(f"Combined context: {combined_context}")
 
             # Find the test by name
-            for test in playbook_data['tests']:
+            for test in tests_data:
                 if test.get('name') == test_name:
                     log.debug(f"Found test '{test_name}' raw data: {test}")
 
@@ -389,21 +398,13 @@ class TestLoader:
     def _extract_used_testfunction_names(self) -> set[str]:
         """Extract all testfunction names used in the current playbook."""
         try:
-            playbook_path = self.experiment_dir / "playbook.yml"
-            if not playbook_path.exists():
-                log.warning("No playbook.yml found, cannot extract testfunction names")
-                return set()
-
-            from adarelib.testset.yaml.customloader import get_custom_loader
-            playbook_yaml = playbook_path.read_text()
-            playbook_data = yaml.load(playbook_yaml, Loader=get_custom_loader())
-
-            if 'tests' not in playbook_data:
-                log.debug("No tests section in playbook")
+            tests_data = self._load_playbook_tests()
+            if not tests_data:
+                log.debug("No tests available to extract testfunction names")
                 return set()
 
             used_functions = set()
-            for test in playbook_data['tests']:
+            for test in tests_data:
                 if 'function' in test:
                     function_name = test['function']
                     used_functions.add(function_name)
@@ -529,21 +530,14 @@ class TestLoader:
         """
         try:
             # Load test definition to get function name
-            playbook_path = self.experiment_dir / "playbook.yml"
-            if not playbook_path.exists():
-                log.warning(f"Playbook not found: {playbook_path}")
-                return None
-
-            from adarelib.testset.yaml.customloader import get_custom_loader
-            playbook_yaml = playbook_path.read_text()
-            playbook_data = yaml.load(playbook_yaml, Loader=get_custom_loader())
-
-            if 'tests' not in playbook_data:
+            tests_data = self._load_playbook_tests()
+            if not tests_data:
+                log.warning("No tests available to resolve test class")
                 return None
 
             # Find test by name
             test_function = None
-            for test in playbook_data['tests']:
+            for test in tests_data:
                 if test.get('name') == test_name:
                     test_function = test.get('function')
                     break

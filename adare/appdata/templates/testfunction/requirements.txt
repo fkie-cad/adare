@@ -1,0 +1,5 @@
+# Python dependencies for this testfunction collection (one per line).
+# These are installed into ADARE's interpreter when the collection is loaded,
+# e.g.:
+#   lxml>=4.9.0
+#   openpyxl>=3.1.0

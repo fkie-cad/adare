@@ -4,13 +4,8 @@ import { endpoints } from '@/api/endpoints'
 import type { ApiResponse } from '@/types/api'
 
 /**
- * Hooks for managing locally-registered VMs (database-tracked).
- *
- * For interacting with running VMs (VirtualSpice instances, snapshots,
- * live events), use the VM proxy paths from `endpoints.vmProxy` /
- * `endpoints.vmWebSocket` / `endpoints.vmEventsWebSocket` directly, since
- * those requests hit the FastAPI reverse proxy mounted at the app root
- * (outside the `/api` axios baseURL).
+ * Hooks for managing locally-registered VMs (database-tracked) and for
+ * resolving a running VM's live VirtualSpice display URL (watch / embed).
  */
 
 // Shape of a locally-registered VM record. The backend returns whatever
@@ -53,20 +48,155 @@ export function useDeleteLocalVm() {
   })
 }
 
+/** A running VM instance (as opposed to a registered VM image). */
+export interface VmInstance {
+  id: string
+  vm_id?: string
+  name?: string
+  status?: 'active' | 'available' | 'stopped' | string
+  websocket_port?: number
+  [key: string]: unknown
+}
+
+export interface VmSnapshot {
+  name: string
+  instance_id?: string
+  [key: string]: unknown
+}
+
+export interface VmInstanceUsage {
+  [key: string]: unknown
+}
+
+export function useVmInstances(vmId?: string) {
+  return useQuery({
+    queryKey: ['vm-instances', vmId ?? null],
+    queryFn: async () => {
+      const url = vmId
+        ? `${endpoints.vmInstances}?vm_id=${encodeURIComponent(vmId)}`
+        : endpoints.vmInstances
+      const { data } = await api.get<ApiResponse<VmInstance[]>>(url)
+      return data.data ?? []
+    },
+  })
+}
+
+export function useVmInstance(instanceId: string) {
+  return useQuery({
+    queryKey: ['vm-instance', instanceId],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<VmInstance>>(endpoints.vmInstance(instanceId))
+      return data.data!
+    },
+    enabled: !!instanceId,
+  })
+}
+
+export function useVmInstanceUsage() {
+  return useQuery({
+    queryKey: ['vm-instance-usage'],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<VmInstanceUsage>>(endpoints.vmInstanceUsage)
+      return data.data!
+    },
+  })
+}
+
+export function useRemoveVmInstance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (instanceId: string) => {
+      await api.delete(endpoints.vmInstance(instanceId))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vm-instances'] }),
+  })
+}
+
+export function useRemoveAllStoppedInstances() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.delete<ApiResponse<number>>(endpoints.vmInstances)
+      return data.data ?? 0
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vm-instances'] }),
+  })
+}
+
+export function useVmSnapshots(instanceId: string) {
+  return useQuery({
+    queryKey: ['vm-snapshots', instanceId],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<VmSnapshot[]>>(endpoints.vmInstanceSnapshots(instanceId))
+      return data.data ?? []
+    },
+    enabled: !!instanceId,
+  })
+}
+
+export function useDeleteVmSnapshot(instanceId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (name: string) => {
+      await api.delete(endpoints.vmInstanceSnapshotDelete(instanceId, name))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vm-snapshots', instanceId] }),
+  })
+}
+
 /**
- * Call an arbitrary VirtualSpice REST endpoint via the backend proxy.
+ * Live-display connection info for a running VM, as resolved by the backend.
  *
- * VirtualSpice routes are proxied at `/api/vm/{path}` from the FastAPI root,
- * so this helper uses `fetch` directly rather than the `/api`-scoped axios
- * instance to avoid double-prefixing.
+ * The backend maps the ADARE VM *name* to VirtualSpice's *uuid* and returns the
+ * same-origin WebSocket path (`ws_path`) that the ADARE-owned viewer connects
+ * to. ADARE proxies that socket to VirtualSpice internally, so the browser
+ * never contacts `:8081` directly (no cross-origin, no mixed-content).
  */
-export async function callVmProxy<T = unknown>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
-  const response = await fetch(endpoints.vmProxy(path), init)
+export interface VmSpiceInfo {
+  uuid: string
+  name: string
+  view_only: boolean
+  spice_port: number
+  ws_path: string
+}
+
+/**
+ * Build the same-origin WebSocket URL for the viewer from a resolved `ws_path`.
+ */
+export function buildVmWsUrl(wsPath: string): string {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${proto}://${location.host}${wsPath}`
+}
+
+/**
+ * Resolve a running VM's live display connection info.
+ *
+ * @returns the {@link VmSpiceInfo}, or `null` if the VM could not be resolved
+ *          (VirtualSpice down or no matching running domain).
+ */
+export async function resolveVmSpice(
+  name: string,
+  viewOnly = true,
+): Promise<VmSpiceInfo | null> {
+  const response = await fetch(endpoints.vmWatchUrl(name, viewOnly))
   if (!response.ok) {
-    throw new Error(`VM proxy request failed: ${response.status} ${response.statusText}`)
+    return null
   }
-  return response.json() as Promise<T>
+  return (await response.json()) as VmSpiceInfo
+}
+
+/**
+ * React-Query hook exposing a running VM's live display connection info for the
+ * in-app viewer. `data === null` means "not reachable" (VirtualSpice down or VM
+ * stopped) — distinct from `isLoading`. Does not retry (a 404 is a definitive
+ * "no such running VM", not a transient failure).
+ */
+export function useVmSpice(name: string, viewOnly = true, enabled = true) {
+  return useQuery({
+    queryKey: ['vm-spice', name, viewOnly],
+    queryFn: () => resolveVmSpice(name, viewOnly),
+    enabled: enabled && !!name,
+    retry: false,
+    staleTime: 60_000,
+  })
 }

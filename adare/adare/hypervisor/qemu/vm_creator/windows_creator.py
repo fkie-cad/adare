@@ -16,6 +16,7 @@ from adare.console import console, print_section, print_step
 from adare.helperfunctions.web.download import download
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
+from adare.hypervisor.qemu.vm_creator.disk_helpers import disk_device_args
 from adare.hypervisor.qemu.vm_creator.os_catalog import (
     UTM_GUEST_TOOLS_ISO_FILENAME,
     UTM_GUEST_TOOLS_ISO_URL,
@@ -24,8 +25,13 @@ from adare.hypervisor.qemu.vm_creator.os_catalog import (
     OsDefinition,
     SetupLevel,
 )
-from adare.hypervisor.qemu.vm_creator.progress import wait_for_qemu_exit
+from adare.hypervisor.qemu.vm_creator.progress import (
+    QemuInstallTerminated,
+    terminate_qemu_on_exit,
+    wait_for_qemu_exit,
+)
 from adare.hypervisor.qemu.vm_creator.qmp_utils import (
+    install_qmp_socket_path,
     qemu_params_for_arch,
     repeatedly_send_keypress,
 )
@@ -107,6 +113,17 @@ class WindowsVMCreator(BaseVMCreator):
             # Create Autounattend media (floppy for x86_64, ISO for aarch64)
             media_path = _create_autounattend_media(self.os_def, tmpdir_path, setup_level=self.setup_level, virtio_iso_path=self._virtio_iso_path)
 
+            # aarch64: build the legacy-boot override ISO. Win11 24H2/25H2 use the
+            # redesigned "ConX" Setup that ignores Autounattend.xml on removable
+            # media (install stalls at the product-key screen); booting a patched
+            # boot.wim forces the legacy setup.exe path that honors the answer file.
+            legacy_boot_iso: Path | None = None
+            if self.os_def.architecture == 'aarch64':
+                print_step('Building legacy-boot override ISO [dim](forces setup.exe /legacy for Win11 24H2/25H2)[/dim]')
+                legacy_boot_iso = _create_legacy_boot_media(
+                    self.os_def, tmpdir_path, self.iso_path, self.setup_level
+                )
+
             # Boot QEMU and wait for install
             try:
                 _run_windows_installation(
@@ -120,6 +137,8 @@ class WindowsVMCreator(BaseVMCreator):
                     ram_mb=self.ram_mb,
                     cpus=self.cpus,
                     has_tpm=shutil.which('swtpm') is not None,
+                    legacy_boot_iso=legacy_boot_iso,
+                    allow_emulation=self.allow_emulation,
                 )
             except (TimeoutError, subprocess.CalledProcessError) as e:
                 raise WindowsVMCreationError(str(e)) from e
@@ -135,6 +154,8 @@ def create_windows_vm(
     force: bool = False,
     vm_dir: Path | None = None,
     setup_level: SetupLevel = SetupLevel.FULL,
+    compress: bool = True,
+    allow_emulation: bool = False,
 ) -> Path:
     """Create a fully configured Windows VM from a user-supplied ISO.
 
@@ -150,6 +171,8 @@ def create_windows_vm(
         vm_dir=vm_dir,
         iso_path=iso_path,
         setup_level=setup_level,
+        compress=compress,
+        allow_emulation=allow_emulation,
     )
     return creator.create()
 
@@ -201,15 +224,7 @@ def _create_autounattend_media(os_def: OsDefinition, tmpdir: Path, setup_level: 
     Returns:
         Path to the media image (floppy .img or .iso)
     """
-    # Resolve template: os_def.template > _AUTOUNATTEND_MAP
-    if os_def.template:
-        template_name = os_def.template
-    else:
-        template_name = _AUTOUNATTEND_MAP.get(os_def.name)
-        if template_name is None:
-            raise WindowsVMCreationError(f"No Autounattend template for OS '{os_def.name}'")
-
-    xml_content = _render_autounattend(template_name, architecture=os_def.architecture, setup_level=setup_level).encode('utf-8')
+    xml_content = _render_autounattend_for(os_def, setup_level)
 
     if os_def.architecture == 'aarch64':
         from adare.hypervisor.qemu.vm_creator.iso_utils import create_tools_iso
@@ -220,6 +235,34 @@ def _create_autounattend_media(os_def: OsDefinition, tmpdir: Path, setup_level: 
     _write_fat12_floppy(floppy_path, {'Autounattend.xml': xml_content})
     log.info(f'Created Autounattend floppy image: {floppy_path}')
     return floppy_path
+
+
+def _render_autounattend_for(os_def: OsDefinition, setup_level: int) -> bytes:
+    """Resolve the Autounattend template for an OS and render it to UTF-8 bytes."""
+    # Resolve template: os_def.template > _AUTOUNATTEND_MAP
+    if os_def.template:
+        template_name = os_def.template
+    else:
+        template_name = _AUTOUNATTEND_MAP.get(os_def.name)
+        if template_name is None:
+            raise WindowsVMCreationError(f"No Autounattend template for OS '{os_def.name}'")
+    return _render_autounattend(
+        template_name, architecture=os_def.architecture, setup_level=setup_level
+    ).encode('utf-8')
+
+
+def _create_legacy_boot_media(
+    os_def: OsDefinition, tmpdir: Path, windows_iso_path: Path, setup_level: int
+) -> Path:
+    """Build the legacy-boot override ISO for aarch64 Windows (see iso_utils).
+
+    Forces Windows Setup into legacy (non-ConX) mode so the Autounattend.xml is
+    honored on Win11 24H2/25H2. The override carries a patched boot.wim + the
+    ISO's EFI boot tree and is attached alongside the untouched Windows ISO.
+    """
+    from adare.hypervisor.qemu.vm_creator.iso_utils import create_legacy_boot_iso
+    xml_content = _render_autounattend_for(os_def, setup_level)
+    return create_legacy_boot_iso(windows_iso_path, xml_content, tmpdir / 'legacy-boot.iso')
 
 
 
@@ -446,6 +489,8 @@ def _run_windows_installation(
     cpus: int,
     has_tpm: bool = False,
     utm_iso_path: Path | None = None,
+    legacy_boot_iso: Path | None = None,
+    allow_emulation: bool = False,
 ) -> None:
     """Boot QEMU with UEFI + Windows ISO + virtio-win + Autounattend media and wait for install.
 
@@ -455,6 +500,10 @@ def _run_windows_installation(
 
     This avoids the UEFI boot loop where AAVMF re-boots from ISO after the
     mid-install reboot instead of continuing from NVMe.
+
+    ``legacy_boot_iso`` (aarch64 only) is attached in Phase 1 exclusively — it
+    carries the legacy-boot marker, so attaching it in Phase 2 would re-boot the
+    guest into WinPE Setup instead of the freshly installed OS.
     """
     if os_def.architecture == 'aarch64':
         print_section('Installation (Phase 1/2)')
@@ -473,6 +522,8 @@ def _run_windows_installation(
             boot_from_disk=False,
             no_reboot=True,
             phase_label='Phase 1/2: WinPE',
+            legacy_boot_iso=legacy_boot_iso,
+            allow_emulation=allow_emulation,
         )
         print_section('Installation (Phase 2/2)')
         print_step('Completing setup (OOBE + drivers) [dim](this may take 30-60 minutes)[/dim]')
@@ -490,6 +541,7 @@ def _run_windows_installation(
             boot_from_disk=True,
             no_reboot=False,
             phase_label='Phase 2/2: OOBE',
+            allow_emulation=allow_emulation,
         )
     else:
         print_section('Installation')
@@ -508,6 +560,7 @@ def _run_windows_installation(
             boot_from_disk=False,
             no_reboot=False,
             phase_label='Windows installation',
+            allow_emulation=allow_emulation,
         )
 
 
@@ -525,6 +578,8 @@ def _run_qemu_install_phase(
     boot_from_disk: bool,
     no_reboot: bool,
     phase_label: str,
+    legacy_boot_iso: Path | None = None,
+    allow_emulation: bool = False,
 ) -> None:
     """Run a single QEMU install phase.
 
@@ -533,8 +588,9 @@ def _run_qemu_install_phase(
                         If False, ISO gets bootindex=0 and NVMe gets bootindex=1.
         no_reboot: If True, add -no-reboot so QEMU exits on guest reboot.
         phase_label: Label for log messages and status display.
+        legacy_boot_iso: aarch64 legacy-boot override ISO to attach (Phase 1 only).
     """
-    arch_params = qemu_params_for_arch(os_def)
+    arch_params = qemu_params_for_arch(os_def, allow_emulation)
     machine = arch_params['machine']
 
     # aarch64 + HVF: keep device MMIO/ECAM/GIC regions below 4 GB so edk2
@@ -567,17 +623,9 @@ def _run_qemu_install_phase(
     # Disk — ARM64 uses NVMe (native Windows driver, no viostor needed in WinPE).
     # x86_64 uses virtio-blk-pci (viostor loaded via Autounattend DriverPaths).
     # ARM64: cache=writethrough for stability (writeback causes random corruption with HVF)
-    disk_cache = 'writethrough' if os_def.architecture == 'aarch64' else 'writeback'
-    cmd.extend([
-        '-drive', f'file={disk_path},format=qcow2,if=none,id=hd0,cache={disk_cache}',
-    ])
-    if os_def.architecture == 'aarch64':
-        # Phase 1 (boot_from_disk=False): bootindex=1 (fallback)
-        # Phase 2 (boot_from_disk=True):  bootindex=0 (primary)
-        nvme_bootindex = 0 if boot_from_disk else 1
-        cmd.extend(['-device', f'nvme,drive=hd0,serial=boot,bootindex={nvme_bootindex}'])
-    else:
-        cmd.extend(['-device', 'virtio-blk-pci,drive=hd0'])
+    # Phase 1 (boot_from_disk=False): bootindex=1 (fallback, boot from ISO)
+    # Phase 2 (boot_from_disk=True):  bootindex=0 (primary, boot from disk)
+    cmd.extend(disk_device_args(disk_path, os_def, bootindex=0 if boot_from_disk else 1))
     cmd.extend([
         # Network
         '-nic', 'user,model=virtio-net-pci',
@@ -606,12 +654,24 @@ def _run_qemu_install_phase(
     # x86_64 uses IDE CD-ROMs + floppy (classic approach).
     if os_def.architecture == 'aarch64':
         guest_tools_iso = utm_iso_path if utm_iso_path else virtio_iso_path
-        # Phase 1 (boot_from_disk=False): bootindex=0 (primary — boot from ISO)
-        # Phase 2 (boot_from_disk=True):  no bootindex (don't boot from ISO)
-        iso_bootindex = '' if boot_from_disk else ',bootindex=0'
+        # Phase 1 (boot_from_disk=False): the boot medium is primary (bootindex=0).
+        # Phase 2 (boot_from_disk=True):  no bootindex (boot from the installed disk).
+        # When a legacy-boot override is present (Phase 1, aarch64) it MUST be the
+        # boot medium — the firmware El-Torito-boots the first bootable device, and
+        # booting the untouched Windows ISO instead would land back in ConX Setup.
+        # In that case the Windows ISO carries no bootindex; it only supplies
+        # install.wim once WinPE (from the patched boot.wim) is running.
+        if legacy_boot_iso is not None:
+            cmd.extend([
+                '-drive', f'file={legacy_boot_iso},media=cdrom,if=none,id=bootiso',
+                '-device', 'usb-storage,drive=bootiso,bootindex=0,removable=on',
+            ])
+            winiso_bootindex = ''
+        else:
+            winiso_bootindex = '' if boot_from_disk else ',bootindex=0'
         cmd.extend([
             '-drive', f'file={windows_iso_path},media=cdrom,if=none,id=winiso',
-            '-device', f'usb-storage,drive=winiso{iso_bootindex},removable=on',
+            '-device', f'usb-storage,drive=winiso{winiso_bootindex},removable=on',
             '-drive', f'file={media_path},media=cdrom,if=none,id=toolsiso',
             '-device', 'usb-storage,drive=toolsiso,removable=on',
             '-drive', f'file={guest_tools_iso},media=cdrom,if=none,id=guestiso',
@@ -628,8 +688,10 @@ def _run_qemu_install_phase(
     if no_reboot:
         cmd.append('-no-reboot')
 
-    # QMP socket for sending keypresses (needed for "Press any key to boot from CD")
-    qmp_sock = Path(tempfile.gettempdir()) / f'adare-qemu-install-{disk_path.stem}.qmp'
+    # QMP socket for sending keypresses (needed for "Press any key to boot from CD").
+    # Built by a helper because macOS's long TMPDIR plus a recipe base disk name
+    # (`<profile>-recipebase-<hash>.partial`) exceeds the AF_UNIX path limit.
+    qmp_sock = install_qmp_socket_path(disk_path.stem)
     if qmp_sock.exists():
         qmp_sock.unlink()
     cmd.extend(['-qmp', f'unix:{qmp_sock},server,nowait'])
@@ -661,18 +723,24 @@ def _run_qemu_install_phase(
     )
     keypress_thread.start()
 
+    label = f'{disk_path.stem} {phase_label}'
     try:
-        with console.status(f'  [cyan]{disk_path.stem}[/cyan] {phase_label}...', spinner='dots') as status:
+        # Reap QEMU on every exit path, signals included (see linux_creator).
+        with (
+            terminate_qemu_on_exit(process, label=label),
+            console.status(f'  [cyan]{disk_path.stem}[/cyan] {phase_label}...', spinner='dots') as status,
+        ):
             wait_for_qemu_exit(
                 process,
                 timeout_minutes=90,
-                label=f'{disk_path.stem} {phase_label}',
+                label=label,
                 status=status,
             )
     except (TimeoutError, subprocess.CalledProcessError):
         raise
     except KeyboardInterrupt:
         console.print('\n  [bold red]Installation interrupted by user[/bold red]')
-        process.terminate()
-        process.wait(timeout=30)
         raise WindowsVMCreationError('Installation interrupted by user') from None
+    except QemuInstallTerminated as e:
+        console.print(f'\n  [bold red]Installation terminated:[/bold red] {e}')
+        raise WindowsVMCreationError(f'Installation terminated: {e}') from None

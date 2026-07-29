@@ -72,7 +72,17 @@ def __experiment_update(project_path: Path, experiment_ulid, experiment_name, ex
     except (ValueError, KeyError, OSError) as e:
         log.warning(f'Failed to detect environment changes: {e}')
 
-    if not force and not experiment_database.check_for_experiment_change(project_path, experiment_ulid, experiment_directory.sha256):
+    # This must run unconditionally, --force included. --force exists to authorise
+    # overwriting runs when the *content* actually changed (see the num_runs check
+    # below); it was never meant to bypass "did anything change at all". Previously
+    # `not force and ...` short-circuited this whole check whenever --force was given,
+    # so a byte-identical reload (e.g. re-running `load -f` after a run, with no edits
+    # in between) fell straight through to the unconditional remove_experiment() below
+    # -- which cascades and deletes every run of that experiment -- followed by
+    # create_experiment(), minting a brand-new ULID for identical content and orphaning
+    # the prior run(s). Redundant reloads must stay a no-op (ExperimentNotChanged),
+    # regardless of --force.
+    if not experiment_database.check_for_experiment_change(project_path, experiment_ulid, experiment_directory.sha256):
         raise ExperimentNotChanged(log, f'experiment [i]{experiment_ulid}[/i] has not changed')
     log.info(f'experiment {experiment_ulid} has changed')
     num_runs = experiment_database.get_experiment_run_count(project_path, experiment_ulid, exclude_fake=True)
@@ -100,6 +110,8 @@ def __experiment_update(project_path: Path, experiment_ulid, experiment_name, ex
     else:
         log.info(f'Experiment {experiment_name} (ulid: {ulid}) was loaded successfully')
 
+    return ulid
+
 
 def experiment_load(project_path: Path, experiment_name: str, force: bool = False, silent: bool = False):
     from adare.console import print_success_message
@@ -124,7 +136,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
             project_path, experiment_name, trigger_error=False
     ):
         try:
-            __experiment_update(
+            experiment_ulid = __experiment_update(
                 project_path, experiment_ulid, experiment_name, experiment_directory, force
             )
             was_updated = True

@@ -27,6 +27,13 @@ class StageCtxManagerLite:
         self.stage_id = f"{stage.name}_{int(__import__('time').time())}"
         self.start_time = None
         self.end_time = None
+        self.result: bool | None = None
+
+    def set_result(self, result: bool) -> None:
+        """Override the exit glyph: when False and no exception, finalize as ✖ FAILED.
+        Leave as None for phase-level stages (setup/compat/cleanup) that have no boolean result.
+        """
+        self.result = bool(result)
 
     async def __aenter__(self):
         from datetime import datetime
@@ -66,8 +73,11 @@ class StageCtxManagerLite:
         self.stage.end_time = self.end_time
         duration = (self.end_time - self.start_time).total_seconds()
 
-        # Determine status based on exception
+        # Determine status based on exception and explicit result
         if exc_type:
+            status = StatusEnum.FAILED
+            message = f"{self.stage.msg} (failed)"
+        elif self.result is False:
             status = StatusEnum.FAILED
             message = f"{self.stage.msg} (failed)"
         else:
@@ -305,6 +315,37 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
     return await vm_ova_test(ova_file_path, guest_platform, verbose, vm_cleanup_mode)
 
 
+async def vm_test_registered(
+    vm_name: str,
+    disk_path: str,
+    guest_platform: str,
+    architecture: str = 'x86_64',
+    verbose: bool = False,
+    vm_cleanup_mode: str = 'prompt'
+) -> bool:
+    """
+    Test a registered QEMU VM's compatibility with ADARE.
+
+    Thin wrapper around the implementation in vm_test.py (kept there for code
+    organization, mirroring ova_test).
+
+    Args:
+        vm_name: Registered VM name (display only)
+        disk_path: Path to the VM's immutable base disk (vm.file)
+        guest_platform: Platform type ('windows' or 'linux')
+        architecture: Guest CPU architecture (e.g. 'x86_64', 'aarch64')
+        verbose: Enable verbose logging
+        vm_cleanup_mode: VM cleanup mode ('keep' or 'prompt')
+
+    Returns:
+        True if VM is compatible with ADARE, False otherwise
+    """
+    from adare.backend.experiment.vm_test import vm_test_registered as vm_test_registered_impl
+    return await vm_test_registered_impl(
+        vm_name, disk_path, guest_platform, architecture, verbose, vm_cleanup_mode
+    )
+
+
 def publish_run_command(project_directory: Path, run_ulid: str):
     """
     Publish an experiment run to the server with validation and progress tracking.
@@ -320,6 +361,7 @@ def publish_run_command(project_directory: Path, run_ulid: str):
     from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
     from adare.database.api.experiment import ExperimentApi
+    from adare.database.models.project_models import ExperimentRun
     from adare.webappaccess.api_client import ApiClient
     from adare.webappaccess.exceptions import (
         ApiConnectionError,
@@ -340,7 +382,9 @@ def publish_run_command(project_directory: Path, run_ulid: str):
 
     # Validate run exists locally
     with ExperimentApi(project_directory) as exp_api:
-        run = exp_api.get_run_by_ulid(run_ulid)
+        # `ExperimentApi` has no run-specific getter; the generic ULID lookup on the
+        # base API is the one that exists. (`get_run_by_ulid` never did.)
+        run = exp_api.get_by_ulid(ExperimentRun, run_ulid)
         if not run:
             from adare.exceptions import ExperimentRunNotFoundError
             raise ExperimentRunNotFoundError(
@@ -357,6 +401,23 @@ def publish_run_command(project_directory: Path, run_ulid: str):
                 f'Experiment associated with run {run_ulid} not found.',
                 possible_solutions=['Check database integrity']
             )
+        # Read the identity fields while the session is open — the objects are
+        # detached afterwards. The *server's* ULID is what the server can be asked
+        # about; the local one is meaningless to it.
+        experiment_name = experiment.name
+        experiment_local_ulid = experiment.id
+        experiment_remote_ulid = experiment.remote_ulid
+
+    if not experiment_remote_ulid:
+        raise ExperimentNotFoundError(
+            log,
+            f'Experiment {experiment_name} (local ULID: {experiment_local_ulid}) has no '
+            f'server ULID recorded, so it has not been published from this machine.',
+            possible_solutions=[
+                'Publish the experiment first: adare web submit experiment <name>',
+                'Already published elsewhere? Fetch its server identity: adare web sync',
+            ]
+        )
 
     # Create API client
     client = ApiClient()
@@ -369,18 +430,24 @@ def publish_run_command(project_directory: Path, run_ulid: str):
         TaskProgressColumn(),
         console=console,
     ) as progress:
-        # Task 1: Check experiment exists on server
+        # Task 1: Check experiment exists on server — by its REMOTE ULID. Asking
+        # about the local one always answered "no", which is what made publish
+        # abort with "not published on the server" for published experiments.
         task1 = progress.add_task("[cyan]Checking experiment on server...", total=1)
         try:
-            exp_exists = client.check_experiment_exists(experiment.id)
+            exp_exists = client.check_experiment_exists(experiment_remote_ulid)
             if not exp_exists:
                 progress.update(task1, completed=1)
                 raise ExperimentNotFoundError(
                     log,
-                    f'Experiment {experiment.name} (ULID: {experiment.id}) is not published on the server.',
-                    possible_solutions=['Publish the experiment first with: adare web publish <experiment>']
+                    f'Experiment {experiment_name} (server ULID: {experiment_remote_ulid}) is not '
+                    f'published on the server.',
+                    possible_solutions=[
+                        'Publish the experiment first with: adare web submit experiment <name>',
+                        'Refresh the local view of the server: adare web sync',
+                    ]
                 )
-            progress.update(task1, completed=1, description=f"[green]Experiment {experiment.name} verified on server")
+            progress.update(task1, completed=1, description=f"[green]Experiment {experiment_name} verified on server")
         except ApiConnectionError:
             progress.update(task1, completed=1)
             raise
@@ -401,7 +468,7 @@ def publish_run_command(project_directory: Path, run_ulid: str):
         # Task 3: Upload run
         task3 = progress.add_task("[cyan]Uploading experiment run...", total=1)
         try:
-            result = client.publish_experiment_run(run_ulid)
+            result = client.publish_experiment_run(run_ulid, project_directory)
             progress.update(task3, completed=1, description="[green]Run published successfully")
 
             # Update local database to mark as published
@@ -409,7 +476,7 @@ def publish_run_command(project_directory: Path, run_ulid: str):
                 exp_api.mark_run_as_published(run_ulid)
 
             console.print(f"\n[green]Successfully published run {run_ulid}![/green]")
-            console.print(f"Experiment: {experiment.name}")
+            console.print(f"Experiment: {experiment_name}")
             console.print(f"Server ULID: {result.get('ulid', run_ulid)}")
 
         except RunAlreadyExistsError:

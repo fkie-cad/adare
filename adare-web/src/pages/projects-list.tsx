@@ -1,11 +1,10 @@
 import { useState } from 'react'
-import { FolderKanban, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { FolderKanban, Plus, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
-import { Card, CardContent } from '@/components/ui/card'
+import { AsyncBoundary } from '@/components/layout/async-boundary'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CreateProjectDialog } from '@/components/dialogs/create-project-dialog'
@@ -78,31 +77,18 @@ export default function ProjectsListPage() {
         }
       />
 
-      {isPending && <LoadingTable />}
-
-      {isError && (
-        <Card className="border-destructive">
-          <CardContent className="pt-6 flex items-center gap-4">
-            <p className="text-sm text-destructive flex-1">
-              {(error as Error)?.message ?? 'Failed to load projects.'}
-            </p>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
-              <RefreshCw size={14} />
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {!isPending && !isError && data?.length === 0 && (
-        <EmptyState
-          icon={FolderKanban}
-          title="No projects"
-          description="Add a project to organize your work."
-        />
-      )}
-
-      {!isPending && !isError && data && data.length > 0 && (
+      <AsyncBoundary
+        isPending={isPending}
+        isError={isError}
+        error={error}
+        onRetry={() => refetch()}
+        errorFallbackMessage="Failed to load projects."
+        loadingFallback={<LoadingTable />}
+        isEmpty={data?.length === 0}
+        emptyIcon={FolderKanban}
+        emptyTitle="No projects"
+        emptyDescription="Add a project to organize your work."
+      >
         <Table>
           <TableHeader>
             <TableRow>
@@ -114,7 +100,7 @@ export default function ProjectsListPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((project) => (
+            {(data ?? []).map((project) => (
               <TableRow key={project.path} className="hover:bg-muted/50">
                 <TableCell>
                   <div className="flex items-center gap-2">
@@ -143,10 +129,10 @@ export default function ProjectsListPage() {
             ))}
           </TableBody>
           <TableCaption>
-            {data.length} project{data.length === 1 ? '' : 's'}
+            {(data ?? []).length} project{(data ?? []).length === 1 ? '' : 's'}
           </TableCaption>
         </Table>
-      )}
+      </AsyncBoundary>
 
       <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
 

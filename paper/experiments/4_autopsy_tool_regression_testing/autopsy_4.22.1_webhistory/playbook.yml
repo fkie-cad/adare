@@ -565,7 +565,7 @@ actions:
     condition:
       exists:
         text: Central Repository
-    timeout: 120
+    timeout: 360
     skip:
       pixel_change:
         below: 40
@@ -604,7 +604,7 @@ actions:
     condition:
       exists:
         text: Hosts are used
-    timeout: 90
+    timeout: 270
 - keyboard:
     key: enter
   description: Select Host
@@ -667,7 +667,7 @@ actions:
     condition:
       exists:
         text: Web History
-    timeout: 180
+    timeout: 540
 - click:
     target:
       image: generate_report.png

@@ -64,6 +64,7 @@ def exec_manage_db_status(arguments):
                 'global_db_accessible': status.global_db_accessible,
                 'global_db_location': str(status.global_db_location) if status.global_db_location else None,
                 'valid': status.valid,
+                'pending_migrations': status.pending_migrations,
                 'errors': status.errors,
             }
             formatter.print_or_save(status_dict, output_file, dual_output)
@@ -73,6 +74,14 @@ def exec_manage_db_status(arguments):
             print(f"Global database exists: {'✅' if status.global_db_exists else '❌'}")
             print(f"Global database accessible: {'✅' if status.global_db_accessible else '❌'}")
             print(f"System valid: {'✅' if status.valid else '❌'}")
+
+            if status.pending_migrations:
+                print(f"Pending schema migrations: {len(status.pending_migrations)}")
+                for name in status.pending_migrations:
+                    print(f"  ⏳ {name}")
+                print("  → applied automatically on next use, or now via 'adare db migrate'")
+            else:
+                print("Pending schema migrations: none ✅")
 
             if status.errors:
                 print("\nErrors found:")
@@ -109,6 +118,32 @@ def exec_manage_repair_db(arguments):
             print("✅ Database system repair completed successfully")
         else:
             print("❌ Database system repair failed")
+    else:
+        handle_api_error(result)
+
+
+def exec_manage_migrate_db(arguments):
+    """Apply pending database schema migrations using AdareAPI."""
+    print("Applying pending database schema migrations...")
+
+    api = AdareAPI()
+    result = api.manage.migrate_db(quiet=False)
+
+    if result.success:
+        if result.data.applied:
+            print("Applied migrations:")
+            for name in result.data.applied:
+                print(f"  ✅ {name}")
+        else:
+            print("✅ Nothing pending — all databases are up to date")
+
+        if result.data.errors:
+            print("Errors encountered:")
+            for error in result.data.errors:
+                print(f"  ❌ {error}")
+
+        if not result.data.migrated:
+            print("❌ Database migration failed")
     else:
         handle_api_error(result)
 

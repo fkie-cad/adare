@@ -56,12 +56,19 @@ class OsDefinition:
     kernel_path_in_iso: str = ''    # Path to vmlinuz inside ISO (Linux only)
     initrd_path_in_iso: str = ''    # Path to initrd inside ISO (Linux only)
     extra_packages: list[str] = field(default_factory=list)
-    install_mode: str = 'auto'  # 'auto' (unattended) or 'manual' (interactive VNC)
+    install_mode: str = 'auto'  # 'auto' (unattended seed file), 'manual'
+    #   (interactive window), 'gui-auto' (vision-LLM drives the GUI installer),
+    #   or 'playbook' (deterministic CV/OCR-driven replay, no model). See
+    #   _INSTALL_MODES.
     architecture: str = 'x86_64'  # 'x86_64' or 'aarch64'
     template: str = ''  # Custom template filename (empty = use default lookup)
     # Installer family — selects how the rendered template is laid out on the
-    # seed medium. One of: 'subiquity' | 'preseed' | 'kickstart' | 'autoyast'
-    # | 'archinstall-cloudinit' | 'manual'. The default keeps Ubuntu working.
+    # seed medium. One of: 'subiquity' | 'preseed' | 'ubiquity' | 'kickstart'
+    # | 'autoyast' | 'archinstall-cloudinit' | 'manual' | 'gui'. 'gui' writes no
+    # seed file; the installer is driven through its own GUI. 'ubiquity' (Ubuntu /
+    # Kubuntu *desktop* ISOs) renders a d-i preseed but has no labelled-drive
+    # auto-detect, so it must be paired with seed_transport: 'http'.
+    # The default keeps Ubuntu working.
     installer: str = 'subiquity'
     # Kernel command line passed via QEMU `-append`. Supports {console}
     # substitution (ttyS0/ttyAMA0). Distros like Anaconda or AutoYaST need
@@ -71,6 +78,29 @@ class OsDefinition:
     # NoCloud auto-detects 'cidata'; debian-installer and Anaconda detect
     # 'OEMDRV'; AutoYaST reads from a device path so the label is informational.
     seed_label: str = 'cidata'
+    # How the installer config reaches the guest. 'cdrom' (default) attaches the
+    # rendered seed as a labeled second CD-ROM, auto-detected by the installer.
+    # 'http' additionally serves the seed directory over a short-lived local HTTP
+    # server (reachable from the guest at 10.0.2.2 via QEMU user-mode net) and
+    # splices a `url=` fetch hint into the kernel cmdline. Needed for older
+    # debian-installer releases (e.g. Ubuntu 18.04) that do not auto-load a preseed
+    # from an OEMDRV volume, and for ubiquity, which has no auto-detect at all.
+    seed_transport: str = 'cdrom'  # 'cdrom' | 'http'
+    # Deterministic, LLM-free GUI-installer playbook (install_mode == 'playbook').
+    # Each step is a dict driving the graphical installer via the host-side QMP
+    # GUI executor: {action: tap, coords: [x, y, w, h]} | {action: key, keys: [..]}
+    # | {action: type, text: ..} | {action: wait_stable, settle/min/timeout: ..} |
+    # {action: wait, seconds: ..} | {action: shot, name: ..}. install_steps drive
+    # the installer; verify_steps run after rebooting into the installed disk.
+    install_steps: list = field(default_factory=list)
+    verify_steps: list = field(default_factory=list)
+    # Plain-text pointer telling a human where to obtain this ISO. Populated for
+    # the profiles that cannot ship a URL (Windows: the installer is licensed,
+    # not redistributable), and used as the fallback `recipe.iso_notes` for a
+    # consumer-supplied ("BYO") recipe whose publisher omitted it — so a consumer
+    # always has somewhere to go. Declared last because every field above the
+    # first default is positional, and OsDefinition is constructed by keyword.
+    iso_notes: str = ''
 
 
 # Ubuntu 26.04 LTS (Resolute Raccoon) - Server ISO with autoinstall support
@@ -132,7 +162,7 @@ UBUNTU_2404 = OsDefinition(
 # Ubuntu 24.04 LTS (Noble Numbat, ARM64) - User must supply ISO
 UBUNTU_2404_ARM64 = OsDefinition(
     name='ubuntu2404arm64',
-    display_name='Ubuntu 24.04 LTS (Noble Numbat, ARM64)',
+    display_name='Ubuntu 24.04 LTS (Noble Numbat, ARM64, Desktop overlay on Server base)',
     platform='linux',
     distribution='ubuntu',
     distribution_label='Noble Numbat',
@@ -208,7 +238,7 @@ UBUNTU_2204 = OsDefinition(
 # Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64) - User must supply ISO
 UBUNTU_2204_ARM64 = OsDefinition(
     name='ubuntu2204arm64',
-    display_name='Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64)',
+    display_name='Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64, Desktop overlay on Server base)',
     platform='linux',
     distribution='ubuntu',
     distribution_label='Jammy Jellyfish',
@@ -307,6 +337,32 @@ _KICKSTART_CMDLINE = (
     'inst.ks=hd:LABEL=OEMDRV:/ks.cfg inst.text console={console}'
 )
 
+
+def _fedora_archive_cmdline(release: str, arch: str = 'x86_64') -> str:
+    """Kickstart cmdline with ``inst.repo`` pinned to the Fedora *archive*.
+
+    An Everything-netinst ISO carries no packages; Anaconda resolves them through
+    the mirror metalink. Once a release goes EOL the metalink resolves to nothing
+    and the install dies at dependency resolution, so an EOL release must name the
+    archive mirror explicitly. Every release ADARE ships for replication is or will
+    be EOL, hence the pin.
+    """
+    return (
+        f'inst.ks=hd:LABEL=OEMDRV:/ks.cfg '
+        f'inst.repo=https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/'
+        f'{release}/Everything/{arch}/os/ '
+        f'inst.text console={{console}}'
+    )
+
+
+# Fedora 41 and 42 are both permanently EOL, so their metalink is dead — see
+# _fedora_archive_cmdline. The Workstation profiles below are pinned to the
+# archive; fedora41kde / fedora42kde share the defect and are NOT pinned, because
+# no one has verified a KDE-spin build against the archive repo (their kickstart
+# selects a different package group). Pin them the same way once verified.
+_FEDORA_41_CMDLINE = _fedora_archive_cmdline('41')
+_FEDORA_42_CMDLINE = _fedora_archive_cmdline('42')
+
 FEDORA_41_WORKSTATION = OsDefinition(
     name='fedora41',
     display_name='Fedora 41 Workstation (GNOME)',
@@ -314,16 +370,18 @@ FEDORA_41_WORKSTATION = OsDefinition(
     distribution='fedora',
     distribution_label='Workstation',
     version='41',
-    iso_url='',
-    iso_sha256='',
-    iso_filename='',
+    iso_url=(
+        'https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/iso/Fedora-Everything-netinst-x86_64-41-1.4.iso'
+    ),
+    iso_sha256='bc943f6b426ef8db9587715d87d6361c4048146f3aadd36a9dcbab2b33fe320e',
+    iso_filename='Fedora-Everything-netinst-x86_64-41-1.4.iso',
     default_disk_size='60G',
     default_ram_mb=8192,
     default_cpus=0,
     kernel_path_in_iso='/images/pxeboot/vmlinuz',
     initrd_path_in_iso='/images/pxeboot/initrd.img',
     installer='kickstart',
-    kernel_cmdline=_KICKSTART_CMDLINE,
+    kernel_cmdline=_FEDORA_41_CMDLINE,
     seed_label='OEMDRV',
 )
 
@@ -354,16 +412,18 @@ FEDORA_42_WORKSTATION = OsDefinition(
     distribution='fedora',
     distribution_label='Workstation',
     version='42',
-    iso_url='',
-    iso_sha256='',
-    iso_filename='',
+    iso_url=(
+        'https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/42/Everything/x86_64/iso/Fedora-Everything-netinst-x86_64-42-1.1.iso'
+    ),
+    iso_sha256='1bd6ab4798983c2fe4a210f9c4ca135fed453d6142ba852c1f8d5fba22e113ab',
+    iso_filename='Fedora-Everything-netinst-x86_64-42-1.1.iso',
     default_disk_size='60G',
     default_ram_mb=8192,
     default_cpus=0,
     kernel_path_in_iso='/images/pxeboot/vmlinuz',
     initrd_path_in_iso='/images/pxeboot/initrd.img',
     installer='kickstart',
-    kernel_cmdline=_KICKSTART_CMDLINE,
+    kernel_cmdline=_FEDORA_42_CMDLINE,
     seed_label='OEMDRV',
 )
 
@@ -561,12 +621,14 @@ OPENSUSE_TUMBLEWEED = OsDefinition(
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Manual-mode GUI distros (Phase 6 — Calamares / distinst / nixos installers
-# with no documented unattended path)
+# GUI-only distros (Calamares / distinst / nixos installers with no documented
+# unattended path)
 # ─────────────────────────────────────────────────────────────────────────────
-# These boot the live ISO normally; the user clicks through the graphical
-# installer. linux_creator skips kernel/seed plumbing for install_mode='manual'
-# and writes INSTALL_INSTRUCTIONS.md alongside the qcow2.
+# install_mode='manual' boots the live ISO and waits for a human to click
+# through the graphical installer (manual_creator drives QEMU directly; it does
+# not write a seed file). install_mode='gui-auto' instead lets a vision-LLM
+# agent drive the same installer and record a reusable playbook — see
+# gui_creator and the "GUI-automated installation" guide.
 
 LINUX_MINT = OsDefinition(
     name='mint',
@@ -652,6 +714,14 @@ WINDOWS_11 = OsDefinition(
     default_cpus=0,
     requires_uefi=True,
     requires_tpm=True,
+    # Microsoft media is licensed, not redistributable, so this profile ships no
+    # iso_url. These notes are the fallback download pointer a consumer sees when a
+    # recipe's own `iso_notes` is absent.
+    iso_notes=(
+        "Download from https://www.microsoft.com/software-download/windows11 - "
+        "\"Windows 11 (multi-edition ISO for x64 devices)\", English "
+        "(International). Requires a valid licence."
+    ),
 )
 
 # Windows 10 - User must supply ISO
@@ -669,6 +739,10 @@ WINDOWS_10 = OsDefinition(
     default_ram_mb=16384,
     default_cpus=0,
     requires_uefi=True,
+    iso_notes=(
+        "Download from https://www.microsoft.com/software-download/windows10 - "
+        "\"Windows 10\", English (International), 64-bit. Requires a valid licence."
+    ),
 )
 
 # Virtio-win drivers ISO for Windows guests
@@ -716,6 +790,12 @@ _BUILTIN_CATALOG: dict[str, OsDefinition] = {
 
 _REQUIRED_YAML_FIELDS = {'name', 'platform', 'distribution', 'version'}
 
+# Recognised install_mode values. 'auto' is the unattended seed-file path;
+# 'manual' opens a QEMU window for a human; 'gui-auto' lets a vision-LLM agent
+# drive the graphical installer; 'playbook' replays a CV-driven playbook that
+# locates installer buttons by on-screen label via the cv-server (no model).
+_INSTALL_MODES = frozenset({'auto', 'manual', 'gui-auto', 'playbook'})
+
 
 def _load_yaml_profiles() -> dict[str, OsDefinition]:
     """Load OS profiles from YAML files in the os-profiles directory."""
@@ -743,8 +823,11 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     continue
 
                 install_mode = data.get('install_mode', 'auto')
-                if install_mode not in ('auto', 'manual'):
-                    log.warning('Skipping %s: install_mode must be "auto" or "manual", got "%s"', yml_file, install_mode)
+                if install_mode not in _INSTALL_MODES:
+                    log.warning(
+                        'Skipping %s: install_mode must be one of %s, got "%s"',
+                        yml_file, ', '.join(sorted(_INSTALL_MODES)), install_mode,
+                    )
                     continue
 
                 architecture = data.get('architecture', 'x86_64')
@@ -782,6 +865,10 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                         'kernel_cmdline', 'autoinstall console={console} ---'
                     ),
                     seed_label=data.get('seed_label', 'cidata'),
+                    seed_transport=data.get('seed_transport', 'cdrom'),
+                    install_steps=data.get('install_steps', []),
+                    verify_steps=data.get('verify_steps', []),
+                    iso_notes=data.get('iso_notes', ''),
                 )
             except (OSError, yaml.YAMLError, TypeError, ValueError) as e:
                 log.warning('Skipping %s: %s', yml_file, e)
@@ -824,6 +911,15 @@ def get_os_definition(os_name: str) -> OsDefinition:
         available = ', '.join(sorted(OS_CATALOG.keys()))
         raise KeyError(
             f"Unknown OS '{os_name}'. Available: {available}\n"
-            f"Run 'adare manage os-profile list' to see all profiles."
+            f"Run 'adare os-profile list' to see all profiles."
         )
     return OS_CATALOG[os_name]
+
+
+def list_os_definitions() -> list[OsDefinition]:
+    """Return every OS definition in the catalog, sorted by profile name.
+
+    Read-only convenience for callers (e.g. the webapi) that need to list
+    all available profiles rather than look one up.
+    """
+    return [OS_CATALOG[name] for name in sorted(OS_CATALOG)]

@@ -11,3 +11,12 @@ requires_uefi: true
 requires_tpm: true
 architecture: aarch64
 template: autounattend_win11_arm64.xml
+# Where to obtain the ISO. Microsoft installer media is licensed, not
+# redistributable, so this profile ships no iso_url; a recipe environment for it
+# uses the consumer-supplied ("BYO") ISO form and falls back to these notes when
+# the publisher declares no recipe.iso_notes of its own.
+iso_notes: |
+  Download from https://www.microsoft.com/software-download/windows11 —
+  "Windows 11 Arm64", English (International). Requires a valid licence.
+  Verified filename: Win11_25H2_English_Arm64_v2.iso
+  sha256: 638aa2c88e94385b00f4f178d071e3df0b7d9e335577a83bd533b7f2eb65adf0

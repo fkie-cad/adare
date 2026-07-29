@@ -339,12 +339,18 @@ class TestCreateDisk:
         mock_print_section,
         tmp_path,
     ):
-        """_create_disk removes existing disk and NVRAM when force=True."""
+        """_create_disk removes existing disk and NVRAM when force=True.
+
+        The NVRAM name has to be the one `firmware.get_nvram_path_for_vm` writes,
+        `{vm_name}-nvram.fd`. This test used to assert `{vm_name}_VARS.fd`, which the
+        code also spelled — so the unlink matched nothing and a rebuilt disk silently
+        inherited the previous install's UEFI variables and boot entries.
+        """
         os_def = _make_os_def()
         creator = ConcreteCreator(os_def=os_def, vm_name='existing', vm_dir=tmp_path, force=True)
 
         disk_file = tmp_path / 'existing.qcow2'
-        nvram_file = tmp_path / 'existing_VARS.fd'
+        nvram_file = tmp_path / 'existing-nvram.fd'
         disk_file.write_text('fake')
         nvram_file.write_text('fake')
 

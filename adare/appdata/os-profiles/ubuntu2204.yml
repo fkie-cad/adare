@@ -1,14 +1,54 @@
 name: ubuntu2204
-display_name: "Ubuntu 22.04 LTS (Jammy Jellyfish)"
+display_name: "Ubuntu 22.04 LTS (Jammy Jellyfish) Desktop"
 platform: linux
 distribution: ubuntu
 distribution_label: "Jammy Jellyfish"
 version: "22.04"
-iso_url: "https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso"
-iso_sha256: "9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635571d9c954b60"
-iso_filename: "ubuntu-22.04.5-live-server-amd64.iso"
+# Genuine desktop edition installed by replaying a deterministic playbook through
+# its graphical ubiquity installer — no LLM. Buttons are located by their on-screen
+# LABEL via ADARE's cv-server OCR (find_text), so the steps are independent of
+# window position / resolution / minor version differences.
+install_mode: playbook
+installer: gui
+iso_url: "https://releases.ubuntu.com/22.04/ubuntu-22.04.5-desktop-amd64.iso"
+iso_sha256: "bfd1cee02bc4f35db939e69b934ba49a39a378797ce9aee20f6e3e3e728fefbf"
+iso_filename: "ubuntu-22.04.5-desktop-amd64.iso"
 default_disk_size: "60G"
 default_ram_mb: 8192
 default_cpus: 0
-kernel_path_in_iso: "/casper/vmlinuz"
-initrd_path_in_iso: "/casper/initrd"
+requires_uefi: false
+
+install_steps:
+  - {action: wait_stable, settle: 6, timeout: 360, min: 120, note: "live session + Welcome"}
+  - {action: click_text, text: "Install Ubuntu", shot: welcome}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: keyboard, note: "Keyboard layout"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: updates, note: "Updates/other software"}
+  - {action: wait_stable, settle: 6, timeout: 180}
+  - {action: click_text, text: "Install Now", shot: installtype, note: "Erase disk"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: writeconfirm, note: "Write changes dialog"}
+  - {action: wait_stable, settle: 6, timeout: 180}
+  - {action: click_text, text: "Continue", shot: timezone, note: "Timezone"}
+  - {action: wait_stable, settle: 6, timeout: 120, shot: whoami}
+  # 'Your name' is auto-focused on this screen; type + Tab through the form.
+  - {action: type, text: "adare", note: "Your name"}
+  - {action: key, keys: [tab]}
+  - {action: key, keys: [ctrl, a]}
+  - {action: type, text: "ubuntu2204", note: "computer name"}
+  - {action: key, keys: [tab], repeat: 2}
+  - {action: type, text: "adare", note: "password"}
+  - {action: key, keys: [tab]}
+  - {action: type, text: "adare", note: "confirm"}
+  - {action: shot, name: user-filled}
+  - {action: click_text, text: "Continue", note: "start install"}
+  - {action: wait_stable, settle: 45, timeout: 3600, shot: complete, note: "wait for install"}
+
+verify_steps:
+  - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
+  - {action: click_text, text: "adare", note: "select the adare user"}
+  - {action: wait, seconds: 2}
+  - {action: type, text: "adare", note: "password"}
+  - {action: key, keys: [ret]}
+  - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}

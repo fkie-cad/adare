@@ -20,3 +20,7 @@ class TestfunctionMissingFileError(LoggedErrorException):
 
 class TestfunctionUpdatedError(LoggedErrorException):
     pass
+
+
+class TestfunctionDependencyError(LoggedErrorException):
+    pass

@@ -2,7 +2,6 @@
 import logging
 
 import pandas as pd
-from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 
@@ -32,11 +31,12 @@ class TestfunctionListPanel:
 
         # Add file column if not filtering by specific file
         if not self.testfunction_file:
-            table.add_column("file", justify="left", style="cyan", no_wrap=True)
+            table.add_column("file", justify="left", style="cyan", no_wrap=True, max_width=24)
 
-        table.add_column("testfunction", justify="left", style="cyan", no_wrap=True)
-        table.add_column("description", justify="left", style="cyan", no_wrap=True)
-        table.add_column("#parameters", justify="left", style="cyan", no_wrap=True)
+        table.add_column("testfunction", justify="left", style="cyan", no_wrap=True, max_width=30)
+        table.add_column("version", justify="left", style="cyan", no_wrap=True, max_width=14)
+        table.add_column("description", justify="left", style="cyan", no_wrap=False, max_width=50)
+        table.add_column("#parameters", justify="left", style="cyan", no_wrap=True, max_width=12)
 
         for _, row in self.testfunctions.iterrows():
             # For name, use smart display name when available, otherwise fall back to existing logic
@@ -67,8 +67,12 @@ class TestfunctionListPanel:
                     file_name = 'unknown'
                 row_data.append(file_name)
 
+            version = str(row['version']) if 'version' in row and str(row['version']) not in ('', 'None', 'nan') else '1'
+            if 'is_current' in row and str(row['is_current']) in ('False', '0', 'false'):
+                version = f'{version} (removed)'
             row_data.extend([
                 display_name,
+                f'v{version}',
                 row['description'],
                 str(row['num_parameters']),
             ])
@@ -126,8 +130,7 @@ def print_testfunction_list(testfunction_file: str = None, formatter=None, outpu
                 if file_column:
                     testfunctions = testfunctions[testfunctions[file_column] == testfunction_file]
 
-            console = DefaultConsole()
-            layout = Layout(name="root")
-            panel = TestfunctionListPanel(testfunctions, testfunction_file)
-            layout.update(panel)
-            console.print(layout)
+            # Printed directly, NOT wrapped in a Layout: a Layout crops its content
+            # to the terminal height and silently drops the overflowing rows, which
+            # reads as "those testfunctions do not exist".
+            DefaultConsole().print(TestfunctionListPanel(testfunctions, testfunction_file))

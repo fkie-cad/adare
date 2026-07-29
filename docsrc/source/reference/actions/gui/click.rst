@@ -65,6 +65,13 @@ Target Options
 - ``text``: Text to find with optional ``text_match`` configuration
 - ``coordinates``: [x, y] pixel coordinates
 - ``strategy``: Selection strategy when multiple matches found (SweepStrategy, BestConfidenceStrategy, etc.)
+- ``use_cache``: bool, default unset (auto-reuse) - a match cached by an earlier
+  target resolution (e.g. a ``wait_until`` check) on an identical target (same
+  image/text/position/strategy/offset) is reused automatically, skipping a fresh
+  screenshot + CV pass, as long as no *other* target resolution has happened in
+  between. Set explicitly to ``false`` to opt out and force a fresh detection for
+  this target even when that condition holds. See
+  `Reusing a wait_until Match (Performance)`_ below.
 
 Advanced Text Matching
 -----------------------
@@ -316,13 +323,64 @@ The ``max_distance`` parameter (in pixels):
                index: 2
          description: "Click the second occurrence of Documents"
 
+Reusing a wait_until Match (Performance)
+-----------------------------------------
+
+CV detection (image/text matching) can take anywhere from ~200ms to over a second per
+attempt. If a ``wait_until`` already confirmed a target is on screen, a following
+``click`` on the *identical* target automatically skips re-running detection - no flag
+needed:
+
+.. code-block:: yaml
+
+   actions:
+     - wait_until:
+         condition:
+           exists:
+             image: "save_button.png"
+         timeout: 30.0
+     - click:
+         target:
+           image: "save_button.png"
+         description: "Click Save (automatically reuses the wait_until match)"
+
+**Boundary:** the cache is only valid for the single target-resolution attempt
+immediately following the one that populated it - it is not a whole-run cache. A
+target resolution is any ``exists``/``not_exists`` check inside a ``wait_until`` or
+any target lookup performed by an action like ``click``. Non-resolving actions in
+between (keyboard input, a pause, a drag by fixed coordinate) do **not** invalidate
+the cache, since they never look at the screen for a target - only another target
+resolution does, whether or not it targets the same image/text/position/strategy/offset.
+
+**Opt out with** ``use_cache: false`` **when you know the screen changed without
+another find running in between** - for example, a keyboard shortcut that closes the
+dialog the cached match was found in:
+
+.. code-block:: yaml
+
+   actions:
+     - wait_until:
+         condition:
+           exists:
+             image: "save_button.png"
+         timeout: 30.0
+     - keyboard:
+         hotkey: "alt+f4"
+         description: "Close the dialog without clicking Save"
+     - click:
+         target:
+           image: "save_button.png"
+           use_cache: false
+         description: "Force fresh detection - the dialog is gone, don't trust the stale match"
+
 Notes
 -----
 
 - Image files should be in the experiment directory
 - Text matching uses OCR (Tesseract)
 - Coordinates are relative to top-left corner
-- Use ``wait_until`` before clicking if element may not be immediately visible
+- Use ``wait_until`` before clicking if element may not be immediately visible - see
+  `Reusing a wait_until Match (Performance)`_ above to skip the redundant re-detection
 
 See Also
 --------

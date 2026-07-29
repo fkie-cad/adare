@@ -80,6 +80,12 @@ def list_testfunctions(fields: list[str] = None) -> list:
         return result
 
 
+def get_version_history(file_name: str, func_name: str | None = None) -> dict | None:
+    """Return the version history for a testfunction file (optionally a method)."""
+    with TestfunctionDbApi() as api:
+        return api.get_version_history(file_name, func_name)
+
+
 def testfunction_exists(name: str):
     with TestfunctionDbApi() as api:
         return api.testfunction_exists(name)

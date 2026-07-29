@@ -145,6 +145,20 @@ class EnvironmentListItem:
     in_request: bool = False
     created_at: datetime | None = None
     file: str = ""
+    # Source spec parsed from the environment file: `vm` is the disk reference
+    # (a published URL for URL-baked envs), `vm_type` is auto/path/url/recipe,
+    # `vm_sha256` the expected disk hash. Surfaced so the web list can render a
+    # URL-baked VM as a clickable link.
+    vm: str = ""
+    vm_type: str = ""
+    vm_sha256: str = ""
+    # Backing disk of the registered VM, and whether it is actually on disk right now.
+    # `file` above is the environment's YAML descriptor, which keeps existing after the
+    # qcow2 it points at has been pruned -- so an environment whose disk is gone still
+    # looks healthy in every listing, and only fails once a run reaches VM setup.
+    # disk_present is None when there is no local path to check (e.g. a URL-baked env).
+    disk_path: str = ""
+    disk_present: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
@@ -159,6 +173,13 @@ class EnvironmentListItem:
                 'id': self.vm_id,
                 'name': self.vm_name,
                 'os_info': self.os_info,
+            },
+            'vm_source': self.vm,
+            'vm_type': self.vm_type,
+            'vm_sha256': self.vm_sha256,
+            'disk': {
+                'path': self.disk_path,
+                'present': self.disk_present,
             },
             'os_details': {
                 'os': self.osinfo_os,
@@ -198,6 +219,19 @@ class EnvironmentDetail:
     created_at: datetime | None = None
     file: str = ""
     experiment_count: int = 0
+    # Source spec parsed from the environment file (see EnvironmentListItem).
+    vm: str = ""
+    vm_type: str = ""
+    vm_sha256: str = ""
+    # Optional install-profile provenance for a baked source (informational
+    # only -- see EnvironmentMetadata.source_profile). Empty for most
+    # environments and always empty for a recipe environment.
+    source_profile: str = ""
+    source_iso_sha256: str = ""
+    # Backing disk of the registered VM and whether it exists right now. See
+    # EnvironmentListItem for why the environment's own `file` is not a proxy for this.
+    disk_path: str = ""
+    disk_present: bool | None = None
 
 
 @dataclass

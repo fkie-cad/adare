@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { CheckSquare, Copy, FlaskConical, Link2, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { CheckSquare, Copy, FlaskConical, Link2, Plus, Trash2 } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { PageHeader } from '@/components/layout/page-header'
-import { Card, CardContent } from '@/components/ui/card'
+import { AsyncBoundary } from '@/components/layout/async-boundary'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CreateExperimentDialog } from '@/components/dialogs/create-experiment-dialog'
@@ -111,31 +111,18 @@ export default function ExperimentsListPage() {
         }
       />
 
-      {isPending && <LoadingTable />}
-
-      {isError && (
-        <Card className="border-destructive">
-          <CardContent className="pt-6 flex items-center gap-4">
-            <p className="text-sm text-destructive flex-1">
-              {(error as Error)?.message ?? 'Failed to load experiments.'}
-            </p>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
-              <RefreshCw size={14} />
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {!isPending && !isError && data?.length === 0 && (
-        <EmptyState
-          icon={FlaskConical}
-          title="No experiments yet"
-          description="Create an experiment to get started."
-        />
-      )}
-
-      {!isPending && !isError && data && data.length > 0 && (
+      <AsyncBoundary
+        isPending={isPending}
+        isError={isError}
+        error={error}
+        onRetry={() => refetch()}
+        errorFallbackMessage="Failed to load experiments."
+        loadingFallback={<LoadingTable />}
+        isEmpty={data?.length === 0}
+        emptyIcon={FlaskConical}
+        emptyTitle="No experiments yet"
+        emptyDescription="Create an experiment to get started."
+      >
         <Table>
           <TableHeader>
             <TableRow>
@@ -148,14 +135,18 @@ export default function ExperimentsListPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((exp) => {
+            {(data ?? []).map((exp) => {
               const project = projectPathOf(exp) || '—'
               const tags: string[] = Array.isArray(exp.tags) ? exp.tags : []
               const runCount = (exp as { run_count?: number }).run_count
               const envNames: string[] = exp.environment_names ?? []
               return (
                 <TableRow key={exp.name} className="hover:bg-muted/50">
-                  <TableCell className="font-medium">{exp.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link to="/experiments/$name" params={{ name: exp.name }} className="hover:underline">
+                      {exp.name}
+                    </Link>
+                  </TableCell>
                   <TableCell>
                     <span className="font-mono text-xs">{project}</span>
                   </TableCell>
@@ -163,9 +154,11 @@ export default function ExperimentsListPage() {
                     {envNames.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {envNames.map((name) => (
-                          <Badge key={name} variant="outline">
-                            {name}
-                          </Badge>
+                          <Link key={name} to="/environments/$name" params={{ name }}>
+                            <Badge variant="outline" className="hover:bg-accent">
+                              {name}
+                            </Badge>
+                          </Link>
                         ))}
                       </div>
                     ) : (
@@ -227,10 +220,10 @@ export default function ExperimentsListPage() {
             })}
           </TableBody>
           <TableCaption>
-            {data.length} experiment{data.length === 1 ? '' : 's'}
+            {(data ?? []).length} experiment{(data ?? []).length === 1 ? '' : 's'}
           </TableCaption>
         </Table>
-      )}
+      </AsyncBoundary>
 
       <CreateExperimentDialog open={createOpen} onOpenChange={setCreateOpen} />
 

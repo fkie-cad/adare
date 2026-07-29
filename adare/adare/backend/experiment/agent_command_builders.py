@@ -320,7 +320,20 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             # PowerShell array expansion: @(Get-ChildItem ...) forces wildcard expansion
             # before pip sees the arguments. PowerShell doesn't expand wildcards in
             # base64-encoded commands, so we must explicitly use Get-ChildItem.
-            return rf'C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            #
+            # Two passes rather than one plain --force-reinstall: adarevm/adarelib are
+            # local dev wheels whose version string does not bump between builds, so a
+            # plain install would see "already satisfied" and skip picking up code
+            # changes -- hence the second, forced pass. But --force-reinstall alone
+            # forces the whole dependency tree too (pillow, pyautogui, cattrs,
+            # websockets, ...), none of which are local, so every run re-fetched all of
+            # them from PyPI into the throwaway overlay regardless of whether they were
+            # already satisfied. Pass 1 (no --force-reinstall) installs anything
+            # genuinely missing without disturbing what is already there; pass 2 adds
+            # --no-deps so the forced reinstall touches only the two local wheels.
+            conda_pip = r'C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install'
+            wheel_glob = rf'@(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            return f'{conda_pip} {wheel_glob}; {conda_pip} --force-reinstall --no-deps {wheel_glob}'
         # Editable install from shared folder source
         return rf'cd {adarelib_path}; C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd {adarevm_path}; C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
 
@@ -340,7 +353,14 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             python_cmd = self._resolve_python_path(vm)
             log.info(f"Using executed python command: {python_cmd}")
 
-            return rf'{python_cmd} -m pip install --force-reinstall @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            # Two passes, same reasoning as _build_conda_install_command: a plain
+            # install would skip the local wheels (version string doesn't bump
+            # between builds), but --force-reinstall alone forces the whole
+            # dependency tree from PyPI too. Pass 1 installs anything genuinely
+            # missing; pass 2 forces only the two local wheels via --no-deps.
+            pip_install = f'{python_cmd} -m pip install'
+            wheel_glob = rf'@(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            return f'{pip_install} {wheel_glob}; {pip_install} --force-reinstall --no-deps {wheel_glob}'
         # Editable install via uv
         return rf'cd {adarevm_path}; uv sync'
 
@@ -381,22 +401,68 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
 class LinuxAgentCommandBuilder(AgentCommandBuilder):
     """Linux-specific command builder."""
 
+    # Used only when the guest's system python is older than adarevm's requires-python
+    # (Ubuntu 20.04 focal ships 3.8). uv fetches this interpreter and the agent runs
+    # from the venv below instead of the system site-packages.
+    FALLBACK_AGENT_PYTHON = '3.12'
+    FALLBACK_AGENT_VENV = '/opt/adare-agent'
+
+    # Runtime-only firewalld exception for the adarevm WebSocket port.
+    #
+    # The Windows builder has always opened port 18765 (see
+    # WindowsAgentCommandBuilder.build_setup_commands); Linux never did, because the
+    # Debian/Ubuntu family ships ufw inactive, so nothing blocked the port. Fedora
+    # does not: firewalld runs by default, and its `public` zone drops inbound
+    # traffic on the external interface while leaving loopback open. That produces a
+    # failure that looks like a broken agent rather than a blocked port — adarevm
+    # starts fine, `ss` shows it LISTENing on 0.0.0.0:18765, the guest's own
+    # /dev/tcp/localhost/18765 probe reports "Port reachable", and only the host's
+    # SLIRP-forwarded connection is dropped, so the run dies at "Connecting to
+    # Agent: All 6 connection attempts failed".
+    #
+    # Deliberately NOT --permanent: `firewall-cmd --add-port` without it changes
+    # only firewalld's in-memory state, so nothing is written under /etc/firewalld
+    # and the guest's on-disk configuration is unchanged for forensic diffing.
+    # Preferred over stopping firewalld outright for the same reason — the smaller
+    # deviation from the stock image is the one to make.
+    #
+    # A no-op on guests without firewalld (the whole Debian/Ubuntu family), which is
+    # why it is safe to add unconditionally: `command -v firewall-cmd` fails there.
+    _FIREWALLD_OPEN_AGENT_PORT = (
+        'if command -v firewall-cmd >/dev/null 2>&1 '
+        '&& systemctl is-active --quiet firewalld; then '
+        'firewall-cmd --add-port=18765/tcp >/dev/null 2>&1 '
+        '&& echo ADARE_FIREWALLD_PORT_OPENED '
+        '|| echo ADARE_FIREWALLD_OPEN_FAILED; '
+        'else echo ADARE_FIREWALLD_ABSENT; fi'
+    )
+
     async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> list[SetupCommand]:
         """Build Linux setup commands with per-command admin requirements."""
         commands = [
-            # Add project-wide tools to PATH (user bashrc, no admin needed)
+            # Open the agent's WebSocket port before anything tries to connect to it.
+            # See _FIREWALLD_OPEN_AGENT_PORT for why this is needed and why it is
+            # runtime-only.
             SetupCommand(
-                command="grep -qxF 'export PATH=$PATH:/adare/project_shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/project_shared/tools' >> ~/.bashrc; . ~/.bashrc",
+                command=self._FIREWALLD_OPEN_AGENT_PORT,
+                requires_admin=True
+            ),
+            # Add project-wide tools to PATH (user bashrc)
+            # Ensure /home/adare exists and has correct ownership before modifying .bashrc (QGA runs as root)
+            SetupCommand(
+                command="(grep -qxF \"export PATH=\\$PATH:/adare/project_shared/tools\" /home/adare/.bashrc || echo \"export PATH=\\$PATH:/adare/project_shared/tools\" >> /home/adare/.bashrc)",
                 requires_admin=False
             ),
-            # Add experiment-specific tools to PATH (user bashrc, no admin needed)
+            # Add experiment-specific tools to PATH (user bashrc)
+            # Ensure /home/adare exists and has correct ownership before modifying .bashrc (QGA runs as root)
             SetupCommand(
-                command="grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc; . ~/.bashrc",
+                command="(grep -qxF \"export PATH=\\$PATH:/adare/shared/tools\" /home/adare/.bashrc || echo \"export PATH=\\$PATH:/adare/shared/tools\" >> /home/adare/.bashrc)",
                 requires_admin=False
             ),
-            # Add ~/.local/bin to PATH for installations (user bashrc, no admin needed)
+            # Add ~/.local/bin to PATH for installations (user bashrc)
+            # Ensure /home/adare exists and has correct ownership before modifying .bashrc (QGA runs as root)
             SetupCommand(
-                command="grep -qxF 'export PATH=\"$HOME/.local/bin:$PATH\"' ~/.bashrc || echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.bashrc; . ~/.bashrc",
+                command="(grep -qxF \"export PATH=\\\"\\$HOME/.local/bin:\\$PATH\\\"\" /home/adare/.bashrc || echo \"export PATH=\\\"\\$HOME/.local/bin:\\$PATH\\\"\" >> /home/adare/.bashrc)",
                 requires_admin=False
             )
         ]
@@ -421,9 +487,15 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         """Build Conda installation command."""
         env_py = '/home/adare/.miniforge3/envs/pyadare/bin/python'
         if self.wheels_available:
+            # Two passes, same reasoning as the Windows builders above: a plain
+            # install would skip the local wheels (version string doesn't bump
+            # between builds), but --force-reinstall alone forces the whole
+            # dependency tree from PyPI too. Pass 1 installs anything genuinely
+            # missing; pass 2 forces only the two local wheels via --no-deps.
             cmd = (
                 f'{env_py} -m ensurepip --upgrade && '
-                f'{env_py} -m pip install --no-cache-dir --force-reinstall '
+                f'{env_py} -m pip install --no-cache-dir /adare/vm/wheels/*.whl && '
+                f'{env_py} -m pip install --no-cache-dir --force-reinstall --no-deps '
                 f'/adare/vm/wheels/*.whl'
             )
             if not self.skip_xhost:
@@ -444,7 +516,36 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         if self.wheels_available:
             # Use find for reliable wheel discovery (works with QEMU guest agent)
             # --no-cache-dir avoids cache permission issues
-            cmd = 'find /adare/vm/wheels -name "*.whl" -exec pip3 install --no-cache-dir --force-reinstall {} +'
+            #
+            # --break-system-packages only exists from pip 23.0.1 on, where PEP 668
+            # marks the system interpreter externally-managed. Ubuntu 20.04 ships
+            # pip 20.0.2, which aborts with "no such option" and fails VM setup, so
+            # probe for the flag instead of assuming it.
+            #
+            # adarevm/adarelib declare requires-python >=3.10, but Ubuntu 20.04 (focal)
+            # ships Python 3.8 as its system interpreter and its autoinstall template
+            # deliberately provisions no conda -- "standalone uv plus the system
+            # python". Installing the wheels into a 3.8 system python therefore aborts
+            # with "Package 'adarevm' requires a different Python: 3.8.10 not in
+            # '>=3.10'". uv is present precisely to supply a modern interpreter, so on
+            # such guests build a uv-managed venv and symlink the entry point onto PATH
+            # (build_run_command invokes a bare `adarevm`, which the symlink satisfies).
+            cmd = (
+                'if pip3 install --help 2>/dev/null | grep -q -- --break-system-packages; '
+                'then BSP=--break-system-packages; else BSP=; fi; '
+                'PYV=$(python3 -c "import sys; print(sys.version_info[0]*100+sys.version_info[1])" '
+                '2>/dev/null || echo 0); '
+                'if [ "$PYV" -ge 310 ]; then '
+                'find /adare/vm/wheels -name "*.whl" -exec pip3 install --no-cache-dir '
+                '--force-reinstall --ignore-installed $BSP {} +; '
+                'else '
+                'UV=$(command -v uv || echo /usr/local/bin/uv); '
+                f'"$UV" venv --python {self.FALLBACK_AGENT_PYTHON} {self.FALLBACK_AGENT_VENV} && '
+                f'"$UV" pip install --python {self.FALLBACK_AGENT_VENV}/bin/python --no-cache '
+                '--reinstall /adare/vm/wheels/*.whl && '
+                f'ln -sf {self.FALLBACK_AGENT_VENV}/bin/adarevm /usr/local/bin/adarevm; '
+                'fi'
+            )
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd

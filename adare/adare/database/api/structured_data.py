@@ -270,7 +270,7 @@ class StructuredDataApi(DatabaseApi):
 
         runs = safe_query_all(query)
         result = []
-        orphaned_run_ids: list[str] = []
+        dangling_run_ids: list[str] = []
 
         # Get current project name from context (experiments are stored per-project)
         current_project_name = project_name or get_current_project_name() or ""
@@ -279,7 +279,13 @@ class StructuredDataApi(DatabaseApi):
             # Experiment and environment info are now eagerly loaded
             experiment = run.experiment
             if experiment is None:
-                orphaned_run_ids.append(run.id)
+                # A run without a linked experiment must still be surfaced, never hidden.
+                # Distinguish two cases:
+                #   - experiment_id IS NULL      -> unlinked (recoverable via `adare run relink`)
+                #   - experiment_id set, no row  -> genuinely dangling (integrity problem)
+                if run.experiment_id is not None:
+                    dangling_run_ids.append(run.id)
+                result.append(self.__build_unlinked_run_info(run, current_project_name))
                 continue
             env = experiment.environments[0] if experiment.environments else None
 
@@ -309,14 +315,81 @@ class StructuredDataApi(DatabaseApi):
             )
             result.append(run_info)
 
-        if orphaned_run_ids:
-            preview = ", ".join(orphaned_run_ids[:5])
-            more = f" (+{len(orphaned_run_ids) - 5} more)" if len(orphaned_run_ids) > 5 else ""
+        if dangling_run_ids:
+            preview = ", ".join(dangling_run_ids[:5])
+            more = f" (+{len(dangling_run_ids) - 5} more)" if len(dangling_run_ids) > 5 else ""
             log.warning(
-                "Skipped %d orphaned run(s) with dangling experiment_id: %s%s",
-                len(orphaned_run_ids),
+                "Found %d run(s) with a dangling experiment_id (references a missing experiment): %s%s",
+                len(dangling_run_ids),
                 preview,
                 more,
             )
 
         return result
+
+    def get_run_files(self, ulid: str) -> dict | None:
+        """Resolve a run's on-disk directory and known artifact file paths.
+
+        Returns ``None`` if no run with this ULID exists in this project's
+        database (callers search across projects the same way `get_run` does).
+        """
+        run = safe_query_first(
+            self._session.query(ExperimentRun)
+            .options(joinedload(ExperimentRun.files))
+            .filter(ExperimentRun.id == ulid)
+        )
+        if run is None:
+            return None
+
+        files = run.files
+        return {
+            "run_dir": run.path,
+            "log_adare": files.log_adare.path if files and files.log_adare else None,
+            "log_adarevm": files.log_adarevm.path if files and files.log_adarevm else None,
+            "results_file": files.results_file_path if files else None,
+            "actions_file": files.actions_file_path if files else None,
+            "system_info_file": files.system_info_file_path if files else None,
+            "zip_file": files.zip_file_path if files else None,
+        }
+
+    def __build_unlinked_run_info(self, run: ExperimentRun, current_project_name: str) -> RunInfo:
+        """Build a RunInfo for a run not linked to an experiment.
+
+        The experiment name is derived from the run path (``run/<name>/<timestamp>``)
+        so completed-but-unlinked runs remain visible in `run list` with a
+        meaningful label instead of being silently skipped.
+        """
+        from adare.database.api.base import experiment_name_from_run_path
+
+        derived_name = experiment_name_from_run_path(run.path) or "(unlinked)"
+        exp_label = f"{current_project_name}.{derived_name}" if current_project_name else derived_name
+
+        # Best-effort environment name from the (global) environment reference
+        env_name = ""
+        if run.environment_id:
+            try:
+                from adare.database.reference_manager import reference_manager
+                env_obj = reference_manager.get_environment_object(run.environment_id)
+                env_name = env_obj.name if env_obj else ""
+            except (AttributeError, KeyError, DataRetrievalError):
+                env_name = ""
+
+        duration_seconds = 0.0
+        if run.start_time and run.end_time:
+            duration_seconds = (run.end_time - run.start_time).total_seconds()
+
+        return RunInfo(
+            ulid=run.id,
+            experiment_name=exp_label,
+            experiment_ulid=run.experiment_id or "",
+            environment_name=env_name,
+            environment_ulid=run.environment_id or "",
+            project_name=current_project_name,
+            start_time=run.start_time,
+            end_time=run.end_time,
+            duration_seconds=duration_seconds,
+            status=run.status,
+            published=run.published or False,
+            fake=run.fake or False,
+            overall_result=run.result_status or ""
+        )

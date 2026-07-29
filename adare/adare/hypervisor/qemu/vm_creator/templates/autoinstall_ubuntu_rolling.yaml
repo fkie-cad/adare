@@ -20,6 +20,29 @@ autoinstall:
   locale: en_US.UTF-8
   keyboard:
     layout: us
+  # Match the interface by pattern, never by name. ADARE runs experiments with the
+  # NIC pinned to a different PCI address than the installer used, so the guest's
+  # predictable name changes between install and run (enp0s1 -> enp0s31). A config
+  # naming one interface leaves the guest with no address at all, which costs a
+  # 120s systemd-networkd-wait-online timeout on every boot and breaks the SLIRP
+  # SMB share at 10.0.2.4. See hypervisor/qemu/guest_network.py.
+  network:
+    version: 2
+    # Deliberately NO `renderer:` here. Subiquity applies this very section
+    # inside the LIVE INSTALLER, which has no NetworkManager, so
+    # `renderer: NetworkManager` makes the installer's own `netplan apply` fail
+    # and aborts the build with
+    #   Command '['netplan', 'apply']' returned non-zero exit status 1
+    #   An error occurred. Press enter to start a shell
+    # `match: {name: "e*"}` + dhcp4 is renderer-agnostic and already delivers
+    # the name-independence described above. NetworkManager is made the renderer
+    # of the INSTALLED system by the late-command that writes
+    # /etc/netplan/99-adare-nm.yaml.
+    ethernets:
+      adare-any:
+        match:
+          name: "e*"
+        dhcp4: true
   storage:
     layout:
       name: lvm
@@ -41,6 +64,11 @@ autoinstall:
     {% if setup_level >= 2 %}
     - python3-pip
     {% endif %}
+    # cifs-utils: ADARE mounts its host share with `mount -t cifs //10.0.2.4/qemu
+    # /adare`. Without mount.cifs that mount fails with "bad option; ... you might
+    # need a /sbin/mount.<type> helper program" and the host silently degrades to
+    # the far slower QGA file-by-file transfer.
+    - cifs-utils
     - openssh-server
     - curl
     - wget
@@ -50,6 +78,19 @@ autoinstall:
     - chmod 440 /target/etc/sudoers.d/adare
     - mkdir -p /target/etc/gdm3
     - "printf '[daemon]\\nAutomaticLoginEnable=true\\nAutomaticLogin=adare\\n' > /target/etc/gdm3/custom.conf"
+    # Hand the INSTALLED system's networking to NetworkManager. This cannot be
+    # done with `renderer:` in the autoinstall `network:` section -- subiquity
+    # applies that section in the live installer, which has no NetworkManager,
+    # and the resulting `netplan apply` failure aborts the whole install.
+    # NetworkManager claims any ethernet device regardless of its name, which is
+    # what survives ADARE re-pinning the NIC to a different PCI address between
+    # install and run (enp0s1 -> enp0s31); systemd-networkd only configures what
+    # its config names. 99- sorts after the installer's own netplan file, so this
+    # file's global `renderer` wins the merge.
+    - mkdir -p /target/etc/netplan
+    - |
+      printf 'network:\n  version: 2\n  renderer: NetworkManager\n  ethernets:\n    adare-any:\n      match:\n        name: "e*"\n      dhcp4: true\n' > /target/etc/netplan/99-adare-nm.yaml
+    - chmod 600 /target/etc/netplan/99-adare-nm.yaml
     - curtin in-target -- systemctl disable unattended-upgrades || true
     - curtin in-target -- apt-get remove -y unattended-upgrades || true
     # Disable APT periodic update/upgrade timers

@@ -123,3 +123,4 @@ Subsystem Documentation
    file-sharing
    guest-agent
    cv-server
+   database-migrations

@@ -1,0 +1,61 @@
+name: ubuntu1804
+display_name: "Ubuntu 18.04 LTS (Bionic Beaver) Desktop"
+platform: linux
+distribution: ubuntu
+distribution_label: "Bionic Beaver"
+version: "18.04"
+architecture: x86_64
+# Genuine desktop edition installed by replaying a deterministic playbook through
+# its graphical ubiquity installer — no LLM. Buttons are located by their on-screen
+# LABEL via ADARE's cv-server OCR (find_text), so the steps are independent of
+# window position / resolution. Same ubiquity flow as 20.04.
+install_mode: playbook
+installer: gui
+# 18.04 is EOL, so the desktop ISO lives on old-releases. The hash is the vendor
+# SHA256SUMS entry (verified 2026-07-25); a mismatch re-downloads rather than
+# installing a wrong image.
+iso_url: "http://old-releases.ubuntu.com/releases/18.04/ubuntu-18.04.5-desktop-amd64.iso"
+iso_sha256: "f295570badb09a606d97ddfc3421d7bf210b4a81c07ba81e9c040eda6ddea6a0"
+iso_filename: "ubuntu-18.04.5-desktop-amd64.iso"
+default_disk_size: "60G"
+default_ram_mb: 4096
+default_cpus: 0
+requires_uefi: false
+
+install_steps:
+  - {action: wait_stable, settle: 6, timeout: 360, min: 120, note: "live session + Welcome"}
+  - {action: click_text, text: "Install Ubuntu", shot: welcome}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: keyboard, note: "Keyboard layout"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: updates, note: "Updates/other software"}
+  - {action: wait_stable, settle: 6, timeout: 180}
+  - {action: click_text, text: "Install Now", shot: installtype, note: "Erase disk"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: writeconfirm, note: "Write changes dialog"}
+  - {action: wait_stable, settle: 6, timeout: 180}
+  - {action: click_text, text: "Continue", shot: timezone, note: "Timezone"}
+  - {action: wait_stable, settle: 6, timeout: 120, shot: whoami}
+  # Click the name field first (18.04 does not always auto-focus it), then Tab
+  # through the who-are-you form: name, computer, password, confirm.
+  - {action: click_text, text: "Your name", dy: 28, note: "focus name field"}
+  - {action: wait, seconds: 1}
+  - {action: type, text: "adare", note: "Your name"}
+  - {action: key, keys: [tab]}
+  - {action: key, keys: [ctrl, a]}
+  - {action: type, text: "ubuntu1804", note: "computer name"}
+  - {action: key, keys: [tab], repeat: 2}
+  - {action: type, text: "adare", note: "password"}
+  - {action: key, keys: [tab]}
+  - {action: type, text: "adare", note: "confirm"}
+  - {action: shot, name: user-filled}
+  - {action: click_text, text: "Continue", note: "start install"}
+  - {action: wait_stable, settle: 45, timeout: 3600, shot: complete, note: "wait for install"}
+
+verify_steps:
+  - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
+  - {action: click_text, text: "adare", note: "select the adare user"}
+  - {action: wait, seconds: 2}
+  - {action: type, text: "adare", note: "password"}
+  - {action: key, keys: [ret]}
+  - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}

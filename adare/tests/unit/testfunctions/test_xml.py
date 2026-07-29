@@ -163,7 +163,7 @@ class TestElementExists:
         assert "1 matches" in result.details[0]
 
     def test_element_exists_file_not_found(self, tmp_path):
-        """Test error when XML file doesn't exist."""
+        """A missing XML file is a test FAILURE, not an execution error."""
         test = ElementExists(
             name="test_exists",
             parameter=ElementExistsParameter(
@@ -173,9 +173,21 @@ class TestElementExists:
         )
         result = test.test()
 
-        # File not found results in ERROR status
-        assert result.status == StatusEnum.ERROR
-        assert "Cannot read XML file" in result.details[0] or "does not exist" in result.details[0]
+        # FAILED, not ERROR, and this assertion was changed deliberately when xml.py
+        # moved from lxml to the stdlib parser.
+        #
+        # xml.py has always ordered `except FileNotFoundError -> failed(...)` ahead of
+        # `except OSError -> execution_error(...)`, in all six of its functions, so a
+        # missing file was clearly meant to read as a failed assertion. But lxml's
+        # parse() raises a bare OSError for a missing path, never FileNotFoundError,
+        # so that clause was unreachable and the file surfaced as ERROR instead. The
+        # stdlib parser raises FileNotFoundError, so the intended branch now runs.
+        #
+        # FAILED is also the more truthful verdict: "the artifact is not there" is a
+        # finding about the evidence, whereas ERROR says the test could not be
+        # evaluated. The detail string still names the path, so nothing is lost.
+        assert result.status == StatusEnum.FAILED
+        assert "does not exist" in result.details[0]
 
     def test_element_exists_malformed_xml(self, create_xml_file):
         """Test error with malformed XML."""

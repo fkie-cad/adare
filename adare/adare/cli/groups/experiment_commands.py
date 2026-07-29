@@ -68,9 +68,10 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--test-mode', type=click.Choice(['auto', 'agent', 'host']), help='Test execution mode: auto (default), agent (WebSocket), or host (QGA for QEMU only)')
     @click.option('--diff/--no-diff', default=None, help='Enable/disable filesystem diff (overrides playbook setting)')
     @click.option('--diff-mode', type=click.Choice(['auto', 'guest', 'host']), default='auto', help='Diff mode: auto (smart selection), guest (VM-based), host (QEMU virt-diff)')
+    @click.option('--allow-emulation', is_flag=True, default=False, help='Allow QEMU TCG software emulation when the environment guest architecture does not match the host CPU (slow; hardware acceleration is used otherwise). Also honored via hypervisor_config.allow_emulation in the environment YAML.')
     @click.option('--project', help='Name of the project')
     @click.pass_context
-    def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, gui_mode, test_mode, diff, diff_mode, project):
+    def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, gui_mode, test_mode, diff, diff_mode, allow_emulation, project):
         """Run an experiment in a given environment or all environments if none specified.
 
         By default, runs in TEST mode (creates fake runs, skips integrity checks, allows modifications).
@@ -100,6 +101,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             test_mode=test_mode,
             diff=diff,
             diff_mode=diff_mode,
+            allow_emulation=allow_emulation,
             project=project,
             verbose=ctx.obj.verbose,
             very_verbose=ctx.obj.very_verbose
@@ -278,6 +280,36 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
 
     @experiment.command()
+    @click.argument('ulid')
+    @click.option('-e', '--environment', help='Name of the environment to use (required if the bundle has more than one)')
+    @click.option('--project', '-p', help='Name of the project')
+    @click.option('--production', '--prod', is_flag=True, help='Run the experiment in production mode (default: test mode)')
+    @click.option('--skip-run', is_flag=True, help="Download and load only, don't execute")
+    def replicate(ulid, environment, project, production, skip_run):
+        """Download a published experiment bundle and run it, end to end.
+
+        Downloads the experiment (+ its testfunction sets), loads the
+        environment (fetching and verifying the VM disk), loads the
+        experiment into the project, and runs it.
+
+        ULID is the published experiment's ULID.
+
+        Examples:
+        - adare experiment replicate 01HXYZ...
+        - adare experiment replicate 01HXYZ... -e ubuntu24 --production
+        - adare experiment replicate 01HXYZ... --skip-run
+        """
+        from adare.cli.experiment import exec_experiment_replicate
+        args = SimpleNamespace(
+            ulid=ulid,
+            environment=environment,
+            project=project,
+            test=not production,
+            skip_run=skip_run,
+        )
+        exec_with_error_printing(exec_experiment_replicate, args)
+
+    @experiment.command()
     @click.argument('experiment', type=click.Path(exists=False))
     @click.option('-e', '--environment', type=click.Path(exists=False), required=True,
                   help='Name of the environment (must be QEMU-based)')
@@ -308,5 +340,58 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             project=project
         )
         exec_with_error_printing(exec_experiment_diff, args)
+
+    # ------------------------------
+    # Playbook read / validate / write (file + DB, no VM)
+    # ------------------------------
+    @experiment.group(name='playbook', cls=AliasedGroup)
+    def playbook():
+        """Read, validate, and write an experiment's playbook.yml."""
+        pass
+
+    playbook.add_alias('cat', 'show')
+
+    @playbook.command(name='show')
+    @click.argument('experiment', type=click.Path(exists=False))
+    @click.option('--project', '-p', help='Name of the project')
+    def playbook_show(experiment, project):
+        """Print an experiment's playbook YAML (disk, DB fallback).
+
+        EXPERIMENT is the experiment name.
+        """
+        from adare.cli.experiment import exec_playbook_show
+        args = SimpleNamespace(experiment=experiment, project=project)
+        exec_with_error_printing(exec_playbook_show, args)
+
+    @playbook.command(name='validate')
+    @click.argument('file', type=click.Path(exists=True))
+    def playbook_validate(file):
+        """Statically validate a playbook YAML file (parse + schema, no VM).
+
+        FILE is a path to a playbook YAML file.
+        """
+        from adare.cli.experiment import exec_playbook_validate
+        args = SimpleNamespace(file=file)
+        exec_with_error_printing(exec_playbook_validate, args)
+
+    @playbook.command(name='set')
+    @click.argument('experiment', type=click.Path(exists=False))
+    @click.argument('file', type=click.Path(exists=True))
+    @click.option('--no-backup', is_flag=True, help='Do not back up the existing playbook.yml to .bak')
+    @click.option('--project', '-p', help='Name of the project')
+    def playbook_set(experiment, file, no_backup, project):
+        """Validate then write a playbook YAML file to an experiment.
+
+        Refuses invalid YAML; on success writes playbook.yml (with a .bak
+        backup unless --no-backup) and re-ingests the project database.
+
+        EXPERIMENT is the target experiment name.
+        FILE is the playbook YAML file to write.
+        """
+        from adare.cli.experiment import exec_playbook_set
+        args = SimpleNamespace(
+            experiment=experiment, file=file, backup=not no_backup, project=project
+        )
+        exec_with_error_printing(exec_playbook_set, args)
 
     return experiment

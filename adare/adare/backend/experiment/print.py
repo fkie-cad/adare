@@ -15,6 +15,34 @@ from adarelib.constants import StatusEnum
 log = logging.getLogger(__name__)
 
 
+def _plural(count: int, singular: str) -> str:
+    return f"{count} {singular}" if count == 1 else f"{count} {singular}s"
+
+
+def format_nesting_detail(top_level: int, nested: int, loops = ()) -> str:
+    """Describe how a tally splits between top-level and loop/block bodies.
+
+    Returns markup like ``" (4 top-level + 130 in a loop of 10 iterations)"``, or an
+    empty string when nothing ran nested — the whole point is that a ten-iteration
+    loop must not read as the single ``loop:`` line it occupies in the playbook.
+    """
+    if not nested:
+        return ""
+
+    iterated = [loop for loop in loops if loop.iterations_completed]
+    if iterated:
+        completed = sum(loop.iterations_completed for loop in iterated)
+        planned = sum(loop.iterations_planned or loop.iterations_completed for loop in iterated)
+        iterations = _plural(completed, "iteration") if completed >= planned else f"{completed}/{planned} iterations"
+        where = f"a loop of {iterations}" if len(iterated) == 1 else f"{_plural(len(iterated), 'loop')}, {iterations}"
+    elif loops:
+        where = _plural(len(loops), "loop")
+    else:
+        where = "nested blocks"
+
+    return f" [dim]({top_level} top-level + {nested} in {where})[/dim]"
+
+
 class ExperimentFlowConsole:
     console: Console
     stop_event: threading.Event
@@ -28,8 +56,10 @@ class ExperimentFlowConsole:
 
     indent_offset: int
     layout: Text
+    transient: bool  # If True, the live display is erased on stop (final output printed separately)
 
-    def __init__(self, disable: bool = False, external_stop_event: threading.Event = None, indent_offset: int = 0):
+    def __init__(self, disable: bool = False, external_stop_event: threading.Event = None, indent_offset: int = 0,
+                 transient: bool = False):
         self.console = Console()
         self.stop_event = threading.Event()
         self.external_stop_event = external_stop_event
@@ -38,6 +68,7 @@ class ExperimentFlowConsole:
         self.disable = disable
         self._original_log_level = None
         self.indent_offset = indent_offset
+        self.transient = transient
 
         # No need to re-initialize console with fixed height
         # Console will use full terminal and scroll naturally
@@ -47,7 +78,7 @@ class ExperimentFlowConsole:
     def _start_live_in_thread(self):
         tick_count = 0
         with Live(self.layout, console=self.console, refresh_per_second=self.ticks_per_second,
-                  auto_refresh=False, transient=False) as live:
+                  auto_refresh=False, transient=self.transient) as live:
             while not self.stop_event.is_set():
                 try:
                     # Use snapshot to avoid holding lock during render
@@ -60,8 +91,10 @@ class ExperimentFlowConsole:
                         message_identifiers.insert(0, 'EXPERIMENT_TIMER')
 
                     # Generate ALL messages (preserve full history)
+                    prefixes = self._compute_tree_prefixes(message_identifiers, messages_snapshot)
                     generated_messages = [
-                        self._generate_message(identifier, messages_snapshot[identifier], tick_count)
+                        self._generate_message(identifier, messages_snapshot[identifier], tick_count,
+                                               prefix=prefixes[identifier])
                         for identifier in message_identifiers
                     ]
                     non_empty_messages = [msg for msg in generated_messages if msg.strip()]
@@ -123,8 +156,10 @@ class ExperimentFlowConsole:
                 message_identifiers.insert(0, 'EXPERIMENT_TIMER')
 
             # Generate and print all messages
+            prefixes = self._compute_tree_prefixes(message_identifiers, messages_snapshot)
             generated_messages = [
-                self._generate_message(identifier, messages_snapshot[identifier], spinner_position=0)
+                self._generate_message(identifier, messages_snapshot[identifier], spinner_position=0,
+                                       prefix=prefixes[identifier])
                 for identifier in message_identifiers
             ]
             non_empty_messages = [msg for msg in generated_messages if msg.strip()]
@@ -151,7 +186,38 @@ class ExperimentFlowConsole:
             from adare.setup_logging import set_console_log_level
             set_console_log_level(self._original_log_level)
 
-    def _generate_message(self, identifier: str, message_object: dict, spinner_position: int = 0):
+    def _compute_tree_prefixes(self, ordered_ids, snapshot):
+        levels = [max(0, snapshot[i]['level'] - self.indent_offset) for i in ordered_ids]
+        prefixes = {}
+        for idx, ident in enumerate(ordered_ids):
+            L = levels[idx]
+            if L == 0:
+                prefixes[ident] = ""
+                continue
+            # last sibling at this level? scan forward until level drops below L
+            is_last = True
+            for j in range(idx + 1, len(ordered_ids)):
+                if levels[j] < L:
+                    break
+                if levels[j] == L:
+                    is_last = False
+                    break
+            # ancestor continuation columns for levels 1..L-1
+            segs = []
+            for a in range(1, L):
+                cont = False
+                for j in range(idx + 1, len(ordered_ids)):
+                    if levels[j] < a:
+                        break
+                    if levels[j] == a:
+                        cont = True
+                        break
+                segs.append("[dim]│[/dim]  " if cont else "   ")
+            branch = "[dim]└─[/dim] " if is_last else "[dim]├─[/dim] "
+            prefixes[ident] = "".join(segs) + branch
+        return prefixes
+
+    def _generate_message(self, identifier: str, message_object: dict, spinner_position: int = 0, prefix: str = ""):
         # NOTE: message_object comes from snapshot, so no lock needed here
         message = message_object['message']
 
@@ -159,6 +225,9 @@ class ExperimentFlowConsole:
         if message_object.get('is_experiment_timer'):
             if not message and not message_object.get('duration') and not message_object.get('start_time'):
                 return ""
+            if message:
+                icon = StatusEnum.get_icon(message_object['status'], color=True)
+                message = f'{icon} {message}'
         else:
             icon = StatusEnum.get_icon(message_object['status'], color=True)
             message = f'{icon} {message}'
@@ -172,9 +241,8 @@ class ExperimentFlowConsole:
             else:
                 message = f'{spinner[spinner_position]} {message}'
 
-        if message_object['level'] > 0:
-            effective_level = max(0, message_object['level'] - self.indent_offset)
-            message = ' ' * 2 * effective_level + message
+        if prefix:
+            message = prefix + message
 
         if message_object['result_status']:
             message = f'{message} {StatusEnum.get_icon(message_object["result_status"], color=True)}'
@@ -346,7 +414,15 @@ class ExperimentFlowConsole:
             self.state.log_multi_experiment_summary(complete_message)
 
 
-    def log_experiment_summary(self, ulid: str, success: bool, total_actions: int = 0, successful_actions: int = 0, failed_actions: int = 0, total_tests: int = 0, successful_tests: int = 0, failed_tests: int = 0, duration: float = None, level: int = 0, was_interrupted: bool = False):
+    def log_experiment_summary(self, ulid: str, success: bool, total_actions: int = 0, successful_actions: int = 0, failed_actions: int = 0, total_tests: int = 0, successful_tests: int = 0, failed_tests: int = 0, duration: float = None, level: int = 0, was_interrupted: bool = False, breakdown = None):
+        """Render the closing run summary.
+
+        ``breakdown`` is an optional :class:`~adare.backend.experiment.run_tally.ExperimentTally`.
+        When present the tally's structure is appended to the action/test lines, so
+        a ten-iteration loop reads as such instead of collapsing into its single
+        top-level ``loop:`` entry. The plain counters stay authoritative for the
+        numbers themselves, which keeps the legacy callers working unchanged.
+        """
 
         # Formatting Logic locally
         def get_status_header(success, interrupted):
@@ -384,7 +460,12 @@ class ExperimentFlowConsole:
         # Actions
         action_summary_txt = format_action_summary(successful_actions, total_actions, failed_actions)
         if total_actions > 0:
-            summary_parts.append(f"{indent}📊 {action_summary_txt}")
+            action_detail = format_nesting_detail(
+                getattr(breakdown, 'top_level_actions', 0),
+                getattr(breakdown, 'nested_actions', 0),
+                getattr(breakdown, 'loops', ()),
+            ) if breakdown is not None else ""
+            summary_parts.append(f"{indent}📊 {action_summary_txt}{action_detail}")
         elif not success:
             msg = "No actions executed (experiment was interrupted)" if was_interrupted else "No actions executed (experiment failed during setup)"
             summary_parts.append(f"{indent}📊 {msg}")
@@ -392,7 +473,19 @@ class ExperimentFlowConsole:
         # Tests
         test_summary_txt = format_test_summary(successful_tests, total_tests, failed_tests)
         if total_tests > 0:
-            summary_parts.append(f"{indent}🧪 {test_summary_txt}")
+            test_detail = format_nesting_detail(
+                getattr(breakdown, 'top_level_tests', 0),
+                getattr(breakdown, 'nested_tests', 0),
+                getattr(breakdown, 'loops', ()),
+            ) if breakdown is not None else ""
+            summary_parts.append(f"{indent}🧪 {test_summary_txt}{test_detail}")
+
+        # Started but never reported completion: never let this hide behind a count.
+        incomplete = (getattr(breakdown, 'incomplete_actions', 0) + getattr(breakdown, 'incomplete_tests', 0)) if breakdown is not None else 0
+        if incomplete > 0:
+            summary_parts.append(
+                f"{indent}⚠️  [bold yellow]{incomplete}[/bold yellow] step(s) started but never reported completion"
+            )
 
         summary_parts.extend([f"{indent}🆔 Run ID: [dim]{ulid}[/dim]"])
         summary_parts.extend(["", separator])
@@ -452,7 +545,7 @@ class ExperimentFlowConsole:
         return f"({time_str})"
 
     def start_experiment_timer(self, experiment_name: str = None):
-        self.state.start_experiment_timer()
+        self.state.start_experiment_timer(experiment_name)
 
     def finish_experiment_timer(self, success: bool = True):
         self.state.finish_experiment_timer(success)

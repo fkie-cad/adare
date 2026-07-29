@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from adare.backend.experiment.exceptions import ExperimentException
-from adare.backend.experiment.mcp_server_manager import MCPServerManager
+from adare.backend.experiment.mcp_server_manager import (
+    MCPServerManager,
+    find_free_cv_port,
+    save_cv_state,
+)
 from adare.backend.experiment.websocket_client import WebSocketTimeoutError
 from adare.core.result import Result
 from adare.exceptions import LoggedErrorException
@@ -130,13 +134,25 @@ class DevModeActionExecutionMixin:
 
         log.info(f"Executing playbook with {len(playbook.actions)} actions")
 
-        # Update playbook reference in controller
-        self.playbook_controller.playbook = playbook
+        # Update the playbook reference in the controller. set_playbook() merges the
+        # `adare_*` automatic variables into this playbook's registry — a plain
+        # `controller.playbook = playbook` left them out, so a variable whose value
+        # referenced a built-in ({{ adare_user_documents }}/x) silently resolved to `/x`.
+        # It also keeps the test loader's playbook in sync, which inline `tests:` need in
+        # dev mode (the file isn't staged as experiment_dir/playbook.yml).
+        self.playbook_controller.set_playbook(playbook)
 
         # Update variables if playbook has them
         if playbook.variables:
             var_dict = playbook.variables.to_execution_context(for_tests=False)
             self.playbook_controller.execution_context.update(var_dict)
+
+        # Prepare test execution when the playbook has a `tests:` block. The full
+        # experiment runner does this in run_setup; the dev path calls the
+        # action-only execute_playbook(), so wire it up here or a `- test:` action
+        # errors ("No testfunctions directory available" / routes nowhere).
+        if playbook.tests:
+            await self._prepare_test_execution(playbook)
 
         # Execute using existing PlaybookController logic
         with self._command_logger("playbook_execution"):
@@ -151,6 +167,57 @@ class DevModeActionExecutionMixin:
         )
 
         return result
+
+    async def _prepare_test_execution(self, playbook: Playbook) -> None:
+        """Wire up test execution for a playbook's inline ``tests:`` in dev mode.
+
+        The full experiment runner configures this in run_setup; the dev path
+        calls the action-only ``execute_playbook()``, so replicate it here.
+        Resolves the test-execution mode from the session VM + playbook settings
+        (+ CLI override), then either configures the host-mode
+        GuestToHostTestExecutor (QGA proxies, no upload) or uploads the used
+        testfunctions to the guest for agent/VM-side execution.
+        """
+        controller = self.playbook_controller
+        test_actions = getattr(controller.action_executor, 'test_actions', None)
+        if test_actions is None:
+            return
+        vm = getattr(self.experiment_ctx, 'vm', None)
+        if vm is None:
+            log.warning("No VM available; cannot prepare test execution for inline tests")
+            return
+
+        from adare.backend.experiment.execution.base import TestExecutionMode
+        from adare.backend.experiment.execution.test_executor_factory import (
+            resolve_test_execution_mode,
+        )
+        from adare.backend.experiment.run_setup import _setup_guest_to_host_test_executor
+
+        config = getattr(self.experiment_ctx, 'config', None)
+        cli_override = getattr(config, 'test_mode_override', None) if config else None
+        try:
+            mode = resolve_test_execution_mode(
+                vm=vm,
+                playbook_settings=getattr(playbook, 'settings', None),
+                cli_override=cli_override,
+            )
+        except ValueError as e:
+            log.warning(f"Could not resolve test execution mode ({e}); defaulting to agent")
+            mode = TestExecutionMode.AGENT
+
+        vm_os = getattr(self.experiment_ctx, 'guest_platform', None) or 'linux'
+
+        if mode == TestExecutionMode.HOST:
+            _setup_guest_to_host_test_executor(controller, vm, playbook, vm_os)
+            log.info("Dev mode: host-mode test execution configured for inline tests")
+        else:
+            test_actions.set_test_execution_mode(TestExecutionMode.AGENT)
+            client = getattr(self.experiment_ctx, 'client', None)
+            if client is not None:
+                await controller.test_loader.load_tests(client)
+                log.info("Dev mode: uploaded testfunctions for agent-side test execution")
+            else:
+                log.warning("Dev mode: no agent connection; inline tests may not execute")
 
     async def reload_testfunctions(self) -> Result[None]:
         """
@@ -235,22 +302,47 @@ class DevModeActionExecutionMixin:
             if not log_file and self.experiment_ctx.experiment_run_directory:
                 log_file = self.experiment_ctx.experiment_run_directory.mcp_gui_log_file
 
+            # Port: re-bind the one this session already owns. Allocating a fresh
+            # port here would leave the just-stopped server's port unused and, worse,
+            # move the session off the port its recorded state names — so a later
+            # resume or shutdown would target a port it no longer owns. Only a
+            # session with no server yet needs an allocation.
+            if current_server is not None:
+                new_port = current_server.server_port
+                log.info(f"Re-binding this session's own CV port {new_port}")
+            else:
+                new_port = find_free_cv_port()
+                log.info(f"No existing CV server for this session; allocated port {new_port}")
+
             # 3. Create new manager
             log.info(f"Creating new MCP server manager (debug={new_debug}, output={new_debug_output_dir})")
             new_manager = MCPServerManager(
+                server_port=new_port,
                 log_file=log_file,
                 debug=new_debug,
                 debug_output_dir=new_debug_output_dir
             )
 
             # 4. Start new server
+            # allow_existing=False is deliberate: step 1 stopped OUR server, so the
+            # port must be free. If it is not, something we do not own holds it and
+            # failing loudly is right — starting elsewhere would orphan a server.
             try:
                 success = await new_manager.start(allow_existing=False)
                 if success:
                     self.experiment_ctx.mcp_server = new_manager
+                    if self.experiment_ctx.experiment_run_directory is not None:
+                        save_cv_state(
+                            self.experiment_ctx.experiment_run_directory.path,
+                            new_port,
+                            new_manager.known_server_pid,
+                        )
                     log.info("MCP GUI server restarted successfully")
                     return Result.ok(None)
-                log.error("Failed to start new MCP server")
+                log.error(
+                    f"Failed to start new MCP server on this session's port {new_port} "
+                    f"(is it held by something we do not own?)"
+                )
                 return Result.fail("MCP_START_FAILED", "Failed to start new MCP server")
             except (OSError, RuntimeError) as e:
                 log.error(f"Error restarting MCP server: {e}", exc_info=True)

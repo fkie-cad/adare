@@ -1,9 +1,12 @@
 name: ubuntu2204arm64
-display_name: "Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64)"
+display_name: "Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64, Desktop overlay on Server base)"
 platform: linux
 distribution: ubuntu
 distribution_label: "Jammy Jellyfish"
 version: "22.04"
+# Ubuntu publishes no arm64 Desktop ISO, so ARM64 guests are built the proven way:
+# the live-server ISO's subiquity autoinstall plus the desktop metapackage
+# (see templates/autoinstall_ubuntu_lts.yaml).
 install_mode: auto
 architecture: aarch64
 iso_url: ""

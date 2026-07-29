@@ -1,14 +1,82 @@
 name: ubuntu2404
-display_name: "Ubuntu 24.04 LTS (Noble Numbat)"
+display_name: "Ubuntu 24.04 LTS (Noble Numbat) Desktop"
 platform: linux
 distribution: ubuntu
 distribution_label: "Noble Numbat"
 version: "24.04"
-iso_url: "https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso"
-iso_sha256: "d6dab0c3a657988501b4bd76f1297c053df710e06e0c3aece60dead24f270b4d"
-iso_filename: "ubuntu-24.04.2-live-server-amd64.iso"
+# Genuine desktop edition installed by replaying a deterministic playbook
+# through the new Flutter-based Ubuntu Desktop installer — no LLM. Buttons are
+# located by their on-screen LABEL via ADARE's cv-server OCR (find_text), so the
+# steps are independent of window position / resolution. The Flutter installer
+# advances mostly with "Next"; the final screen commits with "Install".
+install_mode: playbook
+installer: gui
+iso_url: "https://releases.ubuntu.com/24.04/ubuntu-24.04.4-desktop-amd64.iso"
+iso_sha256: "3a4c9877b483ab46d7c3fbe165a0db275e1ae3cfe56a5657e5a47c2f99a99d1e"
+iso_filename: "ubuntu-24.04.4-desktop-amd64.iso"
 default_disk_size: "60G"
 default_ram_mb: 8192
 default_cpus: 0
-kernel_path_in_iso: "/casper/vmlinuz"
-initrd_path_in_iso: "/casper/initrd"
+requires_uefi: false
+
+install_steps:
+  # Live boot shows a long black screen before the Flutter installer renders.
+  - {action: wait_stable, settle: 5, timeout: 240, min: 130, note: "boot to installer"}
+  - {action: tap, coords: [512, 84, 1024, 768], note: "harmless title-bar nudge to wake display"}
+  # Language: English must be explicitly selected, then Next.
+  - {action: click_text, text: "English", tries: 25, interval: 2, shot: language}
+  - {action: click_text, text: "Next"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: accessibility, note: "Accessibility"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: keyboard, note: "Keyboard layout"}
+  - {action: wait_stable, settle: 5, timeout: 180}
+  - {action: click_text, text: "Next", shot: internet, note: "Internet (wired)"}
+  - {action: wait_stable, settle: 5, timeout: 180}
+  # 'Update available for the installer' appears only when an update exists.
+  # Optional: if absent we are already on the next screen.
+  - {action: click_text, text: "Skip", optional: true, tries: 6, shot: update, note: "skip installer update"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Install Ubuntu", note: "What do you want to do"}
+  - {action: click_text, text: "Next", shot: whattodo}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: insttype, note: "Interactive installation"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: apps, note: "Default selection"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: proprietary, note: "Proprietary software (unchecked)"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: disk, note: "Erase disk and install Ubuntu"}
+  - {action: wait_stable, settle: 5, timeout: 120, shot: account}
+  # Create your account: typing the name auto-fills the username + computer
+  # name (the auto hostname is kept — renaming the Flutter field is unreliable).
+  # Explicit waits after each field click let the input focus settle before
+  # typing, so no keystroke is dropped (which would break password confirmation).
+  - {action: click_text, text: "Your name"}
+  - {action: wait, seconds: 1}
+  - {action: type, text: "adare"}
+  - {action: wait, seconds: 1}
+  - {action: click_text, text: "Password", note: "password field (exact match)"}
+  - {action: wait, seconds: 1}
+  - {action: type, text: "adare"}
+  - {action: wait, seconds: 1}
+  - {action: click_text, text: "Confirm password"}
+  - {action: wait, seconds: 1}
+  - {action: type, text: "adare"}
+  - {action: wait, seconds: 1}
+  - {action: shot, name: account-filled}
+  - {action: click_text, text: "Next", note: "account -> timezone"}
+  - {action: wait_stable, settle: 5, timeout: 120}
+  - {action: click_text, text: "Next", shot: timezone, note: "Timezone"}
+  - {action: wait_stable, settle: 5, timeout: 120}
+  - {action: click_text, text: "Install", shot: ready, note: "Ready to install -> Install"}
+  - {action: wait_stable, settle: 45, timeout: 3600, shot: complete, note: "wait for install"}
+
+verify_steps:
+  # Reboots from disk into GDM (GNOME). Select the adare user, type the password.
+  - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
+  - {action: click_text, text: "adare", note: "select the adare user"}
+  - {action: wait, seconds: 2}
+  - {action: type, text: "adare", note: "password"}
+  - {action: key, keys: [ret]}
+  - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}

@@ -47,6 +47,12 @@ class ExperimentEnvLinkBody(BaseModel):
     force: bool = False
 
 
+class ExperimentRunBody(BaseModel):
+    """Request body for running an experiment."""
+    project_path: str
+    environment_name: str
+
+
 # ---- Helpers ----
 
 def _api():
@@ -81,6 +87,16 @@ async def create_experiment(body: ExperimentCreateBody):
         name=body.name,
     )
     result = _api().experiment.create(dto)
+    return result_to_response(result)
+
+
+@router.post("/{name}/run")
+async def run_experiment(name: str, body: ExperimentRunBody):
+    """Start an experiment run as a background task; returns immediately with
+    the run's ULID so the caller can navigate to its detail page."""
+    result = await _api().experiment.run(
+        Path(body.project_path), name, body.environment_name
+    )
     return result_to_response(result)
 
 

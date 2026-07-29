@@ -12,6 +12,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d5f4d14b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
     
     
@@ -211,8 +212,10 @@
 <li class="toctree-l1"><a class="reference internal" href="../guide/experiments.html">Experiments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/test-driven-analysis.html">Test-Driven Analysis</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/diff-analysis.html">Diff Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../guide/icon-library.html">Windows Icon Library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/vm-image-creation.html">VM Image Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/dev-mode.html">Dev Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../guide/mcp-authoring.html">Authoring Experiments with the MCP Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/sharing.html">Sharing</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -321,7 +324,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
 <ul>
@@ -330,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../architecture/file-sharing.html">File Sharing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/guest-agent.html">Guest Agent</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/cv-server.html">CV Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/database-migrations.html">Database Migrations</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
@@ -396,8 +400,9 @@
 <li><p><a class="reference internal" href="#run-management" id="id9">Run Management</a></p></li>
 <li><p><a class="reference internal" href="#web-platform-integration" id="id10">Web Platform Integration</a></p></li>
 <li><p><a class="reference internal" href="#mcp-server-testing" id="id11">MCP Server Testing</a></p></li>
-<li><p><a class="reference internal" href="#system-management" id="id12">System Management</a></p></li>
-<li><p><a class="reference internal" href="#help-commands" id="id13">Help Commands</a></p></li>
+<li><p><a class="reference internal" href="#icon-library" id="id12">Icon Library</a></p></li>
+<li><p><a class="reference internal" href="#system-management" id="id13">System Management</a></p></li>
+<li><p><a class="reference internal" href="#help-commands" id="id14">Help Commands</a></p></li>
 </ul>
 </li>
 </ul>
@@ -945,7 +950,6 @@ Session IDs are auto-detected when only one session is running; use <code class=
 <dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">download</span> <span class="pre">bundle</span> <span class="pre">&lt;ulid&gt;</span></code></dt><dd><p>Download an experiment bundle (experiment plus all dependencies) from the web platform.</p>
 <dl class="simple">
 <dt>Options:</dt><dd><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">--include-disk-images</span></code> - Also download disk images</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--project,</span> <span class="pre">-p</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
 </ul>
 </dd>
@@ -1038,24 +1042,90 @@ Session IDs are auto-detected when only one session is running; use <code class=
 </dd>
 </dl>
 </section>
-<section id="system-management">
-<h3><a class="toc-backref" href="#id12" role="doc-backlink">System Management</a><a class="headerlink" href="#system-management" title="Link to this heading">¶</a></h3>
-<p>Administrative commands for maintaining the ADARE system.</p>
+<section id="icon-library">
+<h3><a class="toc-backref" href="#id12" role="doc-backlink">Icon Library</a><a class="headerlink" href="#icon-library" title="Link to this heading">¶</a></h3>
+<p>Inspect the Windows icon library and extract icons from a connected target. See
+<a class="reference internal" href="../guide/icon-library.html"><span class="doc">Windows Icon Library</span></a> for the full guide.</p>
 <dl>
-<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">manage</span> <span class="pre">reset-db</span></code></dt><dd><p>Reset the ADARE database (use with caution - will delete all experiment data).</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">manage</span> <span class="pre">reset-vm</span></code></dt><dd><p>Reset all VMs in the system (use with caution).</p>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">icons</span> <span class="pre">list</span></code></dt><dd><p>List every icon term in the registry with its resolver spec. Aliases: <code class="docutils literal notranslate"><span class="pre">l</span></code>.</p>
 <dl class="simple">
 <dt>Options:</dt><dd><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">--force</span></code> - Force deletion of all VMs (required for confirmation)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--os-key</span> <span class="pre">TEXT</span></code> - OS profile / build key for cache separation (default: windows)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">icons</span> <span class="pre">dump-all</span></code></dt><dd><p>Resolve every registry term on a connected target, writing the PNGs plus an
+HTML contact sheet to the per-OS icon cache directory. Aliases: <code class="docutils literal notranslate"><span class="pre">dump</span></code>.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--host</span> <span class="pre">TEXT</span></code> - adarevm host (default: localhost)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--port</span> <span class="pre">INTEGER</span></code> - adarevm WebSocket port (default: 18765)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--os-key</span> <span class="pre">TEXT</span></code> - OS profile / build key for cache separation (default: windows)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--force</span></code> - Re-extract even if a cached PNG already exists</p></li>
 </ul>
 </dd>
 </dl>
 </dd>
 </dl>
 </section>
+<section id="system-management">
+<h3><a class="toc-backref" href="#id13" role="doc-backlink">System Management</a><a class="headerlink" href="#system-management" title="Link to this heading">¶</a></h3>
+<p>Administrative commands for maintaining the ADARE system.</p>
+<section id="database">
+<h4>Database<a class="headerlink" href="#database" title="Link to this heading">¶</a></h4>
+<p>ADARE keeps a global database (VMs, environments, test functions, project
+registry) plus one database per project (experiments, runs). Schema changes are
+carried by ordered migrations that are applied automatically whenever a
+database is opened – see <a class="reference internal" href="../architecture/database-migrations.html"><span class="doc">Database Migrations</span></a>.</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">db</span> <span class="pre">status</span></code></dt><dd><p>Report whether the global database exists, is accessible, and whether any
+schema migrations are still pending. Pending migrations are informational:
+they are applied on next use.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">db</span> <span class="pre">migrate</span></code></dt><dd><p>Apply pending schema migrations to the global database and to every
+registered project database, printing each migration as it is applied.
+Re-running reports that nothing is pending. Safe to run at any time; it is
+part of <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">install</span></code> and <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">update</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">db</span> <span class="pre">init</span></code></dt><dd><p>Initialize the database system (directories + global database).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">db</span> <span class="pre">repair</span></code></dt><dd><p>Reinitialize the global database and apply pending migrations.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">db</span> <span class="pre">reset</span></code></dt><dd><p>Delete the global database (use with caution - VMs, environments and the
+test function registry are lost).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">db</span> <span class="pre">clean-install</span></code></dt><dd><p>Recreate the global database from scratch (DANGER: deletes all global data).</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--force</span></code>, <code class="docutils literal notranslate"><span class="pre">-f</span></code> - Skip the confirmation prompt</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+<section id="vms-and-runtime">
+<h4>VMs and runtime<a class="headerlink" href="#vms-and-runtime" title="Link to this heading">¶</a></h4>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">reset</span></code></dt><dd><p>Reset all VMs in the system (use with caution).</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--force</span></code>, <code class="docutils literal notranslate"><span class="pre">-f</span></code> - Force reset of all VMs (required for confirmation)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">runtime</span> <span class="pre">refresh</span></code></dt><dd><p>Refresh the VM runtime files in the current project.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">runtime</span> <span class="pre">build</span></code></dt><dd><p>Build fresh VM runtime wheels (<code class="docutils literal notranslate"><span class="pre">adarelib</span></code>, <code class="docutils literal notranslate"><span class="pre">adarevm</span></code>) for the current
+project.</p>
+</dd>
+</dl>
+</section>
+</section>
 <section id="help-commands">
-<h3><a class="toc-backref" href="#id13" role="doc-backlink">Help Commands</a><a class="headerlink" href="#help-commands" title="Link to this heading">¶</a></h3>
+<h3><a class="toc-backref" href="#id14" role="doc-backlink">Help Commands</a><a class="headerlink" href="#help-commands" title="Link to this heading">¶</a></h3>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">help</span></code></dt><dd><p>Show help for special options and advanced usage patterns.</p>
 </dd>
@@ -1131,7 +1201,12 @@ Session IDs are auto-detected when only one session is running; use <code class=
 <li><a class="reference internal" href="#run-management">Run Management</a></li>
 <li><a class="reference internal" href="#web-platform-integration">Web Platform Integration</a></li>
 <li><a class="reference internal" href="#mcp-server-testing">MCP Server Testing</a></li>
-<li><a class="reference internal" href="#system-management">System Management</a></li>
+<li><a class="reference internal" href="#icon-library">Icon Library</a></li>
+<li><a class="reference internal" href="#system-management">System Management</a><ul>
+<li><a class="reference internal" href="#database">Database</a></li>
+<li><a class="reference internal" href="#vms-and-runtime">VMs and runtime</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#help-commands">Help Commands</a></li>
 </ul>
 </li>
@@ -1151,6 +1226,7 @@ Session IDs are auto-detected when only one session is running; use <code class=
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>
 document.addEventListener('DOMContentLoaded', function() {
   if (!window.simpleDatatables) {

@@ -392,11 +392,15 @@ class DataActionsMixin:
         try:
             # Progress callback for logging
             def progress_callback(chunk_idx, total_chunks, bytes_xfer, total_bytes):
+                # A 0-byte artifact is legitimate (a tool that writes nothing to
+                # stderr), and it is fully transferred by definition - report 100%
+                # rather than dividing by zero and failing the whole pull action.
+                percent = (bytes_xfer / total_bytes * 100) if total_bytes else 100.0
                 log.info(
                     f"Transfer progress [{file_idx}/{total_files}]: "
                     f"chunk {chunk_idx + 1}/{total_chunks} "
                     f"({bytes_xfer}/{total_bytes} bytes, "
-                    f"{(bytes_xfer/total_bytes*100):.1f}%)"
+                    f"{percent:.1f}%)"
                 )
 
             result = await self.client.pull_file_chunked(

@@ -661,13 +661,16 @@ async def health_check():
 
 from adare.webapi.routes.environments import router as environments_router
 from adare.webapi.routes.experiments import router as experiments_router
+from adare.webapi.routes.gui_agent import router as gui_agent_router
 from adare.webapi.routes.local_vms import router as local_vms_router
 from adare.webapi.routes.manage import router as manage_router
 from adare.webapi.routes.projects import router as projects_router
 from adare.webapi.routes.runs import router as runs_router
 from adare.webapi.routes.testfunctions import router as testfunctions_router
+from adare.webapi.routes.vm_instances import router as vm_instances_router
 from adare.webapi.routes.web_sync import router as web_sync_router
-from adare.webapi.vm_proxy import router as vm_proxy_router
+from adare.webapi.spice_proxy import router as spice_proxy_router
+from adare.webapi.vm_watch import router as vm_watch_router
 
 app.include_router(projects_router)
 app.include_router(experiments_router)
@@ -675,9 +678,12 @@ app.include_router(environments_router)
 app.include_router(runs_router)
 app.include_router(testfunctions_router)
 app.include_router(local_vms_router)
+app.include_router(vm_instances_router)
+app.include_router(gui_agent_router)
 app.include_router(web_sync_router)
 app.include_router(manage_router)
-app.include_router(vm_proxy_router)
+app.include_router(vm_watch_router)
+app.include_router(spice_proxy_router)
 
 
 # =============================================================================

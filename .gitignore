@@ -84,3 +84,9 @@ CLAUDE.md
 NOTES.md
 ROADMAP.md
 graphify-out/
+
+# Editor/tool backups. `adare experiment playbook --fix` and the playbook
+# regeneration scripts write playbook.yml.bak / .bak_before_regen next to the
+# file they rewrite; 45 of those were once committed into the paper artifact.
+*.bak
+*.bak_*

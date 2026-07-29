@@ -26,6 +26,8 @@ export interface DevSessionListItem {
   created_at: string
   action_count: number
   uptime_seconds: number
+  vm_running?: boolean
+  vm_name?: string
 }
 
 export interface CheckpointInfo {

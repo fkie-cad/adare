@@ -1,0 +1,125 @@
+# Autopsy regression-testing environment, Solr 8 group (Autopsy >= 4.18.0).
+#
+# This file REPLACES a 46 GB baked disk image. Everything needed to rebuild the
+# environment is declared here; a consumer supplies only the Windows 11 ARM64 ISO
+# they already own (see recipe.iso_notes) and runs:
+#
+#     adare env load win11-autopsy-solr8.yml
+#
+# Build shape: ADARE installs Windows once from the ISO (Stage 1, cached by the
+# base hash), then runs `recipe.provision` against a throwaway overlay of that
+# base via the QEMU guest agent and flattens the result (Stage 2). Stage 1 here is
+# byte-for-byte the same declaration as in win11-autopsy-solr4.yml, so building
+# that one first makes this a base-cache hit: no second Windows install.
+#
+# Why build-time and not `postsetupinstallations`: installing Autopsy writes
+# Prefetch, registry and MFT entries. Those are precisely the artifacts under
+# measurement, so the installs must happen ONCE while the disk is being built,
+# not inside every experiment run.
+vm_type: recipe
+hypervisor: qemu
+description: >-
+  Windows 11 ARM64 + Autopsy 4.18.0-4.22.1 (Solr 8.6.3+). Each version installs
+  into its own C:\Program Files\Autopsy-<v> directory, so all 8 coexist; the
+  x64 MSIs run under Windows' built-in Prism emulation. Run one Autopsy at a
+  time (they share the embedded Solr port).
+tags: [autopsy, forensics, solr8, windows]
+
+recipe:
+  profile: windows11arm64
+  # Consumer-supplied ISO: Microsoft installer media cannot lawfully be
+  # rehosted, so the recipe names the file + its digest instead of a URL.
+  iso_name: Win11_25H2_English_Arm64_v2.iso
+  iso_sha256: 638aa2c88e94385b00f4f178d071e3df0b7d9e335577a83bd533b7f2eb65adf0
+  iso_notes: |
+    Download from https://www.microsoft.com/software-download/windows11 —
+    "Windows 11 Arm64", English (International). Requires a valid licence.
+    Put it in ~/.adare/isos/ or pass --iso /path/to/it.
+  template: autounattend_win11_arm64.xml
+  params:
+    # 160G (vs. the 120G of win11arm64-fresh): 8 Autopsy installs need the room.
+    # Kept identical to the solr4 recipe so both share ONE cached base disk —
+    # any params difference would fork the base hash and cost a second install.
+    # setup_level 2 (full) also guarantees the QEMU guest agent, without which
+    # build-time provisioning has nothing to talk to.
+    setup_level: 2
+    disk_size: 160G
+    ram_mb: 8192
+    cpus: 4
+
+  provision:
+    # Paths below are absolute on purpose. The guest agent runs as
+    # NT AUTHORITY\SYSTEM, where $env:TEMP is C:\Windows\TEMP and
+    # $env:USERPROFILE is C:\Windows\system32\config\systemprofile — NOT the
+    # adare user's directories. An environment-variable path would resolve
+    # somewhere the host cannot predict, so `log_files` could never be pulled.
+    # ADARE force-stops (hard power-off) Windows guests on teardown to avoid
+    # triggering Windows Update. A hard-killed Win11 guest otherwise
+    # intermittently comes back into "Windows didn't shut down correctly" /
+    # automatic Startup Repair, which WAITS FOR INPUT — so the desktop and the
+    # guest agent never start, and the next run dead-waits its readiness budget
+    # and fails. These two settings are boot policy only: no files, no logs,
+    # consistent with the "minimal guest state" constraint.
+    #
+    # Two independent settings, therefore two steps, each asserting its own end
+    # state. `shell: cmd` because PowerShell parses `{default}` as a script block.
+    # The verify strings are exact: bcdedit renders the values capitalised
+    # ("IgnoreAllFailures", "No"), hence findstr /i and the regex whitespace.
+    - name: boot-hardening-bootstatuspolicy
+      description: Skip boot-failure detection after a hard power-off
+      shell: cmd
+      command: bcdedit /set {default} bootstatuspolicy ignoreallfailures
+      verify: >-
+        bcdedit /enum {default} /v | findstr /r /i /c:"bootstatuspolicy  *IgnoreAllFailures"
+
+    - name: boot-hardening-recoveryenabled
+      description: Never auto-launch the recovery/repair environment
+      shell: cmd
+      command: bcdedit /set {default} recoveryenabled No
+      verify: >-
+        bcdedit /enum {default} /v | findstr /r /i /c:"recoveryenabled  *No"
+
+    - name: autopsy
+      description: Autopsy {{ item }} (Solr 8.6.3+), own Program Files directory
+      for_each: ["4.18.0", "4.19.0", "4.19.1", "4.19.2", "4.19.3", "4.20.0",
+                 "4.21.0", "4.22.1"]
+      steps:
+        # curl.exe ships with Windows 10/11. -f fails the command on an HTTP
+        # error rather than writing an HTML error page as "the MSI".
+        - name: autopsy-{{ item }}-download
+          command: >-
+            curl.exe -L -f --retry 3 -o "C:\Windows\Temp\autopsy-{{ item }}.msi"
+            https://github.com/sleuthkit/autopsy/releases/download/autopsy-{{ item }}/autopsy-{{ item }}-64bit.msi
+          timeout_minutes: 20
+
+        # The Autopsy MSI's default install location already embeds the version,
+        # so each one lands in its own directory with no INSTALLDIR override.
+        - name: autopsy-{{ item }}-install
+          command: >-
+            $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList
+            '/i',"`"C:\Windows\Temp\autopsy-{{ item }}.msi`"",'/qn','/norestart',
+            '/l*v',"`"C:\Windows\Temp\autopsy-{{ item }}-msi.log`""; exit $p.ExitCode
+          # 3010 is "success, reboot required" — harmless here, and no reboot is
+          # taken: nothing in these installs needs one before the next MSI.
+          allow_exit_codes: [0, 3010]
+          # msiexec reporting success is not evidence the files exist. Assert it.
+          verify: 'if (-not (Test-Path "C:\Program Files\Autopsy-{{ item }}")) { exit 1 }'
+          # Pulled to the host build-log directory only if this step fails.
+          log_files: ['C:\Windows\Temp\autopsy-{{ item }}-msi.log']
+          timeout_minutes: 45
+
+        # Reclaim the MSI immediately rather than at the end, so peak disk holds
+        # one installer, not eight.
+        - name: autopsy-{{ item }}-cleanup
+          command: >-
+            Remove-Item -Force -ErrorAction SilentlyContinue
+            "C:\Windows\Temp\autopsy-{{ item }}.msi",
+            "C:\Windows\Temp\autopsy-{{ item }}-msi.log"
+
+os:
+  os: Windows 11 (ARM64)
+  platform: windows
+  distribution: Home
+  version: '11'
+  language: English
+  architecture: aarch64

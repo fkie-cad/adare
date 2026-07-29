@@ -64,6 +64,7 @@ class FlowControlExecutor:
             try:
                 # Get screenshot for condition checking
                 screenshot_base64, screenshot_path = await self.target_resolution.get_current_screenshot_with_path()
+                self.target_resolution.begin_resolution()
                 conditions_met = await self.condition_checker.check_conditions(action.when, screenshot_base64)
                 if not conditions_met:
                     # Include screenshot path in skipped result
@@ -121,15 +122,12 @@ class FlowControlExecutor:
                 break  # Break out of block action loop
 
             if not result.success:
-                # Handle testset-related errors specifically
-                if "No testset loaded" in result.message:
-                    return ActionResult(
-                        success=False,
-                        message=f"Block action failed: {result.message}"
-                    )
+                # 'actions_executed' so a failed block still reports how far it got
+                # (BlockActionCompleteEvent reads it; without it the event says 0).
                 return ActionResult(
                     success=False,
-                    message=f"Block action failed: {result.message}"
+                    message=f"Block action failed: {result.message}",
+                    data={'actions_executed': len(results)}
                 )
 
             # Apply custom delay between actions if specified
@@ -283,7 +281,16 @@ class FlowControlExecutor:
                             return ActionResult(
                                 success=False,
                                 message=f"Loop failed at iteration {i}, action {j}: {result.message}",
-                                data={'completed_iterations': i, 'total_iterations': iteration_count}
+                                data={
+                                    'completed_iterations': i,
+                                    'total_iterations': iteration_count,
+                                    # Same keys the success path emits, so the run summary
+                                    # can report "8/10 iterations" on a failed loop instead
+                                    # of an unknown iteration count (LoopActionCompleteEvent
+                                    # reads 'iterations' / 'actions_executed').
+                                    'iterations': i,
+                                    'actions_executed': len(results),
+                                }
                             )
 
                 finally:
@@ -519,6 +526,7 @@ class FlowControlExecutor:
                         target.strategy = TopLeftStrategy()
                         log.debug("Applied default TopLeft strategy for text target")
 
+                self.target_resolution.begin_resolution()
                 target_match = await self.target_resolution.target_resolver.resolve_target(target, screenshot_base64)
 
                 # Cache successful match if we have a path
@@ -539,6 +547,7 @@ class FlowControlExecutor:
                         target.strategy = TopLeftStrategy()
                         log.debug("Applied default TopLeft strategy for text target")
 
+                self.target_resolution.begin_resolution()
                 target_match = await self.target_resolution.target_resolver.resolve_target(target, screenshot_base64)
                 return target_match is None
 
