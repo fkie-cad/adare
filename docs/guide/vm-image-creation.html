@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Dev Mode" href="dev-mode.html"><link rel="prev" title="Diff Analysis" href="diff-analysis.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Dev Mode" href="dev-mode.html"><link rel="prev" title="Windows Icon Library" href="icon-library.html">
         <link rel="prefetch" href="../_static/logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.12.19 -->
@@ -12,6 +12,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d5f4d14b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
     
     
@@ -211,8 +212,10 @@
 <li class="toctree-l1"><a class="reference internal" href="experiments.html">Experiments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="test-driven-analysis.html">Test-Driven Analysis</a></li>
 <li class="toctree-l1"><a class="reference internal" href="diff-analysis.html">Diff Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="icon-library.html">Windows Icon Library</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">VM Image Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="dev-mode.html">Dev Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp-authoring.html">Authoring Experiments with the MCP Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sharing.html">Sharing</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -321,7 +324,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
 <ul>
@@ -330,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../architecture/file-sharing.html">File Sharing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/guest-agent.html">Guest Agent</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/cv-server.html">CV Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/database-migrations.html">Database Migrations</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
@@ -445,6 +449,267 @@ adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>my-custom-os<span class="w"> </span>--iso<span class="w"> </span>/path/to/installer.iso
 </pre></div>
 </div>
+<p>The VM boots the live ISO in a window and waits for you to click through the
+graphical installer. (Manual mode drives QEMU directly and writes no seed file.)</p>
+</section>
+<section id="gui-automated-installation-record-once-replay-deterministically">
+<h3>GUI-automated installation (record once, replay deterministically)<a class="headerlink" href="#gui-automated-installation-record-once-replay-deterministically" title="Link to this heading">¶</a></h3>
+<p>Some distributions ship the <strong>Calamares</strong> GUI installer — most notably
+<strong>Kubuntu 24.04+</strong>, plus Mint, Pop!_OS and elementary — which has <em>no</em>
+answer-file mechanism (no Subiquity/preseed/kickstart/AutoYaST). Instead of
+clicking through it by hand, <code class="docutils literal notranslate"><span class="pre">install_mode:</span> <span class="pre">gui-auto</span></code> drives the installer’s
+screen directly:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>kubuntu2404<span class="w"> </span>--iso<span class="w"> </span>kubuntu-24.04-desktop-amd64.iso
+</pre></div>
+</div>
+<p><strong>How it works — record once, then replay.</strong></p>
+<ul class="simple">
+<li><p><strong>First run (record, needs a vLLM endpoint).</strong> A vision-LLM agent runs a
+<code class="docutils literal notranslate"><span class="pre">perceive</span> <span class="pre">→</span> <span class="pre">decide</span> <span class="pre">→</span> <span class="pre">act</span></code> loop: it screenshots the installer, the model
+decides the next action (click / type / key / scroll / wait / done), and the
+action is executed over QEMU’s host-side QMP engine (no guest agent). As it
+acts it <strong>records a reusable ADARE playbook</strong> — per click it saves an image
+crop (an <code class="docutils literal notranslate"><span class="pre">image:</span></code> target the CV engine can re-find) plus the model’s
+natural-language description. Output: the installed <code class="docutils literal notranslate"><span class="pre">qcow2</span></code>, a baked
+environment YAML, the generated <code class="docutils literal notranslate"><span class="pre">gui_&lt;distro&gt;.play.yaml</span></code> (+ crop images),
+and a screenshot-illustrated <code class="docutils literal notranslate"><span class="pre">install_report.md</span></code>.</p></li>
+<li><p><strong>Later runs (replay, no LLM).</strong> The generated playbook replays through
+ADARE’s ordinary CV/OCR engine (<code class="xref py py-class docutils literal notranslate"><span class="pre">ActionExecutor</span></code> +
+<code class="docutils literal notranslate"><span class="pre">MCPTargetResolver</span></code>) — deterministic and LLM-free. If a step’s target no
+longer matches (e.g. a new point release moved a button), replay falls back
+to the vision model to re-locate it, clicks it, and re-crops the target so
+the playbook stays current (<strong>self-heal</strong>).</p></li>
+</ul>
+<p>The generated <code class="docutils literal notranslate"><span class="pre">.play.yaml</span></code> is a first-class ADARE playbook: hand-editable,
+shareable, and usable in experiments. A validated playbook can be shipped in
+the package templates so most users never trigger a record run.</p>
+<p><strong>When to use which route.</strong> Prefer <code class="docutils literal notranslate"><span class="pre">gui-auto</span></code> when you want a <em>faithful</em>
+native Calamares install automated end-to-end. Alternatives: build an Ubuntu
+Server autoinstall + <code class="docutils literal notranslate"><span class="pre">kubuntu-desktop</span></code> (robust, but not a native Calamares
+install), or install once by hand and capture a disk image (faithful, but
+semi-manual and needs BYO hosting).</p>
+<p><strong>vLLM setup (record / self-heal only).</strong> Serve a <em>grounding-capable</em> vision
+model (Qwen2-VL / UI-TARS / Molmo-class) over an OpenAI-compatible endpoint and
+point ADARE at it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">ADARE_VLLM_BASE_URL</span><span class="o">=</span>http://localhost:8000/v1
+<span class="nb">export</span><span class="w"> </span><span class="nv">ADARE_VLLM_MODEL</span><span class="o">=</span>Qwen/Qwen2-VL-7B-Instruct
+<span class="c1"># If your model returns 0..1000 normalized coordinates instead of pixels:</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">ADARE_VLLM_COORD_SPACE</span><span class="o">=</span>normalized_1000
+</pre></div>
+</div>
+<p>Pure replay needs <strong>no</strong> endpoint. Budgets bound the record run
+(<code class="docutils literal notranslate"><span class="pre">ADARE_GUI_AGENT_MAX_STEPS</span></code>, <code class="docutils literal notranslate"><span class="pre">ADARE_GUI_AGENT_STALL_LIMIT</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ADARE_GUI_AGENT_WALL_CLOCK_SECONDS</span></code>).</p>
+<p><strong>Using Ollama Cloud.</strong> The client is a plain OpenAI-compatible caller, so an
+Ollama Cloud model works with no code change — point it at the cloud endpoint
+and use a grounding model:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">ADARE_VLLM_BASE_URL</span><span class="o">=</span>https://ollama.com/v1
+<span class="nb">export</span><span class="w"> </span><span class="nv">ADARE_VLLM_API_KEY</span><span class="o">=</span>&lt;key<span class="w"> </span>from<span class="w"> </span>ollama.com/settings/keys&gt;
+<span class="nb">export</span><span class="w"> </span><span class="nv">ADARE_VLLM_MODEL</span><span class="o">=</span>gemma4:31b
+<span class="nb">export</span><span class="w"> </span><span class="nv">ADARE_VLLM_COORD_SPACE</span><span class="o">=</span>normalized_1000<span class="w">   </span><span class="c1"># coord convention varies by model</span>
+</pre></div>
+</div>
+<p>Ollama Cloud retired the <code class="docutils literal notranslate"><span class="pre">qwen3-vl</span></code> GUI/computer-use line in 2026-06;
+<code class="docutils literal notranslate"><span class="pre">gemma4:31b</span></code> is the current cloud vision model. It is a <em>general</em> multimodal
+model (not coordinate-tuned), so keep <code class="docutils literal notranslate"><span class="pre">--ground</span></code> on — LocateAnything localizes
+each click from the model’s textual target description. Verify everything up
+front with the preflight, which pings the endpoint and auto-detects the
+coordinate convention:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>vm<span class="w"> </span>gui-doctor
+</pre></div>
+</div>
+<p><strong>Driving an existing environment / authoring experiments.</strong> The same agent can
+drive an <em>already-installed</em> environment to author reusable automation. Bring the
+environment up once, then hand the agent a goal (add <code class="docutils literal notranslate"><span class="pre">--out</span></code> to record a
+playbook):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>dev<span class="w"> </span>start<span class="w"> </span>-e<span class="w"> </span>&lt;environment&gt;<span class="w">          </span><span class="c1"># boots the VM + CV server, keeps them alive</span>
+adare<span class="w"> </span>dev<span class="w"> </span>agent<span class="w"> </span>--goal<span class="w"> </span><span class="s2">&quot;open the Files app and navigate to Documents&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out<span class="w"> </span>experiments/files.play.yaml<span class="w">     </span><span class="c1"># drives the VM; records a playbook</span>
+</pre></div>
+</div>
+<p>The recorded <code class="docutils literal notranslate"><span class="pre">.play.yaml</span></code> is an ordinary ADARE playbook. Replay it
+deterministically (no LLM) via <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">dev</span> <span class="pre">playbook</span> <span class="pre">&lt;session&gt;</span> <span class="pre">-f</span> <span class="pre">files.play.yaml</span></code>
+or the normal engine with <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">run</span> <span class="pre">&lt;exp&gt;</span> <span class="pre">-e</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--gui-mode</span> <span class="pre">host</span></code>.
+A raw drive (no <code class="docutils literal notranslate"><span class="pre">--out</span></code>) needs only the VLM; recording a playbook whose steps
+use image/text targets also relies on the CV server (already up in a dev session).</p>
+<p><strong>Optional: precise icon grounding (LocateAnything).</strong> By default each recorded
+click stores a fixed ~220×90 crop around the model’s click point. If you run the
+standalone LocateAnything grounding sidecar and point the agent at it, each click
+is grounded to the element’s true bounding box and the recorded image target is
+the tight icon crop instead — better centred on the element (the recorded
+playbook still replays deterministically via the CV matcher, no model needed):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># sidecar wraps the locate-anything-cli binary; no VLM deps enter the adare package</span>
+<span class="nv">LA_CLI_BIN</span><span class="o">=</span>/path/to/locate-anything-cli<span class="w"> </span><span class="nv">LA_MODEL</span><span class="o">=</span>/path/to/model.gguf<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>python3<span class="w"> </span>scripts/locate_anything_sidecar.py<span class="w"> </span>--port<span class="w"> </span><span class="m">13111</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">ADARE_LOCATE_URL</span><span class="o">=</span>http://127.0.0.1:13111<span class="w">   </span><span class="c1"># enables grounding for `dev agent`</span>
+</pre></div>
+</div>
+<p>A tight crop is more precise but less distinctive to the CV matcher: a small,
+generic glyph (e.g. a bare document icon) can collide with near-duplicate UI
+(a full trash bin). Grounding is best-effort — a miss falls back to the fixed
+crop, so a run never breaks when the sidecar is down.</p>
+<p><strong>Goal / acceptance spec.</strong> The record-run <em>input</em> is a high-level goal, not a
+per-screen script, in <code class="docutils literal notranslate"><span class="pre">gui_&lt;distro&gt;.yaml</span></code> (bundled, or overridden in
+<code class="docutils literal notranslate"><span class="pre">~/.adare/vm-templates/</span></code>):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">goal</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;</span>
+<span class="w">  </span><span class="no">Install Kubuntu to the whole disk (erase it). Create user adare /</span>
+<span class="w">  </span><span class="no">password adare. Accept sensible defaults and reboot when finished.</span>
+<span class="nt">hints</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;Choose</span><span class="nv"> </span><span class="s">&#39;Erase</span><span class="nv"> </span><span class="s">disk&#39;</span><span class="nv"> </span><span class="s">—</span><span class="nv"> </span><span class="s">not</span><span class="nv"> </span><span class="s">&#39;Install</span><span class="nv"> </span><span class="s">alongside&#39;.&quot;</span>
+<span class="nt">acceptance</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">min_disk_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5000000000</span>
+<span class="w">  </span><span class="nt">visual</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;a</span><span class="nv"> </span><span class="s">Kubuntu/KDE</span><span class="nv"> </span><span class="s">SDDM</span><span class="nv"> </span><span class="s">login</span><span class="nv"> </span><span class="s">or</span><span class="nv"> </span><span class="s">desktop</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">user</span><span class="nv"> </span><span class="s">adare</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">shown&quot;</span>
+</pre></div>
+</div>
+<p>The stem is derived from the profile name with trailing digits stripped
+(<code class="docutils literal notranslate"><span class="pre">kubuntu2404</span></code> → <code class="docutils literal notranslate"><span class="pre">kubuntu</span></code>), so <strong>all</strong> versions of a distribution share one
+goal file <em>and one cached</em> <code class="docutils literal notranslate"><span class="pre">gui_&lt;stem&gt;.play.yaml</span></code> by default. When two versions
+ship different installers — Kubuntu 20.04/22.04 run ubiquity, 24.04 runs
+Calamares — pin the version by setting <code class="docutils literal notranslate"><span class="pre">template:</span></code> to the bare stem in the
+profile (the loader prepends <code class="docutils literal notranslate"><span class="pre">gui_</span></code>), as <code class="docutils literal notranslate"><span class="pre">kubuntu2404.yml</span></code> does with
+<code class="docutils literal notranslate"><span class="pre">template:</span> <span class="pre">kubuntu2404</span></code> → <code class="docutils literal notranslate"><span class="pre">gui_kubuntu2404.yaml</span></code> +
+<code class="docutils literal notranslate"><span class="pre">gui_kubuntu2404.play.yaml</span></code>. Without it, a Calamares recording would be
+replayed against ubiquity.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">acceptance</span></code> block is the single place “what success looks like” lives:
+after the installed disk reboots, ADARE runs <strong>acceptance checks</strong> (a visual
+check via the model plus structural checks — domain running, disk grew) and
+fails the build (non-zero exit) if they do not pass.</p>
+<p><strong>Limitations &amp; safety.</strong> The record run is non-deterministic and needs a
+capable grounding model; step / stall / wall-clock budgets bound it. Disk
+partitioning during install is destructive but sandboxed — the blast radius is
+only the throwaway VM disk. Replay is deterministic; self-heal recovers from
+minor drift but a heavily redesigned installer may need <code class="docutils literal notranslate"><span class="pre">--relearn</span></code>.</p>
+</section>
+<section id="scripted-gui-installation-gui-script-deterministic-no-model">
+<h3>Scripted GUI installation (<code class="docutils literal notranslate"><span class="pre">gui-script</span></code>) — deterministic, no model<a class="headerlink" href="#scripted-gui-installation-gui-script-deterministic-no-model" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">install_mode:</span> <span class="pre">gui-script</span></code> replays a hand-calibrated QMP playbook against the
+installer’s GUI. It is the <em>no-model</em> sibling of <code class="docutils literal notranslate"><span class="pre">gui-auto</span></code>: <strong>no vision model,
+no CV server, no</strong> <code class="docutils literal notranslate"><span class="pre">ADARE_VLLM_*</span></code> <strong>configuration</strong>, and the same playbook
+produces the same disk on any host with QEMU.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>ubuntu1804<span class="w">      </span><span class="c1"># ISO auto-downloads (iso_url is baked in)</span>
+adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>ubuntu2004
+</pre></div>
+</div>
+<div class="table-wrapper colwidths-given docutils container" id="id4">
+<table class="docutils align-default" id="id4">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">gui-auto</span></code> vs <code class="docutils literal notranslate"><span class="pre">gui-script</span></code></span><a class="headerlink" href="#id4" title="Link to this table">¶</a></caption>
+<colgroup>
+<col style="width: 22.0%" />
+<col style="width: 39.0%" />
+<col style="width: 39.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">gui-auto</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">gui-script</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Targets a screen by</p></td>
+<td><p>image/text matching (CV), model on miss</p></td>
+<td><p>fixed pixel coordinates</p></td>
+</tr>
+<tr class="row-odd"><td><p>Needs a vision model</p></td>
+<td><p>yes to record or self-heal</p></td>
+<td><p>never</p></td>
+</tr>
+<tr class="row-even"><td><p>Needs the CV server</p></td>
+<td><p>yes</p></td>
+<td><p>no</p></td>
+</tr>
+<tr class="row-odd"><td><p>Waits by</p></td>
+<td><p>CV target appearing</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">wait_stable</span></code> frame diffing</p></td>
+</tr>
+<tr class="row-even"><td><p>Recovers from UI drift</p></td>
+<td><p>yes (self-heal, re-crop)</p></td>
+<td><p>no — coords must be recalibrated</p></td>
+</tr>
+<tr class="row-odd"><td><p>Use it to</p></td>
+<td><p><strong>record</strong> a route for a new release</p></td>
+<td><p><strong>replay</strong> a route that is already proven</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>How the waiting works.</strong> The primitive that makes replay robust is
+<code class="docutils literal notranslate"><span class="pre">wait_stable</span></code> (<code class="xref py py-mod docutils literal notranslate"><span class="pre">adare.hypervisor.qemu.vm_creator.qmp_replay</span></code>): successive
+<code class="docutils literal notranslate"><span class="pre">screendump</span></code> frames are diffed <em>as raw bytes</em> until the screen stops changing
+for a settle period. There is no template matching, no OCR and no model, so a
+step never waits on a fixed sleep that is too short on a slow host or wastefully
+long on a fast one. During the copy phase the progress bar keeps the frame
+changing, so the wait only returns once the installer is genuinely idle on its
+“Installation Complete” dialog. A <code class="docutils literal notranslate"><span class="pre">min:</span></code> floor skips the static early-boot
+plymouth screens, which are otherwise perfectly stable before any UI exists.</p>
+<p><strong>Two constraints, both learned by breaking them.</strong> The creator asserts the
+first and the playbooks depend on the second:</p>
+<ul class="simple">
+<li><p><strong>``-vga qxl``, never ``-vga std``.</strong> The std adapter’s tablet applies a 2x
+coordinate scaling, so absolute clicks land at double the intended offset and
+the right half of the screen is simply unreachable.</p></li>
+<li><p><strong>Click buttons with ``tap``, not the keyboard.</strong> ubiquity does not reliably
+hold keyboard focus at live-session start, and its timezone screen traps focus
+in the city-entry field. A mouse click both focuses the window and activates
+the button.</p></li>
+</ul>
+<p><strong>Playbooks.</strong> They live beside the other templates as
+<code class="docutils literal notranslate"><span class="pre">qmpinstall_&lt;stem&gt;.yaml</span></code> (override in <code class="docutils literal notranslate"><span class="pre">~/.adare/vm-templates/</span></code>) and are
+resolved by the same stem lookup <code class="docutils literal notranslate"><span class="pre">gui-auto</span></code> uses, so <code class="docutils literal notranslate"><span class="pre">template:</span> <span class="pre">ubuntu1804</span></code>
+keeps per-version isolation — 18.04’s and 20.04’s ubiquity differ visually and
+must not share a recording. Steps are <code class="docutils literal notranslate"><span class="pre">key</span></code> / <code class="docutils literal notranslate"><span class="pre">type</span></code> / <code class="docutils literal notranslate"><span class="pre">tap</span></code> / <code class="docutils literal notranslate"><span class="pre">wait</span></code> /
+<code class="docutils literal notranslate"><span class="pre">wait_stable</span></code> / <code class="docutils literal notranslate"><span class="pre">shot</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ram_mb</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4096</span>
+<span class="w">  </span><span class="nt">cpus</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">  </span><span class="nt">disk_size</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;60G&quot;</span>
+<span class="w">  </span><span class="nt">vga</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">qxl</span>
+<span class="w">  </span><span class="nt">firmware</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bios</span>
+<span class="w">  </span><span class="nt">frame</span><span class="p">:</span><span class="w">            </span><span class="c1"># the frame the tap coords were calibrated at</span>
+<span class="w">    </span><span class="nt">width</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1024</span>
+<span class="w">    </span><span class="nt">height</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">768</span>
+
+<span class="nt">install</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="nv">wait_stable</span><span class="p p-Indicator">,</span><span class="nt"> settle</span><span class="p">:</span><span class="w"> </span><span class="nv">6</span><span class="p p-Indicator">,</span><span class="nt"> timeout</span><span class="p">:</span><span class="w"> </span><span class="nv">360</span><span class="p p-Indicator">,</span><span class="nt"> min</span><span class="p">:</span><span class="w"> </span><span class="nv">120</span><span class="p p-Indicator">,</span><span class="nt"> shot</span><span class="p">:</span><span class="w"> </span><span class="nv">welcome</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="nv">tap</span><span class="p p-Indicator">,</span><span class="nt"> coords</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">763</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">434</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1024</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">768</span><span class="p p-Indicator">],</span><span class="nt"> note</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;click</span><span class="nv"> </span><span class="s">&#39;Install</span><span class="nv"> </span><span class="s">Ubuntu&#39;&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="nv">type</span><span class="p p-Indicator">,</span><span class="nt"> text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;adare&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="nv">key</span><span class="p p-Indicator">,</span><span class="nt"> keys</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">tab</span><span class="p p-Indicator">],</span><span class="nt"> repeat</span><span class="p">:</span><span class="w"> </span><span class="nv">2</span><span class="p p-Indicator">}</span>
+
+<span class="nt">reboot_from_disk</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="nt">verify</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="nv">wait_stable</span><span class="p p-Indicator">,</span><span class="nt"> settle</span><span class="p">:</span><span class="w"> </span><span class="nv">8</span><span class="p p-Indicator">,</span><span class="nt"> timeout</span><span class="p">:</span><span class="w"> </span><span class="nv">240</span><span class="p p-Indicator">,</span><span class="nt"> min</span><span class="p">:</span><span class="w"> </span><span class="nv">45</span><span class="p p-Indicator">,</span><span class="nt"> shot</span><span class="p">:</span><span class="w"> </span><span class="nv">login</span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<p>Every <code class="docutils literal notranslate"><span class="pre">tap</span></code> carries the frame its coordinates belong to, and the creator
+<strong>rejects</strong> a playbook whose coords disagree with the declared <code class="docutils literal notranslate"><span class="pre">frame</span></code> or fall
+outside it. A coordinate recorded at another resolution otherwise mis-clicks
+silently, which is far more expensive to diagnose after a 40-minute install. A
+screenshot is written per step (<code class="docutils literal notranslate"><span class="pre">&lt;vm&gt;_gui-script/</span></code>) and stays on by default —
+it is the only useful debugging aid when a click lands wrong.</p>
+<p><strong>Calibrating a new playbook.</strong> <code class="docutils literal notranslate"><span class="pre">scripts/gui-install/</span></code> is the authoring tool
+and shares this playbook format. Boot the installer with <code class="docutils literal notranslate"><span class="pre">--keep-running</span></code> and
+poke at it interactively to read coordinates off the screen:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>scripts/gui-install
+./gui_install.py<span class="w"> </span>playbooks/ubuntu2004-desktop.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--iso<span class="w"> </span>ubuntu-20.04.6-desktop-amd64.iso<span class="w"> </span>--vm-dir<span class="w"> </span>/vms<span class="w"> </span>--keep-running
+./qmp_drive.py<span class="w"> </span>--sock<span class="w"> </span>/tmp/gui-install/qmp.sock<span class="w"> </span>shot<span class="w"> </span>/tmp/now.png
+./qmp_drive.py<span class="w"> </span>--sock<span class="w"> </span>/tmp/gui-install/qmp.sock<span class="w"> </span>tap<span class="w"> </span><span class="m">924</span><span class="w"> </span><span class="m">566</span><span class="w"> </span><span class="m">1024</span><span class="w"> </span><span class="m">768</span>
+</pre></div>
+</div>
+<p>Once the coordinates are proven, copy the playbook to
+<code class="docutils literal notranslate"><span class="pre">adare/adare/hypervisor/qemu/vm_creator/templates/qmpinstall_&lt;stem&gt;.yaml</span></code> and
+flip the profile to <code class="docutils literal notranslate"><span class="pre">install_mode:</span> <span class="pre">gui-script</span></code>.</p>
+<p><strong>Limitations.</strong> Coordinate-fragile by construction: a different guest
+resolution silently mis-clicks, and a redesigned installer needs recalibration
+(there is no self-heal). Use <code class="docutils literal notranslate"><span class="pre">gui-auto</span></code> to record a route for a release nobody
+has coordinates for, and <code class="docutils literal notranslate"><span class="pre">gui-script</span></code> to replay one that is proven.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The 18.04 / 20.04 playbooks are <strong>x86_64 desktop</strong> installs and have not been
+replayed by us on this Apple Silicon host — x86_64 guests cannot be built
+there (no TCG fallback). See <a class="reference internal" href="#replicating-on-x86-64"><span class="std std-ref">Replicating on x86_64</span></a>.</p>
+</div>
 </section>
 </section>
 <section id="options">
@@ -477,22 +742,40 @@ adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </
 <td><p>CPU core count (default: half of host cores, clamped 2–8)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--setup</span> <span class="pre">LEVEL</span></code></p></td>
-<td><p>Setup level: <code class="docutils literal notranslate"><span class="pre">bare</span></code> (OS only), <code class="docutils literal notranslate"><span class="pre">base</span></code> (+ guest tools), <code class="docutils literal notranslate"><span class="pre">full</span></code> (+ Python, default), <code class="docutils literal notranslate"><span class="pre">agent</span></code> (+ adarevm, deferred)</p></td>
+<td><p>Setup level: <code class="docutils literal notranslate"><span class="pre">bare</span></code> (OS only), <code class="docutils literal notranslate"><span class="pre">base</span></code> (+ guest tools), <code class="docutils literal notranslate"><span class="pre">full</span></code> (+ Python, default), <code class="docutils literal notranslate"><span class="pre">agent</span></code> (not implemented – rejected)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--interactive</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--bare</span></code></p></td>
+<td><p>Deprecated alias for <code class="docutils literal notranslate"><span class="pre">--setup</span> <span class="pre">bare</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--interactive</span></code></p></td>
 <td><p>Boot the VM after automated install for manual customization</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--force</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--force</span></code></p></td>
 <td><p>Overwrite an existing disk image with the same name</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--vm-dir</span> <span class="pre">DIR</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--vm-dir</span> <span class="pre">DIR</span></code></p></td>
 <td><p>Directory for the disk image (default: <code class="docutils literal notranslate"><span class="pre">~/.adare/state/vms/</span></code>)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--arch</span> <span class="pre">ARCH</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--arch</span> <span class="pre">ARCH</span></code></p></td>
 <td><p>Override CPU architecture: <code class="docutils literal notranslate"><span class="pre">x86_64</span></code> or <code class="docutils literal notranslate"><span class="pre">aarch64</span></code> (default from OS profile)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--env-name</span> <span class="pre">NAME</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--env-name</span> <span class="pre">NAME</span></code></p></td>
 <td><p>Environment file name (defaults to VM name)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--recipe</span></code> / <code class="docutils literal notranslate"><span class="pre">--no-recipe</span></code></p></td>
+<td><p>Emit a declarative <em>recipe</em> environment (built on load) instead of a baked disk. Default: recipe for Windows, baked for Linux. See <a class="reference internal" href="#recipe-environments"><span class="std std-ref">Recipe Environments</span></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--record</span></code></p></td>
+<td><p>GUI-auto only: record a fresh playbook with the vision agent even if a cached one exists.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--relearn</span></code></p></td>
+<td><p>GUI-auto only: discard the cached playbook and re-record from scratch.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--display</span></code></p></td>
+<td><p>GUI-auto only: show the VM window while the agent drives the installer (and leave it up on failure for inspection).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--template</span> <span class="pre">NAME</span></code></p></td>
+<td><p>GUI-auto only: explicit goal/spec template name (default: <code class="docutils literal notranslate"><span class="pre">gui_&lt;distribution&gt;</span></code>).</p></td>
 </tr>
 </tbody>
 </table>
@@ -528,33 +811,375 @@ adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </
 <td><p>Standard ADARE experiments</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">agent</span></code></p></td>
-<td><p>Pre-installed <code class="docutils literal notranslate"><span class="pre">adarevm</span></code> guest agent (deferred)</p></td>
-<td><p>Zero-overhead experiment runs</p></td>
+<td><p><strong>Not implemented</strong> – the CLI rejects <code class="docutils literal notranslate"><span class="pre">--setup</span> <span class="pre">agent</span></code></p></td>
+<td><p>Documented placeholder only</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p><strong>What ``full`` actually bakes:</strong></p>
+<ul class="simple">
+<li><p><strong>Linux and Windows x86_64</strong> – Miniforge3 plus a <code class="docutils literal notranslate"><span class="pre">pyadare</span></code> conda environment</p></li>
+<li><p><strong>Windows ARM64</strong> – plain CPython 3.11 (no conda; there is no Miniforge build for
+Windows on ARM64), which is by design</p></li>
+<li><p><strong>``gui-auto`` and ``manual`` installs</strong> – no Python environment at all; the level
+therefore has little effect for those profiles</p></li>
+</ul>
 <p><strong>Guest tools per platform:</strong></p>
 <ul class="simple">
 <li><p><strong>Linux</strong> – <code class="docutils literal notranslate"><span class="pre">qemu-guest-agent</span></code></p></li>
 <li><p><strong>Windows x86_64</strong> – <code class="docutils literal notranslate"><span class="pre">virtio-win-guest-tools.exe</span></code> (VirtIO drivers, QGA, SPICE) + firewall rule for port 18765</p></li>
 <li><p><strong>Windows ARM64 (UTM)</strong> – UTM guest tools + firewall rule for port 18765</p></li>
 </ul>
+<p><strong>Conda vs. system Python is never a create-time choice.</strong> The guest’s Python stack is
+auto-detected at run time (a baked conda env is used if present, otherwise the system
+interpreter, with a create-the-env recovery path). Likewise the <code class="docutils literal notranslate"><span class="pre">adarevm</span></code>/<code class="docutils literal notranslate"><span class="pre">adarelib</span></code>
+wheels are <em>not</em> installed during <code class="docutils literal notranslate"><span class="pre">vm</span> <span class="pre">create</span></code> – they install themselves on the first
+experiment or dev-session start.</p>
+</section>
+<section id="recipe-environments">
+<span id="id1"></span><h2>Recipe Environments<a class="headerlink" href="#recipe-environments" title="Link to this heading">¶</a></h2>
+<p>An ADARE environment can be defined in one of two ways:</p>
+<ul class="simple">
+<li><p><strong>Baked disk</strong> (Linux default) – <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">create</span></code> builds a <code class="docutils literal notranslate"><span class="pre">qcow2</span></code> disk
+now and the environment references that frozen artifact. Integrity is anchored
+on the disk’s SHA256 (<code class="docutils literal notranslate"><span class="pre">Vm.hash</span></code>). This is the historical model and is
+unchanged.</p></li>
+<li><p><strong>Recipe</strong> (Windows default) – the environment is defined <em>declaratively</em> by
+its build inputs: an OS profile, a user-supplied ISO plus its expected
+<code class="docutils literal notranslate"><span class="pre">iso_sha256</span></code>, an optional unattended-install template, and build params. The
+disk is built <strong>on load</strong> and cached. Integrity is anchored on the <em>inputs</em>
+(“same inputs -&gt; forensically equivalent system”), because OS installs are
+never bit-reproducible.</p></li>
+</ul>
+<section id="why-recipes-for-windows">
+<h3>Why recipes for Windows<a class="headerlink" href="#why-recipes-for-windows" title="Link to this heading">¶</a></h3>
+<p>Windows evaluation editions and activation expire. A baked Windows disk cannot
+be refreshed without becoming a different artifact. With a recipe you simply
+drop in a fresh ISO and rebuild – the environment definition (profile + params)
+is unchanged, only the ISO and its <code class="docutils literal notranslate"><span class="pre">iso_sha256</span></code> move forward. Because the ISO
+is part of the integrity identity, a new ISO is always a <strong>new environment</strong>,
+never a silent in-place refresh, so historical results stay reproducible.</p>
+</section>
+<section id="recipe-environment-file">
+<h3>Recipe environment file<a class="headerlink" href="#recipe-environment-file" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">create</span> <span class="pre">windows11</span> <span class="pre">--iso</span> <span class="pre">/path/to/Win11.iso</span></code> emits a recipe
+environment instead of building immediately:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vm_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">recipe</span>
+<span class="nt">hypervisor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">qemu</span>
+<span class="nt">recipe</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">windows11</span><span class="w">          </span><span class="c1"># resolves via the OS profile catalog</span>
+<span class="w">  </span><span class="nt">iso</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/Win11.iso</span><span class="w">     </span><span class="c1"># user-supplied installer ISO</span>
+<span class="w">  </span><span class="nt">iso_sha256</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;abc123...&quot;</span><span class="w">     </span><span class="c1"># expected SHA256 of the ISO (hard-checked)</span>
+<span class="w">  </span><span class="nt">params</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">setup_level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span><span class="w">            </span><span class="c1"># 0=bare, 1=base, 2=full</span>
+<span class="w">    </span><span class="nt">disk_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">80G</span>
+<span class="w">    </span><span class="nt">ram_mb</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16384</span>
+<span class="w">  </span><span class="c1"># Build-time provisioning: run ONCE while the disk is built (see below).</span>
+<span class="w">  </span><span class="c1"># provision:</span>
+<span class="w">  </span><span class="c1">#   - {name: my-tool, command: &quot;msiexec /i ... /qn&quot;, timeout_minutes: 30}</span>
+<span class="c1"># Per-RUN steps, unchanged: these execute inside every experiment run. Use</span>
+<span class="c1"># them only for work that must be redone each run -- installing software here</span>
+<span class="c1"># writes Prefetch/registry/MFT entries into the artifact set under</span>
+<span class="c1"># measurement, which is a forensic contamination. For software installs, use</span>
+<span class="c1"># `recipe.provision` above instead.</span>
+<span class="c1"># postsetupinstallations:</span>
+<span class="c1">#   - {name: my-tool, command: &quot;...&quot;, description: &quot;...&quot;}</span>
+</pre></div>
+</div>
+</section>
+<section id="build-lifecycle">
+<h3>Build lifecycle<a class="headerlink" href="#build-lifecycle" title="Link to this heading">¶</a></h3>
+<p>On <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">environment</span> <span class="pre">load</span></code> the recipe flow:</p>
+<ol class="arabic simple">
+<li><p>Enforces the ISO-source contract for a consumer (see
+<a class="reference internal" href="#byo-isos"><span class="std std-ref">Consumer-supplied (BYO) ISOs – Windows only</span></a> below), resolves the ISO to a local file, and verifies
+<code class="docutils literal notranslate"><span class="pre">hash(iso)</span> <span class="pre">==</span> <span class="pre">iso_sha256</span></code> – <strong>hard-fails</strong> on mismatch.</p></li>
+<li><p>Expands and validates <code class="docutils literal notranslate"><span class="pre">recipe.provision</span></code>, and checks free disk space. Every
+cheap failure happens here, <em>before</em> any multi-hour install.</p></li>
+<li><p>Computes two hashes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">base_hash</span></code> – <code class="docutils literal notranslate"><span class="pre">iso_sha256</span></code> + the install template + the
+params/profile/post-install identity, <strong>without</strong> <code class="docutils literal notranslate"><span class="pre">provision</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">recipe_hash</span></code> – the same, <strong>with</strong> <code class="docutils literal notranslate"><span class="pre">provision</span></code>.</p></li>
+</ul>
+</li>
+<li><p>If a VM with that <code class="docutils literal notranslate"><span class="pre">recipe_hash</span></code> already exists (and its cached disk is
+present), reuses it – <strong>no rebuild</strong> (build once, cache).</p></li>
+<li><p>Otherwise builds in two stages:</p>
+<ul class="simple">
+<li><p><strong>Stage 1 – base disk.</strong> The normal creator machinery installs the OS into
+<code class="docutils literal notranslate"><span class="pre">~/.adare/qemu/cache/recipe-bases/{profile}-recipebase-{base_hash}.qcow2</span></code>.
+Already there? Cache hit, and the OS install is skipped entirely.</p></li>
+<li><p><strong>Stage 2 – provisioning.</strong> Only when <code class="docutils literal notranslate"><span class="pre">provision</span></code> is non-empty: boot a
+throwaway overlay of the base, run the steps through the guest agent, shut
+the guest down cleanly, and flatten the overlay into
+<code class="docutils literal notranslate"><span class="pre">~/.adare/state/vms/{profile}-{recipe_hash}.qcow2</span></code>.</p></li>
+</ul>
+</li>
+<li><p>Registers the result with <code class="docutils literal notranslate"><span class="pre">build_source='recipe'</span></code> plus the recipe hash, ISO
+hash, and profile name for provenance.</p></li>
+</ol>
+<p>With no provision steps <code class="docutils literal notranslate"><span class="pre">base_hash</span> <span class="pre">==</span> <span class="pre">recipe_hash</span></code>, Stage 2 is skipped, and the
+result is identical to the pre-provisioning behaviour – including the disk’s name
+and location.</p>
+<p>Because the built disk is still hashed into <code class="docutils literal notranslate"><span class="pre">Vm.hash</span></code>, it remains
+tamper-checked exactly like a baked disk. A recipe environment gains one
+recovery advantage a baked disk lacks: if the cached disk goes missing, integrity
+verification rebuilds it from the recipe instead of hard-failing.</p>
+</section>
+<section id="build-time-provisioning">
+<span id="id2"></span><h3>Build-time provisioning<a class="headerlink" href="#build-time-provisioning" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">recipe.provision</span></code> installs software <strong>once, while the disk is being built</strong>,
+through the QEMU guest agent. This is not a convenience: for forensic work it is
+the only correct place to do it. Installing an application writes Prefetch entries,
+registry keys and MFT records – precisely the artifacts an experiment measures –
+so an install that ran inside every run would contaminate its own results.</p>
+<p>Contrast the two fields:</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 40.0%" />
+<col style="width: 40.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">recipe.provision</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">postsetupinstallations</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Runs</p></td>
+<td><p>Once, at disk build time</p></td>
+<td><p>Inside every experiment run</p></td>
+</tr>
+<tr class="row-odd"><td><p>Result</p></td>
+<td><p>Baked into the cached disk</p></td>
+<td><p>Re-applied to a fresh overlay each run</p></td>
+</tr>
+<tr class="row-even"><td><p>Use for</p></td>
+<td><p>Installing the software under test</p></td>
+<td><p>Per-run setup that must not persist</p></td>
+</tr>
+<tr class="row-odd"><td><p>Transport</p></td>
+<td><p>QEMU guest agent (<code class="docutils literal notranslate"><span class="pre">guest-exec</span></code>)</p></td>
+<td><p>The ADARE guest agent, at run time</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Both are folded into the recipe hash, so changing either yields a new environment
+identity.</p>
+<section id="schema">
+<h4>Schema<a class="headerlink" href="#schema" title="Link to this heading">¶</a></h4>
+<p>Each <code class="docutils literal notranslate"><span class="pre">provision</span></code> entry is either a single command or a repeated group:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">provision</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Single command.</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">boot-hardening</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Survive a hard power-off without Startup Repair</span>
+<span class="w">    </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmd</span><span class="w">                    </span><span class="c1"># powershell | cmd | bash | auto (default)</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bcdedit /set {default} recoveryenabled No</span>
+
+<span class="w">  </span><span class="c1"># Repeated group: every step replays once per for_each item, with</span>
+<span class="w">  </span><span class="c1"># {{ item }} substituted through name, description, command, verify, cwd</span>
+<span class="w">  </span><span class="c1"># and log_files.</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autopsy</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Autopsy {{ item }}</span>
+<span class="w">    </span><span class="nt">for_each</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;4.4.0&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;4.4.1&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autopsy-{{ item }}-download</span>
+<span class="w">        </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">curl.exe -L -f -o &quot;C:\Windows\Temp\a-{{ item }}.msi&quot; https://...</span>
+<span class="w">        </span><span class="nt">timeout_minutes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autopsy-{{ item }}-install</span>
+<span class="w">        </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">msiexec /i &quot;C:\Windows\Temp\a-{{ item }}.msi&quot; /qn /norestart</span>
+<span class="w">        </span><span class="nt">allow_exit_codes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3010</span><span class="p p-Indicator">]</span><span class="w">     </span><span class="c1"># 3010 = success, reboot required</span>
+<span class="w">        </span><span class="nt">verify</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;if</span><span class="nv"> </span><span class="s">(-not</span><span class="nv"> </span><span class="s">(Test-Path</span><span class="nv"> </span><span class="s">&quot;C:\Program</span><span class="nv"> </span><span class="s">Files\Autopsy-{{</span><span class="nv"> </span><span class="s">item</span><span class="nv"> </span><span class="s">}}&quot;))</span><span class="nv"> </span><span class="s">{</span><span class="nv"> </span><span class="s">exit</span><span class="nv"> </span><span class="s">1</span><span class="nv"> </span><span class="s">}&#39;</span>
+<span class="w">        </span><span class="nt">log_files</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;C:\Windows\Temp\a-{{</span><span class="nv"> </span><span class="s">item</span><span class="nv"> </span><span class="s">}}-msi.log&#39;</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">timeout_minutes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">45</span>
+<span class="w">        </span><span class="nt">reboot</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</pre></div>
+</div>
+<p>Fields on a command: <code class="docutils literal notranslate"><span class="pre">name</span></code> (required, must be unique after expansion),
+<code class="docutils literal notranslate"><span class="pre">command</span></code> (required), <code class="docutils literal notranslate"><span class="pre">description</span></code>, <code class="docutils literal notranslate"><span class="pre">cwd</span></code>, <code class="docutils literal notranslate"><span class="pre">shell</span></code>,
+<code class="docutils literal notranslate"><span class="pre">allow_exit_codes</span></code> (default <code class="docutils literal notranslate"><span class="pre">[0]</span></code>), <code class="docutils literal notranslate"><span class="pre">verify</span></code>, <code class="docutils literal notranslate"><span class="pre">log_files</span></code>,
+<code class="docutils literal notranslate"><span class="pre">timeout_minutes</span></code> (default 30), <code class="docutils literal notranslate"><span class="pre">reboot</span></code>. A group adds <code class="docutils literal notranslate"><span class="pre">for_each</span></code> and
+<code class="docutils literal notranslate"><span class="pre">steps</span></code>; exactly one of <code class="docutils literal notranslate"><span class="pre">command</span></code> / <code class="docutils literal notranslate"><span class="pre">steps</span></code> per entry.</p>
+<p>Three details worth knowing:</p>
+<ul class="simple">
+<li><p><strong>Success is the exit code, never stderr.</strong> A successful PowerShell command
+routinely writes CLIXML progress records to stderr.</p></li>
+<li><p><strong>``verify`` is how a step proves it worked.</strong> An installer reporting exit 0 is
+not evidence the files exist; a non-zero <code class="docutils literal notranslate"><span class="pre">verify</span></code> fails the build.</p></li>
+<li><p><strong>``{{ item }}`` is strict.</strong> An unknown variable (<code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">version</span> <span class="pre">}}</span></code> for
+<code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">item</span> <span class="pre">}}</span></code>) is a hard error, not an empty string – otherwise a typo yields a
+plausible-but-wrong disk.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">shell</span></code> matters more than it looks. <code class="docutils literal notranslate"><span class="pre">cmd</span></code> exists because PowerShell parses
+<code class="docutils literal notranslate"><span class="pre">{default}</span></code> in <code class="docutils literal notranslate"><span class="pre">bcdedit</span> <span class="pre">/set</span> <span class="pre">{default}</span> <span class="pre">...</span></code> as a script block, so such a
+command has to reach <code class="docutils literal notranslate"><span class="pre">cmd.exe</span></code> verbatim.</p>
+<p>Requires <code class="docutils literal notranslate"><span class="pre">setup_level</span></code> 1 (base) or higher: the QEMU guest agent is what
+provisioning talks to, and level 0 (bare) does not install it.</p>
+</section>
+<section id="downloads-inside-a-provision-command-are-not-digest-pinned">
+<span id="provision-no-digest"></span><h4>Downloads inside a provision command are not digest-pinned<a class="headerlink" href="#downloads-inside-a-provision-command-are-not-digest-pinned" title="Link to this heading">¶</a></h4>
+<p>There is no <code class="docutils literal notranslate"><span class="pre">sha256:</span></code> field on a provision command, and this is a settled design
+decision rather than a missing feature. <code class="docutils literal notranslate"><span class="pre">iso_sha256</span></code> is the integrity boundary of
+a recipe: the ISO is the one input a <em>consumer</em> supplies from their own copy, so
+its digest is what makes two independent builds of the same recipe comparable.</p>
+<p>A URL fetched by a provision command (<code class="docutils literal notranslate"><span class="pre">curl.exe</span> <span class="pre">-L</span> <span class="pre">-f</span> <span class="pre">-o</span> <span class="pre">...</span> <span class="pre">https://...</span></code>) points
+at an asset the upstream project controls. Pinning it would move the trust anchor
+from “the OS install is reproducible” to “upstream never re-cuts a tag” – a
+property ADARE cannot enforce – and would turn every legitimate upstream
+re-release into an apparent tampering event, fixable only by editing the recipe,
+which changes <code class="docutils literal notranslate"><span class="pre">recipe_hash</span></code> and forces a rebuild.</p>
+<p>The accepted consequence: if an upstream release is retagged, the same recipe hash
+can describe a different disk. What limits the damage is already in the model –
+the recipe records the exact version list, <code class="docutils literal notranslate"><span class="pre">verify</span></code> asserts each install’s own
+target exists, and <code class="docutils literal notranslate"><span class="pre">log_files</span></code> are pulled on failure, so a substituted installer
+surfaces as a changed artifact set rather than a silent pass. Reproducing a
+<em>specific historical</em> build therefore depends on upstream tag stability; the
+published disk hash, not the recipe, is the durable record of what was built.</p>
+</section>
+<section id="when-a-step-fails">
+<h4>When a step fails<a class="headerlink" href="#when-a-step-fails" title="Link to this heading">¶</a></h4>
+<p>Provisioning <strong>aborts on the first failure</strong> and no environment is registered. A
+recipe hash must describe a disk where every step succeeded; a
+partially-provisioned disk that occupied that hash’s cache slot would be a disk
+whose contents do not match its identity.</p>
+<p>On failure ADARE pulls each <code class="docutils literal notranslate"><span class="pre">log_files</span></code> entry from the guest to
+<code class="docutils literal notranslate"><span class="pre">~/.adare/qemu/build-logs/</span></code> and names the failing step, its exit code and its
+output. The base disk is cached, so retrying is cheap:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Reuse the cached OS install, re-run provisioning from scratch.</span>
+adare<span class="w"> </span>env<span class="w"> </span>load<span class="w"> </span>myenv.yml<span class="w"> </span>--reprovision
+
+<span class="c1"># Rebuild both stages.</span>
+adare<span class="w"> </span>env<span class="w"> </span>load<span class="w"> </span>myenv.yml<span class="w"> </span>--force
+
+<span class="c1"># Keep the failed overlay for post-mortem.</span>
+<span class="nv">ADARE_KEEP_FAILED_PROVISION</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>adare<span class="w"> </span>env<span class="w"> </span>load<span class="w"> </span>myenv.yml<span class="w"> </span>--reprovision
+</pre></div>
+</div>
+<p>Step-level resume is deliberately not offered: a half-installed MSI is not a clean
+resume point, and pretending otherwise produces disks whose contents do not match
+their hash. If one <code class="docutils literal notranslate"><span class="pre">for_each</span></code> item is at fault, bisect the list.</p>
+<p>A guest that will not shut down cleanly is also a hard failure. Flattening a dirty
+NTFS volume produces a disk that boots into Startup Repair on the consumer’s
+machine – and the recipe hash would vouch for it.</p>
+<p>Every command’s name, interpreter, full text, exit code, wall time, stdout and
+stderr are recorded in <code class="docutils literal notranslate"><span class="pre">~/.adare/qemu/build-logs/provision-&lt;hash&gt;.log</span></code>. That
+file is the complete account of what was done to the disk, and is worth attaching
+to a published artifact.</p>
+</section>
+<section id="sharing-one-base-across-several-recipes">
+<h4>Sharing one base across several recipes<a class="headerlink" href="#sharing-one-base-across-several-recipes" title="Link to this heading">¶</a></h4>
+<p>Because <code class="docutils literal notranslate"><span class="pre">base_hash</span></code> excludes <code class="docutils literal notranslate"><span class="pre">provision</span></code>, two recipes that declare an
+<em>identical</em> Stage 1 – same ISO, same template, same <code class="docutils literal notranslate"><span class="pre">params</span></code> – share one cached
+base disk. Build the first, and the second prints
+<code class="docutils literal notranslate"><span class="pre">Recipe</span> <span class="pre">base</span> <span class="pre">cache</span> <span class="pre">hit</span> <span class="pre">--</span> <span class="pre">reusing</span> <span class="pre">...</span></code> and goes straight to its own provisioning.</p>
+<p>The corollary is a trap worth stating: any difference in <code class="docutils literal notranslate"><span class="pre">params</span></code> (even
+<code class="docutils literal notranslate"><span class="pre">disk_size</span></code>) forks the base hash and costs a second full OS install. Keep them
+byte-identical across sibling recipes.</p>
+<p>The base cache is swept by <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">prune</span></code>, which reclaims any base no recipe
+environment still resolves to. Losing one only costs a rebuild.</p>
+<p>A cache entry is <strong>published by an atomic rename</strong>, never written in place: the OS
+installs into <code class="docutils literal notranslate"><span class="pre">{profile}-recipebase-{hash}.partial.qcow2</span></code> and is moved onto the
+real name only once the install completes. So the presence of
+<code class="docutils literal notranslate"><span class="pre">{profile}-recipebase-{hash}.qcow2</span></code> <em>implies</em> a finished install, and an
+interrupted Stage 1 — Ctrl-C, a killed process, a host crash — leaves a
+<code class="docutils literal notranslate"><span class="pre">.partial</span></code> file rather than an empty disk masquerading as a cached base. Without
+this, a build interrupted any time after the initial <code class="docutils literal notranslate"><span class="pre">qemu-img</span> <span class="pre">create</span></code> would
+poison the cache permanently: every later build would report a cache hit, skip the
+install, boot a disk with no operating system, and fail fifteen minutes later with
+“the guest agent did not respond” — a true statement that says nothing about the
+cause. <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">prune</span></code> reclaims <code class="docutils literal notranslate"><span class="pre">.partial</span></code> leftovers along with stale bases.</p>
+</section>
+</section>
+<section id="consumer-supplied-byo-isos-windows-only">
+<span id="byo-isos"></span><h3>Consumer-supplied (BYO) ISOs – Windows only<a class="headerlink" href="#consumer-supplied-byo-isos-windows-only" title="Link to this heading">¶</a></h3>
+<p>A recipe is only shareable if the consumer can obtain its ISO. For Linux that is
+easy: the ISO is freely redistributable, so <code class="docutils literal notranslate"><span class="pre">recipe.iso</span></code> is a published
+<code class="docutils literal notranslate"><span class="pre">http(s)</span></code> URL and publishing requires one. For <strong>Windows</strong> it is not: Microsoft
+installer media is licensed, not redistributable, and hosting it yourself is not an
+option.</p>
+<p>So a Windows recipe may instead name the file the consumer must already own:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">recipe</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">windows11arm64</span>
+<span class="w">  </span><span class="nt">iso_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Win11_25H2_English_Arm64_v2.iso</span>
+<span class="w">  </span><span class="nt">iso_sha256</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">638aa2c8...adf0</span>
+<span class="w">  </span><span class="nt">iso_notes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">    </span><span class="no">Download from https://www.microsoft.com/software-download/windows11 --</span>
+<span class="w">    </span><span class="no">&quot;Windows 11 Arm64&quot;, English (International). Requires a valid licence.</span>
+</pre></div>
+</div>
+<p>Exactly one of <code class="docutils literal notranslate"><span class="pre">iso</span></code> / <code class="docutils literal notranslate"><span class="pre">iso_name</span></code>. <code class="docutils literal notranslate"><span class="pre">iso_sha256</span></code> is required in <strong>both</strong> forms
+and is the actual integrity boundary – the Windows-only restriction on BYO is a
+quality rule about redistributability, not a security control.</p>
+<p><code class="docutils literal notranslate"><span class="pre">iso_notes</span></code> is plain text (never markdown or HTML) and is shown to a consumer who
+does not have the file. Omit it and ADARE falls back to the OS profile’s own
+<code class="docutils literal notranslate"><span class="pre">iso_notes</span></code>, so a consumer always gets a download pointer.</p>
+<section id="supplying-the-iso-as-a-consumer">
+<h4>Supplying the ISO as a consumer<a class="headerlink" href="#supplying-the-iso-as-a-consumer" title="Link to this heading">¶</a></h4>
+<p><code class="docutils literal notranslate"><span class="pre">environment</span> <span class="pre">load</span></code> searches these locations by filename, first existing file
+wins:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--iso</span> <span class="pre">PATH</span></code> – a file, or a directory to look inside.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">$ADARE_ISO_DIR/&lt;iso_name&gt;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">~/.adare/isos/&lt;iso_name&gt;</span></code></p></li>
+<li><p>the environment file’s own directory</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">~/.adare/qemu/cache/&lt;iso_name&gt;</span></code></p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span>Win11_25H2_English_Arm64_v2.iso<span class="w"> </span>~/.adare/isos/
+adare<span class="w"> </span>env<span class="w"> </span>load<span class="w"> </span>win11-autopsy-solr4.yml
+
+<span class="c1"># or, without moving anything:</span>
+adare<span class="w"> </span>env<span class="w"> </span>load<span class="w"> </span>win11-autopsy-solr4.yml<span class="w"> </span>--iso<span class="w"> </span>~/Downloads/
+</pre></div>
+</div>
+<p>ADARE never <em>guesses</em>: a single unrelated <code class="docutils literal notranslate"><span class="pre">*.iso</span></code> sitting in the search path is
+not used, because silently building from the wrong ISO is the one failure that must
+never be silent. If the file is absent the error names the required filename, its
+sha256, the profile, the download pointer, and every path searched.</p>
+</section>
+<section id="converting-an-existing-recipe">
+<h4>Converting an existing recipe<a class="headerlink" href="#converting-an-existing-recipe" title="Link to this heading">¶</a></h4>
+<p><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">create</span></code> can emit the BYO form directly with <code class="docutils literal notranslate"><span class="pre">--byo-iso</span></code>, and an
+existing recipe with a local ISO path is converted in place:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>windows11arm64<span class="w"> </span>--iso<span class="w"> </span>~/ISO/Win11.iso<span class="w"> </span>--byo-iso
+adare<span class="w"> </span>env<span class="w"> </span>recipe-byo<span class="w"> </span>win11-autopsy-solr4
+</pre></div>
+</div>
+<p>The recipe hash does <strong>not</strong> change: how a consumer obtained the ISO is not a build
+input, so any disk already built stays a cache hit. Only the descriptor changes.</p>
+</section>
+</section>
+<section id="choosing-the-mode">
+<h3>Choosing the mode<a class="headerlink" href="#choosing-the-mode" title="Link to this heading">¶</a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">--recipe</span></code> / <code class="docutils literal notranslate"><span class="pre">--no-recipe</span></code> to override the platform default:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Linux, opt into a recipe environment (needs an ISO)</span>
+adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>ubuntu2404<span class="w"> </span>--iso<span class="w"> </span>/path/to/ubuntu.iso<span class="w"> </span>--recipe
+
+<span class="c1"># Windows, force a baked disk instead of a recipe</span>
+adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>windows11<span class="w"> </span>--iso<span class="w"> </span>/path/to/Win11.iso<span class="w"> </span>--no-recipe
+</pre></div>
+</div>
+</section>
 </section>
 <section id="profile-system">
 <h2>Profile System<a class="headerlink" href="#profile-system" title="Link to this heading">¶</a></h2>
-<p>ADARE ships with built-in profiles for Ubuntu 22.04, 24.04, 25.10, Windows 10,
-Windows 11, and Windows 11 ARM64. You can add custom profiles for other
+<p>ADARE ships profiles for Ubuntu 20.04–26.04, Kubuntu 20.04–24.04 (both
+architectures), Debian, Kali, Fedora, RHEL rebuilds, openSUSE, Windows 10,
+Windows 11 and Windows 11 ARM64. You can add custom profiles for other
 distributions.</p>
 <section id="listing-profiles">
 <h3>Listing profiles<a class="headerlink" href="#listing-profiles" title="Link to this heading">¶</a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>manage<span class="w"> </span>os-profile<span class="w"> </span>list
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>os-profile<span class="w"> </span>list
 </pre></div>
 </div>
 </section>
 <section id="showing-profile-details">
 <h3>Showing profile details<a class="headerlink" href="#showing-profile-details" title="Link to this heading">¶</a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>manage<span class="w"> </span>os-profile<span class="w"> </span>show<span class="w"> </span>ubuntu2404
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>os-profile<span class="w"> </span>show<span class="w"> </span>ubuntu2404
 </pre></div>
 </div>
 </section>
@@ -567,7 +1192,7 @@ distributions.</p>
 <span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu</span><span class="w">         </span><span class="c1"># distribution family</span>
 <span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;1.0&#39;</span>
 <span class="nt">architecture</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">x86_64</span><span class="w">         </span><span class="c1"># &#39;x86_64&#39; or &#39;aarch64&#39;</span>
-<span class="nt">install_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span><span class="w">           </span><span class="c1"># &#39;auto&#39; or &#39;manual&#39;</span>
+<span class="nt">install_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span><span class="w">           </span><span class="c1"># &#39;auto&#39;, &#39;manual&#39;, &#39;gui-auto&#39;, or &#39;gui-script&#39;</span>
 
 <span class="c1"># Optional -- omit for manual installs or when using --iso</span>
 <span class="nt">iso_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://example.com/my-distro.iso</span>
@@ -597,13 +1222,13 @@ distributions.</p>
 </pre></div>
 </div>
 <p>Then add it:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>manage<span class="w"> </span>os-profile<span class="w"> </span>add<span class="w"> </span>my-distro.yml
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>os-profile<span class="w"> </span>add<span class="w"> </span>my-distro.yml
 </pre></div>
 </div>
 </section>
 <section id="removing-a-custom-profile">
 <h3>Removing a custom profile<a class="headerlink" href="#removing-a-custom-profile" title="Link to this heading">¶</a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>manage<span class="w"> </span>os-profile<span class="w"> </span>remove<span class="w"> </span>my-distro
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>os-profile<span class="w"> </span>remove<span class="w"> </span>my-distro
 </pre></div>
 </div>
 </section>
@@ -649,7 +1274,10 @@ distributions.</p>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">install_mode</span></code></p></td>
 <td><p>No</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">auto</span></code> (default) or <code class="docutils literal notranslate"><span class="pre">manual</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">auto</span></code> (default, unattended answer file), <code class="docutils literal notranslate"><span class="pre">manual</span></code> (a human clicks
+through a QEMU window), <code class="docutils literal notranslate"><span class="pre">gui-auto</span></code> (a vision-LLM drives the GUI
+installer and records a playbook), or <code class="docutils literal notranslate"><span class="pre">gui-script</span></code> (deterministic QMP
+playbook replay – no model, no CV server)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">template</span></code></p></td>
 <td><p>No</p></td>
@@ -699,8 +1327,380 @@ distributions.</p>
 <td><p>No</p></td>
 <td><p>List of additional packages to install</p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">installer</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Installer family, i.e. how the rendered answer file reaches the installer:
+<code class="docutils literal notranslate"><span class="pre">subiquity</span></code> (default), <code class="docutils literal notranslate"><span class="pre">preseed</span></code>, <code class="docutils literal notranslate"><span class="pre">ubiquity</span></code>, <code class="docutils literal notranslate"><span class="pre">kickstart</span></code>,
+<code class="docutils literal notranslate"><span class="pre">autoyast</span></code>, <code class="docutils literal notranslate"><span class="pre">archinstall-cloudinit</span></code>, <code class="docutils literal notranslate"><span class="pre">manual</span></code>, <code class="docutils literal notranslate"><span class="pre">gui</span></code>. See
+<em>Installer families</em> below.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">kernel_cmdline</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Kernel command line passed to QEMU’s <code class="docutils literal notranslate"><span class="pre">-append</span></code> on the direct kernel boot.
+Default <code class="docutils literal notranslate"><span class="pre">autoinstall</span> <span class="pre">console={console}</span> <span class="pre">---</span></code>. <code class="docutils literal notranslate"><span class="pre">{console}</span></code> expands to
+<code class="docutils literal notranslate"><span class="pre">ttyAMA0</span></code> on aarch64 / <code class="docutils literal notranslate"><span class="pre">ttyS0</span></code> on x86_64. With
+<code class="docutils literal notranslate"><span class="pre">seed_transport:</span> <span class="pre">http</span></code> ADARE additionally splices a <code class="docutils literal notranslate"><span class="pre">url=</span></code> fetch hint
+in before the <code class="docutils literal notranslate"><span class="pre">---</span></code> separator; the profile does not write it itself.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">seed_label</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Volume label of the seed ISO attached as the second drive; the installer
+auto-detects the answer file by it. <code class="docutils literal notranslate"><span class="pre">cidata</span></code> (default) for cloud-init /
+Subiquity, <code class="docutils literal notranslate"><span class="pre">OEMDRV</span></code> for debian-installer and Anaconda. Ignored by
+<code class="docutils literal notranslate"><span class="pre">ubiquity</span></code> (which reads no label) and by <code class="docutils literal notranslate"><span class="pre">gui</span></code> / <code class="docutils literal notranslate"><span class="pre">manual</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">seed_transport</span></code></p></td>
+<td><p>No</p></td>
+<td><p>How the answer file reaches the guest. <code class="docutils literal notranslate"><span class="pre">cdrom</span></code> (default) attaches the
+rendered seed as the labelled second drive and lets the installer
+auto-detect it. <code class="docutils literal notranslate"><span class="pre">http</span></code> <em>additionally</em> serves the seed directory from the
+host on an ephemeral port for the duration of the install
+(<code class="xref py py-mod docutils literal notranslate"><span class="pre">adare.hypervisor.qemu.vm_creator.seed_http</span></code>) and splices
+<code class="docutils literal notranslate"><span class="pre">url=http://10.0.2.2:&lt;port&gt;/&lt;answer-file&gt;</span></code> into <code class="docutils literal notranslate"><span class="pre">kernel_cmdline</span></code>.
+Needed for installers with no labelled-drive auto-detect: <code class="docutils literal notranslate"><span class="pre">ubiquity</span></code>,
+and older debian-installer releases such as Ubuntu 18.04’s.</p></td>
+</tr>
 </tbody>
 </table>
+</div>
+</section>
+<section id="installer-families">
+<h3>Installer families<a class="headerlink" href="#installer-families" title="Link to this heading">¶</a></h3>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 22.0%" />
+<col style="width: 20.0%" />
+<col style="width: 58.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">installer</span></code></p></th>
+<th class="head"><p>Rendered file</p></th>
+<th class="head"><p>How the installer finds it</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">subiquity</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user-data</span></code> (+ empty <code class="docutils literal notranslate"><span class="pre">meta-data</span></code>)</p></td>
+<td><p>cloud-init NoCloud auto-detects the <code class="docutils literal notranslate"><span class="pre">cidata</span></code>-labelled seed drive;
+<code class="docutils literal notranslate"><span class="pre">autoinstall</span></code> on the cmdline enables it. Ubuntu <strong>live-server</strong> ISOs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">archinstall-cloudinit</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user-data</span></code> (+ empty <code class="docutils literal notranslate"><span class="pre">meta-data</span></code>)</p></td>
+<td><p>Same NoCloud mechanism.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">preseed</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">preseed.cfg</span></code></p></td>
+<td><p>debian-installer auto-loads <code class="docutils literal notranslate"><span class="pre">/preseed.cfg</span></code> from any <code class="docutils literal notranslate"><span class="pre">OEMDRV</span></code>-labelled
+drive. Debian / Kali <strong>netinst</strong> ISOs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ubiquity</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">preseed.cfg</span></code></p></td>
+<td><p>Ubuntu / Kubuntu <strong>desktop</strong> ISOs. ubiquity has <em>no</em> labelled-drive
+auto-detect: casper’s network-preseed script fetches the file from the
+<code class="docutils literal notranslate"><span class="pre">url=</span></code> on the cmdline. ADARE serves the seed directory over HTTP on an
+ephemeral host port for the duration of the install
+(<code class="xref py py-mod docutils literal notranslate"><span class="pre">adare.hypervisor.qemu.vm_creator.seed_http</span></code>); under QEMU user-mode
+networking the guest reaches the host at <code class="docutils literal notranslate"><span class="pre">10.0.2.2</span></code>. Declare it with
+<code class="docutils literal notranslate"><span class="pre">seed_transport:</span> <span class="pre">http</span></code> and ADARE adds the <code class="docutils literal notranslate"><span class="pre">url=</span></code> itself:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">installer</span><span class="p">:</span> <span class="n">ubiquity</span>
+<span class="n">seed_transport</span><span class="p">:</span> <span class="n">http</span>
+<span class="n">kernel_cmdline</span><span class="p">:</span> <span class="o">&gt;-</span>
+  <span class="n">automatic</span><span class="o">-</span><span class="n">ubiquity</span> <span class="n">noprompt</span> <span class="n">boot</span><span class="o">=</span><span class="n">casper</span> <span class="n">console</span><span class="o">=</span><span class="p">{</span><span class="n">console</span><span class="p">}</span> <span class="o">---</span>
+</pre></div>
+</div>
+<p>The labelled seed drive is still attached, because that is the
+configuration the 18.04 install was validated against. It means the guest
+has a second block device, so pin <code class="docutils literal notranslate"><span class="pre">partman-auto/disk</span> <span class="pre">string</span> <span class="pre">/dev/vda</span></code> in
+the preseed rather than relying on there being only one disk.</p>
+</td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">kickstart</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ks.cfg</span></code></p></td>
+<td><p>Anaconda reads it from the <code class="docutils literal notranslate"><span class="pre">OEMDRV</span></code> drive when given
+<code class="docutils literal notranslate"><span class="pre">inst.ks=hd:LABEL=OEMDRV:/ks.cfg</span></code>. Fedora / RHEL-family netinst + DVD.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">autoyast</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">autoinst.xml</span></code></p></td>
+<td><p>AutoYaST auto-loads it from <code class="docutils literal notranslate"><span class="pre">OEMDRV</span></code> with <code class="docutils literal notranslate"><span class="pre">autoyast=default</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gui</span></code> / <code class="docutils literal notranslate"><span class="pre">manual</span></code></p></td>
+<td><p>(none)</p></td>
+<td><p>No answer file is written; the installer is driven by the vision agent
+(<code class="docutils literal notranslate"><span class="pre">gui-auto</span></code>) or by a human (<code class="docutils literal notranslate"><span class="pre">manual</span></code>).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="desktop-guests-on-aarch64">
+<h3>Desktop guests on aarch64<a class="headerlink" href="#desktop-guests-on-aarch64" title="Link to this heading">¶</a></h3>
+<p>Desktop ISO availability on arm64 is uneven, and it is what bounds the options:</p>
+<ul class="simple">
+<li><p><strong>Ubuntu</strong> publishes an arm64 desktop ISO from <strong>24.04.3 onwards</strong>
+(<code class="docutils literal notranslate"><span class="pre">ubuntu-24.04.4-desktop-arm64.iso</span></code>). Earlier LTS releases (22.04, 20.04) do
+not — those trees carry only server, ppc64el and s390x images.</p></li>
+<li><p><strong>Kubuntu</strong> publishes <code class="docutils literal notranslate"><span class="pre">desktop-amd64</span></code> <strong>exclusively</strong>, for every release.
+There is no arm64 Kubuntu desktop ISO to install.</p></li>
+<li><p><strong>Fedora</strong> published no aarch64 Workstation <em>Live</em> image before release 42.</p></li>
+</ul>
+<p>The rule ADARE follows:</p>
+<ul class="simple">
+<li><p><strong>x86_64</strong> — install the real desktop ISO where one exists (Ubuntu Desktop,
+Kubuntu) through the <code class="docutils literal notranslate"><span class="pre">ubiquity</span></code> family, or Calamares through <code class="docutils literal notranslate"><span class="pre">gui-auto</span></code>
+for Kubuntu 24.04+.</p></li>
+<li><p><strong>aarch64</strong> — install the <strong>live-server ISO</strong> of the matching version through
+<code class="docutils literal notranslate"><span class="pre">subiquity</span></code> and pull in the desktop metapackage
+(<code class="docutils literal notranslate"><span class="pre">ubuntu-desktop-minimal</span></code> / <code class="docutils literal notranslate"><span class="pre">kubuntu-desktop</span></code>). This is the route that
+produced the existing 24.04 ARM64 environments, and the only route available
+for Kubuntu and for Ubuntu 22.04 / 20.04 on arm64.</p></li>
+</ul>
+<p>The two are <em>not</em> byte-identical installs, so the divergence is stated in the
+profile’s <code class="docutils literal notranslate"><span class="pre">display_name</span></code> — e.g. “Kubuntu 22.04 (KDE Plasma on Ubuntu 22.04
+Server base, ARM64)” — and therefore in the environment metadata of every
+experiment run against it.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The <strong>x86_64</strong> profiles <code class="docutils literal notranslate"><span class="pre">ubuntu2004</span></code>, <code class="docutils literal notranslate"><span class="pre">kubuntu2004</span></code> and <code class="docutils literal notranslate"><span class="pre">kubuntu2204</span></code>
+ship <strong>untested</strong>. They cannot be built on an Apple Silicon host: the guest
+architecture is guarded for non-aarch64 guests and QEMU is invoked as
+<code class="docutils literal notranslate"><span class="pre">qemu-system-&lt;host</span> <span class="pre">arch&gt;</span></code> with <code class="docutils literal notranslate"><span class="pre">accel=hvf</span></code>, and ADARE deliberately has no
+TCG fallback. A green <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">os-profile</span> <span class="pre">list</span></code> row is <em>not</em> a verification —
+treat these as recipes for replication on Intel/AMD hosts.</p>
+</div>
+</section>
+<section id="paper-replication-profiles">
+<h3>Paper-replication profiles<a class="headerlink" href="#paper-replication-profiles" title="Link to this heading">¶</a></h3>
+<p>The profiles behind the case studies, and the ISO each one expects:</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 26.0%" />
+<col style="width: 12.0%" />
+<col style="width: 62.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Profile</p></th>
+<th class="head"><p>Installer</p></th>
+<th class="head"><p>ISO to pass with <code class="docutils literal notranslate"><span class="pre">--iso</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ubuntu2004arm64</span></code></p></td>
+<td><p>subiquity</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ubuntu-20.04.5-live-server-arm64.iso</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ubuntu2204arm64</span></code></p></td>
+<td><p>subiquity</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ubuntu-22.04.5-live-server-arm64.iso</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ubuntu2404arm64</span></code></p></td>
+<td><p>subiquity</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ubuntu-24.04.x-live-server-arm64.iso</span></code> (a genuine
+<code class="docutils literal notranslate"><span class="pre">ubuntu-24.04.4-desktop-arm64.iso</span></code> also exists — 24.04 is the only
+release on this list for which an arm64 <em>desktop</em> ISO is published)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">kubuntu2004arm64</span></code></p></td>
+<td><p>subiquity</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ubuntu-20.04.5-live-server-arm64.iso</span></code> (+ <code class="docutils literal notranslate"><span class="pre">kubuntu-desktop</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">kubuntu2204arm64</span></code></p></td>
+<td><p>subiquity</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ubuntu-22.04.5-live-server-arm64.iso</span></code> (+ <code class="docutils literal notranslate"><span class="pre">kubuntu-desktop</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">kubuntu2404arm64</span></code></p></td>
+<td><p>subiquity</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ubuntu-24.04.x-live-server-arm64.iso</span></code> (+ <code class="docutils literal notranslate"><span class="pre">kubuntu-desktop</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fedora41arm64</span></code></p></td>
+<td><p>kickstart</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Fedora-Everything-netinst-aarch64-41-1.4.iso</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fedora42arm64</span></code></p></td>
+<td><p>kickstart</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Fedora-Everything-netinst-aarch64-42-1.1.iso</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ubuntu1804</span></code> (x86_64)</p></td>
+<td><p>gui-script</p></td>
+<td><p>auto-downloads <code class="docutils literal notranslate"><span class="pre">ubuntu-18.04.5-desktop-amd64.iso</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ubuntu2004</span></code> (x86_64)</p></td>
+<td><p>gui-script</p></td>
+<td><p>auto-downloads <code class="docutils literal notranslate"><span class="pre">ubuntu-20.04.6-desktop-amd64.iso</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">kubuntu2004</span></code> / <code class="docutils literal notranslate"><span class="pre">kubuntu2204</span></code> (x86_64)</p></td>
+<td><p>ubiquity</p></td>
+<td><p>auto-downloads <code class="docutils literal notranslate"><span class="pre">kubuntu-20.04.6</span></code> / <code class="docutils literal notranslate"><span class="pre">22.04.5-desktop-amd64.iso</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">kubuntu2404</span></code> (x86_64)</p></td>
+<td><p>gui (Calamares)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">kubuntu-24.04.x-desktop-amd64.iso</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fedora41</span></code> / <code class="docutils literal notranslate"><span class="pre">fedora42</span></code> (x86_64)</p></td>
+<td><p>kickstart</p></td>
+<td><p>auto-downloads <code class="docutils literal notranslate"><span class="pre">Fedora-Everything-netinst-x86_64-4{1,2}-1.x.iso</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Both Fedora profiles install from <strong>Everything-netinst</strong> rather than the
+Workstation Live ISO: Fedora 41 has no aarch64 live image at all, so netinst is
+the only route that keeps 41 and 42 method-identical, and directly kernel-booting
+live media would additionally need a per-release <code class="docutils literal notranslate"><span class="pre">root=live:CDLABEL=...</span></code>. Both
+releases are EOL, so their metalink no longer resolves to a mirror — the profiles
+pin <code class="docutils literal notranslate"><span class="pre">inst.repo</span></code> at <code class="docutils literal notranslate"><span class="pre">dl.fedoraproject.org/pub/archive/...</span></code>, which also serves
+stage2. The shared kickstart template’s <code class="docutils literal notranslate"><span class="pre">%post</span></code> repoints dnf at the same
+archive if the installed system’s metalink fails, then installs the ADARE extras
+— which also covers live media, where Anaconda ignores <code class="docutils literal notranslate"><span class="pre">%packages</span></code> entirely.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Ubuntu 20.04 (focal) needs two extra autoinstall keys</strong>, both in
+<code class="docutils literal notranslate"><span class="pre">autoinstall_ubuntu_focal.yaml</span></code> / <code class="docutils literal notranslate"><span class="pre">autoinstall_kubuntu_focal.yaml</span></code>:</p>
+<ul class="simple">
+<li><p><strong>No ``packages:`` block.</strong> Focal’s curtin leaves <code class="docutils literal notranslate"><span class="pre">devpts</span></code> unmounted inside
+<code class="docutils literal notranslate"><span class="pre">/target</span></code>, so apt’s pty logging fails with <em>“Can not write log (Is /dev/pts
+mounted?) - posix_openpt (19: No such device)”</em> and subiquity’s in-target
+package step exits 100 — after which subiquity drops to a rescue shell and the
+unattended install hangs until ADARE’s timeout. Setting <code class="docutils literal notranslate"><span class="pre">apt:</span> <span class="pre">conf:</span>
+<span class="pre">'Dpkg::Use-Pty</span> <span class="pre">&quot;false&quot;;'</span></code> does <strong>not</strong> help: curtin writes that to
+<code class="docutils literal notranslate"><span class="pre">/etc/apt/apt.conf.d/94curtin-config</span></code> and deletes it again before the package
+step runs. Focal therefore installs everything from <code class="docutils literal notranslate"><span class="pre">late-commands</span></code> with
+<code class="docutils literal notranslate"><span class="pre">apt-get</span> <span class="pre">install</span> <span class="pre">-y</span> <span class="pre">-o</span> <span class="pre">Dpkg::Use-Pty=false</span></code>, the one place the setting
+survives. Jammy and noble ship a curtin that mounts devpts, so they keep using
+<code class="docutils literal notranslate"><span class="pre">packages:</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">shutdown:</span> <span class="pre">poweroff</span></code> works on focal — a 20.04.**5** ISO carries subiquity
+snap rev 3704 (2022-era), not the 2020 original, because point releases refresh
+the installer. <code class="docutils literal notranslate"><span class="pre">sizing-policy:</span> <span class="pre">all</span></code> is accepted but <em>ignored</em> by it: the root
+LV still lands at half the PV (measured 28.5 GiB of 57 GiB on a 60 GB disk),
+which is ample for a desktop guest.</p></li>
+</ul>
+<p>Every new template also declares <code class="docutils literal notranslate"><span class="pre">error-commands</span></code> that dump the curtin/apt
+logs to <code class="docutils literal notranslate"><span class="pre">/dev/console</span></code> (captured into <code class="docutils literal notranslate"><span class="pre">&lt;vm&gt;_install.log</span></code>). Without it a
+failed in-target package install reaches the host as nothing more than
+<code class="docutils literal notranslate"><span class="pre">returned</span> <span class="pre">non-zero</span> <span class="pre">exit</span> <span class="pre">status</span> <span class="pre">100</span></code>. Those commands deliberately do <strong>not</strong>
+power the guest off: ADARE infers install success from QEMU exiting, so a
+poweroff-on-error would present a half-installed disk as a finished build.
+A <code class="docutils literal notranslate"><span class="pre">&lt;disk&gt;_install.log</span></code> scan for installer failure markers runs after every
+Linux build for the same reason — QEMU exits <code class="docutils literal notranslate"><span class="pre">0</span></code> on SIGTERM and on a closed
+QEMU window too.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><strong>Fedora guests run with SELinux in permissive mode.</strong> ADARE drives Linux
+guests through the QEMU guest agent, and Fedora confines that agent to the
+<code class="docutils literal notranslate"><span class="pre">virt_qemu_ga_t</span></code> domain — confined so tightly that it cannot stat
+<code class="docutils literal notranslate"><span class="pre">/usr/bin/sudo</span></code>. Probing a stock enforcing install through the agent gives
+<code class="docutils literal notranslate"><span class="pre">ls</span> <span class="pre">-l</span> <span class="pre">/usr/bin/sudo</span></code> → <em>Permission denied</em>, <code class="docutils literal notranslate"><span class="pre">command</span> <span class="pre">-v</span> <span class="pre">sudo</span></code> → not found,
+<code class="docutils literal notranslate"><span class="pre">systemctl</span></code> → <em>Access denied</em>, so every ADARE setup step fails even though
+every package is installed. <code class="docutils literal notranslate"><span class="pre">kickstart_fedora_workstation.yaml</span></code> therefore
+sets <code class="docutils literal notranslate"><span class="pre">selinux</span> <span class="pre">--permissive</span></code>.</p>
+<p>Permissive, not disabled: files are still labelled and AVCs are still audited,
+so SELinux contexts and audit entries keep showing up in forensic diffs — only
+the denials stop. It remains a deviation from a stock Fedora install and should
+be stated wherever these environments are reported. Debian/Ubuntu guests are
+unaffected (no SELinux confinement of the agent). The same one-line fix applies
+to <code class="docutils literal notranslate"><span class="pre">kickstart_fedora_kde.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">kickstart_rhel_workstation.yaml</span></code>, which
+have not been changed.</p>
+</div>
+<p><strong>Install timeout.</strong> One unattended install is allowed
+<code class="docutils literal notranslate"><span class="pre">ADARE_VM_INSTALL_TIMEOUT_MINUTES</span></code> minutes (default <strong>150</strong>) before it is
+treated as hung and the half-written disk is discarded. It is a hang detector,
+not a budget — a healthy install that runs long must not be killed. Measured on
+an M-series host: an Ubuntu live-server autoinstall lands well inside an hour,
+while a Fedora Workstation netinst needs longer (≈1900 RPMs fetched from the
+archive, then their scriptlets, before <code class="docutils literal notranslate"><span class="pre">%post</span></code> even starts) and a
+<code class="docutils literal notranslate"><span class="pre">kubuntu-desktop</span></code> build pulls the whole Plasma set over the network. Raise it
+for a slow link:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">ADARE_VM_INSTALL_TIMEOUT_MINUTES</span><span class="o">=</span><span class="m">240</span><span class="w"> </span>adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>fedora42arm64<span class="w"> </span>--iso<span class="w"> </span>...
+</pre></div>
+</div>
+<p>Register an environment under a name of your choosing with <code class="docutils literal notranslate"><span class="pre">--env-name</span></code>, which
+is how the paper’s hyphenated environment names are produced:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>fedora42arm64<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--iso<span class="w"> </span>~/.adare/isos/Fedora-Everything-netinst-aarch64-42-1.1.iso<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--env-name<span class="w"> </span>fedora-42
+</pre></div>
+</div>
+</section>
+<section id="replicating-on-x86-64">
+<span id="id3"></span><h3>Replicating on x86_64<a class="headerlink" href="#replicating-on-x86-64" title="Link to this heading">¶</a></h3>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p><strong>The aarch64 disks are not portable to x86_64.</strong> A qcow2 built by the
+<code class="docutils literal notranslate"><span class="pre">*arm64</span></code> profiles contains an ARM64 kernel and userland; there is no
+conversion. Replicating on an x86 host means <em>rebuilding</em> from the x86
+profiles, which produces a different (though method-identical) artefact.</p>
+</div>
+<p><strong>Host requirements.</strong> Linux with <strong>KVM</strong>. ADARE selects the accelerator by host
+OS: <code class="docutils literal notranslate"><span class="pre">hvf</span></code> on Darwin, otherwise <code class="docutils literal notranslate"><span class="pre">kvm</span></code>
+(<code class="xref py py-mod docutils literal notranslate"><span class="pre">adare.hypervisor.qemu.vm_creator.qmp_utils</span></code>, <code class="docutils literal notranslate"><span class="pre">config/__init__.py</span></code>).
+<strong>Windows hosts are not covered</strong> — WHPX is never selected, so a Windows host
+falls through to <code class="docutils literal notranslate"><span class="pre">kvm</span></code> and QEMU fails to start. Use Linux, or WSL2 with nested
+virtualisation.</p>
+<p>Each x86 profile bakes its <code class="docutils literal notranslate"><span class="pre">iso_url</span></code> + <code class="docutils literal notranslate"><span class="pre">iso_sha256</span></code>, so no <code class="docutils literal notranslate"><span class="pre">--iso</span></code> is
+needed: the ISO is downloaded into the cache and hash-checked, and a mismatch
+re-downloads rather than installing a wrong image. One command per environment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Ubuntu desktop, deterministic GUI replay (no vision model)</span>
+adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>ubuntu1804<span class="w"> </span>--env-name<span class="w"> </span>ubuntu-1804
+adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>ubuntu2004<span class="w"> </span>--env-name<span class="w"> </span>ubuntu-2004
+
+<span class="c1"># Kubuntu desktop via ubiquity + an HTTP-served preseed</span>
+adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>kubuntu2004<span class="w"> </span>--env-name<span class="w"> </span>kubuntu-2004
+adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>kubuntu2204<span class="w"> </span>--env-name<span class="w"> </span>kubuntu-2204
+
+<span class="c1"># Kubuntu 24.04 runs Calamares -&gt; needs the vision agent (see gui-auto)</span>
+adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>kubuntu2404<span class="w"> </span>--iso<span class="w"> </span>kubuntu-24.04.3-desktop-amd64.iso<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--env-name<span class="w"> </span>kubuntu-2404
+
+<span class="c1"># Fedora, Everything-netinst pinned to the archive mirror</span>
+adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>fedora41<span class="w"> </span>--env-name<span class="w"> </span>fedora-41
+adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>fedora42<span class="w"> </span>--env-name<span class="w"> </span>fedora-42
+
+<span class="c1"># Ubuntu server-based x86 profiles (same method as the arm64 ones)</span>
+adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>ubuntu2204<span class="w"> </span>--env-name<span class="w"> </span>ubuntu-2204
+adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>ubuntu2404<span class="w"> </span>--env-name<span class="w"> </span>ubuntu-2404
+</pre></div>
+</div>
+<p>Then load and verify each one, <strong>sequentially</strong> — a concurrent build starves the
+booting guest badly enough to time out the guest agent:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>env<span class="w"> </span>load<span class="w"> </span>~/.adare/state/environments/&lt;name&gt;_*.yml<span class="w"> </span>-f
+adare<span class="w"> </span>env<span class="w"> </span>verify<span class="w"> </span>&lt;name&gt;<span class="w">          </span><span class="c1"># installs the agent and performs a GUI click</span>
+</pre></div>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><strong>The x86 profiles are unverified by us.</strong> This work was done on an Apple
+Silicon host, which cannot build x86_64 guests at all (no TCG fallback), so
+every x86 profile above is shipped on the strength of its template and — for
+<code class="docutils literal notranslate"><span class="pre">ubuntu1804</span></code> / <code class="docutils literal notranslate"><span class="pre">ubuntu2004</span></code> — a playbook validated on someone else’s x86
+host. Treat the first run on x86 as a bring-up, not a regression test.</p>
+<p>Vendor URLs for EOL images also rot: focal has already moved to
+<code class="docutils literal notranslate"><span class="pre">old-releases</span></code>, and Kubuntu 20.04.5 has already been pruned (only <code class="docutils literal notranslate"><span class="pre">.6</span></code>
+remains). The baked SHA-256 turns that rot into a loud failure rather than a
+silently wrong image, but a 404 still needs the URL refreshed.</p>
+</div>
+<p>The two warnings above apply to x86 exactly as they do to aarch64: <strong>Fedora
+guests run with SELinux permissive</strong>, and <strong>Ubuntu 20.04 (focal) needs the
+``-o Dpkg::Use-Pty=false`` workaround</strong> for its unmounted <code class="docutils literal notranslate"><span class="pre">/dev/pts</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Images built before the interface-matching fix boot slowly and need the
+run-time network repair.</strong> Ubuntu/Kubuntu images whose autoinstall baked a
+<em>named</em> interface (<code class="docutils literal notranslate"><span class="pre">enp0s1</span></code>) into netplan cannot configure their NIC at run
+time, because ADARE gives it a different PCI address (<code class="docutils literal notranslate"><span class="pre">enp0s31</span></code>). Symptoms,
+as measured on the eight paper-replication environments:</p>
+<ul class="simple">
+<li><p>every boot pays the full <strong>120 s</strong> <code class="docutils literal notranslate"><span class="pre">systemd-networkd-wait-online</span></code> timeout,
+so <code class="docutils literal notranslate"><span class="pre">VM</span> <span class="pre">is</span> <span class="pre">ready</span></code> lands at 127-164 s instead of ~16 s;</p></li>
+<li><p>Kubuntu / Ubuntu 22.04 / 20.04 end up with no address at all, the
+<code class="docutils literal notranslate"><span class="pre">//10.0.2.4/qemu</span></code> mount fails, and file transfer degrades to QGA;</p></li>
+<li><p>Ubuntu 24.04 is rescued by NetworkManager one second after the timeout, so it
+passes but still pays the 120 s;</p></li>
+<li><p>Fedora is unaffected (NetworkManager manages any unnamed device).</p></li>
+</ul>
+<p>ADARE repairs this after boot (see <a class="reference internal" href="../architecture/file-sharing.html#guest-network-repair"><span class="std std-ref">Guest network repair</span></a>), so these
+images verify green as they are. Rebuilding them picks up the
+<code class="docutils literal notranslate"><span class="pre">match:</span> <span class="pre">{name:</span> <span class="pre">&quot;e*&quot;}</span></code> seed and removes the 120 s penalty as well.</p>
 </div>
 </section>
 </section>
@@ -737,11 +1737,50 @@ precedence, allowing you to override defaults without modifying ADARE source.</p
 <li><p><code class="docutils literal notranslate"><span class="pre">miniforge_arch</span></code> – <code class="docutils literal notranslate"><span class="pre">x86_64</span></code> or <code class="docutils literal notranslate"><span class="pre">aarch64</span></code> (for Miniforge download URL)</p></li>
 </ul>
 </section>
+<section id="template-metadata">
+<h3>Template metadata<a class="headerlink" href="#template-metadata" title="Link to this heading">¶</a></h3>
+<p>Each Linux autoinstall template carries a self-describing metadata block as a
+Jinja comment at the top of the file. The block declares which OS profiles the
+template covers, so dropping a template into <code class="docutils literal notranslate"><span class="pre">~/.adare/vm-templates/</span></code> is
+enough to register it – no Python edits required.</p>
+<div class="highlight-jinja notranslate"><div class="highlight"><pre><span></span><span class="c">{# adare-template</span>
+<span class="c">schema: 1</span>
+<span class="c">id: my-ubuntu</span>
+<span class="c">description: Custom Ubuntu 24.04 with extra tooling</span>
+<span class="c">maintainer: yourname</span>
+<span class="c">revision: 2026-05-06</span>
+<span class="c">supports:</span>
+<span class="c">  - ubuntu2404</span>
+<span class="c">  - ubuntu2404arm64</span>
+<span class="c">#}</span>
+<span class="x">#cloud-config</span>
+<span class="x">autoinstall:</span>
+<span class="x">  ...</span>
+</pre></div>
+</div>
+<p>Field reference:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">schema</span></code> (required, integer) – Metadata schema version. Currently <code class="docutils literal notranslate"><span class="pre">1</span></code>.
+Loading a template with an unknown schema raises an explicit error.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">id</span></code> (required, string) – Stable identifier surfaced in
+<code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">os-profile</span> <span class="pre">show</span></code>. Independent of filename.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">description</span></code> (string) – Human-readable summary.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">maintainer</span></code> (string) – Name or handle responsible for the template.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">revision</span></code> (string) – Free-form revision marker (date, version, etc.).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">supports</span></code> (list of strings) – OS profile names this template applies to.
+Order does not matter. Within a single template directory, two templates
+cannot claim the same OS name; across directories, user templates override
+built-ins.</p></li>
+</ul>
+<p>Because the block is a Jinja <code class="docutils literal notranslate"><span class="pre">{#</span> <span class="pre">...</span> <span class="pre">#}</span></code> comment, it is stripped at render
+time and never reaches cloud-init. The line <code class="docutils literal notranslate"><span class="pre">#cloud-config</span></code> remains the first
+line of the rendered output.</p>
+</section>
 <section id="writing-a-custom-template">
 <h3>Writing a custom template<a class="headerlink" href="#writing-a-custom-template" title="Link to this heading">¶</a></h3>
 <ol class="arabic">
 <li><p>Copy an existing template from the built-in directory as a starting point:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span><span class="k">$(</span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import adare.hypervisor.qemu.vm_creator.autoinstall as a; print(a.TEMPLATES_DIR)&quot;</span><span class="k">)</span>/autoinstall_ubuntu_2404.yaml<span class="w"> </span><span class="se">\</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span><span class="k">$(</span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import adare.hypervisor.qemu.vm_creator.autoinstall as a; print(a.TEMPLATES_DIR)&quot;</span><span class="k">)</span>/autoinstall_ubuntu_lts.yaml<span class="w"> </span><span class="se">\</span>
 <span class="w">   </span>~/.adare/vm-templates/my_autoinstall.yaml
 </pre></div>
 </div>
@@ -759,7 +1798,7 @@ precedence, allowing you to override defaults without modifying ADARE source.</p
 </div>
 </li>
 <li><p>Add the profile and create the VM:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>manage<span class="w"> </span>os-profile<span class="w"> </span>add<span class="w"> </span>my-ubuntu.yml
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>os-profile<span class="w"> </span>add<span class="w"> </span>my-ubuntu.yml
 adare<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>my-ubuntu
 </pre></div>
 </div>
@@ -885,8 +1924,8 @@ seconds per experiment. See the package wheels in the shared folder
 <h2>Registering as an Environment<a class="headerlink" href="#registering-as-an-environment" title="Link to this heading">¶</a></h2>
 <p>After creating a VM, register it as an ADARE environment so experiments can
 target it. Create an environment YAML file describing the VM:</p>
-<div class="literal-block-wrapper docutils container" id="id1">
-<div class="code-block-caption"><span class="caption-text">my-win11-env.yml</span><a class="headerlink" href="#id1" title="Link to this code">¶</a></div>
+<div class="literal-block-wrapper docutils container" id="id5">
+<div class="code-block-caption"><span class="caption-text">my-win11-env.yml</span><a class="headerlink" href="#id5" title="Link to this code">¶</a></div>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">win11-custom</span>
 <span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;~/.adare/state/vms/windows11-20260408.qcow2&quot;</span>
 <span class="nt">os</span><span class="p">:</span>
@@ -902,8 +1941,8 @@ target it. Create an environment YAML file describing the VM:</p>
 </div>
 </div>
 <p>For a Linux VM:</p>
-<div class="literal-block-wrapper docutils container" id="id2">
-<div class="code-block-caption"><span class="caption-text">my-ubuntu-env.yml</span><a class="headerlink" href="#id2" title="Link to this code">¶</a></div>
+<div class="literal-block-wrapper docutils container" id="id6">
+<div class="code-block-caption"><span class="caption-text">my-ubuntu-env.yml</span><a class="headerlink" href="#id6" title="Link to this code">¶</a></div>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu2404-custom</span>
 <span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;~/.adare/state/vms/ubuntu2404-20260408.qcow2&quot;</span>
 <span class="nt">os</span><span class="p">:</span>
@@ -962,14 +2001,14 @@ environment file was already generated automatically. Check with
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="diff-analysis.html">
+          <a class="prev-page" href="icon-library.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Diff Analysis</div>
+                <div class="title">Windows Icon Library</div>
                 
               </div>
             </a>
@@ -1009,21 +2048,47 @@ environment file was already generated automatically. Check with
 <li><a class="reference internal" href="#linux-fully-automated">Linux (fully automated)</a></li>
 <li><a class="reference internal" href="#windows-user-supplied-iso">Windows (user-supplied ISO)</a></li>
 <li><a class="reference internal" href="#manual-iso-install">Manual ISO install</a></li>
+<li><a class="reference internal" href="#gui-automated-installation-record-once-replay-deterministically">GUI-automated installation (record once, replay deterministically)</a></li>
+<li><a class="reference internal" href="#scripted-gui-installation-gui-script-deterministic-no-model">Scripted GUI installation (<code class="docutils literal notranslate"><span class="pre">gui-script</span></code>) — deterministic, no model</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#options">Options</a></li>
 <li><a class="reference internal" href="#setup-levels">Setup Levels</a></li>
+<li><a class="reference internal" href="#recipe-environments">Recipe Environments</a><ul>
+<li><a class="reference internal" href="#why-recipes-for-windows">Why recipes for Windows</a></li>
+<li><a class="reference internal" href="#recipe-environment-file">Recipe environment file</a></li>
+<li><a class="reference internal" href="#build-lifecycle">Build lifecycle</a></li>
+<li><a class="reference internal" href="#build-time-provisioning">Build-time provisioning</a><ul>
+<li><a class="reference internal" href="#schema">Schema</a></li>
+<li><a class="reference internal" href="#downloads-inside-a-provision-command-are-not-digest-pinned">Downloads inside a provision command are not digest-pinned</a></li>
+<li><a class="reference internal" href="#when-a-step-fails">When a step fails</a></li>
+<li><a class="reference internal" href="#sharing-one-base-across-several-recipes">Sharing one base across several recipes</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#consumer-supplied-byo-isos-windows-only">Consumer-supplied (BYO) ISOs – Windows only</a><ul>
+<li><a class="reference internal" href="#supplying-the-iso-as-a-consumer">Supplying the ISO as a consumer</a></li>
+<li><a class="reference internal" href="#converting-an-existing-recipe">Converting an existing recipe</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#choosing-the-mode">Choosing the mode</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#profile-system">Profile System</a><ul>
 <li><a class="reference internal" href="#listing-profiles">Listing profiles</a></li>
 <li><a class="reference internal" href="#showing-profile-details">Showing profile details</a></li>
 <li><a class="reference internal" href="#adding-a-custom-profile">Adding a custom profile</a></li>
 <li><a class="reference internal" href="#removing-a-custom-profile">Removing a custom profile</a></li>
 <li><a class="reference internal" href="#yaml-field-reference">YAML field reference</a></li>
+<li><a class="reference internal" href="#installer-families">Installer families</a></li>
+<li><a class="reference internal" href="#desktop-guests-on-aarch64">Desktop guests on aarch64</a></li>
+<li><a class="reference internal" href="#paper-replication-profiles">Paper-replication profiles</a></li>
+<li><a class="reference internal" href="#replicating-on-x86-64">Replicating on x86_64</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#custom-templates">Custom Templates</a><ul>
 <li><a class="reference internal" href="#template-search-order">Template search order</a></li>
 <li><a class="reference internal" href="#available-template-variables">Available template variables</a></li>
+<li><a class="reference internal" href="#template-metadata">Template metadata</a></li>
 <li><a class="reference internal" href="#writing-a-custom-template">Writing a custom template</a></li>
 </ul>
 </li>
@@ -1058,6 +2123,7 @@ environment file was already generated automatically. Check with
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>
 document.addEventListener('DOMContentLoaded', function() {
   if (!window.simpleDatatables) {

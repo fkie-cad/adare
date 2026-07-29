@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from adare.types.playbook import _structure_action, parse_playbook
+from adare.types.playbook import parse_playbook, structure_action
 
 
 def parse_action_from_file(file_path: str):
@@ -23,7 +23,7 @@ def parse_action_from_file(file_path: str):
 def parse_action_from_yaml(yaml_content: str):
     """Parse single action from YAML string."""
     action_dict = yaml.safe_load(yaml_content)
-    return _structure_action(action_dict)
+    return structure_action(action_dict)
 
 
 def parse_action_from_stdin():

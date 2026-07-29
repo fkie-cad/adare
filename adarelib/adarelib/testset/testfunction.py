@@ -30,12 +30,22 @@ class ModuleLoadFailure:
             match = re.search(r"No module named '([^']+)'", self.exception_message)
             if match:
                 dep_name = match.group(1)
-                return f"Testfunction '{self.module_name}' requires missing dependency: {dep_name}"
+                # Top-level package (the installable name for the common case).
+                pkg = dep_name.split('.')[0]
+                return (
+                    f"Testfunction '{self.module_name}' requires missing dependency: {dep_name}. "
+                    f"Add it to the collection's requirements.txt and reload, or install it manually: "
+                    f"uv pip install {pkg}"
+                )
             return f"Testfunction '{self.module_name}' has missing dependency: {self.exception_message}"
         elif self.exception_type == 'ImportError':
             return f"Testfunction '{self.module_name}' import failed: {self.exception_message}"
         elif self.exception_type == 'SyntaxError':
             return f"Testfunction '{self.module_name}' has syntax error: {self.exception_message}"
+        elif self.exception_type == 'ContractViolation':
+            return f"Testfunction '{self.module_name}' violates the authoring contract: {self.exception_message}"
+        elif self.exception_type == 'DuplicateTestnameError':
+            return f"Testfunction '{self.module_name}' has {self.exception_message}"
         else:
             return f"Testfunction '{self.module_name}' failed to load: {self.exception_type}: {self.exception_message}"
 
@@ -83,10 +93,32 @@ class TestfunctionLoader:
             module = import_module_from_pyfile(file_path)
             testdict[name] = {}
 
+            duplicates: list[str] = []
             for attribute_name in dir(module):
                 attribute = getattr(module, attribute_name)
-                if isclass(attribute) and issubclass(attribute, BasicTest):
-                    testdict[name][getattr(attribute, 'testname')] = attribute
+                if isclass(attribute) and issubclass(attribute, BasicTest) and attribute is not BasicTest:
+                    testname = getattr(attribute, 'testname', '')
+                    if not testname:
+                        continue
+                    if testname in testdict[name]:
+                        # Two @testfunction(name=...) in this collection share a name;
+                        # the second would silently overwrite the first. Surface it.
+                        duplicates.append(testname)
+                        continue
+                    testdict[name][testname] = attribute
+
+            if duplicates:
+                msg = (
+                    f"duplicate testname(s) {', '.join(sorted(set(duplicates)))} in collection "
+                    f"'{name}' — each @testfunction(name=...) must be unique within a file"
+                )
+                log.error(f"Duplicate testname loading testfunction '{name}' from {file_path}: {msg}")
+                self._load_failures[name] = ModuleLoadFailure(
+                    module_name=name,
+                    file_path=str(file_path),
+                    exception_type='DuplicateTestnameError',
+                    exception_message=msg,
+                )
 
         except ModuleNotFoundError as e:
             log.error(f"Missing dependency loading testfunction '{name}' from {file_path}: {e}")
@@ -124,6 +156,18 @@ class TestfunctionLoader:
                 exception_message=str(e)
             )
 
+        except ValueError as e:
+            # Raised by the @testfunction decorator when the authoring contract is
+            # violated (first param not 'ctx', unannotated params). Record instead
+            # of letting it abort the whole collection load.
+            log.error(f"Contract violation loading testfunction '{name}' from {file_path}: {e}")
+            self._load_failures[name] = ModuleLoadFailure(
+                module_name=name,
+                file_path=str(file_path),
+                exception_type='ContractViolation',
+                exception_message=str(e)
+            )
+
     def _do_import(self, source=None, directory=None) -> dict:
         """Internal import logic. Caller must hold self._lock."""
         testdict = {}
@@ -151,6 +195,16 @@ class TestfunctionLoader:
 
                 file = testfunction_dir / f'{testfunction_dir.name}.py'
                 if not file.exists():
+                    # A collection is loaded from <dir>/<dir>.py. If the dir holds
+                    # .py files but not the matching one, it is silently skipped —
+                    # a common and confusing authoring mistake, so warn about it.
+                    stray_py = [p.name for p in testfunction_dir.glob('*.py')]
+                    if stray_py:
+                        log.warning(
+                            f"Skipping testfunction dir '{testfunction_dir.name}': expected "
+                            f"'{testfunction_dir.name}.py' but found {stray_py}. "
+                            f"The .py file must be named exactly like its directory."
+                        )
                     continue
 
                 self._load_single_module(file.stem, file, testdict)

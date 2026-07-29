@@ -209,6 +209,95 @@ class DevModeSnapshotsMixin:
                 log.error(f"Hard reset failed: {e}", exc_info=True)
                 return Result.fail("RESET_FAILED", f"Hard reset failed: {e}")
 
+    async def restart_with_memory(self, memory_mb: int | None = None) -> Result[None]:
+        """Cold-restart the VM, optionally rebuilding the domain with more RAM.
+
+        RAM is bound when the QEMU domain is (re)built from ``config.vm_memory``
+        (see ``QEMUVM`` construction in the qemu lifecycle strategy), so a memory
+        change requires a full rebuild — not just a stop/start. This mirrors the
+        VM-setup sequence in :meth:`DevModeSession.start` (create/prepare -> file
+        transfer -> networking -> start -> reinstall + reconnect WS), which is
+        the proven cold-boot path.
+
+        A rebuild uses a fresh overlay, so ALL in-VM state is discarded — the
+        caller (the GUI agent) re-drives its goal on the resized VM. When
+        ``memory_mb`` is None the VM simply reboots at its current size.
+
+        Persisting the working value into ``settings.vm_memory`` is done by the
+        caller via its recorder (the session holds no recorder reference).
+        """
+        with self._command_logger("restart_with_memory"):
+            try:
+                if memory_mb is not None:
+                    memory_mb = int(memory_mb)
+                    log.info(
+                        f"Restarting VM with {memory_mb} MB RAM "
+                        f"(was {self.experiment_ctx.config.vm_memory} MB)"
+                    )
+                    self.vm_memory = memory_mb
+                    self.experiment_ctx.config.vm_memory = memory_mb
+                else:
+                    log.info(
+                        f"Restarting VM at current size "
+                        f"({self.experiment_ctx.config.vm_memory} MB)"
+                    )
+
+                # 1. Disconnect WebSocket
+                if self.experiment_ctx.client:
+                    await self.experiment_ctx.client.disconnect()
+                    log.debug("WebSocket disconnected")
+
+                # 2. Stop VM (don't check interrupt event during teardown)
+                with self._create_stage_context(CleanupShutdownStage()):
+                    await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True)
+                log.debug("VM stopped")
+
+                # 3. Rebuild the domain with the (possibly new) RAM and start it.
+                #    Same sequence as start(): the rebuild reconstructs the QEMU
+                #    domain from config.vm_memory and boots a fresh overlay.
+                await self.vm_manager.create_and_prepare_vm(self.experiment_ctx)
+                await self.vm_manager.setup_file_transfer(self.experiment_ctx)
+                await self.vm_manager.setup_networking(self.experiment_ctx)
+                await self.vm_manager.start_vm(self.experiment_ctx)
+                log.debug("VM rebuilt and restarted")
+
+                # 4. Reinstall + reconnect the WebSocket server on the fresh boot
+                from adare.backend.experiment.run import (
+                    step_connect_websocket,
+                    step_install_and_run_websocket_server,
+                )
+                with StageCtxManager(
+                    SoftwareInstallationStage(),
+                    self.experiment_ctx.experiment_run_ulid,
+                    event=self.experiment_ctx.user_interrupt_event
+                ):
+                    await step_install_and_run_websocket_server(self.experiment_ctx)
+                    await step_connect_websocket(self.experiment_ctx)
+                    log.debug("WebSocket reconnected")
+
+                # 5. A fresh boot invalidates the controller state and counters.
+                if self.playbook_controller:
+                    self.playbook_controller.execution_context.clear()
+                    self.playbook_controller.execution_context.update(
+                        self.initial_variables.copy()
+                    )
+                self.actions_executed = 0
+
+                log.info(
+                    f"VM restart completed at {self.experiment_ctx.config.vm_memory} MB"
+                )
+                return Result.ok(None)
+
+            except HypervisorException as e:
+                log.error(f"VM restart failed: {e}", exc_info=True)
+                return Result.fail("VM_OPERATION_FAILED", f"VM restart failed: {e}")
+            except (WebSocketTimeoutError, ConnectionError, OSError) as e:
+                log.error(f"VM restart failed: {e}", exc_info=True)
+                return Result.fail("CONNECTION_FAILED", f"VM restart connection failed: {e}")
+            except LoggedErrorException as e:
+                log.error(f"VM restart failed: {e}", exc_info=True)
+                return Result.fail("RESTART_FAILED", f"VM restart failed: {e}")
+
     async def create_checkpoint(self, name: str, description: str = "") -> Result[None]:
         """
         Create a named snapshot for later restoration.
@@ -327,11 +416,14 @@ class DevModeSnapshotsMixin:
 
                 # QEMU: Restore external snapshot
                 if self.experiment_ctx.hypervisor_type == 'qemu':
+                    use_qmp_snapshot = getattr(vm, '_use_qmp_internal_snapshot', lambda: False)()
+
                     # Disconnect WebSocket before VM state change
                     if self.experiment_ctx.client:
                         await self.experiment_ctx.client.disconnect()
 
-                    # Restore external snapshot (destroys VM, updates disk, restores memory)
+                    # Restore snapshot. QMP internal: loadvm in place (VM keeps
+                    # running, agent restored alive). External: destroy/redefine/restore.
                     success = vm.restore_external_snapshot(
                         memory_path=snapshot.memory_file_path,
                         disk_path=snapshot.disk_file_path
@@ -342,7 +434,7 @@ class DevModeSnapshotsMixin:
                         return Result.fail("SNAPSHOT_RESTORE_FAILED", f"Failed to restore external snapshot for checkpoint '{name}'")
 
                     # Wait for VM to be ready after memory restore
-                    # The VM is running after virsh restore, but guest OS needs time to initialize
+                    # The VM is running after restore, but guest OS needs time to initialize
                     log.info("Waiting for VM to be ready after snapshot restore...")
                     await self._wait_for_vm_ready_after_restore(self.experiment_ctx)
 
@@ -351,8 +443,9 @@ class DevModeSnapshotsMixin:
                         log.error("WebSocket port not set in context - cannot reconnect")
                         return Result.fail("CONNECTION_FAILED", "WebSocket port not set in context - cannot reconnect")
 
-                    # Restart agent and reconnect to WebSocket server
-                    # (Required because shared directory issues may kill the agent during restore)
+                    # Reconnect to the WebSocket server. For QMP internal snapshots
+                    # the in-guest server survives the loadvm, so only reconnect;
+                    # for external snapshots the agent must be reinstalled + started.
                     from adare.backend.experiment.run import (
                         step_connect_websocket,
                         step_install_and_run_websocket_server,
@@ -362,7 +455,8 @@ class DevModeSnapshotsMixin:
                         self.experiment_ctx.experiment_run_ulid,
                         event=self.experiment_ctx.user_interrupt_event
                     ):
-                        await step_install_and_run_websocket_server(self.experiment_ctx)
+                        if not use_qmp_snapshot:
+                            await step_install_and_run_websocket_server(self.experiment_ctx)
                         await step_connect_websocket(self.experiment_ctx)
 
                 # VirtualBox path (unchanged)
@@ -394,11 +488,15 @@ class DevModeSnapshotsMixin:
                         await step_install_and_run_websocket_server(self.experiment_ctx)
                         await step_connect_websocket(self.experiment_ctx)
 
-                # Reset playbook controller state
-                self.playbook_controller.execution_context.clear()
-                self.playbook_controller.execution_context.update(
-                    snapshot.variable_state.copy()
-                )
+                # Reset playbook controller state. It is lazily created
+                # (_ensure_playbook_controller), so it may still be None if no
+                # playbook has run in this session yet (e.g. boot -> checkpoint ->
+                # restore) — mirror the guard used by create_checkpoint above.
+                if self.playbook_controller:
+                    self.playbook_controller.execution_context.clear()
+                    self.playbook_controller.execution_context.update(
+                        snapshot.variable_state.copy()
+                    )
 
                 # Reset counters
                 self.actions_executed = 0
@@ -456,34 +554,34 @@ class DevModeSnapshotsMixin:
             if vm.get_state() != 'running':
                 raise HypervisorException("VM must be running to create live snapshot")
 
-            # STOP AGENT BEFORE SNAPSHOT
-            # This ensures that when the snapshot is restored, the agent is NOT running,
-            # allowing for a clean fresh start using the cached command.
-            log.info("Stopping AdareVM agent before snapshot to ensure clean state")
+            # QMP internal (savevm/loadvm) snapshots capture the FULL live machine
+            # state, so the in-guest agent survives a restore and must NOT be killed
+            # first (killing it and reinstalling after loadvm hangs on guest-exec).
+            # libvirt external snapshots do a reboot-like restore, so there the
+            # agent is stopped for a clean fresh start.
+            use_qmp_snapshot = getattr(vm, '_use_qmp_internal_snapshot', lambda: False)()
 
-            # 1. Disconnect WebSocket client
+            # Disconnect the host WebSocket client so no stale host-side connection
+            # is captured; it is reconnected after the snapshot.
             if self.experiment_ctx.client:
                 try:
                     await self.experiment_ctx.client.disconnect()
                 except (WebSocketTimeoutError, ConnectionError, OSError) as e:
                     log.warning(f"Error disconnecting client before snapshot: {e}")
 
-            # 2. Kill adarevm process in VM
-            try:
-                if self.experiment_ctx.guest_platform == 'windows':
-                    stop_cmd = "taskkill /F /IM adarevm.exe"
-                else:
-                    # Linux: pkill
-                    stop_cmd = "pkill -f adarevm"
-
-                # Run stop command (ignore errors if not running)
-                # We use a short timeout
-                await vm.run_command(stop_cmd, timeout=10)
-            except (HypervisorException, OSError, TimeoutError) as e:
-                log.warning(f"Failed to stop adarevm agent in VM (might not be running): {e}")
-
-            # Wait a moment for process to die and file handles to close
-            await asyncio.sleep(2)
+            if not use_qmp_snapshot:
+                # External-snapshot path: kill adarevm so restore starts fresh.
+                log.info("Stopping AdareVM agent before snapshot to ensure clean state")
+                try:
+                    if self.experiment_ctx.guest_platform == 'windows':
+                        stop_cmd = "taskkill /F /IM adarevm.exe"
+                    else:
+                        stop_cmd = "pkill -f adarevm"
+                    await vm.run_command(stop_cmd, timeout=10)
+                except (HypervisorException, OSError, TimeoutError) as e:
+                    log.warning(f"Failed to stop adarevm agent in VM (might not be running): {e}")
+                # Wait a moment for process to die and file handles to close
+                await asyncio.sleep(2)
 
             # Compute snapshot storage directory
             snapshot_dir = vm._get_snapshot_storage_dir()
@@ -507,10 +605,10 @@ class DevModeSnapshotsMixin:
             log.debug(f"Memory file: {memory_file_path}")
             log.debug(f"Disk file: {disk_file_path}")
 
-            # Restart agent and reconnect
-            # (Required because shared directory issues may kill the agent during snapshot creation)
-            log.info("Restarting AdareVM agent after snapshot creation")
-
+            # Reconnect the host WebSocket client. For QMP internal snapshots the
+            # in-guest server is still running (it was captured live), so we only
+            # reconnect. For external snapshots the agent was killed above and must
+            # be reinstalled + restarted.
             from adare.backend.experiment.run import step_connect_websocket, step_install_and_run_websocket_server
 
             with StageCtxManager(
@@ -518,8 +616,13 @@ class DevModeSnapshotsMixin:
                 self.experiment_ctx.experiment_run_ulid,
                 event=self.experiment_ctx.user_interrupt_event
             ):
-                await step_install_and_run_websocket_server(self.experiment_ctx)
-                await step_connect_websocket(self.experiment_ctx)
+                if use_qmp_snapshot:
+                    log.info("Reconnecting to AdareVM agent (still running) after snapshot")
+                    await step_connect_websocket(self.experiment_ctx)
+                else:
+                    log.info("Restarting AdareVM agent after snapshot creation")
+                    await step_install_and_run_websocket_server(self.experiment_ctx)
+                    await step_connect_websocket(self.experiment_ctx)
 
         else:
             log.warning(f"Unknown hypervisor type: {self.experiment_ctx.hypervisor_type}")

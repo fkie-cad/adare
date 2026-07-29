@@ -30,7 +30,13 @@ from adare.hypervisor.exceptions import (
     VMAlreadyRunningException,
     VMStartException,
 )
+from adare.hypervisor.qemu.accel import native_accel
 from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
+from adare.hypervisor.qemu.libvirt_undefine import (
+    delete_firmware_state_flags,
+    keep_firmware_state_flags,
+    undefine,
+)
 from adare.hypervisor.qemu.manager import QEMUManager
 from adare.hypervisor.qemu.mixins.commands import CommandExecutionMixin
 from adare.hypervisor.qemu.mixins.configuration import ConfigurationMixin
@@ -39,6 +45,7 @@ from adare.hypervisor.qemu.mixins.networking import NetworkingMixin
 from adare.hypervisor.qemu.mixins.registry import RegistryMixin
 from adare.hypervisor.qemu.mixins.snapshots import SnapshotMixin
 from adare.hypervisor.qemu.models import CommandResult
+from adare.hypervisor.qemu.utilities.disk_utils import try_cow_clone
 
 log = logging.getLogger(__name__)
 
@@ -60,12 +67,23 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         cpus: int = 2,
         ram: int = 2048,
         machine: str = 'pc',
-        accel: str = 'kvm',
+        accel: str | None = None,
         drive_format: str = 'qcow2',
         disk_path: str | None = None,
-        architecture: str = 'x86_64'
+        architecture: str = 'x86_64',
+        iso_path: str = '',
+        boot_from_cdrom: bool = False,
+        resolution: str | None = None,
+        hypervisor_config: dict | None = None,
+        environment_identity: str | None = None,
     ):
         self.vm_name = vm_name
+        # Stable per-environment id (e.g. the environment's vm_id), used only to
+        # derive a deterministic domain UUID on first config creation -- see
+        # ConfigurationMixin._domain_uuid_for. vm_name itself is run-scoped, so
+        # this is the one piece of identity that survives across runs of the
+        # same environment. None for callers with no environment context.
+        self._environment_identity = environment_identity
         self.guest_os = guest_os
         self.architecture = architecture
         self.username = username
@@ -73,7 +91,10 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         self.cpus = cpus
         self.ram = ram
         self.machine = machine
-        self.accel = accel
+        # Callers that don't resolve accel explicitly (OVA import, dev-session
+        # restore) get the host's native accelerator rather than a hardcoded
+        # 'kvm' that would be wrong on Darwin — see accel.py.
+        self.accel = accel if accel is not None else native_accel()
         self.drive_format = drive_format
         self.host_os = platform.system().lower()
         self.manager = manager
@@ -82,6 +103,13 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         self._command_queue = []
         self._qemu_process = None  # Running QEMU process
         self._external_disk_path = disk_path  # Optional external disk path for --no-copy mode
+        # Live-installer boot: attach an ISO as CDROM and (optionally) boot it first.
+        self._iso_path = iso_path or ''
+        self._boot_from_cdrom = bool(boot_from_cdrom)
+        # Optional guest display resolution "WxH" (e.g. "1280x1024"); None => host/env
+        # default. Consumed by ConfigurationMixin -> QEMUVMConfig.resolution_x/y (EDID).
+        self._resolution = resolution or None
+        self._hypervisor_config = hypervisor_config or {}  # Store for mixins (boot_mode override)
 
         # libvirt integration
         self._libvirt_conn = None  # Lazy initialization - will use manager's connection
@@ -210,6 +238,8 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 # Create new connection for this QEMUVM instance (thread-safe)
                 # Don't use self.manager.libvirt_conn to avoid shared connection issues
                 self._libvirt_conn = libvirt.open(libvirt_uri)
+                from adare.hypervisor.qemu.libvirt_errors import install_libvirt_error_logger
+                install_libvirt_error_logger()
                 log.debug(f"Created thread-local libvirt connection for {self.vm_name}")
             except libvirt.libvirtError as e:
                 log.warning(f"Failed to create libvirt connection: {e}")
@@ -284,7 +314,26 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 if existing_domain.isActive():
                     log.warning(f"Domain '{self.vm_name}' is running, destroying first...")
                     existing_domain.destroy()
-                existing_domain.undefine()
+                # KEEP_NVRAM: a UEFI domain (Windows/OVMF) carries an <nvram/>
+                # varstore, and a plain undefine() on it raises "Cannot undefine
+                # domain with nvram". The NVRAM file was just (re)generated by the
+                # XML build above and must survive the redefine — so keep it here
+                # (this path is hit on every restart, e.g. a boot retry).
+                #
+                # KEEP_TPM for the same reason, and it is the load-bearing one on this
+                # path: libvirt deletes the emulated TPM state on undefine unless told
+                # otherwise, so without it EVERY start — including every cold-boot
+                # retry — handed the Windows guest a freshly manufactured vTPM to
+                # re-provision. See hypervisor/qemu/libvirt_undefine.
+                #
+                # No flagless fallback here: undefine() already degrades internally
+                # (AttributeError -> flagless; an unsupported-flag libvirtError ->
+                # retry without the TPM bits). A flagless undefine() on top of that
+                # would delete NVRAM+vTPM state on the most frequently hit path in
+                # the codebase (every VM start, including every boot retry) for any
+                # *other* libvirtError — the opposite of what KEEP_TPM is for. Let a
+                # genuine failure propagate to the outer handler below instead.
+                undefine(existing_domain, keep_firmware_state_flags())
         except libvirt.libvirtError as e:
             # Domain doesn't exist, which is fine
             if 'Domain not found' not in str(e):
@@ -452,6 +501,14 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             if not os.path.exists(self.config.disk_path):
                 raise VMStartException(self.vm_name, f"VM disk not found at {self.config.disk_path}")
 
+            # Directory-level sweep: reap crash-orphaned QMP/QGA sockets left by
+            # OTHER instances whose QEMU died and is never re-run (the per-VM
+            # cleanup below only handles this VM's own same-name sockets). Never
+            # touches a socket with a live listener; keep our own sockets for the
+            # explicit per-VM cleanup that follows.
+            from adare.hypervisor.qemu.mixins.configuration import sweep_stale_sockets
+            sweep_stale_sockets(keep={self.config.qmp_socket_path, self.config.guest_agent_socket_path})
+
             # Clean up any stale socket files before starting
             for socket_path in [self.config.qmp_socket_path, self.config.guest_agent_socket_path]:
                 if os.path.exists(socket_path):
@@ -490,6 +547,34 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     if not silent:
                         log.debug(f"{message}")
                     return 0
+                if state != libvirt.VIR_DOMAIN_SHUTOFF:
+                    # Paused / crashed / pmsuspended leftovers from an aborted run.
+                    # These are still 'active' to libvirt, so create() below would
+                    # fail with an opaque "End of file while reading data" error.
+                    # Resuming is not an option either: this start already redefined
+                    # the domain onto a fresh overlay, so the leftover's disk state
+                    # is gone. Destroy it and boot cleanly.
+                    log.warning(
+                        f"VM '{self.vm_name}' was left in libvirt state {state} by an "
+                        f"earlier run; destroying it before a clean start"
+                    )
+                    try:
+                        self._libvirt_domain.destroy()
+                    except libvirt.libvirtError as e:
+                        # "cannot acquire state change lock" means libvirtd has a
+                        # wedged job on this domain — usually its QEMU died without
+                        # libvirtd noticing, leaving a phantom 'paused' entry that
+                        # neither destroy nor domjobabort can clear. Nothing in-process
+                        # can fix that, so say what will.
+                        log.error(
+                            f"Could not destroy leftover domain '{self.vm_name}': {e}\n"
+                            f"If this is a state-change-lock timeout, libvirtd holds a "
+                            f"wedged job on a domain whose QEMU process is already gone. "
+                            f"The start below will fail. Clear it by restarting the "
+                            f"session libvirt daemon (no running guests are lost if "
+                            f"'virsh -c qemu:///session list' shows none):\n"
+                            f"  pkill -f 'libvirtd -f' && virsh -c qemu:///session list --all"
+                        )
             except libvirt.libvirtError as e:
                 log.warning(f"Could not check domain state: {e}")
 
@@ -691,19 +776,16 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             log_file_path = get_experiment_log_file()
 
             # Undefine libvirt domain (removes from virsh list)
-            # Use undefineFlags for proper cleanup of snapshots and managed storage
-            flags = (libvirt.VIR_DOMAIN_UNDEFINE_MANAGED_SAVE |
-                     libvirt.VIR_DOMAIN_UNDEFINE_SNAPSHOTS_METADATA |
-                     libvirt.VIR_DOMAIN_UNDEFINE_NVRAM)
+            # Use undefineFlags for proper cleanup of snapshots and managed storage.
+            # This is instance REMOVAL, so the instance-scoped firmware state goes with
+            # it: NVRAM *and* the emulated TPM state, which otherwise outlives the
+            # instance as an orphan directory under ~/.config/libvirt/qemu/swtpm/.
+            flags = delete_firmware_state_flags()
 
             if self._libvirt_domain:
                 try:
                     with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
-                        try:
-                            self._libvirt_domain.undefineFlags(flags)
-                        except AttributeError:
-                            # Fall back to basic undefine if undefineFlags not available
-                            self._libvirt_domain.undefine()
+                        undefine(self._libvirt_domain, flags)
                     if not silent:
                         log.debug(f"Undefined libvirt domain '{self.vm_name}'")
                 except libvirt.libvirtError as e:
@@ -716,11 +798,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
                         conn = self._get_libvirt_connection()
                         domain = conn.lookupByName(self.vm_name)
-                        try:
-                            domain.undefineFlags(flags)
-                        except AttributeError:
-                            # Fall back to basic undefine if undefineFlags not available
-                            domain.undefine()
+                        undefine(domain, flags)
                     if not silent:
                         log.debug(f"Undefined libvirt domain '{self.vm_name}'")
                 except libvirt.libvirtError:
@@ -844,12 +922,19 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         try:
             log_file = get_experiment_log_file()
 
-            # Try to get domain state from libvirt
+            # Resolve the domain with a direct, non-raising lookup. Going through
+            # _ensure_libvirt_domain() would raise a HypervisorException that
+            # self-logs at ERROR, but an undefined domain is the normal
+            # "poweroff" case while a VM is still being defined / booting.
             if not self._libvirt_domain:
+                conn = self._get_libvirt_connection()
+                if not conn:
+                    return "poweroff"
                 try:
-                    self._ensure_libvirt_domain()
-                except HypervisorException:
-                    # Domain not defined in libvirt or connection unavailable
+                    with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                        self._libvirt_domain = conn.lookupByName(self.vm_name)
+                except libvirt.libvirtError as e:
+                    log.debug(f"Domain '{self.vm_name}' not defined yet: {e}")
                     return "poweroff"
 
             # Get domain state
@@ -1223,6 +1308,16 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                         f"Please ensure directory has write permissions."
                     )
 
+        # Materialize the instance base. For a qcow2 source on a managed VM, try a CoW
+        # clone (APFS clonefile / reflink) so the base shares blocks with the template
+        # until written; otherwise fall back to a full qemu-img convert (also the path
+        # for non-qcow2 sources that genuinely need format conversion).
+        if source_format == 'qcow2' and not self._external_disk_path:
+            if try_cow_clone(str(source_disk), dest_disk):
+                log.info(f"CoW-cloned instance base from template: {dest_disk}")
+                self._save_vm_config()
+                return 0, "VM imported successfully (CoW clone)"
+
         # Convert to qcow2
         log.debug(f"Converting {source_format} disk to qcow2 at {dest_disk}")
         args = [qemu_img_exe, 'convert', '-O', 'qcow2', str(source_disk), dest_disk]
@@ -1515,24 +1610,39 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             log.error(f"QMP drag button press failed: {response2.get('error')}")
             return False
 
-        await asyncio.sleep(0.01)
+        # Hold at the press point so the toolkit registers the button-down on
+        # the item before motion begins (required for GTK/Nautilus DnD).
+        await asyncio.sleep(0.15)
 
-        # Step 3: Move to end position (while holding button)
-        move_end_command = {
-            "execute": "input-send-event",
-            "arguments": {
-                "events": [
-                    {"type": "abs", "data": {"axis": "x", "value": norm_x2}},
-                    {"type": "abs", "data": {"axis": "y", "value": norm_y2}}
-                ]
+        # Step 3: Move to end in INTERPOLATED steps (while holding button).
+        # A single teleport does not trigger GTK drag-and-drop: the toolkit must
+        # see continuous pointer motion crossing the drag threshold. Send a
+        # sequence of intermediate absolute positions with small real-time gaps.
+        steps = 25
+        move_responses = []
+        for i in range(1, steps + 1):
+            frac = i / steps
+            ix = int(round(norm_x1 + (norm_x2 - norm_x1) * frac))
+            iy = int(round(norm_y1 + (norm_y2 - norm_y1) * frac))
+            move_cmd = {
+                "execute": "input-send-event",
+                "arguments": {
+                    "events": [
+                        {"type": "abs", "data": {"axis": "x", "value": ix}},
+                        {"type": "abs", "data": {"axis": "y", "value": iy}}
+                    ]
+                }
             }
-        }
-        response3 = await self._send_qmp_command(move_end_command)
-        if 'error' in response3:
-            log.error(f"QMP drag move to end failed: {response3.get('error')}")
-            return False
+            resp = await self._send_qmp_command(move_cmd)
+            if 'error' in resp:
+                log.error(f"QMP drag interpolated move failed: {resp.get('error')}")
+                return False
+            move_responses.append(resp)
+            await asyncio.sleep(0.02)
 
-        await asyncio.sleep(0.01)
+        # Settle at the drop target so it can highlight/accept before release.
+        await asyncio.sleep(0.2)
+        response3 = move_responses[-1] if move_responses else {'return': {}}
 
         # Step 4: Release button
         release_command = {
@@ -1600,13 +1710,20 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Returns:
             True if successful, False otherwise
         """
+        # QEMU has no "wheel" axis: the mouse wheel is an InputButton
+        # (wheel-up / wheel-down), pressed once per notch. A "rel"/axis:wheel
+        # event is rejected by QMP, which is why scroll silently failed.
+        button = "wheel-up" if amount > 0 else "wheel-down"
+        clicks = abs(int(amount))
+        if clicks == 0:
+            return True
+        events: list[dict] = []
+        for _ in range(clicks):
+            events.append({"type": "btn", "data": {"button": button, "down": True}})
+            events.append({"type": "btn", "data": {"button": button, "down": False}})
         command = {
             "execute": "input-send-event",
-            "arguments": {
-                "events": [
-                    {"type": "rel", "data": {"axis": "wheel", "value": amount}}
-                ]
-            }
+            "arguments": {"events": events}
         }
         response = await self._send_qmp_command(command)
         return 'return' in response

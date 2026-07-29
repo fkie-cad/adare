@@ -8,6 +8,10 @@ ADARE enables researchers and forensic analysts to create reproducible experimen
 
 ## Quick Start
 
+## Web Platform
+
+The ADARE web platform is available at **https://adare.click/**.
+
 ## Documentation
 
 Full documentation is available at **https://fkie-cad.github.io/adare/**.

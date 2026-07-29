@@ -5,6 +5,8 @@ import {
   FlaskConical,
   FolderKanban,
   Server,
+  HardDrive,
+  Bot,
   Sun,
   Moon,
   Monitor,
@@ -15,12 +17,31 @@ import { cn } from '@/lib/utils'
 import { useThemeStore } from '@/stores/theme-store'
 import { useSidebarStore } from '@/stores/sidebar-store'
 
-const navItems = [
-  { to: '/', label: 'Home', icon: LayoutDashboard },
-  { to: '/runs', label: 'Runs', icon: Play },
-  { to: '/experiments', label: 'Experiments', icon: FlaskConical },
-  { to: '/projects', label: 'Projects', icon: FolderKanban },
-  { to: '/environments', label: 'Environments', icon: Server },
+const navSections = [
+  {
+    label: 'Overview',
+    items: [{ to: '/', label: 'Home', icon: LayoutDashboard }],
+  },
+  {
+    label: 'Build',
+    items: [
+      { to: '/projects', label: 'Projects', icon: FolderKanban },
+      { to: '/experiments', label: 'Experiments', icon: FlaskConical },
+      { to: '/environments', label: 'Environments', icon: Server },
+    ],
+  },
+  {
+    label: 'VMs',
+    items: [{ to: '/vms', label: 'VMs', icon: HardDrive }],
+  },
+  {
+    label: 'Develop',
+    items: [{ to: '/develop', label: 'Workbench', icon: Bot }],
+  },
+  {
+    label: 'Results',
+    items: [{ to: '/runs', label: 'Runs', icon: Play }],
+  },
 ] as const
 
 export function Sidebar() {
@@ -42,26 +63,36 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto p-4">
-        <ul className="space-y-1">
-          {navItems.map(({ to, label, icon: Icon }) => (
-            <li key={to}>
-              <Link
-                to={to}
-                activeProps={{ className: 'bg-accent text-accent-foreground' }}
-                activeOptions={to === '/' ? { exact: true } : undefined}
-                className={cn(
-                  'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium',
-                  'hover:bg-accent hover:text-accent-foreground transition-colors',
-                  collapsed && 'justify-center',
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {!collapsed && <span>{label}</span>}
-              </Link>
-            </li>
-          ))}
-        </ul>
+      <nav className="flex-1 overflow-y-auto p-4 space-y-4">
+        {navSections.map((section) => (
+          <div key={section.label}>
+            {!collapsed && (
+              <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {section.label}
+              </p>
+            )}
+            <ul className="space-y-1">
+              {section.items.map(({ to, label, icon: Icon }) => (
+                <li key={to}>
+                  <Link
+                    to={to}
+                    activeProps={{ className: 'bg-accent text-accent-foreground' }}
+                    activeOptions={to === '/' ? { exact: true } : undefined}
+                    className={cn(
+                      'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium',
+                      'hover:bg-accent hover:text-accent-foreground transition-colors',
+                      collapsed && 'justify-center',
+                    )}
+                    title={collapsed ? label : undefined}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {!collapsed && <span>{label}</span>}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </nav>
 
       {/* Theme controls */}

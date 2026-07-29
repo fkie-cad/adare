@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { Server, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Server, Plus, Trash2 } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { PageHeader } from '@/components/layout/page-header'
-import { Card, CardContent } from '@/components/ui/card'
+import { AsyncBoundary } from '@/components/layout/async-boundary'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CreateEnvironmentDialog } from '@/components/dialogs/create-environment-dialog'
@@ -13,7 +13,7 @@ import { useEnvironments, useDeleteEnvironment, type Environment } from '@/api/h
 import { toast } from '@/components/ui/toast'
 
 const SKELETON_ROWS = 5
-const COLUMNS = 6
+const COLUMNS = 7
 
 function LoadingTable() {
   return (
@@ -21,6 +21,7 @@ function LoadingTable() {
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
+          <TableHead>Type</TableHead>
           <TableHead>OS</TableHead>
           <TableHead>VM</TableHead>
           <TableHead>Project</TableHead>
@@ -46,6 +47,37 @@ function LoadingTable() {
 function SyncBadge({ synced }: { synced: unknown }) {
   if (synced === true) return <Badge variant="success">Synced</Badge>
   if (synced === false) return <Badge variant="warning">Unsynced</Badge>
+  return <>—</>
+}
+
+function EnvironmentTypeBadge({ env }: { env: Environment }) {
+  if (env.recipe) return <Badge variant="secondary">Recipe</Badge>
+  if (env.vm_type === 'path' || env.vm_type === 'url' || env.vm) {
+    return <Badge variant="outline">Baked</Badge>
+  }
+  return <Badge variant="outline">Legacy</Badge>
+}
+
+function isUrl(value?: string): value is string {
+  return !!value && /^https?:\/\//i.test(value)
+}
+
+function VmCell({ env }: { env: Environment }) {
+  if (isUrl(env.vm) || (env.vm_type === 'url' && env.vm)) {
+    return (
+      <a
+        href={env.vm}
+        target="_blank"
+        rel="noreferrer"
+        className="font-mono text-xs text-primary underline underline-offset-2 hover:no-underline break-all"
+      >
+        {env.vm}
+      </a>
+    )
+  }
+  if (env.vm) {
+    return <span className="font-mono text-xs break-all">{env.vm}</span>
+  }
   return <>—</>
 }
 
@@ -84,35 +116,23 @@ export default function EnvironmentsListPage() {
         }
       />
 
-      {isPending && <LoadingTable />}
-
-      {isError && (
-        <Card className="border-destructive">
-          <CardContent className="pt-6 flex items-center gap-4">
-            <p className="text-sm text-destructive flex-1">
-              {(error as Error)?.message ?? 'Failed to load environments.'}
-            </p>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
-              <RefreshCw size={14} />
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {!isPending && !isError && data?.length === 0 && (
-        <EmptyState
-          icon={Server}
-          title="No environments"
-          description="Create an environment to run experiments against."
-        />
-      )}
-
-      {!isPending && !isError && data && data.length > 0 && (
+      <AsyncBoundary
+        isPending={isPending}
+        isError={isError}
+        error={error}
+        onRetry={() => refetch()}
+        errorFallbackMessage="Failed to load environments."
+        loadingFallback={<LoadingTable />}
+        isEmpty={data?.length === 0}
+        emptyIcon={Server}
+        emptyTitle="No environments"
+        emptyDescription="Create an environment to run experiments against."
+      >
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead>OS</TableHead>
               <TableHead>VM</TableHead>
               <TableHead>Project</TableHead>
@@ -121,16 +141,19 @@ export default function EnvironmentsListPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((env) => (
+            {(data ?? []).map((env) => (
               <TableRow key={env.name} className="hover:bg-muted/50">
-                <TableCell className="font-medium">{env.name}</TableCell>
-                <TableCell>{(env as any).os || '—'}</TableCell>
+                <TableCell className="font-medium">
+                  <Link to="/environments/$name" params={{ name: env.name }} className="hover:underline">
+                    {env.name}
+                  </Link>
+                </TableCell>
                 <TableCell>
-                  {env.vm_path ? (
-                    <span className="font-mono text-xs">{env.vm_path}</span>
-                  ) : (
-                    '—'
-                  )}
+                  <EnvironmentTypeBadge env={env} />
+                </TableCell>
+                <TableCell>{(env as any).os || '—'}</TableCell>
+                <TableCell className="max-w-xs">
+                  <VmCell env={env} />
                 </TableCell>
                 <TableCell>
                   {env.project_path ? (
@@ -156,10 +179,10 @@ export default function EnvironmentsListPage() {
             ))}
           </TableBody>
           <TableCaption>
-            {data.length} environment{data.length === 1 ? '' : 's'}
+            {(data ?? []).length} environment{(data ?? []).length === 1 ? '' : 's'}
           </TableCaption>
         </Table>
-      )}
+      </AsyncBoundary>
 
       <CreateEnvironmentDialog open={createOpen} onOpenChange={setCreateOpen} />
 

@@ -105,7 +105,15 @@ class GUIActionsMixin:
                 success=success,
                 message=result.get('message', ''),
                 coordinates=src_coords,
-                data={'source': action.src, 'destination': action.dst, 'source_coordinates': src_coords, 'dest_coordinates': dst_coords}
+                # Keep data JSON-serializable: store the targets' descriptors
+                # (text/image) rather than the Target objects themselves, which
+                # are not JSON-encodable and break DB persistence of the result.
+                data={
+                    'source': action.src.text or action.src.image,
+                    'destination': action.dst.text or action.dst.image,
+                    'source_coordinates': src_coords,
+                    'dest_coordinates': dst_coords,
+                }
             )
 
         except Exception as e:
@@ -115,6 +123,21 @@ class GUIActionsMixin:
     async def execute_keyboard(self, action: KeyboardAction, parent_event_id: str = None,
                               event_emitter = None) -> ActionResult:
         """Execute keyboard action via GUI executor."""
+        # Evaluate optional `when` conditions before acting (mirrors execute_block).
+        # Skipping is treated as success, matching FlowControlExecutor.execute_block.
+        if action.when:
+            from adare.backend.experiment.target_resolver import MCPConditionChecker
+            try:
+                screenshot_base64, _ = await self.target_resolution.get_current_screenshot_with_path()
+                checker = MCPConditionChecker(self.target_resolution.target_resolver)
+                self.target_resolution.begin_resolution()
+                conditions_met = await checker.check_conditions(action.when, screenshot_base64)
+                if not conditions_met:
+                    return ActionResult(success=True, message="Keyboard conditions not met, skipping")
+            except (RuntimeError, OSError, ValueError, TypeError, KeyError) as e:
+                log.error(f"Error checking keyboard conditions: {e}")
+                return ActionResult(success=False, message=f"Condition check failed: {str(e)}")
+
         try:
             if action.key:
                 # Single key press -> pyautogui.press()

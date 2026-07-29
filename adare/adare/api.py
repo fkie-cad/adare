@@ -17,6 +17,8 @@ Available API facades:
 All API methods return Result[T] objects for consistent error handling.
 """
 
+from functools import cached_property
+
 
 class DevModeAPI:
     """Dev mode operations API."""
@@ -39,13 +41,13 @@ class DevModeAPI:
         """List all dev mode sessions."""
         return self._service.list_sessions(request)
 
-    def get_session_state(self, request):
+    def get_state(self, request):
         """Get session state."""
-        return self._service.get_session_state(request)
+        return self._service.get_state(request)
 
-    def cleanup_sessions(self, request):
+    def cleanup_stale_sessions(self, request):
         """Cleanup stale sessions."""
-        return self._service.cleanup_sessions(request)
+        return self._service.cleanup_stale_sessions(request)
 
     def reset_session(self, request):
         """Reset session (soft or hard)."""
@@ -98,6 +100,26 @@ class DevModeAPI:
     def resume_most_recent(self, project_path, console_ulid=None):
         """Resume the most recently stopped dev mode session."""
         return self._service.resume_most_recent(project_path, console_ulid=console_ulid)
+
+    def run_gui_agent(self, request, event_sink=None):
+        """Drive the session VM toward a goal with the vision-LLM GUI agent.
+
+        ``event_sink`` (optional) is a plain-sync callable that receives each
+        progress event — used by the web server to broadcast a live view.
+        """
+        return self._service.run_gui_agent(request, event_sink=event_sink)
+
+    def run_gui_author(self, request):
+        """Author a playbook from human text steps (no VLM planner)."""
+        return self._service.run_gui_author(request)
+
+    def serve_mcp(self, request):
+        """Serve the session VM as a GUI-automation MCP server (blocking)."""
+        return self._service.serve_mcp(request)
+
+    def author_playbook(self, request):
+        """LLM-author a UI-action playbook for the session VM (author/validate/replay/repair)."""
+        return self._service.author_playbook(request)
 
 
 class TestFunctionAPI:
@@ -207,6 +229,18 @@ class ExperimentAPI:
         """Get experiment by ID."""
         return self._service.get_by_id(project_path, experiment_id)
 
+    def read_playbook(self, request):
+        """Read an experiment's playbook YAML (disk, DB fallback)."""
+        return self._service.read_playbook(request)
+
+    def validate_playbook(self, request):
+        """Statically validate a playbook YAML string (no VM)."""
+        return self._service.validate_playbook(request)
+
+    def write_playbook(self, request):
+        """Validate, write, and DB-re-ingest an experiment's playbook YAML."""
+        return self._service.write_playbook(request)
+
 
 class ManageAPI:
     """Database and system management API."""
@@ -228,6 +262,10 @@ class ManageAPI:
     def repair_db(self):
         """Repair the database system."""
         return self._service.repair_db()
+
+    def migrate_db(self, quiet=False):
+        """Apply pending schema migrations to global + project databases."""
+        return self._service.migrate_db(quiet=quiet)
 
     def clean_install_db(self, force=False):
         """Perform clean database installation."""
@@ -263,9 +301,29 @@ class EnvironmentAPI:
         """Load an environment."""
         return self._service.load(request)
 
+    def extend(self, request):
+        """Extend an environment (or VM) into a new environment (declarative mode)."""
+        return self._service.extend(request)
+
     def create(self, request):
         """Create a new environment."""
         return self._service.create(request)
+
+    def publish_prepare(
+        self, project_path, name, vm_url, vm_format=None, verify_url=False, compress=False,
+        source_profile=None, source_iso_sha256=None,
+    ):
+        """Convert a local-path baked environment into a publish-ready URL one."""
+        return self._service.publish_prepare(
+            project_path, name, vm_url, vm_format=vm_format,
+            verify_url=verify_url, compress=compress,
+            source_profile=source_profile, source_iso_sha256=source_iso_sha256,
+        )
+
+    def recipe_byo(self, project_path, name, iso_name=None, iso_notes=None):
+        """Convert a recipe environment's local ISO path into a consumer-supplied one."""
+        from adare.services.environment_recipe_byo import recipe_byo
+        return recipe_byo(project_path, name, iso_name=iso_name, iso_notes=iso_notes)
 
     def delete(self, identifier, force=False):
         """Delete an environment."""
@@ -282,6 +340,10 @@ class EnvironmentAPI:
     def get_by_name(self, name):
         """Get environment by name."""
         return self._service.get_by_name(name)
+
+    def list_os_profiles(self):
+        """List available OS profiles for building recipe environments."""
+        return self._service.list_os_profiles()
 
 
 class ProjectAPI:
@@ -330,6 +392,10 @@ class ShowAPI:
     def remove_run(self, request):
         """Remove a run."""
         return self._service.remove_run(request)
+
+    def get_run_files(self, ulid):
+        """Resolve a run's on-disk directory and known artifact file paths."""
+        return self._service.get_run_files(ulid)
 
     def list_projects(self):
         """List all projects."""
@@ -429,6 +495,10 @@ class VMAPI:
         """Test an OVA file (async)."""
         return await self._service.test_ova(request)
 
+    async def test_registered_vm(self, request):
+        """Test a registered VM's compatibility with ADARE (async)."""
+        return await self._service.test_registered_vm(request)
+
 
 class WebAPI:
     """Web integration and sync API."""
@@ -502,6 +572,11 @@ class WebAPI:
         from adare.services.submit_service import SubmitService
         return SubmitService().submit_environment(request)
 
+    def precheck_submission(self, entity_type, name):
+        """Classify a create submission by name before opening a PR."""
+        from adare.services.submit_service import SubmitService
+        return SubmitService().precheck_submission(entity_type, name)
+
 
 class AdareAPI:
     """
@@ -521,13 +596,38 @@ class AdareAPI:
     - api.web - Web integration and sync
     """
 
-    def __init__(self):
-        self.devmode = DevModeAPI()
-        self.testfunction = TestFunctionAPI()
-        self.experiment = ExperimentAPI()
-        self.manage = ManageAPI()
-        self.environment = EnvironmentAPI()
-        self.project = ProjectAPI()
-        self.show = ShowAPI()
-        self.vm = VMAPI()
-        self.web = WebAPI()
+    @cached_property
+    def devmode(self):
+        return DevModeAPI()
+
+    @cached_property
+    def testfunction(self):
+        return TestFunctionAPI()
+
+    @cached_property
+    def experiment(self):
+        return ExperimentAPI()
+
+    @cached_property
+    def manage(self):
+        return ManageAPI()
+
+    @cached_property
+    def environment(self):
+        return EnvironmentAPI()
+
+    @cached_property
+    def project(self):
+        return ProjectAPI()
+
+    @cached_property
+    def show(self):
+        return ShowAPI()
+
+    @cached_property
+    def vm(self):
+        return VMAPI()
+
+    @cached_property
+    def web(self):
+        return WebAPI()

@@ -90,7 +90,12 @@ class SyncResult:
 
 @dataclass
 class UploadRunRequest:
-    """Request to upload an experiment run."""
+    """Request to upload an experiment run.
+
+    ``project_path`` is required: the run is a project-scoped record, so the
+    serializer has to open that project's database rather than the global one.
+    """
+    project_path: Path
     ulid: str
 
 
@@ -149,6 +154,12 @@ class SubmitRequest:
     """Request to submit an entity (experiment/testfunction/environment) as a PR."""
     project_path: Path
     name: str
+    action: str = 'create'
+    # Experiments only: skip the client-side dependency pre-flight. The pre-flight
+    # reads the server's PUBLISHED catalog, so it cannot see a test function whose
+    # owning set is still unpublished even though ingest would resolve it. This is
+    # the escape hatch for that case; the server stays authoritative.
+    skip_dependency_check: bool = False
 
 
 @dataclass
@@ -168,4 +179,12 @@ class DownloadBundleRequest:
     """Request to download an experiment bundle."""
     project_path: Path
     ulid: str
-    include_disk_images: bool = False
+
+
+@dataclass
+class DownloadBundleResult:
+    """Result of a bundle download, listing what was fetched."""
+    experiment_name: str
+    environment_names: list[str]
+    testfunction_names: list[str]
+    message: str = ""

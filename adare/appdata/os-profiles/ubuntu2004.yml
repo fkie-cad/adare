@@ -1,0 +1,54 @@
+name: ubuntu2004
+display_name: "Ubuntu 20.04 LTS (Focal Fossa) Desktop"
+platform: linux
+distribution: ubuntu
+distribution_label: "Focal Fossa"
+version: "20.04"
+# Genuine desktop edition installed by replaying a deterministic playbook through
+# its graphical ubiquity installer — no LLM. Buttons are located by their on-screen
+# LABEL via ADARE's cv-server OCR (find_text), so the steps are independent of
+# window position / resolution / minor version differences.
+install_mode: playbook
+installer: gui
+iso_url: "https://releases.ubuntu.com/20.04/ubuntu-20.04.6-desktop-amd64.iso"
+iso_sha256: "510ce77afcb9537f198bc7daa0e5b503b6e67aaed68146943c231baeaab94df1"
+iso_filename: "ubuntu-20.04.6-desktop-amd64.iso"
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0
+requires_uefi: false
+
+install_steps:
+  - {action: wait_stable, settle: 6, timeout: 360, min: 120, note: "live session + Welcome"}
+  - {action: click_text, text: "Install Ubuntu", shot: welcome}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: keyboard, note: "Keyboard layout"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: updates, note: "Updates/other software"}
+  - {action: wait_stable, settle: 6, timeout: 180}
+  - {action: click_text, text: "Install Now", shot: installtype, note: "Erase disk"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: writeconfirm, note: "Write changes dialog"}
+  - {action: wait_stable, settle: 6, timeout: 180}
+  - {action: click_text, text: "Continue", shot: timezone, note: "Timezone"}
+  - {action: wait_stable, settle: 6, timeout: 120, shot: whoami}
+  # 'Your name' is auto-focused on this screen; type + Tab through the form.
+  - {action: type, text: "adare", note: "Your name"}
+  - {action: key, keys: [tab]}
+  - {action: key, keys: [ctrl, a]}
+  - {action: type, text: "ubuntu2004", note: "computer name"}
+  - {action: key, keys: [tab], repeat: 2}
+  - {action: type, text: "adare", note: "password"}
+  - {action: key, keys: [tab]}
+  - {action: type, text: "adare", note: "confirm"}
+  - {action: shot, name: user-filled}
+  - {action: click_text, text: "Continue", note: "start install"}
+  - {action: wait_stable, settle: 45, timeout: 3600, shot: complete, note: "wait for install"}
+
+verify_steps:
+  - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
+  - {action: click_text, text: "adare", note: "select the adare user"}
+  - {action: wait, seconds: 2}
+  - {action: type, text: "adare", note: "password"}
+  - {action: key, keys: [ret]}
+  - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}

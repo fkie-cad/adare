@@ -1,0 +1,53 @@
+# Idiom: delete a file from the GUI file manager, then assert it is gone.
+#
+# A reusable, parameterizable pattern — not a turnkey playbook. Adapt the OCR
+# text targets to your desktop environment (labels differ across GNOME/KDE/XFCE),
+# or re-record against a live VM with `adare dev mcp` so each click gets a robust
+# image crop. Replay is deterministic (CV/OCR, no LLM).
+#
+# Override the variables per environment:
+#   adare experiment run ... (variables are resolved into the {{ ... }} slots)
+settings:
+  idle: 1.0
+  timeout: 1800
+  continue_on_test_failure: false
+
+variables:
+  file_manager: Files
+  file_name: testfile.txt
+  file_path: /root/testfile.txt
+
+actions:
+  - keyboard:
+      key: super
+      description: Open the activities / application search
+  - keyboard:
+      text: "{{ file_manager }}"
+      description: Search for the file manager
+  - keyboard:
+      key: enter
+      description: Launch the file manager
+  - wait_until:
+      condition:
+        exists:
+          text: "{{ file_manager }}"
+      timeout: 30.0
+      description: Wait for the file manager window
+  - click:
+      target:
+        text: "{{ file_name }}"
+      type: left
+      description: Select the target file
+  - keyboard:
+      key: delete
+      description: Delete the selected file
+  - idle:
+      duration: 1.0
+      description: Let the delete settle
+
+tests:
+  - name: file_is_deleted
+    function: filesystem.file_does_not_exist
+    description: The file must no longer exist after deletion
+    parameter:
+      path: "{{ file_path }}"

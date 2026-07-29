@@ -1,6 +1,7 @@
 """
 Configuration Mixin - VM configuration lifecycle (load, save, defaults).
 """
+import contextlib
 import json
 import logging
 import subprocess
@@ -8,14 +9,192 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from adare.config import DEFAULT_RESOLUTION_WH
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.models import QEMUVMConfig
-from adare.hypervisor.qemu.utilities.disk_utils import get_boot_mode_for_os
+from adare.hypervisor.qemu.utilities.disk_utils import get_boot_mode_for_os, resolve_boot_mode
 
 if TYPE_CHECKING:
     from adare.hypervisor.qemu.vm import QEMUVM
 
 log = logging.getLogger(__name__)
+
+
+# Fixed namespace for deriving a stable per-environment domain UUID (see
+# ``_domain_uuid_for`` below). Generated once via uuid.uuid4() and frozen here --
+# it is a namespace, not a secret, and must never change or every environment's
+# derived UUID (and thus its vTPM identity) would silently shift.
+_ADARE_VM_UUID_NAMESPACE = uuid.UUID('7c6f6e6e-2e26-4e5a-9f2d-8f6a1a9c8b7e')
+
+
+def _domain_uuid_for(environment_identity: str | None) -> str:
+    """A libvirt domain UUID, stable across runs of the same environment.
+
+    ``vm_name`` (and therefore this VM's own config file) is scoped to the
+    *experiment run*, not the environment -- see ``QEMULifecycleStrategy.
+    prepare_vm_for_experiment``, which mints a fresh instance name per run. A
+    plain ``uuid.uuid4()`` here therefore gave every run of the same environment
+    a different domain UUID, and because swtpm keys its state directory by
+    domain UUID (``~/.config/libvirt/qemu/swtpm/<uuid>/``), KEEP_TPM was
+    preserving a directory the next run's domain never pointed at again -- the
+    vTPM "survived" undefine but was orphaned rather than reused.
+
+    Deriving the UUID from ``environment_identity`` (the environment's stable
+    VM/disk id, not the run-scoped ``vm_name``) instead makes it identical for
+    every run of the same environment, so the same domain UUID -- and thus the
+    same swtpm state directory -- is reused run after run.
+
+    Args:
+        environment_identity: A stable per-environment identifier (e.g. the
+            environment's ``vm_id``). ``None`` for VMs with no environment
+            context (dev-session restore, OVA import, ad-hoc test VMs), which
+            fall back to a random UUID -- the status quo for those paths.
+    """
+    if not environment_identity:
+        return str(uuid.uuid4())
+    return str(uuid.uuid5(_ADARE_VM_UUID_NAMESPACE, environment_identity))
+
+
+# ---------------------------------------------------------------------------
+# Managed QEMU storage locations (single source of truth)
+# ---------------------------------------------------------------------------
+
+def get_qemu_disk_dir() -> Path:
+    """Directory holding managed disks (base/overlay/nvram): ~/.adare/qemu/disks."""
+    disk_dir = Path.home() / '.adare' / 'qemu' / 'disks'
+    disk_dir.mkdir(parents=True, exist_ok=True)
+    return disk_dir
+
+
+def get_qemu_runtime_dir() -> Path:
+    """Directory holding runtime sockets/pids (QMP/QGA/pid): ~/.adare/qemu/run."""
+    runtime_dir = Path.home() / '.adare' / 'qemu' / 'run'
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    return runtime_dir
+
+
+def get_qemu_vm_config_dir() -> Path:
+    """Directory holding per-VM config JSON: ~/.adare/qemu/vms."""
+    config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return config_dir
+
+
+def is_socket_listening(socket_path: str, timeout: float = 0.2) -> bool:
+    """Return True if a Unix socket currently accepts a new connection.
+
+    A successful non-blocking connect proves something is serving the socket,
+    so it is definitely live. The converse is NOT reliable: QMP/QGA are
+    single-client channels, so a *live* socket that already has its one client
+    connected refuses further connects (``ECONNREFUSED``). Treat this only as a
+    positive "definitely alive" signal — never infer "stale" from a failure
+    alone (cross-check with the owning domain via ``get_active_domain_names``).
+    """
+    import socket as _socket
+
+    sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    try:
+        sock.settimeout(timeout)
+        sock.connect(socket_path)
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.close()
+
+
+def get_active_domain_names() -> set[str] | None:
+    """Return the set of running libvirt domain names, or None if unknowable.
+
+    The QMP/QGA socket basename stem equals the VM/domain name, so a running
+    domain authoritatively marks its sockets as live. Returns None (rather than
+    an empty set) when libvirt is unavailable or the query fails, so callers can
+    refuse to reap anything rather than risk deleting a live socket.
+    """
+    try:
+        import libvirt
+    except ImportError:
+        return None
+
+    try:
+        from adare.config import HYPERVISOR_CONFIGS
+        libvirt_uri = HYPERVISOR_CONFIGS.get('qemu', {}).get('libvirt_uri', 'qemu:///session')
+    except ImportError:
+        libvirt_uri = 'qemu:///session'
+
+    conn = None
+    try:
+        conn = libvirt.open(libvirt_uri)
+        if conn is None:
+            return None
+        # VIR_CONNECT_LIST_DOMAINS_ACTIVE = running/paused domains only.
+        active = conn.listAllDomains(libvirt.VIR_CONNECT_LIST_DOMAINS_ACTIVE)
+        return {domain.name() for domain in active}
+    except libvirt.libvirtError as e:
+        log.warning(f"Could not query active libvirt domains: {e}")
+        return None
+    finally:
+        if conn is not None:
+            with contextlib.suppress(libvirt.libvirtError):
+                conn.close()
+
+
+def find_stale_sockets(runtime_dir: Path | None = None, keep: set[str] | None = None) -> list[Path]:
+    """Return QMP/QGA sockets in *runtime_dir* that no running QEMU owns.
+
+    A socket is considered LIVE (and never returned) if its owning domain is
+    active, or if it still accepts a connection. It is only reported stale when
+    BOTH checks say it is dead — this is what protects a live-but-occupied QGA
+    socket from being reaped. Sockets whose absolute path or basename is in
+    *keep* are always skipped.
+
+    Returns an empty list (reaping nothing) if the active-domain set cannot be
+    determined, so we never delete a socket we could not verify as dead.
+    """
+    if runtime_dir is None:
+        runtime_dir = get_qemu_runtime_dir()
+    keep = keep or set()
+
+    active = get_active_domain_names()
+    if active is None:
+        log.warning("Cannot determine active libvirt domains — skipping stale-socket sweep for safety")
+        return []
+
+    stale: list[Path] = []
+    for pattern in ('*.qmp', '*.qga'):
+        for sock_path in runtime_dir.glob(pattern):
+            if str(sock_path) in keep or sock_path.name in keep:
+                continue
+            # Only ever operate on genuine sockets.
+            try:
+                if not sock_path.is_socket():
+                    continue
+            except OSError:
+                continue
+            # sock_path.stem strips the .qmp/.qga suffix → the domain/VM name.
+            if sock_path.stem in active:
+                continue  # owning domain running → live
+            if is_socket_listening(str(sock_path)):
+                continue  # someone is still serving it → live
+            stale.append(sock_path)
+    return stale
+
+
+def sweep_stale_sockets(runtime_dir: Path | None = None, keep: set[str] | None = None) -> list[str]:
+    """Reap crash-orphaned QMP/QGA sockets (those no running QEMU owns).
+
+    Uses :func:`find_stale_sockets` for the safe liveness determination, then
+    unlinks each. Returns the list of unlinked socket paths (errors swallowed).
+    """
+    removed: list[str] = []
+    for sock_path in find_stale_sockets(runtime_dir, keep):
+        try:
+            sock_path.unlink()
+            removed.append(str(sock_path))
+            log.debug(f"Swept stale socket: {sock_path}")
+        except OSError as e:
+            log.warning(f"Could not remove stale socket {sock_path}: {e}")
+    return removed
 
 
 class ConfigurationMixin:
@@ -101,9 +280,7 @@ class ConfigurationMixin:
     def _get_vm_config_path(self: 'QEMUVM') -> Path:
         """Get path to VM configuration JSON file."""
         # Store VM configs in ~/.adare/qemu/vms/
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
-        config_dir.mkdir(parents=True, exist_ok=True)
-        return config_dir / f"{self.vm_name}.json"
+        return get_qemu_vm_config_dir() / f"{self.vm_name}.json"
 
     def _load_or_create_vm_config(self: 'QEMUVM') -> QEMUVMConfig:
         """Load VM config from JSON or create new one."""
@@ -124,7 +301,7 @@ class ConfigurationMixin:
             # Validate and sync guest_os, architecture, and boot_mode from current environment
             # This fixes stale configs that may have incorrect values
             current_arch = getattr(self, 'architecture', 'x86_64')
-            expected_boot_mode = get_boot_mode_for_os(self.guest_os, current_arch)
+            expected_boot_mode = resolve_boot_mode(self.guest_os, self._hypervisor_config, current_arch)
             config_updated = False
 
             if config.guest_os != self.guest_os:
@@ -140,6 +317,26 @@ class ConfigurationMixin:
             if config.boot_mode != expected_boot_mode:
                 log.info(f"Updating boot_mode in VM config: {config.boot_mode} → {expected_boot_mode}")
                 config.boot_mode = expected_boot_mode
+                config_updated = True
+
+            # Sync accel: a config built on one host (e.g. hvf on Apple Silicon)
+            # must not silently persist onto a different host (e.g. kvm on Linux,
+            # or tcg under cross-arch emulation) that reopens it.
+            current_accel = getattr(self, 'accel', None)
+            if current_accel and config.accel != current_accel:
+                log.info(f"Updating accel in VM config: {config.accel} → {current_accel}")
+                config.accel = current_accel
+                config_updated = True
+
+            # Apply live-installer boot settings passed to the constructor
+            # (e.g. a GUI-automated install re-attaching its ISO).
+            requested_iso = getattr(self, '_iso_path', '')
+            requested_cdrom = getattr(self, '_boot_from_cdrom', False)
+            if requested_iso and config.iso_path != requested_iso:
+                config.iso_path = requested_iso
+                config_updated = True
+            if config.boot_from_cdrom != requested_cdrom:
+                config.boot_from_cdrom = requested_cdrom
                 config_updated = True
 
             # Sync Windows resource defaults
@@ -162,22 +359,22 @@ class ConfigurationMixin:
 
             return config
         log.debug(f"Creating new VM config for '{self.vm_name}'")
-        # Create new config
-        vm_uuid = str(uuid.uuid4())
+        # Create new config. See _domain_uuid_for: deterministic per environment
+        # when we know one, so the domain (and its vTPM state) is reused across
+        # runs rather than re-randomized every time.
+        vm_uuid = _domain_uuid_for(getattr(self, '_environment_identity', None))
 
         # Determine disk path: use external path if provided, otherwise use managed storage
         if self._external_disk_path:
             disk_path = self._external_disk_path
             log.debug(f"Using external disk path for --no-copy mode: {disk_path}")
         else:
-            disk_dir = Path.home() / '.adare' / 'qemu' / 'disks'
-            disk_dir.mkdir(parents=True, exist_ok=True)
+            disk_dir = get_qemu_disk_dir()
             disk_path = str(disk_dir / f"{self.vm_name}.qcow2")
             log.debug(f"Using managed disk path: {disk_path}")
 
         # Socket paths
-        runtime_dir = Path.home() / '.adare' / 'qemu' / 'run'
-        runtime_dir.mkdir(parents=True, exist_ok=True)
+        runtime_dir = get_qemu_runtime_dir()
         qmp_socket = str(runtime_dir / f"{self.vm_name}.qmp")
         qga_socket = str(runtime_dir / f"{self.vm_name}.qga")
         pid_file = str(runtime_dir / f"{self.vm_name}.pid")
@@ -187,9 +384,9 @@ class ConfigurationMixin:
             if len(path) > 107:
                 raise ValueError(f"{name} socket path too long ({len(path)} > 107 chars): {path}")
 
-        # Determine boot mode based on guest OS and architecture
+        # Determine boot mode: environment YAML override, else architecture-aware auto-detection
         current_arch = getattr(self, 'architecture', 'x86_64')
-        boot_mode = get_boot_mode_for_os(self.guest_os, current_arch)
+        boot_mode = resolve_boot_mode(self.guest_os, self._hypervisor_config, current_arch)
 
         # Windows VMs need more resources for proper operation
         # Use higher defaults if the current values are the standard defaults
@@ -202,6 +399,16 @@ class ConfigurationMixin:
         else:
             config_cpus = self.cpus
             config_ram = self.ram
+
+        # Guest display resolution: default from config, allow an optional per-VM
+        # override (tuple or "WxH" string) via the same getattr pattern as iso_path.
+        resolution_x, resolution_y = DEFAULT_RESOLUTION_WH
+        override = getattr(self, '_resolution', None)
+        if override:
+            if isinstance(override, str):
+                resolution_x, resolution_y = (int(v) for v in override.split('x'))
+            else:
+                resolution_x, resolution_y = int(override[0]), int(override[1])
 
         config = QEMUVMConfig(
             vm_name=self.vm_name,
@@ -218,7 +425,11 @@ class ConfigurationMixin:
             network='user',
             qmp_socket_path=qmp_socket,
             guest_agent_socket_path=qga_socket,
-            pid_file_path=pid_file
+            pid_file_path=pid_file,
+            iso_path=getattr(self, '_iso_path', ''),
+            boot_from_cdrom=getattr(self, '_boot_from_cdrom', False),
+            resolution_x=resolution_x,
+            resolution_y=resolution_y,
         )
 
         self._save_vm_config_obj(config)

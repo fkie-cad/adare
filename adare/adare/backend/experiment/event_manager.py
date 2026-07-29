@@ -244,7 +244,7 @@ class EventManager:
             actual_duration=r.execution_time, **d)
         yield DragAction, lambda a, r, d: DragActionCompleteEvent(
             source_coordinates=r.data.get('source_coordinates') if r.data else None,
-            dest_coordinates=r.coordinates, **d)
+            dest_coordinates=r.data.get('dest_coordinates') if r.data else None, **d)
         yield GotoAction, lambda a, r, d: GotoActionCompleteEvent(
             final_url=r.data.get('final_url') if r.data else None, **d)
         yield BlockAction, lambda a, r, d: BlockActionCompleteEvent(
@@ -314,7 +314,11 @@ class EventManager:
 
     def _create_loop_start_event(self, action, event_data):
         """Create start event for LoopAction."""
-        iteration_count = action.times if action.times is not None else (len(action.items) if action.items else None)
+        # Only a materialised list has a known length here; `items` may still be an
+        # unresolved template string, whose len() would be its character count and
+        # would make the summary claim a wrong number of planned iterations.
+        items = getattr(action, 'items', None)
+        iteration_count = action.times if action.times is not None else (len(items) if isinstance(items, list) else None)
         return LoopActionStartEvent(
             iteration_count=iteration_count,
             items=action.items if hasattr(action, 'items') else None,

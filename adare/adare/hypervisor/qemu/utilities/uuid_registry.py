@@ -64,9 +64,21 @@ class QEMUVMRegistry:
             ram=data.get('ram', 2048),
             machine=data.get('machine', 'pc'),
             accel=data.get('accel', 'kvm'),
-            drive_format=data.get('drive_format', 'qcow2')
+            drive_format=data.get('drive_format', 'qcow2'),
+            hypervisor_config=None  # No hypervisor config for UUID registry recovery
         )
 
+
+    @staticmethod
+    def vm_exists(vm_name: str) -> bool:
+        """True if a QEMU VM config exists for this name.
+
+        A non-raising probe for callers that must not trigger the self-logging
+        (ERROR-level) VMNotFoundException on an expected miss — e.g. cleaning up
+        a VM a prior boot-retry already removed.
+        """
+        config_path = Path.home() / '.adare' / 'qemu' / 'vms' / f"{vm_name}.json"
+        return config_path.exists()
 
     @staticmethod
     def get_vm_info_by_uuid(uuid: str) -> dict[str, Any] | None:

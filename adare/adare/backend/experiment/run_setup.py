@@ -119,6 +119,19 @@ def step_initialize(context: ExperimentRunCtx, fake: bool = False, run_ulid: str
     log.info(f'initialized experiment run {context.experiment_run_ulid}')
 
 
+def _apply_playbook_resolution(context: ExperimentRunCtx):
+    """Copy the playbook's optional `settings.resolution` onto the run config.
+
+    Unset/None leaves ``vm_display_resolution`` at its default (None), so the VM
+    builder advertises the host/env default and issues no guest-side mode-set.
+    """
+    settings = getattr(context.playbook, 'settings', None) if context.playbook else None
+    resolution = getattr(settings, 'resolution', None) if settings else None
+    if resolution:
+        context.config.vm_display_resolution = resolution
+        log.info(f"Playbook requests guest display resolution: {resolution}")
+
+
 def step_setup_experiment_environment(context: ExperimentRunCtx):
     """Consolidated step: Setup directories, validate playbook, and resolve environment."""
     with StageCtxManager(SetupExperimentEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
@@ -158,6 +171,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                 # Get VM OS and user for automatic variables
                 context.playbook = parse_playbook(playbook_path)
                 log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
+                _apply_playbook_resolution(context)
                 return
 
             # Load from database (pre-validated)
@@ -180,6 +194,10 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
 
         except (ValueError, KeyError, OSError, TypeError) as e:
             raise LoggedException(log, f"Playbook loading failed: {str(e)}") from e
+
+        # Carry the playbook's optional display-resolution setting into the run
+        # config so the QEMU VM builder can advertise it (mirrors iso_path plumbing).
+        _apply_playbook_resolution(context)
 
         # Verify integrity of testfunctions used in playbook
         # TODO: Re-enable this for production use - currently disabled for testing
@@ -311,7 +329,7 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
             _ensure_and_copy_adare_log_to_run_directory(run_dir, file_log_level=context.config.file_log_level)
 
         # Initialize MCP server with log file
-        from adare.backend.experiment.mcp_server_manager import MCPServerManager
+        from adare.backend.experiment.mcp_server_manager import MCPServerManager, find_free_cv_port
 
         # Determine debug output directory
         debug_output_dir = None
@@ -321,11 +339,21 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
             run_dir.screenshots_directory.mkdir(parents=True, exist_ok=True)
             log.info(f"Enabled CV debug output to: {debug_output_dir}")
 
+        # Pick a free port rather than taking the fixed default: two concurrent
+        # `adare experiment run` invocations would otherwise share one cv-server, and
+        # the loser's CV debug images and mcp_gui.log would be written into the
+        # winner's run directory (both are fixed in the spawned process's argv).
+        # The chosen URL is handed to the PlaybookController in
+        # step_execute_experiment so the resolver talks to THIS run's server.
+        cv_port = find_free_cv_port()
+
         context.mcp_server = MCPServerManager(
+            server_port=cv_port,
             log_file=run_dir.mcp_gui_log_file,
             debug=context.config.dev_mode,
             debug_output_dir=debug_output_dir
         )
+        log.info(f"CV/OCR server for this run will use port {cv_port}")
 
 
 def _resolve_and_store_test_execution_mode(context: ExperimentRunCtx):
@@ -354,6 +382,12 @@ def _resolve_and_store_test_execution_mode(context: ExperimentRunCtx):
 async def step_execute_installations_via_qga(context: ExperimentRunCtx):
     """Execute environment installations via QGA guest-exec (no WebSocket needed)."""
     from adare.backend.experiment.agent_lifecycle import execute_installations_via_qga
+    # Skip the stage entirely when there is nothing to install, so the
+    # "Installing environment software" row never appears for empty environments.
+    installations = environment_database.get_environment_installations(context.environment_ulid)
+    if not installations:
+        log.info("No environment installations to execute; skipping stage")
+        return
     with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
         await execute_installations_via_qga(context, stage_ctx)
 
@@ -371,6 +405,12 @@ async def step_connect_websocket(context: ExperimentRunCtx):
 
 async def step_execute_installations(context: ExperimentRunCtx):
     from adare.backend.experiment.agent_lifecycle import execute_installations_via_websocket
+    # Skip the stage entirely when there is nothing to install, so the
+    # "Installing environment software" row never appears for empty environments.
+    installations = environment_database.get_environment_installations(context.environment_ulid)
+    if not installations:
+        log.info("No environment installations to execute; skipping stage")
+        return
     with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
         await execute_installations_via_websocket(context, stage_ctx)
 
@@ -383,6 +423,17 @@ async def step_start_mcp_server(context: ExperimentRunCtx):
         success = await context.mcp_server.start()
         if success:
             log.info("MCP GUI server started successfully")
+            # Record which port/PID this run or dev session owns, so a resumed dev
+            # session reclaims its own server instead of allocating a second one and
+            # leaking the first. Written here rather than at each construction site
+            # so dev start, dev resume and production runs all record it identically.
+            if context.experiment_run_directory is not None:
+                from adare.backend.experiment.mcp_server_manager import save_cv_state
+                save_cv_state(
+                    context.experiment_run_directory.path,
+                    context.mcp_server.server_port,
+                    context.mcp_server.known_server_pid,
+                )
         else:
             from adare.exceptions import LoggedException
             raise LoggedException(log, "MCP GUI server failed to start - cannot proceed without target detection capabilities")
@@ -442,6 +493,15 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         # Get flow console for interactive actions like pause
         flow_console = flowconsolemanager.get_handler(context.experiment_run_ulid)
 
+        # Point the target resolver at THIS run's cv-server. Without this the
+        # controller falls back to its hardcoded http://localhost:13109/mcp default
+        # (playbook_controller.py / target_resolver.py), which under concurrency is a
+        # different run's server — or nothing at all. diff_run.py and the dev-session
+        # path already pass this; the production run path did not.
+        controller_kwargs = {}
+        if context.mcp_server is not None:
+            controller_kwargs['mcp_gui_url'] = context.mcp_server.server_url
+
         # Create playbook controller
         controller = PlaybookController(
             websocket_client=context.client,  # May be None in host mode
@@ -458,12 +518,13 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             vm_user=vm_user,
             flow_console=flow_console,
             test_mode=context.test_mode,
-            config=context.config
+            config=context.config,
+            **controller_kwargs,
         )
 
         # Set up host-mode test executor if in HOST test mode
         if is_host_test_mode:
-            _setup_guest_to_host_test_executor(controller, context, vm_os)
+            _setup_guest_to_host_test_executor(controller, context.vm, context.playbook, vm_os)
 
         # Execute complete experiment (playbook + tests)
         log.info(f"Starting experiment execution for {context.config.experiment_name}")
@@ -483,8 +544,12 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             log.error(f"Action results: {result.successful_actions}/{result.total_actions} succeeded")
 
 
-def _setup_guest_to_host_test_executor(controller, context: ExperimentRunCtx, vm_os: str):
-    """Set up host-mode test execution on the PlaybookController."""
+def _setup_guest_to_host_test_executor(controller, vm, playbook, vm_os: str):
+    """Set up host-mode test execution on the PlaybookController.
+
+    Takes ``vm`` and ``playbook`` directly (rather than an ExperimentRunCtx) so
+    the dev-mode playbook path can reuse it without building a full run context.
+    """
     from adare.backend.experiment.execution.base import TestExecutionMode
     from adare.backend.experiment.guest_to_host_test_executor import GuestToHostTestExecutor
     from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
@@ -495,8 +560,8 @@ def _setup_guest_to_host_test_executor(controller, context: ExperimentRunCtx, vm
     guest_os = vm_os or 'linux'
 
     # Create QGA proxies
-    guest_file = GuestFileProxy(vm=context.vm, guest_os=guest_os)
-    guest_command = GuestCommandProxy(vm=context.vm, guest_os=guest_os)
+    guest_file = GuestFileProxy(vm=vm, guest_os=guest_os)
+    guest_command = GuestCommandProxy(vm=vm, guest_os=guest_os)
 
     # Load testfunctions locally on host
     global_testfunctions_path = STATE_DIR / 'testfunctions'
@@ -508,7 +573,7 @@ def _setup_guest_to_host_test_executor(controller, context: ExperimentRunCtx, vm
         log.warning("Host mode: no testfunctions directory found")
 
     # Pre-flight validation: check all playbook tests are host-mode compatible
-    playbook_tests = getattr(context.playbook, 'tests', [])
+    playbook_tests = getattr(playbook, 'tests', [])
     if playbook_tests:
         ok, issues = GuestToHostTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
         if not ok:
@@ -586,6 +651,16 @@ def step_finalize(context: ExperimentRunCtx, post_interrupt: bool = False):
     with StageCtxManager(FinalizeStage(), context.experiment_run_ulid, event=event):
         timestamp_end = datetime.now(UTC)
         experiment_database.update_experiment_run_end(context.project_directory.path, context.experiment_run_ulid, timestamp_end)
+
+        # The run actually executed against this environment: register it as a
+        # "can run here" indicator on the experiment (DB + metadata.yml). This is
+        # best-effort and never breaks a completed run.
+        experiment_database.register_experiment_environment(
+            context.project_directory.path,
+            context.config.experiment_name,
+            context.config.environment_name,
+        )
+
         duration_total = timestamp_end - context.timestamp_start
         duration_vm = timestamp_end - context.timestamp_before_vm_start
         log.info(f"Experiment run {context.experiment_run_ulid} finished after {duration_total} seconds (vm run time: {duration_vm})")

@@ -12,6 +12,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d5f4d14b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
     
     
@@ -211,8 +212,10 @@
 <li class="toctree-l1"><a class="reference internal" href="experiments.html">Experiments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="test-driven-analysis.html">Test-Driven Analysis</a></li>
 <li class="toctree-l1"><a class="reference internal" href="diff-analysis.html">Diff Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="icon-library.html">Windows Icon Library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="vm-image-creation.html">VM Image Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="dev-mode.html">Dev Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp-authoring.html">Authoring Experiments with the MCP Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sharing.html">Sharing</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -321,7 +324,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
 <ul>
@@ -330,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../architecture/file-sharing.html">File Sharing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/guest-agent.html">Guest Agent</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/cv-server.html">CV Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/database-migrations.html">Database Migrations</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
@@ -383,47 +387,132 @@
 <p>Environments define virtual machine configurations for running experiments.</p>
 <section id="environment-configuration">
 <h2>Environment Configuration<a class="headerlink" href="#environment-configuration" title="Link to this heading">¶</a></h2>
-<p>Environments are defined using YAML files with these key fields:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/vm.ova&quot;</span>
+<p>Environments are defined using YAML files. The environment’s <strong>name</strong> always comes
+from the filename stem, never from a field inside the file.</p>
+<p>Every environment declares exactly one <strong>VM source</strong>, and which one it is decides
+which other fields apply:</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 18.0%" />
+<col style="width: 22.0%" />
+<col style="width: 60.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">vm_type</span></code></p></th>
+<th class="head"><p>Source field</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">path</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">vm</span></code></p></td>
+<td><p>A local disk image. Reference-only: not publishable.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">url</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">vm</span></code> + <code class="docutils literal notranslate"><span class="pre">vm_sha256</span></code></p></td>
+<td><p>A baked disk hosted at an <code class="docutils literal notranslate"><span class="pre">http(s)</span></code> URL, verified after download.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">recipe</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">recipe:</span></code></p></td>
+<td><p>Built on load from declared inputs. See <a class="reference internal" href="vm-image-creation.html#recipe-environments"><span class="std std-ref">Recipe Environments</span></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">auto</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">vm</span></code></p></td>
+<td><p>Default; infers <code class="docutils literal notranslate"><span class="pre">path</span></code> or <code class="docutils literal notranslate"><span class="pre">url</span></code> from the value.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<section id="baked-disk-local-vm-type-path">
+<h3>Baked disk, local (<code class="docutils literal notranslate"><span class="pre">vm_type:</span> <span class="pre">path</span></code>)<a class="headerlink" href="#baked-disk-local-vm-type-path" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/Users/me/.adare/state/vms/win11.qcow2</span>
+<span class="nt">vm_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path</span>
+<span class="nt">vm_sha256</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;abc123...&quot;</span><span class="w">          </span><span class="c1"># optional here; verified on load when present</span>
 <span class="nt">os</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows&quot;</span>
-<span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span><span class="w">  </span><span class="c1"># or &quot;linux&quot;</span>
+<span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">11&quot;</span>
+<span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span><span class="w">           </span><span class="c1"># or &quot;linux&quot;</span>
 <span class="w">  </span><span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Pro&quot;</span>
 <span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;11&quot;</span>
-<span class="w">  </span><span class="nt">architecture</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;x64&quot;</span>
-
-<span class="nt">postsetupinstallations</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Install</span><span class="nv"> </span><span class="s">Tool&quot;</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;setup.exe</span><span class="nv"> </span><span class="s">/S&quot;</span>
-<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Install</span><span class="nv"> </span><span class="s">custom</span><span class="nv"> </span><span class="s">tool&quot;</span>
-<span class="w">    </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-
+<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;English&quot;</span>
+<span class="w">  </span><span class="nt">architecture</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;x86_64&quot;</span><span class="w">        </span><span class="c1"># or aarch64</span>
+<span class="nt">hypervisor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">qemu</span>
 <span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;windows&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;forensics&quot;</span><span class="p p-Indicator">]</span>
 <span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">11</span><span class="nv"> </span><span class="s">forensics</span><span class="nv"> </span><span class="s">environment&quot;</span>
 </pre></div>
 </div>
+</section>
+<section id="baked-disk-published-vm-type-url">
+<h3>Baked disk, published (<code class="docutils literal notranslate"><span class="pre">vm_type:</span> <span class="pre">url</span></code>)<a class="headerlink" href="#baked-disk-published-vm-type-url" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://cloud.example.org/s/TOKEN/download</span>
+<span class="nt">vm_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">url</span>
+<span class="nt">vm_sha256</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;abc123...&quot;</span><span class="w">          </span><span class="c1"># REQUIRED for a URL source</span>
+<span class="nt">vm_format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">qcow2</span><span class="w">                </span><span class="c1"># REQUIRED when the URL has no disk extension</span>
+<span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Ubuntu</span><span class="nv"> </span><span class="s">24.04&quot;</span><span class="p p-Indicator">,</span><span class="nt"> platform</span><span class="p">:</span><span class="w"> </span><span class="nv">linux</span><span class="p p-Indicator">,</span><span class="nt"> distribution</span><span class="p">:</span><span class="w"> </span><span class="nv">ubuntu</span><span class="p p-Indicator">}</span>
+<span class="nt">hypervisor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">qemu</span>
+</pre></div>
+</div>
+<p>Produced by <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">env</span> <span class="pre">publish-prepare</span> <span class="pre">&lt;name&gt;</span> <span class="pre">--vm-url</span> <span class="pre">&lt;url&gt;</span></code>, which hashes the
+local disk and rewrites the descriptor.</p>
+</section>
+<section id="recipe-vm-type-recipe">
+<h3>Recipe (<code class="docutils literal notranslate"><span class="pre">vm_type:</span> <span class="pre">recipe</span></code>)<a class="headerlink" href="#recipe-vm-type-recipe" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vm_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">recipe</span>
+<span class="nt">hypervisor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">qemu</span>
+<span class="nt">recipe</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">windows11arm64</span><span class="w">       </span><span class="c1"># resolves via the OS profile catalog</span>
+<span class="w">  </span><span class="nt">iso_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Win11_25H2_English_Arm64_v2.iso</span><span class="w">   </span><span class="c1"># or `iso:` (path / http(s) URL)</span>
+<span class="w">  </span><span class="nt">iso_sha256</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;638aa2c8...&quot;</span><span class="w">     </span><span class="c1"># REQUIRED; the integrity boundary</span>
+<span class="w">  </span><span class="nt">iso_notes</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Download</span><span class="nv"> </span><span class="s">from</span><span class="nv"> </span><span class="s">microsoft.com/software-download/windows11&quot;</span>
+<span class="w">  </span><span class="nt">template</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autounattend_win11_arm64.xml</span>
+<span class="w">  </span><span class="nt">params</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">setup_level</span><span class="p">:</span><span class="w"> </span><span class="nv">2</span><span class="p p-Indicator">,</span><span class="nt"> disk_size</span><span class="p">:</span><span class="w"> </span><span class="nv">160G</span><span class="p p-Indicator">,</span><span class="nt"> ram_mb</span><span class="p">:</span><span class="w"> </span><span class="nv">8192</span><span class="p p-Indicator">,</span><span class="nt"> cpus</span><span class="p">:</span><span class="w"> </span><span class="nv">4</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">provision</span><span class="p">:</span><span class="w">                    </span><span class="c1"># build-time steps, run once (see below)</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">my-tool</span><span class="p p-Indicator">,</span><span class="nt"> command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;msiexec</span><span class="nv"> </span><span class="s">/i</span><span class="nv"> </span><span class="s">C:\\tmp\\t.msi</span><span class="nv"> </span><span class="s">/qn&quot;</span><span class="p p-Indicator">,</span><span class="nt"> allow_exit_codes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3010</span><span class="p p-Indicator">]}</span>
+<span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">11</span><span class="nv"> </span><span class="s">(ARM64)&quot;</span><span class="p p-Indicator">,</span><span class="nt"> platform</span><span class="p">:</span><span class="w"> </span><span class="nv">windows</span><span class="p p-Indicator">,</span><span class="nt"> distribution</span><span class="p">:</span><span class="w"> </span><span class="nv">Home</span><span class="p p-Indicator">,</span>
+<span class="nt">     version</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;11&#39;</span><span class="p p-Indicator">,</span><span class="nt"> language</span><span class="p">:</span><span class="w"> </span><span class="nv">English</span><span class="p p-Indicator">,</span><span class="nt"> architecture</span><span class="p">:</span><span class="w"> </span><span class="nv">aarch64</span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<p>In recipe mode the <code class="docutils literal notranslate"><span class="pre">os:</span></code> block is optional – it is derived from the profile when
+omitted. Full details, including build-time provisioning and consumer-supplied
+ISOs, are in <a class="reference internal" href="vm-image-creation.html#recipe-environments"><span class="std std-ref">Recipe Environments</span></a>.</p>
+</section>
 <section id="required-fields">
 <h3>Required Fields<a class="headerlink" href="#required-fields" title="Link to this heading">¶</a></h3>
 <ul class="simple">
-<li><p><strong>name</strong>: Environment identifier</p></li>
-<li><p><strong>vm</strong>: Path to VM image file (.ova)</p></li>
-<li><p><strong>os.platform</strong>: Either “windows” or “linux”</p></li>
+<li><p><strong>A VM source</strong>: one of <code class="docutils literal notranslate"><span class="pre">vm</span></code>, <code class="docutils literal notranslate"><span class="pre">recipe</span></code>, or legacy <code class="docutils literal notranslate"><span class="pre">vagrantbox</span></code>.</p></li>
+<li><p><strong>os.platform</strong>: <code class="docutils literal notranslate"><span class="pre">windows</span></code> or <code class="docutils literal notranslate"><span class="pre">linux</span></code> (optional for a recipe, which derives
+it from the profile).</p></li>
+<li><p><strong>vm_sha256</strong>: required when <code class="docutils literal notranslate"><span class="pre">vm</span></code> is a URL.</p></li>
+<li><p><strong>recipe.iso_sha256</strong>: required for every recipe.</p></li>
 </ul>
 </section>
 <section id="optional-fields">
 <h3>Optional Fields<a class="headerlink" href="#optional-fields" title="Link to this heading">¶</a></h3>
 <ul class="simple">
-<li><p><strong>postsetupinstallations</strong>: Commands to run after VM boot</p></li>
-<li><p><strong>tags</strong>: Labels for organization</p></li>
-<li><p><strong>description</strong>: Environment purpose</p></li>
-<li><p><strong>vagrantbox</strong>: Legacy Vagrant box (backward compatibility)</p></li>
+<li><p><strong>vm_type</strong>: <code class="docutils literal notranslate"><span class="pre">auto</span></code> (default), <code class="docutils literal notranslate"><span class="pre">path</span></code>, <code class="docutils literal notranslate"><span class="pre">url</span></code>, or <code class="docutils literal notranslate"><span class="pre">recipe</span></code>.</p></li>
+<li><p><strong>vm_format</strong>: disk format hint (<code class="docutils literal notranslate"><span class="pre">qcow2</span></code>/<code class="docutils literal notranslate"><span class="pre">ova</span></code>/<code class="docutils literal notranslate"><span class="pre">vmdk</span></code>/<code class="docutils literal notranslate"><span class="pre">vdi</span></code>/<code class="docutils literal notranslate"><span class="pre">img</span></code>/<code class="docutils literal notranslate"><span class="pre">raw</span></code>);
+required for a URL with no recognizable disk extension.</p></li>
+<li><p><strong>postsetupinstallations</strong>: commands run inside <strong>every experiment run</strong>. Not the
+place to install software under test – see <code class="docutils literal notranslate"><span class="pre">recipe.provision</span></code> in
+<a class="reference internal" href="vm-image-creation.html#build-time-provisioning"><span class="std std-ref">Build-time provisioning</span></a> for why.</p></li>
+<li><p><strong>tags</strong>: labels for organization</p></li>
+<li><p><strong>description</strong>: environment purpose</p></li>
+<li><p><strong>hypervisor</strong> / <strong>hypervisor_config</strong>: hypervisor selection and per-hypervisor
+settings (e.g. <code class="docutils literal notranslate"><span class="pre">boot_mode:</span> <span class="pre">bios</span></code>)</p></li>
+<li><p><strong>vagrantbox</strong>: legacy Vagrant box (backward compatibility)</p></li>
 </ul>
 </section>
 </section>
 <section id="managing-environments">
 <h2>Managing Environments<a class="headerlink" href="#managing-environments" title="Link to this heading">¶</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load environment from config file</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load environment from config file (for a recipe, this BUILDS the disk)</span>
 adare<span class="w"> </span>environment<span class="w"> </span>load<span class="w"> </span>config.yml
+
+<span class="c1"># Recipe with a consumer-supplied ISO: point ADARE at the file (or its directory)</span>
+adare<span class="w"> </span>env<span class="w"> </span>load<span class="w"> </span>config.yml<span class="w"> </span>--iso<span class="w"> </span>~/Downloads/Win11_25H2_English_Arm64_v2.iso
+
+<span class="c1"># Retry only the build-time provisioning stage, reusing the cached OS install</span>
+adare<span class="w"> </span>env<span class="w"> </span>load<span class="w"> </span>config.yml<span class="w"> </span>--reprovision
 
 <span class="c1"># List environments</span>
 adare<span class="w"> </span>environment<span class="w"> </span>list
@@ -529,6 +618,9 @@ a URL for the VM, the file will always be downloaded to managed storage.</p>
             <ul>
 <li><a class="reference internal" href="#">Environments</a><ul>
 <li><a class="reference internal" href="#environment-configuration">Environment Configuration</a><ul>
+<li><a class="reference internal" href="#baked-disk-local-vm-type-path">Baked disk, local (<code class="docutils literal notranslate"><span class="pre">vm_type:</span> <span class="pre">path</span></code>)</a></li>
+<li><a class="reference internal" href="#baked-disk-published-vm-type-url">Baked disk, published (<code class="docutils literal notranslate"><span class="pre">vm_type:</span> <span class="pre">url</span></code>)</a></li>
+<li><a class="reference internal" href="#recipe-vm-type-recipe">Recipe (<code class="docutils literal notranslate"><span class="pre">vm_type:</span> <span class="pre">recipe</span></code>)</a></li>
 <li><a class="reference internal" href="#required-fields">Required Fields</a></li>
 <li><a class="reference internal" href="#optional-fields">Optional Fields</a></li>
 </ul>
@@ -554,6 +646,7 @@ a URL for the VM, the file will always be downloaded to managed storage.</p>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>
 document.addEventListener('DOMContentLoaded', function() {
   if (!window.simpleDatatables) {

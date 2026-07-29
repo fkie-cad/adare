@@ -186,6 +186,18 @@ class VmTestRequest:
 
 
 @dataclass
+class VmRegisteredTestRequest:
+    """Request to test a registered VM's compatibility with ADARE."""
+    vm_name: str
+    disk_path: str
+    guest_platform: str  # 'windows' or 'linux'
+    hypervisor: str  # 'qemu' or 'virtualbox'
+    architecture: str = 'x86_64'
+    verbose: bool = False
+    vm_cleanup_mode: str = 'prompt'  # 'keep', 'remove', or 'prompt'
+
+
+@dataclass
 class VmTestResult:
     """Result of VM compatibility test."""
     success: bool

@@ -75,10 +75,15 @@ Environments define virtual machine configurations and contain experiments that 
     * ``--project TEXT`` - Name of the project
 
 ``adare environment list``
-  List all environments in the current project.
+  List all environments in the current project. The **disk** column reports the
+  backing disk of each environment's registered VM: ``ok``, ``MISSING`` (registered
+  but the disk is gone, so a run will fail at VM setup), or ``-`` (nothing local to
+  check). Note this is not the *file path* column, which is the environment's YAML
+  descriptor and outlives the disk it points at.
 
 ``adare environment info <dotnotation>``
   Show detailed information about a specific environment using dotnotation (project.environment).
+  Includes a **disk** row with the backing disk path and whether it is present.
 
 Experiment Management
 =====================
@@ -464,7 +469,6 @@ Commands for integrating with the ADARE Web platform for sharing experiments and
   Download an experiment bundle (experiment plus all dependencies) from the web platform.
 
   Options:
-    * ``--include-disk-images`` - Also download disk images
     * ``--project, -p TEXT`` - Name of the project
 
 ``adare web publish <ulid>``
@@ -484,10 +488,15 @@ Commands for integrating with the ADARE Web platform for sharing experiments and
 **Web Submit Sub-commands (adare web submit)**
 
 ``adare web submit experiment <name>``
-  Submit an experiment as a pull request to the shared repository.
+  Submit an experiment as a pull request to the shared repository. Every test
+  function and environment the experiment references is checked against the
+  server's published catalog first; if one is unresolvable the submission fails
+  and no pull request is created. See :ref:`experiment-dependency-preflight`.
 
   Options:
     * ``--project, -p TEXT`` - Name of the project
+    * ``--skip-dependency-check`` - Submit even if a referenced test function or
+      environment is not resolvable in the server's published catalog
 
 ``adare web submit testfunction <name>``
   Submit a testfunction as a pull request to the shared repository.
@@ -538,19 +547,83 @@ Commands for testing MCP (Model Control Protocol) server functionality used for 
     * ``--host TEXT`` - MCP server host (default: localhost)
     * ``--port INTEGER`` - MCP server port (default: 13109)
 
+Icon Library
+============
+
+Inspect the Windows icon library and extract icons from a connected target. See
+:doc:`../guide/icon-library` for the full guide.
+
+``adare icons list``
+  List every icon term in the registry with its resolver spec. Aliases: ``l``.
+
+  Options:
+    * ``--os-key TEXT`` - OS profile / build key for cache separation (default: windows)
+
+``adare icons dump-all``
+  Resolve every registry term on a connected target, writing the PNGs plus an
+  HTML contact sheet to the per-OS icon cache directory. Aliases: ``dump``.
+
+  Options:
+    * ``--host TEXT`` - adarevm host (default: localhost)
+    * ``--port INTEGER`` - adarevm WebSocket port (default: 18765)
+    * ``--os-key TEXT`` - OS profile / build key for cache separation (default: windows)
+    * ``--force`` - Re-extract even if a cached PNG already exists
+
 System Management
 =================
 
 Administrative commands for maintaining the ADARE system.
 
-``adare manage reset-db``
-  Reset the ADARE database (use with caution - will delete all experiment data).
+Database
+--------
 
-``adare manage reset-vm``
-  Reset all VMs in the system (use with caution).
-  
+ADARE keeps a global database (VMs, environments, test functions, project
+registry) plus one database per project (experiments, runs). Schema changes are
+carried by ordered migrations that are applied automatically whenever a
+database is opened -- see :doc:`../architecture/database-migrations`.
+
+``adare db status``
+  Report whether the global database exists, is accessible, and whether any
+  schema migrations are still pending. Pending migrations are informational:
+  they are applied on next use.
+
+``adare db migrate``
+  Apply pending schema migrations to the global database and to every
+  registered project database, printing each migration as it is applied.
+  Re-running reports that nothing is pending. Safe to run at any time; it is
+  part of ``make install`` and ``make update``.
+
+``adare db init``
+  Initialize the database system (directories + global database).
+
+``adare db repair``
+  Reinitialize the global database and apply pending migrations.
+
+``adare db reset``
+  Delete the global database (use with caution - VMs, environments and the
+  test function registry are lost).
+
+``adare db clean-install``
+  Recreate the global database from scratch (DANGER: deletes all global data).
+
   Options:
-    * ``--force`` - Force deletion of all VMs (required for confirmation)
+    * ``--force``, ``-f`` - Skip the confirmation prompt
+
+VMs and runtime
+---------------
+
+``adare vm reset``
+  Reset all VMs in the system (use with caution).
+
+  Options:
+    * ``--force``, ``-f`` - Force reset of all VMs (required for confirmation)
+
+``adare runtime refresh``
+  Refresh the VM runtime files in the current project.
+
+``adare runtime build``
+  Build fresh VM runtime wheels (``adarelib``, ``adarevm``) for the current
+  project.
 
 Help Commands
 =============

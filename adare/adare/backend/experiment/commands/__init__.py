@@ -21,6 +21,7 @@ from adare.backend.experiment.commands.manage import (
     experiment_remove,
     ova_test,
     publish_run_command,
+    vm_test_registered,
 )
 from adare.backend.experiment.commands.modify import (
     experiment_add_environments,
@@ -43,6 +44,7 @@ __all__ = [
     "experiment_clean",
     "experiment_remove",
     "ova_test",
+    "vm_test_registered",
     "publish_run_command",
     "StageCtxManagerLite",
     # modify

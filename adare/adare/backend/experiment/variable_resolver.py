@@ -804,13 +804,31 @@ class VariableResolver:
 
         elif isinstance(action, PullAction):
             if resolved_action.src:
-                resolved_action.src = self.replace_variables(resolved_action.src, execution_context)
+                # src is `str | list[str]`. Passing a list to replace_variables is a
+                # silent no-op ('{{' not in <list> tests element equality, not
+                # substrings), so the guest would receive literal "{{ out_dir }}/..."
+                # paths. Resolve each entry individually.
+                if isinstance(resolved_action.src, list):
+                    resolved_action.src = [
+                        self.replace_variables(entry, execution_context)
+                        for entry in resolved_action.src
+                    ]
+                else:
+                    resolved_action.src = self.replace_variables(resolved_action.src, execution_context)
             if resolved_action.dst:
                 resolved_action.dst = self.replace_variables(resolved_action.dst, execution_context)
 
         # Resolve Target fields for actions that have targets
         if hasattr(resolved_action, 'target') and resolved_action.target:
             resolved_action.target = self.resolve_target_variables(resolved_action.target, execution_context)
+
+        # WaitUntilAction keeps its Targets inside a recursive `condition` tree rather than
+        # a flat `target` attribute, so the branch above never reached them and the guest
+        # was asked to wait for a literal "{{ filename }}".
+        if hasattr(resolved_action, 'condition') and resolved_action.condition:
+            resolved_action.condition = self._resolve_condition_variables(
+                resolved_action.condition, execution_context
+            )
 
         # Resolve Source/Destination targets for DragAction
         if isinstance(action, DragAction):
@@ -820,6 +838,27 @@ class VariableResolver:
                 resolved_action.dst = self.resolve_target_variables(resolved_action.dst, execution_context)
 
         return resolved_action
+
+    def _resolve_condition_variables(self, condition, execution_context: dict[str, Any]):
+        """Resolve variables in a WaitCondition tree, in place on an already-copied action.
+
+        WaitCondition is recursive: `exists`/`not_exists` hold Targets, while
+        `all`/`any`/`negate` hold nested conditions. Exactly one field is set (enforced by
+        WaitCondition.__attrs_post_init__), so each branch is mutually exclusive.
+        """
+        if getattr(condition, 'exists', None):
+            condition.exists = self.resolve_target_variables(condition.exists, execution_context)
+        if getattr(condition, 'not_exists', None):
+            condition.not_exists = self.resolve_target_variables(condition.not_exists, execution_context)
+        for group in ('all', 'any'):
+            nested = getattr(condition, group, None)
+            if nested:
+                setattr(condition, group, [
+                    self._resolve_condition_variables(child, execution_context) for child in nested
+                ])
+        if getattr(condition, 'negate', None):
+            condition.negate = self._resolve_condition_variables(condition.negate, execution_context)
+        return condition
 
     def resolve_target_variables(self, target, execution_context: dict[str, Any]):
         """Resolve variables in Target fields."""

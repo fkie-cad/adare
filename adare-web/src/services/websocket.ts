@@ -21,10 +21,11 @@ export class WebSocketClient {
   constructor(sessionId: string) {
     this.sessionId = sessionId
     // Use WS protocol for WebSocket, auto-detect host
+    // Connect to the same origin so the Vite dev proxy (see vite.config.ts,
+    // which forwards `/ws` to the backend) and production both work without a
+    // hardcoded port.
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.hostname
-    const port = import.meta.env.DEV ? '8000' : window.location.port
-    this.url = `${protocol}//${host}:${port}/ws/${sessionId}`
+    this.url = `${protocol}//${window.location.host}/ws/${sessionId}`
   }
 
   /**
@@ -32,16 +33,13 @@ export class WebSocketClient {
    */
   connect(): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('CLAUDE: WebSocket already connected')
       return
     }
 
-    console.log(`CLAUDE: Connecting to WebSocket: ${this.url}`)
     this.isManualClose = false
     this.ws = new WebSocket(this.url)
 
     this.ws.onopen = () => {
-      console.log('CLAUDE: WebSocket connected')
       this.startPingInterval()
       this.emit('connected', {})
     }
@@ -51,17 +49,16 @@ export class WebSocketClient {
         const message: WebSocketMessage = JSON.parse(event.data)
         this.handleMessage(message)
       } catch (error) {
-        console.error('CLAUDE: Failed to parse WebSocket message:', error)
+        console.error('Failed to parse WebSocket message:', error)
       }
     }
 
     this.ws.onerror = (error) => {
-      console.error('CLAUDE: WebSocket error:', error)
+      console.error('WebSocket error:', error)
       this.emit('error', { error: 'WebSocket connection error' })
     }
 
     this.ws.onclose = () => {
-      console.log('CLAUDE: WebSocket closed')
       this.stopPingInterval()
       this.emit('disconnected', {})
 
@@ -113,7 +110,7 @@ export class WebSocketClient {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message))
     } else {
-      console.warn('CLAUDE: WebSocket not connected, cannot send message')
+      console.warn('WebSocket not connected, cannot send message')
     }
   }
 
@@ -124,11 +121,6 @@ export class WebSocketClient {
     const handlers = this.handlers.get(message.type)
     if (handlers) {
       handlers.forEach((handler) => handler(message))
-    }
-
-    // Handle pong response
-    if (message.type === 'pong') {
-      console.debug('CLAUDE: Received pong from server')
     }
   }
 
@@ -170,7 +162,6 @@ export class WebSocketClient {
    */
   private scheduleReconnect(): void {
     this.stopReconnectTimer()
-    console.log(`CLAUDE: Reconnecting in ${this.reconnectInterval}ms...`)
     this.reconnectTimer = window.setTimeout(() => {
       this.connect()
     }, this.reconnectInterval)

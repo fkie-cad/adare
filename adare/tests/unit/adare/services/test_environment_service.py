@@ -39,6 +39,9 @@ class TestEnvironmentServiceLoad:
     @patch("adare.services.environment_service.environment_database")
     @patch("adare.services.environment_service.backend_environment_load")
     def test_load_success_with_db_data(self, mock_load, mock_db, service, load_request):
+        # backend_environment_load returns (environment_ulid, created); an
+        # unconfigured MagicMock iterates empty and fails the unpack.
+        mock_load.return_value = ("01ULID", True)
         mock_db.resolve_environment_identifier.return_value = "01ULID"
         mock_db.get_environment_data.return_value = {
             "id": "01ULID", "name": "test-env", "description": "desc",
@@ -56,15 +59,21 @@ class TestEnvironmentServiceLoad:
     @patch("adare.services.environment_service.environment_database")
     @patch("adare.services.environment_service.backend_environment_load")
     def test_load_fallback_when_not_in_db(self, mock_load, mock_db, service, load_request):
+        mock_load.return_value = ("01ULID", True)
         from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
         mock_db.resolve_environment_identifier.side_effect = _make_exception(
             EnvironmentDoesNotExistInDatabase
         )
+        # The fallback branch is the one taken when the post-load row lookup comes
+        # up empty; an unconfigured MagicMock is truthy and takes the happy path.
+        mock_db.get_environment_data.return_value = None
 
         result = service.load(load_request)
 
         assert result.success is True
+        # Falls back to the filename stem for the display name.
         assert result.data.name == "test-env"
+        assert result.data.id == "01ULID"
 
     @patch("adare.services.environment_service.backend_environment_load")
     def test_load_fails_on_load_error(self, mock_load, service, load_request):

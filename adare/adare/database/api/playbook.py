@@ -162,6 +162,8 @@ class PlaybookApi(ProjectDatabaseApi):
             result["screenshot"] = config.settings.screenshot
         if hasattr(config.settings, 'continue_on_test_failure'):
             result["continue_on_test_failure"] = config.settings.continue_on_test_failure
+        if getattr(config.settings, 'resolution', None) is not None:
+            result["resolution"] = config.settings.resolution
 
         return result
 
@@ -261,9 +263,14 @@ class PlaybookApi(ProjectDatabaseApi):
 
         # CRITICAL: Check WaitCondition BEFORE hasattr(__dict__) because attrs classes
         # may not have __dict__ (they use __slots__ by default)
-        from adare.types.playbook import WaitCondition
+        from adare.types.playbook import Target, WaitCondition
         if isinstance(value, WaitCondition):
             return self._serialize_wait_condition(value)
+        # Target is a slots-based attrs class (no __dict__), so it would fall
+        # through to the str() fallback below and break _json_to_target on load
+        # (e.g. a DragAction's src/dst). Serialize it symmetrically here.
+        if isinstance(value, Target):
+            return self._target_to_json(value)
 
         # Now check for __dict__ for other object types
         if hasattr(value, '__dict__'):
@@ -400,7 +407,8 @@ class PlaybookApi(ProjectDatabaseApi):
             continue_on_test_failure=settings_json.get('continue_on_test_failure', False),
             auto_pull_on_test_failure=settings_json.get('auto_pull_on_test_failure', True),
             collect_system_info=settings_json.get('collect_system_info', True),
-            forensic_logging=settings_json.get('forensic_logging', True)
+            forensic_logging=settings_json.get('forensic_logging', True),
+            resolution=settings_json.get('resolution')
         )
 
     def _json_to_target(self, target_json: dict[str, Any] | None):

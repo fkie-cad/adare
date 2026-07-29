@@ -30,6 +30,37 @@ from adare.core.result import Result
 log = logging.getLogger(__name__)
 
 
+def _parse_env_source(file: str | None) -> tuple[str, str, str, str, str]:
+    """Read (vm, vm_type, vm_sha256, source_profile, source_iso_sha256) from an
+    environment YAML file.
+
+    Best-effort: a missing/unparseable file yields empty strings so the list
+    still renders. Recipe environments have no baked ``vm`` and return empties.
+    The last two are optional, informational install-profile provenance (see
+    ``EnvironmentMetadata.source_profile``) and are empty for most environments.
+    """
+    empty = ("", "", "", "", "")
+    if not file:
+        return empty
+    env_path = Path(file)
+    if not env_path.exists():
+        return empty
+    try:
+        from adare.exceptions import DataStructuringError
+        from adare.types.environment import parse_environment_file
+        metadata = parse_environment_file(env_path)
+    except (OSError, ValueError, DataStructuringError) as e:
+        # A single malformed file must never break the whole list.
+        log.warning(f"Could not parse environment source from {env_path}: {e}")
+        return empty
+    if metadata is None:
+        return empty
+    return (
+        metadata.vm or "", metadata.vm_type or "", metadata.vm_sha256 or "",
+        metadata.source_profile or "", metadata.source_iso_sha256 or "",
+    )
+
+
 class ShowService:
     """
     Service for data display operations.
@@ -207,6 +238,33 @@ class ShowService:
                 solutions=['Check database connection', 'Verify the ULID is correct']
             )
 
+    def get_run_files(self, ulid: str) -> Result[dict]:
+        """Resolve a run's on-disk directory and known artifact file paths.
+
+        Searches across all project databases the same way `get_run` does,
+        since the caller (a ULID-only route) has no project context.
+        """
+        try:
+            matches = self._query_across_projects(
+                lambda api, name: (
+                    [files] if (files := api.get_run_files(ulid)) is not None else []
+                )
+            )
+            if not matches:
+                return Result.fail(
+                    code="RunNotFoundError",
+                    message=f"Run with ULID {ulid} not found",
+                    solutions=['Use `adare show runs` to find valid run ULIDs']
+                )
+            return Result.ok(matches[0])
+        except (FileNotFoundError, OSError) as e:
+            log.error(f"Failed to get run files for {ulid}: {e}")
+            return Result.fail(
+                code="RunRetrievalError",
+                message=f"Failed to get run files: {e}",
+                solutions=['Check database connection', 'Verify the ULID is correct']
+            )
+
     def remove_run(self, request: RunRemoveRequest) -> Result[RunRemoveResult]:
         """
         Remove a single experiment run.
@@ -322,14 +380,34 @@ class ShowService:
         Returns:
             Result[List[EnvironmentListItem]] with list of environments.
         """
+        from pathlib import Path
+
+        from adare.database.api.base import GlobalDatabaseApi
+        from adare.database.models.global_models import Vm
         from adare.database.api.structured_data import StructuredDataApi
 
         try:
             with StructuredDataApi() as api:
                 environments = api.get_environments_structured()
 
-            items = [
-                EnvironmentListItem(
+            # Registered disk per VM, so each environment can be checked against the
+            # file a run would actually boot. Fetched in one query rather than per
+            # environment because several environments share a VM.
+            with GlobalDatabaseApi() as db:
+                vm_files = {vm_row.id: vm_row.file for vm_row in db._session.query(Vm).all()}
+
+            items = []
+            for env in environments:
+                vm, vm_type, vm_sha256, _source_profile, _source_iso_sha256 = _parse_env_source(env.file)
+                disk_path = vm_files.get(env.vm_id) or ''
+                # Only a local path can be stat'ed; a URL-baked env has nothing to check
+                # here, which is reported as unknown rather than as missing.
+                disk_present = (
+                    Path(disk_path).is_file()
+                    if disk_path and '://' not in disk_path
+                    else None
+                )
+                items.append(EnvironmentListItem(
                     ulid=env.ulid,
                     name=env.name,
                     display_name=env.display_name,
@@ -347,9 +425,12 @@ class ShowService:
                     in_request=env.in_request,
                     created_at=env.created_at,
                     file=env.file,
-                )
-                for env in environments
-            ]
+                    vm=vm,
+                    vm_type=vm_type,
+                    vm_sha256=vm_sha256,
+                    disk_path=disk_path,
+                    disk_present=disk_present,
+                ))
 
             return Result.ok(items)
 
@@ -386,6 +467,24 @@ class ShowService:
                     solutions=['Use `adare show environments` to list available environments']
                 )
 
+            vm, vm_type, vm_sha256, source_profile, source_iso_sha256 = _parse_env_source(env.file)
+
+            # Same disk check as list_environments, so `env info` cannot report an
+            # environment as healthy when the qcow2 a run would boot has been pruned.
+            from pathlib import Path
+
+            from adare.database.api.base import GlobalDatabaseApi
+            from adare.database.models.global_models import Vm
+
+            with GlobalDatabaseApi() as db:
+                vm_row = db._session.query(Vm).filter_by(id=env.vm_id).first() if env.vm_id else None
+            disk_path = (vm_row.file if vm_row else '') or ''
+            disk_present = (
+                Path(disk_path).is_file()
+                if disk_path and '://' not in disk_path
+                else None
+            )
+
             detail = EnvironmentDetail(
                 ulid=env.ulid,
                 name=env.name,
@@ -404,6 +503,13 @@ class ShowService:
                 in_request=env.in_request,
                 created_at=env.created_at,
                 file=env.file,
+                vm=vm,
+                vm_type=vm_type,
+                vm_sha256=vm_sha256,
+                source_profile=source_profile,
+                source_iso_sha256=source_iso_sha256,
+                disk_path=disk_path,
+                disk_present=disk_present,
             )
 
             return Result.ok(detail)

@@ -3,7 +3,7 @@ schema: 1
 id: fedora-kde
 description: Fedora 41 / 42 / 43 / 44 KDE Plasma Spin install via Anaconda kickstart
 maintainer: ADARE
-revision: 2026-05-07
+revision: 2026-07-28
 supports:
   - fedora41kde
   - fedora42kde
@@ -22,7 +22,40 @@ rootpw --iscrypted --lock {{ password_hash }}
 user --name=adare --password={{ password_hash }} --iscrypted --groups=wheel --gecos="ADARE User"
 
 # Services
+#
+# NOTE on firewalld: `--disabled=firewalld` below does NOT take effect on this
+# spin. Measured on both built images (fedora-41-kde, fedora-42-kde):
+# `systemctl is-enabled firewalld` reports "enabled" and `is-active` reports
+# "active", with the `public` zone bound to the external interface. The mechanism
+# is not established — do not assume this line works.
+#
+# ADARE does not depend on it. The only inbound port a run needs is the adarevm
+# WebSocket port, and LinuxAgentCommandBuilder opens it at run time, in
+# firewalld's in-memory state only (see _FIREWALLD_OPEN_AGENT_PORT in
+# backend/experiment/agent_command_builders.py). Everything else ADARE uses is
+# outbound (PyPI, the SLIRP SMB share at 10.0.2.4) or not network at all (QGA
+# rides a virtio-serial channel), and firewalld permits all of that.
+#
+# The line is kept rather than removed because a stock-as-shipped firewall is the
+# better forensic baseline: leaving the guest's on-disk configuration untouched
+# keeps artifact diffs attributable to the experiment rather than to the image
+# build. Before relying on firewalld being off here, verify it in-guest.
 services --enabled=sshd --disabled=firewalld
+
+# SELinux
+#
+# ADARE controls Linux guests through the QEMU guest agent (guest-exec). Fedora
+# confines that agent to the `virt_qemu_ga_t` domain, which may not even stat
+# /usr/bin/sudo: on a stock enforcing install `command -v sudo` reports "not
+# found" and `systemctl` reports "Access denied", so every setup step fails with
+# a misleading "sudo: command not found" even though sudo is installed.
+#
+# Permissive rather than disabled: files keep getting labelled and AVCs are still
+# audited, so SELinux contexts and audit entries remain present in forensic
+# diffs — only the denials stop. Mirrors kickstart_fedora_workstation.yaml, which
+# has always carried this; its absence here would have failed the KDE builds
+# after the full ~90-150 min install.
+selinux --permissive
 
 # Disk
 clearpart --all --initlabel
@@ -41,6 +74,11 @@ wget
 git
 gnome-screenshot
 ImageMagick
+# CIFS client. Without it ADARE's SMB file-transfer strategy cannot mount the host
+# share and silently degrades to the much slower QGA byte-pushing path — the
+# diagnostic for that is emitted by file_transfer/smb_strategy.py. Absent here
+# until 2026-07-28, so the Workstation spin got SMB and the KDE spin did not.
+cifs-utils
 {% if setup_level >= 1 %}
 qemu-guest-agent
 {% endif %}
@@ -48,6 +86,52 @@ qemu-guest-agent
 python3-pip
 python3-tkinter
 xdotool
+{% endif %}
+%end
+
+%post --log=/dev/null
+# ADARE extras via dnf.
+#
+# The %packages section above only takes effect on netinst / DVD media — Anaconda
+# ignores it when installing from *live* media, where the package set is whatever
+# the squashfs carries. Installing the same extras here covers both media types.
+#
+# EOL Fedora releases are dropped from MirrorManager, so their metalink stops
+# resolving. Fedora 41 and 42 — the two releases the paper replicates — are both
+# EOL, so without this fallback a netinst build fails outright after ~90-150 min.
+# Ported verbatim from kickstart_fedora_workstation.yaml, which has always had it.
+#
+# Note this fallback repairs only the *post-install* dnf transactions. Anaconda's
+# own package resolution runs earlier and is pinned separately, via inst.repo in
+# the profile's kernel_cmdline (see appdata/os-profiles/fedora4*kdearm64.yml).
+if ! dnf -y makecache >/dev/null 2>&1; then
+    relver=$(rpm -E %fedora)
+    arch=$(uname -m)
+    archive="https://dl.fedoraproject.org/pub/archive/fedora/linux"
+    for repo in /etc/yum.repos.d/fedora.repo /etc/yum.repos.d/fedora-updates.repo; do
+        [ -f "$repo" ] && sed -i 's/^metalink=/#metalink=/; s/^mirrorlist=/#mirrorlist=/' "$repo"
+    done
+    cat > /etc/yum.repos.d/adare-archive.repo <<EOF
+[adare-archive]
+name=Fedora \$releasever archive - \$basearch
+baseurl=${archive}/releases/${relver}/Everything/${arch}/os/
+enabled=1
+gpgcheck=0
+[adare-archive-updates]
+name=Fedora \$releasever archive updates - \$basearch
+baseurl=${archive}/updates/${relver}/Everything/${arch}/
+enabled=1
+gpgcheck=0
+EOF
+    dnf -y makecache || true
+fi
+
+dnf -y install openssh-server sudo curl wget git gnome-screenshot ImageMagick cifs-utils || true
+{% if setup_level >= 1 %}
+dnf -y install qemu-guest-agent || true
+{% endif %}
+{% if setup_level >= 2 %}
+dnf -y install python3-pip python3-tkinter xdotool || true
 {% endif %}
 %end
 

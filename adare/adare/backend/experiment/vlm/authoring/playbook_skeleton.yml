@@ -1,0 +1,81 @@
+# UI-action playbook skeleton (NO tests: — pure UI actions).
+#
+# This is the template the authoring model fills in. It demonstrates every
+# robust pattern the HARD ROBUSTNESS RULES require. Replace the placeholder
+# targets/text with ones visible in the actual screenshot for your goal.
+#
+# Parses under adare.types.playbook.parse_playbook (strict: forbid_extra_keys).
+
+settings:
+  # A SMALL idle is present but is NOT used for synchronization — wait_until does
+  # that. Keep it small; raise only if a cold app launch outruns replay.
+  idle: 1.0
+  # Wall-clock ceiling for the whole playbook (seconds).
+  timeout: 1800
+
+actions:
+  # 1. SYNC before acting: wait for a piece of text that only appears once the
+  #    app/window is actually ready. Never assume the screen is settled.
+  - wait_until:
+      condition:
+        exists:
+          text: "File"
+      timeout: 60.0
+      initial_delay: 5.0
+      description: wait until the application window and menu bar are ready
+
+  # 2. OPTIONAL DIALOG: first-run / welcome / update popups may or may not be
+  #    present. Guard them with block.when so the playbook survives either way.
+  #    Dismiss with the keyboard (esc), not by clicking a close button.
+  - block:
+      when:
+        - exists:
+            text: "Tip of the Day"
+      actions:
+        - keyboard:
+            key: esc
+            description: dismiss the first-run 'Tip of the Day' dialog if present
+      description: handle optional first-run dialog
+
+  # 3. WAIT-UNTIL -> CLICK on an OCR text target (preferred over image clicks).
+  - wait_until:
+      condition:
+        exists:
+          text: "File"
+      description: confirm the File menu is present before clicking it
+  - click:
+      target:
+        text: "File"
+      type: left
+      description: open the File menu
+
+  # 4. KEYBOARD NAVIGATION is preferred over hunting for icons. Guard with when:
+  #    if the step depends on a specific state being visible.
+  - keyboard:
+      text: "example text into the document"
+      description: type content once (do not re-type or correct)
+
+  # 5. Key combinations use `combination:`; single keys use `key:`.
+  - keyboard:
+      combination: [ctrl, s]
+      description: open the Save dialog
+  - wait_until:
+      condition:
+        exists:
+          text: "Save"
+      description: wait for the Save dialog before typing the filename
+  - keyboard:
+      combination: [ctrl, a]
+      description: select the suggested filename
+  - keyboard:
+      text: "report"
+      description: replace the filename
+  - keyboard:
+      key: enter
+      description: confirm the save
+
+  # 6. A single small idle is acceptable ONLY to let a disk write flush AFTER the
+  #    UI already reports done. It is NOT a synchronization mechanism.
+  - idle:
+      duration: 2.0
+      description: allow the save to flush to disk

@@ -3,6 +3,7 @@ import hashlib
 
 # configure logging
 import logging
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -47,8 +48,22 @@ def _copy_environment_file(source_path: Path, environment_name: str, file_hash: 
         # Ensure global environments directory exists
         ENVIRONMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Generate target filename with environment name and hash prefix for uniqueness
+        # Generate target filename with environment name and hash prefix for uniqueness.
+        # Re-loading an ALREADY-MANAGED file would otherwise chain suffixes forever
+        # (ubuntu-2004_d01d78e5 -> ubuntu-2004_d01d78e5_d01d78e5 -> ...), and editing a
+        # managed file in place then re-loading chains a *different* hash on each pass
+        # (win11-autopsy-solr4_678b5723 -> ..._678b5723_1c005afe). Both produced the
+        # drifts of near-identical manifests in ENVIRONMENTS_DIR.
+        #
+        # Only strip when the source actually IS a managed copy, so a user-supplied file
+        # legitimately named e.g. "myenv_deadbeef.yml" keeps its name.
         hash_prefix = file_hash[:8]
+        try:
+            is_managed_copy = source_path.resolve().parent == ENVIRONMENTS_DIR.resolve()
+        except OSError:
+            is_managed_copy = False
+        if is_managed_copy:
+            environment_name = re.sub(r'(_[0-9a-f]{8})+$', '', environment_name)
         target_filename = f"{environment_name}_{hash_prefix}{source_path.suffix}"
         target_path = ENVIRONMENTS_DIR / target_filename
 
@@ -82,15 +97,28 @@ def _copy_environment_file(source_path: Path, environment_name: str, file_hash: 
         ) from e
 
 
-def resolve_vm_from_url(url: str) -> Path:
+# Disk-image extensions we recognize in a URL path. Kept in sync with the
+# publish contract (webapi `_validate_url_format`, server `check_file_validity`).
+DISK_EXTENSIONS = ('.ova', '.ovf', '.qcow2', '.vmdk', '.vdi', '.img', '.raw')
+
+
+def resolve_vm_from_url(url: str, vm_format: str | None = None) -> Path:
     """
-    Download and cache an OVA file from URL using the global vm directory.
+    Download and cache a disk image from a URL into the global vm directory.
+
+    Works for any host, including owncloud/Nextcloud share links whose URL has
+    no disk extension. The cache-file suffix is derived from the URL's own
+    extension when it has a recognized one, otherwise from ``vm_format`` — so an
+    extension-less qcow2 is cached as ``*.qcow2`` (not ``*_downloaded.ova``),
+    which drives the correct validator/hypervisor handling downstream.
 
     Args:
-        url: URL to the OVA file
+        url: URL to the disk image.
+        vm_format: Optional format hint (qcow2/ova/vmdk/vdi/img/raw) used to name
+            the cache file when the URL carries no recognized disk extension.
 
     Returns:
-        Path to the downloaded/cached OVA file
+        Path to the downloaded/cached disk image.
 
     Raises:
         EnvironmentLoadFailed: If download fails
@@ -108,10 +136,14 @@ def resolve_vm_from_url(url: str) -> Path:
     # Create hash-based filename to avoid conflicts and enable caching
     url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
 
-    if original_filename and original_filename.lower().endswith(('.ova', '.ovf')):
+    if original_filename and original_filename.lower().endswith(DISK_EXTENSIONS):
+        # URL already names the disk (e.g. .../win10.qcow2) — keep its filename.
         filename = f"{url_hash}_{original_filename}"
     else:
-        filename = f"{url_hash}_downloaded.ova"
+        # No recognized extension (owncloud/Nextcloud share link): name the
+        # cache file from the format hint so the suffix reflects the real disk.
+        suffix = (vm_format or 'ova').lower().lstrip('.')
+        filename = f"{url_hash}_downloaded.{suffix}"
 
     cached_file_path = vm_dir / filename
 
@@ -169,14 +201,23 @@ def environment_sync(environment_ulid: str):
     log.info(f'environment {environment_ulid} synced')
 
 
-def environment_load(environment: str, force: bool = False, no_copy: bool = False):
+def environment_load(environment: str, force: bool = False, no_copy: bool = False,
+                     iso_override: Path | None = None, reprovision: bool = False,
+                     allow_emulation: bool = False):
     """
     Load environment from YAML file.
 
     Args:
         environment: Environment name or path
-        force: Force reload even if already exists
+        force: Force reload even if already exists. For a recipe environment this
+            rebuilds both the base disk and the build-time provisioning stage.
         no_copy: Keep VM file at original location (local files only)
+        iso_override: Recipe only — a file, or a directory to search for the ISO.
+            How a consumer supplies the ISO for a BYO (``iso_name``) recipe.
+        reprovision: Recipe only — reuse the cached base disk but re-run
+            build-time provisioning from scratch.
+        allow_emulation: Recipe only — permit QEMU TCG when the recipe profile's
+            guest architecture does not match the host CPU.
 
     Returns:
         Tuple of (environment_ulid, created). ``created`` is False only on the
@@ -231,7 +272,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                 f"Environment with name '{environment_name}' already exists in the database.",
                 possible_solutions=[
                     "Use a different filename for your environment",
-                    f"Delete the existing environment: adare env delete {environment_name}",
+                    f"Delete the existing environment: adare env remove {environment_name}",
                     f"Update the existing environment safely with: adare env load --force {environment_file}"
                 ]
             )
@@ -263,8 +304,13 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
     managed_environment_file = _copy_environment_file(environment_file, environment_name, environment_file_sha256)
     log.info(f'Environment file stored at: {managed_environment_file}')
 
-    # Early check - if environment already exists by hash, skip VM processing entirely
-    existing_environment_id = environment_database.get_environment_by_hash(environment_file_sha256, trigger_exception=False)
+    # Early check - if environment already exists by hash, skip VM processing entirely.
+    # Ask for the 'id' field explicitly: without ``fields`` this returns the full
+    # Environment object, and callers expect a ULID string.
+    existing_environment = environment_database.get_environment_by_hash(
+        environment_file_sha256, trigger_exception=False, fields=['id']
+    )
+    existing_environment_id = existing_environment['id'] if existing_environment else None
     if existing_environment_id:
         if not force:
             elapsed_time = time.time() - start_time
@@ -289,7 +335,26 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
     is_url = False  # Track if VM was loaded from URL
 
     try:
-        if environment_metadata.vm:
+        if environment_metadata.is_recipe_environment:
+            # Recipe environment: build (or reuse a cached) disk from the
+            # declarative recipe inputs. Integrity is anchored on the inputs
+            # (recipe_hash); the produced disk is still hashed into Vm.hash.
+            from adare.backend.vm.recipe import build_or_reuse_recipe_vm
+            log.info('Recipe environment detected; resolving disk from recipe inputs...')
+            recipe_result = build_or_reuse_recipe_vm(
+                environment_metadata,
+                project_path=None,  # VMs are global
+                base_dir=environment_file.parent,
+                force=force,
+                reprovision=reprovision,
+                iso_override=iso_override,
+                allow_emulation=allow_emulation,
+            )
+            vm_id = recipe_result['vm_id']
+            if not recipe_result['was_existing']:
+                created_vm_id = vm_id
+            log.info(f'Recipe disk resolved to VM ID: {vm_id}')
+        elif environment_metadata.vm:
             # Determine how to handle the VM specification
             is_url = False
 
@@ -304,17 +369,68 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                 is_url = False
 
             if is_url:
+                # A URL source must be http(s) — explicit scheme allow-list, not a
+                # bare startswith. This rejects file://, ftp://, and bare local
+                # paths that were mislabeled `vm_type: url`.
+                if urlparse(environment_metadata.vm).scheme not in ('http', 'https'):
+                    raise EnvironmentLoadFailed(
+                        log,
+                        f'VM URL must use the http or https scheme: {environment_metadata.vm}',
+                        possible_solutions=[
+                            'Host the disk image at an http(s) URL and reference that',
+                            'Use vm_type "path" for a local disk file',
+                        ]
+                    )
+
+                # A URL source MUST declare vm_sha256 — it is the only integrity
+                # anchor for a remotely-hosted disk (no local bytes to trust).
+                if not environment_metadata.vm_sha256:
+                    raise EnvironmentLoadFailed(
+                        log,
+                        f'vm_sha256 is required for a URL-based VM: {environment_metadata.vm}',
+                        possible_solutions=[
+                            'Add the expected SHA256 of the hosted disk to "vm_sha256"',
+                            'Compute it from the local disk with: shasum -a 256 <disk-image>',
+                            'Use: adare environment publish-prepare <name> --vm-url <url> --vm-format <fmt>',
+                        ]
+                    )
+
                 # Download VM from URL and cache in global vm directory
                 # NOTE: URLs ALWAYS download to managed storage, ignoring --no-copy
                 log.info(f'Processing URL-based VM: {environment_metadata.vm}')
                 if no_copy:
                     log.info('Note: --no-copy flag is ignored for URL-based VMs (always downloaded to managed storage)')
                 try:
-                    vm_path = resolve_vm_from_url(environment_metadata.vm)
+                    vm_path = resolve_vm_from_url(environment_metadata.vm, environment_metadata.vm_format)
                     log.info(f'VM downloaded from URL and cached: {vm_path}')
                 except (OSError, ConnectionError, TimeoutError, ValueError, EnvironmentLoadFailed) as e:
                     log.error(f'Failed to download VM from URL {environment_metadata.vm}: {e}')
                     raise
+
+                log.info('Verifying downloaded VM against declared vm_sha256...')
+                actual_sha256 = file_sha256_with_progress(
+                    vm_path,
+                    description=f"Verifying {vm_path.name}",
+                    silent=False
+                )
+                expected_sha256 = environment_metadata.vm_sha256.lower()
+                if actual_sha256.lower() != expected_sha256:
+                    # Evict the stale cache entry so a subsequent load re-downloads instead
+                    # of hitting this same corrupt/mismatched file forever.
+                    if vm_path.exists():
+                        vm_path.unlink()
+                    raise EnvironmentLoadFailed(
+                        log,
+                        f'VM integrity check failed for {environment_metadata.vm}: '
+                        f'expected vm_sha256 {expected_sha256} but downloaded file hashes to {actual_sha256}. '
+                        f'The cached file has been deleted; re-run the load to re-download.',
+                        possible_solutions=[
+                            'Re-run "adare environment load" — the corrupt cache was deleted, so it will re-download',
+                            'Verify the "vm_sha256" in the environment file matches the published disk',
+                            'Contact the environment author if the mismatch persists',
+                        ]
+                    )
+                log.info('VM integrity check passed')
             else:
                 # Handle local file path - support both relative and absolute paths
                 vm_path = Path(environment_metadata.vm)

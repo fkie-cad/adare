@@ -118,13 +118,11 @@ def exec_download_testfunction(arguments):
 def exec_download_bundle(arguments):
     """Download an experiment bundle (experiment + all dependencies)."""
     project_directory = get_project_path(arguments)
-    include_disk_images = getattr(arguments, 'include_disk_images', False)
 
     api = AdareAPI()
     result = api.web.download_bundle(DownloadBundleRequest(
         project_path=project_directory,
         ulid=arguments.ulid,
-        include_disk_images=include_disk_images
     ))
 
     if not result.success:
@@ -149,8 +147,13 @@ def exec_web_sync(arguments):
 
 def exec_web_upload_experiment_run(arguments):
     """Upload experiment run to server using AdareAPI."""
+    project_directory = get_project_path(arguments)
+
     api = AdareAPI()
-    result = api.web.upload_run(UploadRunRequest(ulid=arguments.ulid))
+    result = api.web.upload_run(UploadRunRequest(
+        project_path=project_directory,
+        ulid=arguments.ulid
+    ))
 
     if not result.success:
         handle_api_error(result)
@@ -232,21 +235,65 @@ def exec_web_check_run(arguments):
 # Submit Operations
 # =========================================================================
 
-def exec_submit_experiment(arguments):
-    """Submit an experiment as a PR to the shared repository."""
-    project_directory = get_project_path(arguments)
+def _resolve_submit_action(api, entity_type, name):
+    """Pre-check a create submission by name and decide the action to submit.
 
-    api = AdareAPI()
-    result = api.web.submit_experiment(SubmitRequest(
-        project_path=project_directory,
-        name=arguments.name
-    ))
+    Returns the action to submit ('create' or 'modify'), or ``None`` to abort.
+    Prints guidance and prompts when the name collides:
 
+    * ALREADY_PUBLISHED -> prompt to submit a modify PR instead (yes -> 'modify',
+      no -> abort);
+    * OPEN_DUPLICATE -> inform that the existing PR #M will be updated, proceed;
+    * OK / pre-check unavailable -> proceed with 'create' (the server still guards
+      the submission, so a failed pre-check must not block a legitimate submit).
+    """
+    precheck = api.web.precheck_submission(entity_type, name)
+    if not precheck.success:
+        # non-fatal: fall back to a plain create; the server remains authoritative
+        log.warning(f'submission pre-check unavailable: {precheck.error.message}')
+        return 'create'
+
+    info = precheck.data or {}
+    code = info.get('code')
+    if code == 'ALREADY_PUBLISHED':
+        print(info.get('message') or f"'{name}' is already published.")
+        answer = input('submit a modify PR instead? [y/N]: ').strip().lower()
+        if answer not in ('y', 'yes'):
+            print('Aborted — nothing was submitted. Edit the published version with a modify PR.')
+            return None
+        return 'modify'
+    if code == 'OPEN_DUPLICATE':
+        pr_number = info.get('pr_number')
+        print(info.get('message')
+              or f"'{name}' is already proposed in pull request #{pr_number}; updating that PR.")
+        return 'create'
+    return 'create'
+
+
+def _run_submit(submit_fn, request):
+    """Invoke a submit facade with ``request`` and render the Result."""
+    result = submit_fn(request)
     if not result.success:
         handle_api_error(result)
     else:
         print(result.data.message)
         print(f'PR URL: {result.data.pr_url}')
+
+
+def exec_submit_experiment(arguments):
+    """Submit an experiment as a PR to the shared repository."""
+    project_directory = get_project_path(arguments)
+
+    api = AdareAPI()
+    action = _resolve_submit_action(api, 'experiment', arguments.name)
+    if action is None:
+        return
+    _run_submit(api.web.submit_experiment, SubmitRequest(
+        project_path=project_directory,
+        name=arguments.name,
+        action=action,
+        skip_dependency_check=getattr(arguments, 'skip_dependency_check', False),
+    ))
 
 
 def exec_submit_testfunction(arguments):
@@ -254,16 +301,14 @@ def exec_submit_testfunction(arguments):
     project_directory = get_project_path(arguments)
 
     api = AdareAPI()
-    result = api.web.submit_testfunction(SubmitRequest(
+    action = _resolve_submit_action(api, 'testfunction', arguments.name)
+    if action is None:
+        return
+    _run_submit(api.web.submit_testfunction, SubmitRequest(
         project_path=project_directory,
-        name=arguments.name
+        name=arguments.name,
+        action=action,
     ))
-
-    if not result.success:
-        handle_api_error(result)
-    else:
-        print(result.data.message)
-        print(f'PR URL: {result.data.pr_url}')
 
 
 def exec_submit_environment(arguments):
@@ -271,13 +316,11 @@ def exec_submit_environment(arguments):
     project_directory = get_project_path(arguments)
 
     api = AdareAPI()
-    result = api.web.submit_environment(SubmitRequest(
+    action = _resolve_submit_action(api, 'environment', arguments.name)
+    if action is None:
+        return
+    _run_submit(api.web.submit_environment, SubmitRequest(
         project_path=project_directory,
-        name=arguments.name
+        name=arguments.name,
+        action=action,
     ))
-
-    if not result.success:
-        handle_api_error(result)
-    else:
-        print(result.data.message)
-        print(f'PR URL: {result.data.pr_url}')

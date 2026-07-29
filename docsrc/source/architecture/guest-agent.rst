@@ -189,6 +189,28 @@ Agent Lifecycle
    WebSocket server through the forwarded port. The agent sends a welcome
    event listing available tools.
 
+   Before the agent is installed, a setup command opens port 18765 in the
+   guest's firewall on both platforms: ``New-NetFirewallRule`` on Windows, and
+   ``firewall-cmd --add-port=18765/tcp`` on Linux guests that run firewalld
+   (Fedora and relatives). The Linux step is a no-op where ``firewall-cmd``
+   does not exist, which covers the whole Debian/Ubuntu family -- those guests
+   ship ufw inactive, so nothing blocks the port there.
+
+   The Linux rule is deliberately **not** ``--permanent``: it changes only
+   firewalld's in-memory state, so nothing is written under ``/etc/firewalld``
+   and the guest's on-disk configuration stays untouched for forensic diffing.
+
+   .. note::
+
+      A blocked port does not look like a blocked port. firewalld's default
+      zone permits loopback while dropping inbound traffic on the external
+      interface, so the agent installs, starts, binds and answers its own
+      ``/dev/tcp/localhost/18765`` probe -- every in-guest check passes, and
+      only the host's forwarded connection is dropped. The run then fails at
+      *Connecting to Agent: All 6 connection attempts failed*, which reads as a
+      broken agent rather than a firewall. If you see that on a guest with a
+      default-on firewall, check the firewall before the agent.
+
 4. **Operation** -- the host sends ``TOOL_CALL`` messages as dictated by
    the playbook. Each tool runs as a background task; the agent streams
    ``EVENT`` messages for progress and returns a ``TOOL_RESULT`` when done.

@@ -15,11 +15,25 @@ from pathlib import Path
 
 from adare.database.api.base import EnhancedDatabaseApi
 from adare.database.exceptions import EntityNotFoundError, ValidationError
+from adare.database.migrations.runner import apply_pending
 from adare.database.models.devcheckpoint import DevCheckpoint
 from adare.database.models.devsession import DevSession
 from adare.database.models.global_models import GlobalBase
 
 log = logging.getLogger(__name__)
+
+
+class AmbiguousSessionNameError(Exception):
+    """A session name matched more than one session; caller must disambiguate.
+
+    Carries the offending ``name`` and the list of matching ``DevSession`` rows
+    so callers can present the candidates and ask for a session id instead.
+    """
+
+    def __init__(self, name: str, matches: list["DevSession"]):
+        self.name = name
+        self.matches = matches
+        super().__init__(f"Session name '{name}' matches {len(matches)} sessions")
 
 
 class DevModeApi(EnhancedDatabaseApi):
@@ -43,6 +57,9 @@ class DevModeApi(EnhancedDatabaseApi):
         super().__init__(db_path)
         self._start_session()
         GlobalBase.metadata.create_all(self.engine)
+        # create_all never ALTERs existing tables — apply pending schema
+        # migrations (dev_sessions gained columns over time).
+        apply_pending(self.engine, 'global')
 
     def save_session(
         self,
@@ -50,7 +67,8 @@ class DevModeApi(EnhancedDatabaseApi):
         project_path: Path,
         experiment_name: str,
         environment_name: str,
-        vm_name: str
+        vm_name: str,
+        name: str | None = None
     ) -> DevSession:
         """
         Persist a new dev mode session to the database.
@@ -61,6 +79,7 @@ class DevModeApi(EnhancedDatabaseApi):
             experiment_name: Name of the experiment being developed
             environment_name: Name of the VM environment
             vm_name: Name of the VM instance
+            name: Optional human-friendly label (not unique)
 
         Returns:
             Created DevSession instance
@@ -79,6 +98,7 @@ class DevModeApi(EnhancedDatabaseApi):
         # Create new session
         session = DevSession(
             session_id=session_id,
+            name=name,
             project_path=str(project_path),
             experiment_name=experiment_name,
             environment_name=environment_name,
@@ -543,3 +563,45 @@ class DevModeApi(EnhancedDatabaseApi):
             DevSession.environment_name == environment_name,
             DevSession.status == 'stopped'
         ).order_by(DevSession.updated_at.desc()).first()
+
+    def resolve_session_ref(
+        self,
+        ref: str,
+        project_path: Path | None = None
+    ) -> str | None:
+        """
+        Resolve a session reference (an id or a name) to a session id.
+
+        Resolution order:
+        1. Exact ``session_id`` match — returned as-is.
+        2. Exact ``name`` match (optionally scoped by ``project_path``).
+
+        Args:
+            ref: A session id or a human-friendly session name.
+            project_path: Optional project scope for name matching.
+
+        Returns:
+            The resolved session id, or None if ``ref`` matches neither an id
+            nor a name (callers may then surface the usual "not found" error).
+
+        Raises:
+            AmbiguousSessionNameError: If ``ref`` matches more than one name.
+        """
+        if not ref:
+            return None
+
+        # 1. Exact session id
+        if self.get_session(ref) is not None:
+            return ref
+
+        # 2. Exact name match
+        query = self._session.query(DevSession).filter(DevSession.name == ref)
+        if project_path:
+            query = query.filter(DevSession.project_path == str(project_path))
+        matches = query.order_by(DevSession.created_at.desc()).all()
+
+        if not matches:
+            return None
+        if len(matches) > 1:
+            raise AmbiguousSessionNameError(ref, matches)
+        return matches[0].session_id

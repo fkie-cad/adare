@@ -19,7 +19,10 @@ from adare.backend.testfunction.commands import (
 from adare.backend.testfunction.commands import (
     testfunction_remove as backend_testfunction_remove,
 )
-from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
+from adare.backend.testfunction.exceptions import (
+    TestfunctionDependencyError,
+    TestfunctionMissingFileError,
+)
 from adare.core.dto.testfunction import (
     TestfunctionCreateRequest,
     TestfunctionExistsResult,
@@ -107,7 +110,7 @@ class TestfunctionService:
                 tip='Loaded testfunctions are available globally across projects',
             ))
 
-        except TestfunctionMissingFileError as e:
+        except (TestfunctionMissingFileError, TestfunctionDependencyError) as e:
             return Result.from_exception(e)
 
     def remove(self, name: str, force: bool = False) -> Result[TestfunctionRemoveResult]:

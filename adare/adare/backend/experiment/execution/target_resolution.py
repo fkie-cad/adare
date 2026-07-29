@@ -47,8 +47,18 @@ class TargetResolutionExecutor:
         self.current_action_prefix: str | None = None
         self._manifest_initialized = False
 
-        # Cache for target resolution results: {'target_hash': str, 'result': MatchResult, 'timestamp': float, 'screenshot_path': str}
+        # Cache for target resolution results: {'target_hash': str, 'result': MatchResult, 'timestamp': float, 'screenshot_path': str, 'generation': int}
         self.last_match_cache = {}
+
+        # Monotonic counter, incremented once per target-resolution attempt (see
+        # begin_resolution()). Used to restrict cache reuse to strictly the next
+        # target-resolution attempt after the one that populated the cache entry,
+        # instead of an unbounded whole-run cache.
+        self._resolution_generation = 0
+
+    def begin_resolution(self):
+        """Advance the resolution-generation counter. Call once per target-resolution attempt."""
+        self._resolution_generation += 1
 
     def _get_target_hash(self, target) -> str:
         """Generate a unique hash for a target definition."""
@@ -82,13 +92,19 @@ class TargetResolutionExecutor:
         self.last_match_cache[target_hash] = {
             'result': match_result,
             'timestamp': time.time(),
-            'screenshot_path': screenshot_path
+            'screenshot_path': screenshot_path,
+            'generation': self._resolution_generation
         }
-        log.debug(f"Cached match for target {target_hash}")
+        log.debug(f"Cached match for target {target_hash} at generation {self._resolution_generation}")
 
     def get_cached_match(self, target):
         """
-        Retrieve a cached match for the target if available.
+        Retrieve a cached match for the target if it was populated by the
+        target-resolution attempt immediately preceding the current one. A cache
+        entry is only valid for the single next target-resolution attempt after
+        the one that produced it - any other generation is treated as a miss and
+        the stale entry is dropped so it can never be resurrected by a later,
+        coincidental generation match.
 
         Args:
             target: The Target to look up
@@ -99,6 +115,15 @@ class TargetResolutionExecutor:
         target_hash = self._get_target_hash(target)
         if target_hash in self.last_match_cache:
             cache_entry = self.last_match_cache[target_hash]
+
+            if cache_entry['generation'] != self._resolution_generation - 1:
+                log.debug(
+                    f"Dropping stale cache entry for target {target_hash} "
+                    f"(cached at generation {cache_entry['generation']}, now at {self._resolution_generation})"
+                )
+                del self.last_match_cache[target_hash]
+                return None, None, None
+
             age = time.time() - cache_entry['timestamp']
 
             # Log debug info but don't commit to using it yet
@@ -110,6 +135,10 @@ class TargetResolutionExecutor:
     async def resolve_target_with_steps(self, target, parent_action_id: str = None,
                                        event_emitter = None, action_context: str = None) -> tuple[int, int] | None:
         """Resolve target with find step emitted as action event."""
+        # This call is itself a target-resolution attempt, whether it ends up
+        # served from cache or via fresh CV - advance the counter either way.
+        self.begin_resolution()
+
         # Apply smart defaults if no strategy specified
         if target.strategy is None:
             from adare.types.playbook import BestConfidenceStrategy, TopLeftStrategy
@@ -165,23 +194,25 @@ class TargetResolutionExecutor:
             start_event = event_emitter.create_action_start_event(find_step, -1, find_action_id, parent_action_id)
             emit_action(self.experiment_run_id, start_event, find_action_id)
 
-        # Check cache first if requested or if result is fresh (heuristic for "directly after")
+        # Cache reuse is automatic by default and only valid for the single
+        # target-resolution attempt immediately following the one that populated it
+        # (enforced by generation-checking in get_cached_match). A stale match must
+        # never be reused implicitly across a target-resolution boundary (the old
+        # time-based heuristic was removed because a "fresh" match can already be
+        # off-screen after an action). Author sets use_cache: false to opt out and
+        # force a fresh detection even when the generation would otherwise match.
         cached_match, cached_screenshot_path, cached_age = self.get_cached_match(target)
         should_use_cache = False
 
-        if cached_match:
-            # Explicit request
-            if hasattr(target, 'use_cache') and target.use_cache:
-                should_use_cache = True
-                log.info(f"Using cached target (explicit request, age: {cached_age:.2f}s)")
-
-            # Heuristic: If match is very recent (WaitUntil just finished), it's safe to reuse
-            # Limit to 5.0 seconds (generous buffer for processing implementation delays)
-            elif cached_age is not None and cached_age < 5.0:
-                 should_use_cache = True
-                 log.info(f"Using cached target (fresh heuristic, age: {cached_age:.2f}s)")
+        if cached_match and getattr(target, 'use_cache', None) is not False:
+            should_use_cache = True
+            log.info(f"Using cached target (age: {cached_age:.2f}s)")
 
         if should_use_cache and cached_match:
+            # One-shot consumption: drop the entry so it can't be reused again even if
+            # a later action coincidentally lands on the same generation check.
+            del self.last_match_cache[self._get_target_hash(target)]
+
             # Use cached result effectively skipping new screenshot and expensive resolution
             return self._process_match_result(
                 target, cached_match, cached_screenshot_path,

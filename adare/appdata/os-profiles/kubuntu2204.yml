@@ -1,0 +1,59 @@
+name: kubuntu2204
+display_name: "Kubuntu 22.04 LTS (Jammy Jellyfish) Desktop"
+platform: linux
+distribution: ubuntu
+distribution_label: "Jammy Jellyfish"
+version: "22.04"
+# Genuine Kubuntu (KDE Plasma) desktop installed by replaying a deterministic
+# playbook through its graphical ubiquity (KDE frontend) installer — no LLM.
+# Buttons are located by their on-screen LABEL via ADARE's cv-server OCR
+# (find_text), so the steps are independent of window position / resolution.
+install_mode: playbook
+installer: gui
+iso_url: "https://cdimage.ubuntu.com/kubuntu/releases/22.04/release/kubuntu-22.04.5-desktop-amd64.iso"
+iso_sha256: "a3e2c4b1bc190cebaa8083c0d23ea2555e223d86b885570474a423b6de818888"
+iso_filename: "kubuntu-22.04.5-desktop-amd64.iso"
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0
+requires_uefi: false
+
+install_steps:
+  - {action: wait_stable, settle: 6, timeout: 360, min: 120, note: "live session + Welcome"}
+  - {action: click_text, text: "Install Kubuntu", shot: welcome}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: keyboard, note: "Keyboard layout"}
+  - {action: wait_stable, settle: 5, timeout: 180}
+  # Wireless auto-completes on a wired link; this Continue lands on the
+  # 'Updates and other software' screen (Normal install, defaults kept).
+  - {action: click_text, text: "Continue", shot: software, note: "Updates/other software"}
+  - {action: wait_stable, settle: 5, timeout: 180}
+  - {action: click_text, text: "Install Now", shot: installtype, note: "Guided - use entire disk"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Continue", shot: writeconfirm, note: "Write changes dialog"}
+  - {action: wait_stable, settle: 6, timeout: 180}
+  - {action: click_text, text: "Continue", shot: timezone, note: "Timezone / Where are you"}
+  - {action: wait_stable, settle: 6, timeout: 120, shot: whoami}
+  # 'Who are you?' — KDE form order differs from GNOME: name, username,
+  # password+confirm, computer name. Click each field by its label, offset
+  # down into the input. Username + computer name auto-fill from the name.
+  - {action: click_text, text: "Your name", dy: 30, note: "Your name field"}
+  - {action: type, text: "adare"}
+  - {action: click_text, text: "Choose a password", dy: 30, note: "password field"}
+  - {action: type, text: "adare"}
+  - {action: key, keys: [tab]}
+  - {action: type, text: "adare", note: "confirm password"}
+  - {action: click_text, text: "Your computer", dy: 30, note: "computer name field"}
+  - {action: key, keys: [ctrl, a]}
+  - {action: type, text: "kubuntu2204"}
+  - {action: shot, name: user-filled}
+  - {action: click_text, text: "Continue", note: "start install"}
+  - {action: wait_stable, settle: 45, timeout: 3600, shot: complete, note: "wait for install"}
+
+verify_steps:
+  # Reboots from disk into SDDM (KDE login manager). The password field is
+  # focused; type the password and log in.
+  - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
+  - {action: type, text: "adare", note: "password (SDDM field is focused)"}
+  - {action: key, keys: [ret]}
+  - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}

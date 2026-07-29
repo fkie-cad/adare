@@ -26,35 +26,38 @@ class VirtualSpiceManager:
         if env_path and os.path.isfile(env_path):
             return env_path
 
-        # Check common locations
+        # Check common locations. The SpiceMacOS crate is a cargo *workspace*
+        # whose binary is named `spice-client` and lands in the workspace-root
+        # `target/` (not `backend/target/`); installed copies are often renamed
+        # `virtualspice`. Probe both names and both layouts.
+        spice_root = Path.home() / "Documents" / "Projects" / "SpiceMacOS"
         candidates = [
             Path.home() / ".local" / "bin" / "virtualspice",
             Path("/usr/local/bin/virtualspice"),
-            # Development build location
-            Path.home()
-            / "Documents"
-            / "Projects"
-            / "SpiceMacOS"
-            / "backend"
-            / "target"
-            / "release"
-            / "virtualspice",
-            Path.home()
-            / "Documents"
-            / "Projects"
-            / "SpiceMacOS"
-            / "backend"
-            / "target"
-            / "debug"
-            / "virtualspice",
+            # Development build location (cargo workspace: root target/, bin name
+            # `spice-client`).
+            spice_root / "target" / "release" / "spice-client",
+            spice_root / "target" / "debug" / "spice-client",
+            # Legacy/alternate layouts kept for compatibility.
+            spice_root / "backend" / "target" / "release" / "virtualspice",
+            spice_root / "backend" / "target" / "debug" / "virtualspice",
         ]
 
         for path in candidates:
             if path.is_file():
                 return str(path)
 
-        # Try PATH
-        return shutil.which("virtualspice")
+        # Managed cache tier: a release binary downloaded by virtualspice_release.
+        # This is network-free — cached_binary_path() never downloads; it only
+        # reports an already-present, executable cached binary.
+        from adare.webapi.virtualspice_release import cached_binary_path
+
+        cached = cached_binary_path()
+        if cached is not None:
+            return str(cached)
+
+        # Try PATH (either name)
+        return shutil.which("virtualspice") or shutil.which("spice-client")
 
     @property
     def available(self) -> bool:

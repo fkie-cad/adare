@@ -2,7 +2,6 @@
 import logging
 
 import pandas as pd
-from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 
@@ -19,8 +18,8 @@ class ProjectTablePanel:
 
     def __rich__(self) -> Panel:
         table = Table(expand=True)
-        table.add_column("name", style="cyan", no_wrap=True)
-        table.add_column("path", style="cyan", no_wrap=True)
+        table.add_column("name", style="cyan", no_wrap=True, max_width=30)
+        table.add_column("path", style="cyan", no_wrap=False, max_width=60)
 
         for _i, row in self.projects.iterrows():
             table.add_row(
@@ -55,8 +54,7 @@ def print_project_list(formatter=None, output_file=None, dual_output=False):
             formatter.print_or_save({'projects': project_list}, output_file, dual_output)
     else:
         # Use existing Rich formatting
-        console = DefaultConsole()
-        layout = Layout(name="root")
-        panel = ProjectTablePanel(projects)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which reads
+        # as "those projects do not exist".
+        DefaultConsole().print(ProjectTablePanel(projects))

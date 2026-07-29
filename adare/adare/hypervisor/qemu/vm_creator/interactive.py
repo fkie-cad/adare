@@ -3,12 +3,16 @@
 import logging
 import platform
 import subprocess
+import sys
 import time
+import uuid
 from pathlib import Path
 
 from adare.console import console, print_section, print_step
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.base_creator import VMCreationError
+from adare.hypervisor.qemu.vm_creator.disk_helpers import disk_device_args
+from adare.hypervisor.qemu.vm_creator.extend_console import _confirm, run_extend_console
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 from adare.hypervisor.qemu.vm_creator.qmp_utils import (
     qemu_params_for_arch,
@@ -25,29 +29,68 @@ class InteractiveSessionError(VMCreationError):
         super().__init__(f"Interactive: {detail}")
 
 
-def run_post_install_session(
+# macOS AF_UNIX sun_path limit is 104 bytes; Linux allows 108. Use the stricter
+# bound so interactive-extend works on macOS long temp dirs ($TMPDIR ≈ 49 chars).
+_QMP_SOCK_LIMIT = 104
+
+
+def _interactive_socket(disk_path: Path, kind: str) -> Path:
+    """Unix socket path for an interactive-session channel (`kind` = 'qmp'/'qga').
+
+    Co-located with the disk when it fits the Unix socket limit; otherwise
+    falls back to ADARE's managed run dir so long temp-disk paths (e.g.
+    `env extend` under macOS's /var/folders/... TMPDIR) don't blow the limit.
+    """
+    preferred = disk_path.parent / f'.{disk_path.stem}-interactive-{kind}.sock'
+    if len(str(preferred)) < _QMP_SOCK_LIMIT:
+        return preferred
+    run_dir = Path.home() / '.adare' / 'qemu' / 'run'
+    run_dir.mkdir(parents=True, exist_ok=True)
+    fallback = run_dir / f'.interactive-{uuid.uuid4().hex[:8]}.{kind}'
+    if len(str(fallback)) >= _QMP_SOCK_LIMIT:
+        raise InteractiveSessionError(
+            f'{kind.upper()} socket path too long ({len(str(fallback))} >= '
+            f'{_QMP_SOCK_LIMIT} chars): {fallback}'
+        )
+    return fallback
+
+
+def build_post_install_qemu_cmd(
     disk_path: Path,
     nvram_path: Path | None,
     os_def: OsDefinition,
     ram_mb: int,
     cpus: int,
-) -> None:
-    """Boot a finished VM disk image for manual customization.
+    qmp_sock_path: Path,
+    qga_sock_path: Path | None = None,
+    allow_emulation: bool = False,
+    headless: bool = False,
+) -> list[str]:
+    """Build the QEMU argv that boots a *finished* disk (no ISO, no -no-reboot).
 
-    Starts QEMU from the installed disk (no ISO, no kernel/initrd, no -no-reboot)
-    so the user can install additional software on top of the automated setup.
+    Single definition shared by the interactive post-install session and recipe
+    build-time provisioning. Both must boot a built disk *identically* — same boot
+    mode, same NVMe-vs-virtio controller choice, same display device — or a disk
+    that provisions cleanly could fail to boot interactively (or vice versa), and
+    the difference would be invisible until someone hit it.
+
+    Notably this does NOT apply the ``highmem-mmio/ecam/redists=off`` machine
+    properties that ``windows_creator._run_qemu_install_phase`` needs on aarch64:
+    those exist so edk2 can enumerate PCI/USB while running *Windows Setup*, and
+    a booted Windows kernel does not need them. Verified on the real
+    ``windows11arm64`` recipe disk — ``virtio-serial`` + ``virtserialport``
+    enumerate on plain ``virt``, and the guest agent answered in ~3 s.
 
     Args:
-        disk_path: Path to the qcow2 disk image.
-        nvram_path: Path to NVRAM file (None if UEFI is not required).
-        os_def: OS definition for architecture-specific parameters.
-        ram_mb: RAM allocation in MB.
-        cpus: Number of CPU cores.
-    """
-    arch_params = qemu_params_for_arch(os_def)
+        qga_sock_path: When given, adds the guest-agent virtio-serial channel.
+        headless: Use ``-display none`` instead of a native window. Provisioning
+            turns this on when it is not attached to a TTY (CI, background runs),
+            where an unwatched window is pure overhead.
 
-    # QMP socket for ACPI shutdown
-    qmp_sock_path = disk_path.parent / f'.{disk_path.stem}-interactive-qmp.sock'
+    Returns:
+        The full QEMU argv.
+    """
+    arch_params = qemu_params_for_arch(os_def, allow_emulation)
 
     cmd = [
         arch_params['exe'],
@@ -55,10 +98,22 @@ def run_post_install_session(
         '-cpu', arch_params['cpu'],
         '-m', str(ram_mb),
         '-smp', str(cpus),
-        # Boot from installed disk
-        '-drive', f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
-        # QMP for ACPI shutdown
-        '-qmp', f'unix:{qmp_sock_path},server=on,wait=off',
+    ]
+    # Boot from installed disk — per-arch controller matching installation
+    # (aarch64 NVMe / x86_64 virtio-blk) so Windows finds its boot driver.
+    cmd += disk_device_args(disk_path, os_def, bootindex=0)
+    # QMP for ACPI shutdown
+    cmd += ['-qmp', f'unix:{qmp_sock_path},server=on,wait=off']
+
+    # QEMU guest agent channel (virtio-serial) for the console / provisioning.
+    if qga_sock_path is not None:
+        cmd += [
+            '-chardev', f'socket,path={qga_sock_path},server=on,wait=off,id=qga0',
+            '-device', 'virtio-serial',
+            '-device', 'virtserialport,chardev=qga0,name=org.qemu.guest_agent.0',
+        ]
+
+    cmd += [
         # Network
         '-netdev', 'user,id=net0',
         '-device', 'virtio-net-pci,netdev=net0',
@@ -74,7 +129,9 @@ def run_post_install_session(
     cmd.extend(arch_params['vga_args'])
 
     # Native display (platform-specific)
-    if platform.system() == 'Darwin':
+    if headless:
+        cmd.extend(['-display', 'none'])
+    elif platform.system() == 'Darwin':
         cmd.extend(['-display', 'cocoa'])
     else:
         cmd.extend(['-display', 'gtk'])
@@ -89,6 +146,67 @@ def run_post_install_session(
         ]
         machine_idx = cmd.index('-machine') + 2
         cmd[machine_idx:machine_idx] = pflash_args
+
+    return cmd
+
+
+def run_post_install_session(
+    disk_path: Path,
+    nvram_path: Path | None,
+    os_def: OsDefinition,
+    ram_mb: int,
+    cpus: int,
+    console_mode: bool = False,
+    ask_store: bool = False,
+    allow_emulation: bool = False,
+) -> tuple[bool, list[dict]]:
+    """Boot a finished VM disk image for manual customization.
+
+    Starts QEMU from the installed disk (no ISO, no kernel/initrd, no -no-reboot)
+    so the user can install additional software on top of the automated setup.
+
+    With ``console_mode`` (used by `env extend --interactive --console`) a QEMU
+    guest-agent channel is added and an interactive console runs in the terminal
+    alongside the GUI window, recording the commands the user runs. Without it a
+    GUI-only press-Enter wait is used and no recording is produced.
+
+    ``ask_store`` marks this as an extend session, where a store/discard decision
+    is required. In the GUI-only branch (``console_mode`` False), once the VM is
+    down the user is prompted *"Create the new environment from this session?"* on
+    a TTY (non-TTY → discard). In ``console_mode`` the console already owns that
+    decision. When ``ask_store`` is False (the `vm create` path) the store flag is
+    irrelevant, the caller ignores the return value, and ``(True, [])`` is
+    returned — behaviour unchanged.
+
+    Args:
+        disk_path: Path to the qcow2 disk image.
+        nvram_path: Path to NVRAM file (None if UEFI is not required).
+        os_def: OS definition for architecture-specific parameters.
+        ram_mb: RAM allocation in MB.
+        cpus: Number of CPU cores.
+        console_mode: If True, attach the guest-agent console and record commands.
+        ask_store: If True, prompt for a store/discard decision in the GUI-only
+            branch (extend sessions); kept False for `vm create`.
+        allow_emulation: Permit QEMU TCG software emulation when the guest
+            architecture doesn't match the host (see --allow-emulation)
+
+    Returns:
+        Tuple of ``(store, recorded)``. In ``console_mode`` these are passed
+        through from the console: ``store`` is the user's explicit decision to
+        create the new environment, ``recorded`` the commands to fold in. In the
+        GUI-only branch ``recorded`` is always ``[]`` and ``store`` is the
+        prompted decision when ``ask_store`` (else ``True``).
+    """
+    # QMP socket for ACPI shutdown; QGA socket only when the console is used.
+    qmp_sock_path = _interactive_socket(disk_path, 'qmp')
+    qga_sock_path = _interactive_socket(disk_path, 'qga') if console_mode else None
+
+    cmd = build_post_install_qemu_cmd(
+        disk_path, nvram_path, os_def, ram_mb, cpus,
+        qmp_sock_path=qmp_sock_path,
+        qga_sock_path=qga_sock_path,
+        allow_emulation=allow_emulation,
+    )
 
     log.info(f'Starting interactive post-install session: {" ".join(cmd)}')
 
@@ -107,13 +225,35 @@ def run_post_install_session(
     display_backend = 'Cocoa' if platform.system() == 'Darwin' else 'GTK'
     print_section('Interactive Post-Install Session')
     console.print(f'  A QEMU [bold]{display_backend}[/bold] window has opened.')
-    console.print('  Install additional software or configure the VM as needed.')
+    if console_mode:
+        console.print('  Use the window for GUI-only steps; use the console below to run commands.')
+    else:
+        console.print('  Install additional software or configure the VM as needed.')
 
+    store = True
+    recorded: list[dict] = []
+    windows = 'windows' in (os_def.platform or '').lower()
     try:
-        wait_for_input_or_exit(process, qmp_sock_path)
+        if console_mode:
+            store, recorded = run_extend_console(
+                qga_sock_path, qmp_sock_path, process, windows=windows
+            )
+        else:
+            wait_for_input_or_exit(process, qmp_sock_path)
+            if ask_store:
+                # Extend session, GUI-only: the VM is down; ask whether to keep
+                # the result. Non-TTY is ambiguous → discard (matches console).
+                if sys.stdin.isatty():
+                    store = _confirm(
+                        'Create the new environment from this session?',
+                        default_yes=True,
+                    )
+                else:
+                    store = False
     finally:
-        if qmp_sock_path.exists():
-            qmp_sock_path.unlink()
+        for sock in (qmp_sock_path, qga_sock_path):
+            if sock is not None and sock.exists():
+                sock.unlink()
 
     if process.returncode and process.returncode != 0:
         stderr = process.stderr.read().decode() if process.stderr else ''
@@ -122,3 +262,4 @@ def run_post_install_session(
         )
 
     print_step('[green]Interactive session completed.[/green]')
+    return store, recorded

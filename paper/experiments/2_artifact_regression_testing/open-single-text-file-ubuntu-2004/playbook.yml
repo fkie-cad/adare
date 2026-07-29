@@ -1,0 +1,360 @@
+# Paper section 5.2 -- Artifact Regression Testing, Ubuntu 20.04 (GNOME / Nautilus).
+#
+# Same interaction as the 22.04 / 24.04 variants: create a document, open it exactly
+# once, then validate the XDG recently-used artifact against the known ground truth.
+#
+# Expected outcome for this distro/version: artifact PRESENT but the 'visited' access
+# metadata is DEFECTIVE -- Ubuntu 20.04 records integer -1, serialised as
+# 1969-12-31T23:59:59Z. This playbook is therefore a regression test that PINS a known
+# defect: xbel_visited_is_epoch_minus_one is expected to pass here and would fail on any
+# release that fixed the bug, which is exactly the drift the paper wants surfaced.
+#
+# PROPOSED, NOT YET VERIFIED ON A LIVE RUN (authored 2026-07-28). Nautilus is opened through
+# the GNOME Activities overview, NOT by clicking the dock icon. Everything below the "route"
+# heading has never been executed on this release; the first run of it is the verification.
+#
+# Why the dock click had to go. The Yaru dock art differs per release, and the crop this
+# experiment shipped was a byte-identical copy of the 24.04 one (sha256 eaf1b9d1..., 10 513 B,
+# 256x256): run 01KYMQ1E3EMFPJV8Q3FPYJMXD1 (2026-07-28) aborted at action 5 with
+# "Could not resolve target: Target(image='filemanager-app.png')". Re-measured offline against
+# that run's own failure screenshot (multi-scale TM_CCOEFF_NORMED, 0.10-2.00 in 0.02 steps),
+# the shared crop peaks at 0.411 against a confidence_floor of 0.7
+# (adare/adare/backend/experiment/target_resolver.py:56) -- a genuine non-match, not a missing
+# CV server: that run's logs/mcp_gui.log is 3906 B, so the server was up and serving. The
+# 20.04 Yaru drawer icon has no crimson top flap; the 22.04/24.04 art does. The desktop itself
+# was healthy -- dock present with a Files launcher at (36, 130), top bar reading
+# "Activities" / "Jul 28 15:57", and screenshots 000/001/002 byte-identical, so the session had
+# fully settled long before the click. Nothing was wrong except the reference image.
+#
+# Why a keyboard route rather than a fresh crop. A re-crop was tried first and is kept as the
+# fallback below, but it is per-release, per-wallpaper and per-dock-layout: the Ubuntu Dock is
+# translucent (panel BGR [38,30,65] over wallpaper [61,34,152] at y=130, and the panel mean
+# varies with y), so any crop bakes in wallpaper-tinted background and would have to be
+# re-taken for ubuntu-2004 / ubuntu-2004-r2 / ubuntu-2004-gis separately. Note also that even
+# on their own releases the 22.04 and 24.04 crops clear the floor by only 0.075
+# (0.775 in runs 01KYMPVN952S2MXC2481JR205G and 01KYJ23VJY2B3P4DPCD3EES4WM) -- the dock-click
+# approach is marginal everywhere, not just here. The keyboard route is theme-, wallpaper- and
+# dock-layout-independent, and it is ADARE's own documented house rule: see rule 9 of
+# adare/adare/backend/experiment/vlm/authoring/authoring_prompt.md, "Launch apps with the
+# keyboard, not a dock click ... reserve a dock position click only if a keyboard launch is
+# truly impossible". The route mirrors gui_files_ops (env ubuntu2510-libre-20260714, run
+# 2026-07-20_15-09-55, all 19 steps green), which is the only GNOME launch path in this repo
+# known to work end to end.
+#
+# This is the same class of fix, and the same precedent, as the Kubuntu 20.04 variant: its
+# panel had no launchers at all, so it switched to Kickoff. Following that file's conventions,
+# the now-unused variable icon_filemanager_taskbar is KEPT so the 22.04/24.04 variants stay
+# line-for-line diffable against this one, and the failing run ID is recorded inline above.
+#
+# FALLBACK, if the keyboard route misses on GNOME 3.36: img/filemanager-app.png has already
+# been re-taken against this release (sha256 5e18118a..., 47x43 RGBA, cropped from the failure
+# screenshot at box (13, 109) - (60, 152), scoring 0.950 there, selected at (36, 130); the
+# next-best rival anywhere on screen is the app-grid button at 0.777, so
+# BestConfidenceStrategy is unambiguous). Swapping the four keyboard/wait_until actions back
+# for a single `click: {target: {image: "{{ icon_filemanager_taskbar }}"}}` restores the old
+# shape. That score is circular, though -- it is a pixel-exact crop of the very frame it was
+# cut from, so 0.950 proves the art is present at (36, 130), not that a fresh render matches.
+# Do NOT substitute ~/.adare/examples/*/img/nautilus_taskbar.png: it reaches 0.878 on this
+# frame but lands at (1046, 354) on bare wallpaper, i.e. it is an active false positive here.
+# The 22.04 and 24.04 variants still share the original crop and are deliberately untouched.
+
+settings:
+  idle: 2.0
+  timeout: 600
+  screenshot:
+    format: "png"
+    quality: 95
+
+variables:
+  filename:
+    type: string
+    value: "adare.txt"
+    description: "Name of the document that gets created and opened once"
+
+  text_file:
+    type: path
+    value: "{{ adare_user_documents }}/{{ filename }}"
+    description: "Full path of the document that gets opened"
+
+  xbel_file:
+    type: path
+    value: "{{ adare_user_home }}/.local/share/recently-used.xbel"
+    description: "XDG recently-used artifact under test"
+
+  icon_filemanager_taskbar:
+    type: string
+    value: "filemanager-app.png"
+    description: "Taskbar icon of the GNOME file manager (Nautilus)"
+
+  file_content:
+    type: string
+    value: "This is test text"
+    description: "Document content, also used as the on-screen proof that the editor opened it"
+
+
+tests:
+  # --- pre-conditions: the artifact must be created BY the interaction ---
+  - name: xbel_absent_before
+    description: 'Verify the recently-used artifact is absent before the interaction'
+    function: standard.file_does_not_exist
+    parameter:
+      dst: '{{ xbel_file }}'
+
+  - name: text_file_created
+    description: 'Verify the document to be opened exists before the interaction'
+    function: standard.file_exists
+    parameter:
+      dst: '{{ text_file }}'
+
+  # --- paper claim: "the artifact was created in all tested Ubuntu versions" ---
+  - name: xbel_exists
+    description: 'Verify the recently-used artifact was created by opening the document'
+    function: standard.file_exists
+    parameter:
+      dst: '{{ xbel_file }}'
+
+  # --- paper claim: access metadata -- which file, how many entries ---
+  - name: xbel_bookmark_count
+    description: 'Exactly one bookmark entry after opening exactly one document'
+    function: xml.element_count
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark'
+      expected_count: 1
+      comparison_type: 'equals'
+
+  - name: xbel_bookmark_href
+    description: 'The single bookmark entry points at the document that was opened'
+    function: xml.element_exists
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark[@href="file://{{ text_file }}"]'
+
+  # --- paper claim: access metadata -- counts ---
+  - name: xbel_visit_count
+    description: 'The registering application recorded exactly one visit (document opened once)'
+    function: xml.attribute_matches
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark:applications/bookmark:application'
+      attribute: 'count'
+      expected_value: '1'
+      namespaces:
+        bookmark: "http://www.freedesktop.org/standards/desktop-bookmarks"
+        mime: "http://www.freedesktop.org/standards/shared-mime-info"
+
+  # --- paper claim: "Ubuntu 20.04 consistently recorded the 'visited' timestamp as
+  # 1969-12-31T23:59:59Z (integer -1)" -- the observed defect IS the expectation here.
+  # No tolerance placeholder: the value is not a real timestamp, it is the serialisation
+  # of time_t == -1 by GLib < 2.66, so it must match exactly.
+  - name: xbel_visited_is_epoch_minus_one
+    description: 'REGRESSION PIN: Ubuntu 20.04 writes visited as integer -1 (1969-12-31T23:59:59Z) instead of the access time'
+    function: xml.attribute_matches
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark'
+      attribute: 'visited'
+      expected_value: '1969-12-31T23:59:59Z'
+
+  # --- paper claim: access metadata -- timestamps match the interaction time ---
+  # Only 'modified' and 'added' carry usable times on 20.04; 'visited' is pinned above.
+  # The xbel attributes are UTC with a trailing 'Z', so the format string carries the
+  # literal Z and '| localtime' is deliberately NOT applied: the host side of the
+  # comparison is a UTC epoch from save_timestamp, and adding '| localtime' would make
+  # basictest._parse_timestamp_with_format read the guest's UTC wall time as local wall
+  # time, skewing the comparison by the host's UTC offset. See README ("UTC, not localtime").
+  # tolerance(5, -30) -- ASYMMETRIC on purpose. The 22.04 variant now carries the same
+  # bound, for its own separately measured reason (CV find latency ahead of the click,
+  # ~13.5s on an idle host); only 24.04 still uses a symmetric +/-5s, because there the
+  # interaction completes in ~2.2s and needs no widening.
+  # The filter signature is tolerance(upper, lower) and the comparison
+  # is diff = reference - actual (basictest.py:274), so the NEGATIVE bound is the one
+  # that allows the artifact to be timestamped LATER than the reference.
+  #
+  # Only that direction is physically reachable. open_timestamp is captured immediately
+  # BEFORE the opening click and the xbel is written only once the document opens, so
+  # the artifact is always later. A symmetric +/-30s would additionally accept an
+  # artifact up to 30s EARLIER than the reference, which cannot happen from this
+  # interaction and would mean a stale artifact or a genuinely skewed guest clock --
+  # exactly the sort of thing that should fail loudly rather than be absorbed by
+  # slack. The +5s upper bound is therefore left where it already is, as jitter
+  # allowance for host/guest clock disagreement.
+  #
+  # The -30s is a measured property of focal, not a nudge to make a red test green:
+  # gedit's cold start plus the xbel flush takes ~11s from the click on this release,
+  # versus ~2.2s on 24.04. Run 01KYN01D7824ZE0K6K87ZQ2B7H reported -12.601346s against
+  # +/-5s on a verified-idle host (no other VM, no other QEMU), and that failure
+  # aborted the run before the two precision assertions below could execute.
+  #
+  # It is latency, NOT clock skew, and the run's own timeline proves which: the guest
+  # wrote modified=2026-07-28T18:35:34Z, while the host clicked at 18:35:23 and saw the
+  # document content at 18:35:36. The guest stamp falls INSIDE that host interval, so
+  # the clocks agree; 12.6s of skew would have placed it at ~18:35:08, before the click.
+  # Do not "fix" this by adjusting the guest clock.
+  #
+  # The assertion's purpose survives: it still shows the artifact was written by THIS
+  # interaction rather than being a leftover, because xbel_absent_before proves the file
+  # did not exist beforehand and text_file_accessed proves the document was read
+  # afterwards.
+  - name: xbel_modified_timestamp
+    description: 'modified timestamp matches the moment the document was opened (+/-30s -- focal gedit cold start)'
+    function: xml.attribute_matches
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark'
+      attribute: 'modified'
+      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%SZ') | tolerance(5, -30) }}"
+
+  - name: xbel_added_timestamp
+    description: 'added timestamp matches the moment the document was opened (+/-30s -- focal gedit cold start)'
+    function: xml.attribute_matches
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark'
+      attribute: 'added'
+      expected_value: "{{ open_timestamp | format('%Y-%m-%dT%H:%M:%SZ') | tolerance(5, -30) }}"
+
+  # --- paper claim: "timestamp precision improved over time: Ubuntu 20.04 stored only
+  # second-level precision" -- executable form of the precision-drift finding. The regex
+  # rejects any fractional-second component, so it fails on 22.04 / 24.04 output.
+  - name: xbel_modified_second_precision
+    description: 'PRECISION DRIFT: Ubuntu 20.04 stores second-level precision only (no fractional seconds)'
+    function: xml.attribute_matches
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark'
+      attribute: 'modified'
+      expected_value: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+      regex_match: true
+
+  - name: xbel_added_second_precision
+    description: 'PRECISION DRIFT: Ubuntu 20.04 stores second-level precision only (no fractional seconds)'
+    function: xml.attribute_matches
+    parameter:
+      dst: '{{ xbel_file }}'
+      xpath: '//bookmark'
+      attribute: 'added'
+      expected_value: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+      regex_match: true
+
+  # --- proof that the interaction really reached the document ---
+  # atime was reset to 2000-01-01 immediately before the opening click, so any recent
+  # access time can only come from the document actually being read afterwards.
+  - name: text_file_accessed
+    description: 'The document was read after the opening click (access time no longer the reset value)'
+    function: standard.file_timestamps
+    parameter:
+      dst: '{{ text_file }}'
+      timestamp_type: 'accessed'
+      comparison_type: 'within_last'
+      within_duration: '30m'
+
+
+actions:
+  - command:
+      name: "Ensure recently-used.xbel is absent"
+      description: "Start from a state in which the artifact under test does not exist"
+      command: "rm -f {{ xbel_file }}"
+  - test: xbel_absent_before
+
+  - command:
+      name: "Create text file to be opened"
+      description: "Create the document that will be opened exactly once"
+      command: "echo '{{ file_content }}' > {{ text_file }}"
+      shell: true
+  - test: text_file_created
+
+  # --- route: launch Nautilus from the Activities overview (see the header) ---
+  # Shaped on gui_files_ops, which is green on GNOME 49 (25.10), and on the Kubuntu 20.04
+  # Kickoff precedent -- but deliberately WITHOUT that file's `down` press: GNOME Shell
+  # pre-selects the first search result, so a bare Enter launches it, whereas Kickoff on
+  # Plasma 5.18 does not pre-highlight and needs the extra key. If a live run shows GNOME 3.36
+  # NOT pre-selecting, add `- keyboard: {key: down}` before the Enter -- but do not add it
+  # speculatively, because on a pre-selecting shell it would move to the SECOND result.
+  - keyboard:
+      key: super
+      description: "Open the GNOME Activities overview"
+  # GNOME 3.36 renders this placeholder as "Type to search..." with a Unicode ellipsis, and
+  # text matching is case-insensitive substring by default (docsrc/source/reference/actions/
+  # gui/click.rst:85), so the ellipsis does not need to be matched. If OCR on 3.36 mangles it,
+  # the documented escape hatch is text_match: {mode: fuzzy, allow_missing_chars: [".", "..."],
+  # max_missing: 3} (click.rst:120-135) -- verified as the string "Type to search" on 25.10.
+  - wait_until:
+      condition:
+        exists:
+          text: "Type to search"
+      description: "Wait for the overview search entry to be ready"
+  - keyboard:
+      text: "Files"
+      description: "Type the file manager's name into the overview search box"
+  - keyboard:
+      key: enter
+      description: "Launch the top (pre-selected) result -- the GNOME file manager (Nautilus)"
+  - wait_until:
+      condition:
+        exists:
+          text: "Documents"
+      description: "Wait for the file manager sidebar to be usable"
+
+  # index 2 is carried over unchanged from the 22.04/24.04 variants and is the next plausible
+  # failure point: the aborted run never reached this action, so there is ZERO evidence about
+  # how many "Documents" hits OCR sees on Nautilus 3.36 or how they sort. This is the exact trap
+  # that bit the Kubuntu 20.04 variant, which needed index 1 because Plasma 5.18 showed three
+  # hits where later releases show two. Left at 2 because guessing 1 would be a second
+  # unverified change; if the run navigates into the icon-view label instead of the sidebar
+  # (symptom: Nautilus stays in Home and the next wait_until times out on {{ filename }}),
+  # drop it to 1.
+  - click:
+      target:
+        text: "Documents"
+        strategy:
+          SweepStrategy:
+            index: 2
+      description: "Navigate to the Documents folder"
+  - wait_until:
+      condition:
+        exists:
+          text: "{{ filename }}"
+      description: "Wait for the document to be listed"
+
+  # Reset atime AFTER navigation so that file-manager previewing/thumbnailing cannot be
+  # mistaken for the opening read.
+  - command:
+      name: "Reset access time of the document"
+      description: "Pin atime to 2000-01-01 so a later access time proves the document was opened"
+      command: "touch -a -t 200001010000 {{ text_file }}"
+
+  - save_timestamp:
+      variable: open_timestamp
+      description: "Reference time for the xbel access metadata, captured immediately before opening"
+  - click:
+      type: "double"
+      target:
+        text: "{{ filename }}"
+      description: "Open the document exactly once (gedit on 20.04)"
+
+  - wait_until:
+      condition:
+        exists:
+          text: "{{ file_content }}"
+      timeout: 60.0
+      description: "Editor shows the document content -- runtime proof that the open succeeded"
+  - idle:
+      duration: 5
+      description: "Let the editor flush the recently-used artifact to disk"
+
+  - test: xbel_exists
+  - test: xbel_bookmark_count
+  - test: xbel_bookmark_href
+  - test: xbel_visit_count
+  - test: xbel_visited_is_epoch_minus_one
+  - test: xbel_modified_timestamp
+  - test: xbel_added_timestamp
+  - test: xbel_modified_second_precision
+  - test: xbel_added_second_precision
+  - test: text_file_accessed
+
+  - pull:
+      description: "pull the recently-used.xbel for offline inspection"
+      src: "{{ xbel_file }}"
+      dst: "recently-used.xbel"

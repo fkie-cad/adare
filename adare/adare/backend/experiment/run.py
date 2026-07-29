@@ -51,6 +51,28 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
 
 
+def _playbook_settings_memory(project_path: Path, experiment_name: str) -> int | None:
+    """Read ``settings.vm_memory`` (MB) from the experiment playbook, if any.
+
+    Best-effort: returns None when the playbook is absent, unparseable, or the
+    field is unset. The playbook is parsed authoritatively later during setup,
+    so a parse error here is not fatal — we simply fall through to defaults.
+    """
+    try:
+        from adare.backend.experiment.directory import ExperimentDirectory
+        from adare.types.playbook import parse_playbook
+
+        exp_dir = ExperimentDirectory(project_path, experiment_name)
+        if not exp_dir.playbookfile.exists():
+            return None
+        playbook = parse_playbook(exp_dir.playbookfile)
+    except (FileNotFoundError, OSError, ValueError, KeyError, TypeError) as e:
+        log.warning(f"Could not read settings.vm_memory from playbook: {e}")
+        return None
+    settings = getattr(playbook, 'settings', None)
+    return getattr(settings, 'vm_memory', None) if settings else None
+
+
 def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_success: bool) -> tuple[bool, dict]:
     """Resolve the success verdict for an experiment run.
 
@@ -89,7 +111,8 @@ def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_succe
     if is_smoke_run:
         success = bool(execution_success)
     else:
-        success = result_status == StatusEnum.SUCCESS
+        # WARNING is pass-with-warning: a passing verdict, reported distinctly.
+        success = result_status in (StatusEnum.SUCCESS, StatusEnum.WARNING)
 
     diagnostics = {
         "verdict": "SUCCESS" if success else "FAILED",
@@ -105,7 +128,32 @@ def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_succe
     return success, diagnostics
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', file_log_level: int = logging.INFO, run_ulid: str | None = None):
+async def _recompute_run_tally(experiment_run_context):
+    """Rebuild the executed-work tally for a finished run from its event rows.
+
+    Waits for the batching DB writer to drain first, otherwise the last few events
+    of the run may not be readable yet. Both the drain and the query are pushed to
+    a worker thread so the event loop is not blocked. Returns ``None`` when the
+    tally cannot be produced, leaving the caller on the in-memory counters.
+    """
+    from adare.backend.events.listener import drain_db_operations
+    from adare.backend.experiment.run_tally import tally_from_database
+
+    project_path = experiment_run_context.project_directory.path
+    run_ulid = experiment_run_context.experiment_run_ulid
+
+    def _drain_and_tally():
+        drain_db_operations()
+        return tally_from_database(project_path, run_ulid)
+
+    try:
+        return await asyncio.get_running_loop().run_in_executor(None, _drain_and_tally)
+    except (AttributeError, OSError, RuntimeError, ValueError) as e:
+        log.warning(f"Could not recompute the run tally for {run_ulid}: {e}")
+        return None
+
+
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', allow_emulation: bool = False, file_log_level: int = logging.INFO, run_ulid: str | None = None):
     import signal
 
     log.info(f"Starting experiment run {experiment_name} in project {project_path}")
@@ -118,6 +166,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         preserve_snapshot=preserve_snapshot,
         runlog=runlog,
         test_mode=test,
+        allow_emulation=allow_emulation,
         file_log_level=file_log_level
     )
 
@@ -136,29 +185,45 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             environment_metadata = parse_environment_file(environment_file)
             guest_platform = environment_metadata.os.platform
 
-            # Set platform-specific defaults if not overridden by CLI
-            if vm_memory is None:
-                if 'windows' in guest_platform.lower():
+            # Memory precedence: CLI override > playbook settings.vm_memory >
+            # platform default. settings.vm_memory carries a RAM size a prior
+            # run recorded as working, so replays boot there without rediscovery.
+            if vm_memory is not None:
+                config.vm_memory = vm_memory
+                log.info(f"Using custom VM memory: {vm_memory}MB")
+            else:
+                settings_memory = _playbook_settings_memory(project_path, experiment_name)
+                if settings_memory:
+                    config.vm_memory = settings_memory
+                    log.info(f"Using playbook settings.vm_memory: {settings_memory}MB")
+                elif 'windows' in guest_platform.lower():
                     config.vm_memory = 8192  # 8GB for Windows
                     log.info("Using Windows default VM memory: 8192MB")
                 else:
                     config.vm_memory = 4096  # 4GB for Linux
                     log.info("Using Linux default VM memory: 4096MB")
-            else:
-                config.vm_memory = vm_memory
-                log.info(f"Using custom VM memory: {vm_memory}MB")
         else:
-            # Fallback: apply CLI override or keep default
+            # Fallback: CLI override > playbook settings > keep default
             if vm_memory is not None:
                 config.vm_memory = vm_memory
                 log.info(f"Using custom VM memory: {vm_memory}MB")
+            else:
+                settings_memory = _playbook_settings_memory(project_path, experiment_name)
+                if settings_memory:
+                    config.vm_memory = settings_memory
+                    log.info(f"Using playbook settings.vm_memory: {settings_memory}MB")
     except (FileNotFoundError, OSError) as e:
         # Only catch file system related errors, not environment validation errors
         log.warning(f"Could not determine guest platform for memory defaults: {e}")
-        # Fallback: apply CLI override or keep default
+        # Fallback: CLI override > playbook settings > keep default
         if vm_memory is not None:
             config.vm_memory = vm_memory
             log.info(f"Using custom VM memory: {vm_memory}MB")
+        else:
+            settings_memory = _playbook_settings_memory(project_path, experiment_name)
+            if settings_memory:
+                config.vm_memory = settings_memory
+                log.info(f"Using playbook settings.vm_memory: {settings_memory}MB")
 
     # Override VM CPU settings if provided via CLI
     if vm_cpus is not None:
@@ -201,16 +266,78 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     # Add the user interrupt event to the context so step functions can use it
     experiment_run_context.user_interrupt_event = user_interrupt_event
 
-    def handle_sigint():
-        log.info("Ctrl-C detected. Stopping experiment run...")
-        user_interrupt_event.set()  # Signal user interruption
-        experiment_run_context.stop_event.set()  # Signal the context's stop event.
-        stop_event.set()  # Signal the asyncio stop event.
-        log.info('hanlde: send stop events')
+    # Number of termination signals seen so far. The first asks for a graceful
+    # wind-down; the second gives up on it and destroys the guest outright.
+    termination_signals = 0
 
-    # Register the signal handler for SIGINT.
+    def handle_termination_signal(signum: int):
+        """Wind the run down on SIGINT/SIGTERM/SIGHUP.
+
+        Registering SIGTERM and SIGHUP here (not just SIGINT) is the whole point:
+        with their default disposition the interpreter dies immediately, the
+        ``finally`` below never runs, ``vm_manager.stop_vm`` is never reached, and
+        the guest's QEMU — forked by libvirt, never a child of ours — simply
+        reparents to PID 1 and keeps running. That was observed directly: SIGTERM
+        killed a run's CLI in under 2 s and left its VM live.
+
+        SIGHUP for the same reason one step removed: a closed terminal or a killed
+        parent shell would otherwise leak a VM per session.
+        """
+        nonlocal termination_signals
+        termination_signals += 1
+        name = signal.Signals(signum).name
+
+        if termination_signals == 1:
+            log.info(f"{name} received. Stopping experiment run...")
+            user_interrupt_event.set()  # Signal user interruption
+            experiment_run_context.stop_event.set()  # Signal the context's stop event.
+            stop_event.set()  # Signal the asyncio stop event.
+            log.info('handle: send stop events')
+            return
+
+        # Second signal: the operator is not waiting any longer, and the next one
+        # may well be SIGKILL — which we cannot intercept at all. Destroy the
+        # domain NOW so the guest cannot outlive us.
+        #
+        # Deliberately not done on the first signal: the graceful path is still
+        # inside retrieve_artifacts / perform_host_diff, both of which need the
+        # guest alive (QGA and VirtioFS pull files out of a running VM). Killing it
+        # there would trade a leaked VM for a run with no evidence — strictly
+        # worse for a forensic tool. So: first signal collects the artifacts,
+        # second signal forfeits them.
+        log.warning(
+            f"Second {name} received — skipping graceful wind-down and destroying "
+            f"the VM domain immediately"
+        )
+        from adare.backend.experiment.vm_lifecycle_manager import destroy_domain_by_name
+        destroy_domain_by_name(experiment_run_context.vm_name)
+
+        # Hand the signal back to the default handler so a third one, or an
+        # unwinding that is itself wedged, still terminates the process.
+        try:
+            loop.remove_signal_handler(signum)
+        except (RuntimeError, ValueError) as e:
+            log.debug(f"Could not restore default disposition for {name}: {e}")
+
+    # Register the handler for every signal a supervisor, shell or operator might
+    # realistically use to stop the run. SIGKILL is intentionally absent: it cannot
+    # be caught, which is exactly why the second-signal destroy above exists.
+    #
+    # SIGHUP via getattr because it does not exist on Windows; a missing signal is
+    # simply one fewer leak vector to cover, not an error.
     loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGINT, handle_sigint)
+    installed_signals: list[int] = []
+    for _sig in (signal.SIGINT, signal.SIGTERM, getattr(signal, 'SIGHUP', None)):
+        if _sig is None:
+            continue
+        try:
+            loop.add_signal_handler(_sig, handle_termination_signal, _sig)
+            installed_signals.append(_sig)
+        except (NotImplementedError, RuntimeError, ValueError) as e:
+            # Not the main thread, or the platform has no such signal. A run that
+            # cannot install a handler is still a valid run — it just loses the
+            # emergency VM teardown, so say so rather than failing.
+            log.warning(f"Could not install handler for signal {_sig}: {e}")
 
     # Create and start the flow console.
     flow_console = create_and_start_flow_console(experiment_run_context.experiment_run_ulid, disable_printing, user_interrupt_event)
@@ -231,6 +358,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
     # --- Execution Flow ---
     vm_manager = None
+    video_recorder = None
 
     try:
 
@@ -244,8 +372,12 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 ]
                 await step_runner.run_steps_sequence(initial_steps, experiment_run_context)
 
-                # Start MCP server early (independent of VM)
-                await step_runner.run_async_step(step_start_mcp_server, experiment_run_context)
+        # Start computer vision (MCP) server as its own top-level step after prep
+        # completes, so it renders as a clean sibling of "Preparing experiment"
+        # rather than nested inside it. MCPServerManager is created earlier in
+        # step_prepare_run_environment, so this ordering is safe.
+        if not stop_event.is_set():
+            await step_runner.run_async_step(step_start_mcp_server, experiment_run_context)
 
         # Create VM lifecycle manager with hypervisor from environment
         # (Must be created after step_setup_experiment_environment sets hypervisor_type)
@@ -260,6 +392,41 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 await step_runner.run_async_step(vm_manager.setup_file_transfer, experiment_run_context)
                 await step_runner.run_async_step(vm_manager.setup_networking, experiment_run_context)
                 await step_runner.run_async_step(vm_manager.start_vm, experiment_run_context)
+
+        # Whole-run MP4 via ffmpeg (opt-in, ADARE_EXPERIMENT_VIDEO — no CLI flag
+        # yet). QEMU-only: SPICE/QMP screendump are QEMU-specific capture paths.
+        # Best-effort: a capture failure (missing ffmpeg/SpiceClientGLib, or the
+        # SPICE display already busy) logs a warning and the experiment proceeds
+        # unrecorded rather than failing the whole run.
+        if not stop_event.is_set() and experiment_run_context.hypervisor_type == 'qemu':
+            from adare.config.server import (
+                AGENT_VIDEO_BACKEND,
+                AGENT_VIDEO_FPS,
+                EXPERIMENT_VIDEO,
+                FFMPEG,
+            )
+            if EXPERIMENT_VIDEO and experiment_run_context.vm is not None:
+                from adare.backend.experiment.execution.qemu_video_recorder import (
+                    VideoUnavailable,
+                )
+                video_out = experiment_run_context.experiment_run_directory.path / 'run.mp4'
+                try:
+                    if AGENT_VIDEO_BACKEND == 'spice':
+                        from adare.backend.experiment.execution.spice_video_recorder import (
+                            SpiceVideoRecorder,
+                        )
+                        video_recorder = SpiceVideoRecorder(
+                            experiment_run_context.vm, video_out, fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
+                    else:
+                        from adare.backend.experiment.execution.qemu_video_recorder import (
+                            QemuVideoRecorder,
+                        )
+                        video_recorder = QemuVideoRecorder(
+                            experiment_run_context.vm, video_out, fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
+                    await video_recorder.start()
+                except VideoUnavailable as exc:
+                    log.warning(f"Could not start experiment video recording: {exc}")
+                    video_recorder = None
 
         # Resolve test execution mode after VM is created
         if not stop_event.is_set():
@@ -362,13 +529,23 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 await step_runner.run_cleanup_step(step_shutdown_mcp_server, experiment_run_context, post_interrupt=True)
                 await step_runner.run_cleanup_step(step_shutdown_ws, experiment_run_context, post_interrupt=True)
 
+                # Finalize the video (idempotent) before the VM goes away.
+                if video_recorder is not None:
+                    await video_recorder.stop()
+
                 if vm_manager:
-                    # Determine if force shutdown is needed (Windows on QEMU)
+                    # Force shutdown by default for QEMU guests: the overlay is discarded
+                    # on cleanup regardless (ephemeral run), so waiting up to 60s for a
+                    # graceful ACPI shutdown buys nothing -- except when --preserve-snapshot
+                    # keeps the overlay around, where a force-stop's guest-side
+                    # uncleanliness could actually persist into the saved artifact.
                     force_shutdown = False
-                    if (experiment_run_context.hypervisor_type == 'qemu' and
-                        experiment_run_context.guest_platform == 'windows'):
-                        force_shutdown = True
-                        log.info("Forcing shutdown for Windows VM on QEMU to prevent updates")
+                    if experiment_run_context.hypervisor_type == 'qemu':
+                        if experiment_run_context.config.preserve_snapshot:
+                            log.info("Preserving snapshot: using graceful shutdown for QEMU VM")
+                        else:
+                            force_shutdown = True
+                            log.info("Forcing shutdown for QEMU VM (ephemeral overlay, nothing to preserve)")
 
                     # Retrieve artifacts BEFORE stopping VM (critical for QGA/VirtioFS which need a running VM)
                     # The lifecycle strategy handles stop internally in the correct order per transfer mode
@@ -395,7 +572,29 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             if hasattr(experiment_run_context, 'timestamp_start'):
                 total_duration = (datetime.now(UTC) - experiment_run_context.timestamp_start).total_seconds()
 
-            if execution_result:
+            # Recompute the tally from the persisted events rather than from the
+            # in-memory counters. execution_result only knows top-level actions —
+            # a loop/block body, and every assertion inside it, is invisible there
+            # (flow_control keeps child results locally and returns one aggregate
+            # ActionResult), so a ten-iteration loop reported "Tests: 1/1 passed".
+            # The event rows are also what an auditor would query.
+            tally = await _recompute_run_tally(experiment_run_context)
+
+            if tally is not None and tally.has_executions:
+                flow_console.log_experiment_summary(
+                    ulid=experiment_run_context.experiment_run_ulid,
+                    success=bool(getattr(execution_result, 'success', False)) and tally.all_passed,
+                    total_actions=tally.total_actions,
+                    successful_actions=tally.successful_actions,
+                    failed_actions=tally.failed_actions,
+                    total_tests=tally.total_tests,
+                    successful_tests=tally.successful_tests,
+                    failed_tests=tally.failed_tests,
+                    duration=total_duration,
+                    was_interrupted=user_interrupt_event.is_set(),
+                    breakdown=tally,
+                )
+            elif execution_result:
                 flow_console.log_experiment_summary(
                     ulid=experiment_run_context.experiment_run_ulid,
                     success=execution_result.success,
@@ -438,6 +637,24 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             except Exception as cleanup_error:
                 # Intentionally broad: last-resort cleanup must not raise.
                 log.error(f"Error stopping stage coordinator during error cleanup: {cleanup_error}", exc_info=True)
+
+        # Un-register our signal handlers. Necessary because experiment_run() is
+        # NOT only a CLI entry point: batch_runner.py and the webapi service layer
+        # both await it in-process, and a handler left behind would keep firing
+        # into THIS run's closed-over context long after it finished — a batch's
+        # second experiment would be stopped by setting the first one's events.
+        #
+        # Caveat worth knowing: asyncio's remove_signal_handler restores the
+        # DEFAULT disposition, not whatever was installed before us. A host
+        # process that had its own handler (uvicorn's graceful shutdown) does not
+        # get it back. That is strictly better than the alternative — the process
+        # stays killable — but it means the webapi should ultimately run
+        # experiments out-of-process rather than in its own loop.
+        for _sig in installed_signals:
+            try:
+                loop.remove_signal_handler(_sig)
+            except (RuntimeError, ValueError) as e:
+                log.debug(f"Could not remove handler for signal {_sig}: {e}")
 
     # Resolve the success verdict. For smoke/verify runs (test=False AND no
     # abstract tests on the experiment) trust the playbook completion signal.

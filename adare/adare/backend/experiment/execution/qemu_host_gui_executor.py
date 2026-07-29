@@ -105,6 +105,19 @@ SHIFT_MAP = {
 class QEMUHostGUIExecutor(AbstractGUIExecutor):
     """GUI executor using QMP commands for QEMU VMs (host-based)."""
 
+    # Pacing for typed text. Every key event (down/up, and the shift-down/
+    # shift-up that bracket a capital or shifted symbol) is sent as its own QMP
+    # command with TYPE_EVENT_DELAY after it, and TYPE_INTERKEY_DELAY is added
+    # between characters. Injecting a whole string -- or even one character's
+    # events -- back-to-back makes the guest's USB HID layer silently drop
+    # transitions: a dropped key-up loses a character (spaces especially), and
+    # a dropped SHIFT-up leaves shift stuck down so the rest of the line comes
+    # out capitalised. Either way the vision agent then sees "wrong" text and
+    # loops trying to fix it. Real-time gaps clearing the ~8-10ms HID poll make
+    # every transition register while keeping typing ~1s.
+    TYPE_EVENT_DELAY = 0.008
+    TYPE_INTERKEY_DELAY = 0.015
+
     def __init__(self, vm, target_resolution_executor=None, experiment_run_id=None,
                  playbook=None, execution_context=None, experiment_run_directory=None, **kwargs):
         """
@@ -282,12 +295,32 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             Dict with 'status', optional 'message'
         """
         try:
+            if action_type == "type":
+                # Type text with per-EVENT pacing (see TYPE_EVENT_DELAY /
+                # TYPE_INTERKEY_DELAY): send every key event on its own with a
+                # short real-time gap, plus an extra gap between characters, so
+                # every key-down/up -- including the shift-up that ends a
+                # capital -- is registered and none are dropped.
+                char_groups = self._create_type_events(value)
+                if not char_groups:
+                    return {'status': 'error', 'message': f'Failed to create QMP events for: {value}'}
+                success = True
+                for group in char_groups:
+                    for event in group:
+                        if not await self.vm.send_qmp_keyboard([event]):
+                            success = False
+                        await asyncio.sleep(self.TYPE_EVENT_DELAY)
+                    await asyncio.sleep(self.TYPE_INTERKEY_DELAY)
+                if not success:
+                    return {'status': 'error', 'message': 'QMP keyboard command failed'}
+                return {
+                    'status': 'success',
+                    'message': f'Keyboard {action_type}({value}) via QMP'
+                }
+
             if action_type == "press":
                 # Single key press
                 events = self._create_key_events(value)
-            elif action_type == "type":
-                # Type text (character by character)
-                events = self._create_type_events(value)
             elif action_type == "hotkey":
                 # Key combination (e.g., "ctrl+c")
                 events = self._create_hotkey_events(value)
@@ -433,15 +466,18 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
 
     def _create_type_events(self, text: str) -> list:
         """
-        Create QMP events for typing text.
+        Create QMP key-event groups for typing text, one group per character.
 
         Args:
             text: Text to type
 
         Returns:
-            List of QMP event dictionaries
+            List of per-character event lists (each group is 2 events for a
+            plain key, 4 for a shifted key). Callers send one group at a time
+            with a short delay between groups so the guest registers every
+            keystroke (see keyboard() / TYPE_INTERKEY_DELAY).
         """
-        events = []
+        groups = []
         for char in text:
             # Handle uppercase by adding shift
             if char.isupper():
@@ -449,7 +485,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
                 qcode = self._pyautogui_key_to_qcode(char_lower)
                 if qcode:
                     # Shift down, key down, key up, shift up
-                    events.extend([
+                    groups.append([
                         {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": "shift"}}},
                         {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}},
                         {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}},
@@ -461,7 +497,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
                 qcode = self._pyautogui_key_to_qcode(base_char)
                 if qcode:
                     # Shift down, key down, key up, shift up
-                    events.extend([
+                    groups.append([
                         {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": "shift"}}},
                         {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}},
                         {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}},
@@ -471,12 +507,12 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
                 # Regular character
                 qcode = self._pyautogui_key_to_qcode(char)
                 if qcode:
-                    events.extend([
+                    groups.append([
                         {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}},
                         {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}}
                     ])
 
-        return events
+        return groups
 
     def _create_hotkey_events(self, combo: str) -> list:
         """

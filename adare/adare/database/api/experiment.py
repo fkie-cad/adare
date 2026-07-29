@@ -4,6 +4,8 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from adare.backend.experiment.directory import ExperimentDirectory
 
 # internal imports
@@ -19,8 +21,10 @@ from adare.database.models.project_models import (
     ExperimentRun,
     ExperimentRunFiles,
     LogFile,
+    SyncMetadata,
     TestParameterEntry,
 )
+from adare.database.models.sync_identity import apply_remote_identity
 from adare.exceptions import TestSetFormatError
 from adarelib.constants import StatusEnum
 from adarelib.testset.type import Test as FTest
@@ -90,8 +94,6 @@ class ExperimentApi(ProjectDatabaseApi):
         Get environment IDs for the given environment names from the global database.
         Returns environment IDs that can be stored in experiment.environment_ids
         """
-        from sqlalchemy.exc import SQLAlchemyError
-
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
 
@@ -116,8 +118,6 @@ class ExperimentApi(ProjectDatabaseApi):
         Get environment by name from the global database.
         project_name is ignored since environments are now global.
         """
-        from sqlalchemy.exc import SQLAlchemyError
-
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
 
@@ -201,8 +201,6 @@ class ExperimentApi(ProjectDatabaseApi):
 
     def get_experiment_environment_names(self, experiment_ulid: str) -> list[str]:
         """Get current environment names from experiment's environment_ids."""
-        from sqlalchemy.exc import SQLAlchemyError
-
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
 
@@ -251,6 +249,51 @@ class ExperimentApi(ProjectDatabaseApi):
             self._session.commit()
 
         log.debug(f"Updated experiment {experiment_ulid} environments to: {new_env_names}")
+
+    def add_experiment_environment(self, experiment_ulid: str, environment_id: str, auto_commit: bool = True) -> bool:
+        """Register an environment id into the experiment's indicator list.
+
+        ``environment_ids`` is a *discovery indicator* of where an experiment can
+        run, not a hard gate. Appends ``environment_id`` if not already present and
+        returns ``True`` when a change was made, ``False`` otherwise.
+        """
+        experiment = self.get_experiment_by_ulid(experiment_ulid)
+        if not experiment:
+            raise ValueError(f"Experiment {experiment_ulid} not found")
+
+        current_ids = list(experiment.environment_ids or [])
+        if environment_id in current_ids:
+            return False
+
+        current_ids.append(environment_id)
+        # Reassign a new list so SQLAlchemy detects the change on the JSON column
+        experiment.environment_ids = current_ids
+
+        if auto_commit:
+            self._session.commit()
+
+        log.debug(f"Registered environment {environment_id} into experiment {experiment_ulid}")
+        return True
+
+    def update_experiment_metadata_hash(self, experiment_ulid: str, sha256_metadata: str, auto_commit: bool = True) -> None:
+        """Refresh the stored metadata hash after metadata.yml was rewritten (bookkeeping)."""
+        experiment = self.get_experiment_by_ulid(experiment_ulid)
+        if experiment:
+            experiment.sha256_metadata = sha256_metadata
+            if auto_commit:
+                self._session.commit()
+
+    def get_unlinked_runs(self) -> list[ExperimentRun]:
+        """Return experiment runs that are not linked to any experiment (experiment_id IS NULL)."""
+        return self._session.query(ExperimentRun).filter(ExperimentRun.experiment_id.is_(None)).all()
+
+    def link_run_to_experiment(self, run_ulid: str, experiment_ulid: str, auto_commit: bool = True) -> None:
+        """Attach an existing run to an experiment by ulid."""
+        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == run_ulid).first()
+        if experiment_run:
+            experiment_run.experiment_id = experiment_ulid
+            if auto_commit:
+                self._session.commit()
 
     def __create_logfile(self, path: Path) -> LogFile:
         logfile = LogFile(
@@ -355,16 +398,26 @@ class ExperimentApi(ProjectDatabaseApi):
 
         # Look up the global test function
         testfunction_id = None
+        # Reproducibility pin captured from the current (is_current) global rows.
+        pin: dict = {}
 
         with GlobalDatabaseApi() as global_api:
             testfunction_file = global_api._session.query(TestFunctionFile).filter_by(name=testfunction_set).first()
             if testfunction_file:
                 testfunction = global_api._session.query(TestFunction).filter_by(
                     name=testfunction_type,
-                    file_id=testfunction_file.id
+                    file_id=testfunction_file.id,
+                    is_current=True,
                 ).first()
                 if testfunction:
                     testfunction_id = testfunction.id
+                    pin = {
+                        'testfunction_file_name': testfunction_file.name,
+                        'testfunction_file_version': testfunction_file.version,
+                        'testfunction_file_sha256': testfunction_file.sha256hash,
+                        'testfunction_version': testfunction.version,
+                        'testfunction_sha256': testfunction.sha256hash,
+                    }
 
         if not testfunction_id:
             raise TestSetFormatError(
@@ -422,9 +475,16 @@ class ExperimentApi(ProjectDatabaseApi):
         if not abstract_test_obj:
             abstract_test_obj = AbstractTest(
                 name=test.name,
-                testfunction_id=testfunction_id
+                testfunction_id=testfunction_id,
+                **pin
             )
             self._session.add(abstract_test_obj)
+        else:
+            # Backfill pins on pre-versioning rows without overwriting an existing pin
+            # (the original pin captures what the experiment was created against).
+            for pin_key, pin_value in pin.items():
+                if getattr(abstract_test_obj, pin_key) is None:
+                    setattr(abstract_test_obj, pin_key, pin_value)
 
         # Add parameter entries
         for param_entry in parameter_entries:
@@ -454,13 +514,20 @@ class ExperimentApi(ProjectDatabaseApi):
             self._session.commit()
 
     def sync_experiment(self, ulid: str, remote_ulid: str, abstract_tests_ulids: dict, remote_url: str, is_published: bool):
+        """Record where this experiment and its tests live on the server.
+
+        The experiment's remote identity goes into its SyncMetadata row (read back
+        via :class:`~adare.database.models.sync_identity.RemoteIdentityMixin`); each
+        test's server ULID goes into ``AbstractTest.remote_ulid``. Both are mapped
+        columns — publishing a run needs them after this session closes.
+        """
         # Retrieve the experiment by its ULID
         experiment = self.get_experiment_by_ulid(ulid)
 
-        # Update the experiment properties
-        experiment.remote_ulid = remote_ulid
-        experiment.remote_url = remote_url
-        experiment.published = is_published
+        apply_remote_identity(
+            self._session, experiment, SyncMetadata,
+            remote_ulid=remote_ulid, remote_url=remote_url, is_published=is_published,
+        )
 
         # Iterate through the abstract tests ULIDs and update each corresponding AbstractTest object
         for test_name, test_ulid in abstract_tests_ulids.items():

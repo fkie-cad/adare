@@ -102,6 +102,27 @@ class PlaybookValidator(ABC):
         pass
 
 
+class SettingsValidator(PlaybookValidator):
+    """Validates playbook-level `Settings` fields."""
+
+    _RESOLUTION_RE = re.compile(r'^\d+x\d+$')
+
+    def validate(self, playbook: Playbook) -> ValidationResult:
+        result = ValidationResult()
+        settings = getattr(playbook, 'settings', None)
+        if settings is None:
+            return result
+
+        resolution = getattr(settings, 'resolution', None)
+        if resolution is not None and not self._RESOLUTION_RE.match(str(resolution)):
+            result.add_error(
+                f"settings.resolution must be in 'WxH' format (e.g. '1280x1024'), "
+                f"got '{resolution}'",
+                field_name='settings.resolution',
+            )
+        return result
+
+
 class VariableUsageValidator(PlaybookValidator):
     """Extracts all variable references from playbook actions."""
 
@@ -254,6 +275,9 @@ class VariableUsageValidator(PlaybookValidator):
                                      action_index, action_type, references)
         if target.image:
             self._extract_from_string(target.image, f'{field_prefix}.image',
+                                     action_index, action_type, references)
+        if target.icon:
+            self._extract_from_string(target.icon, f'{field_prefix}.icon',
                                      action_index, action_type, references)
 
     def _extract_from_wait_condition(self, condition, field_prefix: str,
@@ -813,8 +837,10 @@ def validate_playbook(playbook: Playbook) -> None:
     duplicate_validator = DuplicateVariableValidator()
     definition_validator = VariableDefinitionValidator(usage_validator)
     filter_validator = FilterValidator(usage_validator)
+    settings_validator = SettingsValidator()
 
     validators = [
+        settings_validator,
         usage_validator,
         duplicate_validator,  # Check for duplicates before checking definitions
         definition_validator,

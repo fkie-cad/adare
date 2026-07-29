@@ -1,7 +1,6 @@
 # external imports
 import logging
 
-from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -78,10 +77,10 @@ def print_vm_info(vm_id: str):
             console.print(f"[red]VM with ID '{vm_id}' not found[/red]")
             return
 
-        layout = Layout(name="root")
-        panel = VMInfoPanel(vm_info)
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops whatever overflows, so a short
+        # window hid snapshot rows without any indication they were there.
+        console.print(VMInfoPanel(vm_info))
 
     except Exception as e:
         log.error(f"Failed to get VM info: {e}")
@@ -123,10 +122,10 @@ def print_vm_or_instance_info(vm_or_instance_id: str, formatter=None, output_fil
                 if not dual_output:
                     return
 
-            layout = Layout(name="root")
-            panel = VMInfoPanel(vm_info)
-            layout.update(panel)
-            console.print(layout)
+            # Printed directly, NOT wrapped in a Layout: a Layout crops its content
+            # to the terminal height and silently drops whatever overflows, so a
+            # short window hid snapshot rows without any indication.
+            console.print(VMInfoPanel(vm_info))
             return
 
         # If not found as base VM, try as instance

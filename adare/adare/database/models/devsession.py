@@ -25,6 +25,7 @@ class DevSession(SerializerMixin, GlobalBase):
 
     Attributes:
         session_id: Unique ULID identifier for the session
+        name: Optional human-friendly label; selectable via -s (not unique)
         project_path: Path to the ADARE project
         experiment_name: Name of the experiment being developed
         environment_name: Name of the VM environment
@@ -39,6 +40,7 @@ class DevSession(SerializerMixin, GlobalBase):
     RELATIONSHIPS_TO_DICT = True
 
     session_id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+    name = Column(String(255), nullable=True, index=True)  # human-friendly label; not unique
     project_path = Column(String(512), nullable=False, index=True)
     experiment_name = Column(String(255), nullable=False)
     environment_name = Column(String(255), nullable=False)

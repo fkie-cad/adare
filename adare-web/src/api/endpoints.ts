@@ -16,23 +16,36 @@ export const endpoints = {
   actionExecute: (id: string) => `/sessions/${id}/actions/execute`,
   actionTypes: '/actions/types',
 
+  // GUI agent (live view)
+  agentRun: (id: string) => `/sessions/${id}/agent/run`,
+  // NOTE: `agentStepImage` returns an absolute `/api/...` path because it is
+  // consumed by an `<img src>`, which bypasses the axios baseURL.
+  agentStepImage: (id: string, index: number) =>
+    `/api/sessions/${id}/agent/steps/${index}.png`,
+
   // Playbooks
   playbookExecute: (id: string) => `/sessions/${id}/playbooks/execute`,
   playbookSave: '/playbooks/save',
   playbookLoad: (name: string) => `/playbooks/${name}`,
 
-  // VirtualSpice REST/WebSocket proxy
-  // NOTE: `vmProxy` returns a path starting with `/api/vm/...` because the
-  // VirtualSpice proxy router is mounted at the app root (not under the `/api`
-  // axios baseURL). Consumers should pass the full path to `fetch` or build an
-  // absolute URL. WebSocket paths are likewise absolute.
-  vmProxy: (path: string) => `/api/vm/${path}`,
-  vmWebSocket: (path: string) => `/ws/vm/${path}`,
-  vmEventsWebSocket: '/ws/vm-events',
+  // Resolve an ADARE VM name to the live-display connection info (uuid + the
+  // same-origin `ws_path` the ADARE-owned viewer connects to). Mounted at the
+  // app root (not under the `/api` axios baseURL), so consumers `fetch` this
+  // absolute path directly. The viewer WS is same-origin — never `:8081`.
+  vmWatchUrl: (name: string, viewOnly = true) =>
+    `/api/vm-watch-url?name=${encodeURIComponent(name)}&view_only=${viewOnly}`,
 
   // Local VMs (database-tracked)
   localVms: '/local-vms',
   localVm: (id: string) => `/local-vms/${id}`,
+
+  // VM instances (running VMs) and their snapshots
+  vmInstances: '/vm-instances',
+  vmInstanceUsage: '/vm-instances/usage',
+  vmInstance: (id: string) => `/vm-instances/${id}`,
+  vmInstanceSnapshots: (id: string) => `/vm-instances/${id}/snapshots`,
+  vmInstanceSnapshotDelete: (id: string, name: string) =>
+    `/vm-instances/${id}/snapshots/${encodeURIComponent(name)}`,
 
   // Projects
   projects: '/projects',
@@ -55,10 +68,15 @@ export const endpoints = {
   environmentDelete: (name: string, force = false) =>
     `/environments/${name}?force=${force}`,
   verifyEnvironment: (name: string) => `/environments/${name}/verify`,
+  osProfiles: '/environments/os-profiles',
+  environmentCheckUrl: '/environments/check-url',
 
   // Runs
   runs: '/runs',
   run: (ulid: string) => `/runs/${ulid}`,
+  runArtifacts: (ulid: string) => `/runs/${ulid}/artifacts`,
+  runArtifact: (ulid: string, path: string) =>
+    `/api/runs/${ulid}/artifacts/${path.split('/').map(encodeURIComponent).join('/')}`,
 
   // Test functions
   testfunctions: '/testfunctions',

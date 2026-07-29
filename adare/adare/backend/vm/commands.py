@@ -58,6 +58,22 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
     # Check if this is an external VM file
     is_external = not _is_vm_managed(vm_file_path)
 
+    # Recipe recovery advantage: if the cached disk of a recipe-built VM is
+    # missing, rebuild it from the recipe instead of hard-failing (a baked disk
+    # cannot recover from a missing file). The rebuilt disk is then verified
+    # normally below via its recorded Vm.hash.
+    is_recipe = getattr(vm_record, 'build_source', 'baked') == 'recipe'
+    if is_recipe and not vm_file_path.exists():
+        log.warning(f"Cached recipe disk missing for VM '{vm_record.name}'; attempting rebuild from recipe...")
+        from adare.backend.vm.recipe import rebuild_recipe_vm_by_id
+        rebuilt_id = rebuild_recipe_vm_by_id(vm_id)
+        if rebuilt_id:
+            rebuilt_record = vm_database.get_vm_by_id(rebuilt_id)
+            if rebuilt_record:
+                vm_record = rebuilt_record
+                vm_file_path = Path(vm_record.file)
+                log.info(f"Rebuilt recipe disk for VM '{vm_record.name}' at {vm_file_path}")
+
     if not vm_file_path.exists():
         from adare.backend.experiment.exceptions import ExperimentIntegrityError
         if is_external:
@@ -130,7 +146,9 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
         await verify_in_stage()
 
 
-def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_metadata, no_copy: bool = False, force: bool = False) -> dict:
+def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_metadata, no_copy: bool = False, force: bool = False,
+                                 build_source: str = 'baked', recipe_hash: str | None = None,
+                                 iso_sha256: str | None = None, profile_name: str | None = None) -> dict:
     """
     Load VM file during environment load - only hash calculation and file copying.
     No VirtualBox import happens here!
@@ -141,6 +159,10 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
         environment_metadata: Environment configuration
         no_copy: If True, reference file at original location instead of copying
         force: If True, overwrite existing VM with same name but different hash
+        build_source: 'baked' (default) or 'recipe' - how the disk was produced
+        recipe_hash: Recipe integrity anchor (recipe builds only)
+        iso_sha256: Expected ISO SHA256 (recipe builds only)
+        profile_name: OS profile the disk was built from (recipe builds only)
 
     Returns:
         Dict with 'vm_id' and 'was_existing' keys
@@ -199,7 +221,11 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
         silent=False,
         no_copy=no_copy,  # Pass the flag
         hypervisor=hypervisor,  # NEW: Pass hypervisor type
-        force=force  # Pass force flag for VM overwriting
+        force=force,  # Pass force flag for VM overwriting
+        build_source=build_source,
+        recipe_hash=recipe_hash,
+        iso_sha256=iso_sha256,
+        profile_name=profile_name
     )
 
     log.info(f"VM file loaded into database: {vm.name} (ID: {vm.id})")
@@ -331,15 +357,16 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
         # Delete associated VmInstance records - they handle VirtualBox VM cleanup
         from adare.database.api.vm import VmApi
         with VmApi() as api:
-            instances = api.get_vm_instances_by_vm_id(vm_id)
+            instances = api.get_vm_instances_for_vm(vm_id)
             if instances:
                 log.info(f"Found {len(instances)} VM instances to delete for '{vm.name}'")
-                from adare.backend.vm.instance_manager import delete_vm_instance
+                from adare.backend.vm.instance_manager import cleanup_vm_instance
+                from adare.hypervisor.exceptions import InstanceStateException
                 for instance in instances:
                     try:
-                        await delete_vm_instance(instance.id, force=force)
+                        await cleanup_vm_instance(instance.id)
                         log.info(f"Deleted VM instance: {instance.instance_name}")
-                    except (VMError, OSError) as inst_error:
+                    except (VMError, OSError, InstanceStateException) as inst_error:
                         log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
                         if not force:
                             raise VMError(log, f"Failed to delete VM instance: {inst_error}") from inst_error

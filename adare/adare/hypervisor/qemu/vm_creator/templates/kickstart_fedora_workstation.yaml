@@ -3,10 +3,12 @@ schema: 1
 id: fedora-workstation
 description: Fedora 41 / 42 / 43 / 44 Workstation (GNOME) install via Anaconda kickstart
 maintainer: ADARE
-revision: 2026-05-07
+revision: 2026-07-25
 supports:
   - fedora41
+  - fedora41arm64
   - fedora42
+  - fedora42arm64
   - fedora43
   - fedora44
 -#}
@@ -23,6 +25,21 @@ user --name=adare --password={{ password_hash }} --iscrypted --groups=wheel --ge
 
 # Services
 services --enabled=sshd --disabled=firewalld
+
+# SELinux: permissive — required for ADARE to drive the guest at all.
+#
+# ADARE controls Linux guests through the QEMU guest agent (guest-exec). Fedora
+# confines that agent to the `virt_qemu_ga_t` domain, which may not even stat
+# /usr/bin/sudo: probing a stock enforcing install shows `ls -l /usr/bin/sudo` ->
+# "Permission denied", `command -v sudo` -> not found, `systemctl` -> "Access
+# denied". Every setup step (create /adare, mount the shared dir, launch adarevm)
+# therefore fails, even though the packages are installed.
+#
+# Permissive rather than disabled: files keep getting labelled and AVCs are still
+# audited, so SELinux contexts and audit entries remain present in forensic
+# diffs — only the denials stop. This is a visible deviation from a stock Fedora
+# install and is documented in the "VM image creation" guide.
+selinux --permissive
 
 # Disk
 clearpart --all --initlabel
@@ -48,6 +65,48 @@ qemu-guest-agent
 python3-pip
 python3-tkinter
 xdotool
+{% endif %}
+%end
+
+%post --log=/dev/null
+# ADARE extras via dnf.
+#
+# The %packages section above only takes effect on netinst / DVD media — Anaconda
+# ignores it when installing from *live* media, where the package set is whatever
+# the squashfs carries. Installing the same extras here covers both media types,
+# so %packages stays as-is for netinst users and live installs still end up with
+# the tooling ADARE needs.
+#
+# EOL Fedora releases are dropped from MirrorManager, so their metalink stops
+# resolving. Fall back to the archive tree before installing anything.
+if ! dnf -y makecache >/dev/null 2>&1; then
+    relver=$(rpm -E %fedora)
+    arch=$(uname -m)
+    archive="https://dl.fedoraproject.org/pub/archive/fedora/linux"
+    for repo in /etc/yum.repos.d/fedora.repo /etc/yum.repos.d/fedora-updates.repo; do
+        [ -f "$repo" ] && sed -i 's/^metalink=/#metalink=/; s/^mirrorlist=/#mirrorlist=/' "$repo"
+    done
+    cat > /etc/yum.repos.d/adare-archive.repo <<EOF
+[adare-archive]
+name=Fedora \$releasever archive - \$basearch
+baseurl=${archive}/releases/${relver}/Everything/${arch}/os/
+enabled=1
+gpgcheck=0
+[adare-archive-updates]
+name=Fedora \$releasever archive updates - \$basearch
+baseurl=${archive}/updates/${relver}/Everything/${arch}/
+enabled=1
+gpgcheck=0
+EOF
+    dnf -y makecache || true
+fi
+
+dnf -y install openssh-server sudo curl wget git gnome-screenshot ImageMagick || true
+{% if setup_level >= 1 %}
+dnf -y install qemu-guest-agent || true
+{% endif %}
+{% if setup_level >= 2 %}
+dnf -y install python3-pip python3-tkinter xdotool || true
 {% endif %}
 %end
 

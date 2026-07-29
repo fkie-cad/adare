@@ -9,12 +9,13 @@ These models are stored in the global database and shared across all projects.
 from pathlib import Path
 
 import ulid
-from sqlalchemy import CHAR, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, func
+from sqlalchemy import CHAR, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, UniqueConstraint, func
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import backref, declarative_base, relationship
 from sqlalchemy_serializer import SerializerMixin
 
+from adare.database.models.sync_identity import RemoteIdentityMixin
 from adarelib.constants import StatusEnum, VmInstanceStatus
 
 # Create separate base for global models
@@ -144,7 +145,7 @@ class TestParameter(SerializerMixin, GlobalBase):
         return f"<TestParameter(name='{self.name}',dtype='{self.dtype}')>"
 
 
-class TestFunctionFile(SerializerMixin, GlobalBase):
+class TestFunctionFile(RemoteIdentityMixin, SerializerMixin, GlobalBase):
     """
     Represents a file containing one or more test functions, with metadata and hash.
     """
@@ -157,6 +158,10 @@ class TestFunctionFile(SerializerMixin, GlobalBase):
     requirements_path = Column(String, nullable=True)
     sha256hash = Column(String, nullable=False)
     description = Column(String, nullable=True, default=None)
+
+    # Immutable version counter. Bumped (never overwritten) each time the file's
+    # content changes; the retained snapshots live in TestFunctionFileVersion.
+    version = Column(Integer, nullable=False, default=1, server_default='1')
 
     sync_metadata_id = Column(CHAR(26), ForeignKey('sync_metadata.id', ondelete='CASCADE'), nullable=True)
     sync_metadata = relationship("SyncMetadata", backref="test_function_file")
@@ -186,6 +191,13 @@ class TestFunction(SerializerMixin, GlobalBase):
     description = Column(String, nullable=True)
     sha256hash = Column(String, nullable=False)
 
+    # Stable identity = this ULID (referenced by experiments). A content change
+    # bumps `version` in place and appends a TestFunctionVersion row — the ULID
+    # never changes. `is_current` is flipped to False (not deleted) when the
+    # method vanishes from source, so prior experiment references never dangle.
+    version = Column(Integer, nullable=False, default=1, server_default='1')
+    is_current = Column(Boolean, nullable=False, default=True, server_default='1')
+
     file_id = Column(CHAR(26), ForeignKey('test_function_file.id'), nullable=False)
     file = relationship(TestFunctionFile, backref=backref("test_functions", cascade="all, delete-orphan"))
 
@@ -204,6 +216,59 @@ class TestFunction(SerializerMixin, GlobalBase):
 
     def __repr__(self):
         return f"<TestFunction(name='{self.dotnotation}',description='{self.description}')>"
+
+
+class TestFunctionFileVersion(SerializerMixin, GlobalBase):
+    """
+    Snapshot registry for a testfunction *file* (collection). One row per
+    retained version: which sha256 the whole collection had at that version and
+    where the on-disk copy of that version was kept. Old versions are never
+    pruned (forensic tool; snapshots are cheap .py files).
+    """
+    __tablename__ = 'test_function_file_version'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+    file_id = Column(CHAR(26), ForeignKey('test_function_file.id', ondelete='CASCADE'), nullable=False)
+    file = relationship(TestFunctionFile, backref=backref("versions", cascade="all, delete-orphan"))
+
+    version = Column(Integer, nullable=False)
+    sha256hash = Column(String, nullable=False)
+    snapshot_dir = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=True, default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('file_id', 'version', name='uq_test_function_file_version'),
+    )
+
+    def __repr__(self):
+        return f"<TestFunctionFileVersion(file_id='{self.file_id}', version={self.version})>"
+
+
+class TestFunctionVersion(SerializerMixin, GlobalBase):
+    """
+    Per-method version history. Answers "what version is this test method" and
+    is the per-method pin source. `file_version` records which file version
+    introduced this method hash.
+    """
+    __tablename__ = 'test_function_version'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+    test_function_id = Column(CHAR(26), ForeignKey('test_function.id', ondelete='CASCADE'), nullable=False)
+    test_function = relationship(TestFunction, backref=backref("versions", cascade="all, delete-orphan"))
+
+    version = Column(Integer, nullable=False)
+    sha256hash = Column(String, nullable=False)
+    file_version = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=True, default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('test_function_id', 'version', name='uq_test_function_version'),
+    )
+
+    def __repr__(self):
+        return f"<TestFunctionVersion(test_function_id='{self.test_function_id}', version={self.version})>"
 
 
 class OsInfo(SerializerMixin, GlobalBase):
@@ -260,6 +325,16 @@ class Vm(SerializerMixin, GlobalBase):
 
     # Hypervisor configuration
     hypervisor = Column(String, nullable=False, default='virtualbox', server_default='virtualbox')
+
+    # Build provenance. 'baked' = disk was loaded as a frozen artifact (default,
+    # unchanged behaviour). 'recipe' = disk was built from a declarative recipe;
+    # recipe_hash anchors the reproducible integrity identity while `hash` stays
+    # the per-run forensic record of the produced disk. iso_sha256/profile_name
+    # make a recipe-built disk traceable to its build inputs.
+    build_source = Column(String, nullable=False, default='baked', server_default='baked')
+    recipe_hash = Column(String, nullable=True, index=True)
+    iso_sha256 = Column(String, nullable=True)
+    profile_name = Column(String, nullable=True)
 
     # Snapshot configuration
     use_snapshots = Column(Boolean, default=True)
@@ -350,6 +425,12 @@ class VmInstance(SerializerMixin, GlobalBase):
         Index('idx_vm_instance_vm_status', 'vm_id', 'status'),
         Index('idx_vm_instance_experiment', 'current_experiment_run_id', 'status'),
         Index('idx_vm_instance_port', 'websocket_port', 'status'),
+        # Enforces at the DB layer (the only thing atomic across separate OS
+        # processes/connections) that no two *active* instances share a port.
+        # Scoped to status='active' so releasing a port (websocket_port=None)
+        # or stale values on non-active rows never trips the constraint.
+        Index('idx_vm_instance_active_websocket_port', 'websocket_port', unique=True,
+              sqlite_where=(status == 'active')),
     )
 
     def __str__(self):
@@ -403,7 +484,7 @@ class VmInstance(SerializerMixin, GlobalBase):
         return VmInstanceStatus.from_string(self.status)
 
 
-class Environment(SerializerMixin, GlobalBase):
+class Environment(RemoteIdentityMixin, SerializerMixin, GlobalBase):
     """
     Environment definition stored globally.
     """

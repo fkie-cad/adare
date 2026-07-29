@@ -1,7 +1,6 @@
 # external imports
 import logging
 
-from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -143,14 +142,14 @@ def print_vm_clear_environment_confirmation(environment_ulid: str):
         vms = get_vms_by_environment(environment_ulid)
         console = DefaultConsole()
 
-        layout = Layout(name="root")
-        panel = VMConfirmationPanel(
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which would
+        # understate what this confirmation is about to delete.
+        console.print(VMConfirmationPanel(
             vms,
             "Clear Environment VMs",
             f"This will delete {len(vms)} VMs for environment {environment_ulid}!"
-        )
-        layout.update(panel)
-        console.print(layout)
+        ))
 
     except Exception as e:
         log.error(f"Failed to show environment VM confirmation: {e}")
@@ -163,10 +162,10 @@ def print_vm_clear_all_results(results: dict):
     try:
         console = DefaultConsole()
 
-        layout = Layout(name="root")
-        panel = VMCleanupResultsPanel(results, "Clear All VMs")
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which would
+        # hide part of what was actually deleted.
+        console.print(VMCleanupResultsPanel(results, "Clear All VMs"))
 
     except Exception as e:
         log.error(f"Failed to show VM cleanup results: {e}")
@@ -179,10 +178,10 @@ def print_vm_clear_environment_results(results: dict, environment_ulid: str):
     try:
         console = DefaultConsole()
 
-        layout = Layout(name="root")
-        panel = VMCleanupResultsPanel(results, f"Clear Environment VMs ({environment_ulid})")
-        layout.update(panel)
-        console.print(layout)
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
+        # the terminal height and silently drops the overflowing rows, which would
+        # hide part of what was actually deleted.
+        console.print(VMCleanupResultsPanel(results, f"Clear Environment VMs ({environment_ulid})"))
 
     except Exception as e:
         log.error(f"Failed to show environment VM cleanup results: {e}")

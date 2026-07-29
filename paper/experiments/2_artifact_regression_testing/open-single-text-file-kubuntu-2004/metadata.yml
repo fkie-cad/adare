@@ -1,0 +1,12 @@
+# No 'name:' key -- ExperimentMetadata does not define one and cattrs drops it silently.
+description: "Paper 5.2: open one document on Kubuntu 20.04 and assert recently-used.xbel is NOT created"
+
+environments:
+  - kubuntu-2004
+
+tags:
+  - xbel
+  - recently-used
+  - xdg
+  - regression
+  - absent-artifact

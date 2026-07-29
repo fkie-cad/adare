@@ -13,10 +13,55 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import backref, declarative_base, relationship
 from sqlalchemy_serializer import SerializerMixin
 
+from adare.database.models.sync_identity import RemoteIdentityMixin
 from adarelib.constants import StatusEnum
 
 # Create separate base for project models
 ProjectBase = declarative_base()
+
+SyncStatusEnum = SAEnum('pending', 'synced', 'failed', 'local_only', name="syncstatusenum")
+SyncDirectionEnum = SAEnum('push', 'pull', 'bidirectional', name="syncdirectionenum")
+
+
+class SyncMetadata(SerializerMixin, ProjectBase):
+    """Synchronisation state of a project entity against the remote instance.
+
+    The project-database twin of :class:`global_models.SyncMetadata`. The two
+    databases are separate SQLite files, so a project entity cannot reference the
+    global table — it needs its own. Same columns, same meaning; see
+    :mod:`adare.database.models.sync_identity`.
+    """
+    __tablename__ = 'sync_metadata'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+
+    # Sync timing
+    last_sync_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=func.now())
+
+    # Sync state
+    sync_status = Column(SyncStatusEnum, default='pending')
+    sync_direction = Column(SyncDirectionEnum, default='push')
+    failure_reason = Column(String, nullable=True)
+
+    # Remote tracking
+    remote_id = Column(String, nullable=True)
+    remote_url = Column(String, nullable=True)
+
+    def __str__(self):
+        return f"SyncMetadata({self.id})"
+
+    def __repr__(self):
+        return f"<SyncMetadata(id='{self.id}', status='{self.sync_status}')>"
+
+    @hybrid_property
+    def is_synced(self):
+        return self.sync_status == 'synced'
+
+    @hybrid_property
+    def needs_sync(self):
+        return self.sync_status in ['pending', 'failed']
 
 
 class Tag(SerializerMixin, ProjectBase):
@@ -194,6 +239,22 @@ class AbstractTest(SerializerMixin, ProjectBase):
     # Reference to global test function by ID (not FK)
     testfunction_id = Column(String, nullable=False)  # Global test function ID
 
+    # ULID this test has on the server, filled in when the owning experiment is
+    # published. A run's test events are uploaded against it, so it must be a real
+    # column: it was once a plain attribute assignment that commit() discarded.
+    # Not a SyncMetadata row — a test has no publish state of its own, it inherits
+    # the experiment's.
+    remote_ulid = Column(String, nullable=True)
+
+    # Reproducibility pins captured at experiment-bind time. Record which version
+    # of which testfunction *file* (collection) and which method version/hash the
+    # experiment was created against. Nullable: NULL = pre-versioning (no pin).
+    testfunction_file_name = Column(String, nullable=True)
+    testfunction_file_version = Column(Integer, nullable=True)
+    testfunction_file_sha256 = Column(String, nullable=True)
+    testfunction_version = Column(Integer, nullable=True)
+    testfunction_sha256 = Column(String, nullable=True)
+
     parameters = relationship(TestParameterEntry, secondary=mapping_abstracttest_testparameterentry)
     tools = relationship(Tool, secondary=mapping_abstracttest_tool)
 
@@ -250,7 +311,7 @@ class USBDrive(SerializerMixin, ProjectBase):
         return f"<USBDrive(name='{self.name}',vendor_id='{self.vendor_id}',product_id='{self.product_id}')>"
 
 
-class Experiment(SerializerMixin, ProjectBase):
+class Experiment(RemoteIdentityMixin, SerializerMixin, ProjectBase):
     """
     Experiment definition within a project.
     """
@@ -263,6 +324,11 @@ class Experiment(SerializerMixin, ProjectBase):
     sha256 = Column(String, nullable=False)
     sha256_playbook = Column(String, nullable=True)
     sha256_metadata = Column(String, nullable=True)
+
+    # Where this experiment lives on the server once published. RemoteIdentityMixin
+    # exposes remote_ulid / remote_url / published / in_request off this row.
+    sync_metadata_id = Column(CHAR(26), ForeignKey('sync_metadata.id', ondelete='SET NULL'), nullable=True)
+    sync_metadata = relationship("SyncMetadata", backref="experiment")
 
     # Note: project_id removed as experiments are now stored per-project
 
@@ -367,6 +433,14 @@ class TestEvent(Event):
     result_id = Column(CHAR(26), ForeignKey('result.id'), nullable=True)
     abstract_test = relationship(AbstractTest, backref=backref("test_events", cascade="all, delete-orphan"))
     result = relationship(Result)
+
+    # What actually executed, stamped at run time. Compared against the AbstractTest
+    # pins to detect drift (current code always runs; drift is logged loudly).
+    testfunction_file_name = Column(String, nullable=True)
+    testfunction_file_version = Column(Integer, nullable=True)
+    testfunction_file_sha256 = Column(String, nullable=True)
+    testfunction_version = Column(Integer, nullable=True)
+    testfunction_sha256 = Column(String, nullable=True)
 
     def __str__(self):
         return str(self.abstract_test.name)
@@ -671,14 +745,20 @@ class ExperimentRun(SerializerMixin, ProjectBase):
 
         # First check for test execution failures and result failures
         # This takes priority over missing tests since failed tests cause early termination
+        saw_warning = False
         for t in self.tests:
             # Check if test execution failed (success=False in Event base class)
             if hasattr(t, 'success') and t.success is False:
                 return StatusEnum.FAILED
 
-            # Check if test result indicates failure
-            if t.result and int(t.result.status_id) != StatusEnum.SUCCESS:
-                return StatusEnum.FAILED
+            # Check if test result indicates failure. WARNING is pass-with-warning:
+            # it must not be treated as a failure (see TestResult.warning).
+            if t.result:
+                status = int(t.result.status_id)
+                if status == StatusEnum.WARNING:
+                    saw_warning = True
+                elif status != StatusEnum.SUCCESS:
+                    return StatusEnum.FAILED
 
         # Only check for missing tests if no tests failed
         # (missing tests are expected when earlier tests failed and stopped execution)
@@ -691,7 +771,8 @@ class ExperimentRun(SerializerMixin, ProjectBase):
             if not found:
                 return StatusEnum.TEST_MISSING
 
-        return StatusEnum.SUCCESS
+        # All tests passed; surface WARNING distinctly (still a passing verdict).
+        return StatusEnum.WARNING if saw_warning else StatusEnum.SUCCESS
 
     @hybrid_property
     def ulid(self):

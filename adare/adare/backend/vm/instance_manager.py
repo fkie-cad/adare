@@ -17,6 +17,8 @@ import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from sqlalchemy.exc import IntegrityError
+
 from adare.backend.vm.exceptions import VMError
 from adare.backend.vm.port_manager import reserve_port_atomically
 from adare.database.models.global_models import VmInstance
@@ -260,7 +262,7 @@ class VmInstanceManager:
             log.debug(f"create_new_instance traceback: {traceback.format_exc()}")
             raise
 
-    async def reuse_instance(self, instance: VmInstance, experiment_run_id: str) -> VmInstance:
+    async def reuse_instance(self, instance: VmInstance, experiment_run_id: str) -> VmInstance | None:
         """
         Reuse an existing available VM instance for a new experiment.
 
@@ -269,7 +271,7 @@ class VmInstanceManager:
             experiment_run_id: New experiment run ID
 
         Returns:
-            Updated VmInstance
+            Updated VmInstance, or None if another process claimed it first
         """
         from adare.backend.vm.snapshot_manager import verify_instance_base_snapshot_exists
         from adare.database.api.vm import VmApi
@@ -296,41 +298,58 @@ class VmInstanceManager:
             else:
                 log.debug("Skipping snapshot validation for non-VirtualBox instance")
 
-        # Allocate fresh websocket port for reused instance atomically
+        # Allocate a fresh websocket port for the reused instance, retrying
+        # across the port range: the DB-level unique-active-port index means
+        # a candidate another process just grabbed raises IntegrityError
+        # instead of silently overwriting it.
         from adare.backend.vm.port_manager import PORT_RANGE_END, PORT_RANGE_START
 
         with VmApi() as api:
-            # Find available port within the same transaction to avoid race conditions
+            # Fast path: skip ports already seen as active in an initial scan.
             active_instances = api.get_all_vm_instances()
             used_ports = set()
 
             for inst in active_instances:
-                # Only consider active instances with allocated ports in our range
                 if (inst.status == 'active' and
                     inst.websocket_port is not None and
                     PORT_RANGE_START <= inst.websocket_port <= PORT_RANGE_END):
                     used_ports.add(inst.websocket_port)
 
-            # Find first available port
-            websocket_port = None
-            for port in range(PORT_RANGE_START, PORT_RANGE_END + 1):
-                if port not in used_ports:
-                    websocket_port = port
-                    break
+            claimed_port = None
+            for candidate in range(PORT_RANGE_START, PORT_RANGE_END + 1):
+                if candidate in used_ports:
+                    continue
 
-            if not websocket_port:
+                # Atomically claim the instance (status='available' -> 'active')
+                # with this candidate port. If another process claimed the
+                # *instance* first, this returns False without touching the
+                # row. If another process just took this *port* on a
+                # different instance, the unique-active-port index raises
+                # IntegrityError and we try the next candidate.
+                try:
+                    claimed = api.claim_available_vm_instance(
+                        instance.id,
+                        experiment_run_id=experiment_run_id,
+                        websocket_port=candidate
+                    )
+                except IntegrityError:
+                    log.debug(
+                        f"Port {candidate} taken by another process while claiming "
+                        f"{instance.instance_name}, trying next port"
+                    )
+                    used_ports.add(candidate)
+                    continue
+
+                if not claimed:
+                    log.info(f"Instance {instance.instance_name} was claimed by another process first, giving up reuse")
+                    return None
+
+                claimed_port = candidate
+                log.info(f"Allocated fresh port {claimed_port} for reused instance {instance.instance_name}")
+                break
+
+            if claimed_port is None:
                 raise VMError(log, f"No available websocket ports for reused instance {instance.instance_name}")
-
-            log.info(f"Allocated fresh port {websocket_port} for reused instance {instance.instance_name}")
-
-            # Update instance status, assignment, and new port atomically
-            api.update_vm_instance(
-                instance.id,
-                status='active',
-                current_experiment_run_id=experiment_run_id,
-                websocket_port=websocket_port,
-                last_used_at=datetime.now(UTC)
-            )
 
         # Refresh instance data
         with VmApi() as api:
@@ -398,8 +417,12 @@ class VmInstanceManager:
 
             if available_instance:
                 log.info(f"Found available instance for reuse: {available_instance.instance_name}")
-                return await self.reuse_instance(available_instance, experiment_run_id)
-            log.info("No available instances found, creating new instance")
+                reused = await self.reuse_instance(available_instance, experiment_run_id)
+                if reused is not None:
+                    return reused
+                log.info("Lost race to claim available instance, creating new instance instead")
+            else:
+                log.info("No available instances found, creating new instance")
             return await self.create_new_instance(vm_id, experiment_run_id)
 
         except Exception as e:
@@ -823,8 +846,11 @@ class VmInstanceManager:
         Returns:
             Unique instance name
         """
-        # Use first 8 characters of experiment run ID for uniqueness
-        short_id = experiment_run_id[:8]
+        # Use last 8 characters of the experiment run ID (ULID) for uniqueness.
+        # A ULID's leading chars encode a millisecond timestamp; two runs
+        # started in the same millisecond window would collide on [:8]. The
+        # trailing chars are the random suffix, so [-8:] avoids that.
+        short_id = experiment_run_id[-8:]
         return f"{base_vm_name}_exp_{short_id}"
 
     async def _cleanup_hypervisor_instance(self, instance: VmInstance):
@@ -882,12 +908,24 @@ class VmInstanceManager:
         try:
             from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
 
-            vm = QEMUVMRegistry.get_vm_by_name(instance.instance_name)
-            if not vm:
-                log.warning(f"QEMU VM not found: {instance.instance_name}")
+            # Look before leap: get_vm_by_name() raises the self-logging
+            # VMNotFoundException on a missing config (which would spam ERROR
+            # during boot-retry cleanup of an already-removed attempt), and it
+            # never returns falsy — so probe existence first.
+            if not QEMUVMRegistry.vm_exists(instance.instance_name):
+                log.debug(f"QEMU VM config already gone, nothing to clean up: {instance.instance_name}")
                 return
 
-            await vm.remove()
+            vm = QEMUVMRegistry.get_vm_by_name(instance.instance_name)
+
+            await vm.destroy()
+
+            # destroy() removes only the overlay (it is hard-guarded to
+            # overlay-only). This path is instance-scoped, so reclaim the
+            # instance's own dedicated base disk + NVRAM too, otherwise they
+            # leak in ~/.adare/qemu/disks/ forever. No-op for --no-copy VMs.
+            await vm.cleanup_base_disk()
+
             log.info(f"Cleaned up QEMU VM: {instance.instance_name}")
         except ImportError:
             log.warning("QEMU module not available for cleanup")

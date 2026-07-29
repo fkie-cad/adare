@@ -430,3 +430,53 @@ class DiskManagementMixin:
                 log.warning(f"Failed to delete overlay {overlay_path}: {e}")
         else:
             log.debug(f"Overlay already deleted: {overlay_path}")
+
+    async def cleanup_base_disk(self: 'QEMUVM') -> None:
+        """
+        Reclaim this managed instance's dedicated base disk and NVRAM.
+
+        Every VM instance is a full converted copy of the template
+        (``qemu-img convert``, ~12 GB each) and owns its own ``-base.qcow2``
+        plus ``-nvram.fd``. ``QEMUVM.destroy()`` only removes the overlay
+        (it is hard-guarded to overlay-only), so without this the instance's
+        base/nvram leak on instance removal.
+
+        Call this ONLY from an instance-scoped removal path, AFTER
+        ``destroy()`` has succeeded — never from a dev-session stop, where the
+        pooled instance's base must survive for the next session.
+
+        No-op for external (``--no-copy``) VMs: the base IS the user's original
+        file and must never be deleted.
+        """
+        # --no-copy: base is the user's original disk — never delete it.
+        if self._external_disk_path:
+            log.debug("cleanup_base_disk: external disk (--no-copy), skipping base reclaim")
+            return
+
+        from adare.hypervisor.qemu.firmware import get_nvram_path_for_vm
+
+        # Managed instances store their disk as <disk_dir>/<vm_name>.qcow2, so the
+        # base is always <disk_dir>/<vm_name>-base.qcow2 (see get_base_disk_path)
+        # and the NVRAM is <disk_dir>/<vm_name>-nvram.fd. Derive both from
+        # vm_name rather than config.disk_path, which may still be an overlay at
+        # removal time. Delete whichever currently exists.
+        disk_dir = Path(self.config.disk_path).parent
+        base_disk_path = str(disk_dir / f"{self.vm_name}-base.qcow2")
+        nvram_path = get_nvram_path_for_vm(self.vm_name, disk_dir)
+
+        for target, required_suffix in (
+            (base_disk_path, '-base.qcow2'),
+            (nvram_path, '-nvram.fd'),
+        ):
+            name = Path(target).name
+            # Belt-and-suspenders: only ever delete files with the expected
+            # managed suffix, so a stray path can never reach an unlink.
+            if not name.endswith(required_suffix):
+                log.warning(f"cleanup_base_disk: refusing unexpected name {name!r}")
+                continue
+            try:
+                if os.path.exists(target):
+                    os.remove(target)
+                    log.info(f"Reclaimed instance {required_suffix.lstrip('-')}: {name}")
+            except OSError as e:
+                log.warning(f"cleanup_base_disk: failed to remove {target}: {e}")

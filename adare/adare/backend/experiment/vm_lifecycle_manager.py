@@ -12,6 +12,7 @@ from adare.backend.experiment.directory import ExperimentRunDirectory
 from adare.backend.experiment.runctx import ExperimentRunCtx
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.exceptions import LoggedException
+from adare.hypervisor.qemu.libvirt_undefine import keep_firmware_state_flags, undefine
 from adare.hypervisor.virtualbox import VirtualBoxVM
 from adare.types.stages import (
     VMDestroyStage,
@@ -26,6 +27,134 @@ from adare.types.stages import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _undefine_keeping_firmware_state(domain) -> None:
+    """Undefine a libvirt domain while preserving its UEFI NVRAM varstore and vTPM.
+
+    libvirt refuses a flagless ``undefine()`` on a domain that declares ``<nvram/>``
+    ("Cannot undefine domain with NVRAM/varstore"), which is every UEFI guest and
+    therefore every aarch64 guest. That refusal used to leave the domain defined but
+    shut off forever, one stale entry per run in ``virsh list --all``.
+
+    ``KEEP_NVRAM`` rather than ``NVRAM`` because the varstore is INSTANCE-scoped, not
+    run-scoped: ``libvirt_xml_builder`` points ``<nvram/>`` at
+    ``<disk_dir>/<instance_name>-nvram.fd`` (``firmware.get_nvram_path_for_vm``), beside
+    the instance's base disk, and the caller of this function releases that instance for
+    reuse by the next experiment. The file carries the guest's UEFI boot entries -
+    including the aarch64 Shell-boot pre-population from
+    ``firmware._prepare_nvram_for_shell_boot`` - so deleting it here would silently reset
+    a reusable instance's firmware state. Only ``QEMUVM.cleanup_base_disk()``, on
+    instance removal, may delete it.
+
+    For a BIOS domain with no ``<nvram/>`` the flag is inert, so x86 guests are
+    unaffected.
+
+    ``KEEP_TPM`` is here for the same instance-scoped reason, and matters more than it
+    looks: without it libvirt DELETES the emulated TPM state on undefine, so the next
+    run manufactures a factory-fresh vTPM and the Windows guest re-provisions its TPM
+    on every single cold boot. See ``hypervisor/qemu/libvirt_undefine`` for the full
+    reasoning.
+
+    Args:
+        domain: libvirt virDomain object to undefine
+
+    Raises:
+        libvirt.libvirtError: Propagated to the caller, which decides how to report it
+    """
+    undefine(domain, keep_firmware_state_flags())
+
+
+def destroy_domain_by_name(vm_name: str | None) -> bool:
+    """Force-stop and undefine the libvirt domain called ``vm_name``. Best-effort.
+
+    The emergency counterpart to the ordinary teardown at the end of
+    :func:`adare.backend.experiment.run.run_experiment`. That path needs a live
+    ``VMLifecycleManager`` plus a populated run context; this one needs only a name,
+    so it can be called from a signal handler after a second SIGTERM, when the
+    caller has given up on unwinding gracefully and only wants the guest gone.
+
+    ``destroy()`` (not ``shutdown()``) on purpose: a second termination signal means
+    the operator wants out now, and the run overlay is discarded anyway.
+
+    Note this cannot be expressed with the existing reaping helpers in
+    ``hypervisor/qemu/vm_creator/progress.py``: those are ``subprocess.Popen``-shaped,
+    and on the *run* path ADARE never owns the QEMU process — libvirt forks it from
+    ``defineXML`` + ``create()``, so PPID 1 is its normal, healthy state. There is no
+    child to reap; there is only a domain to destroy.
+
+    Idempotent and silent by design — an absent domain, an unreachable libvirtd, or a
+    missing libvirt-python must not turn a shutdown into a traceback.
+
+    Args:
+        vm_name: libvirt domain name. This is the VM *instance* name
+            (``context.vm_name``), which is what ``QEMUVM`` records as
+            ``config.libvirt_domain_name`` when it defines the domain (vm.py).
+            ``None`` is accepted and is a no-op, because a signal can arrive before
+            an instance has been allocated.
+
+    Returns:
+        True if a running domain was destroyed, False in every other case
+        (nothing to do, or the attempt failed).
+    """
+    if not vm_name:
+        return False
+
+    try:
+        import libvirt
+
+        from adare.config import HYPERVISOR_CONFIGS
+        from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
+
+        qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
+        libvirt_uri = qemu_config.get('libvirt_uri', 'qemu:///session')
+
+        conn = libvirt.open(libvirt_uri)
+        if not conn:
+            log.warning(f"Emergency stop: no libvirt connection, cannot destroy '{vm_name}'")
+            return False
+
+        log_file = get_experiment_log_file()
+        destroyed = False
+        try:
+            with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                domain = conn.lookupByName(vm_name)
+
+            if domain.isActive():
+                with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                    domain.destroy()
+                log.info(f"Emergency stop: destroyed libvirt domain '{vm_name}'")
+                destroyed = True
+            else:
+                log.debug(f"Emergency stop: domain '{vm_name}' is already shut off")
+
+            # Undefining as well keeps `virsh list --all` from filling up with one
+            # stale shut-off entry per interrupted run. KEEP_NVRAM because the
+            # varstore is instance-scoped and the instance is reused — see
+            # _undefine_keeping_firmware_state.
+            try:
+                with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                    _undefine_keeping_firmware_state(domain)
+            except libvirt.libvirtError as e:
+                log.debug(f"Emergency stop: could not undefine '{vm_name}': {e}")
+
+        except libvirt.libvirtError as e:
+            # Domain absent is the common case (never created, or already cleaned up).
+            log.debug(f"Emergency stop: domain '{vm_name}' not actionable: {e}")
+        finally:
+            try:
+                conn.close()
+            except libvirt.libvirtError:
+                pass
+
+        return destroyed
+
+    except ImportError:
+        log.debug("Emergency stop: libvirt-python not installed; nothing to destroy")
+        return False
+    except OSError as e:
+        log.warning(f"Emergency stop: error destroying domain '{vm_name}': {e}")
+        return False
 
 
 class VMLifecycleManager:
@@ -115,7 +244,10 @@ class VMLifecycleManager:
             adarelib_wheel_time = adarelib_wheel[0].stat().st_mtime
             adarevm_wheel_time = adarevm_wheel[0].stat().st_mtime
 
-            adarelib_source_time = self._get_latest_mtime(adarevm_source)
+            # Compare each wheel against its OWN source tree. Deriving both times from
+            # adarevm_source meant an adarelib-only change never rebuilt any wheel, so
+            # the guest kept running a stale adarelib indefinitely.
+            adarelib_source_time = self._get_latest_mtime(adarelib_source)
             adarevm_source_time = self._get_latest_mtime(adarevm_source)
 
             if (adarelib_source_time > adarelib_wheel_time or
@@ -723,7 +855,7 @@ class VMLifecycleManager:
                             # Only undefine if domain is not running
                             state, _ = context.vm._libvirt_domain.state()
                             if state == libvirt.VIR_DOMAIN_SHUTOFF:
-                                context.vm._libvirt_domain.undefine()
+                                _undefine_keeping_firmware_state(context.vm._libvirt_domain)
                                 log.info(f"Undefined libvirt domain '{context.vm.vm_name}'")
                             else:
                                 log.warning(
@@ -731,8 +863,16 @@ class VMLifecycleManager:
                                     f"still running (state: {state}). Domain will be undefined on next start."
                                 )
                         except libvirt.libvirtError as e:
-                            # Domain might already be undefined or in invalid state
-                            log.debug(f"Could not undefine domain: {e}")
+                            # A domain that is already gone is the normal case; anything
+                            # else means the definition just leaked and stays visible in
+                            # `virsh list --all` forever, so do not bury it at debug.
+                            if e.get_error_code() == libvirt.VIR_ERR_NO_DOMAIN:
+                                log.debug(f"Domain already undefined: {e}")
+                            else:
+                                log.warning(
+                                    f"Could not undefine domain '{context.vm.vm_name}' - its "
+                                    f"definition will leak (see `virsh list --all`): {e}"
+                                )
                         finally:
                             # Always clear cached domain object to force redefinition
                             context.vm._libvirt_domain = None

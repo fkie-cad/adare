@@ -2,6 +2,7 @@
 
 import logging
 import io
+import math
 import asyncio
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -40,16 +41,63 @@ class OCRProcessor:
                 text_det_box_thresh=OCRConstants.OCR_DET_BOX_THRESH,
                 lang='en' # Explicitly set language
             )
-            
+
             # Restore logging level
             root_logger.setLevel(original_level)
 
             log.info("Converting bytes to numpy array...")
+
+            # Handle SVG format
+            if screenshot_bytes[:200].decode('utf-8', errors='ignore').strip().lower().startswith(('<?xml', '<svg')):
+                try:
+                    import cairosvg
+                    log.info("Detected SVG format, converting to PNG for OCR")
+                    screenshot_bytes = cairosvg.svg2png(bytestring=screenshot_bytes)
+                except ImportError:
+                    raise OCRProcessingError(
+                        "CairoSVG library required for SVG support. Install: pip install cairosvg"
+                    )
+                except Exception as e:
+                    raise OCRProcessingError(f"SVG conversion failed: {e}") from e
+
             nparr = np.frombuffer(screenshot_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            original_max_side = max(img.shape[:2])
+
+            # Pre-OCR upscaling: PaddleOCR recognizes tiny text poorly (e.g. a
+            # wrapped desktop-icon caption), so small images benefit from being
+            # upscaled before predict(). But scaling is adaptive, not flat: we
+            # only scale up to OCR_TARGET_SIDE (the detector's sweet spot), never
+            # beyond OCR_UPSCALE, and not at all once the image already meets it.
+            # A flat upscale on an already-large screenshot pushes it past the
+            # detection-side-length limit, silently defeating itself (PaddleOCR
+            # downscales back down for detection) and wrecking recall on
+            # ordinary-sized UI text - see OCR_UPSCALE's docstring in constants.py.
+            max_upscale = OCRConstants.OCR_UPSCALE
+            target_side = OCRConstants.OCR_TARGET_SIDE
+            if max_upscale and max_upscale > 1.0 and target_side and original_max_side > 0:
+                upscale = min(max_upscale, max(1.0, target_side / original_max_side))
+            else:
+                upscale = 1.0
+
+            if upscale != 1.0:
+                log.info(f"Upscaling screenshot {upscale:.2f}x before OCR ({img.shape[1]}x{img.shape[0]})")
+                img = cv2.resize(img, None, fx=upscale, fy=upscale, interpolation=cv2.INTER_CUBIC)
+
+            # The detection-side limit must never be smaller than the image we're
+            # about to hand PaddleOCR, or "max" limit_type will downscale it right
+            # back down before detection - undoing any upscale above and, just as
+            # importantly, shrinking already-large native screenshots (e.g. 4K)
+            # that never went through the upscale path at all.
+            processed_max_side = max(img.shape[:2])
+            det_limit_side_len = max(OCRConstants.OCR_DET_LIMIT_SIDE_LEN, math.ceil(processed_max_side))
 
             log.info("Running OCR prediction with numpy array...")
-            result = ocr.predict(input=img)
+            result = ocr.predict(
+                input=img,
+                text_det_limit_side_len=det_limit_side_len,
+                text_det_limit_type=OCRConstants.OCR_DET_LIMIT_TYPE,
+            )
 
             # Extract detection results from predict() format
             detections = []
@@ -60,6 +108,9 @@ class OCRProcessor:
 
                 # Combine texts, boxes and scores
                 for text, box, score in zip(rec_texts, rec_polys, rec_scores):
+                    # Rescale box back to original screenshot-pixel space
+                    if upscale and upscale != 1.0:
+                        box = box / upscale
                     box_points = box.tolist()
                     detections.append([box_points, (text, score)])
 

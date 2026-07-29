@@ -1,5 +1,31 @@
 # external imports
-from lxml import etree as ET
+# The stdlib parser, deliberately and exclusively -- this module used to import lxml.
+#
+# ONE parser on every guest, by design. These testfunctions produce forensic evidence
+# that is compared ACROSS OS versions (the paper's section 5.2 asserts that Ubuntu
+# 20.04 writes `visited` as integer -1 while 22.04/24.04 write a subsecond timestamp).
+# If the parser varied by guest, a cross-version difference could be an artifact of
+# the measuring instrument instead of the platform, and the comparison would no longer
+# be sound. Falling back to ElementTree only where lxml is missing would have created
+# exactly that split: lxml on 22.04/24.04, ElementTree on 20.04 -- i.e. the parser
+# differing along the very axis under study. So the instrument is held constant and
+# lxml is not used at all.
+#
+# lxml was not removed for taste. It cannot be installed uniformly: on Ubuntu 20.04
+# (focal, Python 3.8, aarch64) the pinned version has no wheel, so pip attempts a
+# source build needing libxml2-dev/libxslt1-dev, absent from a minimal server guest.
+# That single ModuleNotFoundError at import time made the ENTIRE xml collection
+# unavailable, so every xml.* assertion on 20.04 failed as an execution error while
+# 22.04 and 24.04 passed -- run 01KYMYDVD7VDS5TNJZPSNWKVDB died that way.
+#
+# The cost is XPath expressiveness: ElementPath is a documented subset (child and
+# descendant steps, prefixed names, [@attr='value'] and [tag='value'] predicates).
+# Every XPath in every shipped playbook, example and unit test was inventoried and
+# all of them fall inside it -- no functions, axes, unions or positional predicates
+# anywhere. An expression outside the subset raises rather than mis-evaluating; see
+# _xpath().
+import xml.etree.ElementTree as ET
+
 import re
 from typing import Optional
 
@@ -22,18 +48,70 @@ def _parse_xml(filepath):
     try:
         tree = ET.parse(filepath)
         return tree.getroot()
-    except ET.XMLSyntaxError as e:
+    except ET.ParseError as e:
         raise ValueError(f"Invalid XML format: {e}") from e
+
+
+# Constructs ElementPath does not implement. Listed so an expression using one is
+# REFUSED outright instead of being evaluated to the wrong answer -- see _xpath().
+_UNSUPPORTED_XPATH_TOKENS = ('(', '::', '..', '|')
+
+
+def _xpath(root, xpath, namespaces=None):
+    """Select the elements matching *xpath*, relative to *root*.
+
+    ElementPath needs an explicit relative start, so two absolute forms are
+    translated (both appear in shipped tests, and both raise if passed through):
+
+    * ``//tag`` -> ``.//tag`` — search all descendants of *root*.
+    * ``/tag``  -> matched against *root* itself, since ElementPath cannot express
+      "the document element" and ``findall('/tag')`` simply raises. ``/a/b`` becomes
+      ``./b`` evaluated on *root* when *root* is ``a``, and matches nothing when it
+      is not, which is what an absolute path means.
+
+    Everything else is passed through unchanged: child and descendant steps, prefixed
+    names resolved via *namespaces*, and ``[@attr='value']`` / ``[tag='value']``
+    predicates (either quote style).
+
+    Raises:
+        ValueError: If *xpath* uses a construct ElementPath does not implement.
+            Raising is the point. ``findall()`` handed an unsupported construct
+            generally returns ``[]``, which every caller here reads as "no elements
+            matched" — so an assertion would FAIL with a plausible message about the
+            artifact under test while the real cause was the expression. In a
+            forensic result a loud error beats a silently wrong verdict.
+    """
+    offending = [t for t in _UNSUPPORTED_XPATH_TOKENS if t in xpath]
+    if offending:
+        raise ValueError(
+            f"XPath '{xpath}' uses {', '.join(offending)}, which ElementPath (the "
+            f'stdlib XPath subset ADARE uses for every guest) does not implement. '
+            f"Restate it using child/descendant steps and [@attr='value'] or "
+            f"[tag='value'] predicates."
+        )
+
+    if xpath.startswith('//'):
+        return root.findall(f'.{xpath}', namespaces or {})
+    if xpath.startswith('/'):
+        # Absolute: the first step must BE the root element.
+        steps = xpath[1:].split('/', 1)
+        first, rest = steps[0], (steps[1] if len(steps) > 1 else '')
+        root_tag = root.tag
+        if namespaces and ':' in first:
+            prefix, local = first.split(':', 1)
+            if prefix in namespaces:
+                first = f'{{{namespaces[prefix]}}}{local}'
+        if root_tag != first:
+            return []
+        return root.findall(f'./{rest}', namespaces or {}) if rest else [root]
+    return root.findall(xpath, namespaces or {})
 
 
 def _find_elements(root, xpath, namespaces=None):
     """Find elements using XPath with namespace support"""
     try:
-        # Use lxml's xpath() method for full XPath support
-        if namespaces:
-            return root.xpath(xpath, namespaces=namespaces)
-        return root.xpath(xpath)
-    except (AttributeError, SyntaxError, ET.XPathEvalError) as e:
+        return _xpath(root, xpath, namespaces)
+    except (AttributeError, SyntaxError, KeyError) as e:
         raise ValueError(f"Invalid XPath expression '{xpath}': {e}") from e
 
 
@@ -143,24 +221,23 @@ def _compare_count(actual_count, expected_count, comparison_type):
 def _evaluate_xpath(root, xpath, result_type, namespaces=None):
     """Evaluate XPath and convert result based on type"""
     try:
-        # Use lxml's xpath() method for full XPath support
         if result_type == 'text':
-            elements = root.xpath(xpath, namespaces=namespaces or {})
+            elements = _xpath(root, xpath, namespaces)
             if elements:
                 return elements[0].text or ""
             return ""
         if result_type == 'number':
-            elements = root.xpath(xpath, namespaces=namespaces or {})
+            elements = _xpath(root, xpath, namespaces)
             if elements:
                 text = elements[0].text or "0"
                 return float(text)
             return 0.0
         if result_type == 'boolean':
-            elements = root.xpath(xpath, namespaces=namespaces or {})
+            elements = _xpath(root, xpath, namespaces)
             return len(elements) > 0
         raise ValueError(f"Unsupported result type: {result_type}")
 
-    except (AttributeError, SyntaxError, ValueError, ET.XPathEvalError) as e:
+    except (AttributeError, SyntaxError, KeyError, ValueError) as e:
         raise ValueError(f"XPath evaluation error '{xpath}': {e}") from e
 
 
@@ -190,7 +267,7 @@ def _parse_xml_with_namespaces(filepath):
                 namespaces[''] = root.attrib[attr_name]
 
         return root, namespaces
-    except ET.XMLSyntaxError as e:
+    except ET.ParseError as e:
         raise ValueError(f"Invalid XML format: {e}") from e
 
 

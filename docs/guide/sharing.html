@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Actions" href="../reference/actions.html"><link rel="prev" title="Dev Mode" href="dev-mode.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Actions" href="../reference/actions.html"><link rel="prev" title="Authoring Experiments with the MCP Server" href="mcp-authoring.html">
         <link rel="prefetch" href="../_static/logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.12.19 -->
@@ -12,6 +12,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d5f4d14b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
     
     
@@ -211,8 +212,10 @@
 <li class="toctree-l1"><a class="reference internal" href="experiments.html">Experiments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="test-driven-analysis.html">Test-Driven Analysis</a></li>
 <li class="toctree-l1"><a class="reference internal" href="diff-analysis.html">Diff Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="icon-library.html">Windows Icon Library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="vm-image-creation.html">VM Image Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="dev-mode.html">Dev Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp-authoring.html">Authoring Experiments with the MCP Server</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Sharing</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -321,7 +324,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
 <ul>
@@ -330,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../architecture/file-sharing.html">File Sharing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/guest-agent.html">Guest Agent</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../architecture/cv-server.html">CV Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../architecture/database-migrations.html">Database Migrations</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../architecture/hypervisors.html">Hypervisor Abstraction</a></li>
@@ -457,34 +461,64 @@ adare<span class="w"> </span>web<span class="w"> </span>download<span class="w">
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>environment<span class="w"> </span>ubuntu24043
 </pre></div>
 </div>
+<p>A downloaded <strong>recipe</strong> environment is a set of build inputs, not a disk: the disk
+is built locally on the first <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">environment</span> <span class="pre">load</span></code>. If it declares
+<code class="docutils literal notranslate"><span class="pre">recipe.iso_name</span></code> rather than <code class="docutils literal notranslate"><span class="pre">recipe.iso</span></code>, you must supply that ISO yourself –
+put it in <code class="docutils literal notranslate"><span class="pre">~/.adare/isos/</span></code> or pass <code class="docutils literal notranslate"><span class="pre">--iso</span></code>. See
+<a class="reference internal" href="#environment-publish-contract"><span class="std std-ref">The environment publish contract</span></a> and <a class="reference internal" href="vm-image-creation.html#byo-isos"><span class="std std-ref">Consumer-supplied (BYO) ISOs – Windows only</span></a>.</p>
 </section>
 <section id="downloading-bundles">
 <h3>Downloading Bundles<a class="headerlink" href="#downloading-bundles" title="Link to this heading">¶</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>bundle<span class="w"> </span>&lt;ulid&gt;
 </pre></div>
 </div>
-<p>Downloads an experiment bundle, which includes the experiment and all its dependencies (test functions, environment configurations, shared resources). This is the easiest way to get a complete, runnable experiment.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Download bundle without disk images</span>
-adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>bundle<span class="w"> </span>01JQXYZ123ABC
-
-<span class="c1"># Include disk images (large download)</span>
-adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>bundle<span class="w"> </span>01JQXYZ123ABC<span class="w"> </span>--include-disk-images
+<p>Downloads an experiment bundle: the experiment plus all its dependencies (testfunction sets and referenced environment configurations). Only descriptor/config files are downloaded — VM disk images are fetched later, on demand, when the environment is loaded (see below).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>bundle<span class="w"> </span>01JQXYZ123ABC
 </pre></div>
 </div>
 <section id="options">
 <h4>Options<a class="headerlink" href="#options" title="Link to this heading">¶</a></h4>
 <dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">--include-disk-images</span></code></dt><dd><p>Also download the VM disk images. These can be very large (multiple GB). Without this flag, only the configuration files are downloaded.</p>
-</dd>
 <dt><code class="docutils literal notranslate"><span class="pre">-p,</span> <span class="pre">--project</span></code></dt><dd><p>Target project name or path.</p>
 </dd>
 </dl>
 </section>
 </section>
 </section>
-<section id="running-downloaded-experiments">
-<h2>Running Downloaded Experiments<a class="headerlink" href="#running-downloaded-experiments" title="Link to this heading">¶</a></h2>
-<p>After downloading, experiments appear in your project and can be run like any locally created experiment:</p>
+<section id="replicating-an-experiment-one-command">
+<h2>Replicating an Experiment (one command)<a class="headerlink" href="#replicating-an-experiment-one-command" title="Link to this heading">¶</a></h2>
+<p>To download a published experiment and immediately run it — the easiest way to reproduce a result end to end:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>experiment<span class="w"> </span>replicate<span class="w"> </span>&lt;ulid&gt;
+</pre></div>
+</div>
+<p>This downloads the bundle, loads the environment (fetching and verifying the VM disk via its <code class="docutils literal notranslate"><span class="pre">sha256</span></code>), loads the experiment, and runs it in test mode.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Auto-selects the environment if the bundle has exactly one</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>replicate<span class="w"> </span>01JQXYZ123ABC
+
+<span class="c1"># Pick an environment when the bundle has more than one</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>replicate<span class="w"> </span>01JQXYZ123ABC<span class="w"> </span>-e<span class="w"> </span>ubuntu24043
+
+<span class="c1"># Run for real (production mode) instead of test mode</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>replicate<span class="w"> </span>01JQXYZ123ABC<span class="w"> </span>--production
+
+<span class="c1"># Only download and load, don&#39;t run</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>replicate<span class="w"> </span>01JQXYZ123ABC<span class="w"> </span>--skip-run
+</pre></div>
+</div>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">-e,</span> <span class="pre">--environment</span></code></dt><dd><p>Name of the environment to use. Required if the bundle has more than one; optional (auto-selected) if it has exactly one.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--production,</span> <span class="pre">--prod</span></code></dt><dd><p>Run in production mode with full integrity checks (default: test mode).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--skip-run</span></code></dt><dd><p>Download and load only, without starting a VM.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-p,</span> <span class="pre">--project</span></code></dt><dd><p>Target project name or path.</p>
+</dd>
+</dl>
+</section>
+<section id="running-downloaded-experiments-manually">
+<h2>Running Downloaded Experiments Manually<a class="headerlink" href="#running-downloaded-experiments-manually" title="Link to this heading">¶</a></h2>
+<p>You can also perform the download/load/run steps yourself instead of using <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">replicate</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Download an experiment</span>
 adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>experiment<span class="w"> </span>01JQXYZ123ABC
 
@@ -552,6 +586,54 @@ adare<span class="w"> </span>web<span class="w"> </span>submit<span class="w"> <
 </div>
 <p>Each submit command creates a pull request on the shared repository. You receive a PR URL upon successful submission that you can use to track the review process.</p>
 </section>
+<section id="the-environment-publish-contract">
+<span id="environment-publish-contract"></span><h3>The environment publish contract<a class="headerlink" href="#the-environment-publish-contract" title="Link to this heading">¶</a></h3>
+<p>An environment descriptor is checked <strong>before</strong> any branch or pull request is
+created, so a non-publishable one never reaches the shared repo – and a local
+filesystem path can never leak into it. What is required depends on the source.</p>
+<p><strong>Baked disk.</strong> <code class="docutils literal notranslate"><span class="pre">vm</span></code> must be an <code class="docutils literal notranslate"><span class="pre">http(s)</span></code> URL with a required <code class="docutils literal notranslate"><span class="pre">vm_sha256</span></code>,
+plus a <code class="docutils literal notranslate"><span class="pre">vm_format</span></code> when the URL path has no recognizable disk extension (share
+links like <code class="docutils literal notranslate"><span class="pre">.../s/TOKEN/download</span></code> have none). Prepare one with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>env<span class="w"> </span>publish-prepare<span class="w"> </span>my-env<span class="w"> </span>--vm-url<span class="w"> </span>https://cloud.example.org/s/TOKEN/download<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--vm-format<span class="w"> </span>qcow2<span class="w"> </span>--verify-url
+</pre></div>
+</div>
+<p><strong>Recipe, Linux profile.</strong> <code class="docutils literal notranslate"><span class="pre">recipe.iso</span></code> must be an <code class="docutils literal notranslate"><span class="pre">http(s)</span></code> URL with a
+required <code class="docutils literal notranslate"><span class="pre">recipe.iso_sha256</span></code>. Linux ISOs are freely redistributable, so there is
+no reason to make a consumer hunt for one.</p>
+<p><strong>Recipe, Windows profile.</strong> Microsoft installer media cannot lawfully be rehosted,
+so a Windows recipe may instead declare <code class="docutils literal notranslate"><span class="pre">recipe.iso_name</span></code> (a bare filename) plus
+<code class="docutils literal notranslate"><span class="pre">recipe.iso_sha256</span></code> and an optional plain-text <code class="docutils literal notranslate"><span class="pre">recipe.iso_notes</span></code> download
+pointer. The consumer supplies the ISO themselves; the digest proves they got the
+right one. Convert an existing recipe with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>env<span class="w"> </span>recipe-byo<span class="w"> </span>win11-autopsy-solr4
+</pre></div>
+</div>
+<p>Exactly one of <code class="docutils literal notranslate"><span class="pre">iso</span></code> / <code class="docutils literal notranslate"><span class="pre">iso_name</span></code> may be set, and <code class="docutils literal notranslate"><span class="pre">iso_sha256</span></code> is required in
+both forms – it is the actual integrity boundary. It must be written in canonical
+form (lowercase, no surrounding whitespace): the server stores the value verbatim
+and other clients compare it case-sensitively, so a non-canonical digest would
+publish an environment nobody can build.</p>
+<p>The declared <code class="docutils literal notranslate"><span class="pre">os.platform</span></code> must also agree with what the profile actually builds,
+in both directions. <code class="docutils literal notranslate"><span class="pre">profile:</span> <span class="pre">ubuntu2404</span></code> next to <code class="docutils literal notranslate"><span class="pre">platform:</span> <span class="pre">windows</span></code> describes
+a system it does not build, and is rejected.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The consumer’s own <code class="docutils literal notranslate"><span class="pre">environment</span> <span class="pre">load</span></code> re-checks the same rules against <em>their</em>
+OS-profile catalog, which is the authoritative check for building. The server’s
+ingest validation is a coarse filter – it has no profile catalog and therefore
+cannot resolve a profile to a platform.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>ADARE clients older than build-time provisioning silently <strong>ignore</strong> a
+<code class="docutils literal notranslate"><span class="pre">recipe.provision</span></code> block: unknown YAML keys are dropped, so such a client
+builds a bare OS install and reports success. It computes a different recipe
+hash (no <code class="docutils literal notranslate"><span class="pre">provision</span></code> key), so there is no false cache hit, but the operator
+gets a disk without the provisioned software and no warning. Consumers of a
+provisioned recipe need a client with this feature.</p>
+</div>
+</section>
 </section>
 <section id="checking-status">
 <h2>Checking Status<a class="headerlink" href="#checking-status" title="Link to this heading">¶</a></h2>
@@ -598,14 +680,14 @@ adare<span class="w"> </span>web<span class="w"> </span>submit<span class="w"> <
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="dev-mode.html">
+          <a class="prev-page" href="mcp-authoring.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Dev Mode</div>
+                <div class="title">Authoring Experiments with the MCP Server</div>
                 
               </div>
             </a>
@@ -657,13 +739,15 @@ adare<span class="w"> </span>web<span class="w"> </span>submit<span class="w"> <
 </li>
 </ul>
 </li>
-<li><a class="reference internal" href="#running-downloaded-experiments">Running Downloaded Experiments</a></li>
+<li><a class="reference internal" href="#replicating-an-experiment-one-command">Replicating an Experiment (one command)</a></li>
+<li><a class="reference internal" href="#running-downloaded-experiments-manually">Running Downloaded Experiments Manually</a></li>
 <li><a class="reference internal" href="#syncing">Syncing</a></li>
 <li><a class="reference internal" href="#publishing-results">Publishing Results</a></li>
 <li><a class="reference internal" href="#submitting-to-the-community">Submitting to the Community</a><ul>
 <li><a class="reference internal" href="#submitting-an-experiment">Submitting an Experiment</a></li>
 <li><a class="reference internal" href="#submitting-a-test-function">Submitting a Test Function</a></li>
 <li><a class="reference internal" href="#submitting-an-environment">Submitting an Environment</a></li>
+<li><a class="reference internal" href="#the-environment-publish-contract">The environment publish contract</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#checking-status">Checking Status</a><ul>
@@ -687,6 +771,7 @@ adare<span class="w"> </span>web<span class="w"> </span>submit<span class="w"> <
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>
 document.addEventListener('DOMContentLoaded', function() {
   if (!window.simpleDatatables) {

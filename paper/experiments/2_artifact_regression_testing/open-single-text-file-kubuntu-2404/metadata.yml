@@ -1,0 +1,12 @@
+# No 'name:' key -- ExperimentMetadata does not define one and cattrs drops it silently.
+description: "Paper 5.2: open one document on Kubuntu 24.04 and validate the recently-used.xbel access metadata"
+
+environments:
+  - kubuntu-2404
+
+tags:
+  - xbel
+  - recently-used
+  - xdg
+  - regression
+

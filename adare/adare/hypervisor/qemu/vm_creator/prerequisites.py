@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 from adare.hypervisor.exceptions import HypervisorException
+from adare.hypervisor.qemu.accel import resolve_accel
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 
 log = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ def check_prerequisites(
     iso_path: Path | None = None,
     vm_dir: Path | None = None,
     disk_size: str | None = None,
+    allow_emulation: bool = False,
 ) -> None:
     """Check that all required tools and resources are available.
 
@@ -33,6 +35,8 @@ def check_prerequisites(
         iso_path: User-supplied ISO path (for Windows or manual installs)
         vm_dir: Target directory where the qcow2 will be written (overrides VMS_DIR)
         disk_size: User-requested disk size (overrides os_def.default_disk_size)
+        allow_emulation: Permit QEMU TCG software emulation when the guest
+            architecture doesn't match the host (see --allow-emulation)
 
     Raises:
         PrerequisiteError: If any prerequisite is missing
@@ -40,16 +44,11 @@ def check_prerequisites(
     missing: list[str] = []
 
     # Architecture vs host compatibility
-    host_os = platform.system().lower()
-    host_arch = platform.machine().lower()
-    is_apple_silicon = host_os == 'darwin' and host_arch in ('arm64', 'aarch64')
-
-    if is_apple_silicon and os_def.architecture == 'x86_64':
-        missing.append(
-            'Apple Silicon cannot hardware-accelerate x86_64 guests. '
-            'Either use an aarch64 OS profile, or run on x86_64 hardware.'
-        )
-        raise PrerequisiteError(missing)
+    try:
+        resolve_accel(os_def.architecture, allow_emulation)
+    except HypervisorException as e:
+        missing.append(str(e))
+        raise PrerequisiteError(missing) from e
 
     # QEMU system executable for target architecture
     qemu_exe = f'qemu-system-{os_def.architecture}'
@@ -103,6 +102,34 @@ def check_prerequisites(
                 'swtpm not found. Windows 11 TPM requirement will be bypassed '
                 'via registry hack in Autounattend.xml. Install swtpm for proper TPM support.'
             )
+
+        # aarch64: the legacy-boot override ISO (Win11 24H2/25H2 "ConX" setup
+        # workaround) needs wimlib-imagex to patch boot.wim, 7z to read the UDF
+        # Windows ISO, and xorriso to build the El Torito bootable ISO.
+        # See iso_utils.create_legacy_boot_iso.
+        if os_def.architecture == 'aarch64':
+            host = platform.system()
+            if not shutil.which('wimlib-imagex'):
+                hint = ('brew install wimlib' if host == 'Darwin'
+                        else 'sudo apt install wimtools (Debian/Ubuntu) or sudo dnf install wimlib-utils (Fedora)')
+                missing.append(
+                    'wimlib-imagex required to build the Win11 legacy-boot ISO '
+                    f'(24H2/25H2 setup workaround). Install with: {hint}'
+                )
+            if not (shutil.which('7z') or shutil.which('7zz') or shutil.which('7za')):
+                hint = ('brew install p7zip' if host == 'Darwin'
+                        else 'sudo apt install p7zip-full (Debian/Ubuntu) or sudo dnf install p7zip (Fedora)')
+                missing.append(
+                    '7z required to extract boot files from the Windows ISO. '
+                    f'Install with: {hint}'
+                )
+            if not shutil.which('xorriso'):
+                hint = ('brew install xorriso' if host == 'Darwin'
+                        else 'sudo apt install xorriso (Debian/Ubuntu) or sudo dnf install xorriso (Fedora)')
+                missing.append(
+                    'xorriso required to build the El Torito bootable legacy-boot ISO. '
+                    f'Install with: {hint}'
+                )
 
     # Manual install mode checks
     if os_def.install_mode == 'manual':
