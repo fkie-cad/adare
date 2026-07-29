@@ -292,6 +292,7 @@ def exec_submit_experiment(arguments):
         project_path=project_directory,
         name=arguments.name,
         action=action,
+        skip_dependency_check=getattr(arguments, 'skip_dependency_check', False),
     ))
 
 

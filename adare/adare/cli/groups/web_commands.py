@@ -123,10 +123,14 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @submit.command(name='experiment')
     @click.argument('name')
     @click.option('--project', '-p', help='Name of the project')
-    def submit_experiment(name, project):
+    @click.option('--skip-dependency-check', is_flag=True, default=False,
+                  help='Submit even if a referenced test function or environment is not '
+                       'resolvable in the server\'s published catalog')
+    def submit_experiment(name, project, skip_dependency_check):
         """Submit an experiment as a PR to the shared repository."""
         from adare.cli.web import exec_submit_experiment
-        args = SimpleNamespace(name=name, project=project)
+        args = SimpleNamespace(name=name, project=project,
+                               skip_dependency_check=skip_dependency_check)
         exec_with_error_printing(exec_submit_experiment, args)
 
     @submit.command(name='testfunction')

@@ -18,16 +18,34 @@ class SubmitService:
         import requests
 
         from adare.webappaccess.exceptions import NotLoggedInError
-        from adare.webappaccess.experiment_export import export_experiment_for_submission
+        from adare.webappaccess.experiment_export import (
+            ExperimentSubmissionError,
+            export_experiment_for_submission,
+        )
 
         try:
-            files = export_experiment_for_submission(request.project_path, request.name)
+            files = export_experiment_for_submission(
+                request.project_path, request.name,
+                check_dependencies=not request.skip_dependency_check,
+            )
             pr = self._create_pr('experiment', request.name, files, action=request.action)
             return Result.ok(SubmitResult(
                 pr_url=pr['html_url'],
                 pr_number=pr['number'],
                 message=f"PR #{pr['number']} created for experiment '{request.name}'"
             ))
+        except ExperimentSubmissionError as e:
+            return Result.fail(
+                code="UnresolvableDependency",
+                message=str(e),
+                solutions=[
+                    'Submit and merge the missing testfunction sets / environments first',
+                    'Inspect what the server has registered at '
+                    'https://adare.click/api/testfunction/ and /api/environment/',
+                    'Override the check with: adare web submit experiment <name> '
+                    '--skip-dependency-check',
+                ]
+            )
         except FileNotFoundError as e:
             return Result.fail(
                 code="FileNotFound",

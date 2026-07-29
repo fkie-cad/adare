@@ -257,6 +257,60 @@ Submitting an Environment
 
 Each submit command creates a pull request on the shared repository. You receive a PR URL upon successful submission that you can use to track the review process.
 
+.. _experiment-dependency-preflight:
+
+The experiment dependency pre-flight
+------------------------------------
+
+An experiment declares two kinds of dependency: the test functions its ``tests:``
+block calls, and the environments listed in its ``metadata.yml``. The server
+resolves both when it **ingests** the pull request -- long after the PR exists --
+and rejects the experiment with ``UNKNOWN_DEPENDENCY`` if either lookup fails.
+
+To keep an unmergeable PR from being opened at all, ``adare web submit experiment``
+checks the server's published catalog (``/api/testfunction/`` and
+``/api/environment/``) **before** creating any branch or pull request. A failure
+names every unresolvable dependency and what to do about it, and no PR is created.
+
+Two properties are worth knowing:
+
+* The check models the **server's** lookup, which is an exact match on the
+  stored, qualified ``<set>.<name>`` form. A bare playbook name (e.g.
+  ``file_exists``) is normalized to ``standard.<name>`` before that match --
+  the same rule the client's own resolver applies (``adarelib``'s
+  ``get_testclass_from_testfunction``) -- so a name that resolves locally
+  resolves here too. What the pre-flight does **not** do is re-derive that
+  resolution for anything beyond the bare/standard case: a name qualified
+  under the wrong set, or a set that is still registered under an unprefixed
+  name because it has not been re-ingested since the server's qualified-name
+  migration, is still reported as missing (with a message naming which of the
+  two it is).
+* The catalog only lists **published** entities. If a test function's owning set
+  is registered but not yet published, the pre-flight reports it as missing even
+  though ingest would resolve it. Bypass the check in that case with
+  ``--skip-dependency-check``; the server remains authoritative either way.
+
+If the server cannot be reached the check is skipped with a warning rather than
+blocking the submission. The catalog read is authenticated (the same Django
+token used for the rest of the submit flow), so an unauthenticated host is not
+a case the pre-flight needs to degrade for: ``adare web submit`` cannot create
+the pull request either without being logged in, and reports that plainly.
+
+Order of submission
+-------------------
+
+Because dependencies are resolved at ingest, submit and **merge** them before the
+experiment that needs them:
+
+1. ``adare web submit testfunction <set>`` for every set the playbook calls, then
+   merge those PRs.
+2. ``adare web submit environment <name>`` for every environment in
+   ``metadata.yml``, then merge those PRs.
+3. ``adare web submit experiment <name>``.
+
+Merging is a manual action in the Gitea web UI -- the CLI does not auto-merge -- so
+this is a multi-round process whenever a new dependency is involved.
+
 .. _environment-publish-contract:
 
 The environment publish contract

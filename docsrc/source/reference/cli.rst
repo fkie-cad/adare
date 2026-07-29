@@ -488,10 +488,15 @@ Commands for integrating with the ADARE Web platform for sharing experiments and
 **Web Submit Sub-commands (adare web submit)**
 
 ``adare web submit experiment <name>``
-  Submit an experiment as a pull request to the shared repository.
+  Submit an experiment as a pull request to the shared repository. Every test
+  function and environment the experiment references is checked against the
+  server's published catalog first; if one is unresolvable the submission fails
+  and no pull request is created. See :ref:`experiment-dependency-preflight`.
 
   Options:
     * ``--project, -p TEXT`` - Name of the project
+    * ``--skip-dependency-check`` - Submit even if a referenced test function or
+      environment is not resolvable in the server's published catalog
 
 ``adare web submit testfunction <name>``
   Submit a testfunction as a pull request to the shared repository.
