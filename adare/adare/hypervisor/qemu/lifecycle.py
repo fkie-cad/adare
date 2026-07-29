@@ -391,17 +391,48 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         log.info(f'Added port forwarding for websocket server: host:{context.config.websocket_port} -> guest:18765')
 
 
-    @staticmethod
-    def _boot_attempts() -> int:
+    _DEFAULT_BOOT_ATTEMPTS = 3
+
+    @classmethod
+    def _boot_attempts(cls) -> int:
         """Number of cold-boot attempts before giving up (ADARE_VM_BOOT_ATTEMPTS, default 3).
 
         Windows cold boot off a hard-killed image hangs ~independently ~45% of the
         time; retrying converts that to ~0.45**n (3 → ~9%, 4 → ~4%).
+
+        Lowering it is warned about, loudly, because it is purely a debugging
+        affordance and nothing in ADARE sets it: a Windows sweep is only usable
+        *because* of the retry, and setting this to 1 removes both the retry and the
+        escalated budget (attempt 1 keeps the deliberately short 90s). The run then
+        fails on the first hung boot and reports a guest-agent timeout — a real hang,
+        but one the operator had switched off the mitigation for.
         """
+        raw = os.environ.get('ADARE_VM_BOOT_ATTEMPTS')
+        if raw is None:
+            return cls._DEFAULT_BOOT_ATTEMPTS
         try:
-            return max(1, int(os.environ.get('ADARE_VM_BOOT_ATTEMPTS', '3')))
+            attempts = max(1, int(raw))
         except ValueError:
-            return 3
+            log.warning(
+                f"ADARE_VM_BOOT_ATTEMPTS={raw!r} is not an integer; "
+                f"using the default {cls._DEFAULT_BOOT_ATTEMPTS}"
+            )
+            return cls._DEFAULT_BOOT_ATTEMPTS
+
+        if attempts < cls._DEFAULT_BOOT_ATTEMPTS:
+            log.warning(
+                f"ADARE_VM_BOOT_ATTEMPTS={attempts} lowers the cold-boot retry below the "
+                f"default of {cls._DEFAULT_BOOT_ATTEMPTS}"
+                + (
+                    " and DISABLES it entirely: a Windows guest hangs on cold boot a "
+                    "large fraction of the time, and this run will fail on the first "
+                    "such hang instead of retrying it. Unset the variable unless you "
+                    "are deliberately measuring the single-attempt success rate."
+                    if attempts == 1 else
+                    ". Windows cold-boot hangs will be retried fewer times."
+                )
+            )
+        return attempts
 
     # Cap for the escalated readiness budget, so a genuinely dead VM cannot
     # dead-wait indefinitely on the last attempt.
@@ -579,7 +610,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 break
         else:
             raise GuestAgentTimeoutException(
-                context.vm.vm_name, sum(attempt_budgets)
+                context.vm.vm_name, sum(attempt_budgets), attempt_budgets
             )
 
         # Repair guest networking before anything depends on it. ADARE pins the
