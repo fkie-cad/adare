@@ -25,13 +25,24 @@ wherever that class is used today.
 Frame delivery crosses a thread boundary: ``SpiceClientGLib`` dispatches its
 signals on a GLib main loop, which this class runs on a dedicated background
 thread; each display-invalidate callback copies the current primary surface
-and hands the bytes to the asyncio side via ``call_soon_threadsafe``. The
-exact GObject-introspection call shapes below (``get_primary()``'s return
-shape, the ``display-primary-create``/``display-invalidate`` signal
-signatures, channel-type detection) follow the documented spice-gtk C API and
-common PyGObject usage, but — per the design doc for this recorder — should be
-confirmed interactively against the installed spice-gtk version before relying
-on this in an unattended run.
+and hands the bytes to the asyncio side via ``call_soon_threadsafe``.
+
+**Verification status** (live-tested against a real running QEMU VM's SPICE
+server, not just mocks): the QMP ``query-spice`` busy-guard and the libvirt-XML
+port resolution are confirmed correct. The GObject-introspection signal wiring
+below is *not* the naive ``obj.connect(signal, cb)`` one would normally write —
+``SpiceClientGLib.Session``/``Channel`` override ``.connect()`` to mean "start
+the SPICE connection" (mirroring the C ``spice_session_connect()``), shadowing
+GObject's generic signal-connect method; the fix, confirmed live, is
+``GObject.Object.connect(obj, signal, cb)``. What remains unverified: in a
+9-second live connection window only the ``MainChannel`` fired ``channel-new``
+— no ``DisplayChannel`` appeared, so ``get_primary()``'s return shape and the
+whole raw-pixel-copy path are still unconfirmed. Candidate causes to check in
+the next spike: whether the display channel simply needs longer to negotiate,
+or whether this VM's virtio-gpu is using SPICE's GL-scanout/DMABUF capability
+(common for GL-accelerated virtio-gpu) instead of the traditional primary-
+surface path this class assumes — GL-scanout would need a materially different
+(EGL/DRM) frame-pull implementation.
 """
 
 from __future__ import annotations
@@ -293,7 +304,7 @@ class SpiceVideoRecorder:
         try:
             import gi
             gi.require_version('SpiceClientGLib', '2.0')
-            from gi.repository import GLib, SpiceClientGLib
+            from gi.repository import GLib, GObject, SpiceClientGLib
         except (ImportError, ValueError) as exc:
             self._fail(f'SpiceClientGLib import failed on capture thread: {exc}')
             return
@@ -311,7 +322,12 @@ class SpiceVideoRecorder:
             # localhost-only listen is the access control.
             session.set_property('password', '')
 
-            session.connect('channel-new', self._on_channel_new, SpiceClientGLib)
+            # NOTE: Session/Channel .connect() is overridden by spice-gtk's GIR
+            # bindings to mean "start the SPICE connection" (spice_session_connect),
+            # shadowing GObject's generic signal-connect method — confirmed against
+            # a live SPICE server, where `session.connect('channel-new', ...)` raises
+            # TypeError. GObject.Object.connect(obj, signal, cb) bypasses the override.
+            GObject.Object.connect(session, 'channel-new', self._on_channel_new, SpiceClientGLib, GObject)
 
             if not session.connect():
                 self._fail('SpiceSession.connect() returned False')
@@ -324,11 +340,12 @@ class SpiceVideoRecorder:
                     self._session.disconnect()
             context.pop_thread_default()
 
-    def _on_channel_new(self, session, channel, spice_glib_module) -> None:
+    def _on_channel_new(self, session, channel, spice_glib_module, gobject_module) -> None:
         if isinstance(channel, spice_glib_module.DisplayChannel):
-            channel.connect('display-primary-create', self._on_primary_create)
-            channel.connect('display-invalidate', self._on_invalidate)
-        channel.connect('channel-event', self._on_channel_event, spice_glib_module)
+            gobject_module.Object.connect(channel, 'display-primary-create', self._on_primary_create)
+            gobject_module.Object.connect(channel, 'display-invalidate', self._on_invalidate)
+        gobject_module.Object.connect(
+            channel, 'channel-event', self._on_channel_event, spice_glib_module)
 
     def _on_channel_event(self, channel, event, spice_glib_module) -> None:
         bad_events = {
