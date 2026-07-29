@@ -132,7 +132,7 @@ class ApiClient:
             ) from e
 
         # Handle response
-        if response.status_code == 201:
+        if response.status_code in (200, 201):
             log.info(f'Experiment run ({run_ulid}) published successfully.')
             return response.json()
 
@@ -253,7 +253,7 @@ class ApiClient:
 
         if response.status_code == 200:
             data = response.json()
-            return bool(data.get('ulid'))
+            return bool(data.get('exists'))
         log.warning(f'Check run request failed with status {response.status_code}')
         return False
 
