@@ -43,6 +43,16 @@ class EnvironmentSubmissionError(ValueError):
     """
 
 
+class ExperimentSubmissionError(ValueError):
+    """An experiment failed the client-side dependency pre-flight.
+
+    Raised before any Gitea branch/PR is created, so an experiment whose
+    test functions or environments the server cannot resolve never reaches the
+    shared repo. Mirrors the server's ingest-time ``UNKNOWN_DEPENDENCY`` check
+    (``giteaeventmanager/action/plugin.py``, ``ExperimentPlugin``).
+    """
+
+
 def _is_http_url(value: str) -> bool:
     from urllib.parse import urlparse
     return urlparse(value).scheme in ('http', 'https')
@@ -136,9 +146,304 @@ def _preflight_environment(env_file: Path) -> None:
             )
 
 
-def export_experiment_for_submission(project_path: Path, experiment_name: str) -> dict[str, bytes]:
+# --- Experiment dependency pre-flight -------------------------------------------
+#
+# The server resolves an experiment's dependencies at INGEST time, long after the
+# CLI has already opened a Gitea PR (`giteaeventmanager/action/plugin.py`,
+# `ExperimentPlugin.__db_get_abstract_test` / `__db_create_experiment`):
+#
+#   TestFunction.objects.filter(name=test.type).first()   -> UNKNOWN_DEPENDENCY
+#   Environment.objects.filter(name=env)                  -> UNKNOWN_DEPENDENCY
+#
+# `test.type` is the playbook's `function:` string VERBATIM, and the environment
+# name is the metadata entry verbatim. Both are exact-match lookups. So the check
+# below deliberately models the SERVER's lookup, not the client's resolution rule
+# (`adarelib.testset.testfunction.get_testclass_from_testfunction`, which splits
+# `<set>.<name>` and treats an unprefixed name as `standard.<name>`). A pre-flight
+# written against the client's rule would pass names the server then rejects.
+_PUBLIC_CATALOG_PAGE_LIMIT = 500
+_PUBLIC_CATALOG_MAX_PAGES = 20
+# Catalog responses are cached briefly so that submitting several experiments in a
+# row does not re-fetch (and trip the server's rate limiter). Short enough that a
+# dependency PR merged mid-session is picked up on the next attempt.
+_PUBLIC_CATALOG_CACHE_SECONDS = 60
+_public_catalog_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+def _load_yaml_ignoring_custom_tags(yaml_file: Path) -> dict:
+    """Parse ``yaml_file``, keeping unknown ``!tag`` values as opaque scalars.
+
+    Playbooks carry custom tags (``!re``, ``!timestamp``, ...) that plain
+    ``yaml.safe_load`` refuses to construct. The pre-flight only needs the plain
+    strings under ``tests[].function`` and ``environments``, so every unrecognized
+    tag is collapsed to its raw node value rather than requiring this module to
+    track the full tag vocabulary.
+
+    Raises:
+        yaml.YAMLError: If the document is not well-formed YAML.
+    """
+    import yaml
+
+    class _TolerantLoader(yaml.SafeLoader):
+        pass
+
+    def _keep_raw(loader, tag_suffix, node):
+        if isinstance(node, yaml.ScalarNode):
+            return node.value
+        if isinstance(node, yaml.SequenceNode):
+            return loader.construct_sequence(node)
+        return loader.construct_mapping(node)
+
+    _TolerantLoader.add_multi_constructor('', _keep_raw)
+
+    parsed = yaml.load(yaml_file.read_text(encoding='utf-8'), Loader=_TolerantLoader)
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _playbook_test_function_names(playbook_file: Path) -> list[str]:
+    """Return the `function:` values of a playbook's `tests:` block, in order.
+
+    Mirrors the server's `testsetfile.parser.parse_playbook_tests`: only flat
+    `function` entries exist in the playbook schema, and values are taken as
+    authored (unresolved ``{{ }}`` tokens included).
+    """
+    parsed = _load_yaml_ignoring_custom_tags(playbook_file)
+    functions = []
+    for entry in parsed.get('tests') or []:
+        if isinstance(entry, dict) and entry.get('function'):
+            functions.append(str(entry['function']))
+    return functions
+
+
+def _metadata_environment_names(metadata_file: Path) -> list[str]:
+    """Return the environment names declared in an experiment's metadata.yml."""
+    parsed = _load_yaml_ignoring_custom_tags(metadata_file)
+    return [str(env) for env in (parsed.get('environments') or [])]
+
+
+def _fetch_public_catalog(endpoint: str) -> list[dict]:
+    """GET every page of a catalog list endpoint under ``API_URL``, authenticated.
+
+    The endpoints (``testfunction/``, ``environment/``) are themselves
+    ``AllowAny``, but this pre-flight runs on every experiment submission and an
+    anonymous GET is subject to the anon throttle -- shared with every other
+    unauthenticated caller of the API. ``adare web submit`` already requires a
+    login (``_create_pr`` raises ``NotLoggedInError`` otherwise), so there is no
+    reason to hit the anon path here: authenticate with the same Django token
+    used for the rest of the submit flow, which the ``user`` throttle governs
+    instead.
+
+    Raises:
+        NotLoggedInError: If the CLI has no active session.
+        requests.RequestException: On any transport/HTTP failure.
+        ValueError: If a response body is not the expected paginated JSON.
+    """
+    import time
+
+    import requests
+
+    import adare.config.server as config_server
+    from adare.webappaccess.login import WebappLogin
+
+    cached = _public_catalog_cache.get(endpoint)
+    if cached and (time.monotonic() - cached[0]) < _PUBLIC_CATALOG_CACHE_SECONDS:
+        return cached[1]
+
+    headers = WebappLogin().get_django_authenticated_request_header()
+    url = f'{config_server.API_URL}{endpoint}?limit={_PUBLIC_CATALOG_PAGE_LIMIT}'
+    results: list[dict] = []
+    for _ in range(_PUBLIC_CATALOG_MAX_PAGES):
+        response = requests.get(url, headers=headers, timeout=config_server.TIMEOUT_SECONDS)
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get('results'), list):
+            raise ValueError(f'unexpected response shape from {endpoint}')
+        results.extend(item for item in payload['results'] if isinstance(item, dict))
+        url = payload.get('next')
+        if not url:
+            break
+
+    _public_catalog_cache[endpoint] = (time.monotonic(), results)
+    return results
+
+
+def _server_testfunction_index() -> tuple[set[str], dict[str, set[str]], set[str]]:
+    """Read the server's published test-function catalog.
+
+    Returns:
+        ``(registered, bare_to_sets, published_sets)`` where ``registered`` holds
+        every ``TestFunction.name`` exactly as the server stores it (that is what
+        ingest matches against), ``bare_to_sets`` maps a registered name to the
+        set(s) that own it, and ``published_sets`` holds the testfunctionset names.
+    """
+    registered: set[str] = set()
+    bare_to_sets: dict[str, set[str]] = {}
+    published_sets: set[str] = set()
+
+    for tfset in _fetch_public_catalog('testfunction/'):
+        set_name = tfset.get('name')
+        if not set_name:
+            continue
+        published_sets.add(set_name)
+        for testfunction in tfset.get('testfunctions') or []:
+            if not isinstance(testfunction, dict):
+                continue
+            tf_name = testfunction.get('name')
+            if not tf_name:
+                continue
+            registered.add(tf_name)
+            bare_to_sets.setdefault(tf_name, set()).add(set_name)
+
+    return registered, bare_to_sets, published_sets
+
+
+def _server_environment_names() -> set[str]:
+    """Read the names of the server's published environments."""
+    return {
+        env['name'] for env in _fetch_public_catalog('environment/')
+        if env.get('name')
+    }
+
+
+def _owning_set(function_name: str) -> str:
+    """The testfunctionset a playbook `function:` value belongs to.
+
+    Matches `adarelib`'s rule: an unprefixed name lives in `standard`.
+    """
+    return function_name.split('.', 1)[0] if '.' in function_name else 'standard'
+
+
+def _qualified_name(function_name: str) -> str:
+    """``function_name`` in the ``<set>.<name>`` form the server now registers.
+
+    The server qualifies every ``TestFunction.name`` on ingest (adare-server
+    migration ``0018_qualify_testfunction_names``), including bare decorator
+    names living in ``standard``. Comparing a playbook's bare ``function:``
+    value against that catalog verbatim would false-positive every unprefixed
+    standard function as missing -- this mirrors the same ``adarelib`` rule
+    ``_owning_set`` already applies, so a name that resolves locally resolves
+    here too.
+    """
+    return function_name if '.' in function_name else f'{_owning_set(function_name)}.{function_name}'
+
+
+def _describe_missing_testfunction(function_name: str, bare_to_sets: dict[str, set[str]],
+                                   published_sets: set[str]) -> str:
+    """One actionable line explaining why the server cannot resolve ``function_name``."""
+    owner = _owning_set(function_name)
+    bare = function_name.split('.', 1)[1] if '.' in function_name else function_name
+
+    if bare in bare_to_sets and owner in bare_to_sets[bare]:
+        # The server is expected to register every function as `<set>.<name>`
+        # (adare-server migration 0018_qualify_testfunction_names). A set still
+        # carrying an unprefixed registration for this function means IT has not
+        # been re-ingested since that migration -- resubmitting this experiment
+        # will not help, since the mismatch is in the set's own registration.
+        return (f"  - {function_name}: the set '{owner}' is published but still registers this "
+                f"function as '{bare}' (without the set prefix), so the server's exact-name "
+                f"lookup for the qualified '{owner}.{bare}' misses it. Re-submit the "
+                f"testfunctionset so it is re-ingested under the qualified name: "
+                f"adare web submit testfunction {owner} -p <project>.")
+
+    if owner not in published_sets:
+        return (f"  - {function_name}: testfunctionset '{owner}' is not published on the "
+                f"server. Submit it first: adare web submit testfunction {owner} "
+                f"-p <project>, then have that PR merged.")
+
+    return (f"  - {function_name}: testfunctionset '{owner}' is published but registers no "
+            f"function matching this name. Check the @testfunction(name=...) value in "
+            f"{owner}/{owner}.py and resubmit the set.")
+
+
+def _preflight_experiment(experiment_name: str, playbook_file: Path, metadata_file: Path) -> None:
+    """Verify the server can resolve every dependency this experiment declares.
+
+    Runs before any Gitea branch/PR exists. If the shared server cannot be reached
+    the check is skipped with a warning -- an offline host must not be blocked from
+    submitting, and the server stays authoritative either way.
+
+    Raises:
+        ExperimentSubmissionError: If a referenced test function or environment is
+            not resolvable server-side, i.e. ingest would fail with
+            ``UNKNOWN_DEPENDENCY``.
+    """
+    import requests
+    import yaml
+
+    try:
+        declared_functions = _playbook_test_function_names(playbook_file)
+        declared_environments = _metadata_environment_names(metadata_file)
+    except yaml.YAMLError as e:
+        log.warning(
+            'Could not parse %r to pre-flight its dependencies (%s); submitting '
+            'anyway -- the server will still reject an unresolvable dependency at '
+            'ingest time.', experiment_name, e,
+        )
+        return
+
+    try:
+        registered, bare_to_sets, published_sets = _server_testfunction_index()
+        published_environments = _server_environment_names()
+    except (requests.RequestException, ValueError) as e:
+        log.warning(
+            'Could not read the server catalog to pre-flight %r dependencies (%s); '
+            'submitting anyway -- the server will still reject an unresolvable '
+            'dependency at ingest time.', experiment_name, e,
+        )
+        return
+
+    problems: list[str] = []
+
+    # Compare the QUALIFIED form: the server registers every function as
+    # `<set>.<name>` (see _qualified_name), so a bare playbook name must be
+    # normalized the same way before the set-difference, or every unprefixed
+    # `standard` function would false-positive as missing.
+    missing_functions = [
+        function for function in dict.fromkeys(declared_functions)
+        if _qualified_name(function) not in registered
+    ]
+    if missing_functions:
+        problems.append(
+            f"Test functions the server cannot resolve for experiment '{experiment_name}':"
+        )
+        problems.extend(
+            _describe_missing_testfunction(function, bare_to_sets, published_sets)
+            for function in missing_functions
+        )
+
+    missing_environments = [
+        env for env in dict.fromkeys(declared_environments)
+        if env not in published_environments
+    ]
+    if missing_environments:
+        problems.append(
+            f"Environments not published on the server for experiment '{experiment_name}':"
+        )
+        problems.extend(
+            f"  - {env}: submit and merge it first: adare web submit environment {env} "
+            f"-p <project>" for env in missing_environments
+        )
+
+    if problems:
+        raise ExperimentSubmissionError(
+            '\n'.join(problems)
+            + '\nThe server resolves these at ingest and would reject the pull request '
+              'with UNKNOWN_DEPENDENCY, so no PR was created.'
+        )
+
+
+def export_experiment_for_submission(project_path: Path, experiment_name: str,
+                                     check_dependencies: bool = True) -> dict[str, bytes]:
     """
     Collect experiment files for Gitea submission.
+
+    Args:
+        project_path: Project root.
+        experiment_name: Experiment to export.
+        check_dependencies: Run the server dependency pre-flight (see
+            :func:`_preflight_experiment`). Pass ``False`` to bypass it when the
+            server's published catalog is known to understate what ingest can
+            resolve.
 
     Returns dict mapping repo-relative filepaths to file content bytes.
     """
@@ -157,6 +462,11 @@ def export_experiment_for_submission(project_path: Path, experiment_name: str) -
     if not metadata_file.is_file():
         raise FileNotFoundError(f'metadata.yml not found in {experiment_dir}')
     files[f'experiments/{experiment_name}/metadata.yml'] = metadata_file.read_bytes()
+
+    # Pre-flight the dependency contract BEFORE returning any bytes to the submit
+    # service (which would otherwise open a PR the server can only ever reject).
+    if check_dependencies:
+        _preflight_experiment(experiment_name, playbook_file, metadata_file)
 
     img_dir = experiment_dir / 'img'
     if img_dir.is_dir():
