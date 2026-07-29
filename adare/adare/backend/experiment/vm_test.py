@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from adare.exceptions import LoggedException
+from adare.hypervisor.qemu.libvirt_undefine import delete_firmware_state_flags, undefine
 
 log = logging.getLogger(__name__)
 
@@ -1206,14 +1207,12 @@ async def _cleanup_registered_test_vm(context, keep_vm: bool = False,
                     if state == libvirt.VIR_DOMAIN_SHUTOFF:
                         # UEFI guests (e.g. win11arm2) carry an NVRAM varstore;
                         # a bare undefine() is rejected for those. Mirror the
-                        # flags used in QEMUVM.remove() (vm.py).
-                        flags = (libvirt.VIR_DOMAIN_UNDEFINE_MANAGED_SAVE |
-                                 libvirt.VIR_DOMAIN_UNDEFINE_SNAPSHOTS_METADATA |
-                                 libvirt.VIR_DOMAIN_UNDEFINE_NVRAM)
-                        try:
-                            context.vm._libvirt_domain.undefineFlags(flags)
-                        except AttributeError:
-                            context.vm._libvirt_domain.undefine()
+                        # flags used in QEMUVM.remove() (vm.py), which also take
+                        # the emulated TPM state so it is not left orphaned.
+                        undefine(
+                            context.vm._libvirt_domain,
+                            delete_firmware_state_flags(),
+                        )
                         log.info(f"Undefined libvirt domain '{context.vm.vm_name}'")
                     else:
                         log.warning(

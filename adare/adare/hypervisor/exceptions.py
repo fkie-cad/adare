@@ -107,14 +107,32 @@ class VMAlreadyRunningException(VMOperationException):
 
 
 class GuestAgentTimeoutException(VMOperationException):
-    """Raised when guest agent doesn't respond within timeout."""
-    def __init__(self, vm_identifier: str, timeout_seconds: float):
-        super().__init__(
-            vm_identifier,
-            "guest_agent_connect",
-            f"Guest agent did not respond within {timeout_seconds}s"
-        )
+    """Raised when guest agent doesn't respond within timeout.
+
+    ``attempt_budgets`` is the per-cold-boot readiness budget of every attempt
+    that was spent. It is worth reporting because the bare timeout is actively
+    misleading on its own: a single 90s attempt and three escalating attempts
+    both used to render as "did not respond within <n>s", so a run whose boot
+    retry had been switched off via ``ADARE_VM_BOOT_ATTEMPTS`` read exactly
+    like a guest that had been given every chance and was genuinely dead.
+    """
+    def __init__(
+        self,
+        vm_identifier: str,
+        timeout_seconds: float,
+        attempt_budgets: list[int] | None = None
+    ):
+        reason = f"Guest agent did not respond within {timeout_seconds}s"
+        if attempt_budgets:
+            budgets = '/'.join(f'{b}s' for b in attempt_budgets)
+            plural = '' if len(attempt_budgets) == 1 else 's'
+            reason += f" ({len(attempt_budgets)} cold-boot attempt{plural} of {budgets}"
+            if len(attempt_budgets) == 1:
+                reason += "; boot retry is off - unset ADARE_VM_BOOT_ATTEMPTS to restore it"
+            reason += ")"
+        super().__init__(vm_identifier, "guest_agent_connect", reason)
         self.timeout_seconds = timeout_seconds
+        self.attempt_budgets = list(attempt_budgets) if attempt_budgets else []
 
 
 # =============================================================================

@@ -320,7 +320,20 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             # PowerShell array expansion: @(Get-ChildItem ...) forces wildcard expansion
             # before pip sees the arguments. PowerShell doesn't expand wildcards in
             # base64-encoded commands, so we must explicitly use Get-ChildItem.
-            return rf'C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            #
+            # Two passes rather than one plain --force-reinstall: adarevm/adarelib are
+            # local dev wheels whose version string does not bump between builds, so a
+            # plain install would see "already satisfied" and skip picking up code
+            # changes -- hence the second, forced pass. But --force-reinstall alone
+            # forces the whole dependency tree too (pillow, pyautogui, cattrs,
+            # websockets, ...), none of which are local, so every run re-fetched all of
+            # them from PyPI into the throwaway overlay regardless of whether they were
+            # already satisfied. Pass 1 (no --force-reinstall) installs anything
+            # genuinely missing without disturbing what is already there; pass 2 adds
+            # --no-deps so the forced reinstall touches only the two local wheels.
+            conda_pip = r'C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install'
+            wheel_glob = rf'@(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            return f'{conda_pip} {wheel_glob}; {conda_pip} --force-reinstall --no-deps {wheel_glob}'
         # Editable install from shared folder source
         return rf'cd {adarelib_path}; C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd {adarevm_path}; C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
 
@@ -340,7 +353,14 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             python_cmd = self._resolve_python_path(vm)
             log.info(f"Using executed python command: {python_cmd}")
 
-            return rf'{python_cmd} -m pip install --force-reinstall @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            # Two passes, same reasoning as _build_conda_install_command: a plain
+            # install would skip the local wheels (version string doesn't bump
+            # between builds), but --force-reinstall alone forces the whole
+            # dependency tree from PyPI too. Pass 1 installs anything genuinely
+            # missing; pass 2 forces only the two local wheels via --no-deps.
+            pip_install = f'{python_cmd} -m pip install'
+            wheel_glob = rf'@(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            return f'{pip_install} {wheel_glob}; {pip_install} --force-reinstall --no-deps {wheel_glob}'
         # Editable install via uv
         return rf'cd {adarevm_path}; uv sync'
 
@@ -467,9 +487,15 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         """Build Conda installation command."""
         env_py = '/home/adare/.miniforge3/envs/pyadare/bin/python'
         if self.wheels_available:
+            # Two passes, same reasoning as the Windows builders above: a plain
+            # install would skip the local wheels (version string doesn't bump
+            # between builds), but --force-reinstall alone forces the whole
+            # dependency tree from PyPI too. Pass 1 installs anything genuinely
+            # missing; pass 2 forces only the two local wheels via --no-deps.
             cmd = (
                 f'{env_py} -m ensurepip --upgrade && '
-                f'{env_py} -m pip install --no-cache-dir --force-reinstall '
+                f'{env_py} -m pip install --no-cache-dir /adare/vm/wheels/*.whl && '
+                f'{env_py} -m pip install --no-cache-dir --force-reinstall --no-deps '
                 f'/adare/vm/wheels/*.whl'
             )
             if not self.skip_xhost:
