@@ -36,11 +36,43 @@ columns.
 | Missing | Why | How to obtain |
 |---|---|---|
 | `2020JimmyWilson.E01` | NIST CFReDS disk image, far too large to commit. Referenced as `{{ adare_project_shared }}\data\2020JimmyWilson.E01`. | <https://cfreds.nist.gov/> — place it in the project's `shared/data/`. |
-| The two VM images | Built, not committed. | `provisioning/README.md` build runbook, then `adare environment load win11-autopsy-solr4` / `-solr8`. |
-| Autopsy MSIs | Downloaded during provisioning. | `provisioning/Install-Autopsy.ps1` fetches each version's official 64-bit MSI. |
+| The two VM images | Built, not committed. | `provisioning/win11-autopsy-solr4.yml` / `-solr8.yml` are recipe descriptors: `adare env load <file>` rebuilds the whole environment, all Autopsy versions included. See the provenance caveat below. |
+| Autopsy MSIs | Downloaded during provisioning. | The recipes' `provision` block fetches each version's official 64-bit MSI with `curl.exe`; the superseded `provisioning/Install-Autopsy.ps1` is kept for provenance. |
 
 Each version's reference workbook (`shared/data/Report_<version>_reference.xlsx`) **is**
 committed, so the comparison oracle travels with the experiment.
+
+**Provenance caveat.** The recipes describe how to *reproduce* these environments, not how
+the measured ones were made. The disks that produced the results below were built by the
+older `Install-Autopsy.ps1`, so their local VM records carry no recipe hash, and no claim is
+made that a recipe build reproduces them bit-for-bit — only that it declares the same
+install set from the same sources. The build-time provisioning mechanism itself is
+exercised by the recipe-built `win11-autopsy-smoke` environment, which covers the risky
+part (`curl.exe` fetching a real MSI, `msiexec` installing it under Prism emulation).
+
+## Findings: the Recent Documents / report-sheet regression (measured 2026-07-22)
+
+The older versions' failures are the study's result, not a broken harness. Both runs
+completed with **every action successful** (53/53) and no error events — the automation
+navigated, ingested, and exported without a single retry — so each failure is an assertion
+about the content of a well-formed workbook Autopsy really produced.
+
+| Version | Tests passed | Excel sheets produced |
+|---|--:|---|
+| 4.10.0 | 21 / 47 | Summary, Web Bookmarks, Web Cookies, Web Search, Web History, Recent Documents, Tagged Files, Tagged Results |
+| 4.11.0 | 22 / 47 | *(same eight)* |
+| 4.15.0 | 44 / 44 | the eight above **plus** Data Source Usage, Installed Programs, Operating System Information, Operating System User Account, Recycle Bin, Run Programs, Shell Bags, USB Device Attached |
+
+Eight report sheets simply do not exist in 4.10.0/4.11.0. Each absent sheet fails three
+assertions (`sheet_*_exists`, `columns_*`, `content_*`), which is 24 of the failures; the
+remainder are column-level deltas:
+
+- **Web History** — 4.10.0 emits 9 columns, missing `Username`. Present from 4.11.0 on.
+- **Recent Documents** — `Comment` is missing in both 4.10.0 and 4.11.0. 4.10.0
+  additionally emits a `Path ID` column that later versions drop.
+
+Counted by distinct test, not by event: `test_events` records **two rows per test**, so a
+fully green 47-test run reads as 94 events.
 
 ## Two known issues, deliberately not fixed here
 

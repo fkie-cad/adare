@@ -15,7 +15,7 @@ that claim, and this file is the map from each paper section to the files backin
 | 5.1 | Explorative Artifact Research | `experiments/1_artifact_research/playbooks/` | 7 | `ubuntu-1804`, `ubuntu-2004`, `ubuntu-2204`, `ubuntu-2404`, `fedora-41`, `fedora-42` |
 | 5.2 | Artifact Regression Testing | `experiments/2_artifact_regression_testing/` | 7 | `ubuntu-2004`, `ubuntu-2204`, `ubuntu-2404`, `kubuntu-2004`, `kubuntu-2204`, `kubuntu-2404`, `fedora-42` |
 | 5.3 | Tool Validation of PECmd | `experiments/3_tool_validation/pecmd/` | 1 | `win11` |
-| 5.4 | Autopsy Tool Regression Testing | `experiments/4_autopsy_tool_regression_testing/` | 24 | `win11-autopsy-solr4`, `win11-autopsy-solr8` |
+| 5.4 | Autopsy Tool Regression Testing | `experiments/4_autopsy_tool_regression_testing/` | 24 | `win11-autopsy-solr4`, `win11-autopsy-solr8` — buildable from `…/provisioning/` |
 | 5.5 | Cross-Tool Validation | `experiments/5_cross_tool_validation/` | 3 | `ubuntu24043`, `win11` |
 
 Each case-study directory has its own `README.md` with the claim-to-assertion mapping, the
@@ -30,7 +30,7 @@ obtaining the missing piece.
 |---|---|---|---|
 | The three malicious LNK samples | 5.5 | Redistributing malware from a public research repository is not appropriate — the same argument §6 makes about unshareable evidence. | Appendix-A SHA-256 hashes plus VirusTotal retrieval instructions in `experiments/5_cross_tool_validation/provisioning/README.md`. A generator for benign stand-ins that reproduces the measured behaviour split ships alongside. |
 | `2020JimmyWilson.E01` | 5.4 | NIST CFReDS disk image, far too large to commit. | <https://cfreds.nist.gov/> → the project's `shared/data/`. |
-| All VM images | all | Multi-gigabyte disk images. | Built from OS profiles + `adare vm create` / `adare env extend`; §5.4's build runbook is in `experiments/4_autopsy_tool_regression_testing/provisioning/README.md`. |
+| All VM images | all | Multi-gigabyte disk images. | Built from OS profiles + `adare vm create` / `adare env extend`. §5.4 is the fully mechanised case: `experiments/4_autopsy_tool_regression_testing/provisioning/` holds `win11-autopsy-solr4.yml` and `-solr8.yml`, recipe descriptors that rebuild both environments — all 16 / 8 Autopsy installs included — with `adare env load <file>`, given a Windows 11 ARM64 ISO the consumer already owns. See the provenance caveat below. |
 | Autopsy 4.22.0 | 5.4 | **Not a gap.** 4.22.0 is Figure 2's "Missing Version (X)" column — the version whose release notes the paper consulted, not one it ran. 24 playbooks + X = the figure's 25 columns. | — |
 | LECmd, PECmd binaries | 5.3, 5.5 | Third-party tools, provisioned into the environments' shared tools rather than vendored. | <https://ericzimmerman.github.io/> |
 | LECmd **1.5.1** specifically | 5.5 | Not obtainable: ericzimmermanstools.com serves only current builds and the tools have moved to date-based versioning, so no `1.x` release can be produced. `lecmd_version_matches_paper` was re-baselined to the measured 2026.5.0, with the reasoning in the playbook. Table 1's LECmd *behaviour* reproduces on 2026.5.0; the paper's exact binary does not. | `experiments/5_cross_tool_validation/README.md` |
@@ -89,6 +89,28 @@ Two known limits are worth reading before trusting a green result:
 
 Neither is a defect in these artifacts, but both change how much a clean validation run
 proves, so they are recorded here rather than left for the next person to rediscover.
+
+### §5.4's environments: the recipe reproduces, it does not attest (2026-07-29)
+
+`win11-autopsy-solr4` / `-solr8` are published as **recipe** environments: their descriptors
+declare an ISO plus a `recipe.provision` block that installs every Autopsy version at build
+time, so a consumer can rebuild them. That is what the descriptors are for, and it is the
+only lawful way to ship them — the 51 GB disks cannot be committed and the Windows installer
+media cannot be rehosted.
+
+What the recipe is **not** is a record of how the measured disks were made. The environments
+that produced the §5.4 results on the authors' host were built earlier by the superseded
+`provisioning/Install-Autopsy.ps1` (kept in that directory for provenance), so those local
+VM rows still read `build_source: baked` and carry no `recipe_hash`. The recipe has never
+been executed end-to-end to completion, and **no claim is made that it reproduces those
+disks bit-for-bit** — only that it declares the same install set from the same sources.
+
+The build-time provisioning mechanism the recipes rely on is itself exercised: the
+`win11-autopsy-smoke` environment *was* recipe-built, covering exactly the risky part —
+`curl.exe` fetching a real Autopsy MSI and `msiexec` installing it under Windows' Prism
+emulation. So the mechanism is proven; the specific 16-version and 8-version runs are not.
+A consumer rebuilding from the recipe should expect a functionally equivalent environment
+and should not expect matching disk hashes.
 
 One environment-level constraint applies to **every** Windows playbook that invokes a tool
 from the shared-tools mount, and it was found the hard way in §5.3 and §5.5 (2026-07-28):
