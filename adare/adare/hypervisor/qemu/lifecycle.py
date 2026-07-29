@@ -212,6 +212,11 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             architecture=vm_architecture,
             resolution=context.config.vm_display_resolution,
             hypervisor_config=environment_metadata.hypervisor_config if environment_metadata else None,
+            # Stable per-environment id so a first-time config creation derives a
+            # deterministic domain UUID (see ConfigurationMixin._domain_uuid_for)
+            # instead of a fresh random one per run -- see docsrc hypervisors.rst
+            # "Instance-scoped firmware state" for why that matters for the vTPM.
+            environment_identity=env_data.get('vm_id') if env_data else None,
         )
         log.debug(f"Created QEMU VM instance: {context.vm_name}")
 

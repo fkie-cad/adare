@@ -570,7 +570,13 @@ class DomainXMLBuilder:
             # libvirt reject the domain ("does not support TPM model tpm-crb").
             tpm_model = 'tpm-tis' if self._is_aarch64 else 'tpm-crb'
             tpm = ET.SubElement(self._devices, 'tpm', model=tpm_model)
-            ET.SubElement(tpm, 'backend', type='emulator', version='2.0')
+            # persistent_state='yes' is load-bearing, not cosmetic: with it unset
+            # (the default), libvirt treats the swtpm state as ephemeral and
+            # deletes it on ANY undefine regardless of which undefineFlags are
+            # passed — so KEEP_TPM (adare.hypervisor.qemu.libvirt_undefine) has no
+            # effect without this attribute. See docsrc hypervisors.rst
+            # "Instance-scoped firmware state" for the full reasoning.
+            ET.SubElement(tpm, 'backend', type='emulator', version='2.0', persistent_state='yes')
             log.info(f"Added TPM 2.0 emulator ({tpm_model}) for Windows VM {self._config.vm_name}")
         elif self._is_darwin:
             log.warning(

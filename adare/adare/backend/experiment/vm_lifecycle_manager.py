@@ -12,6 +12,7 @@ from adare.backend.experiment.directory import ExperimentRunDirectory
 from adare.backend.experiment.runctx import ExperimentRunCtx
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.exceptions import LoggedException
+from adare.hypervisor.qemu.libvirt_undefine import keep_firmware_state_flags, undefine
 from adare.hypervisor.virtualbox import VirtualBoxVM
 from adare.types.stages import (
     VMDestroyStage,
@@ -28,8 +29,8 @@ from adare.types.stages import (
 log = logging.getLogger(__name__)
 
 
-def _undefine_keeping_nvram(domain) -> None:
-    """Undefine a libvirt domain while preserving its UEFI NVRAM varstore.
+def _undefine_keeping_firmware_state(domain) -> None:
+    """Undefine a libvirt domain while preserving its UEFI NVRAM varstore and vTPM.
 
     libvirt refuses a flagless ``undefine()`` on a domain that declares ``<nvram/>``
     ("Cannot undefine domain with NVRAM/varstore"), which is every UEFI guest and
@@ -49,20 +50,19 @@ def _undefine_keeping_nvram(domain) -> None:
     For a BIOS domain with no ``<nvram/>`` the flag is inert, so x86 guests are
     unaffected.
 
+    ``KEEP_TPM`` is here for the same instance-scoped reason, and matters more than it
+    looks: without it libvirt DELETES the emulated TPM state on undefine, so the next
+    run manufactures a factory-fresh vTPM and the Windows guest re-provisions its TPM
+    on every single cold boot. See ``hypervisor/qemu/libvirt_undefine`` for the full
+    reasoning.
+
     Args:
         domain: libvirt virDomain object to undefine
 
     Raises:
         libvirt.libvirtError: Propagated to the caller, which decides how to report it
     """
-    import libvirt
-
-    try:
-        domain.undefineFlags(libvirt.VIR_DOMAIN_UNDEFINE_KEEP_NVRAM)
-    except AttributeError:
-        # undefineFlags is absent only on a very old libvirt-python; a flagless
-        # undefine still works for BIOS domains, which is better than nothing.
-        domain.undefine()
+    undefine(domain, keep_firmware_state_flags())
 
 
 def destroy_domain_by_name(vm_name: str | None) -> bool:
@@ -131,10 +131,10 @@ def destroy_domain_by_name(vm_name: str | None) -> bool:
             # Undefining as well keeps `virsh list --all` from filling up with one
             # stale shut-off entry per interrupted run. KEEP_NVRAM because the
             # varstore is instance-scoped and the instance is reused — see
-            # _undefine_keeping_nvram.
+            # _undefine_keeping_firmware_state.
             try:
                 with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
-                    _undefine_keeping_nvram(domain)
+                    _undefine_keeping_firmware_state(domain)
             except libvirt.libvirtError as e:
                 log.debug(f"Emergency stop: could not undefine '{vm_name}': {e}")
 
@@ -855,7 +855,7 @@ class VMLifecycleManager:
                             # Only undefine if domain is not running
                             state, _ = context.vm._libvirt_domain.state()
                             if state == libvirt.VIR_DOMAIN_SHUTOFF:
-                                _undefine_keeping_nvram(context.vm._libvirt_domain)
+                                _undefine_keeping_firmware_state(context.vm._libvirt_domain)
                                 log.info(f"Undefined libvirt domain '{context.vm.vm_name}'")
                             else:
                                 log.warning(
