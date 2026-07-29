@@ -361,6 +361,7 @@ def publish_run_command(project_directory: Path, run_ulid: str):
     from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
     from adare.database.api.experiment import ExperimentApi
+    from adare.database.models.project_models import ExperimentRun
     from adare.webappaccess.api_client import ApiClient
     from adare.webappaccess.exceptions import (
         ApiConnectionError,
@@ -381,7 +382,9 @@ def publish_run_command(project_directory: Path, run_ulid: str):
 
     # Validate run exists locally
     with ExperimentApi(project_directory) as exp_api:
-        run = exp_api.get_run_by_ulid(run_ulid)
+        # `ExperimentApi` has no run-specific getter; the generic ULID lookup on the
+        # base API is the one that exists. (`get_run_by_ulid` never did.)
+        run = exp_api.get_by_ulid(ExperimentRun, run_ulid)
         if not run:
             from adare.exceptions import ExperimentRunNotFoundError
             raise ExperimentRunNotFoundError(
