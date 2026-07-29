@@ -77,7 +77,7 @@ async def _run_command_with_retry(
     stop_event: threading.Event,
     *,
     admin: bool = False,
-    max_retries: int = 3,
+    max_retries: int = 8,
     initial_delay: float = 1.0,
     label: str = "command",
 ) -> "CommandResult":
@@ -86,6 +86,12 @@ async def _run_command_with_retry(
     Retries only on guest-agent connectivity problems (returncode == -1) and
     ``asyncio.TimeoutError``.  Genuine command failures (non-zero, non -1
     return codes) are raised immediately.
+
+    ``max_retries=8`` (~127s of backoff) matches ``verify_guest_agent_readiness``'s
+    budget: on a freshly booted Linux guest, QGA can flap again shortly after the
+    boot-time readiness check succeeds (GDM/NetworkManager/gnome-shell still
+    starting), and this helper's two callers (setup commands, agent install) run
+    in exactly that window.
 
     Returns the successful ``CommandResult`` on success.
 

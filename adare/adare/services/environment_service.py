@@ -651,6 +651,16 @@ class EnvironmentService:
                 descriptor = candidate
                 break
         if descriptor is None:
+            # `adare env load` always copies the descriptor into managed storage
+            # under "<name>_<hash8>.yml" (see _copy_environment_file), so a
+            # bare-name guess never matches an already-loaded environment. Fall
+            # back to the database, which records the managed file path.
+            from adare.database.api.environment import EnvironmentDbApi
+            with EnvironmentDbApi() as db:
+                env_record = db.get_environment(name, project_name=None)
+            if env_record and env_record.file and Path(env_record.file).is_file():
+                descriptor = Path(env_record.file)
+        if descriptor is None:
             return Result.fail(
                 code='EnvironmentFileNotFound',
                 message=f'Environment descriptor not found for {name!r} in {env_dir}.',
