@@ -323,6 +323,34 @@ class FlowControlExecutor:
             log.error(f"Loop action failed: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
 
+    @staticmethod
+    def _wait_until_timeout_result(action: WaitUntilAction, start_time: float, check_count: int,
+                                    last_screenshot_path: str | None) -> ActionResult | None:
+        """Return a timeout ActionResult if action.timeout has elapsed, else None.
+
+        Every early-exit point in execute_wait_until's loop (not just the bottom of
+        the loop body) must go through this before looping back - otherwise a
+        `continue` can skip the deadline check indefinitely. That's exactly what
+        happened once per-check screenshot/condition calls became bounded by
+        asyncio.wait_for: once elapsed >= action.timeout, the per-check budget
+        floors at 0.1s, screenshot capture then reliably times out, and an
+        unchecked `continue` at that point spins the loop at ~10Hz forever instead
+        of ever returning.
+        """
+        elapsed_time = time.time() - start_time
+        if elapsed_time >= action.timeout:
+            log.info(f"Wait until timeout reached after {elapsed_time:.1f}s ({check_count} checks)")
+            data = {}
+            if last_screenshot_path:
+                data['screenshot_path'] = last_screenshot_path
+            return ActionResult(
+                success=False,
+                message=f"Timeout waiting for condition after {elapsed_time:.1f}s ({check_count} checks)",
+                execution_time=elapsed_time,
+                data=data if data else None
+            )
+        return None
+
     async def execute_wait_until(self, action: WaitUntilAction, parent_event_id: str = None,
                                 event_emitter = None) -> ActionResult:
         """Execute wait until action - wait for condition to be satisfied with timeout and check interval."""
@@ -380,6 +408,9 @@ class FlowControlExecutor:
                     last_screenshot_path = screenshot_path  # Keep track for timeout case
                 if not screenshot_base64:
                     log.debug(f"Failed to get screenshot on check #{check_count}")
+                    timeout_result = self._wait_until_timeout_result(action, start_time, check_count, last_screenshot_path)
+                    if timeout_result:
+                        return timeout_result
                     continue
 
                 # --- Pixel Change Optimization ---
@@ -445,6 +476,9 @@ class FlowControlExecutor:
                                         last_screenshot_path = screenshot_path
                                 else:
                                     log.warning("Failed to refresh screenshot after idle, skipping check")
+                                    timeout_result = self._wait_until_timeout_result(action, start_time, check_count, last_screenshot_path)
+                                    if timeout_result:
+                                        return timeout_result
                                     continue
 
 
@@ -493,21 +527,9 @@ class FlowControlExecutor:
                     log.debug(f"Condition evaluation failed on check #{check_count}: {e}")
 
                 # Check timeout AFTER each evaluation attempt
-                elapsed_time = time.time() - start_time
-                if elapsed_time >= action.timeout:
-                    log.info(f"Wait until timeout reached after {elapsed_time:.1f}s ({check_count} checks)")
-
-                    # Include last screenshot in timeout result
-                    data = {}
-                    if last_screenshot_path:
-                        data['screenshot_path'] = last_screenshot_path
-
-                    return ActionResult(
-                        success=False,
-                        message=f"Timeout waiting for condition after {elapsed_time:.1f}s ({check_count} checks)",
-                        execution_time=elapsed_time,
-                        data=data if data else None
-                    )
+                timeout_result = self._wait_until_timeout_result(action, start_time, check_count, last_screenshot_path)
+                if timeout_result:
+                    return timeout_result
 
                 # Sleep for check_interval before next attempt (only if check_interval > 0)
                 # Sleep for check_interval before next attempt (only if check_interval > 0)
@@ -518,7 +540,7 @@ class FlowControlExecutor:
                     interval = MIN_PIXEL_POLL_INTERVAL
 
                 if interval > 0:
-                    remaining_time = action.timeout - elapsed_time
+                    remaining_time = action.timeout - (time.time() - start_time)
                     if remaining_time > interval:
                         await asyncio.sleep(interval)
                     elif remaining_time > 0:
