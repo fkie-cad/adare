@@ -155,6 +155,27 @@ installed, or when the ``QEMU_LIBGUESTFS`` environment variable is set.
   (``requires_vm_stop_for_retrieval()`` returns ``True``), then extracts
   artifacts from the disk via guestfish.
 
+.. note::
+
+   **The transfer goes through a tar archive built on the host**, streamed into
+   the disk with a single ``tar-in`` call, not through per-file ``copy-in``.
+   ``copy-in`` places ``basename(source)`` into the target directory and cannot
+   rename, so it could not express the manifest's renames -- the project share
+   is called ``shared`` on the host but must land at ``/adare/project_shared``.
+   In the archive the manifest's ``dest`` becomes the member's ``arcname``, so
+   every destination is honoured exactly, and intermediate directories are
+   created by tar itself.
+
+   Building the archive on the host is also where **ownership is normalized**:
+   every member is written as ``root:root`` with directories ``0755`` and files
+   ``0644`` (the owner-execute bit is preserved as ``0755`` so tools under the
+   shares stay runnable). Without this, the tar-based copy would carry the
+   *host* account's numeric uid/gid into the guest image -- which breaks the
+   guest user on any host whose uid differs from the guest's, and leaks host
+   identity into the disk. Only ``/adare/run`` and its ``logs``/``artifacts``
+   subdirectories are relaxed to ``0777``, since they are the guest's sole
+   read-write locations; the shares keep their read-only contract.
+
 QGA (final fallback)
 --------------------
 
