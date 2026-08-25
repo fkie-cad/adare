@@ -87,7 +87,9 @@ class TestVirtioFSStrategy:
             # Mock project_directory
             context.project_directory.vm_runtime = Path(tmpdir) / 'vm_runtime'
             context.project_directory.vm_runtime.mkdir()
-            context.project_directory.shared = Path(tmpdir) / 'project_shared'
+            # Basename is 'shared' in production (ProjectDirectory.shared);
+            # only the guest destination is named 'project_shared'
+            context.project_directory.shared = Path(tmpdir) / 'project' / 'shared'
             # shared does not exist -> should be skipped
 
             context.config.shared_directories = None
@@ -227,7 +229,9 @@ class TestQGAStrategy:
             # Create dummy wheels
             (wheels_dir / 'adarelib-1.0.whl').write_text('dummy')
             (wheels_dir / 'adarevm-1.0.whl').write_text('dummy')
-            context.project_directory.shared = Path(tmpdir) / 'project_shared'
+            # Basename is 'shared' in production (ProjectDirectory.shared);
+            # only the guest destination is named 'project_shared'
+            context.project_directory.shared = Path(tmpdir) / 'project' / 'shared'
 
             context.config.shared_directories = None
             context.config.installation_mode = 'wheel'

@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+import tarfile
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,38 @@ from adare.hypervisor.qemu.guestfish_client import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _normalize_tar_member(member: tarfile.TarInfo) -> tarfile.TarInfo | None:
+    """Normalize ownership and permissions of a member of the transfer tar.
+
+    'copy-in' is tar-based and preserves the host's numeric uid/gid, which both
+    leaks the host account into the guest image and breaks the guest user
+    whenever host and guest uids differ. Forcing root:root with fixed modes
+    keeps the transfer independent of the host account.
+
+    Args:
+        member: Tar member about to be written
+
+    Returns:
+        The normalized member, or None to exclude it from the archive
+    """
+    if not (member.isfile() or member.isdir()):
+        log.debug(f"Skipping non-regular file in transfer: {member.name}")
+        return None
+
+    member.uid = 0
+    member.gid = 0
+    member.uname = ''
+    member.gname = ''
+
+    if member.isdir():
+        member.mode = 0o755
+    else:
+        # Preserve executability so tools under the shares stay runnable
+        member.mode = 0o755 if member.mode & 0o100 else 0o644
+
+    return member
 
 
 class LibguestfsStrategy(FileTransferStrategy):
@@ -353,9 +386,6 @@ class LibguestfsStrategy(FileTransferStrategy):
         commands.extend(['mkdir-p', f'{target_base_dir}/run/artifacts', ':'])
         commands.extend(['mkdir-p', f'{target_base_dir}/vm', ':'])
 
-        # Collect parent directories
-        parent_dirs: set[str] = set()
-
         def resolve_guest_dest(dest: str) -> str:
             if re.match(r'^[a-zA-Z]:[\\/]', dest):
                 return dest[2:].replace('\\', '/')
@@ -363,30 +393,59 @@ class LibguestfsStrategy(FileTransferStrategy):
                 return dest
             return f"{target_base_dir}/{dest}"
 
-        for file_spec in files_to_copy:
-            dest_full = resolve_guest_dest(file_spec['dest'])
-            parent = str(Path(dest_full).parent)
-            parent_dirs.add(parent)
+        tar_fd = None
+        tar_path = None
+        try:
+            tar_fd, tar_path = tempfile.mkstemp(suffix='.tar')
+            os.close(tar_fd)
+            tar_fd = None
 
-        for parent_dir in sorted(parent_dirs, key=lambda p: len(p.split('/'))):
-            if parent_dir != target_base_dir:
-                commands.extend(['mkdir-p', parent_dir, ':'])
+            # guestfish 'copy-in' places basename(source) into the target
+            # directory and cannot rename, so a host share named 'shared' could
+            # never land as '/adare/project_shared'. Building the archive here
+            # lets arcname decide the guest path, and lets the member filter
+            # normalize ownership instead of leaking host uids into the image.
+            with tarfile.open(tar_path, 'w') as tar:
+                for file_spec in files_to_copy:
+                    source_path = file_spec['source']
+                    dest_full = resolve_guest_dest(file_spec['dest'])
+                    arcname = dest_full.lstrip('/')
 
-        for file_spec in files_to_copy:
-            source_path = file_spec['source']
-            dest_full = resolve_guest_dest(file_spec['dest'])
-            dest_parent = str(Path(dest_full).parent)
+                    log.info(f"Copying {source_path} -> /{arcname}")
+                    tar.add(
+                        source_path,
+                        arcname=arcname,
+                        filter=_normalize_tar_member,
+                    )
 
-            log.info(f"Copying {source_path} -> {dest_full}")
-            commands.extend(['copy-in', source_path, dest_parent, ':'])
+            # Arcnames are relative, so '/' is the correct extraction root for
+            # both POSIX and (drive-stripped) Windows destinations. tar creates
+            # any missing intermediate directories itself.
+            commands.extend(['tar-in', tar_path, '/', ':'])
 
-        # Remove trailing colon
-        if commands and commands[-1] == ':':
-            commands = commands[:-1]
+            # The run directory is the only read-write location in the guest and
+            # may be written by a non-root user; the shares stay 0755/0644.
+            commands.extend(['chmod', '0777', f'{target_base_dir}/run', ':'])
+            commands.extend(
+                ['chmod', '0777', f'{target_base_dir}/run/logs', ':']
+            )
+            commands.extend(
+                ['chmod', '0777', f'{target_base_dir}/run/artifacts', ':']
+            )
 
-        returncode, stdout, stderr = self.guestfish.run_command(
-            disk_path, commands, readonly=False,
-        )
+            # Remove trailing colon
+            if commands and commands[-1] == ':':
+                commands = commands[:-1]
+
+            returncode, stdout, stderr = self.guestfish.run_command(
+                disk_path, commands, readonly=False,
+            )
+        finally:
+            if tar_fd is not None:
+                os.close(tar_fd)
+            if tar_path:
+                with contextlib.suppress(OSError):
+                    Path(tar_path).unlink()
 
         if returncode != 0:
             headline, host_solutions = _classify_libguestfs_failure(stderr)
