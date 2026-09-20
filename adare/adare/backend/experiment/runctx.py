@@ -31,6 +31,9 @@ class ExperimentConfig:
     test_mode_override: str | None = None  # CLI override for test execution mode
     enable_diff: bool | None = None  # None=use playbook, True/False=override
     diff_mode: str = 'auto'  # 'auto', 'guest', or 'host'
+    export_disk_image: bool | None = None  # None=use playbook, True/False=override
+    capture_pcap: bool | None = None  # None=use playbook, True/False=override
+    export_memory_dump: bool | None = None  # None=use playbook, True/False=override
     dev_mode: bool = False  # Track if running in dev mode
     installation_mode: str = "wheel"  # "wheel" (pip) or "editable" (Poetry)
     file_log_level: int = 20  # logging.INFO — level for adare.log file handler

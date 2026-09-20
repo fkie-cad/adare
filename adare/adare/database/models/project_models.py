@@ -576,6 +576,38 @@ class ExperimentRunFiles(SerializerMixin, ProjectBase):
         return f"<ExperimentRunFiles(id='{self.id}')>"
 
 
+class RunArtifact(SerializerMixin, ProjectBase):
+    """
+    Per-machine, per-kind artifact produced by an experiment run (disk image,
+    pcap capture, ...).
+
+    Generalizes the one-column-per-kind scheme on :class:`ExperimentRunFiles`
+    for artifact kinds that produce N files per run (N segments, N machines) —
+    a new artifact type is a new ``kind`` value, not a new column + migration.
+    ``machine_name`` is ``None`` for today's single-VM runs.
+    """
+    __tablename__ = 'run_artifact'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+
+    experiment_run_id = Column(CHAR(26), ForeignKey('experiment_run.id', ondelete='CASCADE'), nullable=False, index=True)
+    experiment_run = relationship("ExperimentRun", backref=backref("artifacts", cascade="all, delete-orphan"))
+
+    machine_name = Column(String, nullable=True)  # None = today's single-VM runs
+    kind = Column(String, nullable=False)  # 'disk_image', 'pcap', ...
+    format = Column(String, nullable=True)  # 'raw', 'vmdk', ...
+    path = Column(String, nullable=False)
+
+    created_at = Column(DateTime, nullable=True, default=func.now())
+
+    def __str__(self):
+        return f"RunArtifact({self.kind}, {self.path})"
+
+    def __repr__(self):
+        return f"<RunArtifact(kind='{self.kind}',machine_name='{self.machine_name}',path='{self.path}')>"
+
+
 class Stage(SerializerMixin, ProjectBase):
     """
     Represents a stage in an experiment or test run, possibly hierarchical.

@@ -814,6 +814,26 @@ class DomainXMLBuilder:
             # PC/i440FX: PCIBusAllocator reserves bus 0 slot 3 for network
             _add_qemu_arg(qemu_commandline, 'virtio-net-pci,netdev=net0,addr=0x3')
 
+        self._add_pcap_capture(qemu_commandline, netdev_id='net0')
+
+    def _add_pcap_capture(self, qemu_commandline: ET.Element, netdev_id: str) -> None:
+        """Tap ``netdev_id`` to a pcap file via QEMU's host-side filter-dump object.
+
+        Purely host-side (no guest-agent involvement); composes with any
+        ``-netdev`` this builder emits. Config is keyed by netdev id (see
+        ``adare.hypervisor.qemu.pcap_capture.PcapCaptureConfig``) so a future
+        per-segment netdev is just another entry, not a rewrite of this method.
+        """
+        from adare.hypervisor.qemu.pcap_capture import PcapCaptureConfig
+
+        pcap_config = PcapCaptureConfig.from_dict(getattr(self._config, 'pcap_paths', None))
+        pcap_path = pcap_config.get(netdev_id)
+        if not pcap_path:
+            return
+
+        _add_qemu_arg(qemu_commandline, '-object')
+        _add_qemu_arg(qemu_commandline, f'filter-dump,id=dump-{netdev_id},netdev={netdev_id},file={pcap_path}')
+
     def _prettify(self) -> str:
         """Convert the domain XML tree to a pretty-printed string."""
         return _prettify_xml(self._domain)

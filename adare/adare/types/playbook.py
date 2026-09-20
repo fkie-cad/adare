@@ -128,6 +128,9 @@ class Settings:
     gui_execution_mode: str = 'auto'  # GUI automation mode: 'auto', 'agent', 'host' (QEMU only)
     resolution: str | None = None  # Guest display resolution "WxH" (e.g. "1280x1024"); unset = host/env default
     vm_memory: int | None = None  # Working RAM in MB discovered/used for this run; boots future runs at this size
+    export_disk_image: bool = False  # Export the VM's overlay disk as a merged raw image (artifacts/disk/), e.g. for Autopsy ingestion
+    capture_pcap: bool = False  # Capture the VM's outside-world traffic to a pcap (artifacts/pcap/) via QEMU filter-dump
+    export_memory_dump: bool = False  # Live-dump guest RAM via QMP dump-guest-memory (artifacts/memory/), e.g. for Volatility ingestion
 
 @attrs.define
 class Offset:

@@ -21,6 +21,7 @@ from adare.database.models.project_models import (
     ExperimentRun,
     ExperimentRunFiles,
     LogFile,
+    RunArtifact,
     SyncMetadata,
     TestParameterEntry,
 )
@@ -340,6 +341,31 @@ class ExperimentApi(ProjectDatabaseApi):
             experiment_run.environment_id = environment_id
             self._session.commit()
         return experiment_run
+
+    def add_run_artifact(
+            self, run_ulid: str, kind: str, path: str,
+            machine_name: str | None = None, format: str | None = None,  # noqa: A002
+    ) -> RunArtifact | None:
+        """Record a per-machine artifact (disk image, pcap, ...) produced by a run.
+
+        ``machine_name`` is None for today's single-VM runs; multi-machine runs
+        will populate it per :class:`RunArtifact`.
+        """
+        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == run_ulid).first()
+        if not experiment_run:
+            log.warning(f"Cannot record artifact '{kind}' - experiment run {run_ulid} not found")
+            return None
+
+        artifact = RunArtifact(
+            experiment_run_id=experiment_run.id,
+            machine_name=machine_name,
+            kind=kind,
+            format=format,
+            path=path,
+        )
+        self._session.add(artifact)
+        self._session.commit()
+        return artifact
 
     def update_experiment_run_start(self, experiment_run_ulid: str, timestamp: datetime):
         experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_ulid).first()
