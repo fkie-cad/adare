@@ -690,6 +690,24 @@ class VMHostDiffStage(Stage):
 
 @register_stage
 @attrs.define
+class VMDiskExportStage(Stage):
+    name: ClassVar[str] = 'vm_disk_export'
+    msg: ClassVar[str] = 'Exporting disk image'
+    description: ClassVar[str] = 'Exporting the VM overlay disk as a self-contained raw/vmdk image'
+    parent: ClassVar[str] = 'cleanup_shutdown'
+    collapse: ClassVar[bool] = True
+
+@register_stage
+@attrs.define
+class VMMemoryDumpStage(Stage):
+    name: ClassVar[str] = 'vm_memory_dump'
+    msg: ClassVar[str] = 'Dumping guest memory'
+    description: ClassVar[str] = "Capturing the VM's live RAM via QMP dump-guest-memory"
+    parent: ClassVar[str] = 'cleanup_shutdown'
+    collapse: ClassVar[bool] = True
+
+@register_stage
+@attrs.define
 class VMGuestDiffStage(Stage):
     name: ClassVar[str] = 'vm_guest_diff'
     msg: ClassVar[str] = 'Performing guest-side filesystem diff'

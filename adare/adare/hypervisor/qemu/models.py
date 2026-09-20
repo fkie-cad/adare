@@ -147,6 +147,11 @@ class QEMUVMConfig:
     iso_path: str = ''  # Path to installer ISO to attach as a CDROM (empty = none)
     boot_from_cdrom: bool = False  # True = boot the CDROM first (order 1), disk second
 
+    # pcap capture: netdev id -> pcap file path (see hypervisor.qemu.pcap_capture).
+    # Only 'net0' (the outside-world SLIRP netdev) is populated today; a future
+    # per-segment netdev is just another key in this same dict.
+    pcap_paths: dict[str, str] = field(default_factory=dict)
+
     def __post_init__(self):
         """Initialize empty collections if None."""
         if self.port_forwarding_rules is None:
@@ -154,6 +159,8 @@ class QEMUVMConfig:
         # Defensive: ensure virtiofs_shares is never None even if set externally
         if self.virtiofs_shares is None:
             self.virtiofs_shares = []
+        if self.pcap_paths is None:
+            self.pcap_paths = {}
 
     def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary for JSON serialization."""
@@ -187,6 +194,7 @@ class QEMUVMConfig:
             'smb_share_path': self.smb_share_path,
             'iso_path': self.iso_path,
             'boot_from_cdrom': self.boot_from_cdrom,
+            'pcap_paths': self.pcap_paths,
         }
 
     @classmethod
@@ -229,4 +237,5 @@ class QEMUVMConfig:
         # Live-installer boot defaults (backward compatibility)
         data.setdefault('iso_path', '')
         data.setdefault('boot_from_cdrom', False)
+        data.setdefault('pcap_paths', {})
         return cls(**data)
