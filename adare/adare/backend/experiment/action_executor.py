@@ -5,6 +5,7 @@ This module orchestrates playbook action execution by delegating to specialized 
 """
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -44,7 +45,24 @@ from .execution.test_actions import TestActionsExecutor
 log = logging.getLogger(__name__)
 
 # Re-export ActionResult for backward compatibility
-__all__ = ['ActionExecutor', 'ActionResult']
+__all__ = ['ActionExecutor', 'ActionResult', 'MachineHandles']
+
+
+@dataclass
+class MachineHandles:
+    """One machine's action-dispatch handles within a (possibly multi-machine) playbook run.
+
+    Single-VM playbooks (no `machines:` key) get exactly one of these, under the
+    implicit `None` key. Multi-machine playbooks get one per declared machine,
+    each with its own VM, websocket client and CV/OCR resolver.
+    """
+    vm: Optional['VirtualBoxVM'] = None
+    client: AdareVMClient | None = None
+    vm_os: str | None = None
+    vm_user: str | None = None
+    mcp_gui_url: str = "http://localhost:13109/mcp"
+    target_resolver: MCPTargetResolver | None = None
+    condition_checker: MCPConditionChecker | None = None
 
 
 class ActionExecutor:
@@ -55,44 +73,62 @@ class ActionExecutor:
     to appropriate specialized executors based on action type.
     """
 
-    def __init__(self, websocket_client: AdareVMClient, target_resolver: MCPTargetResolver,
-                 condition_checker: MCPConditionChecker, experiment_run_id: str | None = None,
+    def __init__(self, websocket_client: AdareVMClient = None, target_resolver: MCPTargetResolver = None,
+                 condition_checker: MCPConditionChecker = None, experiment_run_id: str | None = None,
                  playbook = None, execution_context: dict[str, Any] = None,
                  debug_screenshots: bool = False, screenshots_dir: Path | None = None,
                  vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Path | None = None,
-                 flow_console = None):
+                 flow_console = None, machines: dict[str | None, MachineHandles] | None = None):
         """
         Initialize the action executor.
 
         Args:
-            websocket_client: Connected WebSocket client to adarevm
-            target_resolver: Target resolver for image/text targets
-            condition_checker: Condition checker for block actions
+            websocket_client: (legacy, single-machine) Connected WebSocket client to adarevm
+            target_resolver: (legacy, single-machine) Target resolver for image/text targets
+            condition_checker: (legacy, single-machine) Condition checker for block actions
             experiment_run_id: Experiment run ID for event emission
             playbook: Playbook reference for variable access
             execution_context: Execution context for variable resolution
             debug_screenshots: Whether to save screenshots for debugging
             screenshots_dir: Directory to save debug screenshots
-            vm: VirtualBox VM instance for file operations
+            vm: (legacy, single-machine) VirtualBox VM instance for file operations
             experiment_run_directory: Run directory for artifacts
             flow_console: Flow console for interactive display and input
+            machines: Per-machine dispatch handles for a multi-machine playbook. When
+                omitted, a single-entry dict is built from the legacy singular
+                kwargs above (the None key) -- unchanged behavior for single-VM
+                playbooks and for direct callers that predate multi-machine support.
         """
-        self.client = websocket_client
-        self.target_resolver = target_resolver
-        self.condition_checker = condition_checker
+        if machines is not None:
+            self.machines = machines
+        else:
+            self.machines = {
+                None: MachineHandles(
+                    vm=vm, client=websocket_client,
+                    target_resolver=target_resolver, condition_checker=condition_checker,
+                )
+            }
+        self._primary_machine_key = next(iter(self.machines))
+        primary = self.machines[self._primary_machine_key]
+
+        self.client = primary.client
+        self.target_resolver = primary.target_resolver
+        self.condition_checker = primary.condition_checker
+        self.vm = primary.vm
         self.experiment_run_id = experiment_run_id
         self.playbook = playbook
         self.execution_context = execution_context if execution_context is not None else {}
         self.debug_screenshots = debug_screenshots
         self.screenshots_dir = screenshots_dir
-        self.vm = vm
         self.experiment_run_directory = experiment_run_directory
         self.flow_console = flow_console
 
-        # Initialize specialized executors
+        # Initialize specialized executors, seeded from the primary machine. Every
+        # existing single-VM playbook has exactly one machine (the None key), so
+        # this is byte-for-byte what construction did before machines existed.
         self.target_resolution = TargetResolutionExecutor(
-            websocket_client=websocket_client,
-            target_resolver=target_resolver,
+            websocket_client=self.client,
+            target_resolver=self.target_resolver,
             experiment_run_id=experiment_run_id,
             debug_screenshots=debug_screenshots,
             screenshots_dir=screenshots_dir
@@ -101,12 +137,12 @@ class ActionExecutor:
         # CRITICAL: Pass the SAME execution_context reference to both executors
         # This ensures captured variables from commands are visible to stop/continue conditions
         self.simple_actions = SimpleActionsExecutor(
-            websocket_client=websocket_client,
+            websocket_client=self.client,
             target_resolution_executor=self.target_resolution,
             experiment_run_id=experiment_run_id,
             playbook=playbook,
             execution_context=execution_context,  # Pass reference, not self.execution_context
-            vm=vm,
+            vm=self.vm,
             experiment_run_directory=experiment_run_directory
         )
 
@@ -114,9 +150,9 @@ class ActionExecutor:
         self.target_resolution.gui_executor = self.simple_actions.gui_executor
 
         self.flow_control = FlowControlExecutor(
-            websocket_client=websocket_client,
+            websocket_client=self.client,
             target_resolution_executor=self.target_resolution,
-            condition_checker=condition_checker,
+            condition_checker=self.condition_checker,
             experiment_run_id=experiment_run_id,
             execution_context=execution_context,  # Pass reference, not self.execution_context
             flow_console=flow_console
@@ -126,6 +162,37 @@ class ActionExecutor:
             experiment_run_directory=experiment_run_directory,
             playbook=playbook
         )
+
+    def _rebind_to_machine(self, handles: MachineHandles) -> None:
+        """Point this executor and its sub-executors at one machine's handles.
+
+        Touches the same attribute set ``PlaybookController.update_websocket_client``
+        touches for session-restore reconnects (``client`` on each sub-executor),
+        plus ``vm``/``target_resolver``/``condition_checker`` -- a different
+        ``machine:`` means a genuinely different VM/resolver, not just a refreshed
+        socket on the same one. ``TestActionsExecutor`` needs no rebind: it already
+        takes the client/resolver as per-call parameters (see ``execute_action``).
+        """
+        self.client = handles.client
+        self.vm = handles.vm
+        self.target_resolver = handles.target_resolver
+        self.condition_checker = handles.condition_checker
+
+        self.target_resolution.client = handles.client
+        self.target_resolution.target_resolver = handles.target_resolver
+
+        self.simple_actions.client = handles.client
+        self.simple_actions.vm = handles.vm
+
+        gui_executor = getattr(self.simple_actions, 'gui_executor', None)
+        if gui_executor is not None:
+            if hasattr(gui_executor, 'client'):
+                gui_executor.client = handles.client
+            if hasattr(gui_executor, 'vm'):
+                gui_executor.vm = handles.vm
+
+        self.flow_control.client = handles.client
+        self.flow_control.condition_checker = handles.condition_checker
 
     def set_test_loader(self, test_loader):
         """Set the test loader after initialization."""
@@ -157,6 +224,15 @@ class ActionExecutor:
                 resolved_action = variable_resolver.resolve_action_variables(action, self.execution_context)
             else:
                 resolved_action = action
+
+            # Multi-machine routing: rebind to the action's target machine (or stay
+            # on the primary machine) before dispatch. Single-machine playbooks
+            # always resolve to the same (None) machine, so this is a no-op
+            # reassignment for them -- see _rebind_to_machine.
+            target_key = getattr(resolved_action, 'machine', None)
+            if target_key is None:
+                target_key = self._primary_machine_key
+            self._rebind_to_machine(self.machines.get(target_key, self.machines[self._primary_machine_key]))
 
             action_type = type(resolved_action).__name__
             description = getattr(resolved_action, 'description', '')

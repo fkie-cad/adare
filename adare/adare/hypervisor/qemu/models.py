@@ -152,6 +152,11 @@ class QEMUVMConfig:
     # per-segment netdev is just another key in this same dict.
     pcap_paths: dict[str, str] = field(default_factory=dict)
 
+    # Multi-machine experiments: name of an isolated libvirt <network> this VM
+    # attaches a second NIC to, so it can reach sibling VMs of the same run
+    # (see hypervisor.qemu.libvirt_network). None = single NIC, unchanged.
+    secondary_network_name: str | None = None
+
     def __post_init__(self):
         """Initialize empty collections if None."""
         if self.port_forwarding_rules is None:

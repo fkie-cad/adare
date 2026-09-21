@@ -233,34 +233,40 @@ class KeyboardAction:
     combination: list[str] | None = None  # Key combinations -> pyautogui.hotkey()
     when: list[ExistsCondition | NotExistsCondition] | None = None
     description: str = ''
+    machine: str | None = None
 
 @attrs.define
 class ClickAction:
     target: Target
     type: str = 'left'  # 'left', 'right', 'double'
     description: str = ''
+    machine: str | None = None  # Machine key from playbook.machines this action targets (multi-machine playbooks only)
 
 @attrs.define
 class DragAction:
     src: Target
     dst: Target
     description: str = ''
+    machine: str | None = None
 
 @attrs.define
 class IdleAction:
     duration: float
     description: str = ''
+    machine: str | None = None
 
 @attrs.define
 class ScrollAction:
     direction: str
     amount: int
     description: str = ''
+    machine: str | None = None
 
 @attrs.define
 class GotoAction:
     target: Target
     description: str = ''
+    machine: str | None = None
 
 # info: Do NOT rename it to TestAction, since it lets pytest think it is a test
 @attrs.define
@@ -268,6 +274,7 @@ class ActionTestAction:
     name: str
     description: str = ''
     timeout: float | None = None  # Test timeout in seconds (None = use Test default)
+    machine: str | None = None
 
 @attrs.define
 class CaptureSpec:
@@ -298,6 +305,7 @@ class CommandAction:
     background: bool = False  # Run without waiting for completion
     capture: CaptureSpec | None = None  # Capture command output to variable
     allow_failure: bool = False  # Continue execution even if command returns non-zero exit code
+    machine: str | None = None
 
     def __attrs_post_init__(self):
         if isinstance(self.command, list):
@@ -321,11 +329,13 @@ class ScreenshotAction:
     y: int | None = None
     width: int | None = None
     height: int | None = None
+    machine: str | None = None
 
 @attrs.define
 class SaveTimestampAction:
     variable: str
     description: str = ''
+    machine: str | None = None
 
 @attrs.define
 class SaveVariableAction:
@@ -333,6 +343,7 @@ class SaveVariableAction:
     name: str  # Variable name to save to
     value: Any  # Static value OR Jinja2 template string
     description: str = ''
+    machine: str | None = None
 
 @attrs.define
 class PullAction:
@@ -340,6 +351,7 @@ class PullAction:
     dst: str | None = None  # Optional destination name in artifacts folder
     description: str = ''
     mode: str = 'hypervisor'  # Transfer mode: 'hypervisor' or 'websocket'
+    machine: str | None = None
 
     def __attrs_post_init__(self):
         """Validate mode field."""
@@ -356,6 +368,7 @@ class SnapshotFilesystemAction:
     root_path: str | None = None  # Root path to scan (default: / or C:\)
     timeout: float | None = 300.0  # Timeout in seconds (default: 5 minutes)
     description: str = ''
+    machine: str | None = None
 
 @attrs.define
 class PullChangedFilesAction:
@@ -371,6 +384,7 @@ class PullChangedFilesAction:
     include_modified: bool = True  # Pull modified files
     include_added: bool = True  # Pull added files
     description: str = ''
+    machine: str | None = None
 
     def __attrs_post_init__(self):
         """Validate fields."""
@@ -391,6 +405,7 @@ class PauseAction:
     message: str | None = None  # Optional message to display during pause
     name: str | None = None     # Optional name for the pause action
     description: str = ''
+    machine: str | None = None
 
 @attrs.define
 class VariableCondition:
@@ -435,6 +450,7 @@ class StopAction:
     """
     condition: VariableCondition | None = None
     description: str = ''
+    machine: str | None = None
 
 @attrs.define
 class ContinueAction:
@@ -446,6 +462,7 @@ class ContinueAction:
     """
     condition: VariableCondition | None = None
     description: str = ''
+    machine: str | None = None
 
 @attrs.define
 class BlockAction:
@@ -453,6 +470,7 @@ class BlockAction:
     description: str = ''
     when: list[ExistsCondition | NotExistsCondition] | None = None
     delay: float | None = None
+    machine: str | None = None  # Default machine for children that don't set their own (cascades at parse time)
 
 @attrs.define
 class WaitCondition:
@@ -517,6 +535,7 @@ class WaitUntilAction:
     initial_delay: float = 5.0   # Default 5s delay to let UI stabilize
     skip: SkipOptions | None = None
     description: str = ''
+    machine: str | None = None
 
     def __attrs_post_init__(self):
         """Validate condition tree depth."""
@@ -543,6 +562,7 @@ class LoopAction:
     item_var: str | None = None
 
     description: str = ''
+    machine: str | None = None  # Default machine for children that don't set their own (cascades at parse time)
 
     def __attrs_post_init__(self):
         """Validate that exactly one of times or items is specified."""
@@ -561,11 +581,18 @@ ActionType = (
 )
 
 @attrs.define
+class MachineSpec:
+    """One entry of a playbook's `machines:` section (multi-machine experiments, e.g. a Nextcloud client+server pair)."""
+    environment: str  # Environment name to boot this machine from
+    depends_on: list[str] = attrs.Factory(list)  # Other machine keys that must finish booting first
+
+@attrs.define
 class Playbook:
     actions: list[ActionType]
     settings: Settings = attrs.Factory(Settings)
     variables: VariableRegistry | None = None
     tests: list[Test] = attrs.Factory(list)
+    machines: dict[str, MachineSpec] | None = None  # Multi-machine playbooks only; absent/None = today's single implicit VM
 
 def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
     import logging
@@ -743,17 +770,22 @@ _ACTION_CLASSES = {
     'pull_changed_files': PullChangedFilesAction,
 }
 
-# Step-level annotation written *beside* the action key rather than inside it:
+# Step-level annotations written *beside* the action key rather than inside it:
 #
 #     - keyboard:
 #         key: enter
 #       description: 'Case Information: Next'
+#       machine: client
 #
-# This is the documented spelling and the one the Autopsy playbooks use (352
-# occurrences across 42 files). It used to be discarded outright: only
+# ``description:`` is the documented spelling and the one the Autopsy playbooks use
+# (352 occurrences across 42 files). It used to be discarded outright: only
 # ``obj['<action_key>']`` was structured, so the sibling never reached the action,
 # and ``converter.forbid_extra_keys`` guards the *inner* dict so nothing flagged it.
+# ``machine:`` follows the identical spelling so a multi-machine playbook can route
+# each step without touching its inner mapping.
 DESCRIPTION_KEY = 'description'
+MACHINE_KEY = 'machine'
+SIBLING_FIELDS = (DESCRIPTION_KEY, MACHINE_KEY)
 
 
 def _structure_action(obj, converter):
@@ -768,37 +800,57 @@ def _structure_action(obj, converter):
     else:
         action = converter.structure(body, _ACTION_CLASSES[action_key])
 
-    return _apply_sibling_description(obj, action_key, action)
-
-
-def _apply_sibling_description(obj, action_key, action):
-    """Move a step-level ``description:`` sibling onto the structured action.
-
-    Raises rather than dropping it: a description that vanishes is invisible, and
-    these strings are what makes a 40-step GUI playbook readable.
-    """
-    if DESCRIPTION_KEY not in obj:
-        return action
-
-    description = obj[DESCRIPTION_KEY]
-    if not attrs.has(type(action)) or DESCRIPTION_KEY not in {
-        field.name for field in attrs.fields(type(action))
-    }:
-        raise ValueError(
-            f"action '{action_key}' has no 'description' field, so the "
-            f"description {description!r} written beside it cannot be stored. "
-            f"Remove it, or move it inside the '{action_key}:' mapping if that "
-            f"action supports one."
-        )
-
-    existing = getattr(action, DESCRIPTION_KEY, '')
-    if existing and existing != description:
-        raise ValueError(
-            f"action '{action_key}' has two different descriptions: {existing!r} "
-            f"inside the mapping and {description!r} beside it. Keep one."
-        )
-    setattr(action, DESCRIPTION_KEY, description)
+    action = _apply_sibling_fields(obj, action_key, action)
+    _cascade_machine(action)
     return action
+
+
+def _apply_sibling_fields(obj, action_key, action):
+    """Move step-level siblings (``description:``, ``machine:``) onto the structured action.
+
+    Raises rather than dropping them: a description that vanishes is invisible, and
+    a machine routing that vanishes silently sends a step to the wrong VM.
+    """
+    for sibling_key in SIBLING_FIELDS:
+        if sibling_key not in obj:
+            continue
+
+        value = obj[sibling_key]
+        if not attrs.has(type(action)) or sibling_key not in {
+            field.name for field in attrs.fields(type(action))
+        }:
+            raise ValueError(
+                f"action '{action_key}' has no '{sibling_key}' field, so the "
+                f"{sibling_key} {value!r} written beside it cannot be stored. "
+                f"Remove it, or move it inside the '{action_key}:' mapping if that "
+                f"action supports one."
+            )
+
+        existing = getattr(action, sibling_key, None)
+        if existing and existing != value:
+            raise ValueError(
+                f"action '{action_key}' has two different {sibling_key} values: "
+                f"{existing!r} inside the mapping and {value!r} beside it. Keep one."
+            )
+        setattr(action, sibling_key, value)
+
+    return action
+
+
+def _cascade_machine(action):
+    """Propagate a Block/Loop's ``machine:`` onto children that don't set their own.
+
+    Runs after ``_apply_sibling_fields`` so the block/loop's own ``machine:``
+    (whether written beside the ``block:``/``loop:`` key or inside it) is already
+    resolved. Recurses so a chain of nested blocks/loops inherits transitively.
+    """
+    if not isinstance(action, (BlockAction, LoopAction)) or action.machine is None:
+        return
+
+    for child in action.actions:
+        if getattr(child, 'machine', None) is None:
+            child.machine = action.machine
+        _cascade_machine(child)
 
 def _structure_condition(obj, converter):
     if 'exists' in obj:
@@ -959,6 +1011,6 @@ def _register_strict_hooks(converter):
                 TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
                 BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook,
                 SnapshotFilesystemAction, PullChangedFilesAction, PixelChangeConstraint, SkipOptions, Offset,
-                TextMatchConfig]:
+                TextMatchConfig, MachineSpec]:
         if attrs.has(cls):
             converter.register_structure_hook(cls, _validate_attrs_class(cls))
