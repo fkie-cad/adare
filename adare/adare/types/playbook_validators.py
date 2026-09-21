@@ -21,6 +21,7 @@ from adare.types.playbook import (
     ContinueAction,
     DragAction,
     KeyboardAction,
+    LoopAction,
     Playbook,
     PullAction,
     SaveTimestampAction,
@@ -822,6 +823,61 @@ class VariableDefinitionValidator(PlaybookValidator):
         return variable_field
 
 
+class MachineRoutingValidator(PlaybookValidator):
+    """Validates that every action specifies a valid `machine:` when the playbook is multi-machine.
+
+    Single-machine playbooks (no `machines:` section, or exactly one entry) are
+    exempt -- the implicit `None` machine key covers them. This fails fast at
+    parse time, before an experiment run ever boots a VM, rather than routing an
+    unmarked action to the wrong machine (or crashing) mid-run.
+    """
+
+    def validate(self, playbook: Playbook) -> ValidationResult:
+        result = ValidationResult()
+        machines = getattr(playbook, 'machines', None)
+        if not machines or len(machines) < 2:
+            return result
+
+        valid_keys = set(machines.keys())
+        self._check_actions(playbook.actions, valid_keys, result)
+        return result
+
+    def _check_actions(self, actions: list[ActionType], valid_keys: set[str],
+                        result: ValidationResult, action_offset: int = 0) -> None:
+        for idx, action in enumerate(actions):
+            action_index = action_offset + idx
+            action_type = action.__class__.__name__
+            machine = getattr(action, 'machine', None)
+
+            if machine is None:
+                result.add_error(
+                    message=(
+                        "Playbook defines multiple machines "
+                        f"({', '.join(sorted(valid_keys))}) but this action has no "
+                        "'machine:' field. Every action must specify which machine "
+                        "it targets (directly, or inherited from an enclosing "
+                        "block/loop)."
+                    ),
+                    action_index=action_index,
+                    action_type=action_type,
+                    field_name='machine',
+                )
+            elif machine not in valid_keys:
+                result.add_error(
+                    message=(
+                        f"Action specifies machine '{machine}', which is not "
+                        f"defined in the playbook's 'machines:' section "
+                        f"({', '.join(sorted(valid_keys))})."
+                    ),
+                    action_index=action_index,
+                    action_type=action_type,
+                    field_name='machine',
+                )
+
+            if isinstance(action, (BlockAction, LoopAction)):
+                self._check_actions(action.actions, valid_keys, result, action_offset=action_index)
+
+
 def validate_playbook(playbook: Playbook) -> None:
     """
     Validate playbook and raise ValueError if validation fails.
@@ -838,6 +894,7 @@ def validate_playbook(playbook: Playbook) -> None:
     definition_validator = VariableDefinitionValidator(usage_validator)
     filter_validator = FilterValidator(usage_validator)
     settings_validator = SettingsValidator()
+    machine_routing_validator = MachineRoutingValidator()
 
     validators = [
         settings_validator,
@@ -845,6 +902,7 @@ def validate_playbook(playbook: Playbook) -> None:
         duplicate_validator,  # Check for duplicates before checking definitions
         definition_validator,
         filter_validator,
+        machine_routing_validator,
     ]
 
     # Collect all validation results

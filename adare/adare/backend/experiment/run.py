@@ -32,7 +32,7 @@ from adare.backend.experiment.run_setup import (  # noqa: F401
 from adare.backend.experiment.runctx import ExperimentConfig, ExperimentRunCtx
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.backend.experiment.step_runner import ExperimentStepRunner
-from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
+from adare.backend.experiment.vm_orchestrator import get_vm_orchestrator
 from adare.exceptions import LoggedException
 from adare.types.stages import (
     CleanupShutdownStage,
@@ -318,10 +318,14 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         # second signal forfeits them.
         log.warning(
             f"Second {name} received — skipping graceful wind-down and destroying "
-            f"the VM domain immediately"
+            f"the VM domain(s) immediately"
         )
         from adare.backend.experiment.vm_lifecycle_manager import destroy_domain_by_name
-        destroy_domain_by_name(experiment_run_context.vm_name)
+        # Multi-machine runs have one VM per machine key (not just the primary/None
+        # one `experiment_run_context.vm_name` would read) -- destroy every one so a
+        # second SIGTERM cannot leak a sibling VM.
+        for machine_ctx in experiment_run_context.machines.values():
+            destroy_domain_by_name(machine_ctx.vm_name)
 
         # Hand the signal back to the default handler so a third one, or an
         # unwinding that is itself wedged, still terminates the process.
@@ -390,11 +394,13 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if not stop_event.is_set():
             await step_runner.run_async_step(step_start_mcp_server, experiment_run_context)
 
-        # Create VM lifecycle manager with hypervisor from environment
-        # (Must be created after step_setup_experiment_environment sets hypervisor_type)
-        hypervisor = experiment_run_context.hypervisor_type or 'virtualbox'
-        vm_manager = VMLifecycleManager(hypervisor_type=hypervisor)
-        log.debug(f'Using hypervisor: {hypervisor}')
+        # Create the VM lifecycle driver from the environment(s) resolved by
+        # step_setup_experiment_environment. Single-VM playbooks (no `machines:`
+        # key) get back a plain, unmodified VMLifecycleManager -- zero behavior
+        # change. Multi-machine playbooks get a MultiVMOrchestrator fanning the
+        # same calls out across one VMLifecycleManager per machine.
+        vm_manager = get_vm_orchestrator(experiment_run_context)
+        log.debug(f'Using VM driver: {type(vm_manager).__name__}')
 
         # Virtual Machine Setup Phase
         if not stop_event.is_set():

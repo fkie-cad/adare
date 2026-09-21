@@ -17,7 +17,7 @@ from adare.backend.experiment.agent_lifecycle import install_and_run_adare_vm
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 from adare.backend.experiment.integrity_validator import IntegrityValidator
 from adare.backend.experiment.print import flowconsolemanager
-from adare.backend.experiment.runctx import ExperimentRunCtx
+from adare.backend.experiment.runctx import ExperimentRunCtx, MachineRunCtx
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.backend.project.directory import ProjectDirectory
 from adare.config.configdirectory import ADARELIB_DIR, ADAREVM_DIR
@@ -206,43 +206,66 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
         #     validator = IntegrityValidator(context.config.project_path)
         #     validator.verify_playbook_testfunctions(context.playbook)
 
-        # Resolve environment
-        if context.config.environment_name:
-            context.environment_file = environment_database.get_environment_path_by_project_and_name(
-                context.config.project_path, context.config.environment_name
-            )
+        # Resolve environment name(s). Multi-machine playbooks (`playbook.machines`)
+        # resolve one MachineRunCtx per machine key from its MachineSpec.environment;
+        # today's single-VM playbooks (no `machines:` key) resolve exactly one, under
+        # the implicit `None` key -- net-zero behavior change for existing playbooks.
+        machines_spec = getattr(context.playbook, 'machines', None) if context.playbook else None
+        if machines_spec:
+            for machine_key, spec in machines_spec.items():
+                _resolve_machine_environment(context, machine_key, spec.environment)
         else:
-            context.environment_file = experiment_database.get_experiment_environment(
-                context.config.project_path, context.config.environment_name, context.config.experiment_name
-            )
-            # update environment_name based on file stem
-            context.config.environment_name = context.environment_file.stem
-        context.environment_ulid = experiment_database.get_environment_ulid(context.config.project_path, context.config.environment_name)
+            if context.config.environment_name:
+                environment_name = context.config.environment_name
+            else:
+                environment_file = experiment_database.get_experiment_environment(
+                    context.config.project_path, context.config.environment_name, context.config.experiment_name
+                )
+                # update environment_name based on file stem
+                environment_name = environment_file.stem
+                context.config.environment_name = environment_name
+            _resolve_machine_environment(context, context.primary_machine, environment_name)
 
-        # For lazy loading, VM file might not be available yet - will be resolved during VM creation
-        context.vm_file = environment_database.get_environment_vm_file(context.environment_ulid)
-        context.guest_platform = environment_database.get_environment_os(context.environment_ulid)
-        context.hypervisor_type = environment_database.get_environment_hypervisor(context.environment_ulid)
 
-        # Fetch guest architecture from database (via VM osinfo)
-        env_arch_data = environment_database.get_environment_by_ulid(
-            context.environment_ulid, fields=['vm_architecture']
-        )
-        if env_arch_data and env_arch_data.get('vm_architecture'):
-            context.guest_architecture = env_arch_data['vm_architecture']
+def _resolve_machine_environment(context: ExperimentRunCtx, machine_key: str | None, environment_name: str) -> MachineRunCtx:
+    """Resolve one machine's environment metadata (VM file, guest OS/arch, hypervisor).
 
-        # If VM file is not available, get from environment metadata directly
-        if not context.vm_file or not context.guest_platform or not context.guest_architecture:
-            from adare.types.environment import parse_environment_file
-            environment_metadata = parse_environment_file(context.environment_file)
-            if not context.vm_file:
-                context.vm_file = Path(environment_metadata.vm)
-            if not context.guest_platform:
-                context.guest_platform = environment_metadata.os.platform
-            if not context.guest_architecture and hasattr(environment_metadata.os, 'architecture'):
-                context.guest_architecture = environment_metadata.os.architecture
+    Populates and returns the ``MachineRunCtx`` for ``machine_key`` in
+    ``context.machines``. Called once per ``MachineSpec`` for a multi-machine
+    playbook, or once for the implicit ``None`` key otherwise.
+    """
+    machine_ctx = context.machines.setdefault(machine_key, MachineRunCtx())
 
-        log.info(f'found environment {context.config.environment_name} (hypervisor: {context.hypervisor_type})')
+    machine_ctx.environment_file = environment_database.get_environment_path_by_project_and_name(
+        context.config.project_path, environment_name
+    )
+    machine_ctx.environment_ulid = experiment_database.get_environment_ulid(context.config.project_path, environment_name)
+
+    # For lazy loading, VM file might not be available yet - will be resolved during VM creation
+    machine_ctx.vm_file = environment_database.get_environment_vm_file(machine_ctx.environment_ulid)
+    machine_ctx.guest_platform = environment_database.get_environment_os(machine_ctx.environment_ulid)
+    machine_ctx.hypervisor_type = environment_database.get_environment_hypervisor(machine_ctx.environment_ulid)
+
+    # Fetch guest architecture from database (via VM osinfo)
+    env_arch_data = environment_database.get_environment_by_ulid(
+        machine_ctx.environment_ulid, fields=['vm_architecture']
+    )
+    if env_arch_data and env_arch_data.get('vm_architecture'):
+        machine_ctx.guest_architecture = env_arch_data['vm_architecture']
+
+    # If VM file is not available, get from environment metadata directly
+    if not machine_ctx.vm_file or not machine_ctx.guest_platform or not machine_ctx.guest_architecture:
+        from adare.types.environment import parse_environment_file
+        environment_metadata = parse_environment_file(machine_ctx.environment_file)
+        if not machine_ctx.vm_file:
+            machine_ctx.vm_file = Path(environment_metadata.vm)
+        if not machine_ctx.guest_platform:
+            machine_ctx.guest_platform = environment_metadata.os.platform
+        if not machine_ctx.guest_architecture and hasattr(environment_metadata.os, 'architecture'):
+            machine_ctx.guest_architecture = environment_metadata.os.architecture
+
+    log.info(f'found environment {environment_name} for machine {machine_key!r} (hypervisor: {machine_ctx.hypervisor_type})')
+    return machine_ctx
 
 
 def step_validate_integrity(context: ExperimentRunCtx):
@@ -328,32 +351,43 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
         if context.config.runlog and not skip_adare_log:
             _ensure_and_copy_adare_log_to_run_directory(run_dir, file_log_level=context.config.file_log_level)
 
-        # Initialize MCP server with log file
+        # Initialize one MCP (CV/OCR) server per machine -- multi-machine playbooks
+        # get one cv-server per machine (each needs its own port/log/debug dir);
+        # today's single-VM playbooks (no `machines:` key) get exactly one, under
+        # the implicit None key -- net-zero behavior change.
         from adare.backend.experiment.mcp_server_manager import MCPServerManager, find_free_cv_port
 
-        # Determine debug output directory
-        debug_output_dir = None
-        if context.debug_screenshots:
-            debug_output_dir = run_dir.screenshots_directory / 'cv_debug'
-            # Ensure parent screenshot directory exists (cv_debug will be created by server)
-            run_dir.screenshots_directory.mkdir(parents=True, exist_ok=True)
-            log.info(f"Enabled CV debug output to: {debug_output_dir}")
+        for machine_key, view in _machine_views(context):
+            # Determine debug output directory
+            debug_output_dir = None
+            if context.debug_screenshots:
+                debug_output_dir = run_dir.screenshots_directory / 'cv_debug'
+                if machine_key is not None:
+                    debug_output_dir = debug_output_dir.with_name(f'cv_debug_{machine_key}')
+                # Ensure parent screenshot directory exists (cv_debug will be created by server)
+                run_dir.screenshots_directory.mkdir(parents=True, exist_ok=True)
+                log.info(f"Enabled CV debug output to: {debug_output_dir}")
 
-        # Pick a free port rather than taking the fixed default: two concurrent
-        # `adare experiment run` invocations would otherwise share one cv-server, and
-        # the loser's CV debug images and mcp_gui.log would be written into the
-        # winner's run directory (both are fixed in the spawned process's argv).
-        # The chosen URL is handed to the PlaybookController in
-        # step_execute_experiment so the resolver talks to THIS run's server.
-        cv_port = find_free_cv_port()
+            log_file = run_dir.mcp_gui_log_file
+            if machine_key is not None:
+                log_file = log_file.with_name(f"{log_file.stem}-{machine_key}{log_file.suffix}")
 
-        context.mcp_server = MCPServerManager(
-            server_port=cv_port,
-            log_file=run_dir.mcp_gui_log_file,
-            debug=context.config.dev_mode,
-            debug_output_dir=debug_output_dir
-        )
-        log.info(f"CV/OCR server for this run will use port {cv_port}")
+            # Pick a free port rather than taking the fixed default: two concurrent
+            # `adare experiment run` invocations (or, here, two machines of the same
+            # run) would otherwise share one cv-server, and the loser's CV debug
+            # images and mcp_gui.log would be written into the winner's run
+            # directory (both are fixed in the spawned process's argv). The chosen
+            # URL is handed to the PlaybookController in step_execute_experiment so
+            # each machine's resolver talks to ITS run's server.
+            cv_port = find_free_cv_port()
+
+            view.mcp_server = MCPServerManager(
+                server_port=cv_port,
+                log_file=log_file,
+                debug=context.config.dev_mode,
+                debug_output_dir=debug_output_dir
+            )
+            log.info(f"CV/OCR server for machine {machine_key!r} will use port {cv_port}")
 
 
 def _resolve_and_store_test_execution_mode(context: ExperimentRunCtx):
@@ -379,64 +413,91 @@ def _resolve_and_store_test_execution_mode(context: ExperimentRunCtx):
         context.test_execution_mode = 'agent'
 
 
-async def step_execute_installations_via_qga(context: ExperimentRunCtx):
-    """Execute environment installations via QGA guest-exec (no WebSocket needed)."""
-    from adare.backend.experiment.agent_lifecycle import execute_installations_via_qga
-    # Skip the stage entirely when there is nothing to install, so the
-    # "Installing environment software" row never appears for empty environments.
-    installations = environment_database.get_environment_installations(context.environment_ulid)
-    if not installations:
+def _machine_views(context: ExperimentRunCtx):
+    """Yield a ``(machine_key, view)`` pair for each machine to drive.
+
+    Multi-machine playbooks (``playbook.machines`` with >=2 entries) yield one
+    ``_MachineContextView`` per declared machine, so agent-lifecycle helpers
+    written for a single-VM ``ExperimentRunCtx`` run once per machine unmodified.
+    Today's single-VM playbooks (no ``machines:`` key) yield the context itself
+    once -- net-zero behavior change.
+    """
+    from adare.backend.experiment.vm_orchestrator import _MachineContextView
+
+    machines_spec = getattr(context.playbook, 'machines', None) if context.playbook else None
+    if machines_spec and len(machines_spec) > 1:
+        for machine_key in machines_spec:
+            yield machine_key, _MachineContextView(context, machine_key)
+    else:
+        yield context.primary_machine, context
+
+
+async def _run_per_machine_installations(context: ExperimentRunCtx, install_fn):
+    """Run an installation-execution function once per machine.
+
+    Skips the stage entirely when there is nothing to install on any machine, so
+    the "Installing environment software" row never appears for empty environments.
+    """
+    pending = [
+        (key, view) for key, view in _machine_views(context)
+        if environment_database.get_environment_installations(context.machines[key].environment_ulid)
+    ]
+    if not pending:
         log.info("No environment installations to execute; skipping stage")
         return
     with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
-        await execute_installations_via_qga(context, stage_ctx)
+        for _key, view in pending:
+            await install_fn(view, stage_ctx)
+
+
+async def step_execute_installations_via_qga(context: ExperimentRunCtx):
+    """Execute environment installations via QGA guest-exec (no WebSocket needed)."""
+    from adare.backend.experiment.agent_lifecycle import execute_installations_via_qga
+    await _run_per_machine_installations(context, execute_installations_via_qga)
 
 
 async def step_install_and_run_websocket_server(context: ExperimentRunCtx):
     with StageCtxManager(InstallAdareVMStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-        await install_and_run_adare_vm(context, stop_event=context.user_interrupt_event)
+        for _key, view in _machine_views(context):
+            await install_and_run_adare_vm(view, stop_event=context.user_interrupt_event)
 
 
 async def step_connect_websocket(context: ExperimentRunCtx):
     from adare.backend.experiment.agent_lifecycle import connect_websocket
     with StageCtxManager(ConnectToVMStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
-        await connect_websocket(context, stage_ctx)
+        for _key, view in _machine_views(context):
+            await connect_websocket(view, stage_ctx)
 
 
 async def step_execute_installations(context: ExperimentRunCtx):
     from adare.backend.experiment.agent_lifecycle import execute_installations_via_websocket
-    # Skip the stage entirely when there is nothing to install, so the
-    # "Installing environment software" row never appears for empty environments.
-    installations = environment_database.get_environment_installations(context.environment_ulid)
-    if not installations:
-        log.info("No environment installations to execute; skipping stage")
-        return
-    with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
-        await execute_installations_via_websocket(context, stage_ctx)
+    await _run_per_machine_installations(context, execute_installations_via_websocket)
 
 
 async def step_start_mcp_server(context: ExperimentRunCtx):
-    """Start the MCP GUI server for target detection."""
+    """Start the MCP GUI server(s) for target detection -- one per machine."""
     with StageCtxManager(StartComputerVisionServerStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-        log.info("Starting MCP GUI server for target detection...")
+        for machine_key, view in _machine_views(context):
+            log.info(f"Starting MCP GUI server for machine {machine_key!r}...")
 
-        success = await context.mcp_server.start()
-        if success:
-            log.info("MCP GUI server started successfully")
-            # Record which port/PID this run or dev session owns, so a resumed dev
-            # session reclaims its own server instead of allocating a second one and
-            # leaking the first. Written here rather than at each construction site
-            # so dev start, dev resume and production runs all record it identically.
-            if context.experiment_run_directory is not None:
-                from adare.backend.experiment.mcp_server_manager import save_cv_state
-                save_cv_state(
-                    context.experiment_run_directory.path,
-                    context.mcp_server.server_port,
-                    context.mcp_server.known_server_pid,
-                )
-        else:
-            from adare.exceptions import LoggedException
-            raise LoggedException(log, "MCP GUI server failed to start - cannot proceed without target detection capabilities")
+            success = await view.mcp_server.start()
+            if success:
+                log.info(f"MCP GUI server started successfully for machine {machine_key!r}")
+                # Record which port/PID this run or dev session owns, so a resumed dev
+                # session reclaims its own server instead of allocating a second one and
+                # leaking the first. Written here rather than at each construction site
+                # so dev start, dev resume and production runs all record it identically.
+                if context.experiment_run_directory is not None:
+                    from adare.backend.experiment.mcp_server_manager import save_cv_state
+                    save_cv_state(
+                        context.experiment_run_directory.path,
+                        view.mcp_server.server_port,
+                        view.mcp_server.known_server_pid,
+                        machine_key=machine_key,
+                    )
+            else:
+                from adare.exceptions import LoggedException
+                raise LoggedException(log, f"MCP GUI server failed to start for machine {machine_key!r} - cannot proceed without target detection capabilities")
 
 
 async def step_execute_experiment(context: ExperimentRunCtx):
@@ -458,7 +519,8 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         if is_host_test_mode:
             log.info("Host test mode: skipping testfunction dependency installation in VM (dependencies run on host)")
         else:
-            await test_loader._install_dependencies_only(context.client)
+            for _key, view in _machine_views(context):
+                await test_loader._install_dependencies_only(view.client)
 
     # Then run the actual experiment
     with StageCtxManager(ExperimentRunStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
@@ -501,6 +563,27 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         controller_kwargs = {}
         if context.mcp_server is not None:
             controller_kwargs['mcp_gui_url'] = context.mcp_server.server_url
+
+        # Multi-machine playbooks: build one MachineHandles per machine so the
+        # controller's ActionExecutor can route each action to its `machine:`.
+        machines_spec = getattr(context.playbook, 'machines', None) if context.playbook else None
+        if machines_spec and len(machines_spec) > 1:
+            from adare.backend.experiment.action_executor import MachineHandles
+            machine_handles = {}
+            for machine_key in machines_spec:
+                machine_ctx = context.machines[machine_key]
+                machine_vm_os = machine_ctx.guest_platform or None
+                machine_vm_user = None
+                if machine_vm_os:
+                    machine_vm_user, _ = get_vm_credentials(machine_vm_os)
+                machine_handles[machine_key] = MachineHandles(
+                    vm=machine_ctx.vm,
+                    client=machine_ctx.client,
+                    vm_os=machine_vm_os,
+                    vm_user=machine_vm_user,
+                    mcp_gui_url=machine_ctx.mcp_server.server_url if machine_ctx.mcp_server else "http://localhost:13109/mcp",
+                )
+            controller_kwargs['machines'] = machine_handles
 
         # Create playbook controller
         controller = PlaybookController(
@@ -601,7 +684,7 @@ def _setup_guest_to_host_test_executor(controller, vm, playbook, vm_os: str):
 
 
 async def step_collect_system_info(context: ExperimentRunCtx):
-    """Collect system information from the guest VM and save to YAML file."""
+    """Collect system information from the guest VM(s) and save to YAML file(s)."""
     with StageCtxManager(SystemInfoCollectionStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
         # Check if system info collection is enabled in playbook settings
         collect_enabled = getattr(context.playbook.settings, 'collect_system_info', True)
@@ -609,41 +692,53 @@ async def step_collect_system_info(context: ExperimentRunCtx):
             log.info("System info collection disabled in playbook settings")
             return
 
-        if not context.guest_platform:
-            log.warning("Guest platform not detected - skipping system info collection")
-            return
-
         if not hasattr(context, 'experiment_run_directory') or not context.experiment_run_directory:
             log.warning("Experiment run directory not available - skipping system info collection")
             return
 
-        output_file = context.experiment_run_directory.system_info_file
+        machine_views = list(_machine_views(context))
+        multi_machine = len(machine_views) > 1
+        for machine_key, view in machine_views:
+            await _collect_machine_system_info(context, machine_key, view, multi_machine)
 
-        # Use QGA-based collection in host test mode, WebSocket otherwise
-        is_host_test_mode = context.test_execution_mode == 'host'
 
-        if is_host_test_mode and context.vm:
-            from adare.backend.experiment.system_info_collector import collect_system_info_via_qga
-            success = await collect_system_info_via_qga(
-                vm=context.vm,
-                guest_platform=context.guest_platform,
-                output_file=output_file
-            )
-        elif context.client:
-            from adare.backend.experiment.system_info_collector import collect_system_info
-            success = await collect_system_info(
-                websocket_client=context.client,
-                guest_platform=context.guest_platform,
-                output_file=output_file
-            )
-        else:
-            log.warning("Neither WebSocket client nor VM available - skipping system info collection")
-            return
+async def _collect_machine_system_info(context: ExperimentRunCtx, machine_key, view, multi_machine: bool):
+    """Collect system info for one machine. `view` may be the context itself (single-VM) or a per-machine view."""
+    if not view.guest_platform:
+        log.warning(f"Guest platform not detected for machine {machine_key!r} - skipping system info collection")
+        return
 
-        if success:
-            log.info(f"System information collected and saved to {output_file}")
-        else:
-            log.warning("System information collection failed (experiment continues)")
+    output_file = context.experiment_run_directory.system_info_file
+    if multi_machine:
+        # Distinct output files per machine -- the plain path would otherwise have
+        # every machine overwrite the same system-info.yml.
+        output_file = output_file.with_name(f"{output_file.stem}-{machine_key}{output_file.suffix}")
+
+    # Use QGA-based collection in host test mode, WebSocket otherwise
+    is_host_test_mode = context.test_execution_mode == 'host'
+
+    if is_host_test_mode and view.vm:
+        from adare.backend.experiment.system_info_collector import collect_system_info_via_qga
+        success = await collect_system_info_via_qga(
+            vm=view.vm,
+            guest_platform=view.guest_platform,
+            output_file=output_file
+        )
+    elif view.client:
+        from adare.backend.experiment.system_info_collector import collect_system_info
+        success = await collect_system_info(
+            websocket_client=view.client,
+            guest_platform=view.guest_platform,
+            output_file=output_file
+        )
+    else:
+        log.warning(f"Neither WebSocket client nor VM available for machine {machine_key!r} - skipping system info collection")
+        return
+
+    if success:
+        log.info(f"System information collected and saved to {output_file}")
+    else:
+        log.warning(f"System information collection failed for machine {machine_key!r} (experiment continues)")
 
 
 def step_finalize(context: ExperimentRunCtx, post_interrupt: bool = False):
@@ -668,12 +763,13 @@ def step_finalize(context: ExperimentRunCtx, post_interrupt: bool = False):
 
 
 async def step_shutdown_mcp_server(context: ExperimentRunCtx, post_interrupt: bool = False, force: bool = False):
-    """Stop the MCP GUI server."""
+    """Stop the MCP GUI server(s) -- one per machine."""
     event = None if post_interrupt else context.user_interrupt_event
     with StageCtxManager(ShutdownComputerVisionServerStage(), context.experiment_run_ulid, event=event):
-        log.info('stopping MCP GUI server')
-        if context.mcp_server is not None:
-            await context.mcp_server.stop(force_external=force)
+        for machine_ctx in context.machines.values():
+            if machine_ctx.mcp_server is not None:
+                log.info('stopping MCP GUI server')
+                await machine_ctx.mcp_server.stop(force_external=force)
 
 
 async def step_shutdown_ws(context: ExperimentRunCtx, post_interrupt: bool = False):
