@@ -7,11 +7,53 @@ Libguestfs, QGA).
 """
 import logging
 import shutil
+from pathlib import Path
 from typing import Any
 
 from adare.hypervisor.exceptions import HypervisorException
 
 log = logging.getLogger(__name__)
+
+# Stop counting here so a huge data share doesn't stall VM setup
+_FILE_COUNT_CAP = 10_000
+
+
+def _count_files(path: Path) -> str:
+    """Count regular files below path, capped at _FILE_COUNT_CAP."""
+    count = 0
+    for entry in path.rglob('*'):
+        if entry.is_file():
+            count += 1
+            if count >= _FILE_COUNT_CAP:
+                return f'{_FILE_COUNT_CAP}+'
+    return str(count)
+
+
+def check_shared_dir(host_path: Path, guest_name: str) -> bool:
+    """Log whether a project/experiment shared dir will reach the guest.
+
+    config.json always lists tools/data paths under both shared mounts, so a
+    missing host dir means adarevm looks in a path that will not exist. Without
+    this warning the share is skipped silently and the guest just lacks it.
+
+    Args:
+        host_path: Shared directory on the host
+        guest_name: Mount name under the guest base dir (e.g. 'project_shared')
+
+    Returns:
+        True if host_path exists and should be shared
+    """
+    if not host_path.exists():
+        log.warning(
+            f"Shared directory {host_path} not found -- "
+            f"the guest will have no '{guest_name}' directory"
+        )
+        return False
+    log.info(
+        f"Sharing {host_path} as guest '{guest_name}' "
+        f"({_count_files(host_path)} files)"
+    )
+    return True
 
 
 def build_share_list(
@@ -81,7 +123,7 @@ def build_share_list(
         })
 
     # 4. Project shared directory (optional)
-    if context.project_directory.shared.exists():
+    if check_shared_dir(context.project_directory.shared, 'project_shared'):
         shares.append({
             'tag': 'project_shared',
             'host_path': str(context.project_directory.shared),
@@ -95,7 +137,7 @@ def build_share_list(
     # 5. Experiment shared directory (optional)
     if (
         context.experiment_directory
-        and context.experiment_directory.shared.exists()
+        and check_shared_dir(context.experiment_directory.shared, 'shared')
     ):
         shares.append({
             'tag': 'shared',
@@ -132,6 +174,7 @@ def build_share_list(
 
 def build_config_json(
     is_windows: bool,
+    file_transfer_mode: str,
     installation_mode: str = "wheel",
 ) -> dict[str, Any]:
     """Build config.json content for adarevm with mount paths.
@@ -141,6 +184,8 @@ def build_config_json(
 
     Args:
         is_windows: True if guest is Windows
+        file_transfer_mode: 'virtiofs', 'smb', 'libguestfs' or 'qga'; only
+            logged by adarevm so guest logs show how /adare was populated
         installation_mode: "wheel" (pip) or "editable" (Poetry)
 
     Returns:
@@ -158,6 +203,7 @@ def build_config_json(
             ],
             "logfile": "C:\\adare\\run\\logs\\adarevm.log",
             "installation_mode": installation_mode,
+            "file_transfer_mode": file_transfer_mode,
         }
     return {
         "tools_paths": [
@@ -170,4 +216,5 @@ def build_config_json(
         ],
         "logfile": "/adare/run/logs/adarevm.log",
         "installation_mode": installation_mode,
+        "file_transfer_mode": file_transfer_mode,
     }

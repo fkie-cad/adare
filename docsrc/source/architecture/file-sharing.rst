@@ -283,6 +283,23 @@ The standard shares are:
 User-defined shared directories from the experiment configuration are
 appended to this list.
 
+``project_shared`` and ``shared`` are only added when the host directory
+exists (``<project>/shared`` and ``<project>/experiments/<experiment>/shared``).
+The whole directory is shared, not just its ``tools`` and ``data``
+subdirectories, so ``<project>/shared/image.png`` appears as
+``/adare/project_shared/image.png``. Copy files in rather than symlinking
+them: libguestfs drops symlinks, QGA transfers them as dangling links, and
+under virtiofs a link pointing outside the share does not resolve in the
+guest. Only SMB follows them.
+
+When shared files are missing in the guest, check both logs:
+
+- ``adare.log`` (host) shows ``Sharing <path> as guest '<name>' (N files)``
+  for each shared directory, or a warning when one is skipped because the host
+  directory does not exist.
+- ``adarevm.log`` (guest) shows ``file transfer mode: <mode>`` and, for each
+  tools/data path, its entry count or ``MISSING``.
+
 .. important::
 
    **Write experiment outputs to the run share.** Only the ``run`` share is
@@ -321,10 +338,14 @@ its log:
        "/adare/shared/data"
      ],
      "logfile": "/adare/run/logs/adarevm.log",
-     "installation_mode": "wheel"
+     "installation_mode": "wheel",
+     "file_transfer_mode": "virtiofs"
    }
 
 Windows guests use the same structure with ``C:\adare\`` paths.
+``file_transfer_mode`` is one of ``virtiofs``, ``smb``, ``libguestfs`` or
+``qga``. ``adarevm`` only logs it, so the guest log shows how ``/adare`` was
+populated.
 
 See :doc:`hypervisors` for how file transfer fits into the overall VM
 lifecycle.

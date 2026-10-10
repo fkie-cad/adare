@@ -20,7 +20,7 @@ from typing import Any
 
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
-from adare.hypervisor.qemu.file_transfer.shares import build_config_json
+from adare.hypervisor.qemu.file_transfer.shares import build_config_json, check_shared_dir
 from adare.hypervisor.qemu.guestfish_client import (
     GuestfishClient,
     _classify_libguestfs_failure,
@@ -133,6 +133,7 @@ class LibguestfsStrategy(FileTransferStrategy):
         run_dir = context.experiment_run_directory.path
         config_data = build_config_json(
             is_windows=is_windows,
+            file_transfer_mode='libguestfs',
             installation_mode=context.config.installation_mode,
         )
         with open(run_dir / 'config.json', 'w') as f:
@@ -734,11 +735,7 @@ def _build_file_transfer_manifest(context: Any) -> list[dict[str, str]]:
         ])
 
     # Project-level shared directory
-    if context.project_directory.shared.exists():
-        log.info(
-            f"Adding shared project directory to transfer: "
-            f"{context.project_directory.shared}"
-        )
+    if check_shared_dir(context.project_directory.shared, 'project_shared'):
         files_to_copy.append({
             'source': str(context.project_directory.shared),
             'dest': 'project_shared',
@@ -747,12 +744,8 @@ def _build_file_transfer_manifest(context: Any) -> list[dict[str, str]]:
     # Experiment-level shared directory
     if (
         context.experiment_directory
-        and context.experiment_directory.shared.exists()
+        and check_shared_dir(context.experiment_directory.shared, 'shared')
     ):
-        log.info(
-            f"Adding shared experiment directory to transfer: "
-            f"{context.experiment_directory.shared}"
-        )
         files_to_copy.append({
             'source': str(context.experiment_directory.shared),
             'dest': 'shared',

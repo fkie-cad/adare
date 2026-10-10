@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import os
 import platform
 from pathlib import Path
 from typing import List
@@ -98,6 +99,25 @@ def load_config(run_dir: str) -> dict:
         log.warning(f"Failed to load config from {config_path}: {e}")
         return {}
 
+def _log_shared_paths(paths: List[str], file_transfer_mode: str):
+    """Log how /adare was populated and what each tools/data path holds.
+
+    Missing or empty shares are otherwise invisible in this log, which is the
+    one users send when files they shared don't show up in the guest.
+    """
+    log.info(f"file transfer mode: {file_transfer_mode}")
+    for path in paths:
+        try:
+            entries = len(os.listdir(path))
+        except FileNotFoundError:
+            log.warning(f"shared path {path}: MISSING")
+            continue
+        except OSError as e:
+            log.warning(f"shared path {path}: not readable ({e.strerror})")
+            continue
+        log.info(f"shared path {path}: {entries} entries")
+
+
 def run():
     args = __parse_args()
     
@@ -145,6 +165,8 @@ def run():
     installation_mode = config.get('installation_mode', 'wheel')
 
     log.info(f"adarevm started with tools_paths={tools_paths}, data_paths={data_paths}, installation_mode={installation_mode}")
+    # Hosts older than this key don't write it
+    _log_shared_paths(tools_paths + data_paths, config.get('file_transfer_mode', 'unknown'))
     try:
         asyncio.run(main(tools_paths=tools_paths, data_paths=data_paths, installation_mode=installation_mode))
     except KeyboardInterrupt:
