@@ -21,11 +21,12 @@ def _make_ctx(
         environment_name="test-env",
         gui_mode_override=gui_mode_override,
     )
-    return ExperimentRunCtx(
+    ctx = ExperimentRunCtx(
         config=config,
         test_execution_mode=test_execution_mode,
-        hypervisor_type=hypervisor_type,
     )
+    ctx.hypervisor_type = hypervisor_type
+    return ctx
 
 
 # --- is_interrupted ---

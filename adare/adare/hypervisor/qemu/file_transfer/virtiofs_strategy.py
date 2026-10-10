@@ -61,6 +61,7 @@ class VirtioFSStrategy(FileTransferStrategy):
         run_dir = context.experiment_run_directory.path
         config_data = build_config_json(
             is_windows=is_windows,
+            file_transfer_mode='virtiofs',
             installation_mode=context.config.installation_mode,
         )
         with open(run_dir / 'config.json', 'w') as f:

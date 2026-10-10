@@ -32,7 +32,7 @@ from adare.backend.experiment.run_setup import (  # noqa: F401
 from adare.backend.experiment.runctx import ExperimentConfig, ExperimentRunCtx
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.backend.experiment.step_runner import ExperimentStepRunner
-from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
+from adare.backend.experiment.vm_orchestrator import get_vm_orchestrator
 from adare.exceptions import LoggedException
 from adare.types.stages import (
     CleanupShutdownStage,
@@ -153,7 +153,7 @@ async def _recompute_run_tally(experiment_run_context):
         return None
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', allow_emulation: bool = False, file_log_level: int = logging.INFO, run_ulid: str | None = None):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', export_disk_image: bool = None, capture_pcap: bool = None, export_memory_dump: bool = None, allow_emulation: bool = False, file_log_level: int = logging.INFO, run_ulid: str | None = None):
     import signal
 
     log.info(f"Starting experiment run {experiment_name} in project {project_path}")
@@ -248,6 +248,17 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         config.diff_mode = diff_mode
         log.info(f"Filesystem diff mode: {diff_mode}")
 
+    # Disk image export / pcap capture CLI overrides (None = defer to playbook Settings)
+    if export_disk_image is not None:
+        config.export_disk_image = export_disk_image
+        log.info(f"Disk image export CLI override: {'enabled' if export_disk_image else 'disabled'}")
+    if capture_pcap is not None:
+        config.capture_pcap = capture_pcap
+        log.info(f"pcap capture CLI override: {'enabled' if capture_pcap else 'disabled'}")
+    if export_memory_dump is not None:
+        config.export_memory_dump = export_memory_dump
+        log.info(f"Memory dump CLI override: {'enabled' if export_memory_dump else 'disabled'}")
+
     experiment_run_context = ExperimentRunCtx(config)
     # Respect the --debug-screenshots CLI flag (default: False unless flag is provided)
     experiment_run_context.debug_screenshots = debug_screenshots
@@ -307,10 +318,14 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         # second signal forfeits them.
         log.warning(
             f"Second {name} received — skipping graceful wind-down and destroying "
-            f"the VM domain immediately"
+            f"the VM domain(s) immediately"
         )
         from adare.backend.experiment.vm_lifecycle_manager import destroy_domain_by_name
-        destroy_domain_by_name(experiment_run_context.vm_name)
+        # Multi-machine runs have one VM per machine key (not just the primary/None
+        # one `experiment_run_context.vm_name` would read) -- destroy every one so a
+        # second SIGTERM cannot leak a sibling VM.
+        for machine_ctx in experiment_run_context.machines.values():
+            destroy_domain_by_name(machine_ctx.vm_name)
 
         # Hand the signal back to the default handler so a third one, or an
         # unwinding that is itself wedged, still terminates the process.
@@ -379,11 +394,13 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if not stop_event.is_set():
             await step_runner.run_async_step(step_start_mcp_server, experiment_run_context)
 
-        # Create VM lifecycle manager with hypervisor from environment
-        # (Must be created after step_setup_experiment_environment sets hypervisor_type)
-        hypervisor = experiment_run_context.hypervisor_type or 'virtualbox'
-        vm_manager = VMLifecycleManager(hypervisor_type=hypervisor)
-        log.debug(f'Using hypervisor: {hypervisor}')
+        # Create the VM lifecycle driver from the environment(s) resolved by
+        # step_setup_experiment_environment. Single-VM playbooks (no `machines:`
+        # key) get back a plain, unmodified VMLifecycleManager -- zero behavior
+        # change. Multi-machine playbooks get a MultiVMOrchestrator fanning the
+        # same calls out across one VMLifecycleManager per machine.
+        vm_manager = get_vm_orchestrator(experiment_run_context)
+        log.debug(f'Using VM driver: {type(vm_manager).__name__}')
 
         # Virtual Machine Setup Phase
         if not stop_event.is_set():
@@ -534,6 +551,11 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                     await video_recorder.stop()
 
                 if vm_manager:
+                    # Memory only exists while QEMU is running, so the dump must happen
+                    # BEFORE retrieve_artifacts/stop_vm below (which may themselves stop
+                    # the VM depending on transfer mode) -- unlike host_diff/disk_export,
+                    # which need the still-live overlay AFTER shutdown.
+                    await step_runner.run_cleanup_step(vm_manager.perform_memory_dump, experiment_run_context, post_interrupt=True)
                     # Force shutdown by default for QEMU guests: the overlay is discarded
                     # on cleanup regardless (ephemeral run), so waiting up to 60s for a
                     # graceful ACPI shutdown buys nothing -- except when --preserve-snapshot
@@ -554,6 +576,8 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                     await step_runner.run_cleanup_step(vm_manager.stop_vm, experiment_run_context, post_interrupt=True, force=force_shutdown)
                     # Perform host-side diff AFTER VM stopped, BEFORE overlay cleanup
                     await step_runner.run_cleanup_step(vm_manager.perform_host_diff, experiment_run_context, post_interrupt=True)
+                    # Disk image export needs the same still-live overlay as the diff above
+                    await step_runner.run_cleanup_step(vm_manager.perform_disk_export, experiment_run_context, post_interrupt=True)
                     await step_runner.run_cleanup_step(vm_manager.cleanup_vm, experiment_run_context, post_interrupt=True)
             # Give time for all events to be processed before stopping
             await asyncio.sleep(2)

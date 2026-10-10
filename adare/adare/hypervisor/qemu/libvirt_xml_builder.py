@@ -51,14 +51,18 @@ class PCIBusAllocator:
     }
     _PC_VIRTIOFS_BASE_SLOT = 8  # slots 8+ for virtiofs shares
 
-    def __init__(self, is_q35: bool):
+    def __init__(self, is_q35: bool, num_virtiofs_devices: int = 0):
         self.is_q35 = is_q35
+        # Needed to place 'network_secondary' (the multi-machine inter-VM NIC)
+        # past the virtiofs range, whose length varies by VM -- see address_for.
+        self.num_virtiofs_devices = num_virtiofs_devices
 
     def address_for(self, device: str, index: int = 0) -> dict[str, str]:
         """Return PCI address attributes dict for ET.SubElement.
 
         Args:
-            device: Device type name (e.g. 'disk', 'network', 'virtiofs')
+            device: Device type name (e.g. 'disk', 'network', 'virtiofs',
+                'network_secondary' -- the multi-machine inter-VM NIC)
             index: Index for multi-instance devices like virtiofs shares
 
         Returns:
@@ -73,6 +77,16 @@ class PCIBusAllocator:
                 bus = self._Q35_VIRTIOFS_BASE_BUS + index
                 return self._make_address(bus, 0)
             slot = self._PC_VIRTIOFS_BASE_SLOT + index
+            return self._make_address(0, slot)
+
+        if device == 'network_secondary':
+            # One slot past this VM's virtiofs range, so the bus/slot chosen here
+            # never collides regardless of how many virtiofs shares it has.
+            # _add_pci_controllers reserves the matching extra q35 bus for this.
+            if self.is_q35:
+                bus = self._Q35_VIRTIOFS_BASE_BUS + self.num_virtiofs_devices
+                return self._make_address(bus, 0)
+            slot = self._PC_VIRTIOFS_BASE_SLOT + self.num_virtiofs_devices
             return self._make_address(0, slot)
 
         assignments = self._Q35_ASSIGNMENTS if self.is_q35 else self._PC_ASSIGNMENTS
@@ -142,7 +156,8 @@ class DomainXMLBuilder:
         self._iso_path = getattr(vm_config, 'iso_path', '') or ''
         self._boot_from_cdrom = bool(getattr(vm_config, 'boot_from_cdrom', False))
 
-        self._pci = PCIBusAllocator(self._is_q35)
+        self._num_virtiofs = len(self._virtiofs_shares)
+        self._pci = PCIBusAllocator(self._is_q35, num_virtiofs_devices=self._num_virtiofs)
 
         self._domain: ET.Element | None = None
         self._devices: ET.Element | None = None
@@ -432,6 +447,35 @@ class DomainXMLBuilder:
         else:
             ET.SubElement(interface, 'address', **self._pci.address_for('network'))
 
+        self._add_secondary_network()
+
+    def _add_secondary_network(self) -> None:
+        """Attach a second NIC to an isolated inter-VM network (multi-machine playbooks only).
+
+        Only emitted when ``vm_config.secondary_network_name`` is set -- absent
+        for every existing single-VM environment, so this is purely additive.
+        Reuses the same plain ``<interface type='network'>`` XML path as
+        ``_add_network``'s Windows/bridge branch above, rather than extending the
+        hardcoded netdev logic in ``_add_network_commandline``.
+
+        **Unverified**: see ``adare.hypervisor.qemu.libvirt_network`` -- this has
+        not been exercised against a live libvirt daemon in this session.
+        """
+        network_name = getattr(self._config, 'secondary_network_name', None)
+        if not network_name:
+            return
+
+        interface = ET.SubElement(self._devices, 'interface', type='network')
+        ET.SubElement(interface, 'source', network=network_name)
+        ET.SubElement(interface, 'model', type='virtio')
+
+        if self._is_virt:
+            pass  # libvirt auto-assigns addresses on virt machine
+        elif self._is_q35:
+            ET.SubElement(interface, 'address', **self._pci.address_for('network_secondary'))
+        else:
+            ET.SubElement(interface, 'address', **self._pci.address_for('network_secondary'))
+
     def _add_guest_agent_channel(self) -> None:
         """Add QEMU Guest Agent virtio-serial channel."""
         channel = ET.SubElement(self._devices, 'channel', type='unix')
@@ -465,8 +509,12 @@ class DomainXMLBuilder:
         if self._is_virt:
             ET.SubElement(self._devices, 'controller', type='pci', index='0', model='pcie-root')
         elif self._is_q35:
-            num_virtiofs = len(self._virtiofs_shares) if self._virtiofs_shares else 0
-            _add_q35_pcie_topology(self._devices, num_virtiofs)
+            # +1 bus when this VM has a secondary (inter-VM) NIC, so the bus
+            # PCIBusAllocator.address_for('network_secondary') computes actually
+            # has a pcie-root-port backing it.
+            has_secondary_network = bool(getattr(self._config, 'secondary_network_name', None))
+            extra_buses = 1 if has_secondary_network else 0
+            _add_q35_pcie_topology(self._devices, self._num_virtiofs, extra_buses=extra_buses)
         else:
             ET.SubElement(self._devices, 'controller', type='pci', index='0', model='pci-root')
 
@@ -814,6 +862,26 @@ class DomainXMLBuilder:
             # PC/i440FX: PCIBusAllocator reserves bus 0 slot 3 for network
             _add_qemu_arg(qemu_commandline, 'virtio-net-pci,netdev=net0,addr=0x3')
 
+        self._add_pcap_capture(qemu_commandline, netdev_id='net0')
+
+    def _add_pcap_capture(self, qemu_commandline: ET.Element, netdev_id: str) -> None:
+        """Tap ``netdev_id`` to a pcap file via QEMU's host-side filter-dump object.
+
+        Purely host-side (no guest-agent involvement); composes with any
+        ``-netdev`` this builder emits. Config is keyed by netdev id (see
+        ``adare.hypervisor.qemu.pcap_capture.PcapCaptureConfig``) so a future
+        per-segment netdev is just another entry, not a rewrite of this method.
+        """
+        from adare.hypervisor.qemu.pcap_capture import PcapCaptureConfig
+
+        pcap_config = PcapCaptureConfig.from_dict(getattr(self._config, 'pcap_paths', None))
+        pcap_path = pcap_config.get(netdev_id)
+        if not pcap_path:
+            return
+
+        _add_qemu_arg(qemu_commandline, '-object')
+        _add_qemu_arg(qemu_commandline, f'filter-dump,id=dump-{netdev_id},netdev={netdev_id},file={pcap_path}')
+
     def _prettify(self) -> str:
         """Convert the domain XML tree to a pretty-printed string."""
         return _prettify_xml(self._domain)
@@ -821,7 +889,7 @@ class DomainXMLBuilder:
 
 # --- Module-level helper functions (kept for backward compatibility) ---
 
-def _add_q35_pcie_topology(devices: ET.Element, num_virtiofs_devices: int = 0) -> None:
+def _add_q35_pcie_topology(devices: ET.Element, num_virtiofs_devices: int = 0, extra_buses: int = 0) -> None:
     """Add proper PCIe topology for q35 machines.
 
     q35 machines require devices to connect through pcie-root-port
@@ -835,18 +903,22 @@ def _add_q35_pcie_topology(devices: ET.Element, num_virtiofs_devices: int = 0) -
     - Bus 4: Disk (virtio-block)
     - Bus 5: Memory balloon
     - Buses 6-10: virtio-fs filesystem devices (up to 5)
-    - Buses 11+: Reserved for future use
+    - Bus 6+num_virtiofs_devices: secondary (inter-VM) NIC, if present -- see
+      PCIBusAllocator.address_for('network_secondary')
+    - Remaining buses: Reserved for future use
 
     Args:
         devices: The devices XML element
         num_virtiofs_devices: Number of virtiofs devices to allocate buses for
+        extra_buses: Additional buses to reserve past the virtiofs range (e.g.
+            1 for a multi-machine VM's secondary inter-VM NIC)
     """
     # Root controller (bus 0)
     ET.SubElement(devices, 'controller', type='pci', index='0', model='pcie-root')
 
-    # Calculate total buses needed: base (6) + virtiofs devices (up to 5)
-    # Minimum 9 buses for backward compatibility, max 14 for 5 virtiofs devices
-    total_buses = max(9, 6 + num_virtiofs_devices)
+    # Calculate total buses needed: base (6) + virtiofs devices (up to 5) + any
+    # extra (e.g. the secondary NIC). Minimum 9 buses for backward compatibility.
+    total_buses = max(9, 6 + num_virtiofs_devices + extra_buses)
 
     # Add pcie-root-port controllers (buses 1 to total_buses)
     for i in range(1, total_buses + 1):

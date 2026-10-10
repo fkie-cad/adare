@@ -83,22 +83,26 @@ def find_free_cv_port(preferred: int = DEFAULT_CV_PORT, window: int = CV_PORT_SC
 CV_STATE_FILENAME = 'cv_server.json'
 
 
-def cv_state_file(run_directory: Path) -> Path:
-    """Path of the CV ownership record for ``run_directory``.
+def cv_state_file(run_directory: Path, machine_key: str | None = None) -> Path:
+    """Path of the CV ownership record for ``run_directory`` (and, for a
+    multi-machine run, one specific machine -- each machine gets its own
+    cv-server, so they need distinct ownership records within the same run
+    directory).
 
     Derived from the run directory path rather than added as an
     ``ExperimentRunDirectory`` attribute on purpose: the dev-session restorer
     rebuilds that object via ``__new__`` and hand-sets only a few attributes
     (session_restorer.py), so a new attribute would silently be missing there.
     """
-    return run_directory / 'logs' / CV_STATE_FILENAME
+    filename = CV_STATE_FILENAME if machine_key is None else f'cv_server_{machine_key}.json'
+    return run_directory / 'logs' / filename
 
 
-def save_cv_state(run_directory: Path, port: int, pid: int | None) -> None:
-    """Record which port/PID this run's cv-server owns. Best-effort."""
+def save_cv_state(run_directory: Path, port: int, pid: int | None, machine_key: str | None = None) -> None:
+    """Record which port/PID this run's (machine's) cv-server owns. Best-effort."""
     import json
 
-    target = cv_state_file(run_directory)
+    target = cv_state_file(run_directory, machine_key)
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps({'port': port, 'pid': pid}), encoding='utf-8')
@@ -109,11 +113,11 @@ def save_cv_state(run_directory: Path, port: int, pid: int | None) -> None:
         log.warning(f"Could not record CV server state to {target}: {e}")
 
 
-def load_cv_state(run_directory: Path) -> tuple[int | None, int | None]:
-    """Return the ``(port, pid)`` recorded for ``run_directory``, or ``(None, None)``."""
+def load_cv_state(run_directory: Path, machine_key: str | None = None) -> tuple[int | None, int | None]:
+    """Return the ``(port, pid)`` recorded for ``run_directory`` (and machine), or ``(None, None)``."""
     import json
 
-    source = cv_state_file(run_directory)
+    source = cv_state_file(run_directory, machine_key)
     if not source.exists():
         return None, None
     try:

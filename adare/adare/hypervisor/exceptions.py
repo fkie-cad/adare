@@ -261,6 +261,23 @@ class DiskNotFoundException(DiskOperationException):
 
 
 # =============================================================================
+# Memory Operation Exceptions
+# =============================================================================
+
+class MemoryOperationException(HypervisorException):
+    """Base exception for guest-memory operations."""
+    def __init__(self, dest_path: str, operation: str, reason: str):
+        self.dest_path = dest_path
+        self.operation = operation
+        self.reason = reason
+        super().__init__(f"Memory dump '{dest_path}': {operation} failed - {reason}")
+
+
+class MemoryDumpException(MemoryOperationException):
+    """Raised when a QMP guest-memory dump is rejected, fails, or times out."""
+
+
+# =============================================================================
 # Feature Support Exceptions
 # =============================================================================
 

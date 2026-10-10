@@ -41,6 +41,7 @@ def download_experiment(experiment_ulid: str, location: Path):
     if experiment_dir.exists():
         log.error(f"Experiment {experiment_ulid} already exists in {location}")
         raise ExperimentWithNameAlreadyExistsError(log, f"Experiment {experiment_ulid} already exists in {location}")
+    experiment_dir.mkdir(parents=True)
     for file in [metadata_file, playbook_file]:
         path = experiment_dir / Path(file).name
         download_from_session(file, path, session)
@@ -64,6 +65,7 @@ def download_testfunction(testfunction_name: str, location: Path, version: int =
         raise MissingDataError(log, f"Testfunction {testfunction_name} has no requirements_file attribute")
     # download the files
     session = webapp.get_gitea_session()
+    location.mkdir(parents=True)
     for file in [testfunction_file, requirements_file]:
         path = location / Path(file).name
         download_from_session(file, path, session)

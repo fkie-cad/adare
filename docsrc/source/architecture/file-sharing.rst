@@ -155,6 +155,27 @@ installed, or when the ``QEMU_LIBGUESTFS`` environment variable is set.
   (``requires_vm_stop_for_retrieval()`` returns ``True``), then extracts
   artifacts from the disk via guestfish.
 
+.. note::
+
+   **The transfer goes through a tar archive built on the host**, streamed into
+   the disk with a single ``tar-in`` call, not through per-file ``copy-in``.
+   ``copy-in`` places ``basename(source)`` into the target directory and cannot
+   rename, so it could not express the manifest's renames -- the project share
+   is called ``shared`` on the host but must land at ``/adare/project_shared``.
+   In the archive the manifest's ``dest`` becomes the member's ``arcname``, so
+   every destination is honoured exactly, and intermediate directories are
+   created by tar itself.
+
+   Building the archive on the host is also where **ownership is normalized**:
+   every member is written as ``root:root`` with directories ``0755`` and files
+   ``0644`` (the owner-execute bit is preserved as ``0755`` so tools under the
+   shares stay runnable). Without this, the tar-based copy would carry the
+   *host* account's numeric uid/gid into the guest image -- which breaks the
+   guest user on any host whose uid differs from the guest's, and leaks host
+   identity into the disk. Only ``/adare/run`` and its ``logs``/``artifacts``
+   subdirectories are relaxed to ``0777``, since they are the guest's sole
+   read-write locations; the shares keep their read-only contract.
+
 QGA (final fallback)
 --------------------
 
@@ -262,6 +283,23 @@ The standard shares are:
 User-defined shared directories from the experiment configuration are
 appended to this list.
 
+``project_shared`` and ``shared`` are only added when the host directory
+exists (``<project>/shared`` and ``<project>/experiments/<experiment>/shared``).
+The whole directory is shared, not just its ``tools`` and ``data``
+subdirectories, so ``<project>/shared/image.png`` appears as
+``/adare/project_shared/image.png``. Copy files in rather than symlinking
+them: libguestfs drops symlinks, QGA transfers them as dangling links, and
+under virtiofs a link pointing outside the share does not resolve in the
+guest. Only SMB follows them.
+
+When shared files are missing in the guest, check both logs:
+
+- ``adare.log`` (host) shows ``Sharing <path> as guest '<name>' (N files)``
+  for each shared directory, or a warning when one is skipped because the host
+  directory does not exist.
+- ``adarevm.log`` (guest) shows ``file transfer mode: <mode>`` and, for each
+  tools/data path, its entry count or ``MISSING``.
+
 .. important::
 
    **Write experiment outputs to the run share.** Only the ``run`` share is
@@ -300,10 +338,14 @@ its log:
        "/adare/shared/data"
      ],
      "logfile": "/adare/run/logs/adarevm.log",
-     "installation_mode": "wheel"
+     "installation_mode": "wheel",
+     "file_transfer_mode": "virtiofs"
    }
 
 Windows guests use the same structure with ``C:\adare\`` paths.
+``file_transfer_mode`` is one of ``virtiofs``, ``smb``, ``libguestfs`` or
+``qga``. ``adarevm`` only logs it, so the guest log shows how ``/adare`` was
+populated.
 
 See :doc:`hypervisors` for how file transfer fits into the overall VM
 lifecycle.
