@@ -17,7 +17,7 @@ from typing import Any
 from adare.backend.events.emitters import emit_action
 
 # Specialized modules for clean separation of concerns
-from adare.backend.experiment.action_executor import ActionExecutor, ActionResult
+from adare.backend.experiment.action_executor import ActionExecutor, ActionResult, MachineHandles
 from adare.backend.experiment.event_manager import EventManager
 
 # Import filesystem diff manager
@@ -68,6 +68,7 @@ class PlaybookControllerConfig:
     vm_user: str | None = None
     test_mode: bool = False
     config: Any | None = None
+    machines: dict[str | None, MachineHandles] | None = None  # Multi-machine playbooks only
 
 
 @dataclass
@@ -116,6 +117,7 @@ class PlaybookController:
         vm_user: str | None = None,
         test_mode: bool = False,
         config: Any | None = None,
+        machines: dict[str | None, MachineHandles] | None = None,
     ):
         """
         Initialize the playbook controller.
@@ -138,6 +140,7 @@ class PlaybookController:
             vm_user: (legacy) VM user for automatic variables
             test_mode: (legacy) Whether running in test mode
             config: (legacy) ExperimentConfig for CLI overrides
+            machines: (legacy) Multi-machine playbooks only -- per-machine dispatch handles
         """
         # Build effective config: explicit config wins, then legacy kwargs
         if controller_config is not None:
@@ -156,6 +159,7 @@ class PlaybookController:
                 vm_user=vm_user,
                 test_mode=test_mode,
                 config=config,
+                machines=machines,
             )
 
         self.client = websocket_client
@@ -182,13 +186,19 @@ class PlaybookController:
         if self.experiment_id:
             self._initialize_playbook_items_mapping()
 
-        # Target resolution using MCP GUI server. The WebSocket client and OS
-        # key let the resolver extract-and-cache icons for `target.icon`.
-        self.target_resolver = MCPTargetResolver(
-            cfg.experiment_dir, cfg.mcp_gui_url, cfg.experiment_run_id,
-            vm_client=self.client, os_key=self.vm_os or "windows",
-        )
-        self.condition_checker = MCPConditionChecker(self.target_resolver)
+        # Per-machine dispatch handles. Single-VM playbooks (no controller_config
+        # .machines) get a single-entry dict built from the legacy args above, under
+        # the implicit None key -- unchanged behavior. Each machine gets its own
+        # MCPTargetResolver/MCPConditionChecker (the WebSocket client and OS key let
+        # the resolver extract-and-cache icons for `target.icon`).
+        self.machines: dict[str | None, MachineHandles] = self._build_machine_handles(cfg, websocket_client, vm)
+        self._primary_machine_key = next(iter(self.machines))
+        primary = self.machines[self._primary_machine_key]
+
+        # Back-compat scalars: the primary machine's resolver/checker, exactly as
+        # single-VM callers already expect from `self.target_resolver`.
+        self.target_resolver = primary.target_resolver
+        self.condition_checker = primary.condition_checker
 
         # Initialize specialized modules
         self._initialize_modules()
@@ -200,6 +210,39 @@ class PlaybookController:
         # Auto-pull on test failure tracking
         self._auto_pull_files: list[str] = []
         self._auto_pull_executed: bool = False
+
+    def _build_machine_handles(self, cfg: PlaybookControllerConfig, websocket_client: AdareVMClient,
+                                vm: Any) -> dict[str | None, MachineHandles]:
+        """Build (or complete) the per-machine dispatch handles for this controller.
+
+        Multi-machine playbooks pass ``cfg.machines`` with ``vm``/``client``/
+        ``vm_os``/``vm_user``/``mcp_gui_url`` already filled in per machine; this
+        method fills in each machine's ``target_resolver``/``condition_checker`` if
+        missing. Single-VM playbooks (``cfg.machines`` unset) get a single-entry
+        dict built from the legacy constructor args, under the implicit None key.
+        """
+        if cfg.machines:
+            for key, handles in cfg.machines.items():
+                if handles.target_resolver is None:
+                    handles.target_resolver = MCPTargetResolver(
+                        cfg.experiment_dir, handles.mcp_gui_url, cfg.experiment_run_id,
+                        vm_client=handles.client, os_key=handles.vm_os or "windows",
+                    )
+                if handles.condition_checker is None:
+                    handles.condition_checker = MCPConditionChecker(handles.target_resolver)
+            return cfg.machines
+
+        target_resolver = MCPTargetResolver(
+            cfg.experiment_dir, cfg.mcp_gui_url, cfg.experiment_run_id,
+            vm_client=websocket_client, os_key=self.vm_os or "windows",
+        )
+        return {
+            None: MachineHandles(
+                vm=vm, client=websocket_client, vm_os=self.vm_os, vm_user=self.vm_user,
+                mcp_gui_url=cfg.mcp_gui_url, target_resolver=target_resolver,
+                condition_checker=MCPConditionChecker(target_resolver),
+            )
+        }
 
     def _merge_automatic_variables(self, variable_registry):
         """Merge the OS/user-derived ``adare_*`` built-ins into a playbook variable registry.
@@ -240,17 +283,16 @@ class PlaybookController:
             playbook_items_map=self.playbook_items_map
         )
 
-        # Action executor for individual action execution
+        # Action executor for individual action execution, seeded from every
+        # machine's dispatch handles so it can route each action to its
+        # `machine:` (see ActionExecutor._rebind_to_machine).
         self.action_executor = ActionExecutor(
-            websocket_client=self.client,
-            target_resolver=self.target_resolver,
-            condition_checker=self.condition_checker,
+            machines=self.machines,
             experiment_run_id=self.experiment_run_id,
             playbook=self.playbook,
             execution_context=self.execution_context,
             debug_screenshots=self.debug_screenshots,
             screenshots_dir=self.screenshots_dir,
-            vm=self.vm,
             experiment_run_directory=self.experiment_run_directory,
             flow_console=self.flow_console
         )
@@ -339,6 +381,12 @@ class PlaybookController:
         """
         # Update main client reference
         self.client = new_client
+
+        # Update the primary machine's dispatch handle. execute_action() re-sources
+        # `client` from `self.machines` on every dispatch (_rebind_to_machine), so
+        # updating only the scalars below would be silently overwritten by the next
+        # action if this dict entry were left stale.
+        self.machines[self._primary_machine_key].client = new_client
 
         # Update action executor and its sub-executors
         self.action_executor.client = new_client

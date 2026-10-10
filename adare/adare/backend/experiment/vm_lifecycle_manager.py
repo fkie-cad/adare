@@ -813,6 +813,176 @@ class VMLifecycleManager:
 
         return 'auto'
 
+    async def perform_disk_export(self, context: ExperimentRunCtx, post_interrupt: bool = False):
+        """
+        Export the VM's overlay disk as a self-contained raw image for forensic
+        ingestion (e.g. Autopsy), independent of the metadata-level filesystem
+        diff performed by :meth:`perform_host_diff`.
+
+        Runs AFTER VM shutdown and BEFORE overlay cleanup, same as
+        perform_host_diff, since both need the still-live overlay file.
+        """
+        if self.hypervisor_type != 'qemu':
+            log.debug("Disk export skipped - requires QEMU hypervisor")
+            return
+
+        if not self._is_disk_export_enabled(context):
+            log.debug("Disk export skipped - export_disk_image disabled")
+            return
+
+        from adare.types.stages import VMDiskExportStage
+
+        event = None if post_interrupt else context.user_interrupt_event
+
+        with StageCtxManager(VMDiskExportStage(), context.experiment_run_ulid, event=event) as stage_ctx:
+            try:
+                from adare.hypervisor.exceptions import DiskConversionException
+                from adare.hypervisor.qemu.disk_export import export_disk_image
+                from adare.hypervisor.qemu.vm import QEMUVM
+
+                if not isinstance(context.vm, QEMUVM):
+                    log.warning("VM is not a QEMU instance - cannot export disk image")
+                    return
+
+                if not context.experiment_run_directory:
+                    log.warning("No experiment run directory - cannot export disk image")
+                    return
+
+                overlay_disk_path = Path(context.vm.config.disk_path)
+                if not overlay_disk_path.exists():
+                    log.error(f"Overlay disk not found: {overlay_disk_path}")
+                    return
+
+                fmt = 'raw'
+                dest_path = context.experiment_run_directory.path / 'artifacts' / 'disk' / f'{context.vm_name}.{fmt}'
+
+                log.info(f"Exporting disk image ({fmt}) to {dest_path}")
+                export_disk_image(
+                    overlay_disk_path, dest_path, fmt=fmt,
+                    qemu_img_exe=context.vm.executables.qemu_img,
+                )
+
+                from sqlalchemy.exc import SQLAlchemyError
+
+                from adare.database.api.experiment import ExperimentApi
+                from adare.database.exceptions import DatabaseError
+                with ExperimentApi(context.config.project_path) as api:
+                    api.add_run_artifact(
+                        run_ulid=context.experiment_run_ulid,
+                        kind='disk_image',
+                        path=str(dest_path),
+                        format=fmt,
+                    )
+
+                stage_ctx.stage.sub_msg = f"Exported to {dest_path.name}"
+                log.info(f"Disk image exported to {dest_path}")
+
+            except DiskConversionException as e:
+                log.warning(f"Disk export failed (continuing cleanup): {e}")
+            except (OSError, RuntimeError, ValueError, KeyError) as e:
+                log.warning(f"Disk export failed (continuing cleanup): {e}", exc_info=True)
+            except (DatabaseError, SQLAlchemyError) as e:
+                # DatabaseError from ExperimentApi(...) construction (wrapped),
+                # SQLAlchemyError from add_run_artifact's raw session.commit() --
+                # a failed artifact-row write must not block VM cleanup below.
+                log.warning(f"Disk export artifact recording failed (continuing cleanup): {e}", exc_info=True)
+
+    def _is_disk_export_enabled(self, context: ExperimentRunCtx) -> bool:
+        """Check if raw/vmdk disk image export is enabled (CLI override, then playbook settings)."""
+        if hasattr(context.config, 'export_disk_image') and context.config.export_disk_image is not None:
+            return context.config.export_disk_image
+
+        if context.playbook and hasattr(context.playbook, 'settings') and context.playbook.settings:
+            return bool(getattr(context.playbook.settings, 'export_disk_image', False))
+        return False
+
+    async def perform_memory_dump(self, context: ExperimentRunCtx, post_interrupt: bool = False):
+        """
+        Dump the VM's live guest RAM via QMP ``dump-guest-memory`` for memory-forensics
+        ingestion (e.g. Volatility3).
+
+        Unlike perform_host_diff/perform_disk_export (which run AFTER shutdown, needing
+        the still-live overlay), this must run BEFORE retrieve_artifacts/stop_vm --
+        memory only exists while QEMU is running, and dump-guest-memory is designed to
+        run live (no pause/quiesce first, which would itself be a forensically-visible
+        side effect).
+        """
+        if self.hypervisor_type != 'qemu':
+            log.debug("Memory dump skipped - requires QEMU hypervisor")
+            return
+
+        if not self._is_memory_dump_enabled(context):
+            log.debug("Memory dump skipped - export_memory_dump disabled")
+            return
+
+        from adare.types.stages import VMMemoryDumpStage
+
+        event = None if post_interrupt else context.user_interrupt_event
+
+        with StageCtxManager(VMMemoryDumpStage(), context.experiment_run_ulid, event=event) as stage_ctx:
+            try:
+                from adare.hypervisor.exceptions import MemoryDumpException
+                from adare.hypervisor.qemu.memory_dump import dump_guest_memory
+                from adare.hypervisor.qemu.vm import QEMUVM
+
+                if not isinstance(context.vm, QEMUVM):
+                    log.warning("VM is not a QEMU instance - cannot dump guest memory")
+                    return
+
+                if not context.experiment_run_directory:
+                    log.warning("No experiment run directory - cannot dump guest memory")
+                    return
+
+                fmt = 'elf'
+                dest_path = context.experiment_run_directory.path / 'artifacts' / 'memory' / f'{context.vm_name}.{fmt}'
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+                configured_memory_mb = context.config.vm_memory
+                if configured_memory_mb:
+                    free_bytes = shutil.disk_usage(dest_path.parent).free
+                    if free_bytes < configured_memory_mb * 1024 * 1024 * 1.5:
+                        log.warning(
+                            f"Free disk space ({free_bytes / (1024 ** 3):.1f}GiB) is less than 1.5x "
+                            f"configured VM RAM ({configured_memory_mb}MB) - memory dump may fail to complete"
+                        )
+
+                log.info(f"Dumping guest memory ({fmt}) to {dest_path}")
+                await dump_guest_memory(context.vm, dest_path, fmt=fmt)
+
+                from sqlalchemy.exc import SQLAlchemyError
+
+                from adare.database.api.experiment import ExperimentApi
+                from adare.database.exceptions import DatabaseError
+                with ExperimentApi(context.config.project_path) as api:
+                    api.add_run_artifact(
+                        run_ulid=context.experiment_run_ulid,
+                        kind='memory_dump',
+                        path=str(dest_path),
+                        format=fmt,
+                    )
+
+                stage_ctx.stage.sub_msg = f"Dumped to {dest_path.name}"
+                log.info(f"Guest memory dumped to {dest_path}")
+
+            except MemoryDumpException as e:
+                log.warning(f"Memory dump failed (continuing cleanup): {e}")
+            except (OSError, RuntimeError, ValueError, KeyError) as e:
+                log.warning(f"Memory dump failed (continuing cleanup): {e}", exc_info=True)
+            except (DatabaseError, SQLAlchemyError) as e:
+                # DatabaseError from ExperimentApi(...) construction (wrapped),
+                # SQLAlchemyError from add_run_artifact's raw session.commit() --
+                # a failed artifact-row write must not block VM cleanup below.
+                log.warning(f"Memory dump artifact recording failed (continuing cleanup): {e}", exc_info=True)
+
+    def _is_memory_dump_enabled(self, context: ExperimentRunCtx) -> bool:
+        """Check if RAM dump export is enabled (CLI override, then playbook settings)."""
+        if hasattr(context.config, 'export_memory_dump') and context.config.export_memory_dump is not None:
+            return context.config.export_memory_dump
+
+        if context.playbook and hasattr(context.playbook, 'settings') and context.playbook.settings:
+            return bool(getattr(context.playbook.settings, 'export_memory_dump', False))
+        return False
+
     async def cleanup_vm(self, context: ExperimentRunCtx, post_interrupt: bool = False):
         """
         Cleanup VM resources and handle experiment snapshots.

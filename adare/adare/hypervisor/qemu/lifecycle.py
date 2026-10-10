@@ -229,6 +229,33 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             context.vm._save_vm_config()  # Persist for domain XML generation
             log.debug(f"Configured VM logging to {run_dir}")
 
+        # Opt-in pcap capture of the outside-world netdev (net0): CLI override
+        # (--capture-pcap) takes precedence over playbook Settings.capture_pcap,
+        # same layering as filesystem diff's --diff/enable_filesystem_diff.
+        # Purely host-side (QEMU filter-dump) — see adare.hypervisor.qemu.pcap_capture.
+        cli_capture_pcap = getattr(context.config, 'capture_pcap', None)
+        if cli_capture_pcap is not None:
+            capture_pcap_enabled = cli_capture_pcap
+        else:
+            settings = getattr(context.playbook, 'settings', None) if context.playbook else None
+            capture_pcap_enabled = bool(getattr(settings, 'capture_pcap', False)) if settings else False
+
+        from adare.hypervisor.qemu.pcap_capture import PcapCaptureConfig, resolve_net0_pcap_path
+
+        # QEMUVMConfig persists across runs of the same VM (loaded from
+        # ~/.adare/qemu/vms/<vm_name>.json), so pcap_paths must be reassigned
+        # unconditionally every run -- otherwise a prior run's entry (pointing
+        # at that run's now-cleaned-up directory) survives into a later run
+        # where capture wasn't requested, and QEMU fails to boot trying to
+        # open a filter-dump file that no longer exists.
+        pcap_config = PcapCaptureConfig()
+        if capture_pcap_enabled and context.experiment_run_directory:
+            pcap_path = resolve_net0_pcap_path(context.experiment_run_directory, context.vm_name)
+            pcap_config.set('net0', pcap_path)
+            log.info(f"Capturing net0 traffic to {pcap_path}")
+        context.vm.config.pcap_paths = pcap_config.to_dict()
+        context.vm._save_vm_config()
+
         # Create experiment overlay backed by immutable base disk
         # This ensures libguestfs operations don't modify the base disk,
         # preserving hash integrity for forensic validation

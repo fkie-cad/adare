@@ -169,15 +169,25 @@ class PlaybookApi(ProjectDatabaseApi):
 
     def _target_to_json(self, target) -> dict[str, Any]:
         """Convert Target object to JSON."""
+        import attrs
+
         result = {}
         if target.image:
             result["image"] = target.image
         if target.text:
             result["text"] = target.text
+        if target.icon:
+            result["icon"] = target.icon
+        if target.text_match:
+            result["text_match"] = attrs.asdict(target.text_match)
         if target.position:
             result["position"] = target.position
         if target.strategy:
             result["strategy"] = self._strategy_to_json(target.strategy)
+        if target.offset:
+            result["offset"] = attrs.asdict(target.offset)
+        if target.use_cache is not None:
+            result["use_cache"] = target.use_cache
         return result
 
     def _strategy_to_json(self, strategy) -> dict[str, Any]:
@@ -416,18 +426,30 @@ class PlaybookApi(ProjectDatabaseApi):
         if not target_json:
             return None
 
-        from adare.types.playbook import Target
+        from adare.types.playbook import Offset, Target, TextMatchConfig
 
         # Reconstruct strategy if present
         strategy = None
         if 'strategy' in target_json and target_json['strategy']:
             strategy = self._json_to_strategy(target_json['strategy'])
 
+        text_match = None
+        if target_json.get('text_match'):
+            text_match = TextMatchConfig(**target_json['text_match'])
+
+        offset = None
+        if target_json.get('offset'):
+            offset = Offset(**target_json['offset'])
+
         return Target(
             image=target_json.get('image'),
             text=target_json.get('text'),
+            icon=target_json.get('icon'),
+            text_match=text_match,
             position=target_json.get('position'),
-            strategy=strategy
+            strategy=strategy,
+            offset=offset,
+            use_cache=target_json.get('use_cache')
         )
 
     def _json_to_strategy(self, strategy_json: dict[str, Any]):

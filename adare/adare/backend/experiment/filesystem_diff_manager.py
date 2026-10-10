@@ -135,7 +135,7 @@ class FilesystemDiffManager:
             # Create programmatic snapshot action
             snapshot_action = SnapshotFilesystemAction(
                 variable=variable_name,
-                timeout=300.0,  # 5 minute timeout
+                timeout=1200.0,  # 20 minute timeout - large installs (e.g. Kubernetes) add far more files than this project's usual Docker/Podman experiments
                 description="Automatic snapshot for filesystem diff"
             )
 

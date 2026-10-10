@@ -68,6 +68,7 @@ class QGAStrategy(FileTransferStrategy):
         is_windows = 'windows' in context.guest_platform.lower()
         config_data = build_config_json(
             is_windows=is_windows,
+            file_transfer_mode='qga',
             installation_mode=context.config.installation_mode,
         )
         with open(run_dir / 'config.json', 'w') as f:

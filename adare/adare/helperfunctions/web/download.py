@@ -22,6 +22,7 @@ def download(url: str, path: Path, headers: dict = None, quiet: bool = False):
     if not headers:
         headers = dict()
     resp = requests.get(url, stream=True, headers=headers)
+    resp.raise_for_status()
     total = int(resp.headers.get('content-length', 0))
     if quiet:
         log.debug(f'download of {path.as_posix()} in silent mode start')
@@ -56,6 +57,8 @@ def download_from_session(url: str, path: Path, session: requests.Session):
     total = int(session.head(url).headers.get('content-length', 0))
     log.debug(f'download of {path.as_posix()} start')
     print(f'\nDownload {url} -> {path.as_posix()}')
+    response = session.get(url, stream=True)
+    response.raise_for_status()
     with open(path.as_posix(), 'wb') as file, tqdm(
         desc='',
         total=total,
@@ -63,7 +66,6 @@ def download_from_session(url: str, path: Path, session: requests.Session):
         unit_scale=True,
         unit_divisor=1024,
     ) as bar:
-        response = session.get(url, stream=True)
         for data in response.iter_content(chunk_size=1024):
             size = file.write(data)
             bar.update(size)

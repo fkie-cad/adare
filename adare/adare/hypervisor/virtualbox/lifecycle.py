@@ -112,6 +112,11 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
                 'host': context.project_directory.shared,
                 'vm': shared_root / 'project_shared'
             }
+        else:
+            log.warning(
+                f"Shared directory {context.project_directory.shared} not found -- "
+                f"the guest will have no 'project_shared' directory"
+            )
 
         # Add experiment-level shared directory if it exists
         if context.experiment_directory.shared.exists():
@@ -119,6 +124,11 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
                 'host': context.experiment_directory.shared,
                 'vm': shared_root / 'shared'
             }
+        else:
+            log.warning(
+                f"Shared directory {context.experiment_directory.shared} not found -- "
+                f"the guest will have no 'shared' directory"
+            )
 
         # Remove all existing shared folders to prevent conflicts
         log.debug("Removing all existing shared folders to prevent conflicts")

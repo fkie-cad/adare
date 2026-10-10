@@ -91,6 +91,13 @@ Configure experiment-wide behavior:
      collect_system_info: true      # Capture VM system info (default: true)
      forensic_logging: true         # Generate YAML audit logs (default: true)
      enable_filesystem_diff: true   # Auto snapshots at start/end (default: true)
+     export_disk_image: false       # Export overlay disk as merged raw image to
+                                     # artifacts/disk/ (e.g. for Autopsy ingestion)
+     capture_pcap: false            # Capture outside-world traffic (QEMU only) to
+                                     # artifacts/pcap/ via host-side filter-dump
+     export_memory_dump: false      # Live-dump guest RAM (QEMU only) to
+                                     # artifacts/memory/ via QMP dump-guest-memory,
+                                     # e.g. for Volatility3 ingestion
 
      # GUI automation mode (QEMU only)
      gui_execution_mode: 'auto'     # 'auto' (choose best), 'agent' (VM-based),
