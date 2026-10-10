@@ -108,13 +108,17 @@ class ApiClient:
         # Get authentication header
         header = self._get_auth_header()
 
-        # Make the request
+        # Make the request. `metadata` is sent as a filename-less multipart field
+        # (not via `data=`) so the request is ALWAYS multipart/form-data, even when
+        # `request_files` is empty (a run with no pulled artifacts) -- `requests`
+        # only switches to multipart when `files` is non-empty, and the server
+        # rejects the resulting application/x-www-form-urlencoded body.
         url = config_server.PUBLISH_RUN_URL
+        request_files = {**request_files, 'metadata': (None, json.dumps(data))}
         try:
             response = requests.post(
                 url,
                 headers=header,
-                data={'metadata': json.dumps(data)},
                 files=request_files,
                 timeout=config_server.TIMEOUT_SECONDS
             )
