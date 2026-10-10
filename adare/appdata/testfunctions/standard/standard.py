@@ -220,6 +220,9 @@ def file_exists(ctx, dst: str = '', match_mode: str = "any"):
             return TestResult.error([f'path {dst} cannot be used, '
                                     f'because no unambiguous file could be identified (because {status})'])
 
+        # Plain paths come back from resolve_globfilepath unchecked; drop missing
+        # ones so a nonexistent path is reported as missing, not as the wrong type.
+        paths = [p for p in paths if os.path.lexists(p)]
         files = [p for p in paths if Path(p).is_file()]
 
         if match_mode == "single":
@@ -254,6 +257,9 @@ def file_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
             return TestResult.error([f'path {dst} cannot be used, '
                                     f'because no unambiguous file could be identified (because {status})'])
 
+        # Plain paths come back from resolve_globfilepath unchecked; drop missing
+        # ones so a nonexistent path is reported as missing, not as the wrong type.
+        paths = [p for p in paths if os.path.lexists(p)]
         files = [p for p in paths if Path(p).is_file()]
 
         if match_mode == "single":
@@ -287,6 +293,9 @@ def dir_exists(ctx, dst: str = '', match_mode: str = "any"):
             return TestResult.error([f'path {dst} cannot be used, '
                                     f'because no unambiguous directory could be identified (because {status})'])
 
+        # Plain paths come back from resolve_globfilepath unchecked; drop missing
+        # ones so a nonexistent path is reported as missing, not as the wrong type.
+        paths = [p for p in paths if os.path.lexists(p)]
         dirs = [p for p in paths if Path(p).is_dir()]
 
         if match_mode == "single":
@@ -321,6 +330,9 @@ def dir_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
             return TestResult.error([f'path {dst} cannot be used, '
                                     f'because no unambiguous directory could be identified (because {status})'])
 
+        # Plain paths come back from resolve_globfilepath unchecked; drop missing
+        # ones so a nonexistent path is reported as missing, not as the wrong type.
+        paths = [p for p in paths if os.path.lexists(p)]
         dirs = [p for p in paths if Path(p).is_dir()]
 
         if match_mode == "single":
