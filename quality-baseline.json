@@ -15,7 +15,7 @@
     "SIM117": 16
   },
   "mypy": {
-    "arg-type": 497,
+    "arg-type": 496,
     "assignment": 404,
     "attr-defined": 1065,
     "call-arg": 31,
@@ -44,7 +44,7 @@
   "oversized_files": {
     "adare-cv-server/adare_cv_server/feature_matching.py": 1147,
     "adare/adare/backend/experiment/variable_resolver.py": 1044,
-    "adare/adare/backend/experiment/vm_lifecycle_manager.py": 1197,
+    "adare/adare/backend/experiment/vm_lifecycle_manager.py": 1134,
     "adare/adare/backend/experiment/vm_test.py": 1407,
     "adare/adare/backend/vm/commands.py": 1006,
     "adare/adare/backend/vm/instance_manager.py": 1005,
