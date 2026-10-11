@@ -30,6 +30,22 @@ log = logging.getLogger(__name__)
     category=HostModeCategory.QGA_PROBE,
 )
 def system_service_status(ctx: TestContext, service_name: str, expected_status: str):
+    """Pass when ``systemctl is-active <service_name>`` prints exactly ``expected_status``.
+
+    Use for: checking a systemd unit was started/stopped by an action. Linux guests only
+    (other OSes, a missing ``systemctl`` or a 10 s timeout are execution errors).
+
+    Args:
+        service_name: Unit name as given to systemctl, e.g. ``ssh`` or ``cups.service``.
+        expected_status: Exact, case-sensitive ``is-active`` output: ``active``, ``inactive``,
+            ``failed``, ``activating``, ``deactivating`` ... (unknown units usually print ``inactive``).
+
+    Example:
+        function: linux.system_service_status
+        parameter:
+          service_name: ssh
+          expected_status: active
+    """
     if platform.system() != 'Linux':
         return TestResult.execution_error(None, "This test only runs on Linux")
     try:
@@ -69,6 +85,21 @@ def system_service_status(ctx: TestContext, service_name: str, expected_status: 
     category=HostModeCategory.QGA_PROBE,
 )
 def process_running(ctx: TestContext, process_name: str, min_instances: int = 1):
+    """Pass when ``pgrep -f process_name`` finds at least ``min_instances`` processes.
+
+    Use for: checking an application/daemon is (still) running after an action. Linux only.
+    No matching process always fails, even with ``min_instances: 0``.
+
+    Args:
+        process_name: Extended regex matched against each process's FULL command line
+            (``pgrep -f``), so ``firefox`` also matches ``/usr/lib/firefox/firefox -contentproc``.
+        min_instances: Minimum number of matching PIDs (default 1).
+
+    Example:
+        function: linux.process_running
+        parameter:
+          process_name: soffice.bin
+    """
     if platform.system() != 'Linux':
         return TestResult.execution_error(None, "This test only runs on Linux")
     try:
@@ -110,6 +141,22 @@ def process_running(ctx: TestContext, process_name: str, min_instances: int = 1)
     category=HostModeCategory.QGA_PROBE,
 )
 def user_exists(ctx: TestContext, username: str, uid: int = None, home_dir: str = None):
+    """Pass when local user ``username`` exists (``pwd.getpwnam``) and optional UID/home match.
+
+    Use for: verifying an account was created by an installer or admin action. Linux only.
+
+    Args:
+        username: Login name, exact and case-sensitive.
+        uid: Expected numeric UID; ``None`` skips the check.
+        home_dir: Expected home directory, compared as an exact string (a trailing ``/``
+            matters); ``None`` skips the check.
+
+    Example:
+        function: linux.user_exists
+        parameter:
+          username: alice
+          home_dir: /home/alice
+    """
     if platform.system() != 'Linux':
         return TestResult.execution_error(None, "This test only runs on Linux")
 
@@ -155,6 +202,23 @@ def user_exists(ctx: TestContext, username: str, uid: int = None, home_dir: str 
     category=HostModeCategory.QGA_PROBE,
 )
 def log_entry_exists(ctx: TestContext, log_file: str, pattern: str, max_lines: int = 1000):
+    """Pass when one of the last ``max_lines`` lines of ``log_file`` matches ``pattern`` (``grep -E``).
+
+    Use for: checking an action left a trace in a text log (syslog, auth.log, app logs). Linux
+    only; meant for plain-text logs (not the binary journal). Runs ``tail -n N "log_file" | grep -E "pattern"``
+    through bash, so ``"``, ``$`` and backticks in either value are interpreted by the shell.
+
+    Args:
+        log_file: Guest path of a plain-text log; a missing file fails. No glob support.
+        pattern: POSIX extended regex (``grep -E``), case-sensitive.
+        max_lines: How many trailing lines to search (default 1000).
+
+    Example:
+        function: linux.log_entry_exists
+        parameter:
+          log_file: /var/log/auth.log
+          pattern: 'session opened for user alice'
+    """
     if platform.system() != 'Linux':
         return TestResult.execution_error(None, "This test only runs on Linux")
     try:

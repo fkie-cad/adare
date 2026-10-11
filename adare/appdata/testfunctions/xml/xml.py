@@ -281,6 +281,28 @@ def _parse_xml_with_namespaces(filepath):
     category=HostModeCategory.FILE_CONTENT,
 )
 def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: dict[str, str] = None):
+    """Pass when ``xpath`` selects at least one element in XML file ``dst``.
+
+    Use for: checking a config/profile XML gained an entry. For "absent" use xml.element_count
+    with ``expected_count: 0``.
+
+    Args:
+        dst: Guest path to the XML file; a glob must match exactly one path. A missing file
+            fails; malformed XML is an execution error.
+        xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
+            ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
+            ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
+            Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
+            error, so no functions such as ``text()``.
+        namespaces: Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` +
+            ``//ns:item``); ``{uri}tag`` also works without it.
+
+    Example:
+        function: xml.element_exists
+        parameter:
+          dst: /home/user/.local/share/recently-used.xbel
+          xpath: "//bookmark[@href='file:///home/user/report.odt']"
+    """
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:
@@ -314,6 +336,35 @@ def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: dict[str,
     category=HostModeCategory.FILE_CONTENT,
 )
 def element_text_matches(ctx: TestContext, dst: str, xpath: str, expected_text: str = '', regex_match: bool = False, case_sensitive: bool = True, wildcard_mode: str = "any", namespaces: dict[str, str] = None):
+    """Pass when the text of the element(s) selected by ``xpath`` equals/matches ``expected_text``.
+
+    Use for: asserting an XML setting or record value. "Text" is ``element.text``: only the
+    text before the element's first child, not stripped (missing -> ``''``).
+
+    Args:
+        dst: Guest path to the XML file; a glob must match exactly one path. A missing file
+            fails; malformed XML is an execution error.
+        xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
+            ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
+            ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
+            Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
+            error, so no functions such as ``text()``. No match fails.
+        expected_text: Exact expected text, or a regex with ``regex_match``. A single
+            ``!re``/``!timestamp`` tag is matched by type (``case_sensitive`` then ignored).
+        regex_match: Search ``expected_text`` as a Python regex (``re.search``, unanchored).
+        case_sensitive: ``False`` compares lower-cased / uses ``re.IGNORECASE``.
+        wildcard_mode: For several matched elements: ``any`` (default) or ``all`` must match;
+            other values are an execution error (only checked when several elements match).
+        namespaces: Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` +
+            ``//ns:item``); ``{uri}tag`` also works without it.
+
+    Example:
+        function: xml.element_text_matches
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./general/language
+          expected_text: de_DE
+    """
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:
@@ -356,6 +407,35 @@ def element_text_matches(ctx: TestContext, dst: str, xpath: str, expected_text: 
     category=HostModeCategory.FILE_CONTENT,
 )
 def attribute_matches(ctx: TestContext, dst: str, xpath: str, attribute: str, expected_value: str, regex_match: bool = False, case_sensitive: bool = True, namespaces: dict[str, str] = None):
+    """Pass when ``attribute`` of the FIRST element selected by ``xpath`` equals/matches ``expected_value``.
+
+    Use for: asserting attribute values (``visited``, ``modified``, ``href`` ...). No matching
+    element or a missing attribute fails.
+
+    Args:
+        dst: Guest path to the XML file; a glob must match exactly one path. A missing file
+            fails; malformed XML is an execution error.
+        xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
+            ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
+            ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
+            Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
+            error, so no functions such as ``text()``.
+        attribute: Attribute name; namespaced attributes need the ``{uri}name`` form.
+        expected_value: Exact expected value, or a regex with ``regex_match``; a single
+            ``!re``/``!timestamp`` tag is matched by type.
+        regex_match: Search ``expected_value`` as a Python regex (``re.search``, unanchored).
+        case_sensitive: ``False`` compares lower-cased / uses ``re.IGNORECASE``.
+        namespaces: Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` +
+            ``//ns:item``); ``{uri}tag`` also works without it.
+
+    Example:
+        function: xml.attribute_matches
+        parameter:
+          dst: /home/user/.local/share/recently-used.xbel
+          xpath: "//bookmark[@href='file:///home/user/report.odt']"
+          attribute: visited
+          expected_value: !re '20[0-9]{2}-'
+    """
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:
@@ -438,6 +518,33 @@ def attribute_matches(ctx: TestContext, dst: str, xpath: str, attribute: str, ex
     category=HostModeCategory.FILE_CONTENT,
 )
 def element_count(ctx: TestContext, dst: str, xpath: str, expected_count: int = 0, comparison_type: str = 'equals', namespaces: dict[str, str] = None):
+    """Pass when the number of elements selected by ``xpath`` satisfies ``comparison_type`` vs ``expected_count``.
+
+    Use for: counting entries (bookmarks, recent files); ``expected_count: 0`` asserts absence
+    (opposite of xml.element_exists).
+
+    Args:
+        dst: Guest path to the XML file; a glob must match exactly one path. A missing file
+            fails; malformed XML is an execution error.
+        xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
+            ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
+            ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
+            Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
+            error, so no functions such as ``text()``.
+        expected_count: Number to compare against (default 0).
+        comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
+            ``less_equal``; other values are an execution error.
+        namespaces: Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` +
+            ``//ns:item``); ``{uri}tag`` also works without it.
+
+    Example:
+        function: xml.element_count
+        parameter:
+          dst: /home/user/.local/share/recently-used.xbel
+          xpath: //bookmark
+          expected_count: 1
+          comparison_type: greater_equal
+    """
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:
@@ -473,6 +580,34 @@ def element_count(ctx: TestContext, dst: str, xpath: str, expected_count: int = 
     category=HostModeCategory.FILE_CONTENT,
 )
 def xpath_result_matches(ctx: TestContext, dst: str, xpath: str, expected_result: str | int | float | bool = '', result_type: str = 'text', namespaces: dict[str, str] = None):
+    """Pass when ``xpath`` evaluated as ``result_type`` equals ``expected_result``.
+
+    Use for: typed checks on the first matched element. Prefer xml.element_text_matches for text.
+
+    Args:
+        dst: Guest path to the XML file; a glob must match exactly one path. A missing file
+            fails; malformed XML is an execution error.
+        xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
+            ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
+            ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
+            Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
+            error, so no functions such as ``text()``.
+        expected_result: Converted per ``result_type``: ``str()``, ``float()`` or ``bool()``.
+            Note ``bool('false')`` is True -- use unquoted YAML ``true``/``false``.
+        result_type: ``text`` (default; first element's ``.text``, ``''`` if none), ``number``
+            (``float`` of that text; no match -> 0.0, non-numeric -> execution error) or
+            ``boolean`` (whether anything matched). Other values are an execution error.
+        namespaces: Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` +
+            ``//ns:item``); ``{uri}tag`` also works without it.
+
+    Example:
+        function: xml.xpath_result_matches
+        parameter:
+          dst: /home/user/.config/app/stats.xml
+          xpath: ./counters/opened
+          expected_result: 3
+          result_type: number
+    """
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:
@@ -513,6 +648,26 @@ def xpath_result_matches(ctx: TestContext, dst: str, xpath: str, expected_result
     category=HostModeCategory.FILE_CONTENT,
 )
 def namespace_matches(ctx: TestContext, dst: str, expected_namespaces: dict[str, str] = None, check_mode: str = 'contains'):
+    """Pass when the namespaces detected in ``dst`` contain (or equal) ``expected_namespaces``.
+
+    Use for: checking which XML dialect/schema version a file uses. Only the root element's
+    own namespace is detected, under prefix ``''``: ElementTree drops ``xmlns:*`` attributes,
+    so other declared prefixes are never seen and expecting them fails.
+
+    Args:
+        dst: Guest path to the XML file; a glob must match exactly one path. A missing file
+            fails; malformed XML is an execution error.
+        expected_namespaces: Required map prefix -> URI, e.g. ``{'': 'http://www.w3.org/2000/svg'}``;
+            ``None`` is an execution error.
+        check_mode: ``contains`` (default; every expected prefix present with that URI) or
+            ``exact`` (dicts equal). Other values are an execution error.
+
+    Example:
+        function: xml.namespace_matches
+        parameter:
+          dst: /home/user/Pictures/logo.svg
+          expected_namespaces: {'': 'http://www.w3.org/2000/svg'}
+    """
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:

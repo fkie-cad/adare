@@ -189,7 +189,8 @@ def exec_validate_testfunction(arguments):
 
     Reports every authoring-contract violation with an actionable message:
     filename≠dirname, missing 'ctx', unannotated params, duplicate testnames,
-    import/syntax errors, and missing dependencies.
+    import/syntax errors, and missing dependencies. Documentation gaps (no
+    docstring, parameters without an ``Args:`` entry) are non-blocking warnings.
     """
     from pathlib import Path
 
@@ -251,21 +252,35 @@ def exec_validate_testfunction(arguments):
         if deps:
             req_note = f"declares {len(deps)} dependency(ies): {', '.join(deps)}"
 
+    # Documentation gaps are advisory: they never fail validation.
+    from adare.backend.testfunction.catalog import docstring_warnings
+    doc_warnings = docstring_warnings(py_file) if py_file is not None else []
+
+    from adare.console import console
+
+    def _print_doc_warnings():
+        if not doc_warnings:
+            return
+        console.print(f'\n  [yellow]⚠ {len(doc_warnings)} documentation warning(s)[/yellow] '
+                      f'(non-blocking; docs feed `adare test search/info` and agents):')
+        for warning in doc_warnings:
+            console.print(f'    [yellow]-[/yellow] {warning}')
+
     if issues:
-        from adare.console import console
         console.print(f'\n[bold red]✗ Validation failed for {name}[/bold red] ({len(issues)} issue(s)):')
         for i, issue in enumerate(issues, 1):
             console.print(f'  [red]({i})[/red] {issue}')
         if discovered:
             console.print(f'\n  Loadable tests despite issues: {", ".join(sorted(discovered))}')
+        _print_doc_warnings()
         console.print()
         exit(1)
 
-    from adare.console import console
     console.print(f'\n[bold green]✓ {name} is valid[/bold green]')
     console.print(f'  tests: {", ".join(sorted(discovered)) or "—"}')
     if req_note:
         console.print(f'  requirements.txt {req_note}')
+    _print_doc_warnings()
     console.print()
 
 
