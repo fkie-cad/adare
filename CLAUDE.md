@@ -172,6 +172,21 @@ tests:
 - Every built-in testfunction needs tests in `tests/unit/testfunctions/test_<collection>.py` and a reference page (enforced by `test_testfunction_coverage.py`)
 - Experiments / interactive mode against real VMs remain manual
 
+## Code Quality
+- `make lint` runs exactly what CI's `lint` job runs: `ruff format --check`, strict mypy on
+  `adare.core` (zero errors), and `scripts/quality_ratchet.py`
+- The ratchet budgets legacy debt in `quality-baseline.json` (ruff per rule, mypy per error code,
+  files >1000 lines). New debt fails; after paying some down run `make lint-baseline`. Never raise
+  a budget (`--allow-increase`) to get a change through - fix the new violation instead
+- `make lint-fix` applies formatting + safe autofixes. Review pyupgrade rewrites of runtime-evaluated
+  annotations (class bodies, attrs/cattrs dicts): `Optional[any]` -> `any | None` crashed at import
+- Guest-side code (adarevm, adarelib, testfunctions) is pinned to py310 in ruff's
+  `per-file-target-version`; don't use 3.11+ syntax there
+- ruff/mypy are pinned exactly in the `lint` group; bumping them = `make lint-baseline` in the same PR
+- `uv.lock` is committed and CI uses `--locked`. Plain `uv sync` strips extras from `.venv`; use
+  `uv sync --extra qemu`. After a Homebrew libvirt upgrade: `uv lock -P libvirt-python`
+- Record user-visible changes under **Unreleased** in `CHANGELOG.md`
+
 ## Guidelines
 - Prefix temp logs with `CLAUDE:`
 - Keep files <1000 lines
