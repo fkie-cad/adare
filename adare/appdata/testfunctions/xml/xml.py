@@ -33,6 +33,7 @@ from typing import Optional
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
+from adarelib.testset.compare import compare_with_single_placeholder
 
 # configure logging
 import logging
@@ -142,15 +143,7 @@ def _compare_values(ctx, actual_text, expected_text, regex_match=False, case_sen
             return False, f'expected "{expected_text}", got "{actual_text}"'
     else:
         # Has placeholders - use placeholder system (handles regex and timestamp with tolerance)
-        placeholder_names = ctx.get_placeholders(expected_str)
-        if len(placeholder_names) == 1:
-            placeholder_name = placeholder_names[0]
-            try:
-                return ctx.compare_with_placeholder(placeholder_name, actual_text)
-            except Exception as e:
-                return False, f"placeholder comparison error: {e}"
-        else:
-            return False, f"expected 1 placeholder for single value comparison, got {len(placeholder_names)}"
+        return compare_with_single_placeholder(ctx, expected_str, actual_text)
 
 
 def _handle_wildcard_matching(
@@ -316,31 +309,26 @@ def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: dict[str,
           dst: /home/user/.local/share/recently-used.xbel
           xpath: "//bookmark[@href='file:///home/user/report.odt']"
     """
+    dst_resolved, status = ctx.resolve_globfilepath(dst)
+    if not dst_resolved:
+        return TestResult.failed([f'XML file {dst} not found ({status})'])
+
+    log.debug(f'dst file {dst_resolved} will be used for test element_exists')
+
     try:
-        dst_resolved, status = ctx.resolve_globfilepath(dst)
-        if not dst_resolved:
-            return TestResult.failed([f'XML file {dst} not found ({status})'])
+        root = _parse_xml(dst_resolved)
+        elements = _find_elements(root, xpath, namespaces)
 
-        log.debug(f'dst file {dst_resolved} will be used for test element_exists')
+        if elements:
+            return TestResult.success([f'element found at XPath "{xpath}" ({len(elements)} matches)'])
+        return TestResult.failed([f'no element found at XPath "{xpath}"'])
 
-        try:
-            root = _parse_xml(dst_resolved)
-            elements = _find_elements(root, xpath, namespaces)
-
-            if elements:
-                return TestResult.success([f'element found at XPath "{xpath}" ({len(elements)} matches)'])
-            return TestResult.failed([f'no element found at XPath "{xpath}"'])
-
-        except ValueError as e:
-            return TestResult.execution_error(e, "XML processing error")
-        except FileNotFoundError:
-            return TestResult.failed([f'XML file {dst_resolved} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
-
-    except Exception as e:
-        log.error(f"Unexpected error in XML element exists test: {e}", exc_info=True)
-        return TestResult.execution_error(e, "Unexpected error in XML element exists test")
+    except ValueError as e:
+        return TestResult.execution_error(e, "XML processing error")
+    except FileNotFoundError:
+        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
 
 @testfunction(
@@ -387,42 +375,37 @@ def element_text_matches(
           xpath: ./general/language
           expected_text: de_DE
     """
+    dst_resolved, status = ctx.resolve_globfilepath(dst)
+    if not dst_resolved:
+        return TestResult.failed([f'XML file {dst} not found ({status})'])
+
+    log.debug(f'dst file {dst_resolved} will be used for test element_text_matches')
+
     try:
-        dst_resolved, status = ctx.resolve_globfilepath(dst)
-        if not dst_resolved:
-            return TestResult.failed([f'XML file {dst} not found ({status})'])
+        root = _parse_xml(dst_resolved)
+        elements = _find_elements(root, xpath, namespaces)
 
-        log.debug(f'dst file {dst_resolved} will be used for test element_text_matches')
+        if not elements:
+            return TestResult.failed([f'no elements found at XPath "{xpath}"'])
 
-        try:
-            root = _parse_xml(dst_resolved)
-            elements = _find_elements(root, xpath, namespaces)
+        # Handle multiple elements based on wildcard mode
+        if len(elements) > 1:
+            return _handle_wildcard_matching(
+                ctx, elements, expected_text, wildcard_mode, xpath, regex_match, case_sensitive
+            )
+        # Single element matching
+        element_text = elements[0].text or ""
+        is_match, message = _compare_values(ctx, element_text, expected_text, regex_match, case_sensitive)
+        if is_match:
+            return TestResult.success([message])
+        return TestResult.failed([message])
 
-            if not elements:
-                return TestResult.failed([f'no elements found at XPath "{xpath}"'])
-
-            # Handle multiple elements based on wildcard mode
-            if len(elements) > 1:
-                return _handle_wildcard_matching(
-                    ctx, elements, expected_text, wildcard_mode, xpath, regex_match, case_sensitive
-                )
-            # Single element matching
-            element_text = elements[0].text or ""
-            is_match, message = _compare_values(ctx, element_text, expected_text, regex_match, case_sensitive)
-            if is_match:
-                return TestResult.success([message])
-            return TestResult.failed([message])
-
-        except ValueError as e:
-            return TestResult.execution_error(e, "XML processing error")
-        except FileNotFoundError:
-            return TestResult.failed([f'XML file {dst_resolved} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
-
-    except Exception as e:
-        log.error(f"Unexpected error in XML element text matches test: {e}", exc_info=True)
-        return TestResult.execution_error(e, "Unexpected error in XML element text matches test")
+    except ValueError as e:
+        return TestResult.execution_error(e, "XML processing error")
+    except FileNotFoundError:
+        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
 
 @testfunction(
@@ -469,89 +452,74 @@ def attribute_matches(
           attribute: visited
           expected_value: !re '20[0-9]{2}-'
     """
+    dst_resolved, status = ctx.resolve_globfilepath(dst)
+    if not dst_resolved:
+        return TestResult.failed([f'XML file {dst} not found ({status})'])
+
+    log.debug(f'dst file {dst_resolved} will be used for test attribute_matches')
+
     try:
-        dst_resolved, status = ctx.resolve_globfilepath(dst)
-        if not dst_resolved:
-            return TestResult.failed([f'XML file {dst} not found ({status})'])
+        root = _parse_xml(dst_resolved)
+        elements = _find_elements(root, xpath, namespaces)
 
-        log.debug(f'dst file {dst_resolved} will be used for test attribute_matches')
+        if not elements:
+            return TestResult.failed([f'no elements found at XPath "{xpath}"'])
 
-        try:
-            root = _parse_xml(dst_resolved)
-            elements = _find_elements(root, xpath, namespaces)
+        # Check first matching element's attribute
+        element = elements[0]
+        if attribute not in element.attrib:
+            return TestResult.failed([f'attribute "{attribute}" not found in element at XPath "{xpath}"'])
 
-            if not elements:
-                return TestResult.failed([f'no elements found at XPath "{xpath}"'])
+        actual_value = element.attrib[attribute]
 
-            # Check first matching element's attribute
-            element = elements[0]
-            if attribute not in element.attrib:
-                return TestResult.failed([f'attribute "{attribute}" not found in element at XPath "{xpath}"'])
+        # _compare_values uses "text" wording; for attributes we use the same logic
+        # but need to adjust messages for attribute context
+        expected_str = str(expected_value)
 
-            actual_value = element.attrib[attribute]
-
-            # _compare_values uses "text" wording; for attributes we use the same logic
-            # but need to adjust messages for attribute context
-            expected_str = str(expected_value)
-
-            if not ctx.has_placeholders(expected_str):
-                # No placeholders - check for regex_match flag
-                if regex_match:
-                    # Regex matching
-                    try:
-                        flags = 0 if case_sensitive else re.IGNORECASE
-                        pattern = re.compile(expected_value, flags)
-                        if pattern.search(actual_value):
-                            is_match, message = (
-                                True,
-                                f'attribute value "{actual_value}" matches regex "{expected_value}"',
-                            )
-                        else:
-                            is_match, message = (
-                                False,
-                                f'attribute value "{actual_value}" does not match regex "{expected_value}"',
-                            )
-                    except re.error as e:
-                        is_match, message = False, f'Invalid regex pattern: {expected_value} - {e}'
-                else:
-                    # Direct value comparison
-                    if case_sensitive:
-                        success = actual_value == expected_value
+        if not ctx.has_placeholders(expected_str):
+            # No placeholders - check for regex_match flag
+            if regex_match:
+                # Regex matching
+                try:
+                    flags = 0 if case_sensitive else re.IGNORECASE
+                    pattern = re.compile(expected_value, flags)
+                    if pattern.search(actual_value):
+                        is_match, message = (
+                            True,
+                            f'attribute value "{actual_value}" matches regex "{expected_value}"',
+                        )
                     else:
-                        success = actual_value.lower() == expected_value.lower()
-
-                    if success:
-                        is_match, message = True, f'attribute value matches expected: {actual_value}'
-                    else:
-                        is_match, message = False, f'expected "{expected_value}", got "{actual_value}"'
+                        is_match, message = (
+                            False,
+                            f'attribute value "{actual_value}" does not match regex "{expected_value}"',
+                        )
+                except re.error as e:
+                    is_match, message = False, f'Invalid regex pattern: {expected_value} - {e}'
             else:
-                # Has placeholders - use placeholder system
-                placeholder_names = ctx.get_placeholders(expected_str)
-                if len(placeholder_names) == 1:
-                    placeholder_name = placeholder_names[0]
-                    try:
-                        is_match, message = ctx.compare_with_placeholder(placeholder_name, actual_value)
-                    except Exception as e:
-                        is_match, message = False, f"placeholder comparison error: {e}"
+                # Direct value comparison
+                if case_sensitive:
+                    success = actual_value == expected_value
                 else:
-                    is_match, message = (
-                        False,
-                        f"expected 1 placeholder for single value comparison, got {len(placeholder_names)}",
-                    )
+                    success = actual_value.lower() == expected_value.lower()
 
-            if is_match:
-                return TestResult.success([message])
-            return TestResult.failed([message])
+                if success:
+                    is_match, message = True, f'attribute value matches expected: {actual_value}'
+                else:
+                    is_match, message = False, f'expected "{expected_value}", got "{actual_value}"'
+        else:
+            # Has placeholders - use placeholder system
+            is_match, message = compare_with_single_placeholder(ctx, expected_str, actual_value)
 
-        except ValueError as e:
-            return TestResult.execution_error(e, "XML processing error")
-        except FileNotFoundError:
-            return TestResult.failed([f'XML file {dst_resolved} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
+        if is_match:
+            return TestResult.success([message])
+        return TestResult.failed([message])
 
-    except Exception as e:
-        return TestResult.execution_error(e, "Unexpected error in XML attribute matches test")
+    except ValueError as e:
+        return TestResult.execution_error(e, "XML processing error")
+    except FileNotFoundError:
+        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
 
 @testfunction(
@@ -594,33 +562,29 @@ def element_count(
           expected_count: 1
           comparison_type: greater_equal
     """
+    dst_resolved, status = ctx.resolve_globfilepath(dst)
+    if not dst_resolved:
+        return TestResult.failed([f'XML file {dst} not found ({status})'])
+
+    log.debug(f'dst file {dst_resolved} will be used for test element_count')
+
     try:
-        dst_resolved, status = ctx.resolve_globfilepath(dst)
-        if not dst_resolved:
-            return TestResult.failed([f'XML file {dst} not found ({status})'])
+        root = _parse_xml(dst_resolved)
+        elements = _find_elements(root, xpath, namespaces)
+        actual_count = len(elements)
 
-        log.debug(f'dst file {dst_resolved} will be used for test element_count')
+        success, message = _compare_count(actual_count, expected_count, comparison_type)
 
-        try:
-            root = _parse_xml(dst_resolved)
-            elements = _find_elements(root, xpath, namespaces)
-            actual_count = len(elements)
+        if success:
+            return TestResult.success([f'element count matches: {message}'])
+        return TestResult.failed([f'element count mismatch: {message}'])
 
-            success, message = _compare_count(actual_count, expected_count, comparison_type)
-
-            if success:
-                return TestResult.success([f'element count matches: {message}'])
-            return TestResult.failed([f'element count mismatch: {message}'])
-
-        except ValueError as e:
-            return TestResult.execution_error(e, "XML processing error")
-        except FileNotFoundError:
-            return TestResult.failed([f'XML file {dst_resolved} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
-
-    except Exception as e:
-        return TestResult.execution_error(e, "Unexpected error in XML element count test")
+    except ValueError as e:
+        return TestResult.execution_error(e, "XML processing error")
+    except FileNotFoundError:
+        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
 
 @testfunction(
@@ -664,38 +628,34 @@ def xpath_result_matches(
           expected_result: 3
           result_type: number
     """
+    dst_resolved, status = ctx.resolve_globfilepath(dst)
+    if not dst_resolved:
+        return TestResult.failed([f'XML file {dst} not found ({status})'])
+
+    log.debug(f'dst file {dst_resolved} will be used for test xpath_result_matches')
+
     try:
-        dst_resolved, status = ctx.resolve_globfilepath(dst)
-        if not dst_resolved:
-            return TestResult.failed([f'XML file {dst} not found ({status})'])
+        root = _parse_xml(dst_resolved)
+        actual_result = _evaluate_xpath(root, xpath, result_type, namespaces)
 
-        log.debug(f'dst file {dst_resolved} will be used for test xpath_result_matches')
+        # Type conversion for comparison
+        if result_type == 'number':
+            expected_result = float(expected_result)
+        elif result_type == 'boolean':
+            expected_result = bool(expected_result)
+        else:
+            expected_result = str(expected_result)
 
-        try:
-            root = _parse_xml(dst_resolved)
-            actual_result = _evaluate_xpath(root, xpath, result_type, namespaces)
+        if actual_result == expected_result:
+            return TestResult.success([f'XPath result matches: {actual_result}'])
+        return TestResult.failed([f'XPath result mismatch. Expected: {expected_result}, Got: {actual_result}'])
 
-            # Type conversion for comparison
-            if result_type == 'number':
-                expected_result = float(expected_result)
-            elif result_type == 'boolean':
-                expected_result = bool(expected_result)
-            else:
-                expected_result = str(expected_result)
-
-            if actual_result == expected_result:
-                return TestResult.success([f'XPath result matches: {actual_result}'])
-            return TestResult.failed([f'XPath result mismatch. Expected: {expected_result}, Got: {actual_result}'])
-
-        except ValueError as e:
-            return TestResult.execution_error(e, "XML/XPath processing error")
-        except FileNotFoundError:
-            return TestResult.failed([f'XML file {dst_resolved} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
-
-    except Exception as e:
-        return TestResult.execution_error(e, "Unexpected error in XPath result matches test")
+    except ValueError as e:
+        return TestResult.execution_error(e, "XML/XPath processing error")
+    except FileNotFoundError:
+        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
 
 @testfunction(
@@ -726,48 +686,44 @@ def namespace_matches(
           dst: /home/user/Pictures/logo.svg
           expected_namespaces: {'': 'http://www.w3.org/2000/svg'}
     """
+    dst_resolved, status = ctx.resolve_globfilepath(dst)
+    if not dst_resolved:
+        return TestResult.failed([f'XML file {dst} not found ({status})'])
+
+    log.debug(f'dst file {dst_resolved} will be used for test namespace_matches')
+
     try:
-        dst_resolved, status = ctx.resolve_globfilepath(dst)
-        if not dst_resolved:
-            return TestResult.failed([f'XML file {dst} not found ({status})'])
+        root, actual_namespaces = _parse_xml_with_namespaces(dst_resolved)
 
-        log.debug(f'dst file {dst_resolved} will be used for test namespace_matches')
+        if check_mode == 'exact':
+            if actual_namespaces == expected_namespaces:
+                return TestResult.success([f'namespaces match exactly: {actual_namespaces}'])
+            missing = set(expected_namespaces.items()) - set(actual_namespaces.items())
+            extra = set(actual_namespaces.items()) - set(expected_namespaces.items())
+            details = []
+            if missing:
+                details.append(f'missing: {dict(missing)}')
+            if extra:
+                details.append(f'extra: {dict(extra)}')
+            return TestResult.failed([f'namespace mismatch: {", ".join(details)}'])
 
-        try:
-            root, actual_namespaces = _parse_xml_with_namespaces(dst_resolved)
+        if check_mode == 'contains':
+            missing = []
+            for prefix, uri in expected_namespaces.items():
+                if prefix not in actual_namespaces:
+                    missing.append(f'{prefix}')
+                elif actual_namespaces[prefix] != uri:
+                    missing.append(f'{prefix} (URI mismatch: expected {uri}, got {actual_namespaces[prefix]})')
 
-            if check_mode == 'exact':
-                if actual_namespaces == expected_namespaces:
-                    return TestResult.success([f'namespaces match exactly: {actual_namespaces}'])
-                missing = set(expected_namespaces.items()) - set(actual_namespaces.items())
-                extra = set(actual_namespaces.items()) - set(expected_namespaces.items())
-                details = []
-                if missing:
-                    details.append(f'missing: {dict(missing)}')
-                if extra:
-                    details.append(f'extra: {dict(extra)}')
-                return TestResult.failed([f'namespace mismatch: {", ".join(details)}'])
+            if not missing:
+                return TestResult.success([f'all expected namespaces found: {expected_namespaces}'])
+            return TestResult.failed([f'missing/incorrect namespaces: {missing}'])
 
-            if check_mode == 'contains':
-                missing = []
-                for prefix, uri in expected_namespaces.items():
-                    if prefix not in actual_namespaces:
-                        missing.append(f'{prefix}')
-                    elif actual_namespaces[prefix] != uri:
-                        missing.append(f'{prefix} (URI mismatch: expected {uri}, got {actual_namespaces[prefix]})')
+        return TestResult.execution_error(None, f"Invalid check_mode: {check_mode}")
 
-                if not missing:
-                    return TestResult.success([f'all expected namespaces found: {expected_namespaces}'])
-                return TestResult.failed([f'missing/incorrect namespaces: {missing}'])
-
-            return TestResult.execution_error(None, f"Invalid check_mode: {check_mode}")
-
-        except ValueError as e:
-            return TestResult.execution_error(e, "XML processing error")
-        except FileNotFoundError:
-            return TestResult.failed([f'XML file {dst_resolved} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
-
-    except Exception as e:
-        return TestResult.execution_error(e, "Unexpected error in XML namespace matches test")
+    except ValueError as e:
+        return TestResult.execution_error(e, "XML processing error")
+    except FileNotFoundError:
+        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
