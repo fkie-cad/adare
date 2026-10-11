@@ -1,7 +1,7 @@
 [project]
 name = "adarelib"
 version = "0.1.1"
-description = ""
+description = "ADARE shared library: testfunction API, protocol and utilities used by host and guest"
 authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.10"

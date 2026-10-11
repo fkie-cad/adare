@@ -1,7 +1,7 @@
 [project]
 name = "adarevm"
 version = "0.1.1"
-description = ""
+description = "ADARE guest agent: runs inside the VM and executes playbooks over WebSocket"
 authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.10"
