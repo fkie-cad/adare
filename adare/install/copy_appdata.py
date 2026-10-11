@@ -1,64 +1,130 @@
+"""
+Install the parts of the workspace that ADARE reads at runtime into the appdata directory.
+
+``<appdata>/adare`` receives an allow-listed copy of the workspace (guest agent
+sources, shared library, appdata, skills and the uv workspace metadata that
+``uv run --package adarevm`` needs); everything else there is pruned, so stale
+files and build trees never accumulate. ``adare/appdata/*`` (except
+testfunctions, which are loaded from that copy) is additionally copied to the
+appdata root. Stdlib only: this runs with the system ``python3`` before the
+workspace environment exists.
+"""
+
 import os
 import platform
 import shutil
+import sys
 from pathlib import Path
 
+# Workspace root: this file lives at <root>/adare/install/copy_appdata.py.
+# Resolved from the file, not the cwd, because install.ps1 runs it from adare/.
+WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 
-def __get_default_appdata_directory(create_if_missing: bool = False, program_name: str = 'adare') -> Path | None:
-    """
-    get the default config directory for the tool
+# Directories / files of the workspace copied to <appdata>/adare (relative paths).
+WORKSPACE_DIRS = ('adarevm', 'adarelib', 'adare/appdata', 'skills')
+WORKSPACE_FILES = (
+    'pyproject.toml',
+    'uv.lock',
+    'README.md',
+    'adare/pyproject.toml',
+    'adare-cv-server/pyproject.toml',
+)
 
-    :param create_if_missing: if True, the directory will be created if it does not exist
-    :param program_name: the name of the program
-    :return:
-    """
-    system = platform.system()
-    if system == 'Windows':
-        appdata_path = Path(os.getenv('APPDATA'))
-        appdata_path = appdata_path / program_name.lower()
-    elif system in ("Linux", "Darwin"):
-        appdata_path = Path(f'~/.{program_name.lower()}/').expanduser()
-        if not appdata_path.exists():
-            appdata_path.mkdir(parents=False)
-    else:
-        print(f'the os {system} is not supported by the tool')
-        return None
-    if create_if_missing:
-        appdata_path.mkdir(parents=False, exist_ok=True)
-    if not appdata_path.is_dir():
-        print(f'the appdata directory ({appdata_path}) of the tool is missing')
-        return None
-    return appdata_path
-
-
-APPDATA_DIR: Path = __get_default_appdata_directory(create_if_missing=True)
-
-IGNORE_PATTERNS = [
+IGNORE_PATTERNS = (
+    '.venv',
     'venv',
     'build',
+    'dist',
+    'node_modules',
     '.idea',
+    '.git',
     '*.egg-info',
     '__pycache__',
     '*.pyc',
-    '.git',
-    'uv.lock',
-]
+    '.pytest_cache',
+    '.mypy_cache',
+    '.ruff_cache',
+    '.DS_Store',
+)
+
+
+def appdata_directory(program_name: str = 'adare') -> Path:
+    """Same resolution as ``adare.config.configdirectory`` (``$ADARE_HOME`` first)."""
+    override = os.getenv('ADARE_HOME')
+    if override:
+        return Path(override).expanduser()
+    if platform.system() == 'Windows':
+        appdata = os.getenv('APPDATA')
+        if appdata:
+            return Path(appdata) / program_name
+    return Path.home() / f'.{program_name}'
+
+
+def _remove(path: Path) -> None:
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def _prune(directory: Path, prefix: Path, allowed: set[Path], ancestors: set[Path]) -> None:
+    """Delete every entry below ``directory`` that is neither allowed nor on the way to one."""
+    for entry in directory.iterdir():
+        rel = prefix / entry.name
+        if rel in allowed:
+            continue
+        if rel in ancestors and entry.is_dir() and not entry.is_symlink():
+            _prune(entry, rel, allowed, ancestors)
+        else:
+            _remove(entry)
+
+
+def sync_workspace(src: Path, dst: Path) -> None:
+    """Make ``dst`` an allow-listed copy of the workspace at ``src``.
+
+    Allowed directories are deleted and copied fresh (so files removed upstream
+    disappear), allowed files are overwritten, and anything else in ``dst`` is
+    removed.
+    """
+    allowed = {Path(p) for p in (*WORKSPACE_DIRS, *WORKSPACE_FILES)}
+    ancestors = {parent for path in allowed for parent in path.parents if parent != Path('.')}
+    dst.mkdir(parents=True, exist_ok=True)
+    _prune(dst, Path(), allowed, ancestors)
+
+    ignore = shutil.ignore_patterns(*IGNORE_PATTERNS)
+    for rel in WORKSPACE_DIRS:
+        source, target = src / rel, dst / rel
+        if target.exists():
+            _remove(target)
+        if source.is_dir():
+            shutil.copytree(source, target, ignore=ignore)
+    for rel in WORKSPACE_FILES:
+        source, target = src / rel, dst / rel
+        if source.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+
+
+def install_appdata(src: Path, appdata_dir: Path) -> None:
+    """Copy ``src/adare/appdata/*`` (except testfunctions) to the appdata root."""
+    ignore = shutil.ignore_patterns(*IGNORE_PATTERNS)
+    for entry in (src / 'adare' / 'appdata').iterdir():
+        if entry.name == 'testfunctions':  # loaded from <appdata>/adare/adare/appdata
+            continue
+        if entry.is_dir():
+            shutil.copytree(entry, appdata_dir / entry.name, dirs_exist_ok=True, ignore=ignore)
+        else:
+            shutil.copy2(entry, appdata_dir / entry.name)
+
+
+def main() -> int:
+    appdata_dir = appdata_directory()
+    appdata_dir.mkdir(parents=True, exist_ok=True)
+    sync_workspace(WORKSPACE_ROOT, appdata_dir / 'adare')
+    install_appdata(WORKSPACE_ROOT, appdata_dir)
+    print(f'Installed ADARE appdata into {appdata_dir}')
+    return 0
 
 
 if __name__ == '__main__':
-    adare = Path('.')
-
-    # copy all files and folders from appdata_local to appdata_dir with progress bar and actual file that is copied
-    # (if a file or directory already exists, it will be overwritten)
-    shutil.copytree(adare, APPDATA_DIR / 'adare', dirs_exist_ok=True, ignore=shutil.ignore_patterns(*IGNORE_PATTERNS))
-
-    # move all files from adare/adare/appdata to appdata root (except testfunctions)
-    for file in (APPDATA_DIR / 'adare' / 'adare' / 'appdata').iterdir():
-        if file.name == 'testfunctions':  # Skip testfunctions - we'll load directly from source
-            continue
-        if file.is_dir():
-            shutil.copytree(
-                file, APPDATA_DIR / file.name, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*IGNORE_PATTERNS)
-            )
-        else:
-            shutil.copy2(file, APPDATA_DIR / file.name)
+    sys.exit(main())
