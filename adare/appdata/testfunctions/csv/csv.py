@@ -568,7 +568,9 @@ def compare_files(ctx: TestContext, actual: str = '', reference: str = '', colum
             )
 
         except FileNotFoundError as e:
-            if str(e).find(actual_path) >= 0 or str(e).find(actual) >= 0:
+            # e.filename, not str(e): on Windows str(e) escapes the backslashes
+            # of the path, so a substring search never matches there.
+            if e.filename == actual_path:
                 return TestResult.failed([f'actual file with path {actual} does not exist'])
             return TestResult.failed([f'reference file with path {reference} does not exist'])
         except (PermissionError, OSError) as e:
