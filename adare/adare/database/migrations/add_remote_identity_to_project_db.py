@@ -82,9 +82,8 @@ def _migrate_project(project_path: Path) -> bool:
 
     print(f"Project {project_path}:")
     try:
-        with ProjectDatabaseApi(project_path) as api:
-            with api.engine.begin() as conn:
-                upgrade(conn)
+        with ProjectDatabaseApi(project_path) as api, api.engine.begin() as conn:
+            upgrade(conn)
         return True
     except SQLAlchemyError as e:
         print(f"  ✗ failed: {e}", file=sys.stderr)

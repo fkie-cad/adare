@@ -1,6 +1,6 @@
 """Server-side template rendering and comparison."""
 
-from .renderer import TemplateRenderer
 from .comparator import MetadataComparator
+from .renderer import TemplateRenderer
 
 __all__ = ['TemplateRenderer', 'MetadataComparator']

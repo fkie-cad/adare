@@ -557,7 +557,6 @@ class ExperimentService:
         not loaded in the project database.
         """
         from adare.backend.experiment.vlm.authoring.author_playbook import validate as author_validate
-
         from adare.types.playbook_test_checks import check_playbook_tests
 
         ok, error = author_validate(request.yaml)

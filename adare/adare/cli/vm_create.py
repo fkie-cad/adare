@@ -134,8 +134,8 @@ def exec_vm_create(arguments):
             )
             return
 
-        from adare.helperfunctions.hash import hash_file_sha256
         from adare.console import print_step
+        from adare.helperfunctions.hash import hash_file_sha256
         print_step(f'Hashing ISO for recipe integrity: [dim]{iso_path}[/dim]')
         iso_sha256 = hash_file_sha256(iso_path)
         final_name = env_name or vm_name or f'{os_name}-recipe'

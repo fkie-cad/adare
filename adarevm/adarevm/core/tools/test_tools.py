@@ -14,7 +14,7 @@ import logging
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
@@ -98,7 +98,7 @@ class TestToolsMixin:
             await self.send_event(websocket, EventType.ERROR, {"message": f"Variable setting failed: {e}"})
             return {"status": "error", "message": str(e)}
 
-    def _execute_resolved_test_data(self, resolved_test_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_resolved_test_data(self, resolved_test_data: dict[str, Any]) -> dict[str, Any]:
         """Execute a test using pre-resolved test data."""
         log.info(f"CLAUDE: Starting test execution with resolved_test_data: {resolved_test_data}")
 
@@ -109,7 +109,6 @@ class TestToolsMixin:
                 log.error(error_msg)
                 # This is a system error, not a test failure
                 from adarelib.event.event import TestResult
-                from adarelib.constants import StatusEnum
                 return TestResult.error([error_msg])
 
             # Check if testfunctions directory is available
@@ -118,13 +117,11 @@ class TestToolsMixin:
                 log.error(error_msg)
                 # This is a system error, not a test failure
                 from adarelib.event.event import TestResult
-                from adarelib.constants import StatusEnum
                 return TestResult.error([error_msg])
 
             # Import test function class based on function name
-            from adarelib.testset.testfunction import import_basictest_subclasses, get_testclass_from_testfunction
             from adarelib.event.event import TestResult
-            from adarelib.constants import StatusEnum
+            from adarelib.testset.testfunction import get_testclass_from_testfunction, import_basictest_subclasses
 
             try:
                 # Load testfunctions ONCE per server instance (cached after first test)
@@ -198,19 +195,18 @@ class TestToolsMixin:
                         if match:
                             dep_name = match.group(1)
                             hint_lines.append(f"Install missing dependency: uv add {dep_name}")
-                            hint_lines.append(f"Or run experiment with dependency auto-installation enabled")
+                            hint_lines.append("Or run experiment with dependency auto-installation enabled")
 
                     return TestResult.error(hint_lines)
-                else:
-                    available_functions = []
-                    for coll_name, coll_funcs in supported_tests.items():
-                        for func_name in coll_funcs.keys():
-                            available_functions.append(f"{coll_name}.{func_name}")
+                available_functions = []
+                for coll_name, coll_funcs in supported_tests.items():
+                    for func_name in coll_funcs.keys():
+                        available_functions.append(f"{coll_name}.{func_name}")
 
-                    return TestResult.error([
-                        f"Test function '{function_name}' not found",
-                        f"Available: {', '.join(sorted(available_functions)[:10])}{'...' if len(available_functions) > 10 else ''}"
-                    ])
+                return TestResult.error([
+                    f"Test function '{function_name}' not found",
+                    f"Available: {', '.join(sorted(available_functions)[:10])}{'...' if len(available_functions) > 10 else ''}"
+                ])
 
             # Create test instance with required arguments
             test_name = resolved_test_data.get('name', 'unknown_test')

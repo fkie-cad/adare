@@ -14,7 +14,6 @@ from adare.hypervisor.qemu.vm_creator.autoinstall import (
     resolve_template,
 )
 
-
 _VALID_FRONTMATTER = """\
 {# adare-template
 schema: 1

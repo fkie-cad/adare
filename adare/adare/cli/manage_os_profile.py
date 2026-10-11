@@ -136,6 +136,8 @@ def _resolve_template_path(os_def):
     """
     from adare.hypervisor.qemu.vm_creator.autoinstall import (
         TEMPLATES_DIR as LINUX_TEMPLATES_DIR,
+    )
+    from adare.hypervisor.qemu.vm_creator.autoinstall import (
         resolve_template,
         resolve_template_metadata,
     )
@@ -152,6 +154,8 @@ def _resolve_template_path(os_def):
         # template file to report.)
         from adare.hypervisor.qemu.vm_creator.gui_creator import (
             _BUNDLED_TEMPLATES_DIR as GUI_TEMPLATES_DIR,
+        )
+        from adare.hypervisor.qemu.vm_creator.gui_creator import (
             _template_stems,
         )
         prefix = 'gui_'

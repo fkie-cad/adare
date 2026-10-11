@@ -15,7 +15,9 @@ from adare.console import console, print_section, print_step, print_vm_config_pa
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.firmware import create_nvram_for_vm, get_nvram_path_for_vm
 from adare.hypervisor.qemu.vm_creator.disk_helpers import (
-    DiskCompressionError, compress_qcow2_zstd, create_qcow2_disk,
+    DiskCompressionError,
+    compress_qcow2_zstd,
+    create_qcow2_disk,
 )
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel, default_host_cpus
 from adare.hypervisor.qemu.vm_creator.prerequisites import check_prerequisites

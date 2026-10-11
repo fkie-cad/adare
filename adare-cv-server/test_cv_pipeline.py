@@ -17,8 +17,8 @@ import numpy as np
 # Add the package to path for standalone execution
 sys.path.insert(0, str(Path(__file__).parent))
 
-from adare_cv_server.feature_matching import TemplateMatcher, ORBMatcher, SIFTMatcher
-from adare_cv_server.image_processing import RegionValidator, FeatureMatchingResult, ImageDecoder
+from adare_cv_server.feature_matching import ORBMatcher, TemplateMatcher
+from adare_cv_server.image_processing import FeatureMatchingResult, ImageDecoder, RegionValidator
 
 logging.basicConfig(level=logging.INFO, format="%(name)s - %(levelname)s - %(message)s")
 log = logging.getLogger(__name__)

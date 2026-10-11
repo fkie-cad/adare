@@ -1,9 +1,9 @@
-import subprocess
 import dataclasses
-import re
-from PIL import ImageDraw
-
 import logging
+import re
+import subprocess
+
+
 log = logging.getLogger(__name__)
 
 @dataclasses.dataclass
@@ -250,7 +250,7 @@ def get_os_info():
 
     try:
         # Get OS release info
-        with open('/etc/os-release', 'r') as f:
+        with open('/etc/os-release') as f:
             for line in f:
                 line = line.strip()
                 if '=' in line:
@@ -286,8 +286,8 @@ def get_os_info():
 
 def detect_package_manager():
     """Detect which package manager is available, preferring dpkg for Debian and rpm for RedHat."""
-    import subprocess
     import os
+    import subprocess
 
     # Check for Debian-based systems first
     if os.path.exists('/etc/debian_version'):

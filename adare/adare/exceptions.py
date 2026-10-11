@@ -5,7 +5,6 @@ from pathlib import Path
 from adare.console import err_console
 from adare.helperfunctions.text import clean_rich_inline_str
 
-
 # Marks log records emitted by an exception's constructor. The console log
 # handler hides them at the default verbosity because the CLI boundary
 # (``exec_with_error_printing``) reports the same exception once, on stderr; the

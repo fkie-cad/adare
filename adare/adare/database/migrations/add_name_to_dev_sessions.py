@@ -48,9 +48,8 @@ def run_migration() -> bool:
     print("Running migration: add_name_to_dev_sessions")
 
     try:
-        with DevModeApi() as api:
-            with api.engine.begin() as conn:
-                upgrade(conn)
+        with DevModeApi() as api, api.engine.begin() as conn:
+            upgrade(conn)
 
         print("✓ Migration completed successfully!")
         print("\nIMPORTANT:")

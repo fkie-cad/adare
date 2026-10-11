@@ -2,12 +2,12 @@
 
 import logging
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
-import numpy as np
+
 import cv2
+import numpy as np
 
 from .constants import CVConstants
-from .exceptions import ImageDecodingError, HomographyCalculationError
+from .exceptions import HomographyCalculationError, ImageDecodingError
 
 log = logging.getLogger(__name__)
 
@@ -60,8 +60,9 @@ class ImageDecoder:
         Raises ImageDecodingError if conversion fails.
         """
         try:
-            import cairosvg
             import xml.etree.ElementTree as ET
+
+            import cairosvg
 
             log.info("Converting SVG to PNG for OpenCV processing")
 
@@ -350,7 +351,7 @@ class ImageDecoder:
             raise ImageDecodingError(f"Image decoding failed: {e}") from e
 
     @staticmethod
-    def decode_images(screenshot_bytes: bytes, icon_bytes: bytes) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    def decode_images(screenshot_bytes: bytes, icon_bytes: bytes) -> tuple[np.ndarray, np.ndarray] | None:
         """Decode screenshot and icon from bytes.
 
         DEPRECATED: Use decode_images_with_alpha() for mask support.
@@ -380,7 +381,7 @@ class ImageDecoder:
             raise ImageDecodingError(f"Image decoding failed: {e}") from e
 
     @staticmethod
-    def convert_to_grayscale(screenshot_img: np.ndarray, icon_img: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def convert_to_grayscale(screenshot_img: np.ndarray, icon_img: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Convert images to grayscale."""
         screenshot_gray = cv2.cvtColor(screenshot_img, cv2.COLOR_BGR2GRAY)
         icon_gray = cv2.cvtColor(icon_img, cv2.COLOR_BGR2GRAY)
@@ -392,11 +393,11 @@ class FeatureMatchingResult:
 
     def __init__(
         self,
-        locations: List[Tuple[int, int]],
-        similarities: List[float],
+        locations: list[tuple[int, int]],
+        similarities: list[float],
         method: str,
-        scales: Optional[List[float]] = None,
-        sizes: Optional[List[Tuple[int, int]]] = None
+        scales: list[float] | None = None,
+        sizes: list[tuple[int, int]] | None = None
     ):
         self.locations = locations
         self.similarities = similarities
@@ -439,20 +440,20 @@ class DetectionMatch:
     Used in multi-method aggregation pipeline to track matches from
     different detection methods before applying global NMS.
     """
-    location: Tuple[int, int]      # Center coordinates (x, y)
+    location: tuple[int, int]      # Center coordinates (x, y)
     similarity: float              # Raw similarity (0.0-1.0)
     method: str                    # Source method name
     scale: float = 1.0             # Detected scale (1.0 = original size)
-    size: Tuple[int, int] = (0, 0) # Bounding box (width, height) at detected scale
+    size: tuple[int, int] = (0, 0) # Bounding box (width, height) at detected scale
     weighted_similarity: float = 0.0  # similarity * method_weight (computed during aggregation)
 
 
 def non_maximum_suppression(
-    locations: List[Tuple[int, int]],
-    similarities: List[float],
-    sizes: List[Tuple[int, int]],
+    locations: list[tuple[int, int]],
+    similarities: list[float],
+    sizes: list[tuple[int, int]],
     overlap_threshold: float = 0.5
-) -> Tuple[List[Tuple[int, int]], List[float]]:
+) -> tuple[list[tuple[int, int]], list[float]]:
     """Apply non-maximum suppression to remove overlapping detections.
 
     Keeps the match with highest similarity when IoU (Intersection over Union)
@@ -593,10 +594,10 @@ class HomographyCalculator:
     def calculate_center_from_homography(
         src_pts: np.ndarray,
         dst_pts: np.ndarray,
-        icon_shape: Tuple[int, int],
+        icon_shape: tuple[int, int],
         ransac_threshold: float = CVConstants.SIFT_RANSAC_THRESHOLD,
-        screenshot_shape: Optional[Tuple[int, int]] = None
-    ) -> Optional[Tuple[int, int]]:
+        screenshot_shape: tuple[int, int] | None = None
+    ) -> tuple[int, int] | None:
         """Calculate icon center using homography transformation."""
         try:
             M, _ = cv2.findHomography(
@@ -630,7 +631,7 @@ class HomographyCalculator:
             raise HomographyCalculationError(f"Homography calculation failed: {e}") from e
 
     @staticmethod
-    def calculate_centroid(points: np.ndarray) -> Tuple[int, int]:
+    def calculate_centroid(points: np.ndarray) -> tuple[int, int]:
         """Calculate centroid of a set of points."""
         center_x = int(np.mean(points[:, 0]))
         center_y = int(np.mean(points[:, 1]))

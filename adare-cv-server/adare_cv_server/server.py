@@ -1,17 +1,18 @@
 """Adare CV Server - Computer vision and OCR capabilities."""
 
-from fastmcp import FastMCP
 import base64
-import click
 import logging
-import cv2
+from typing import Any
 
-from typing import Dict, Any, Optional, List, Union, Tuple
-from .constants import DEFAULT_PORT, DEFAULT_HOST, MCP_PATH, DEFAULT_MAX_RESULTS, CVConstants
-from .feature_matching import SIFTMatcher, ORBMatcher, TemplateMatcher, MultiScaleTemplateMatcher, CannyEdgeMatcher
-from .image_processing import ImageDecoder, IconComplexityAnalyzer, DetectionMatch, non_maximum_suppression
-from .ocr_processing import TextDetector
+import click
+import cv2
+from fastmcp import FastMCP
+
+from .constants import DEFAULT_HOST, DEFAULT_MAX_RESULTS, DEFAULT_PORT, MCP_PATH, CVConstants
 from .exceptions import FeatureMatchingError, ImageDecodingError, OCRProcessingError
+from .feature_matching import CannyEdgeMatcher, MultiScaleTemplateMatcher, ORBMatcher, SIFTMatcher, TemplateMatcher
+from .image_processing import DetectionMatch, IconComplexityAnalyzer, ImageDecoder, non_maximum_suppression
+from .ocr_processing import TextDetector
 
 log = logging.getLogger(__name__)
 
@@ -37,9 +38,8 @@ def _normalize_similarity(similarity: float, method: str) -> float:
         # SIFT returns match count - normalize to 0.0-1.0
         # 20+ matches = 1.0 confidence (exceptional match)
         return min(1.0, similarity / CVConstants.SIFT_NORMALIZATION_THRESHOLD)
-    else:
-        # Already normalized (template, canny_edge, multiscale_template, orb)
-        return similarity
+    # Already normalized (template, canny_edge, multiscale_template, orb)
+    return similarity
 
 
 def _get_method_weight(method: str) -> float:
@@ -54,7 +54,7 @@ def _get_method_weight(method: str) -> float:
     return CVConstants.METHOD_WEIGHTS.get(method, 0.8)
 
 
-def _estimate_match_size(scale: float, original_icon_size: Tuple[int, int]) -> Tuple[int, int]:
+def _estimate_match_size(scale: float, original_icon_size: tuple[int, int]) -> tuple[int, int]:
     """Estimate bounding box size for a match at a given scale.
 
     Args:
@@ -69,10 +69,10 @@ def _estimate_match_size(scale: float, original_icon_size: Tuple[int, int]) -> T
 
 
 def _aggregate_matches(
-    all_matches: List[DetectionMatch],
+    all_matches: list[DetectionMatch],
     max_results: int,
-    icon_size: Tuple[int, int]
-) -> Dict[str, Any]:
+    icon_size: tuple[int, int]
+) -> dict[str, Any]:
     """Aggregate matches from multiple detection methods.
 
     Applies global NMS to remove cross-method duplicates, then groups
@@ -224,7 +224,7 @@ async def find_icon(
     orb_min_matches: int = 2,
     orb_max_matches: int = 10,
     orb_distance_threshold: float = 80.0
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Find icon locations in provided screenshot data using base64 encoded icon.
 
     Multi-Method Aggregated Detection Pipeline:
@@ -267,7 +267,7 @@ async def find_icon(
         icon_size = (icon_w, icon_h)
 
         # Collect all matches from all methods
-        all_matches: List[DetectionMatch] = []
+        all_matches: list[DetectionMatch] = []
 
         # ========== Stage 0: Canny Edge-Based Multi-Scale Template Matching ==========
         try:
@@ -460,15 +460,14 @@ async def find_icon(
 
             log.info(f"Final result: {len(aggregated['locations'])} unique matches after aggregation")
             return aggregated
-        else:
-            log.info("No matches from any method")
-            return {
-                'locations': [],
-                'similarities': [],
-                'methods': [],
-                'contributing_methods': [],
-                'method_used': 'no_matches'
-            }
+        log.info("No matches from any method")
+        return {
+            'locations': [],
+            'similarities': [],
+            'methods': [],
+            'contributing_methods': [],
+            'method_used': 'no_matches'
+        }
 
     except (ImageDecodingError, base64.binascii.Error, ValueError) as e:
         log.error(f"Icon search input error: {e}")
@@ -492,7 +491,7 @@ async def get_all_text(
     offset_x: int = 0,
     offset_y: int = 0,
     format: str = "json"
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get all detected text from screenshot data. Format can be 'json' or 'csv'."""
     try:
         screenshot_bytes = base64.b64decode(screenshot_base64)
@@ -519,12 +518,12 @@ async def find_text(
     offset_y: int = 0,
     format: str = "json",
     match_mode: str = "substring",
-    regex_flags: Optional[List[str]] = None,
-    allow_missing_chars: Optional[Union[bool, str, List[str]]] = None,
-    max_missing: Optional[int] = None,
-    min_similarity: Optional[float] = None,
+    regex_flags: list[str] | None = None,
+    allow_missing_chars: bool | str | list[str] | None = None,
+    max_missing: int | None = None,
+    min_similarity: float | None = None,
     case_sensitive: bool = False
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Find text locations in provided screenshot data with advanced matching.
 
     Args:
