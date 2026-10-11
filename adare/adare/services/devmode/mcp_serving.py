@@ -25,23 +25,18 @@ from adare.core.result import Result
 log = logging.getLogger(__name__)
 
 
-def shape_testfunction_catalog(testfunctions: list[Any]) -> list[dict[str, Any]]:
-    """Shape ``get_testfunctions_structured`` output into MCP catalog entries.
+def testfunction_catalog_entries() -> list[dict[str, Any]]:
+    """Installed testfunctions as full catalog dicts for ``list_testfunctions``.
 
-    There is no dedicated ``category`` in the schema, so we group by the
-    testfunction file (the natural grouping). Host-mode compatibility is not
-    filtered here — it is validated at replay by ``GuestToHostTestExecutor``.
+    Read from the collection sources (static catalog), not the global DB: the DB
+    keeps one type/optional flag per parameter *name* across all functions and no
+    defaults, so agents were told optional parameters were required. Host-mode
+    compatibility is not filtered here — it is validated at replay by
+    ``GuestToHostTestExecutor``.
     """
-    catalog: list[dict[str, Any]] = []
-    for tf in testfunctions:
-        catalog.append({
-            'name': tf.name,
-            'dotnotation': tf.dotnotation,
-            'description': tf.description,
-            'parameters': tf.parameters,
-            'category': getattr(tf, 'file_name', '') or getattr(tf, 'file_path', ''),
-        })
-    return catalog
+    from adare.backend.testfunction.catalog import load_catalog
+
+    return [entry.to_dict() for entry in load_catalog() if entry.installed]
 
 
 class McpServingMixin:
@@ -109,19 +104,8 @@ class McpServingMixin:
         await server.serve_async(host, port)
 
     def _load_testfunction_catalog(self, project_path: Path | None) -> list[dict[str, Any]]:
-        """Shape the testfunction library into ``list_testfunctions`` entries.
-
-        Testfunctions live in the **global** adare DB (the ~40 built-ins incl.
-        ``standard.file_does_not_exist``), not the project DB — the project DB has
-        no ``test_function`` table. Read the global catalog. ``project_path`` is
-        kept for signature stability (callers pass it) but is not the source.
-        """
-        from adare.database.api.structured_data import StructuredDataApi
-
-        with StructuredDataApi() as api:
-            catalog = shape_testfunction_catalog(
-                api.get_testfunctions_structured(include_parameters=True)
-            )
+        """``project_path`` is kept for signature stability; testfunctions are global."""
+        catalog = testfunction_catalog_entries()
         if not catalog:
-            log.warning('Global testfunction library is empty — list_testfunctions will be empty')
+            log.warning('No installed testfunctions — list_testfunctions will be empty (run `adare test sync`)')
         return catalog

@@ -8,7 +8,7 @@ and CV resolver are fakes. They assert:
 - ``add_test`` validates the function against the catalog (dropping unknowns),
 - ``save_playbook`` writes a ``parse_playbook``-valid playbook carrying GUI
   actions **and** a ``tests:`` block **and** a ``- test:`` action,
-- ``list_testfunctions`` / catalog shaping from structured-data-shaped input,
+- ``list_testfunctions``: compact index without a query, ranked full entries with one,
 - ``run_playbook`` wires through to the deterministic replay engine,
 - an in-memory MCP client can drive the tools end-to-end (integration).
 """
@@ -23,7 +23,6 @@ from PIL import Image
 
 from adare.backend.experiment.target_resolver import TargetMatch
 from adare.backend.experiment.vlm.mcp_server import GuiMcpServer
-from adare.services.devmode.mcp_serving import shape_testfunction_catalog
 from adare.types.playbook import ActionTestAction, ClickAction, parse_playbook
 
 pytestmark = pytest.mark.unit
@@ -79,26 +78,16 @@ class _FakeResolver:
         return self._match
 
 
-class _TF:
-    """Structured-data-shaped testfunction (mirrors TestFunctionInfo)."""
-
-    def __init__(self, name, dotnotation, description='', parameters=None, file_name=''):
-        self.name = name
-        self.dotnotation = dotnotation
-        self.description = description
-        self.parameters = parameters or []
-        self.file_name = file_name
-        self.file_path = file_name
-
-
 def _catalog():
-    return shape_testfunction_catalog([
-        _TF('file_does_not_exist', 'filesystem.file_does_not_exist',
-            'Assert a path is absent',
-            [{'name': 'path', 'data_type': 'str', 'required': True}], 'filesystem.py'),
-        _TF('file_exists', 'filesystem.file_exists', 'Assert a path is present',
-            [{'name': 'path', 'data_type': 'str', 'required': True}], 'filesystem.py'),
-    ])
+    # Full static-catalog dicts, as ``testfunction_catalog_entries`` produces them.
+    def param(name):
+        return {'name': name, 'type': 'str', 'required': True, 'default': None, 'doc': 'Guest path'}
+    return [
+        {'dotnotation': 'filesystem.file_does_not_exist', 'name': 'file_does_not_exist',
+         'summary': 'Assert a path is absent', 'params': [param('path')]},
+        {'dotnotation': 'filesystem.file_exists', 'name': 'file_exists',
+         'summary': 'Assert a path is present', 'params': [param('path')]},
+    ]
 
 
 def _server(tmp_path, resolver=None):
@@ -114,21 +103,35 @@ def _server(tmp_path, resolver=None):
 # Catalog shaping / list_testfunctions
 # ---------------------------------------------------------------------------
 
-def test_shape_catalog_maps_structured_fields():
-    catalog = _catalog()
-    assert {e['dotnotation'] for e in catalog} == {
-        'filesystem.file_does_not_exist', 'filesystem.file_exists'}
-    entry = catalog[0]
-    assert entry['name'] == 'file_does_not_exist'
-    assert entry['category'] == 'filesystem.py'
-    assert entry['parameters'][0]['name'] == 'path'
-
-
-def test_list_testfunctions_returns_catalog(tmp_path):
-    server = _server(tmp_path)
-    got = server.list_testfunctions()
+def test_list_testfunctions_without_query_is_compact_index(tmp_path):
+    got = _server(tmp_path).list_testfunctions()
     assert {e['dotnotation'] for e in got} == {
         'filesystem.file_does_not_exist', 'filesystem.file_exists'}
+    assert set(got[0]) == {'dotnotation', 'summary', 'signature', 'os', 'installed'}
+    assert got[0]['signature'] == 'filesystem.file_does_not_exist(path: str)'
+
+
+def test_list_testfunctions_query_ranks_goal_with_example(tmp_path):
+    got = _server(tmp_path).list_testfunctions(query='verify the file is gone')
+    assert got[0]['dotnotation'] == 'filesystem.file_does_not_exist'
+    assert got[0]['example']['parameter'] == {'path': '<str>'}
+    assert got[0]['params'][0]['doc'] == 'Guest path'
+
+
+def test_static_catalog_entries_feed_the_server(tmp_path, monkeypatch):
+    from adare.backend.testfunction import catalog
+    from adare.services.devmode.mcp_serving import testfunction_catalog_entries
+
+    root = tmp_path / 'tf' / 'demo'
+    root.mkdir(parents=True)
+    (root / 'demo.py').write_text(
+        "@testfunction(name='file_exists', description='tests if file exists')\n"
+        "def file_exists(ctx, dst: str, mode: str = 'any'):\n    pass\n")
+    monkeypatch.setattr(catalog, 'default_sources', lambda: [(tmp_path / 'tf', True)])
+    entries = testfunction_catalog_entries()
+    server = GuiMcpServer(executor=_FakeExecutor(), resolver=_FakeResolver(), catalog=entries, base_dir=tmp_path)
+    assert server.add_test('t', 'demo.file_exists', parameters={'dst': '/x'})['status'] == 'error'  # not recording
+    assert server.list_testfunctions()[0]['signature'] == "demo.file_exists(dst: str, mode: str = 'any')"
 
 
 # ---------------------------------------------------------------------------

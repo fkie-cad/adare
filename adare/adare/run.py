@@ -420,29 +420,89 @@ def dry_run(target, param, file, path):
     exec_with_error_printing(exec_dry_run_testfunction, args)
 
 
+_catalog_filters = [
+    click.option('--collection', '--set', 'collection', help='Only this collection (e.g. standard, windows)'),
+    click.option('--category', help='Only this host-mode category (e.g. FILE_BASED, HOST_NATIVE)'),
+    click.option('--os', 'os_name', type=click.Choice(['windows', 'linux', 'any'], case_sensitive=False),
+                 help='Only testfunctions usable on this guest OS'),
+]
+
+
+def catalog_filters(func):
+    for option in reversed(_catalog_filters):
+        func = option(func)
+    return func
+
+
 @test.command(name='list')
-@click.option('--set', help='Filter testfunctions by set (e.g., standard)')
-def list_testfunctions(set):
-    """List all testfunctions."""
-    from adare.cli.testfunction import exec_list_testfunctions
-    args = SimpleNamespace(set=set)
-    exec_with_error_printing(exec_list_testfunctions, args)
+@catalog_filters
+@click.option('--full', is_flag=True, help='Structured output with every field (default: compact)')
+def list_testfunctions(collection, category, os_name, full):
+    """List every testfunction with its parameters (no project needed).
+
+    \b
+    Examples:
+      adare test list --collection standard
+      adare --format json test list --os windows
+    """
+    from adare.cli.testfunction_catalog import exec_catalog_list
+    args = SimpleNamespace(collection=collection, category=category, os=os_name, full=full)
+    exec_with_error_printing(exec_catalog_list, args)
 
 @test.command()
-@click.option('--file-name', '-n', help='File name')
+@click.argument('query')
+@catalog_filters
+@click.option('--limit', '-n', default=8, show_default=True, help='Maximum number of results')
+def search(query, collection, category, os_name, limit):
+    """Find the testfunction for a goal, e.g. "deleted file is gone".
+
+    Ranks by name, summary and parameter docs, with synonyms (deleted/gone/
+    removed, registry/hive, ...). Results include a ready-to-paste example.
+
+    \b
+    Examples:
+      adare test search "file was deleted"
+      adare --format json test search "registry value" --os windows
+    """
+    from adare.cli.testfunction_catalog import exec_catalog_search
+    args = SimpleNamespace(query=query, collection=collection, category=category, os=os_name, limit=limit)
+    exec_with_error_printing(exec_catalog_search, args)
+
+@test.command(hidden=True)
+@click.option('--file-name', '-n', help='Collection name')
 def show(file_name):
-    """Show testfunctions with optional file filtering."""
-    from adare.cli.show import exec_show_testfunctions
-    args = SimpleNamespace(file_name=file_name)
-    exec_with_error_printing(exec_show_testfunctions, args)
+    """Deprecated alias of `adare test list --collection`."""
+    from adare.cli.testfunction_catalog import exec_catalog_list
+    args = SimpleNamespace(collection=file_name, category=None, os=None, full=False)
+    exec_with_error_printing(exec_catalog_list, args)
 
 @test.command()
 @click.argument('dotnotation')
-def info(dotnotation):
-    """Show detailed information about a specific testfunction."""
-    from adare.cli.show import exec_show_testfunction
-    args = SimpleNamespace(dotnotation=dotnotation)
-    exec_with_error_printing(exec_show_testfunction, args)
+@click.option('--example', is_flag=True, help='Print only a ready-to-paste `tests:` YAML block')
+def info(dotnotation, example):
+    """Signature, parameter docs and an example for one testfunction.
+
+    DOTNOTATION is <collection>.<function> (e.g. standard.file_exists); a bare
+    function name works when it is unique.
+    """
+    from adare.cli.testfunction_catalog import exec_catalog_info
+    args = SimpleNamespace(dotnotation=dotnotation, example=example)
+    exec_with_error_printing(exec_catalog_info, args)
+
+@test.command()
+@click.option('--markdown', is_flag=True, help='Render a Markdown reference instead of structured output')
+def catalog(markdown):
+    """Export the bundled testfunction catalog (for docs and agent skills).
+
+    Machine-independent: only collections shipped with ADARE, not local ones.
+
+    \b
+    Example:
+      adare test catalog --markdown > skills/adare-testfunction/references/catalog.md
+    """
+    from adare.cli.testfunction_catalog import exec_catalog_export
+    args = SimpleNamespace(markdown=markdown)
+    exec_with_error_printing(exec_catalog_export, args)
 
 @test.command()
 @click.argument('target')
@@ -458,6 +518,8 @@ def versions(target):
 
 # Add aliases for test commands
 test.add_alias('l', 'list')
+test.add_alias('ls', 'list')
+test.add_alias('find', 'search')
 test.add_alias('rm', 'remove')
 test.add_alias('v', 'versions')
 

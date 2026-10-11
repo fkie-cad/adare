@@ -30,12 +30,13 @@ import dataclasses
 import datetime
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from adare.core.result import Result
+from adare.exceptions import LoggedErrorException
 
 log = logging.getLogger(__name__)
 
@@ -121,6 +122,9 @@ def call_tool(tool: ChatTool, arguments: dict[str, Any] | None) -> dict[str, Any
     args = arguments or {}
     try:
         return _normalize(tool.func(**args))
+    except LoggedErrorException as exc:  # ADARE's own errors carry fix hints
+        return {'ok': False, 'error': {'code': exc.error_name, 'message': exc.message,
+                                       'solutions': list(exc.possible_solutions or [])}}
     except _TOOL_ERRORS as exc:
         log.warning('Tool %s failed: %s', tool.name, exc)
         return {'ok': False, 'error': {'code': type(exc).__name__, 'message': str(exc), 'solutions': []}}
@@ -165,6 +169,25 @@ def _resolve_project(project: str | None) -> Path:
             'within a project directory.'
         )
     return Path(path)
+
+
+# --------------------------------------------------------------------------- #
+# Test functions: read from the collection sources (static catalog) — exact
+# per-function signatures with defaults and docs, no project or DB needed.
+# --------------------------------------------------------------------------- #
+def _testfunction_list(collection=None, os=None):
+    from adare.backend.testfunction.catalog import load_catalog, search
+    return [e.to_dict(compact=True) for e in search(load_catalog(), collection=collection, os=os)]
+
+
+def _testfunction_search(query, collection=None, os=None, limit=5):
+    from adare.backend.testfunction.catalog import load_catalog, search
+    return [e.to_dict() for e in search(load_catalog(), query, collection=collection, os=os, limit=limit)]
+
+
+def _testfunction_info(dotnotation):
+    from adare.cli.testfunction_catalog import resolve_entry
+    return resolve_entry(dotnotation).to_dict()
 
 
 # --------------------------------------------------------------------------- #
@@ -336,11 +359,26 @@ def build_tools(api: Any | None = None) -> list[ChatTool]:
         properties={'ulid': _str('Run ULID (omit for the most recent run)')}, group='run')
 
     # -- test functions -----------------------------------------------------
-    add('testfunction_list', 'List available test functions (assertions).',
-        lambda: api.show.list_testfunctions(), group='testfunction')
+    _os = {'type': 'string', 'enum': ['windows', 'linux'], 'description': 'Only testfunctions usable on this guest OS'}
+    add('testfunction_search',
+        'Find the test function (assertion) for a goal, e.g. "verify the deleted file is gone" or '
+        '"registry value was set". Returns the best matches with parameter docs, defaults and a '
+        'ready-to-paste `tests:` example. Use this before writing a playbook `tests:` block.',
+        _testfunction_search,
+        properties={'query': _str('The goal in plain words'),
+                    'collection': _str('Only this collection (e.g. standard, windows)'),
+                    'os': _os, 'limit': _int('Maximum results (default 5)')},
+        required=['query'], group='testfunction')
 
-    add('testfunction_info', 'Get details of one test function by dotnotation.',
-        lambda dotnotation: api.show.get_testfunction(dotnotation),
+    add('testfunction_list',
+        'Compact index of every test function: dotnotation, one-line summary and signature.',
+        _testfunction_list,
+        properties={'collection': _str('Only this collection (e.g. standard, windows)'), 'os': _os},
+        group='testfunction')
+
+    add('testfunction_info',
+        'Full details of one test function: parameter types, defaults, docs and an example.',
+        _testfunction_info,
         properties={'dotnotation': _str('Test function dotnotation, e.g. standard.file_exists')},
         required=['dotnotation'], group='testfunction')
 

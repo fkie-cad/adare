@@ -134,62 +134,6 @@ def exec_show_run(arguments):
         print_run(result.data.ulid, formatter, output_file, dual_output)
 
 
-def exec_show_testfunctions(arguments):
-    """Show testfunctions in the configured output format."""
-    import pandas as pd
-
-    from adare.frontend.terminal.console import DefaultConsole
-    from adare.frontend.terminal.testfunction_list import TestfunctionTablePanel
-    from adare.run import get_formatter_from_context
-
-    api = AdareAPI()
-    formatter, output_file, dual_output = get_formatter_from_context()
-
-    # Get testfunctions from API
-    file_name = arguments.file_name if hasattr(arguments, 'file_name') else None
-    result = api.show.list_testfunctions(file_name=file_name)
-
-    if not result.success:
-        handle_api_error(result)
-        return
-
-    testfunctions = result.data
-
-    if dual_output or formatter.format_type.value != 'rich':
-        # Structured output (JSON/YAML)
-        tf_list = [tf.to_dict() for tf in testfunctions]
-        formatter.print_or_save({'testfunctions': tf_list}, output_file, dual_output)
-    else:
-        # Rich console output - convert to DataFrame for TestfunctionTablePanel
-        if testfunctions:
-            tf_data = [{
-                'ulid': tf.id,
-                'display_name': tf.display_name,
-                'name': tf.name,
-                'parameters': tf.parameter_count,
-                'file_name': tf.file_name,
-                'description': tf.description,
-            } for tf in testfunctions]
-            tf_df = pd.DataFrame(tf_data)
-        else:
-            tf_df = pd.DataFrame()
-
-        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
-        # the terminal height and silently drops the overflowing rows, which reads
-        # as "those testfunctions do not exist".
-        DefaultConsole().print(TestfunctionTablePanel(tf_df))
-
-
-def exec_show_testfunction(arguments):
-    """Get detailed information about a specific testfunction."""
-    from adare.frontend.terminal.testfunction import print_testfunction
-    from adare.run import get_formatter_from_context
-
-    formatter, output_file, dual_output = get_formatter_from_context()
-    # Use the existing frontend function which handles the display
-    print_testfunction(arguments.dotnotation, None, formatter, output_file, dual_output)
-
-
 def exec_show_experiment(arguments):
     """Get detailed information about a specific experiment."""
     from adare.backend.basics import determine_projectdirectory

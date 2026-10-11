@@ -309,50 +309,6 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
     return testfunction_id
 
 
-def testfunction_list(testfunction_set: str = None):
-    from adare.database.api.frontend import DataRetrievalApi
-    from adare.frontend.terminal.console import DefaultConsole
-    from adare.frontend.terminal.testfunction_list import TestfunctionListPanel
-
-    # Use the same data source as the working testfunction show command
-    with DataRetrievalApi() as api:
-        testfunctions_df = api.get_testfunction_list()
-
-    # Filter by testfunction set if specified
-    if testfunction_set:
-        # Filter based on file name (extracted from dotnotation or file_name column)
-        if 'file_name' in testfunctions_df.columns:
-            file_column = 'file_name'
-        elif 'dotnotation' in testfunctions_df.columns:
-            # Extract file name from dotnotation
-            testfunctions_df = testfunctions_df.copy()
-            testfunctions_df['file_name'] = testfunctions_df['dotnotation'].apply(
-                lambda x: x.split('.', 1)[0] if '.' in str(x) else str(x)
-            )
-            file_column = 'file_name'
-        else:
-            file_column = None
-
-        if file_column:
-            # Filter by testfunction set
-            mask = (
-                testfunctions_df[file_column].str.contains(testfunction_set, na=False) |
-                testfunctions_df[file_column].str.startswith(testfunction_set, na=False) |
-                (testfunctions_df[file_column] == testfunction_set)
-            )
-            testfunctions_df = testfunctions_df[mask]
-
-    if not testfunctions_df.empty:
-        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
-        # the terminal height and silently drops the overflowing rows, which reads
-        # as "those testfunctions do not exist".
-        # testfunction_file=None means show all files
-        DefaultConsole().print(TestfunctionListPanel(testfunctions_df, testfunction_file=None))
-    else:
-        filter_msg = f" for set '{testfunction_set}'" if testfunction_set else ""
-        print(f"No testfunctions found{filter_msg}")
-
-
 def testfunction_download(project_path: Path, name: str, version: int = None):
     if not is_logged_in():
         raise NotLoggedInError(log)
