@@ -120,6 +120,33 @@ def _compare_values(test_instance, actual_value, expected_value, regex_match=Fal
     category=HostModeCategory.FILE_CONTENT,
 )
 def line_matches(ctx: TestContext, dst: str = '', conditions: dict[str, str | int | float | bool | None] = None, match_mode: str = "any", regex_match: bool = False, skip_malformed: bool = True):
+    """Pass when one line (``any``) or every valid line (``all``) of JSONL file ``dst`` meets all ``conditions``.
+
+    Use for: event logs / NDJSON exports (e.g. "a line with type=login and user=alice exists").
+    To count matches use jsonl.line_count.
+
+    Args:
+        dst: Guest path to the JSONL file (one JSON document per line; blank lines are
+            skipped). A glob must match exactly one path; a missing or 0-byte file fails.
+        conditions: Required mapping ``key_path -> expected value``; a line matches when every
+            condition holds. If a path yields several values (wildcard or JSON array), one
+            matching element suffices. Missing keys fail the line.
+        match_mode: ``any`` (default) or ``all`` (every valid line must match; no valid lines
+            fails). Other values are an execution error.
+        regex_match: Treat string expected values as regexes searched (``re.search``) in
+            ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
+            are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
+        skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
+            fails on the first malformed line.
+
+    Example:
+        function: jsonl.line_matches
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            event: login
+            user.name: alice
+    """
     try:
         dst_param = dst
         dst, status = ctx.resolve_globfilepath(dst)
@@ -260,6 +287,30 @@ def line_matches(ctx: TestContext, dst: str = '', conditions: dict[str, str | in
     category=HostModeCategory.FILE_CONTENT,
 )
 def line_count(ctx: TestContext, dst: str = '', conditions: dict[str, str | int | float | bool | None] | None = None, expected_count: int | dict[str, int] | None = None, regex_match: bool = False, skip_malformed: bool = True):
+    """Pass when the number of JSONL lines meeting all ``conditions`` is within ``expected_count``.
+
+    Use for: asserting how many records/events were written (e.g. exactly 3 deletions).
+
+    Args:
+        dst: Guest path to the JSONL file (one JSON document per line; blank lines are
+            skipped). A glob must match exactly one path; a missing or 0-byte file fails.
+        conditions: Mapping ``key_path -> expected value`` (all must hold; for multi-value
+            paths one matching element suffices). ``None``/empty counts every valid JSON line.
+        expected_count: ``int`` for an exact count, ``{min: N, max: M}`` for a range (either
+            bound optional: min defaults to 0, max to unbounded), or ``None`` for "at least 1".
+        regex_match: Treat string expected values as regexes searched (``re.search``) in
+            ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
+            are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
+        skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
+            fails on the first malformed line.
+
+    Example:
+        function: jsonl.line_count
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions: {event: file_deleted}
+          expected_count: {min: 1, max: 5}
+    """
     try:
         dst_param = dst
         dst, status = ctx.resolve_globfilepath(dst)
@@ -396,6 +447,31 @@ def line_count(ctx: TestContext, dst: str = '', conditions: dict[str, str | int 
     category=HostModeCategory.FILE_CONTENT,
 )
 def value_in_any_line(ctx: TestContext, dst: str = '', key_path: str = '', expected_value: str | int | float | bool | None = None, regex_match: bool = False, skip_malformed: bool = True):
+    """Pass when ``key_path`` has a value matching ``expected_value`` in at least one JSONL line.
+
+    Use for: a single-field check across a log; for multi-field conditions use jsonl.line_matches.
+
+    Args:
+        dst: Guest path to the JSONL file (one JSON document per line; blank lines are
+            skipped). A glob must match exactly one path; a missing or 0-byte file fails.
+        key_path: Dot path inside each line's object, e.g. ``event.type``; ``*`` expands
+            object values, ``name[*]`` array elements. No numeric indexes.
+            For multi-value paths one matching element suffices.
+        expected_value: Value to find; see ``regex_match`` for how it is compared.
+        regex_match: Treat string expected values as regexes searched (``re.search``) in
+            ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
+            are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
+        skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
+            fails on the first malformed line.
+
+    Example:
+        function: jsonl.value_in_any_line
+        parameter:
+          dst: /home/user/.local/share/app/history.jsonl
+          key_path: url
+          expected_value: example.com
+          regex_match: true
+    """
     try:
         dst_param = dst
         dst, status = ctx.resolve_globfilepath(dst)
