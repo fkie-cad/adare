@@ -538,12 +538,13 @@ class ExperimentService:
         brain can read the errors and fix them.
         """
         from adare.backend.experiment.vlm.authoring.author_playbook import validate as author_validate
+        from adare.types.playbook_test_checks import check_playbook_tests
 
         ok, error = author_validate(request.yaml)
-        return Result.ok(PlaybookValidateResult(
-            valid=ok,
-            errors=[] if ok else [error or 'Unknown validation error'],
-        ))
+        if not ok:
+            return Result.ok(PlaybookValidateResult(valid=False, errors=[error or 'Unknown validation error']))
+        errors, warnings = check_playbook_tests(request.yaml)
+        return Result.ok(PlaybookValidateResult(valid=not errors, errors=errors, warnings=warnings))
 
     def write_playbook(self, request: PlaybookWriteRequest) -> Result[PlaybookWriteResult]:
         """Validate, then write playbook YAML to an experiment and re-ingest the DB.
@@ -557,7 +558,13 @@ class ExperimentService:
         """
         from adare.backend.experiment.vlm.authoring.author_playbook import validate as author_validate
 
+        from adare.types.playbook_test_checks import check_playbook_tests
+
         ok, error = author_validate(request.yaml)
+        if ok:
+            test_errors, _warnings = check_playbook_tests(request.yaml)
+            if test_errors:
+                ok, error = False, '; '.join(test_errors)
         if not ok:
             return Result.fail(
                 code='PLAYBOOK_INVALID',

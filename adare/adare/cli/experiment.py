@@ -930,8 +930,11 @@ def exec_playbook_validate(arguments):
         handle_api_error(result)
         return
 
+    for warning in result.data.warnings:
+        print(f'warning: {warning}', file=sys.stderr)
     if result.data.valid:
-        print_success_message(title=f'Playbook "{playbook_path}" is valid')
+        print_success_message(title=f'Playbook "{playbook_path}" is valid'
+                              + (f' ({len(result.data.warnings)} warning(s))' if result.data.warnings else ''))
     else:
         print_error_message(
             title=f'Playbook "{playbook_path}" is invalid',

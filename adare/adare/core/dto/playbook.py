@@ -6,7 +6,7 @@ experiment's ``playbook.yml`` — the file/DB half of the conversational
 "fix a playbook" loop (read -> edit -> validate -> replay -> write-back).
 These are deliberately file/DB operations only; they never touch a VM.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 # =============================================================================
@@ -51,9 +51,14 @@ class PlaybookReadResult:
 
 @dataclass
 class PlaybookValidateResult:
-    """Static validation outcome. ``errors`` is empty when ``valid``."""
+    """Static validation outcome. ``errors`` is empty when ``valid``.
+
+    ``warnings`` are non-fatal findings, e.g. a test calling a testfunction that
+    is not in this machine's catalog, or a parameter name it does not take.
+    """
     valid: bool
     errors: list[str]
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
