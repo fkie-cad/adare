@@ -190,3 +190,55 @@ def test_skill_catalog_reference_is_fresh():
     assert reference.read_text(encoding='utf-8') == catalog_markdown(load_catalog(bundled_sources())), (
         'stale catalog.md: run `adare test catalog --markdown > skills/adare-testfunction/references/catalog.md`'
     )
+
+
+def _write_collection(root, name, body):
+    (root / name).mkdir(parents=True, exist_ok=True)
+    path = root / name / f'{name}.py'
+    path.write_text(body)
+    return path
+
+
+def _bump_mtime(path):
+    import os
+
+    st = path.stat()
+    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+
+
+def test_load_catalog_is_cached_until_a_source_changes(tmp_path, monkeypatch):
+    from adare.backend.testfunction import catalog
+
+    parsed = []
+    real_parse = catalog.parse_collection
+    monkeypatch.setattr(
+        catalog, 'parse_collection', lambda path, installed: parsed.append(path) or real_parse(path, installed)
+    )
+    one = "@testfunction(name='{n}', description='d')\ndef {n}(ctx, dst: str):\n    pass\n"
+    path = _write_collection(tmp_path, 'demo', one.format(n='aaa'))
+    sources = [(tmp_path, True)]
+
+    first = load_catalog(sources)
+    assert load_catalog(sources) == first
+    assert len(parsed) == 1  # second call served from the cache
+
+    # Edited in place (same size: only the mtime shows it).
+    path.write_text(one.format(n='bbb'))
+    _bump_mtime(path)
+    assert [e.name for e in load_catalog(sources)] == ['bbb']
+
+    # A new collection appears.
+    _write_collection(tmp_path, 'extra', one.format(n='ccc'))
+    assert [e.name for e in load_catalog(sources)] == ['bbb', 'ccc']
+
+    # A collection is removed.
+    path.unlink()
+    assert [e.name for e in load_catalog(sources)] == ['ccc']
+    assert len(parsed) == 1 + 1 + 2 + 1
+
+
+def test_load_catalog_returns_a_fresh_list(tmp_path):
+    _write_collection(tmp_path, 'demo', "@testfunction(name='x', description='d')\ndef x(ctx):\n    pass\n")
+    entries = load_catalog([(tmp_path, True)])
+    entries.clear()
+    assert len(load_catalog([(tmp_path, True)])) == 1
