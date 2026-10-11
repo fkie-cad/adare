@@ -6,6 +6,7 @@ Provides base snapshot creation, experiment snapshots, and cleanup utilities.
 """
 
 import logging
+import threading
 from typing import Optional
 
 from adare.backend.vm.exceptions import VMError

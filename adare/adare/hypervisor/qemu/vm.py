@@ -16,6 +16,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 try:
     import libvirt
@@ -46,6 +47,9 @@ from adare.hypervisor.qemu.mixins.registry import RegistryMixin
 from adare.hypervisor.qemu.mixins.snapshots import SnapshotMixin
 from adare.hypervisor.qemu.models import CommandResult
 from adare.hypervisor.qemu.utilities.disk_utils import try_cow_clone
+
+if TYPE_CHECKING:
+    from adare.hypervisor.executable_manager import ExecutableManager
 
 log = logging.getLogger(__name__)
 

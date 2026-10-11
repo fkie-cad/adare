@@ -6,7 +6,7 @@ Singleton class for managing multiple concurrent dev mode sessions.
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import ulid
 
@@ -18,6 +18,9 @@ from adare.types.stages import ConnectToVMStage
 from .session import DevModeSession, DevModeState
 from .session_restorer import restore_context, restore_infrastructure_context
 from .vm_state_checker import is_vm_running
+
+if TYPE_CHECKING:
+    from .playbook_batch_runner import PlaybookBatchSummary
 
 log = logging.getLogger(__name__)
 

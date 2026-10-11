@@ -9,10 +9,13 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from adare.console import console
 from adarelib.constants import StatusEnum
+
+if TYPE_CHECKING:
+    from .session import DevModeSession
 
 log = logging.getLogger(__name__)
 

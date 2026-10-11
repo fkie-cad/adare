@@ -33,7 +33,7 @@ class PyClassAnalyzer:
             (
                 method
                 for method in self.root.body
-                if type(method) == ast.FunctionDef and method.name == method_name
+                if type(method) is ast.FunctionDef and method.name == method_name
             ),
             None,
         )

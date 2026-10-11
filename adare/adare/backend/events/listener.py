@@ -487,7 +487,7 @@ def _handle_action_event(event, console, ulid):
             message = format_action_message(action_type, display_info)
 
             # Extract start time from action data for live duration tracking
-            from datetime import datetime
+            from datetime import datetime, timezone
             start_time = None
             if action_data.get('timestamp'):
                 try:

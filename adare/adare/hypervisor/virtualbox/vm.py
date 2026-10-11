@@ -9,6 +9,7 @@ import logging
 import platform
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adare.hypervisor.base.vm import AbstractVM
 from adare.hypervisor.exceptions import VMAlreadyRunningException, VMImportException, VMNotFoundException
@@ -16,6 +17,9 @@ from adare.hypervisor.virtualbox.manager import VirtualBoxManager
 from adare.hypervisor.virtualbox.mixins import CommandExecutionMixin, NetworkingMixin, SnapshotMixin
 from adare.hypervisor.virtualbox.utils import read_file_hash, run_subprocess
 from adarelib.constants import StatusEnum
+
+if TYPE_CHECKING:
+    from adare.hypervisor.executable_manager import ExecutableManager
 
 log = logging.getLogger(__name__)
 

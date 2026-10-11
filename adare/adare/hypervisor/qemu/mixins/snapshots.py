@@ -132,8 +132,6 @@ class SnapshotMixin(AbstractSnapshotMixin):
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
 
-        return snapshot_success
-
     def _get_attached_virtiofs_payloads(self) -> list:
         """
         Get XML payloads for all currently attached virtiofs devices.

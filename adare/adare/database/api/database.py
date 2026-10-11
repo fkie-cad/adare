@@ -22,7 +22,9 @@ class DatabaseApi:
     engine: sqlalchemy.engine.base.Engine
     _session: sqlalchemy.orm.Session
 
-    def __init__(self, db_path: Path = config_database.get_database_location()):
+    def __init__(self, db_path: Path | None = None):
+        if db_path is None:
+            db_path = config_database.get_database_location()
         self.engine = sqlalchemy.create_engine(f'sqlite:///{db_path.as_posix()}')
         self.conn = self.engine.connect()
         self.metadata = sqlalchemy.MetaData()

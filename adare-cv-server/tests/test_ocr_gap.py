@@ -48,8 +48,7 @@ async def _run_test_ocr_separation():
     assert "Value" in texts or any("Value" in t for t in texts)
     
     # Explicitly check against merging
-    combined = "".join(texts).replace(" ", "")
     assert "LabelValue" not in texts, "Words were merged into a single detection"
 
 if __name__ == "__main__":
-    asyncio.run(test_ocr_separation_at_gap_20px())
+    test_ocr_separation_at_gap_30px()

@@ -80,7 +80,7 @@ class ProjectDirectory(Directory):
     def remove(self):
         try:
             shutil.rmtree(self.path)
-        except FileNotFoundError or OSError as e:
+        except OSError as e:
             raise ProjectDirectoryRemovalError(
                 log,
                 message=f'project directory ({self.path}) removal failed: {e.strerror}',

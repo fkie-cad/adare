@@ -178,10 +178,10 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         args = SimpleNamespace(instance_id=instance_id)
         exec_with_error_printing(exec_vm_list_snapshots, args)
 
-    @snapshot.command()
+    @snapshot.command(name='remove')
     @click.argument('instance_id')
     @click.argument('snapshot_name')
-    def remove(instance_id, snapshot_name):
+    def snapshot_remove(instance_id, snapshot_name):
         """Delete a single snapshot from a specific VM instance."""
         from adare.cli.vm import exec_vm_delete_snapshot
         args = SimpleNamespace(instance_id=instance_id, snapshot_name=snapshot_name)

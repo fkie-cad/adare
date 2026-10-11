@@ -1,7 +1,7 @@
 # external imports
 import glob
 from enum import Enum
-from typing import Optional, ClassVar, Dict, Any, List, Tuple, Union
+from typing import TYPE_CHECKING, Optional, ClassVar, Dict, Any, List, Tuple, Union
 import attrs
 import re
 
@@ -12,6 +12,9 @@ from adarelib.testset.yaml.customtags import YamlCustomTag
 import logging
 
 log = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    import datetime
 
 
 class HostModeCategory(str, Enum):
