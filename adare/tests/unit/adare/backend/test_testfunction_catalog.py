@@ -110,7 +110,7 @@ def test_search_filters(entries):
 def test_example_marks_required_and_empty_defaults(entries):
     assert find(entries, 'demo.file_exists').example() == {
         'name': 'check_file_exists', 'function': 'demo.file_exists',
-        'parameter': {'dst': '<str>', 'match_mode': 'any'}}
+        'parameter': {'dst': '<str>'}}
     assert find(entries, 'visual.exists').example() == {'name': 'check_exists', 'function': 'visual.exists'}
 
 
@@ -158,3 +158,17 @@ def test_undocumented_installed_copy_borrows_docs_only_when_code_is_identical(tm
     assert same.installed and same.params[0].doc == 'Guest path.' and same.doc.startswith('Pass when')
     assert diff.installed and diff.params[0].doc == '' and diff.doc == ''
     assert 'code_sha' not in same.to_dict()
+
+
+def test_skill_catalog_reference_is_fresh():
+    """skills/adare-testfunction/references/catalog.md must match the bundled sources.
+
+    Regenerate with: adare test catalog --markdown > skills/adare-testfunction/references/catalog.md
+    """
+    from pathlib import Path
+
+    from adare.frontend.terminal.testfunction_catalog import catalog_markdown
+
+    reference = Path(__file__).resolve().parents[5] / 'skills' / 'adare-testfunction' / 'references' / 'catalog.md'
+    assert reference.read_text(encoding='utf-8') == catalog_markdown(load_catalog(bundled_sources())), \
+        'stale catalog.md: run `adare test catalog --markdown > skills/adare-testfunction/references/catalog.md`'
