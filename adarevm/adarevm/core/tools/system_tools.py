@@ -499,7 +499,9 @@ class SystemToolsMixin:
 
                 log.debug(f"[{command_id}] Appended tool paths to PATH: {additional_paths}")
 
-            log.info(f"command environment: {cmd_env}")
+            # Never log values: the environment can carry credentials and tokens.
+            if env:
+                log.info(f"[{command_id}] command environment overrides: {sorted(env)}")
 
             options['env'] = cmd_env
 
@@ -537,7 +539,8 @@ class SystemToolsMixin:
             # Execute shell command directly using execute_on_shell
             # When shell=True, pass command as string; otherwise split into list
             # Log command execution start
-            log.debug(f"[{command_id}] Starting shell execution with options: {options}")
+            logged_options = {k: v for k, v in options.items() if k != 'env'}
+            log.debug(f"[{command_id}] Starting shell execution with options: {logged_options}")
 
             if options.get('shell', False):
                 result = await asyncio.to_thread(execute_on_shell, shell_command, **options)
