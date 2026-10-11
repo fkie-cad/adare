@@ -1,10 +1,10 @@
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
-from . import Base
+from .global_models import GlobalBase
 
 
-class Token(Base):
+class Token(GlobalBase):
     __tablename__ = 'token'
     id = Column(Integer, primary_key=True, autoincrement=True)
     token = Column(String, unique=True)
@@ -15,7 +15,7 @@ class Token(Base):
     )
 
 
-class UserSession(Base):
+class UserSession(GlobalBase):
     __tablename__ = 'user_session'
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String, unique=True)

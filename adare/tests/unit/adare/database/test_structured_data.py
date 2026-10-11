@@ -5,8 +5,6 @@ from unittest.mock import patch
 
 import pytest
 import ulid
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 pytestmark = pytest.mark.unit
 
@@ -178,19 +176,11 @@ def db_path(tmp_path):
 @pytest.fixture()
 def structured_api(db_path):
     """Create tables for both GlobalBase and ProjectBase, return API as context manager."""
-    engine = create_engine(f"sqlite:///{db_path.as_posix()}")
-    GlobalBase.metadata.create_all(engine)
-    ProjectBase.metadata.create_all(engine)
+    api = StructuredDataApi(db_path)
+    GlobalBase.metadata.create_all(api.engine)
+    ProjectBase.metadata.create_all(api.engine)
 
-    api = StructuredDataApi.__new__(StructuredDataApi)
-    api.engine = engine
-    api.conn = engine.connect()
-    api.metadata = GlobalBase.metadata
-    api.session_starter = sessionmaker(autoflush=False, expire_on_commit=False)
-    api.session_starter.configure(bind=engine)
-
-    api._session = api.session_starter()
-    api._session.begin()
+    api._start_session()
     yield api
     api._session.rollback()
     api._session.close()
