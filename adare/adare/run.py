@@ -774,6 +774,52 @@ def start(port, host, dev):
 # ------------------------------
 # Chat — embedded agentic REPL
 # ------------------------------
+@cli.group(name='agent', cls=AliasedGroup)
+def agent():
+    """Set up AI coding agents (Claude Code, OpenCode) to drive ADARE.
+
+    Not the GUI vision agent: that is `adare dev agent`.
+    """
+    pass
+
+
+_agent_client_option = click.option('--client', type=click.Choice(['claude', 'opencode', 'all']), default='all',
+                                    show_default=True, help='Which coding agent(s)')
+
+
+@agent.command(name='setup')
+@_agent_client_option
+@click.option('--scope', type=click.Choice(['user', 'project', 'all']), default='user', show_default=True,
+              help='user = every project (~/.claude/skills, ~/.config/opencode/skills); project = this directory')
+@click.option('--copy', is_flag=True, help='Copy the skills instead of symlinking (e.g. on Windows)')
+@click.option('--force', is_flag=True, help='Re-point skill symlinks that currently point elsewhere')
+@click.option('--dry-run', is_flag=True, help='Show what would change without touching anything')
+def agent_setup(client, scope, copy, force, dry_run):
+    """Install ADARE's workflow skills for your coding agent(s).
+
+    Symlinks every skills/adare-* skill so edits to the source propagate. Real
+    directories are never touched; links pointing elsewhere need --force.
+
+    \b
+    Examples:
+      adare agent setup --dry-run
+      adare agent setup --client claude --scope all
+    """
+    from adare.cli.agent import exec_agent_setup
+    args = SimpleNamespace(client=client, scope=scope, copy=copy, force=force, dry_run=dry_run)
+    exec_with_error_printing(exec_agent_setup, args)
+
+
+@agent.command(name='status')
+@_agent_client_option
+@click.option('--scope', type=click.Choice(['user', 'project', 'all']), default='all', show_default=True)
+def agent_status(client, scope):
+    """Show where ADARE's skills are installed and whether the links are current."""
+    from adare.cli.agent import exec_agent_status
+    args = SimpleNamespace(client=client, scope=scope)
+    exec_with_error_printing(exec_agent_status, args)
+
+
 @cli.command(name='chat')
 @click.option('--model', default=None,
               help='Chat model id (default: $ADARE_CHAT_MODEL, else the vlm model)')
