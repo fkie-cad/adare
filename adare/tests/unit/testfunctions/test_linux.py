@@ -3,6 +3,7 @@
 import pytest
 import sys
 import subprocess
+import shlex
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -456,7 +457,7 @@ class TestLogEntryExists:
 
         # Verify bash command construction
         call_args = mock_subprocess_run.call_args
-        assert call_args[0][0] == ['bash', '-c', f"tail -n 1000 -- {log_file} | grep -E -- error"]
+        assert call_args[0][0] == ['bash', '-c', f"tail -n 1000 -- {shlex.quote(str(log_file))} | grep -E -- error"]
         assert call_args[1]['timeout'] == 30
 
     @patch('platform.system', return_value='Linux')
