@@ -37,6 +37,11 @@ def exec_icons_list(args: SimpleNamespace) -> None:
     except IconLibraryError as exc:
         raise IconsCLIError(str(exc)) from exc
 
+    from adare.cli.output import emit, is_structured_output
+    if is_structured_output():
+        emit({'icons': [{'term': term, 'spec': library.spec_for(term)} for term in terms]})
+        return
+
     print(f"Icon registry: {library.registry_path} ({len(terms)} terms)\n")
     for term in terms:
         print(f"  {term:<28} {library.spec_for(term)}")

@@ -129,7 +129,10 @@ class EnhancedDatabaseApi:
         if self._session:
             try:
                 if exc_type:
-                    log.warning(f"Rolling back transaction due to {exc_type.__name__}: {exc_val}")
+                    # Debug, not warning: the exception itself propagates and is
+                    # reported once at the CLI boundary; at warning level every
+                    # nested DB context echoed it again ("Rolling back ..." x N).
+                    log.debug(f"Rolling back transaction due to {exc_type.__name__}: {exc_val}")
                     self._session.rollback()
                 else:
                     self._session.commit()

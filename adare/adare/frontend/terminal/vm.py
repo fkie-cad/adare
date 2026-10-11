@@ -89,8 +89,13 @@ def print_vm_info(vm_id: str):
 
 
 def print_vm_or_instance_info(vm_or_instance_id: str, formatter=None, output_file=None, dual_output=False):
-    """Print detailed information about a VM or instance (auto-detected)."""
+    """Print detailed information about a VM or instance (auto-detected).
+
+    Accepts a base-VM ID or name, or a VM-instance ID or name. Raises
+    ``VMNotFoundError`` (exit 3 at the CLI boundary) when nothing matches.
+    """
     from adare.database.api.vm import VmApi
+    from adare.database.api.vm.exceptions import VMNotFoundError
     from adare.frontend.terminal.vm_instances import print_vm_instance_info
 
     # Get formatter if not provided
@@ -98,49 +103,51 @@ def print_vm_or_instance_info(vm_or_instance_id: str, formatter=None, output_fil
         from adare.run import get_formatter_from_context
         formatter, output_file, dual_output = get_formatter_from_context()
 
-    console = DefaultConsole()
-
-    try:
-        # First, try as base VM
-        vm_info = get_vm_info(vm_or_instance_id)
-        if vm_info:
-            # Check if structured output is needed
-            if dual_output or formatter.format_type.value != 'rich':
-                # Prepare structured data
-                structured_data = {
-                    'type': 'vm',
-                    'name': vm_info['name'],
-                    'id': vm_info['id'],
-                    'description': vm_info.get('description'),
-                    'file': vm_info['file'],
-                    'hash': vm_info['hash'],
-                    'use_snapshots': vm_info.get('use_snapshots', False),
-                    'snapshots': vm_info.get('snapshots', {})
-                }
-                formatter.print_or_save(structured_data, output_file, dual_output)
-
-                if not dual_output:
-                    return
-
-            # Printed directly, NOT wrapped in a Layout: a Layout crops its content
-            # to the terminal height and silently drops whatever overflows, so a
-            # short window hid snapshot rows without any indication.
-            console.print(VMInfoPanel(vm_info))
-            return
-
-        # If not found as base VM, try as instance
+    # First, try as base VM (by ID, then by name)
+    vm_info = get_vm_info(vm_or_instance_id)
+    if not vm_info:
         with VmApi() as api:
-            instance = api.get_vm_instance_by_id(vm_or_instance_id)
-            if instance:
-                print_vm_instance_info(vm_or_instance_id, formatter, output_file, dual_output)
+            vm_by_name = api.get_vm_by_name(vm_or_instance_id)
+            vm_id = vm_by_name.id if vm_by_name else None
+        if vm_id:
+            vm_info = get_vm_info(vm_id)
+
+    if vm_info:
+        # Check if structured output is needed
+        if dual_output or formatter.format_type.value != 'rich':
+            structured_data = {
+                'type': 'vm',
+                'name': vm_info['name'],
+                'id': vm_info['id'],
+                'description': vm_info.get('description'),
+                'file': vm_info['file'],
+                'hash': vm_info['hash'],
+                'use_snapshots': bool(vm_info.get('use_snapshots', False)),
+                'snapshots': vm_info.get('snapshots', {})
+            }
+            formatter.print_or_save(structured_data, output_file, dual_output)
+
+            if not dual_output:
                 return
 
-        # Not found as either
-        console.print(f"[red]VM or instance with ID '{vm_or_instance_id}' not found[/red]")
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content
+        # to the terminal height and silently drops whatever overflows, so a
+        # short window hid snapshot rows without any indication.
+        DefaultConsole().print(VMInfoPanel(vm_info))
+        return
 
-    except Exception as e:
-        log.error(f"Failed to get VM/instance info: {e}")
-        console.print(f"[red]Error getting VM/instance info: {e}[/red]")
+    # If not found as base VM, try as instance (by ID, then by name)
+    with VmApi() as api:
+        instance = (api.get_vm_instance_by_id(vm_or_instance_id)
+                    or api.get_vm_instance_by_name(vm_or_instance_id))
+        instance_id = instance.id if instance else None
+    if instance_id:
+        print_vm_instance_info(instance_id, formatter, output_file, dual_output)
+        return
+
+    raise VMNotFoundError(log, f"VM or instance '{vm_or_instance_id}' not found", possible_solutions=[
+        'Run `adare vm list` to see VM and instance IDs and names',
+    ])
 
 
 def print_vm_instance_snapshots(instance_id: str):

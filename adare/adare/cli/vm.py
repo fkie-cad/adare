@@ -30,12 +30,42 @@ def exec_vm_info(arguments):
 
 
 def exec_vm_list_snapshots(arguments):
-    """List all snapshots, optionally filtered by VM instance."""
-    from adare.frontend.terminal.vm import print_all_snapshots
-    from adare.run import get_formatter_from_context
+    """List all snapshots, optionally filtered by VM instance.
 
-    formatter, output_file, dual_output = get_formatter_from_context()
-    print_all_snapshots(arguments.instance_id, formatter, output_file, dual_output)
+    Reads the snapshot records from the database (VmService.list_snapshots). The
+    old path queried VirtualBox directly through a module that no longer exists,
+    so the command crashed with ModuleNotFoundError on every host.
+    """
+    from rich.panel import Panel
+    from rich.table import Table
+
+    from adare.cli.output import emit
+
+    api = AdareAPI()
+    result = api.vm.list_snapshots(arguments.instance_id)
+    if not result.success:
+        handle_api_error(result)
+        return
+    snapshots = result.data or []
+
+    def _panel():
+        if not snapshots:
+            return Panel('[yellow]No snapshots found[/yellow]', title='[b gold3]snapshots[/b gold3]',
+                         border_style='blue', title_align='left')
+        table = Table(expand=True)
+        table.add_column('name', style='yellow', no_wrap=True)
+        table.add_column('type', style='cyan', no_wrap=True)
+        table.add_column('instance', style='cyan', no_wrap=True)
+        table.add_column('created', style='dim', no_wrap=True)
+        table.add_column('description', style='dim')
+        for snap in snapshots:
+            table.add_row(snap.name, snap.snapshot_type, snap.vm_instance_id or '-',
+                          snap.created_at.strftime('%Y-%m-%d %H:%M:%S') if snap.created_at else '-',
+                          snap.description or '')
+        return Panel(table, title=f'[b gold3]snapshots ({len(snapshots)} total)[/b gold3]',
+                     border_style='blue', title_align='left')
+
+    emit({'snapshots': snapshots}, rich=_panel)
 
 
 def exec_vm_delete_snapshot(arguments):

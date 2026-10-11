@@ -178,6 +178,13 @@ def _annotate_disk_status(environment: pd.DataFrame) -> None:
     )
 
 
+def _tag_list(tags) -> list[str]:
+    """Tags as a list: the DataFrame view stores them as one ", "-joined string."""
+    if isinstance(tags, str):
+        return [tag.strip() for tag in tags.split(',') if tag.strip()]
+    return list(tags) if tags is not None and not isinstance(tags, float) else []
+
+
 def print_environment(environment_name: str, formatter=None, output_file=None, dual_output=False):
     # Get formatter if not provided
     if formatter is None:
@@ -191,11 +198,17 @@ def print_environment(environment_name: str, formatter=None, output_file=None, d
 
         # Check if structured output is needed
         if dual_output or formatter.format_type.value != 'rich':
+            env_id = environment['id'].values[0]
+            project_name = environment['project_name'].values[0]
             structured_data = {
                 'name': environment['name'].values[0],
-                'id': environment['id'].values[0],
+                # `ulid` / `project` are the canonical keys shared with `env list`;
+                # `id` / `project_name` are kept as aliases for existing consumers.
+                'ulid': env_id,
+                'project': project_name,
+                'id': env_id,
                 'vm_name': environment['vm_name'].values[0],
-                'project_name': environment['project_name'].values[0],
+                'project_name': project_name,
                 'file': environment['file'].values[0],
                 'disk': {
                     'path': environment['disk_path'].values[0] if 'disk_path' in environment.columns else '',
@@ -203,7 +216,7 @@ def print_environment(environment_name: str, formatter=None, output_file=None, d
                 },
                 'created_at': str(environment['created_at'].values[0]),
                 'description': environment['description'].values[0],
-                'tags': environment['tags'].values[0] if 'tags' in environment.columns else [],
+                'tags': _tag_list(environment['tags'].values[0]) if 'tags' in environment.columns else [],
                 'osinfo': {
                     'os': environment['osinfo_os'].values[0],
                     'distribution': environment['osinfo_distribution'].values[0],

@@ -140,7 +140,7 @@ def generate_no_project_error_message(
             solutions = [
                 "Check database connection and try again",
                 "Initialize ADARE with database setup",
-                "Run 'adare manage reset' if database is corrupted"
+                "Run 'adare db repair' (or, as a last resort, 'adare db reset') if the database is corrupted"
             ]
         elif project_count == 0:
             solutions = [

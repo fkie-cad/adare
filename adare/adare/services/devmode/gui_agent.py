@@ -37,7 +37,7 @@ def _grounding_next_steps(msg: str) -> list[str]:
     """
     if 'not ready within' in msg:
         return [
-            'Pre-warm the weights once, then rerun: adare dev grounding pull',
+            'Pre-warm the weights once, then rerun: adare dev grounding-pull',
             'Or allow more load time: ADARE_LOCATE_START_TIMEOUT=900 adare dev agent ...',
             'Read the server log named above to see how far the load got',
             'Or drop --ground to run without element grounding',

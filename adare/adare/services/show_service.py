@@ -202,7 +202,7 @@ class ShowService:
                 return Result.fail(
                     code="RunNotFoundError",
                     message=f"Run with ULID {ulid} not found",
-                    solutions=['Use `adare show runs` to find valid run ULIDs']
+                    solutions=['Use `adare run list` to find valid run ULIDs']
                 )
 
             detail = RunDetail(
@@ -254,7 +254,7 @@ class ShowService:
                 return Result.fail(
                     code="RunNotFoundError",
                     message=f"Run with ULID {ulid} not found",
-                    solutions=['Use `adare show runs` to find valid run ULIDs']
+                    solutions=['Use `adare run list` to find valid run ULIDs']
                 )
             return Result.ok(matches[0])
         except (FileNotFoundError, OSError) as e:
@@ -285,7 +285,7 @@ class ShowService:
                 return Result.fail(
                     code="ArgumentsError",
                     message="No run ULID provided",
-                    solutions=['Use `adare show runs` to find the ULID of the run to remove']
+                    solutions=['Use `adare run list` to find the ULID of the run to remove']
                 )
 
             # Get project path for database context
@@ -304,7 +304,7 @@ class ShowService:
                     return Result.fail(
                         code="RunNotFoundError",
                         message=f"Run with ULID {request.ulid} not found",
-                        solutions=['Use `adare show runs` to find valid run ULIDs']
+                        solutions=['Use `adare run list` to find valid run ULIDs']
                     )
 
                 was_fake = run.fake
@@ -464,7 +464,7 @@ class ShowService:
                 return Result.fail(
                     code="EnvironmentNotFoundError",
                     message=f"Environment '{name}' not found",
-                    solutions=['Use `adare show environments` to list available environments']
+                    solutions=['Use `adare env list` to list available environments']
                 )
 
             vm, vm_type, vm_sha256, source_profile, source_iso_sha256 = _parse_env_source(env.file)
@@ -626,7 +626,7 @@ class ShowService:
                 return Result.fail(
                     code="ExperimentNotFoundError",
                     message=f"Experiment '{identifier}' not found",
-                    solutions=['Use `adare show experiments` to list available experiments']
+                    solutions=['Use `adare experiment list` to list available experiments']
                 )
 
             detail = ExperimentDetail(

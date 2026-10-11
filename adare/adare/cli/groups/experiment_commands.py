@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import click
 
+from adare.cli.output import output_options
+
 
 def register(cli, AliasedGroup, exec_with_error_printing):
     """Register experiment commands with the CLI."""
@@ -127,6 +129,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_experiment_example, args)
 
     @experiment.command(name='list')
+    @output_options
     def list_experiments():
         """List all experiments in an environment."""
         from adare.cli.show import exec_show_experiments
@@ -134,6 +137,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_show_experiments, args)
 
     @experiment.command()
+    @output_options
     @click.argument('name', required=False)
     @click.option('--ulid', '-u', help='ULID of the experiment')
     @click.option('--dotnotation', '-d', help='Dotnotation in format: project_name.environment_name.experiment_name')
@@ -358,6 +362,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     playbook.add_alias('cat', 'show')
 
     @playbook.command(name='show')
+    @output_options
     @click.argument('experiment', type=click.Path(exists=False))
     @click.option('--project', '-p', help='Name of the project')
     def playbook_show(experiment, project):
@@ -365,7 +370,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         EXPERIMENT is the experiment name.
         """
-        from adare.cli.experiment import exec_playbook_show
+        from adare.cli.experiment_playbook import exec_playbook_show
         args = SimpleNamespace(experiment=experiment, project=project)
         exec_with_error_printing(exec_playbook_show, args)
 
@@ -376,7 +381,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         FILE is a path to a playbook YAML file.
         """
-        from adare.cli.experiment import exec_playbook_validate
+        from adare.cli.experiment_playbook import exec_playbook_validate
         args = SimpleNamespace(file=file)
         exec_with_error_printing(exec_playbook_validate, args)
 
@@ -394,7 +399,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         EXPERIMENT is the target experiment name.
         FILE is the playbook YAML file to write.
         """
-        from adare.cli.experiment import exec_playbook_set
+        from adare.cli.experiment_playbook import exec_playbook_set
         args = SimpleNamespace(
             experiment=experiment, file=file, backup=not no_backup, project=project
         )

@@ -154,8 +154,8 @@ def generate_vm_not_found_message(
         solutions = [
             "Check VM name spelling and try again",
             "Run 'adare vm list' to see all available VMs",
-            "Load a new VM with 'adare vm load <file.ova>'",
-            "Initialize VM storage with 'adare vm init' if not done yet"
+            "Create a VM with 'adare vm create' or load an environment with 'adare env load <env.yml>'",
+            "Check the host VM tooling with 'adare vm doctor'"
         ]
     else:
         similar_vms = [f"'{s.name}' ({s.scope})" for s in suggestions[:3]]
@@ -170,11 +170,11 @@ def generate_vm_not_found_message(
         # Add project-specific solutions
         if project_context:
             solutions.extend([
-                f"Load a VM for this project with 'adare vm load <file.ova> --project {project_context}'",
+                f"Load an environment for this project with 'adare env load <env.yml> --project {project_context}'",
                 "Use a global VM with 'adare vm list --scope global'"
             ])
         else:
-            solutions.append("Load a new VM with 'adare vm load <file.ova>'")
+            solutions.append("Create a VM with 'adare vm create' or load an environment with 'adare env load <env.yml>'")
 
     return message, solutions
 

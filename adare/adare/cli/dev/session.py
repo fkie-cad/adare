@@ -396,6 +396,10 @@ def exec_dev_list(arguments):
     ))
 
     if result.success:
+        from adare.cli.output import emit, is_structured_output
+        if is_structured_output():
+            emit({'sessions': result.data or []})
+            return
         if not result.data:
             print("No dev sessions found")
             print("\nStart a new session with: adare dev start <experiment> -e <environment>")
@@ -447,6 +451,10 @@ def exec_dev_state(arguments):
 
     if result.success:
         state = result.data
+        from adare.cli.output import emit, is_structured_output
+        if is_structured_output():
+            emit(state)
+            return
         print(f"Dev Session State: {state.session_id}\n")
         if state.name:
             print(f"  Name: {state.name}")

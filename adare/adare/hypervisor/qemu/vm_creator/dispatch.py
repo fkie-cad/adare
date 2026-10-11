@@ -146,7 +146,7 @@ def create_vm_disk(
 
     raise UnsupportedInstallTarget(
         title=f'Unsupported platform: {os_def.platform}',
-        next_steps=['Pick a profile with platform linux or windows: adare vm profiles'],
+        next_steps=['Pick a profile with platform linux or windows: adare os-profile list'],
     )
 
 

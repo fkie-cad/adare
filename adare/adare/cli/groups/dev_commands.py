@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import click
 
+from adare.cli.output import output_options
+
 
 def register(cli, AliasedGroup, exec_with_error_printing):
     """Register dev mode commands with the CLI."""
@@ -114,6 +116,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_dev_stop, args)
 
     @dev.command()
+    @output_options
     @click.option('--project', '-p', help='Filter by project')
     def list(project):
         """List active dev mode sessions."""
@@ -233,6 +236,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_dev_checkpoint_restore, args)
 
     @checkpoint.command(name='list')
+    @output_options
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
     def checkpoint_list(session_id):
         """List available checkpoints."""
@@ -250,6 +254,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_dev_checkpoint_delete, args)
 
     @dev.command()
+    @output_options
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
     def state(session_id):
         """Show session state (variables, stats, snapshots)."""

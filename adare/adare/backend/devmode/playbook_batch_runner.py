@@ -158,7 +158,7 @@ class PlaybookBatchSummary:
         console.print(f"Checkpoint Restores: {len(self.results)}/{len(self.results)} successful", style="green")
         console.print()
         console.print(f"[dim]Tip: Checkpoint '{self.checkpoint_name}' has been preserved.[/dim]")
-        console.print(f"[dim]     Delete with: adare dev checkpoint-delete {self.checkpoint_name}[/dim]")
+        console.print(f"[dim]     Delete with: adare dev checkpoint remove {self.checkpoint_name}[/dim]")
         console.print()
 
     def to_dict(self) -> dict[str, Any]:

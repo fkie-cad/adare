@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import click
 
+from adare.cli.output import output_options
+
 
 def register(cli, AliasedGroup, exec_with_error_printing):
     """Register web interface commands with the CLI."""
@@ -29,6 +31,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_web_logout, args)
 
     @web.command()
+    @output_options
     def status():
         """Show the web login status."""
         from adare.cli.web import exec_web_status
@@ -91,6 +94,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         pass
 
     @check.command(name='experiment')
+    @output_options
     @click.argument('ulid')
     def check_experiment(ulid):
         """Check if an experiment exists on the server."""
@@ -99,6 +103,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_web_check_experiment, args)
 
     @check.command(name='run')
+    @output_options
     @click.argument('ulid')
     def check_run(ulid):
         """Check if an experiment run exists on the server."""
