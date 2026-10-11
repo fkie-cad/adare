@@ -9,8 +9,6 @@ import subprocess
 from io import BytesIO
 from typing import Any
 
-from PIL import Image
-
 log = logging.getLogger(__name__)
 
 # Global configuration for screenshot method
@@ -51,16 +49,10 @@ def _take_screenshot_maim(x: int = None, y: int = None, width: int = None, heigh
     else:
         log.info("Taking screenshot with maim")
 
-    # Capture screenshot using maim
-    png_bytes = subprocess.check_output(maim_cmd, stderr=subprocess.PIPE)
-
-    # Load image and convert to RGBA
-    img = Image.open(BytesIO(png_bytes)).convert("RGBA")
-
-    # Convert back to bytes
-    buffer = BytesIO()
-    img.save(buffer, format="PNG")
-    return buffer.getvalue()
+    # maim already writes a PNG; return it as is. Re-encoding it as RGBA cost a full
+    # decode + encode per shot, and every consumer reads PNGs in any mode (the host's
+    # own QMP screenshots are RGB).
+    return subprocess.check_output(maim_cmd, stderr=subprocess.PIPE)
 
 
 def _take_screenshot_pyautogui(x: int = None, y: int = None, width: int = None, height: int = None) -> bytes:

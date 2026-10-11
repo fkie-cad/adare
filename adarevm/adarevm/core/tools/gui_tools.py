@@ -28,7 +28,8 @@ class GUIToolsMixin:
         from adarevm.automation.gui import take_screenshot
 
         await self.send_event(websocket, EventType.LOG, {"message": "Taking screenshot"})
-        return take_screenshot(x, y, width, height)
+        # Capture + encode block for tens to hundreds of ms: keep them off the event loop.
+        return await asyncio.to_thread(take_screenshot, x, y, width, height)
 
     async def _click(self, websocket, x: int, y: int):
         """Simulate a mouse click."""
