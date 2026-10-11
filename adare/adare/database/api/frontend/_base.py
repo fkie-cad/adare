@@ -31,6 +31,11 @@ class DataRetrievalBase:
     - Project models: Experiment, ExperimentRun (from project-specific database)
     """
 
+    # Open only inside a `with` block (None otherwise); typed as the APIs because
+    # every query method runs inside one.
+    _global_api: GlobalDatabaseApi
+    _project_api: ProjectDatabaseApi
+
     def __init__(self, project_path: Path = None, require_project: bool = True):
         """
         Initialize DataRetrievalApi with project context.
@@ -53,8 +58,8 @@ class DataRetrievalBase:
 
         self.project_path = project_path
         self.require_project = require_project
-        self._global_api = None
-        self._project_api = None
+        self._global_api = None  # type: ignore[assignment]
+        self._project_api = None  # type: ignore[assignment]
 
     def __enter__(self):
         """Context manager entry - start both database sessions."""
@@ -71,8 +76,8 @@ class DataRetrievalBase:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - handle cleanup of both database sessions."""
-        project_exception = None
-        global_exception = None
+        project_exception: SQLAlchemyError | None = None
+        global_exception: SQLAlchemyError | None = None
 
         # Close project database first
         if self._project_api:
@@ -82,7 +87,7 @@ class DataRetrievalBase:
                 project_exception = e
                 log.error(f"Error closing project database: {e}")
             finally:
-                self._project_api = None
+                self._project_api = None  # type: ignore[assignment]
 
         # Close global database second
         if self._global_api:
@@ -92,12 +97,12 @@ class DataRetrievalBase:
                 global_exception = e
                 log.error(f"Error closing global database: {e}")
             finally:
-                self._global_api = None
+                self._global_api = None  # type: ignore[assignment]
 
         # If we had exceptions during cleanup, log them but don't mask the original exception
-        if project_exception or global_exception:
-            if exc_type is None:  # No original exception, raise cleanup exception
-                raise project_exception or global_exception
+        cleanup_exception = project_exception or global_exception
+        if cleanup_exception is not None and exc_type is None:  # no original exception: raise the cleanup one
+            raise cleanup_exception
 
     def _check_project_exists(self, project_name: str):
         if not self._global_api._session.query(Project).filter_by(name=project_name).count():

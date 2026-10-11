@@ -1,13 +1,20 @@
 """Mixin for test and testfunction related queries."""
 
 import logging
+from typing import TYPE_CHECKING
 
 from adare.database.models.project_models import Event, Experiment, Status
+
+if TYPE_CHECKING:
+    from adare.database.api.frontend._base import DataRetrievalBase as _Host
+else:
+    _Host = object
+
 
 log = logging.getLogger(__name__)
 
 
-class TestQueryMixin:
+class TestQueryMixin(_Host):
     """Mixin providing test and testfunction query methods."""
 
     def get_tests(self, run_ulid: str) -> dict:

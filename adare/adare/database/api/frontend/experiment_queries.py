@@ -1,6 +1,7 @@
 """Mixin for experiment related queries."""
 
 import logging
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
@@ -14,10 +15,16 @@ from adare.exceptions import (
     ExperimentNotFoundError,
 )
 
+if TYPE_CHECKING:
+    from adare.database.api.frontend._base import DataRetrievalBase as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class ExperimentQueryMixin:
+class ExperimentQueryMixin(_Host):
     """Mixin providing experiment query methods."""
 
     def _enrich_experiment_data(self, data: pd.DataFrame) -> pd.DataFrame:
