@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Optional
 import ulid
 
 from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
+from adare.backend.experiment.agent_token import ensure_agent_token
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.database.exceptions import DatabaseError
 from adare.hypervisor.port_forward import forward_connect_host
@@ -387,7 +388,9 @@ class DevModeSessionManager:
                         stage_ctx.stage.sub_msg = f"Reconnecting to {agent_host}:{websocket_port}"
 
                         log.info(f"Attempting WebSocket reconnection to {agent_host}:{websocket_port}")
-                        client = AdareVMClient(host=agent_host, port=websocket_port)
+                        client = AdareVMClient(
+                            host=agent_host, port=websocket_port, token=ensure_agent_token(session.experiment_ctx)
+                        )
 
                         # Try to reconnect
                         if hasattr(client, 'reconnect'):

@@ -50,7 +50,7 @@ def exec_icons_list(args: SimpleNamespace) -> None:
 
 async def exec_icons_dump_all(args: SimpleNamespace) -> None:
     """Resolve every registry term on a connected target and dump a contact sheet."""
-    host = getattr(args, "host", "localhost")
+    host = getattr(args, "host", "127.0.0.1")
     port = getattr(args, "port", 18765)
     os_key = getattr(args, "os_key", "windows")
     force = getattr(args, "force", False)
@@ -62,7 +62,7 @@ async def exec_icons_dump_all(args: SimpleNamespace) -> None:
         raise IconsCLIError(str(exc)) from exc
 
     log.info(f"Connecting to adarevm at {host}:{port}")
-    client = AdareVMClient(host=host, port=port)
+    client = AdareVMClient(host=host, port=port, token=getattr(args, "token", None))
     connected = await client.connect(timeout=getattr(args, "connect_timeout", 15.0))
     if not connected:
         raise IconsCLIError(f"Failed to connect to adarevm at {host}:{port}")

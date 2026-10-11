@@ -41,6 +41,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   suite runs against a temp dir and never touches the real one.
 - `ADARE_FORWARD_BIND` sets the host address VM port forwards listen on.
 - `ADARE_MCP_PORT` sets the `adare mcp serve --transport http` port.
+- Guest agent protocol 2 (`adarevm`/`adarelib` 0.2.0): the agent requires the
+  run's token (`agent_token` in `config.json`, sent as `Authorization: Bearer`),
+  opens every connection with a `welcome` carrying `protocol_version`, versions
+  and tools, and serves exactly the `Tool` enum. The host rejects other protocol
+  versions (reinstalling the agent once first) and only calls advertised tools.
+  `adare ws action` / `adare icons dump-all` take `--token` / `ADARE_AGENT_TOKEN`.
 
 ### Changed
 - Whole workspace formatted with `ruff format`; safe ruff autofixes applied.
@@ -56,8 +62,20 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - Importing `adare.config.configdirectory` no longer creates directories; the CLI
   and web API create them at startup.
 - New `adare.services` functions must be fully typed (mypy override restored).
+- Database APIs share one engine per database file and set the schema up once
+  per process; nested `with api:` blocks join the outer transaction.
+- Web API handlers run services off the event loop (threadpool / `to_thread`).
+- Mixins declare their host for type checking (`QEMUVMHost`, `VirtualBoxVMHost`,
+  `ActionsExecutorCore`, DB API hosts): ~720 fewer mypy errors.
 
 ### Fixed
+- Every dev-session web route failed: async handlers called services that run
+  their own `asyncio.run`; `/api/sessions/start` also passed a removed field and
+  several routes read `result.value`/`is_success()`, which `Result` lacks.
+- A nested `with` on a database API committed and closed the session its outer
+  block was still using.
+- The QEMU shared-folder guard raised `TypeError` instead of
+  `UnsupportedFeatureException`.
 - Experiments started from chat (`experiment_run` tool) were cancelled
   immediately; they now run to completion.
 - Changed `adarevm`/`adarelib` code never reached guests: the skip check compared
@@ -71,6 +89,8 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - Unclosed file handles in network-drive setup and web-app upload.
 
 ### Security
+- The guest agent no longer accepts unauthenticated connections (per-run token);
+  the token is redacted from host logs.
 - VM port forwards (QEMU hostfwd, VirtualBox NAT) listened on all interfaces,
   exposing the guest agent to the LAN; they now bind to 127.0.0.1.
 - The guest agent no longer logs command environment values.

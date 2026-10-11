@@ -164,6 +164,7 @@ def build_config_json(
     is_windows: bool,
     file_transfer_mode: str,
     installation_mode: str = "wheel",
+    agent_token: str | None = None,
 ) -> dict[str, Any]:
     """Build config.json content for adarevm with mount paths.
 
@@ -175,10 +176,18 @@ def build_config_json(
         file_transfer_mode: 'virtiofs', 'smb', 'libguestfs' or 'qga'; only
             logged by adarevm so guest logs show how /adare was populated
         installation_mode: "wheel" (pip) or "editable" (Poetry)
+        agent_token: per-run secret the agent requires on connect (see agent_token.py)
 
     Returns:
         Dictionary with config.json contents
     """
+    config = _paths_config(is_windows, file_transfer_mode, installation_mode)
+    if agent_token:
+        config["agent_token"] = agent_token
+    return config
+
+
+def _paths_config(is_windows: bool, file_transfer_mode: str, installation_mode: str) -> dict[str, Any]:
     if is_windows:
         return {
             "tools_paths": [

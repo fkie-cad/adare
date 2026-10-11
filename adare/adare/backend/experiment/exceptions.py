@@ -261,3 +261,20 @@ class AdareVMProcessDiedError(ExperimentException):
 
 class ExperimentNotChanged(LoggedException):
     informational = True
+
+
+# ---------------------------------------------------------------------------
+# Guest agent connection
+# ---------------------------------------------------------------------------
+
+
+class AgentProtocolMismatchError(ExperimentException):
+    """The guest agent speaks a different protocol version, even after reinstalling it."""
+
+    pass
+
+
+class AgentAuthenticationError(ExperimentException):
+    """The guest agent rejected the run's agent token."""
+
+    pass

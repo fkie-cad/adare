@@ -95,6 +95,11 @@ class ExperimentRunCtx:
     timestamp_before_vm_start: datetime | None = None
     timestamp_end: datetime | None = None
 
+    # --- Guest agent ---
+    # Per-run secret the agent requires on connect (see agent_token.py); shared
+    # by all machines of a run because they share the run's config.json.
+    agent_token: str | None = None
+
     # --- Concurrency ---
     stop_event: threading.Event = field(default_factory=threading.Event)
     user_interrupt_event: threading.Event = field(default_factory=threading.Event)
