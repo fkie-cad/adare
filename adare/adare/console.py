@@ -8,6 +8,8 @@ from rich.table import Table
 from adare.helperfunctions.text import clean_rich_inline_str
 
 console = Console()
+# Errors, warnings and progress go to stderr so stdout carries only data.
+err_console = Console(stderr=True)
 
 
 def log_print(log: logging.Logger, msg: str, level: str = 'info'):
@@ -64,12 +66,12 @@ def print_section(title: str):
 
 
 def print_error_message(title: str, details: str = '', next_steps: list[str] = None):
-    """Print a formatted error message with next steps using Rich."""
-    console.print(f'❌ {title}', style='bold red')
+    """Print a formatted error message with next steps using Rich (on stderr)."""
+    err_console.print(f'❌ {title}', style='bold red')
     if details:
-        console.print(f'Details: {details}', style='dim')
-        console.print()
+        err_console.print(f'Details: {details}', style='dim')
+        err_console.print()
     if next_steps:
-        console.print('📝 Next steps:', style='bold')
+        err_console.print('📝 Next steps:', style='bold')
         for i, step in enumerate(next_steps, 1):
-            console.print(f'   {i}. {step}', style='dim')
+            err_console.print(f'   {i}. {step}', style='dim')

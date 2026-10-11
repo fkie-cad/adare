@@ -414,7 +414,8 @@ def exec_experiment_run(arguments):
 
     from adare.backend.experiment.commands import experiment_load
     from adare.backend.experiment.run import experiment_run
-    from adare.exceptions import LoggedErrorException, LoggedException
+    from adare.cli.errors import EXIT_ERROR, report_exception
+    from adare.exceptions import LoggedException
 
     disable_printing = False
     if arguments.verbose or arguments.very_verbose:
@@ -478,18 +479,14 @@ def exec_experiment_run(arguments):
                     # Use existing Rich formatting for pure Rich output
                     summary.print_summary()
 
-                # Exit with appropriate code
+                # Exit with appropriate code (1 when any run failed; was 255)
                 if summary.failed_runs > 0:
-                    sys.exit(-1)
+                    sys.exit(EXIT_ERROR)
                 else:
                     sys.exit(0)
 
             except LoggedException as e:
-                e.print()
-                if isinstance(e, LoggedErrorException):
-                    sys.exit(-1)
-                else:
-                    sys.exit(0)
+                sys.exit(report_exception(e))
             except KeyboardInterrupt:
                 log.info("Batch execution interrupted by user")
                 sys.exit(0)
@@ -627,11 +624,7 @@ def exec_experiment_run(arguments):
                 # Output using formatter
                 formatter.print_or_save(summary.to_dict(), output_file, dual_output)
         except LoggedException as e:
-            e.print()
-            if isinstance(e, LoggedErrorException):
-                sys.exit(-1)
-            else:
-                sys.exit(0)
+            sys.exit(report_exception(e))
         except KeyboardInterrupt:
             log.info("Keyboard interrupt received, shutting down gracefully...")
         finally:
@@ -885,102 +878,6 @@ def exec_experiment_clone(arguments):
         )
     else:
         handle_api_error(result)
-
-
-def exec_playbook_show(arguments):
-    """Print an experiment's playbook YAML (disk, DB fallback)."""
-    from adare.core.dto.playbook import PlaybookReadRequest
-
-    project_directory = get_project_path(arguments)
-    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
-
-    api = AdareAPI()
-    result = api.experiment.read_playbook(PlaybookReadRequest(
-        project_path=project_directory,
-        experiment=experiment_name,
-    ))
-
-    if not result.success:
-        handle_api_error(result)
-        return
-
-    if getattr(arguments, 'verbose', False) or getattr(arguments, 'very_verbose', False):
-        log.info('Playbook source: %s (%s)', result.data.path, result.data.source)
-    print(result.data.yaml)
-
-
-def exec_playbook_validate(arguments):
-    """Statically validate a playbook YAML file (no VM)."""
-    import sys
-    from pathlib import Path
-
-    from adare.core.dto.playbook import PlaybookValidateRequest
-
-    playbook_path = Path(arguments.file)
-    try:
-        yaml_content = playbook_path.read_text(encoding='utf-8')
-    except OSError as e:
-        print_error_message(title=f'Cannot read {playbook_path}: {e}')
-        sys.exit(1)
-
-    api = AdareAPI()
-    result = api.experiment.validate_playbook(PlaybookValidateRequest(yaml=yaml_content))
-
-    if not result.success:
-        handle_api_error(result)
-        return
-
-    if result.data.valid:
-        print_success_message(title=f'Playbook "{playbook_path}" is valid')
-    else:
-        print_error_message(
-            title=f'Playbook "{playbook_path}" is invalid',
-            next_steps=result.data.errors,
-        )
-        sys.exit(1)
-
-
-def exec_playbook_set(arguments):
-    """Validate then write a playbook YAML file to an experiment (DB re-ingest)."""
-    import sys
-    from pathlib import Path
-
-    from adare.core.dto.playbook import PlaybookWriteRequest
-
-    project_directory = get_project_path(arguments)
-    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
-
-    source_path = Path(arguments.file)
-    try:
-        yaml_content = source_path.read_text(encoding='utf-8')
-    except OSError as e:
-        print_error_message(title=f'Cannot read {source_path}: {e}')
-        sys.exit(1)
-
-    api = AdareAPI()
-    result = api.experiment.write_playbook(PlaybookWriteRequest(
-        project_path=project_directory,
-        experiment=experiment_name,
-        yaml=yaml_content,
-        backup=arguments.backup,
-    ))
-
-    if not result.success:
-        handle_api_error(result)
-        return
-
-    next_steps = []
-    if result.data.backup_path:
-        next_steps.append(f'Previous playbook backed up to {result.data.backup_path}')
-    if result.data.db_ingested:
-        next_steps.append(f'Database re-ingested (playbook version {result.data.version})')
-    else:
-        next_steps.append('Experiment not loaded in DB — file written only; '
-                          f'run `adare experiment load {experiment_name}` to ingest')
-    print_success_message(
-        title=f'Playbook written to {result.data.path}',
-        next_steps=next_steps,
-    )
 
 
 def exec_experiment_validate(arguments):
