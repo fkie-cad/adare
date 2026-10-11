@@ -369,10 +369,10 @@ def test():
     """Test function management commands."""
     pass
 
-@test.command()
+@test.command(name='create')
 @click.argument('name', type=click.Path(exists=False))
 @click.option('--project', '-p', help='Name of the project')
-def create(name, project):
+def test_create(name, project):
     """Create a new testfunction.
 
     NAME can be:
@@ -383,10 +383,10 @@ def create(name, project):
     args = SimpleNamespace(name=name, project=project)
     exec_with_error_printing(exec_create_testfunction, args)
 
-@test.command()
+@test.command(name='remove')
 @click.argument('name')
 @click.option('--project', '-p', help='Name of the project')
-def remove(name, project):
+def test_remove(name, project):
     """Remove a testfunction file by name.
 
     NAME is the testfunction file name (e.g., xml, json, csv).
@@ -583,18 +583,18 @@ def list_runs(filter):
     args = SimpleNamespace(filter=filter)
     exec_with_error_printing(exec_show_runs, args)
 
-@run.command()
+@run.command(name='info')
 @output_options
 @click.argument('ulid', required=False)
-def info(ulid):
+def run_info(ulid):
     """Show detailed information about a run. Shows latest run if no ULID provided."""
     from adare.cli.show import exec_show_run
     args = SimpleNamespace(ulid=ulid)
     exec_with_error_printing(exec_show_run, args)
 
-@run.command()
+@run.command(name='remove')
 @click.argument('ulid', required=True)
-def remove(ulid):
+def run_remove(ulid):
     """Remove a single experiment run by its ULID."""
     from adare.cli.show import exec_remove_run
     args = SimpleNamespace(ulid=ulid)

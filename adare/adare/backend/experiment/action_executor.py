@@ -7,7 +7,7 @@ This module orchestrates playbook action execution by delegating to specialized 
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from adare.backend.experiment.target_resolver import MCPConditionChecker, MCPTargetResolver
 from adare.backend.experiment.websocket_client import AdareVMClient
@@ -41,6 +41,9 @@ from .execution.flow_control import FlowControlExecutor
 from .execution.simple_actions import SimpleActionsExecutor
 from .execution.target_resolution import TargetResolutionExecutor
 from .execution.test_actions import TestActionsExecutor
+
+if TYPE_CHECKING:
+    from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 
 log = logging.getLogger(__name__)
 

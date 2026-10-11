@@ -42,7 +42,6 @@ def test_ocr(gap, unclip_ratio=1.5):
         
         result = ocr.predict(input=img)
         
-        detections = []
         texts = []
         if result:
             for res in result:

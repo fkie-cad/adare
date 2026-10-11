@@ -20,15 +20,15 @@ class PyClassAttributeAnalyzer:
             'value': ''
         }
         target = self.root.target
-        if type(target) == ast.Name:
+        if type(target) is ast.Name:
             attr_dict['name'] = target.id
 
         if hasattr(self.root, 'value'):
             attr_dict['value'] = self.root.value
 
-        if type(self.root) == ast.AnnAssign:
+        if type(self.root) is ast.AnnAssign:
             annotation = self.root.annotation
-            if type(annotation) == ast.Name:
+            if type(annotation) is ast.Name:
                 attr_dict['type'] = annotation.id
 
         return attr_dict

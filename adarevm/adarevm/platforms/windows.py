@@ -49,7 +49,7 @@ def get_os_info():
             except Exception:
                 pass
 
-    except Exception as e:
+    except Exception:
         # Basic fallback
         import platform
         info['name'] = platform.system()
@@ -73,7 +73,7 @@ def get_installed_programs():
         if result.returncode == 0:
             programs = _parse_registry_programs(result.stdout)
 
-    except Exception as e:
+    except Exception:
         # Fallback to PowerShell WMI query (slower but more reliable)
         try:
             ps_cmd = 'powershell -Command "Get-WmiObject -Class Win32_Product | Select-Object Name, Version | ConvertTo-Json"'

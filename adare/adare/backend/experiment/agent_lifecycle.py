@@ -9,6 +9,10 @@ import asyncio
 # configure logging
 import logging
 import threading
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from adare.hypervisor.base.models import CommandResult
 
 log = logging.getLogger(__name__)
 

@@ -1,5 +1,6 @@
 # configure logging
 import logging
+from pathlib import Path
 
 from adare.console import err_console
 from adare.helperfunctions.text import clean_rich_inline_str

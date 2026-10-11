@@ -349,13 +349,10 @@ class MFTParser:
             parent_ref_bytes = attr_data[0:6] + b'\x00\x00'
             parent_ref = struct.unpack('<Q', parent_ref_bytes)[0]
 
-            file_size = struct.unpack('<Q', attr_data[48:56])[0]
-
             flags = struct.unpack('<I', attr_data[56:60])[0]
             is_directory = (flags & 0x10000000) != 0
 
             filename_length = struct.unpack('<B', attr_data[64:65])[0]
-            namespace = struct.unpack('<B', attr_data[65:66])[0]
 
             if len(attr_data) < 66 + (filename_length * 2):
                 log.warning("Filename truncated in $FILE_NAME")
@@ -620,7 +617,6 @@ class MFTParser:
         # Step 2: Stream through data runs, parsing entries
         records = {}
         record_number = 0
-        entries_per_buffer = READ_BUFFER_SIZE // record_size
 
         for run_idx, (cluster_offset, cluster_count) in enumerate(data_runs):
             run_byte_offset = cluster_offset * cluster_size

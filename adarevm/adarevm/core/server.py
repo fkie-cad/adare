@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Set
 import platform
 
-import logging
 log = logging.getLogger(__name__)
 
 # Import our WebSocket protocol

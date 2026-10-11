@@ -818,7 +818,8 @@ class AdareVMClient:
                 host_path = host_dest_dir / relative_path
 
                 # Create per-file progress callback that wraps the overall progress callback
-                def file_progress_callback(chunk_idx, total_chunks, bytes_xfer, file_size):
+                def file_progress_callback(chunk_idx, total_chunks, bytes_xfer, file_size,
+                                           file_idx=file_idx, guest_path=guest_path):
                     if progress_callback:
                         progress_callback(
                             file_idx, total_files, guest_path,
