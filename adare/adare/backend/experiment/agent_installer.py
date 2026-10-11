@@ -57,7 +57,7 @@ async def check_installed_version(
     platform: str,
     stop_event: threading.Event,
     wheels_available: bool = False,
-    inject_user_path: bool = False
+    inject_user_path: bool = False,
 ) -> str | None:
     """Check if package is installed in VM and return its version.
 
@@ -105,6 +105,7 @@ async def check_installed_version(
         if inject_user_path and platform == 'windows':
             try:
                 from adare.hypervisor.qemu.vm import QEMUVM
+
                 if isinstance(vm, QEMUVM):
                     run_kwargs['inject_user_path'] = True
                     log.debug(f"Checking {package_name} version with inject_user_path=True")
@@ -143,7 +144,7 @@ async def should_skip_installation(
     vm,  # VirtualBoxVM instance
     use_conda: bool,
     platform: str,
-    stop_event: threading.Event
+    stop_event: threading.Event,
 ) -> bool:
     """Determine if agent installation can be skipped.
 
@@ -193,6 +194,7 @@ async def should_skip_installation(
     vm_is_qemu = False
     try:
         from adare.hypervisor.qemu.vm import QEMUVM
+
         vm_is_qemu = isinstance(vm, QEMUVM)
     except ImportError:
         pass
@@ -202,19 +204,21 @@ async def should_skip_installation(
     if platform == 'windows' and vm_is_qemu:
         log.debug("Using injected user PATH to check adarevm version on Windows QEMU")
         adarevm_version = await check_installed_version(
-            'adarevm', vm, use_conda, platform, stop_event,
-            wheels_available=True, inject_user_path=True
+            'adarevm', vm, use_conda, platform, stop_event, wheels_available=True, inject_user_path=True
         )
         adarelib_version = await check_installed_version(
-            'adarelib', vm, use_conda, platform, stop_event,
-            wheels_available=True, inject_user_path=True
+            'adarelib', vm, use_conda, platform, stop_event, wheels_available=True, inject_user_path=True
         )
 
     # Standard check (fallback or non-Windows-QEMU)
     if adarevm_version is None:
-        adarevm_version = await check_installed_version('adarevm', vm, use_conda, platform, stop_event, wheels_available=True)
+        adarevm_version = await check_installed_version(
+            'adarevm', vm, use_conda, platform, stop_event, wheels_available=True
+        )
     if adarelib_version is None:
-        adarelib_version = await check_installed_version('adarelib', vm, use_conda, platform, stop_event, wheels_available=True)
+        adarelib_version = await check_installed_version(
+            'adarelib', vm, use_conda, platform, stop_event, wheels_available=True
+        )
 
     # Log findings for debugging
     log.debug(f"Installed versions - adarevm: {adarevm_version}, adarelib: {adarelib_version}")
@@ -229,11 +233,15 @@ async def should_skip_installation(
         return False
 
     if adarevm_version != expected_version:
-        log.info(f"Version mismatch - adarevm installed: {adarevm_version}, expected: {expected_version}, will reinstall")
+        log.info(
+            f"Version mismatch - adarevm installed: {adarevm_version}, expected: {expected_version}, will reinstall"
+        )
         return False
 
     if adarelib_version != expected_version:
-        log.info(f"Version mismatch - adarelib installed: {adarelib_version}, expected: {expected_version}, will reinstall")
+        log.info(
+            f"Version mismatch - adarelib installed: {adarelib_version}, expected: {expected_version}, will reinstall"
+        )
         return False
 
     # Both packages installed with correct versions - can skip!

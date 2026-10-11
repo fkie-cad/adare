@@ -11,6 +11,7 @@ import pytest
 
 # === Path Fixtures ===
 
+
 @pytest.fixture
 def testfunctions_fixtures_dir(fixtures_dir):
     """Path to testfunction-specific fixtures."""
@@ -19,43 +20,51 @@ def testfunctions_fixtures_dir(fixtures_dir):
 
 # === File Creation Factory Fixtures ===
 
+
 @pytest.fixture
 def create_csv_file(tmp_path):
     """Factory to create CSV files."""
+
     def _create(filename, rows):
         filepath = tmp_path / filename
         with open(filepath, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerows(rows)
         return filepath
+
     return _create
 
 
 @pytest.fixture
 def create_json_file(tmp_path):
     """Factory to create JSON files."""
+
     def _create(filename, data):
         filepath = tmp_path / filename
         with open(filepath, 'w') as f:
             json.dump(data, f)
         return filepath
+
     return _create
 
 
 @pytest.fixture
 def create_xml_file(tmp_path):
     """Factory to create XML files."""
+
     def _create(filename, content):
         filepath = tmp_path / filename
         with open(filepath, 'w') as f:
             f.write(content)
         return filepath
+
     return _create
 
 
 @pytest.fixture
 def create_sqlite_db(tmp_path):
     """Factory to create SQLite databases."""
+
     def _create(filename, schema, data=None):
         filepath = tmp_path / filename
         conn = sqlite3.connect(str(filepath))
@@ -68,12 +77,14 @@ def create_sqlite_db(tmp_path):
         conn.commit()
         conn.close()
         return filepath
+
     return _create
 
 
 @pytest.fixture
 def create_excel_file(tmp_path):
     """Factory to create Excel files with multiple sheets."""
+
     def _create(filename, sheets_data):
         """
         Create an Excel file with specified sheets and data.
@@ -91,10 +102,12 @@ def create_excel_file(tmp_path):
                 df = pd.DataFrame(rows) if rows else pd.DataFrame()
                 df.to_excel(writer, sheet_name=sheet_name, index=False, header=False)
         return filepath
+
     return _create
 
 
 # === Metadata Fixtures (for placeholder tests) ===
+
 
 @pytest.fixture
 def variable_metadata_with_tolerance():
@@ -103,16 +116,10 @@ def variable_metadata_with_tolerance():
         "TIMESTAMP": {
             "type": "timestamp",
             "resolved_value": "1705314600",  # 2024-01-15 10:30:00 UTC
-            "tolerance": [5, -5]  # ±5 seconds
+            "tolerance": [5, -5],  # ±5 seconds
         },
-        "REGEX_VAR": {
-            "type": "regex",
-            "resolved_value": r"\d{3}-\d{4}"
-        },
-        "STRING_VAR": {
-            "type": "string",
-            "resolved_value": "expected_value"
-        }
+        "REGEX_VAR": {"type": "regex", "resolved_value": r"\d{3}-\d{4}"},
+        "STRING_VAR": {"type": "string", "resolved_value": "expected_value"},
     }
 
 
@@ -120,22 +127,14 @@ def variable_metadata_with_tolerance():
 def variable_metadata_simple():
     """Simple metadata without tolerance."""
     return {
-        "VAR1": {
-            "type": "string",
-            "resolved_value": "value1"
-        },
-        "VAR2": {
-            "type": "string",
-            "resolved_value": "value2"
-        },
-        "NAME_VAR": {
-            "type": "string",
-            "resolved_value": "Alice"
-        }
+        "VAR1": {"type": "string", "resolved_value": "value1"},
+        "VAR2": {"type": "string", "resolved_value": "value2"},
+        "NAME_VAR": {"type": "string", "resolved_value": "Alice"},
     }
 
 
 # === Mock Factories ===
+
 
 @pytest.fixture
 def mock_subprocess_run():

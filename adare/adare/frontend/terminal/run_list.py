@@ -14,7 +14,6 @@ log = logging.getLogger(__name__)
 
 
 class RunListPanel:
-
     def __init__(self, runs: pd.DataFrame, project: str = None):
         self.runs = runs
         self.project = project
@@ -37,7 +36,7 @@ class RunListPanel:
             experiment_display = row['experiment_dotnotation']
             if self.project and experiment_display.startswith(f"{self.project}."):
                 # Remove project prefix when we're in project context
-                experiment_display = experiment_display[len(self.project) + 1:]
+                experiment_display = experiment_display[len(self.project) + 1 :]
 
             table.add_row(
                 row['id'],
@@ -51,7 +50,9 @@ class RunListPanel:
         return Panel(table, border_style="blue", title_align='left', style='', title=title)
 
 
-def print_run_list(project: str, environment: str = None, experiment: str = None, formatter=None, output_file=None, dual_output=False):
+def print_run_list(
+    project: str, environment: str = None, experiment: str = None, formatter=None, output_file=None, dual_output=False
+):
     """Print run list in the configured output format."""
 
     # Get data from database
@@ -61,16 +62,16 @@ def print_run_list(project: str, environment: str = None, experiment: str = None
     # Get formatter if not provided
     if formatter is None:
         from adare.run import get_formatter_from_context
+
         formatter, output_file, dual_output = get_formatter_from_context()
 
     if dual_output or formatter.format_type.value != 'rich':
         # Use StructuredDataApi for JSON/YAML output
         from adare.database.api.structured_data import StructuredDataApi
+
         with StructuredDataApi() as api:
             runs_structured = api.get_runs_structured(
-                project_name=project,
-                environment_name=environment,
-                experiment_name=experiment
+                project_name=project, environment_name=environment, experiment_name=experiment
             )
             run_list = [run.to_dict() for run in runs_structured]
             formatter.print_or_save({'runs': run_list}, output_file, dual_output)
@@ -80,5 +81,3 @@ def print_run_list(project: str, environment: str = None, experiment: str = None
         # the terminal height and silently drops the overflowing rows, which reads
         # as "those runs do not exist".
         DefaultConsole().print(RunListPanel(runs, project=project))
-
-

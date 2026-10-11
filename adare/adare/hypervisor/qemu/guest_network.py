@@ -33,6 +33,7 @@ disk state stays clean for forensic purposes. The static fallback is safe becaus
 QEMU SLIRP's addressing is fixed: the first (and here only) client always gets
 ``10.0.2.15/24`` with the gateway at ``10.0.2.2``.
 """
+
 import asyncio
 import logging
 
@@ -88,13 +89,12 @@ async def _configure_dns(vm, iface: str, stop_event=None) -> None:
 
     # Last resort: a real resolv.conf. This does write one guest file, but a guest
     # that cannot resolve names cannot install the agent at all.
-    log.warning(
-        f'resolvectl did not restore name resolution; writing /etc/resolv.conf '
-        f'with nameserver {SLIRP_DNS}'
-    )
+    log.warning(f'resolvectl did not restore name resolution; writing /etc/resolv.conf with nameserver {SLIRP_DNS}')
     await vm.run_command(
         f'printf "nameserver {SLIRP_DNS}\\n" > /etc/resolv.conf',
-        admin=True, silent=True, stop_event=stop_event,
+        admin=True,
+        silent=True,
+        stop_event=stop_event,
     )
 
     check = await vm.run_command(probe_dns, silent=True, stop_event=stop_event)

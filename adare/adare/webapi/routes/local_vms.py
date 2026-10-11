@@ -1,4 +1,5 @@
 """Local VM management endpoints (database-tracked VMs, not VirtualSpice proxy)."""
+
 import logging
 
 from fastapi import APIRouter
@@ -12,12 +13,15 @@ router = APIRouter(prefix="/api/local-vms", tags=["local-vms"])
 
 # ---- Helpers ----
 
+
 def _api():
     from adare.api import AdareAPI
+
     return AdareAPI()
 
 
 # ---- Endpoints ----
+
 
 @router.get("")
 async def list_vms():

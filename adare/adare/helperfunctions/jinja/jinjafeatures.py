@@ -12,10 +12,7 @@ def init_jinja_environment(template_folder: Path):
     if not template_folder.is_dir() or not template_folder:
         return None
     try:
-        return Environment(
-            loader=FileSystemLoader(template_folder.as_posix()),
-            autoescape=select_autoescape()
-        )
+        return Environment(loader=FileSystemLoader(template_folder.as_posix()), autoescape=select_autoescape())
     except OSError as e:
         log.error(e)
         return None

@@ -32,35 +32,35 @@ class WebSocketCommand:
             return {
                 "click": {
                     "target": self.parameters.get("target", {}),
-                    "description": self.description or f"Click at {self.parameters.get('target', {})}"
+                    "description": self.description or f"Click at {self.parameters.get('target', {})}",
                 }
             }
         if self.command_type == "type":
             return {
                 "keyboard": {
                     "keys": self.parameters.get("text", ""),
-                    "description": self.description or f"Type: {self.parameters.get('text', '')}"
+                    "description": self.description or f"Type: {self.parameters.get('text', '')}",
                 }
             }
         if self.command_type == "key_combination":
             return {
                 "keyboard": {
                     "combination": self.parameters.get("keys", []),
-                    "description": self.description or f"Key combo: {'+'.join(self.parameters.get('keys', []))}"
+                    "description": self.description or f"Key combo: {'+'.join(self.parameters.get('keys', []))}",
                 }
             }
         if self.command_type == "wait":
             return {
                 "idle": {
                     "duration": self.parameters.get("duration", 1.0),
-                    "description": self.description or f"Wait {self.parameters.get('duration', 1.0)}s"
+                    "description": self.description or f"Wait {self.parameters.get('duration', 1.0)}s",
                 }
             }
         if self.command_type == "screenshot":
             return {
                 "screenshot": {
                     "description": self.description or "Take screenshot",
-                    **{k: v for k, v in self.parameters.items() if k in ["x", "y", "width", "height"]}
+                    **{k: v for k, v in self.parameters.items() if k in ["x", "y", "width", "height"]},
                 }
             }
         if self.command_type == "command":
@@ -68,14 +68,14 @@ class WebSocketCommand:
                 "command": {
                     "cmd": self.parameters.get("cmd", ""),
                     "description": self.description or f"Execute: {self.parameters.get('cmd', '')}",
-                    **{k: v for k, v in self.parameters.items() if k in ["cwd", "env", "timeout", "shell"]}
+                    **{k: v for k, v in self.parameters.items() if k in ["cwd", "env", "timeout", "shell"]},
                 }
             }
         if self.command_type == "test":
             return {
                 "test": {
                     "name": self.parameters.get("name", ""),
-                    "description": self.description or f"Run test: {self.parameters.get('name', '')}"
+                    "description": self.description or f"Run test: {self.parameters.get('name', '')}",
                 }
             }
         raise ValueError(f"Unknown command type: {self.command_type}")
@@ -95,11 +95,15 @@ class WebSocketBridge:
         log.info(f"WebSocket client connected from {websocket.remote_address}")
 
         try:
-            await websocket.send(json.dumps({
-                "type": "connection_established",
-                "message": "Connected to Adare Interactive Development",
-                "timestamp": datetime.now().isoformat()
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "connection_established",
+                        "message": "Connected to Adare Interactive Development",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                )
+            )
 
             async for message in websocket:
                 await self.handle_message(websocket, message)
@@ -140,7 +144,7 @@ class WebSocketBridge:
             command = WebSocketCommand(
                 command_type=data.get("command_type", ""),
                 parameters=data.get("parameters", {}),
-                description=data.get("description", "")
+                description=data.get("description", ""),
             )
 
             # Convert to playbook action and execute
@@ -162,13 +166,17 @@ class WebSocketBridge:
                 self.command_history.append(command)
 
             # Send result back to client
-            await websocket.send(json.dumps({
-                "type": "command_result",
-                "success": result.success,
-                "message": result.message,
-                "data": result.data,
-                "timestamp": datetime.now().isoformat()
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "command_result",
+                        "success": result.success,
+                        "message": result.message,
+                        "data": result.data,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                )
+            )
 
         except Exception as e:
             log.error(f"Error executing command: {e}")
@@ -178,25 +186,21 @@ class WebSocketBridge:
         """Send command history to client."""
         history_data = []
         for cmd in self.command_history:
-            history_data.append({
-                "command_type": cmd.command_type,
-                "parameters": cmd.parameters,
-                "description": cmd.description,
-                "timestamp": cmd.timestamp.isoformat()
-            })
+            history_data.append(
+                {
+                    "command_type": cmd.command_type,
+                    "parameters": cmd.parameters,
+                    "description": cmd.description,
+                    "timestamp": cmd.timestamp.isoformat(),
+                }
+            )
 
-        await websocket.send(json.dumps({
-            "type": "history",
-            "commands": history_data
-        }))
+        await websocket.send(json.dumps({"type": "history", "commands": history_data}))
 
     async def handle_clear_history(self, websocket):
         """Clear command history."""
         self.command_history.clear()
-        await websocket.send(json.dumps({
-            "type": "history_cleared",
-            "message": "Command history cleared"
-        }))
+        await websocket.send(json.dumps({"type": "history_cleared", "message": "Command history cleared"}))
 
     async def handle_save_to_playbook(self, websocket, data: dict[str, Any]):
         """Save command history to playbook file."""
@@ -208,11 +212,7 @@ class WebSocketBridge:
             # Convert commands to playbook actions
             actions = [cmd.to_playbook_action() for cmd in self.command_history]
 
-            playbook_data = {
-                "actions": actions,
-                "settings": {"idle": 0.1},
-                "variables": data.get("variables", {})
-            }
+            playbook_data = {"actions": actions, "settings": {"idle": 0.1}, "variables": data.get("variables", {})}
 
             # Get playbook file path from data or use default
             playbook_path = data.get("playbook_path")
@@ -228,11 +228,15 @@ class WebSocketBridge:
             with open(Path(playbook_path), 'w') as f:
                 yaml.safe_dump(playbook_data, f, default_flow_style=False, indent=2)
 
-            await websocket.send(json.dumps({
-                "type": "playbook_saved",
-                "message": f"Playbook saved to {playbook_path}",
-                "actions_count": len(actions)
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "playbook_saved",
+                        "message": f"Playbook saved to {playbook_path}",
+                        "actions_count": len(actions),
+                    }
+                )
+            )
 
         except Exception as e:
             log.error(f"Error saving playbook: {e}")
@@ -240,22 +244,16 @@ class WebSocketBridge:
 
     async def send_error(self, websocket, error_message: str):
         """Send error message to client."""
-        await websocket.send(json.dumps({
-            "type": "error",
-            "message": error_message,
-            "timestamp": datetime.now().isoformat()
-        }))
+        await websocket.send(
+            json.dumps({"type": "error", "message": error_message, "timestamp": datetime.now().isoformat()})
+        )
 
     async def broadcast_status(self, status_data: dict[str, Any]):
         """Broadcast status update to all connected clients."""
         if not self.connected_clients:
             return
 
-        message = json.dumps({
-            "type": "status_update",
-            **status_data,
-            "timestamp": datetime.now().isoformat()
-        })
+        message = json.dumps({"type": "status_update", **status_data, "timestamp": datetime.now().isoformat()})
 
         # Send to all connected clients
         disconnected_clients = set()
@@ -283,11 +281,7 @@ class WebSocketServer:
         if not self.bridge:
             self.bridge = WebSocketBridge(playbook_controller)
 
-        self.server = await websockets.serve(
-            self.bridge.handle_client,
-            self.host,
-            self.port
-        )
+        self.server = await websockets.serve(self.bridge.handle_client, self.host, self.port)
 
         log.info(f"WebSocket server started on ws://{self.host}:{self.port}")
         return self.server

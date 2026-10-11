@@ -4,6 +4,7 @@ VirtualBox-specific VM lifecycle strategy.
 This module implements the VirtualBox lifecycle strategy using shared folders
 for file transfer. Files are accessible to the guest while the VM is running.
 """
+
 import asyncio
 import logging
 from pathlib import Path
@@ -50,7 +51,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
             password=password,
             executables=self.vbox_manager.executables,
             cpus=context.config.vm_cpus,
-            ram=context.config.vm_memory
+            ram=context.config.vm_memory,
         )
         log.info(f"Created VirtualBox VM instance: {context.vm_name}")
 
@@ -65,11 +66,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
             context: ExperimentRunCtx containing configuration
         """
         # Clean up any existing 'adarevm' port forwarding rule first
-        await context.vm.remove_port_forwarding(
-            name='adarevm',
-            stop_event=context.user_interrupt_event,
-            silent=True
-        )
+        await context.vm.remove_port_forwarding(name='adarevm', stop_event=context.user_interrupt_event, silent=True)
 
         # Add port forwarding: host uses allocated unique port, guest always uses 18765
         if context.config.websocket_port is None:
@@ -80,7 +77,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
             protocol='tcp',
             host_port=context.config.websocket_port,
             guest_port=18765,
-            stop_event=context.user_interrupt_event
+            stop_event=context.user_interrupt_event,
         )
         log.info(f'Added port forwarding for websocket server: host:{context.config.websocket_port} -> guest:18765')
 
@@ -110,7 +107,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
         if context.project_directory.shared.exists():
             context.config.shared_directories['project_shared'] = {
                 'host': context.project_directory.shared,
-                'vm': shared_root / 'project_shared'
+                'vm': shared_root / 'project_shared',
             }
         else:
             log.warning(
@@ -122,7 +119,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
         if context.experiment_directory.shared.exists():
             context.config.shared_directories['shared'] = {
                 'host': context.experiment_directory.shared,
-                'vm': shared_root / 'shared'
+                'vm': shared_root / 'shared',
             }
         else:
             log.warning(
@@ -139,15 +136,12 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
         for name, paths in context.config.shared_directories.items():
             log.debug(f"Adding shared folder '{name}': host={paths['host']} -> vm={paths['vm']}")
             return_code = await context.vm.add_shared_folder(
-                name,
-                host_path=paths['host'],
-                stop_event=context.user_interrupt_event
+                name, host_path=paths['host'], stop_event=context.user_interrupt_event
             )
 
             if return_code != 0:
                 raise LoggedException(
-                    log,
-                    f"Failed to add shared folder '{name}' to VirtualBox (return code: {return_code})"
+                    log, f"Failed to add shared folder '{name}' to VirtualBox (return code: {return_code})"
                 )
 
         log.info("All shared folders added to VirtualBox successfully")
@@ -164,11 +158,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
         from adare.types.stages import VMGuestAgentWaitStage, VMMountSharedDirectoriesStage, VMStartStage
 
         # Stage 1: Start VM
-        with StageCtxManager(
-            VMStartStage(),
-            context.experiment_run_ulid,
-            context.user_interrupt_event
-        ):
+        with StageCtxManager(VMStartStage(), context.experiment_run_ulid, context.user_interrupt_event):
             # Start the VM
             await context.vm.start(stop_event=context.user_interrupt_event)
 
@@ -176,17 +166,11 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
             if not context.stop_event.is_set():
                 width, height = context.config.vm_resolution
                 await context.vm.set_video_mode_hint(
-                    width=width,
-                    height=height,
-                    stop_event=context.user_interrupt_event
+                    width=width, height=height, stop_event=context.user_interrupt_event
                 )
 
         # Stage 2: Wait for guest agent
-        with StageCtxManager(
-            VMGuestAgentWaitStage(),
-            context.experiment_run_ulid,
-            context.user_interrupt_event
-        ):
+        with StageCtxManager(VMGuestAgentWaitStage(), context.experiment_run_ulid, context.user_interrupt_event):
             # Wait until VM is fully booted and ready
             log.info('Waiting until VM is ready')
             if not await context.vm.wait_until_fully_booted(timeout=360, stop_event=context.user_interrupt_event):
@@ -200,18 +184,18 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
 
         # Stage 3: Mount shared directories (VirtualBox-specific)
         with StageCtxManager(
-            VMMountSharedDirectoriesStage(),
-            context.experiment_run_ulid,
-            context.user_interrupt_event
+            VMMountSharedDirectoriesStage(), context.experiment_run_ulid, context.user_interrupt_event
         ):
             # Mount shared directories in the VM
             log.info("Verifying shared folders exist in VirtualBox config before mounting")
-            existing_folders = await context.vm.list_shared_folders(stop_event=context.user_interrupt_event, silent=True)
-            log.debug(f"Found {len(existing_folders)} shared folders in VirtualBox config: {list(existing_folders.keys())}")
+            existing_folders = await context.vm.list_shared_folders(
+                stop_event=context.user_interrupt_event, silent=True
+            )
+            log.debug(
+                f"Found {len(existing_folders)} shared folders in VirtualBox config: {list(existing_folders.keys())}"
+            )
 
-            folders = {
-                name: paths['vm'] for name, paths in context.config.shared_directories.items()
-            }
+            folders = {name: paths['vm'] for name, paths in context.config.shared_directories.items()}
 
             # Check that all required folders exist
             missing_folders = [name for name in folders if name not in existing_folders]
@@ -219,14 +203,11 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
                 raise LoggedException(
                     log,
                     f"Cannot mount shared folders - the following folders are not configured in VirtualBox: {missing_folders}. "
-                    f"Expected folders: {list(folders.keys())}, Found: {list(existing_folders.keys())}"
+                    f"Expected folders: {list(folders.keys())}, Found: {list(existing_folders.keys())}",
                 )
 
             log.info(f"All {len(folders)} required shared folders exist in VirtualBox, proceeding with mount")
-            await context.vm.mount_multiple_shared_folders(
-                folders=folders,
-                stop_event=context.user_interrupt_event
-            )
+            await context.vm.mount_multiple_shared_folders(folders=folders, stop_event=context.user_interrupt_event)
 
     async def retrieve_artifacts(self, context, post_interrupt: bool = False, force_stop: bool = False):
         """
@@ -261,8 +242,4 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
         if context.vm:
             event = None if post_interrupt else context.user_interrupt_event
             log.info('Cleaning up port forwarding rules before VM instance release')
-            await context.vm.remove_port_forwarding(
-                name='adarevm',
-                stop_event=event,
-                silent=True
-            )
+            await context.vm.remove_port_forwarding(name='adarevm', stop_event=event, silent=True)

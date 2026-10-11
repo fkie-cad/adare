@@ -1,4 +1,5 @@
 """Project management endpoints."""
+
 import logging
 from pathlib import Path
 
@@ -14,8 +15,10 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 # ---- Pydantic request models ----
 
+
 class ProjectCreateBody(BaseModel):
     """Request body for creating a project."""
+
     name: str
     path: str
     description: str = ""
@@ -23,12 +26,15 @@ class ProjectCreateBody(BaseModel):
 
 # ---- Helpers ----
 
+
 def _api():
     from adare.api import AdareAPI
+
     return AdareAPI()
 
 
 # ---- Endpoints ----
+
 
 @router.get("")
 async def list_projects():

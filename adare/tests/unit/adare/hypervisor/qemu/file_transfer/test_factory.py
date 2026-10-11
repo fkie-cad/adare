@@ -4,6 +4,7 @@ Tests for the file transfer strategy factory.
 Verifies that detect_file_transfer_mode() and get_file_transfer_strategy()
 select the correct strategy based on tool availability and platform.
 """
+
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -61,6 +62,7 @@ class TestDetectFileTransferMode:
         everything therefore yields 'qga', which is correct — see
         `test_returns_qga_on_linux_without_guestfish`.
         """
+
         def which_side_effect(name):
             if name == 'virtiofsd':
                 return None
@@ -94,6 +96,7 @@ class TestDetectFileTransferMode:
 
     def test_returns_libguestfs_on_macos_with_guestfish(self):
         """macOS without virtiofsd but with guestfish -> libguestfs."""
+
         def which_side_effect(name):
             if name == 'virtiofsd':
                 return None

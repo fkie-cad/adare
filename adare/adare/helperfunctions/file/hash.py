@@ -11,12 +11,11 @@ from tqdm import tqdm
 log = logging.getLogger(__name__)
 
 
-
 def file_sha256_with_progress(
     file_path: Path,
     description: str | None = None,
     silent: bool = False,
-    interrupt_event: threading.Event | None = None
+    interrupt_event: threading.Event | None = None,
 ) -> str:
     """
     Calculate SHA256 hash of file with progress bar.
@@ -52,13 +51,16 @@ def file_sha256_with_progress(
     log.debug(f'Calculating hash for {file_path} with progress bar')
 
     hash_sha256 = hashlib.sha256()
-    with open(file_path, "rb") as f, tqdm(
-        desc=desc,
-        total=file_size,
-        unit='iB',
-        unit_scale=True,
-        unit_divisor=1024,
-    ) as bar:
+    with (
+        open(file_path, "rb") as f,
+        tqdm(
+            desc=desc,
+            total=file_size,
+            unit='iB',
+            unit_scale=True,
+            unit_divisor=1024,
+        ) as bar,
+    ):
         chunk_size = 64 * 1024  # 64KB chunks
         while True:
             if interrupt_event and interrupt_event.is_set():
@@ -78,7 +80,7 @@ async def file_sha256_with_progress_async(
     file_path: Path,
     description: str | None = None,
     silent: bool = False,
-    interrupt_event: threading.Event | None = None
+    interrupt_event: threading.Event | None = None,
 ) -> str:
     """
     Calculate SHA256 hash of file with progress bar (async version).
@@ -95,16 +97,12 @@ async def file_sha256_with_progress_async(
     Raises:
         InterruptedError: If interrupt_event is set during calculation
     """
+
     def _calculate_hash():
         return file_sha256_with_progress(
-            file_path=file_path,
-            description=description,
-            silent=silent,
-            interrupt_event=interrupt_event
+            file_path=file_path, description=description, silent=silent, interrupt_event=interrupt_event
         )
 
     # Run the hash calculation in a thread pool to avoid blocking the event loop
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _calculate_hash)
-
-

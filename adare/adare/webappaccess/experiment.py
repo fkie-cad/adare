@@ -13,7 +13,9 @@ from adare.database.api.experiment import ExperimentApi
 log = logging.getLogger(__name__)
 
 
-async def check_experiment_published(experiment_ulid, project_path, force_check=False, component_func=None, post_func=None):
+async def check_experiment_published(
+    experiment_ulid, project_path, force_check=False, component_func=None, post_func=None
+):
     """
     Check if the experiment is published to the webapp
     :param post_func:
@@ -30,7 +32,12 @@ async def check_experiment_published(experiment_ulid, project_path, force_check=
             raise ValueError(f"Experiment with ulid {experiment_ulid} not found in database")
         # get published status from database
         publish_status = experiment.publish_status
-        if publish_status.name == "published" and not force_check or publish_status.name == "not published" and not force_check:
+        if (
+            publish_status.name == "published"
+            and not force_check
+            or publish_status.name == "not published"
+            and not force_check
+        ):
             return
         if publish_status.name == "unknown" or force_check:
             log.info(f"Check publish status of experiment {experiment_ulid}")
@@ -42,7 +49,9 @@ async def check_experiment_published(experiment_ulid, project_path, force_check=
                     if response.status == 200:
                         response_json = await response.json()
                         if not response_json['ulid']:
-                            experiment_api.set_experiment_publish_status(experiment_ulid=experiment_ulid, publish_status="not published")
+                            experiment_api.set_experiment_publish_status(
+                                experiment_ulid=experiment_ulid, publish_status="not published"
+                            )
                             log.info(f"Experiment {experiment_ulid} is not published")
                             if component_func:
                                 component_func.refresh('not published')
@@ -50,14 +59,18 @@ async def check_experiment_published(experiment_ulid, project_path, force_check=
                                 post_func()
                         else:
                             if response_json['published']:
-                                experiment_api.set_experiment_publish_status(experiment_ulid=experiment_ulid, publish_status="published")
+                                experiment_api.set_experiment_publish_status(
+                                    experiment_ulid=experiment_ulid, publish_status="published"
+                                )
                                 log.info(f"Experiment {experiment_ulid} is published")
                                 if component_func:
                                     component_func.refresh('published')
                                 if post_func:
                                     post_func()
                             else:
-                                experiment_api.set_experiment_publish_status(experiment_ulid=experiment_ulid, publish_status="in request")
+                                experiment_api.set_experiment_publish_status(
+                                    experiment_ulid=experiment_ulid, publish_status="in request"
+                                )
                                 log.info(f"Experiment {experiment_ulid} is contained in a non accepted request")
                                 if component_func:
                                     component_func.refresh('in request')
@@ -76,6 +89,3 @@ async def check_experiment_published(experiment_ulid, project_path, force_check=
         else:
             log.error(f"Unknown publish status {publish_status.name}")
             raise ValueError(f"Unknown publish status {publish_status.name}")
-
-
-

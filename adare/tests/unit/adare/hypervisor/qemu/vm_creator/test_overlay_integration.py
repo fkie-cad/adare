@@ -37,13 +37,16 @@ pytestmark = [pytest.mark.integration, pytest.mark.requires_qemu]
 
 def _qemu_img() -> str:
     from adare.config import HYPERVISOR_CONFIGS
+
     return HYPERVISOR_CONFIGS['qemu']['qemu_img_exe']
 
 
 def _info(disk: Path) -> dict:
     result = subprocess.run(
         [_qemu_img(), 'info', '--output=json', str(disk)],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return json.loads(result.stdout)
 
@@ -51,6 +54,7 @@ def _info(disk: Path) -> dict:
 @pytest.fixture(autouse=True)
 def _require_qemu_img():
     from adare.config import HYPERVISOR_CONFIGS
+
     exe = HYPERVISOR_CONFIGS['qemu']['qemu_img_exe']
     if shutil.which(exe) is None:
         pytest.skip(f'{exe} not on PATH')
@@ -60,12 +64,12 @@ def _require_qemu_img():
 def base_disk(tmp_path) -> Path:
     """A real 10 MB qcow2 with recognisable bytes written into it."""
     disk = tmp_path / 'base.qcow2'
-    subprocess.run([_qemu_img(), 'create', '-f', 'qcow2', str(disk), '10M'],
-                   capture_output=True, text=True, check=True)
+    subprocess.run([_qemu_img(), 'create', '-f', 'qcow2', str(disk), '10M'], capture_output=True, text=True, check=True)
     return disk
 
 
 # --- T10 ---
+
 
 def test_overlay_records_the_base_as_its_backing_file(base_disk, tmp_path):
     overlay = create_work_overlay(base_disk, tmp_path / 'work.qcow2')
@@ -107,8 +111,7 @@ def test_flattened_output_passes_qemu_img_check(base_disk, tmp_path):
     overlay = create_work_overlay(base_disk, tmp_path / 'work.qcow2')
     dest = tmp_path / 'flat.qcow2'
     flatten_overlay(overlay, dest, compress=True)
-    subprocess.run([_qemu_img(), 'check', str(dest)],
-                   capture_output=True, text=True, check=True)
+    subprocess.run([_qemu_img(), 'check', str(dest)], capture_output=True, text=True, check=True)
 
 
 def test_missing_base_disk_raises(tmp_path):
@@ -119,6 +122,7 @@ def test_missing_base_disk_raises(tmp_path):
 
 
 # --- T16: the full recipe flow on a Linux guest ---
+
 
 @pytest.mark.slow
 @pytest.mark.live_vm
@@ -150,48 +154,55 @@ def test_full_recipe_flow_on_a_linux_guest(tmp_path, monkeypatch):
 
     # The arm64 profiles ship no iso_url (Ubuntu published no arm64 desktop ISO
     # for these releases), so the filename is not always in the catalog either.
-    names = [name for name in (os_def.iso_filename,
-                               'ubuntu-24.04.4-live-server-arm64.iso',
-                               'ubuntu-24.04-live-server-amd64.iso') if name]
-    candidates = [directory / name
-                  for directory in (ISO_DIR, QEMU_CACHE_DIR) for name in names]
+    names = [
+        name
+        for name in (os_def.iso_filename, 'ubuntu-24.04.4-live-server-arm64.iso', 'ubuntu-24.04-live-server-amd64.iso')
+        if name
+    ]
+    candidates = [directory / name for directory in (ISO_DIR, QEMU_CACHE_DIR) for name in names]
     iso = next((path for path in candidates if path.is_file()), None)
     if iso is None:
-        pytest.skip(
-            f'no {profile} ISO found; put one of {names} in {ISO_DIR} to run this test'
-        )
+        pytest.skip(f'no {profile} ISO found; put one of {names} in {ISO_DIR} to run this test')
 
     from adare.hypervisor.qemu.vm_creator.iso_utils import iso_sha256
 
     env_file = tmp_path / 'ubuntu-provisioned.yml'
-    env_file.write_text(yaml.dump({
-        'vm_type': 'recipe',
-        'hypervisor': 'qemu',
-        'description': 'T16: Ubuntu + build-time provisioning smoke test',
-        'recipe': {
-            'profile': profile,
-            'iso': str(iso),
-            'iso_sha256': iso_sha256(iso),
-            # setup_level 1 (base) is the minimum that ships the guest agent, and
-            # skips the Python environment we do not need here.
-            'params': {'setup_level': 1, 'disk_size': '20G', 'ram_mb': 4096, 'cpus': 2},
-            'provision': [
-                {'name': 'install-jq',
-                 'command': 'DEBIAN_FRONTEND=noninteractive apt-get install -y jq',
-                 'timeout_minutes': 15,
-                 # A package install asserting its own outcome is the whole
-                 # command/verify contract in miniature.
-                 'verify': 'jq --version'},
-                {'name': 'record-provenance',
-                 'command': 'jq --version > /var/log/adare-provisioned.txt'},
-            ],
-        },
-        'os': {
-            'os': os_def.display_name, 'platform': 'linux', 'distribution': 'ubuntu',
-            'version': '24.04', 'language': 'English',
-            'architecture': os_def.architecture,
-        },
-    }))
+    env_file.write_text(
+        yaml.dump(
+            {
+                'vm_type': 'recipe',
+                'hypervisor': 'qemu',
+                'description': 'T16: Ubuntu + build-time provisioning smoke test',
+                'recipe': {
+                    'profile': profile,
+                    'iso': str(iso),
+                    'iso_sha256': iso_sha256(iso),
+                    # setup_level 1 (base) is the minimum that ships the guest agent, and
+                    # skips the Python environment we do not need here.
+                    'params': {'setup_level': 1, 'disk_size': '20G', 'ram_mb': 4096, 'cpus': 2},
+                    'provision': [
+                        {
+                            'name': 'install-jq',
+                            'command': 'DEBIAN_FRONTEND=noninteractive apt-get install -y jq',
+                            'timeout_minutes': 15,
+                            # A package install asserting its own outcome is the whole
+                            # command/verify contract in miniature.
+                            'verify': 'jq --version',
+                        },
+                        {'name': 'record-provenance', 'command': 'jq --version > /var/log/adare-provisioned.txt'},
+                    ],
+                },
+                'os': {
+                    'os': os_def.display_name,
+                    'platform': 'linux',
+                    'distribution': 'ubuntu',
+                    'version': '24.04',
+                    'language': 'English',
+                    'architecture': os_def.architecture,
+                },
+            }
+        )
+    )
 
     metadata = parse_environment_file(env_file)
     result = build_or_reuse_recipe_vm(metadata, base_dir=env_file.parent)

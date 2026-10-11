@@ -18,6 +18,7 @@ class Script:
     abstract class used as parent class for various scripts
     (provide possibility to write the script and to remove the script)
     """
+
     name: str
     variables: dict
     directory: Path
@@ -29,7 +30,15 @@ class Script:
     wrapper_template: Path = None
     only_copy: bool
 
-    def __init__(self, name: str, source_directory: Path, log_directory: Path = None, variables: dict or None = None, render_wrapper: bool = False, only_copy: bool = False):
+    def __init__(
+        self,
+        name: str,
+        source_directory: Path,
+        log_directory: Path = None,
+        variables: dict or None = None,
+        render_wrapper: bool = False,
+        only_copy: bool = False,
+    ):
         self.name = name
         self.variables = variables or {}
         self.is_template = True
@@ -37,7 +46,7 @@ class Script:
         self.render_wrapper = render_wrapper
         self.only_copy = only_copy
         if log_directory:
-            self.variables['log_file'] = log_directory/f'{Path(name).stem}.log'
+            self.variables['log_file'] = log_directory / f'{Path(name).stem}.log'
 
     def set_scripts_path_remote(self, path: Path):
         self.variables['scripts_directory'] = path.as_posix()
@@ -55,13 +64,13 @@ class Script:
             name=self.wrapper_template.name,
             source_directory=self.wrapper_template.parent,
         )
-        script_path = (self.scripts_path_remote / f'{self.name}')
+        script_path = self.scripts_path_remote / f'{self.name}'
         script_name = script_path.stem
         wrapper_script.update_variables(
             {
                 'script': script_path.as_posix(),
                 'scripts_directory': self.scripts_path_remote.as_posix(),
-                'name': script_name
+                'name': script_name,
             }
         )
         if self.destination_directory:

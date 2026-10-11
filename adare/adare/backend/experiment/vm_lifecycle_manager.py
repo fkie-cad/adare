@@ -172,9 +172,11 @@ class VMLifecycleManager:
         # Instantiate appropriate lifecycle strategy based on hypervisor type
         if hypervisor_type == 'virtualbox':
             from adare.hypervisor.virtualbox.lifecycle import VirtualBoxLifecycleStrategy
+
             self.strategy = VirtualBoxLifecycleStrategy()
         elif hypervisor_type == 'qemu':
             from adare.hypervisor.qemu.lifecycle import QEMULifecycleStrategy
+
             self.strategy = QEMULifecycleStrategy()
         else:
             raise ValueError(f"Unsupported hypervisor: {hypervisor_type}. Supported: 'virtualbox', 'qemu'")
@@ -206,8 +208,7 @@ class VMLifecycleManager:
             adarevm_target_time = self._get_latest_mtime(adarevm_target)
             adarelib_target_time = self._get_latest_mtime(adarelib_target)
 
-            if (adarevm_source_time > adarevm_target_time or
-                adarelib_source_time > adarelib_target_time):
+            if adarevm_source_time > adarevm_target_time or adarelib_source_time > adarelib_target_time:
                 log.info("Source files newer than cached runtime, updating")
                 needs_update = True
 
@@ -250,8 +251,7 @@ class VMLifecycleManager:
             adarelib_source_time = self._get_latest_mtime(adarelib_source)
             adarevm_source_time = self._get_latest_mtime(adarevm_source)
 
-            if (adarelib_source_time > adarelib_wheel_time or
-                adarevm_source_time > adarevm_wheel_time):
+            if adarelib_source_time > adarelib_wheel_time or adarevm_source_time > adarevm_wheel_time:
                 log.info("Source code newer than wheels - rebuilding...")
                 rebuild_wheels = True
             else:
@@ -266,11 +266,12 @@ class VMLifecycleManager:
                 # Build adarelib wheel first (it has no path dependencies)
                 log.info("Building adarelib wheel...")
                 import subprocess
+
                 subprocess.run(
                     ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
                     cwd=adarelib_target,
                     check=True,
-                    capture_output=True
+                    capture_output=True,
                 )
 
                 # Build adarevm wheel without path dependency
@@ -283,11 +284,8 @@ class VMLifecycleManager:
 
                 # Remove workspace source for adarelib
                 import re
-                modified_content = re.sub(
-                    r'adarelib\s*=\s*\{\s*workspace\s*=\s*true\s*\}',
-                    '',
-                    original_content
-                )
+
+                modified_content = re.sub(r'adarelib\s*=\s*\{\s*workspace\s*=\s*true\s*\}', '', original_content)
                 adarevm_pyproject.write_text(modified_content)
 
                 try:
@@ -295,7 +293,7 @@ class VMLifecycleManager:
                         ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
                         cwd=adarevm_target,
                         check=True,
-                        capture_output=True
+                        capture_output=True,
                     )
                 finally:
                     # Restore original pyproject.toml
@@ -330,7 +328,6 @@ class VMLifecycleManager:
                     continue
         return latest
 
-
     async def create_and_prepare_vm(self, context: ExperimentRunCtx):
         """Create and prepare VM for experiment with snapshots and shared folders."""
         # Get VM ID from environment (file operations already done during environment load)
@@ -350,6 +347,7 @@ class VMLifecycleManager:
 
         # Allocate VM instance (allocation and sync stages managed internally)
         import asyncio
+
         vm_instance_id = await asyncio.wait_for(
             ensure_vm_ready_for_experiment(
                 vm_id=vm_id,
@@ -358,9 +356,9 @@ class VMLifecycleManager:
                 experiment_run_ulid=context.experiment_run_ulid,
                 preserve_experiment_snapshot=context.config.preserve_snapshot,
                 interrupt_event=context.user_interrupt_event,
-                test_mode=context.test_mode  # NEW: Pass test mode from context
+                test_mode=context.test_mode,  # NEW: Pass test mode from context
             ),
-            timeout=300  # 5 minute timeout for VM import operations
+            timeout=300,  # 5 minute timeout for VM import operations
         )
 
         log.info(f"VM instance allocation completed successfully, instance_id={vm_instance_id}")
@@ -384,7 +382,9 @@ class VMLifecycleManager:
                         log.error(f"  - {inst.id}: {inst.instance_name} (status: {inst.status})")
 
                     # Check if ID format is correct
-                    log.error(f"Problematic ID: '{vm_instance_id}' (length: {len(vm_instance_id)}, type: {type(vm_instance_id)})")
+                    log.error(
+                        f"Problematic ID: '{vm_instance_id}' (length: {len(vm_instance_id)}, type: {type(vm_instance_id)})"
+                    )
 
                     raise LoggedException(log, f"VM instance with ID {vm_instance_id} not found after preparation")
 
@@ -394,14 +394,13 @@ class VMLifecycleManager:
         except (OSError, ValueError, RuntimeError) as e:
             log.error(f"Error fetching VM instance: {e}")
             import traceback
+
             log.debug(f"Fetch VM instance traceback: {traceback.format_exc()}")
             raise
 
         # Update experiment run with VM instance ID
         experiment_database.update_experiment_run_vm_instance(
-            context.config.project_path,
-            context.experiment_run_ulid,
-            vm_instance_id
+            context.config.project_path, context.experiment_run_ulid, vm_instance_id
         )
 
         # Use the instance name and port from the allocated instance
@@ -416,9 +415,7 @@ class VMLifecycleManager:
 
         # Setup VM runtime directory with smart copying
         with StageCtxManager(
-            VMRuntimePreparationStage(),
-            context.experiment_run_ulid,
-            event=context.user_interrupt_event
+            VMRuntimePreparationStage(), context.experiment_run_ulid, event=context.user_interrupt_event
         ):
             await self._ensure_vm_runtime_ready(context)
 
@@ -438,15 +435,12 @@ class VMLifecycleManager:
 
             # Wrap verification and recovery logic with stage for visibility
             with StageCtxManager(
-                VMInstanceVerificationStage(),
-                context.experiment_run_ulid,
-                event=context.user_interrupt_event
+                VMInstanceVerificationStage(), context.experiment_run_ulid, event=context.user_interrupt_event
             ):
                 # First verify and cleanup VM instance if missing from VirtualBox
                 try:
                     vm_instance_is_available = verify_and_cleanup_vm_instance_for_experiment(
-                        vm_instance.id,
-                        context.experiment_run_ulid
+                        vm_instance.id, context.experiment_run_ulid
                     )
                     if not vm_instance_is_available:
                         # VM instance was missing and cleaned up - need to allocate a new one
@@ -456,7 +450,9 @@ class VMLifecycleManager:
                         from adare.backend.vm.instance_manager import allocate_vm_instance_for_experiment
 
                         # Get VM ID from environment (same as original allocation)
-                        env_data = environment_database.get_environment_by_ulid(context.environment_ulid, fields=['vm_id'])
+                        env_data = environment_database.get_environment_by_ulid(
+                            context.environment_ulid, fields=['vm_id']
+                        )
                         vm_id = env_data['vm_id'] if env_data else None
                         if not vm_id:
                             raise LoggedException(log, "No VM associated with environment after cleanup")
@@ -468,9 +464,7 @@ class VMLifecycleManager:
 
                         # Update the experiment run with new VM instance ID
                         experiment_database.update_experiment_run_vm_instance(
-                            context.config.project_path,
-                            context.experiment_run_ulid,
-                            new_vm_instance.id
+                            context.config.project_path, context.experiment_run_ulid, new_vm_instance.id
                         )
 
                         # Update context with new instance information
@@ -480,13 +474,19 @@ class VMLifecycleManager:
 
                         # Validate that the port was properly allocated
                         if context.config.websocket_port is None:
-                            raise LoggedException(log, f"New VM instance {vm_instance.instance_name} has no websocket port allocated")
+                            raise LoggedException(
+                                log, f"New VM instance {vm_instance.instance_name} has no websocket port allocated"
+                            )
 
-                        log.info(f"Successfully allocated new VM instance after cleanup: {context.vm_name} on port {context.config.websocket_port}")
+                        log.info(
+                            f"Successfully allocated new VM instance after cleanup: {context.vm_name} on port {context.config.websocket_port}"
+                        )
 
                         # New instance needs to be imported to VirtualBox if it doesn't have a UUID
                         if not vm_instance.vbox_uuid:
-                            log.info(f"New VM instance '{vm_instance.instance_name}' needs to be imported to VirtualBox")
+                            log.info(
+                                f"New VM instance '{vm_instance.instance_name}' needs to be imported to VirtualBox"
+                            )
 
                             # Get source VM for import
                             source_vm = vm_database.get_vm_by_id(vm_id)
@@ -495,13 +495,26 @@ class VMLifecycleManager:
 
                             # Verify source VM integrity
                             from adare.backend.vm.commands import verify_vm_integrity
-                            await verify_vm_integrity(vm_id, context.experiment_run_ulid, context.user_interrupt_event, test_mode=context.test_mode)
+
+                            await verify_vm_integrity(
+                                vm_id,
+                                context.experiment_run_ulid,
+                                context.user_interrupt_event,
+                                test_mode=context.test_mode,
+                            )
 
                             # Import VM instance to VirtualBox with proper stage management
                             from adare.types.stages import VMDiskPreparationStage
-                            with StageCtxManager(VMDiskPreparationStage(), context.experiment_run_ulid, context.user_interrupt_event):
-                                with StageCtxManager(VMImportStage(), context.experiment_run_ulid, context.user_interrupt_event):
-                                    log.info(f"Importing new VM instance '{vm_instance.instance_name}' to VirtualBox...")
+
+                            with StageCtxManager(
+                                VMDiskPreparationStage(), context.experiment_run_ulid, context.user_interrupt_event
+                            ):
+                                with StageCtxManager(
+                                    VMImportStage(), context.experiment_run_ulid, context.user_interrupt_event
+                                ):
+                                    log.info(
+                                        f"Importing new VM instance '{vm_instance.instance_name}' to VirtualBox..."
+                                    )
 
                                     # Import using VirtualBox manager directly (inline implementation)
                                     from adare.hypervisor.virtualbox.manager import VirtualBoxManager
@@ -513,7 +526,7 @@ class VMLifecycleManager:
                                     vbox_vm = await manager.import_vm_async(
                                         vm_file_path,
                                         vm_instance.instance_name,
-                                        environment_ulid=context.environment_ulid
+                                        environment_ulid=context.environment_ulid,
                                     )
 
                                     # Update instance with VirtualBox UUID
@@ -522,23 +535,32 @@ class VMLifecycleManager:
                                         api.update_vm_instance(
                                             vm_instance.id,
                                             vbox_uuid=vbox_uuid,
-                                            base_snapshot_name=f"{vm_instance.instance_name}_base"
+                                            base_snapshot_name=f"{vm_instance.instance_name}_base",
                                         )
 
-                                    log.info(f"Successfully imported VM instance '{vm_instance.instance_name}' with UUID: {vbox_uuid}")
+                                    log.info(
+                                        f"Successfully imported VM instance '{vm_instance.instance_name}' with UUID: {vbox_uuid}"
+                                    )
 
                                     # Return updated instance
                                     with VmApi() as api:
                                         vm_instance = api.get_vm_instance_by_id(vm_instance.id)
 
                             # Create base snapshot for the new instance
-                            with StageCtxManager(VMSnapshotCreateStage(), context.experiment_run_ulid, context.user_interrupt_event):
+                            with StageCtxManager(
+                                VMSnapshotCreateStage(), context.experiment_run_ulid, context.user_interrupt_event
+                            ):
                                 from adare.backend.vm.snapshot_manager import create_base_snapshot_for_instance
+
                                 snapshot_success = create_base_snapshot_for_instance(vm_instance, silent=False)
                                 if not snapshot_success:
-                                    log.warning(f"Failed to create base snapshot for new instance {vm_instance.instance_name}")
+                                    log.warning(
+                                        f"Failed to create base snapshot for new instance {vm_instance.instance_name}"
+                                    )
                                 else:
-                                    log.info(f"Successfully created base snapshot for new instance {vm_instance.instance_name}")
+                                    log.info(
+                                        f"Successfully created base snapshot for new instance {vm_instance.instance_name}"
+                                    )
 
                             log.info(f"Successfully imported and prepared new VM instance: {vm_instance.instance_name}")
                 except LoggedException:
@@ -549,16 +571,21 @@ class VMLifecycleManager:
 
                 # Final verification that VM instance exists in VirtualBox
                 if not vm_instance.vbox_uuid or not VirtualBoxVM.verify_vm_exists_by_uuid(vm_instance.vbox_uuid):
-                    raise LoggedException(log, f"VM instance '{context.vm_name}' was not properly prepared - missing from VirtualBox")
-                log.info(f"Using prepared VM instance '{context.vm_name}' with snapshots (UUID: {vm_instance.vbox_uuid})")
+                    raise LoggedException(
+                        log, f"VM instance '{context.vm_name}' was not properly prepared - missing from VirtualBox"
+                    )
+                log.info(
+                    f"Using prepared VM instance '{context.vm_name}' with snapshots (UUID: {vm_instance.vbox_uuid})"
+                )
 
         # Update experiment run with VM-specific data (skip in diff mode where no database persistence)
-        if (not context.stop_event.is_set() and
-            context.experiment_run_directory is not None and
-            isinstance(context.experiment_run_directory, ExperimentRunDirectory)):
+        if (
+            not context.stop_event.is_set()
+            and context.experiment_run_directory is not None
+            and isinstance(context.experiment_run_directory, ExperimentRunDirectory)
+        ):
             context.experiment_run_ulid = experiment_database.update_experiment_run(
-                context.experiment_run_ulid,
-                context.experiment_run_directory
+                context.experiment_run_ulid, context.experiment_run_directory
             )
 
         context.timestamp_before_vm_start = datetime.now(UTC)
@@ -571,11 +598,7 @@ class VMLifecycleManager:
         - VirtualBox: Configure port forwarding via VBoxManage
         - QEMU: Save port forwarding rules to config (applied on VM start)
         """
-        with StageCtxManager(
-            VMNetworkingStage(),
-            context.experiment_run_ulid,
-            event=context.user_interrupt_event
-        ):
+        with StageCtxManager(VMNetworkingStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
             await self.strategy.setup_networking(context)
 
     async def setup_file_transfer(self, context: ExperimentRunCtx):
@@ -588,9 +611,7 @@ class VMLifecycleManager:
         """
         log.info("Starting file transfer setup")
         with StageCtxManager(
-            VMFileTransferSetupStage(),
-            context.experiment_run_ulid,
-            event=context.user_interrupt_event
+            VMFileTransferSetupStage(), context.experiment_run_ulid, event=context.user_interrupt_event
         ) as stage_ctx:
             if self.hypervisor_type == 'qemu' and hasattr(self.strategy, 'file_transfer'):
                 stage_ctx.stage.sub_msg = self.strategy.file_transfer.setup_description
@@ -628,7 +649,9 @@ class VMLifecycleManager:
         but kept for backward compatibility with existing code that may call it separately.
         """
         # For backward compatibility - this is now a no-op as the strategy handles mounting
-        log.debug("mount_shared_directories() called - directories should already be mounted from start_and_initialize_vm()")
+        log.debug(
+            "mount_shared_directories() called - directories should already be mounted from start_and_initialize_vm()"
+        )
 
     async def stop_vm(self, context: ExperimentRunCtx, post_interrupt: bool = False, force: bool = False):
         """Stop the virtual machine."""
@@ -638,7 +661,9 @@ class VMLifecycleManager:
             if context.vm:
                 await context.vm.stop(force=force)
 
-    async def retrieve_artifacts(self, context: ExperimentRunCtx, post_interrupt: bool = False, force_stop: bool = False):
+    async def retrieve_artifacts(
+        self, context: ExperimentRunCtx, post_interrupt: bool = False, force_stop: bool = False
+    ):
         """
         Retrieve artifacts from VM with proper stage visibility.
 
@@ -656,11 +681,7 @@ class VMLifecycleManager:
         # Don't check interrupt event when retrieving artifacts during post-interrupt cleanup
         event = None if post_interrupt else context.user_interrupt_event
 
-        with StageCtxManager(
-            VMFileTransferRetrievalStage(),
-            context.experiment_run_ulid,
-            event=event
-        ) as stage_ctx:
+        with StageCtxManager(VMFileTransferRetrievalStage(), context.experiment_run_ulid, event=event) as stage_ctx:
             if self.hypervisor_type == 'qemu' and hasattr(self.strategy, 'file_transfer'):
                 stage_ctx.stage.sub_msg = self.strategy.file_transfer.retrieval_description
             await self.strategy.retrieve_artifacts(context, post_interrupt=post_interrupt, force_stop=force_stop)
@@ -699,14 +720,11 @@ class VMLifecycleManager:
         event = None if post_interrupt else context.user_interrupt_event
 
         # Wrap execution in StageCtxManager for flow console visibility
-        with StageCtxManager(
-            VMHostDiffStage(),
-            context.experiment_run_ulid,
-            event=event
-        ) as stage_ctx:
+        with StageCtxManager(VMHostDiffStage(), context.experiment_run_ulid, event=event) as stage_ctx:
             try:
                 # Get disk paths from QEMU VM
                 from adare.hypervisor.qemu.vm import QEMUVM
+
                 if not isinstance(context.vm, QEMUVM):
                     log.warning("VM is not a QEMU instance - cannot perform host diff")
                     return
@@ -719,6 +737,7 @@ class VMLifecycleManager:
 
                 # Validate disk paths exist
                 from pathlib import Path
+
                 if not Path(base_disk_path).exists():
                     log.error(f"Base disk not found: {base_disk_path}")
                     return
@@ -740,9 +759,7 @@ class VMLifecycleManager:
                     extract_content_dir = diff_dir / 'content'
 
                 diff_results = self.strategy.compare_disk_images_with_virt_diff(
-                    base_disk_path=base_disk_path,
-                    overlay_disk_path=overlay_disk_path,
-                    extract_dir=extract_content_dir
+                    base_disk_path=base_disk_path, overlay_disk_path=overlay_disk_path, extract_dir=extract_content_dir
                 )
 
                 # Export results to artifacts directory
@@ -752,7 +769,7 @@ class VMLifecycleManager:
                         'diff_mode': 'host',
                         'tool': 'virt-ls-manual',
                         'base_disk_path': base_disk_path,
-                        'overlay_disk_path': overlay_disk_path
+                        'overlay_disk_path': overlay_disk_path,
                     }
 
                     # Export to JSON and CSV formats
@@ -761,6 +778,7 @@ class VMLifecycleManager:
                         export_diff_csv,
                         export_diff_json,
                     )
+
                     json_path = diff_dir / 'filesystem_diffs.json'
                     csv_path = diff_dir / 'filesystem_diffs.csv'
                     bodyfile_path = diff_dir / 'filesystem_diffs.bodyfile'
@@ -770,10 +788,12 @@ class VMLifecycleManager:
                     export_diff_bodyfile(diff_results, bodyfile_path)
 
                     log.info(f"Host-side diff exported to {diff_dir}")
-                    log.info(f"Filesystem changes - "
-                            f"Added: {len(diff_results.get('added', []))}, "
-                            f"Removed: {len(diff_results.get('removed', []))}, "
-                            f"Modified: {len(diff_results.get('modified', []))}")
+                    log.info(
+                        f"Filesystem changes - "
+                        f"Added: {len(diff_results.get('added', []))}, "
+                        f"Removed: {len(diff_results.get('removed', []))}, "
+                        f"Modified: {len(diff_results.get('modified', []))}"
+                    )
 
                     # Update stage sub_msg with diff summary for flow console display
                     stage_ctx.stage.sub_msg = (
@@ -858,7 +878,9 @@ class VMLifecycleManager:
 
                 log.info(f"Exporting disk image ({fmt}) to {dest_path}")
                 export_disk_image(
-                    overlay_disk_path, dest_path, fmt=fmt,
+                    overlay_disk_path,
+                    dest_path,
+                    fmt=fmt,
                     qemu_img_exe=context.vm.executables.qemu_img,
                 )
 
@@ -866,6 +888,7 @@ class VMLifecycleManager:
 
                 from adare.database.api.experiment import ExperimentApi
                 from adare.database.exceptions import DatabaseError
+
                 with ExperimentApi(context.config.project_path) as api:
                     api.add_run_artifact(
                         run_ulid=context.experiment_run_ulid,
@@ -942,7 +965,7 @@ class VMLifecycleManager:
                     free_bytes = shutil.disk_usage(dest_path.parent).free
                     if free_bytes < configured_memory_mb * 1024 * 1024 * 1.5:
                         log.warning(
-                            f"Free disk space ({free_bytes / (1024 ** 3):.1f}GiB) is less than 1.5x "
+                            f"Free disk space ({free_bytes / (1024**3):.1f}GiB) is less than 1.5x "
                             f"configured VM RAM ({configured_memory_mb}MB) - memory dump may fail to complete"
                         )
 
@@ -953,6 +976,7 @@ class VMLifecycleManager:
 
                 from adare.database.api.experiment import ExperimentApi
                 from adare.database.exceptions import DatabaseError
+
                 with ExperimentApi(context.config.project_path) as api:
                     api.add_run_artifact(
                         run_ulid=context.experiment_run_ulid,
@@ -1062,19 +1086,19 @@ class VMLifecycleManager:
             from adare.database.models.project_models import ExperimentRun
 
             with ExperimentApi(context.config.project_path) as api:
-                experiment_run = api._session.query(ExperimentRun).filter(
-                    ExperimentRun.id == context.experiment_run_ulid
-                ).first()
+                experiment_run = (
+                    api._session.query(ExperimentRun).filter(ExperimentRun.id == context.experiment_run_ulid).first()
+                )
 
             if experiment_run and experiment_run.vm_instance_id:
                 from adare.backend.vm.commands import release_vm_instance_for_experiment
+
                 await release_vm_instance_for_experiment(experiment_run.vm_instance_id)
                 log.info(f"Released VM instance {experiment_run.vm_instance_id} for reuse")
             else:
                 log.warning("No VM instance ID found in experiment run - cannot release")
         except (OSError, ValueError, RuntimeError) as e:
             log.error(f"Failed to release VM instance: {e}")
-
 
     async def _create_experiment_snapshot(self, context: ExperimentRunCtx, event: threading.Event):
         """Create a snapshot of the final experiment state."""
@@ -1090,9 +1114,11 @@ class VMLifecycleManager:
 
                 # Get the VM instance ID from the experiment run
                 with ExperimentApi(context.config.project_path) as api:
-                    experiment_run = api._session.query(ExperimentRun).filter(
-                        ExperimentRun.id == context.experiment_run_ulid
-                    ).first()
+                    experiment_run = (
+                        api._session.query(ExperimentRun)
+                        .filter(ExperimentRun.id == context.experiment_run_ulid)
+                        .first()
+                    )
 
                 if not experiment_run or not experiment_run.vm_instance_id:
                     log.warning('No VM instance ID found in experiment run - cannot create experiment snapshot')
@@ -1111,7 +1137,7 @@ class VMLifecycleManager:
                             vm_instance,
                             context.experiment_run_ulid,
                             description=f"Final state snapshot for experiment {context.experiment_run_ulid}",
-                            silent=False
+                            silent=False,
                         )
 
                     if created_snapshot:
@@ -1138,9 +1164,11 @@ class VMLifecycleManager:
 
                 # Get the VM instance ID from the experiment run
                 with ExperimentApi(context.config.project_path) as api:
-                    experiment_run = api._session.query(ExperimentRun).filter(
-                        ExperimentRun.id == context.experiment_run_ulid
-                    ).first()
+                    experiment_run = (
+                        api._session.query(ExperimentRun)
+                        .filter(ExperimentRun.id == context.experiment_run_ulid)
+                        .first()
+                    )
 
                 if not experiment_run or not experiment_run.vm_instance_id:
                     log.warning('No VM instance ID found in experiment run - cannot cleanup experiment snapshot')

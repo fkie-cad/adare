@@ -100,7 +100,8 @@ def create_vm_disk(
     # 1. install_mode wins over platform.
     if os_def.install_mode == 'manual':
         _require_iso(
-            iso_path, os_def,
+            iso_path,
+            os_def,
             title=f'ISO required for manual install of {os_def.display_name}',
         )
         from adare.hypervisor.qemu.vm_creator.manual_creator import create_manual_vm
@@ -109,7 +110,8 @@ def create_vm_disk(
 
     if os_def.install_mode == 'gui-auto':
         _require_iso(
-            iso_path, os_def,
+            iso_path,
+            os_def,
             title=f'ISO required for GUI-automated install of {os_def.display_name}',
         )
         from adare.hypervisor.qemu.vm_creator.gui_creator import create_gui_vm
@@ -136,7 +138,8 @@ def create_vm_disk(
 
     if os_def.platform == 'windows':
         _require_iso(
-            iso_path, os_def,
+            iso_path,
+            os_def,
             title=f'Windows ISO required for {os_def.display_name}',
             extra_steps=['Download from Microsoft (requires a valid license)'],
         )
@@ -150,8 +153,9 @@ def create_vm_disk(
     )
 
 
-def _require_iso(iso_path: Path | None, os_def: OsDefinition, *, title: str,
-                 extra_steps: list[str] | None = None) -> None:
+def _require_iso(
+    iso_path: Path | None, os_def: OsDefinition, *, title: str, extra_steps: list[str] | None = None
+) -> None:
     if iso_path is not None:
         return
     raise InstallerIsoRequired(

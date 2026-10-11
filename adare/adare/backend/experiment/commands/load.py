@@ -35,7 +35,9 @@ def experiment_sync(project_path: Path, experiment_ulid: str):
     remote_url = metadata_remote.get('gitea_url')
     remote_ulid = metadata_remote.get('ulid')
     abstract_tests_ulids = metadata_remote.get('abstract_tests_ulids')
-    experiment_database.sync_experiment(project_path, experiment_ulid, remote_ulid, abstract_tests_ulids, remote_url, is_published)
+    experiment_database.sync_experiment(
+        project_path, experiment_ulid, remote_ulid, abstract_tests_ulids, remote_url, is_published
+    )
     log.info(f'experiment {experiment_ulid} synced')
 
 
@@ -87,15 +89,14 @@ def __experiment_update(project_path: Path, experiment_ulid, experiment_name, ex
     log.info(f'experiment {experiment_ulid} has changed')
     num_runs = experiment_database.get_experiment_run_count(project_path, experiment_ulid, exclude_fake=True)
     if not force and num_runs > 0:
-        raise LoggedException(log,
-                              f'experiment [i]{experiment_ulid}[/i] has changed, use --force to overwrite and delete all related experiment runs')
+        raise LoggedException(
+            log,
+            f'experiment [i]{experiment_ulid}[/i] has changed, use --force to overwrite and delete all related experiment runs',
+        )
     # delete the experiment and all related experiment runs
     experiment_database.remove_experiment(project_path, experiment_ulid)
     log.info(f'experiment {experiment_ulid} removed')
-    ulid = experiment_database.create_experiment(
-        name=experiment_name,
-        experiment_directory=experiment_directory
-    )
+    ulid = experiment_database.create_experiment(name=experiment_name, experiment_directory=experiment_directory)
     log.info(f'experiment {experiment_ulid} created')
 
     # Log user-friendly message about environment changes
@@ -120,11 +121,12 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
     experiment_directory = ExperimentDirectory(project_path, experiment_name)
     if not experiment_directory.exists():
         raise ExperimentDirectoryDoesNotExistError(
-            log, f'experiment directory [b]{experiment_directory.path}[/b] does not exist',
+            log,
+            f'experiment directory [b]{experiment_directory.path}[/b] does not exist',
             possible_solutions=[
                 f'copy the experiment directory to [b]{experiment_directory.path.parent}[/b]',
-                'create the experiment directory with `adare experiment create`'
-            ]
+                'create the experiment directory with `adare experiment create`',
+            ],
         )
     experiment_directory.check_for_missing_files()
 
@@ -133,7 +135,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
 
     was_updated = False
     if experiment_ulid := experiment_database.get_experiment_by_project_and_name(
-            project_path, experiment_name, trigger_error=False
+        project_path, experiment_name, trigger_error=False
     ):
         try:
             experiment_ulid = __experiment_update(
@@ -145,9 +147,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
     else:
         # Create experiment atomically (playbook population is now part of the transaction)
         experiment_ulid = experiment_database.create_experiment(
-            name=experiment_name,
-            experiment_directory=experiment_directory,
-            project_path=project_path
+            name=experiment_name, experiment_directory=experiment_directory, project_path=project_path
         )
         log.info(f'experiment {experiment_name} created')
 
@@ -155,6 +155,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
 
     # Protect experiment files after loading
     from adare.helperfunctions.integrity import protect_loaded_files
+
     experiment_files = [experiment_directory.playbookfile]
     if experiment_directory.metadatafile.exists():
         experiment_files.append(experiment_directory.metadatafile)

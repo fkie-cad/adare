@@ -3,6 +3,7 @@ Abstract snapshot operations mixin for hypervisor VMs.
 
 All hypervisor implementations must provide snapshot functionality.
 """
+
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -25,7 +26,7 @@ class AbstractSnapshotMixin(ABC):
         ctx_manager=None,
         stop_event=None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ):
         """
         Create a snapshot of the VM.
@@ -58,12 +59,7 @@ class AbstractSnapshotMixin(ABC):
 
     @abstractmethod
     def restore_snapshot(
-        self,
-        snapshot_name: str,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, snapshot_name: str, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ) -> bool:
         """
         Restore a snapshot for the VM.
@@ -82,12 +78,7 @@ class AbstractSnapshotMixin(ABC):
 
     @abstractmethod
     def delete_snapshot(
-        self,
-        snapshot_name: str,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, snapshot_name: str, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ) -> bool:
         """
         Delete a snapshot from the VM.
@@ -105,12 +96,7 @@ class AbstractSnapshotMixin(ABC):
         pass
 
     @abstractmethod
-    async def ensure_initial_snapshot(
-        self,
-        ovf_path: str,
-        snapshot_name: str,
-        snapshot_description: str = ""
-    ):
+    async def ensure_initial_snapshot(self, ovf_path: str, snapshot_name: str, snapshot_description: str = ""):
         """
         Ensure the VM exists and has an initial snapshot.
 

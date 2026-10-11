@@ -12,12 +12,12 @@ log = logging.getLogger(__name__)
 
 def download(url: str, path: Path, headers: dict = None, quiet: bool = False):
     """
-        download a file from an url
+    download a file from an url
 
-        :param url: url
-        :param path: place where the downloaded file will be saved to
-        :param headers: headers for the request
-        :param quiet: determines whether additional information about the download process should be printed
+    :param url: url
+    :param path: place where the downloaded file will be saved to
+    :param headers: headers for the request
+    :param quiet: determines whether additional information about the download process should be printed
     """
     if not headers:
         headers = dict()
@@ -33,13 +33,16 @@ def download(url: str, path: Path, headers: dict = None, quiet: bool = False):
     else:
         log.debug(f'download of {path.as_posix()} start')
         print(f'\nDownload {url} -> {path.as_posix()}')
-        with open(path.as_posix(), 'wb') as file, tqdm(
-            desc='',
-            total=total,
-            unit='iB',
-            unit_scale=True,
-            unit_divisor=1024,
-        ) as bar:
+        with (
+            open(path.as_posix(), 'wb') as file,
+            tqdm(
+                desc='',
+                total=total,
+                unit='iB',
+                unit_scale=True,
+                unit_divisor=1024,
+            ) as bar,
+        ):
             for data in resp.iter_content(chunk_size=1024):
                 size = file.write(data)
                 bar.update(size)
@@ -59,13 +62,16 @@ def download_from_session(url: str, path: Path, session: requests.Session):
     print(f'\nDownload {url} -> {path.as_posix()}')
     response = session.get(url, stream=True)
     response.raise_for_status()
-    with open(path.as_posix(), 'wb') as file, tqdm(
-        desc='',
-        total=total,
-        unit='iB',
-        unit_scale=True,
-        unit_divisor=1024,
-    ) as bar:
+    with (
+        open(path.as_posix(), 'wb') as file,
+        tqdm(
+            desc='',
+            total=total,
+            unit='iB',
+            unit_scale=True,
+            unit_divisor=1024,
+        ) as bar,
+    ):
         for data in response.iter_content(chunk_size=1024):
             size = file.write(data)
             bar.update(size)
@@ -84,13 +90,16 @@ async def download2(url: str, path: Path, session: aiohttp.ClientSession):
         total = int(response.headers.get('content-length', 0))
         log.debug(f'download of {path.as_posix()} start')
         print(f'\nDownload {url} -> {path.as_posix()}')
-        with open(path.as_posix(), 'wb') as file, tqdm(
-            desc='',
-            total=total,
-            unit='iB',
-            unit_scale=True,
-            unit_divisor=1024,
-        ) as bar:
+        with (
+            open(path.as_posix(), 'wb') as file,
+            tqdm(
+                desc='',
+                total=total,
+                unit='iB',
+                unit_scale=True,
+                unit_divisor=1024,
+            ) as bar,
+        ):
             async for data in response.content.iter_any():
                 size = file.write(data)
                 bar.update(size)

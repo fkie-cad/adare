@@ -119,6 +119,7 @@ class SpiceVideoRecorder:
         from adare.backend.experiment.execution.qemu_video_recorder import (
             QemuVideoRecorder,
         )
+
         return QemuVideoRecorder.ensure_ffmpeg(ffmpeg)
 
     @staticmethod
@@ -131,6 +132,7 @@ class SpiceVideoRecorder:
         """
         try:
             import gi
+
             gi.require_version('SpiceClientGLib', '2.0')
             from gi.repository import SpiceClientGLib  # noqa: F401
         except (ImportError, ValueError) as exc:
@@ -160,8 +162,10 @@ class SpiceVideoRecorder:
         self._frame_queue = asyncio.Queue()
 
         self._glib_thread = threading.Thread(
-            target=self._run_glib_thread, args=(host, port),
-            daemon=True, name='spice-video-recorder',
+            target=self._run_glib_thread,
+            args=(host, port),
+            daemon=True,
+            name='spice-video-recorder',
         )
         self._glib_thread.start()
 
@@ -169,26 +173,34 @@ class SpiceVideoRecorder:
             await asyncio.wait_for(self._wait_for_ready(), timeout=15)
         except TimeoutError as exc:
             self._shutdown_glib()
-            raise VideoUnavailable(
-                f'Timed out connecting to SPICE display at {host}:{port}'
-            ) from exc
+            raise VideoUnavailable(f'Timed out connecting to SPICE display at {host}:{port}') from exc
         if self._connect_error:
             self._shutdown_glib()
-            raise VideoUnavailable(
-                f'Could not connect to SPICE display at {host}:{port}: {self._connect_error}'
-            )
+            raise VideoUnavailable(f'Could not connect to SPICE display at {host}:{port}: {self._connect_error}')
 
         width, height = self._frame_size
         cmd = [
-            exe, '-y', '-loglevel', 'error',
-            '-f', 'rawvideo', '-pix_fmt', self._pix_fmt,
-            '-s', f'{width}x{height}',
-            '-use_wallclock_as_timestamps', '1',
-            '-i', '-',
+            exe,
+            '-y',
+            '-loglevel',
+            'error',
+            '-f',
+            'rawvideo',
+            '-pix_fmt',
+            self._pix_fmt,
+            '-s',
+            f'{width}x{height}',
+            '-use_wallclock_as_timestamps',
+            '1',
+            '-i',
+            '-',
             # yuv420p needs even dimensions; pad odd screens up by one pixel.
-            '-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2',
-            '-pix_fmt', 'yuv420p',
-            '-an', str(self.out_path),
+            '-vf',
+            'pad=ceil(iw/2)*2:ceil(ih/2)*2',
+            '-pix_fmt',
+            'yuv420p',
+            '-an',
+            str(self.out_path),
         ]
         try:
             self._proc = await asyncio.create_subprocess_exec(
@@ -203,7 +215,13 @@ class SpiceVideoRecorder:
 
         log.info(
             'Recording SPICE video to %s (%dx%d %s via %s -> %s:%d)',
-            self.out_path, width, height, self._pix_fmt, exe, host, port,
+            self.out_path,
+            width,
+            height,
+            self._pix_fmt,
+            exe,
+            host,
+            port,
         )
         self._writer_task = asyncio.create_task(self._writer_loop())
 
@@ -303,6 +321,7 @@ class SpiceVideoRecorder:
     def _run_glib_thread(self, host: str, port: int) -> None:
         try:
             import gi
+
             gi.require_version('SpiceClientGLib', '2.0')
             from gi.repository import GLib, GObject, SpiceClientGLib
         except (ImportError, ValueError) as exc:
@@ -344,8 +363,7 @@ class SpiceVideoRecorder:
         if isinstance(channel, spice_glib_module.DisplayChannel):
             gobject_module.Object.connect(channel, 'display-primary-create', self._on_primary_create)
             gobject_module.Object.connect(channel, 'display-invalidate', self._on_invalidate)
-        gobject_module.Object.connect(
-            channel, 'channel-event', self._on_channel_event, spice_glib_module)
+        gobject_module.Object.connect(channel, 'channel-event', self._on_channel_event, spice_glib_module)
 
     def _on_channel_event(self, channel, event, spice_glib_module) -> None:
         bad_events = {

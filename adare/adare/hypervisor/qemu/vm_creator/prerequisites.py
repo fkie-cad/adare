@@ -77,9 +77,7 @@ def check_prerequisites(
     if os_def.platform == 'windows':
         # User must supply ISO
         if iso_path is None:
-            missing.append(
-                f'Windows ISO required. Use --iso /path/to/{os_def.display_name}.iso'
-            )
+            missing.append(f'Windows ISO required. Use --iso /path/to/{os_def.display_name}.iso')
         elif not iso_path.is_file():
             missing.append(f'ISO file not found: {iso_path}')
 
@@ -87,6 +85,7 @@ def check_prerequisites(
         if os_def.requires_uefi:
             try:
                 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
+
                 find_ovmf_firmware(os_def.architecture)
             except HypervisorException:
                 host = platform.system()
@@ -110,39 +109,43 @@ def check_prerequisites(
         if os_def.architecture == 'aarch64':
             host = platform.system()
             if not shutil.which('wimlib-imagex'):
-                hint = ('brew install wimlib' if host == 'Darwin'
-                        else 'sudo apt install wimtools (Debian/Ubuntu) or sudo dnf install wimlib-utils (Fedora)')
+                hint = (
+                    'brew install wimlib'
+                    if host == 'Darwin'
+                    else 'sudo apt install wimtools (Debian/Ubuntu) or sudo dnf install wimlib-utils (Fedora)'
+                )
                 missing.append(
                     'wimlib-imagex required to build the Win11 legacy-boot ISO '
                     f'(24H2/25H2 setup workaround). Install with: {hint}'
                 )
             if not (shutil.which('7z') or shutil.which('7zz') or shutil.which('7za')):
-                hint = ('brew install p7zip' if host == 'Darwin'
-                        else 'sudo apt install p7zip-full (Debian/Ubuntu) or sudo dnf install p7zip (Fedora)')
-                missing.append(
-                    '7z required to extract boot files from the Windows ISO. '
-                    f'Install with: {hint}'
+                hint = (
+                    'brew install p7zip'
+                    if host == 'Darwin'
+                    else 'sudo apt install p7zip-full (Debian/Ubuntu) or sudo dnf install p7zip (Fedora)'
                 )
+                missing.append(f'7z required to extract boot files from the Windows ISO. Install with: {hint}')
             if not shutil.which('xorriso'):
-                hint = ('brew install xorriso' if host == 'Darwin'
-                        else 'sudo apt install xorriso (Debian/Ubuntu) or sudo dnf install xorriso (Fedora)')
+                hint = (
+                    'brew install xorriso'
+                    if host == 'Darwin'
+                    else 'sudo apt install xorriso (Debian/Ubuntu) or sudo dnf install xorriso (Fedora)'
+                )
                 missing.append(
-                    'xorriso required to build the El Torito bootable legacy-boot ISO. '
-                    f'Install with: {hint}'
+                    f'xorriso required to build the El Torito bootable legacy-boot ISO. Install with: {hint}'
                 )
 
     # Manual install mode checks
     if os_def.install_mode == 'manual':
         if iso_path is None:
-            missing.append(
-                f'ISO required for manual install. Use --iso /path/to/{os_def.display_name}.iso'
-            )
+            missing.append(f'ISO required for manual install. Use --iso /path/to/{os_def.display_name}.iso')
         elif not iso_path.is_file():
             missing.append(f'ISO file not found: {iso_path}')
 
         if os_def.requires_uefi or os_def.architecture == 'aarch64':
             try:
                 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
+
                 find_ovmf_firmware(os_def.architecture)
             except HypervisorException:
                 host = platform.system()
@@ -197,7 +200,7 @@ def _check_disk_space(
     if probe_dir is not None:
         try:
             usage = shutil.disk_usage(probe_dir)
-            free_gb = usage.free / (1024 ** 3)
+            free_gb = usage.free / (1024**3)
             disk_size_gb = _parse_disk_size_gb(disk_size or os_def.default_disk_size)
             required_gb = disk_size_gb + 1  # NVRAM + qcow2 metadata overhead
             if free_gb < required_gb:
@@ -210,17 +213,13 @@ def _check_disk_space(
             pass  # Skip check if we can't determine disk usage
 
     # 2) ISO cache directory: only checked when a download will actually happen.
-    iso_download_expected = (
-        os_def.platform == 'linux'
-        and os_def.install_mode != 'manual'
-        and iso_path is None
-    )
+    iso_download_expected = os_def.platform == 'linux' and os_def.install_mode != 'manual' and iso_path is None
     if iso_download_expected:
         cache_probe = _existing_parent(QEMU_CACHE_DIR)
         if cache_probe is not None:
             try:
                 usage = shutil.disk_usage(cache_probe)
-                free_gb = usage.free / (1024 ** 3)
+                free_gb = usage.free / (1024**3)
                 iso_size_gb = getattr(os_def, 'iso_size_gb', None) or 6
                 if free_gb < iso_size_gb:
                     missing.append(

@@ -50,10 +50,7 @@ def resolve_test_execution_mode(vm, playbook_settings, cli_override: str | None 
     log.debug(f"Resolving test execution mode: mode={mode_str}, vm_type={type(vm).__name__}")
 
     if mode_str not in ('auto', 'agent', 'host'):
-        raise ValueError(
-            f"Invalid test_execution_mode '{mode_str}'. "
-            f"Must be one of: 'auto', 'agent', 'host'"
-        )
+        raise ValueError(f"Invalid test_execution_mode '{mode_str}'. Must be one of: 'auto', 'agent', 'host'")
 
     if mode_str == 'agent':
         log.info("Using agent-based test execution (explicit setting)")

@@ -41,9 +41,12 @@ def _resolve_current_testfunction_pin(testfunction_id: str) -> dict | None:
 
     try:
         with GlobalDatabaseApi() as global_api:
-            testfunction = global_api._session.query(TestFunction).options(
-                joinedload(TestFunction.file)
-            ).filter(TestFunction.id == testfunction_id).first()
+            testfunction = (
+                global_api._session.query(TestFunction)
+                .options(joinedload(TestFunction.file))
+                .filter(TestFunction.id == testfunction_id)
+                .first()
+            )
             if not testfunction:
                 return None
             file = testfunction.file
@@ -64,7 +67,6 @@ def _short_sha(value) -> str:
 
 
 class EventDbApi(ExperimentApi):
-
     def __init__(self, project_path: Path = None, experiment_run_ulid: str = None):
         if project_path is None and experiment_run_ulid is not None:
             # Try to find project path from experiment run ULID
@@ -111,6 +113,7 @@ class EventDbApi(ExperimentApi):
         if 'status' in filter_data:
             from adare.database.models.project_models import Status
             from adarelib.constants import StatusEnum
+
             status_enum = filter_data['status']
             if isinstance(status_enum, StatusEnum):
                 # Look up Status record by name
@@ -134,8 +137,9 @@ class EventDbApi(ExperimentApi):
             self._session.commit()
         return test_result
 
-
-    def add_action_event(self, action_data: dict, action_id: str, experiment_run_ulid: str, parent_event_id: str = None):
+    def add_action_event(
+        self, action_data: dict, action_id: str, experiment_run_ulid: str, parent_event_id: str = None
+    ):
         """
         Add an action event to the database.
 
@@ -163,7 +167,8 @@ class EventDbApi(ExperimentApi):
                 action_type = event_type_resolver.get_action_type(event_type)
 
                 # Create ActionEvent
-                model_event = EventFactory.create_event('action',
+                model_event = EventFactory.create_event(
+                    'action',
                     id=str(ulid.ULID()),
                     event_type='action_event',
                     experiment_run_id=experiment_run_ulid,
@@ -176,12 +181,14 @@ class EventDbApi(ExperimentApi):
                     success=action_data.get('success'),
                     error=action_data.get('error_message'),  # Use Event.error field
                     execution_time=action_data.get('execution_time'),
-                    action_data=json.dumps(action_data)  # Serialize action data as JSON
+                    action_data=json.dumps(action_data),  # Serialize action data as JSON
                 )
 
                 self._session.add(model_event)
                 self._session.commit()
-                log.info(f'Added action event {model_event.ulid} ({action_type.value}) to experiment run {experiment_run_ulid}')
+                log.info(
+                    f'Added action event {model_event.ulid} ({action_type.value}) to experiment run {experiment_run_ulid}'
+                )
 
             except (SQLAlchemyError, ValueError, KeyError, TypeError) as e:
                 log.error(f'Failed to add action event: {e}', exc_info=True)
@@ -238,9 +245,7 @@ class EventDbApi(ExperimentApi):
                 experiment_run = (
                     self._session.query(ExperimentRun)
                     .filter_by(id=experiment_run_ulid)
-                    .options(
-                        joinedload(ExperimentRun.experiment).joinedload(Experiment.abstract_tests)
-                    )
+                    .options(joinedload(ExperimentRun.experiment).joinedload(Experiment.abstract_tests))
                     .first()
                 )
                 if not experiment_run:
@@ -267,7 +272,9 @@ class EventDbApi(ExperimentApi):
                             break
 
                 if not abstract_test:
-                    log.warning(f'No AbstractTest found with name "{test_name}" in experiment {experiment.id if experiment else "None"}')
+                    log.warning(
+                        f'No AbstractTest found with name "{test_name}" in experiment {experiment.id if experiment else "None"}'
+                    )
 
                 # Resolve what actually executed (current global rows) and detect drift
                 # against the pins the experiment was created with. Current code always
@@ -283,13 +290,18 @@ class EventDbApi(ExperimentApi):
                 success = action_data.get('success')
                 if is_complete and success is not None:
                     # Create a Result object for the test
-                    test_result = self.get_or_create_test_result({
-                        'status': StatusEnum.SUCCESS if success else StatusEnum.FAILED,
-                        'details': json.dumps(action_data.get('test_output')) if action_data.get('test_output') else (action_data.get('error_message') or None),
-                    })
+                    test_result = self.get_or_create_test_result(
+                        {
+                            'status': StatusEnum.SUCCESS if success else StatusEnum.FAILED,
+                            'details': json.dumps(action_data.get('test_output'))
+                            if action_data.get('test_output')
+                            else (action_data.get('error_message') or None),
+                        }
+                    )
 
                 # Create TestEvent with specific event type information (like ActionEvent)
-                model_event = EventFactory.create_event('test',
+                model_event = EventFactory.create_event(
+                    'test',
                     id=str(ulid.ULID()),
                     event_type='test_event',
                     experiment_run_id=experiment_run_ulid,
@@ -314,7 +326,9 @@ class EventDbApi(ExperimentApi):
                 self._session.commit()
 
                 event_description = "start" if not is_complete else f"complete (success: {success})"
-                log.info(f'Added test event {model_event.ulid} ({event_description}) for test: {test_name} to experiment run {experiment_run_ulid}')
+                log.info(
+                    f'Added test event {model_event.ulid} ({event_description}) for test: {test_name} to experiment run {experiment_run_ulid}'
+                )
 
             except (SQLAlchemyError, ValueError, KeyError, TypeError) as e:
                 log.error(f'Failed to add test event: {e}', exc_info=True)

@@ -37,6 +37,7 @@ class DevModeSnapshot:
         disk_file_path: Path to external disk overlay file
         checkpoint_id: Database checkpoint ID (ULID)
     """
+
     snapshot_name: str
     created_at: datetime
     variable_state: dict[str, Any]
@@ -60,6 +61,7 @@ class DevModeState:
         current_variables: Current variable context
         available_snapshots: List of available snapshots
     """
+
     session_id: str
     vm_running: bool
     environment_name: str
@@ -88,7 +90,7 @@ class DevModeSessionCore:
         debug_screenshots: bool = False,
         console_ulid: str | None = None,
         experiment_name: str | None = None,
-        shared_directories: dict[str, dict[str, Path]] | None = None
+        shared_directories: dict[str, dict[str, Path]] | None = None,
     ):
         """
         Initialize dev mode session (does not start VM).
@@ -170,7 +172,6 @@ class DevModeSessionCore:
             root_logger = logging.getLogger()
             root_logger.addHandler(handler)
 
-
             log.info(f"Started command logging to {log_filename}")
 
             # Save current root logger level and force to DEBUG to ensure all logs are captured
@@ -207,8 +208,7 @@ class DevModeSessionCore:
         # Use write mode to start fresh (no accumulation)
         handler = logging.FileHandler(session_log_file, mode='w', encoding='utf-8')
         formatter = logging.Formatter(
-            '[%(asctime)s]: %(threadName)s - %(name)s: %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
+            '[%(asctime)s]: %(threadName)s - %(name)s: %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S'
         )
         handler.setFormatter(formatter)
         handler.setLevel(logging.DEBUG)
@@ -272,11 +272,7 @@ class DevModeSessionCore:
         """
         # Use console_ulid if provided for flow console integration, otherwise use experiment_run_ulid
         stage_ulid = self.console_ulid or self.experiment_ctx.experiment_run_ulid
-        return StageCtxManager(
-            stage,
-            stage_ulid,
-            event=self.experiment_ctx.user_interrupt_event
-        )
+        return StageCtxManager(stage, stage_ulid, event=self.experiment_ctx.user_interrupt_event)
 
     async def _ensure_playbook_controller(self) -> Result[None]:
         """
@@ -293,6 +289,7 @@ class DevModeSessionCore:
 
             # Get VM credentials for automatic variables
             from adare.config import get_vm_credentials
+
             vm_os = self.experiment_ctx.guest_platform if self.experiment_ctx.guest_platform else None
             vm_user = None
             if vm_os:
@@ -355,9 +352,6 @@ class DevModeSessionCore:
             experiment_name=self.experiment_name,
             environment_name=self.environment_name,
             actions_executed=self.actions_executed,
-            current_variables=(
-                self.playbook_controller.execution_context.copy()
-                if self.playbook_controller else {}
-            ),
-            available_snapshots=self.snapshots.copy()
+            current_variables=(self.playbook_controller.execution_context.copy() if self.playbook_controller else {}),
+            available_snapshots=self.snapshots.copy(),
         )

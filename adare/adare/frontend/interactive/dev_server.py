@@ -43,6 +43,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class DevSession:
     """Development session state."""
+
     project_directory: ProjectDirectory
     experiment_directory: ExperimentDirectory
     experiment_name: str
@@ -68,7 +69,7 @@ class InteractiveDevelopmentServer:
             experiment_name=experiment_name,
             environment=environment,
             vm_manager=VMLifecycleManager(),
-            mcp_manager=MCPServerManager()
+            mcp_manager=MCPServerManager(),
         )
 
         self.ws_server = None
@@ -92,16 +93,13 @@ class InteractiveDevelopmentServer:
                 environment_name=self.session.environment,
                 test_mode=True,  # Interactive development is like test mode
                 preserve_snapshot=False,  # Don't preserve snapshots in dev mode
-                disable_printing=False
+                disable_printing=False,
             )
 
             # Create experiment run directory for this development session
             # Ensure experiment_name is never None (defensive check)
             experiment_name = self.session.experiment_name or "_dev_session"
-            experiment_run_directory = ExperimentRunDirectory(
-                self.session.project_directory,
-                experiment_name
-            )
+            experiment_run_directory = ExperimentRunDirectory(self.session.project_directory, experiment_name)
             experiment_run_directory.create()
 
             # Create context
@@ -110,7 +108,7 @@ class InteractiveDevelopmentServer:
                 project_directory=self.session.project_directory,
                 experiment_directory=self.session.experiment_directory,
                 experiment_run_directory=experiment_run_directory,
-                debug_screenshots=True
+                debug_screenshots=True,
             )
 
             # Start MCP server for target detection
@@ -126,8 +124,7 @@ class InteractiveDevelopmentServer:
 
             # Create WebSocket client for VM communication
             self.session.context.client = AdareVMClient(
-                host="localhost",
-                port=self.session.context.config.websocket_port
+                host="localhost", port=self.session.context.config.websocket_port
             )
             await self.session.context.client.connect()
 
@@ -138,7 +135,7 @@ class InteractiveDevelopmentServer:
                 project_dir=self.session.project_directory.path,
                 mcp_gui_url=self.session.mcp_manager.server_url,
                 debug_screenshots=True,
-                screenshots_dir=self.session.context.experiment_run_directory.screenshots_directory
+                screenshots_dir=self.session.context.experiment_run_directory.screenshots_directory,
             )
 
             self.session.vm_started = True
@@ -176,6 +173,7 @@ class InteractiveDevelopmentServer:
         try:
             # Parse the action using the existing parser
             import cattrs
+
             converter = cattrs.Converter()
             from adare.types.playbook import _structure_action
 
@@ -188,6 +186,7 @@ class InteractiveDevelopmentServer:
             else:
                 # If no single action executor, create a mini-playbook
                 from adare.types.playbook import Playbook, Settings
+
                 mini_playbook = Playbook(actions=[action], settings=Settings())
                 result = await self.session.playbook_controller.execute_playbook(mini_playbook)
                 if result.action_results:
@@ -195,15 +194,11 @@ class InteractiveDevelopmentServer:
                     return {
                         "success": action_result.success,
                         "message": action_result.message,
-                        "data": action_result.data
+                        "data": action_result.data,
                     }
                 return {"success": False, "error": "No action results returned"}
 
-            return {
-                "success": result.success,
-                "message": result.message,
-                "data": getattr(result, 'data', None)
-            }
+            return {"success": result.success, "message": result.message, "data": getattr(result, 'data', None)}
 
         except Exception as e:
             log.error(f"Failed to execute action: {e}")
@@ -212,11 +207,7 @@ class InteractiveDevelopmentServer:
     def save_action_to_tested(self, action_data: dict[str, Any], result: dict[str, Any]):
         """Save a successfully tested action to the tested actions list."""
         if result.get("success", False):
-            action_with_result = {
-                "action": action_data,
-                "result": result,
-                "timestamp": datetime.now().isoformat()
-            }
+            action_with_result = {"action": action_data, "result": result, "timestamp": datetime.now().isoformat()}
             self.session.tested_actions.append(action_with_result)
 
     def create_ui(self):
@@ -279,7 +270,7 @@ class InteractiveDevelopmentServer:
                 command_type = ui.select(
                     ["click", "keyboard", "idle", "screenshot", "command", "test", "pause"],
                     label="Command Type",
-                    value="click"
+                    value="click",
                 ).classes("w-48")
 
                 # Dynamic command parameters based on type
@@ -356,12 +347,13 @@ class InteractiveDevelopmentServer:
                         playbook_data = {
                             "actions": successful_actions,
                             "settings": {"idle": 0.1},
-                            "variables": self.session.current_variables
+                            "variables": self.session.current_variables,
                         }
 
                         # Write to playbook file
                         with open(self.session.experiment_directory.playbookfile, 'w') as f:
                             import yaml
+
                             yaml.safe_dump(playbook_data, f, default_flow_style=False, indent=2)
 
                         ui.notify(f"Playbook saved with {len(successful_actions)} actions!", type="positive")
@@ -399,17 +391,12 @@ class InteractiveDevelopmentServer:
                 await self.stop_vm_session()
 
         # NiceGUI needs reload=False when called from imported module
-        ui.run(
-            host="127.0.0.1",
-            port=self.port,
-            title="Adare Interactive Development",
-            dark=True,
-            reload=False
-        )
+        ui.run(host="127.0.0.1", port=self.port, title="Adare Interactive Development", dark=True, reload=False)
 
 
 def _structure_action(obj, converter):
     """Helper function to structure action objects from dictionaries."""
     # This is imported from the main playbook module
     from adare.types.playbook import _structure_action as parse_action
+
     return parse_action(obj, converter)

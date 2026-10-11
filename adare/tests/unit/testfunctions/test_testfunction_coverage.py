@@ -26,11 +26,18 @@ DOCS_DIR = PROJECT_ROOT.parent / "docsrc" / "source" / "reference" / "testfuncti
 # Testfunctions that predate this check and still lack a reference page.
 # Remove an entry when its page is written; the test below fails on stale entries.
 UNDOCUMENTED = {
-    "csv.compare_rows", "csv.compare_files",
-    "excel.sheet_exists", "excel.cell_value_matches", "excel.contains_row",
-    "excel.validate_columns", "excel.compare_rows", "excel.compare_sheets",
+    "csv.compare_rows",
+    "csv.compare_files",
+    "excel.sheet_exists",
+    "excel.cell_value_matches",
+    "excel.contains_row",
+    "excel.validate_columns",
+    "excel.compare_rows",
+    "excel.compare_sheets",
     "excel.compare_files",
-    "jsonl.line_matches", "jsonl.line_count", "jsonl.value_in_any_line",
+    "jsonl.line_matches",
+    "jsonl.line_count",
+    "jsonl.value_in_any_line",
 }
 
 # Collections documented in a guide page instead of one reference page per function;
@@ -58,8 +65,9 @@ def test_testfunctions_are_discovered():
     assert {c for c, _, _ in TESTFUNCTIONS} >= {"standard", "sqlite", "csv", "json", "xml"}
 
 
-@pytest.mark.parametrize(("collection", "func", "testname"), TESTFUNCTIONS,
-                         ids=[f"{c}.{t}" for c, _, t in TESTFUNCTIONS])
+@pytest.mark.parametrize(
+    ("collection", "func", "testname"), TESTFUNCTIONS, ids=[f"{c}.{t}" for c, _, t in TESTFUNCTIONS]
+)
 def test_testfunction_has_unit_tests(collection, func, testname):
     test_file = TESTS_DIR / f"test_{collection}.py"
     assert test_file.exists(), f"{collection} has no test file {test_file.name}"
@@ -69,8 +77,9 @@ def test_testfunction_has_unit_tests(collection, func, testname):
     )
 
 
-@pytest.mark.parametrize(("collection", "func", "testname"), TESTFUNCTIONS,
-                         ids=[f"{c}.{t}" for c, _, t in TESTFUNCTIONS])
+@pytest.mark.parametrize(
+    ("collection", "func", "testname"), TESTFUNCTIONS, ids=[f"{c}.{t}" for c, _, t in TESTFUNCTIONS]
+)
 def test_testfunction_has_reference_page(collection, func, testname):
     if collection in GUIDE_DOCUMENTED:
         guide = GUIDE_DOCUMENTED[collection]

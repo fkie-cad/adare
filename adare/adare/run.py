@@ -31,6 +31,7 @@ class AliasedGroup(click.Group):
         # footer. Done here because the Command object does not exist yet when
         # the decorator runs.
         from adare.cli.output import OUTPUT_EPILOG, has_output_options
+
         if has_output_options(cmd) and not cmd.epilog:
             cmd.epilog = OUTPUT_EPILOG
         super().add_command(cmd, name)
@@ -50,8 +51,7 @@ class AliasedGroup(click.Group):
         # get_short_help_str() defaults to 45 characters, which cut most one-line
         # summaries mid-sentence. Show the whole first sentence instead and let
         # write_dl wrap it onto continuation lines on narrow terminals.
-        rows = [(name, cmd.get_short_help_str(limit=_SHORT_HELP_LIMIT) + suffix)
-                for name, cmd, suffix in entries]
+        rows = [(name, cmd.get_short_help_str(limit=_SHORT_HELP_LIMIT) + suffix) for name, cmd, suffix in entries]
         with formatter.section("Commands"):
             formatter.write_dl(rows)
 
@@ -100,24 +100,30 @@ START_TIME = time.time()
 
 # Global CLI group with logging and version options
 @tui()
-@click.group(cls=AliasedGroup, context_settings={'max_content_width': 120},
-             epilog='Output: list/info/status commands take --json or --format '
-                    '[rich|plain|json|yaml] after the subcommand (adare env list --json). '
-                    f'Precedence: subcommand flag > adare --format > ${FORMAT_ENV_VAR} > auto '
-                    '(rich on a terminal, plain tab-separated text when piped). Data goes to '
-                    'stdout, logs and errors to stderr. Exit codes: 0 ok, 1 error, 2 usage, '
-                    '3 not found.')
+@click.group(
+    cls=AliasedGroup,
+    context_settings={'max_content_width': 120},
+    epilog='Output: list/info/status commands take --json or --format '
+    '[rich|plain|json|yaml] after the subcommand (adare env list --json). '
+    f'Precedence: subcommand flag > adare --format > ${FORMAT_ENV_VAR} > auto '
+    '(rich on a terminal, plain tab-separated text when piped). Data goes to '
+    'stdout, logs and errors to stderr. Exit codes: 0 ok, 1 error, 2 usage, '
+    '3 not found.',
+)
 @click.option('--logfile', type=click.Path(), help='Path to logfile')
 @click.option('--verbose', is_flag=True, help='Verbose output (loglevel=INFO)')
 @click.option('--very-verbose', is_flag=True, help='Very verbose output (loglevel=DEBUG, tracebacks on errors)')
 @click.option('--log-level', help='Log level for logfile')
-@click.option('--output-format', '--format', 'output_format',
-              type=click.Choice(FORMAT_CHOICES, case_sensitive=False),
-              default=None,
-              help='Output format for commands that support structured data '
-                   f'(default: ${FORMAT_ENV_VAR}, else rich on a terminal and plain when piped)')
-@click.option('--output-file', type=click.Path(),
-              help='Save output to file instead of printing to console')
+@click.option(
+    '--output-format',
+    '--format',
+    'output_format',
+    type=click.Choice(FORMAT_CHOICES, case_sensitive=False),
+    default=None,
+    help='Output format for commands that support structured data '
+    f'(default: ${FORMAT_ENV_VAR}, else rich on a terminal and plain when piped)',
+)
+@click.option('--output-file', type=click.Path(), help='Save output to file instead of printing to console')
 @click.version_option()  # Uses the package version if configured
 @click.pass_context
 def cli(ctx, logfile, verbose, very_verbose, log_level, output_format, output_file):
@@ -150,47 +156,59 @@ def db():
     """Database management commands."""
     pass
 
+
 @db.command(name='init')
 def db_init():
     """Initialize the database system."""
     from adare.cli.manage import exec_manage_init_db
+
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_init_db, args)
+
 
 @db.command(name='status')
 @output_options
 def db_status():
     """Check database system status."""
     from adare.cli.manage import exec_manage_db_status
+
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_db_status, args)
+
 
 @db.command(name='reset')
 def db_reset():
     """Reset the database (use with caution)."""
     from adare.cli.manage import exec_manage_reset_db
+
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_reset_db, args)
+
 
 @db.command(name='repair')
 def db_repair():
     """Repair the database system."""
     from adare.cli.manage import exec_manage_repair_db
+
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_repair_db, args)
+
 
 @db.command(name='migrate')
 def db_migrate():
     """Apply pending database schema migrations (global + all projects)."""
     from adare.cli.manage import exec_manage_migrate_db
+
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_migrate_db, args)
+
 
 @db.command(name='clean-install')
 @click.option('--force', '-f', is_flag=True, help='Force clean installation without confirmation')
 def db_clean_install(force):
     """Perform clean database installation (DANGER: deletes all data)."""
     from adare.cli.manage import exec_manage_clean_install_db
+
     args = SimpleNamespace(force=force)
     exec_with_error_printing(exec_manage_clean_install_db, args)
 
@@ -203,19 +221,24 @@ def os_profile():
     """OS profile management for VM creation."""
     pass
 
+
 @os_profile.command(name='list')
 @output_options
 def os_profile_list():
     """List all available OS profiles."""
     from adare.cli.manage_os_profile import exec_os_profile_list
+
     exec_with_error_printing(exec_os_profile_list, SimpleNamespace())
+
 
 @os_profile.command(name='add')
 @click.argument('profile_file', type=click.Path(exists=True))
 def os_profile_add(profile_file):
     """Add a custom OS profile from a YAML file."""
     from adare.cli.manage_os_profile import exec_os_profile_add
+
     exec_with_error_printing(exec_os_profile_add, SimpleNamespace(profile_file=profile_file))
+
 
 @os_profile.command(name='show')
 @output_options
@@ -223,14 +246,18 @@ def os_profile_add(profile_file):
 def os_profile_show(name):
     """Show detailed information about an OS profile."""
     from adare.cli.manage_os_profile import exec_os_profile_show
+
     exec_with_error_printing(exec_os_profile_show, SimpleNamespace(name=name))
+
 
 @os_profile.command(name='remove')
 @click.argument('name')
 def os_profile_remove(name):
     """Remove a custom OS profile."""
     from adare.cli.manage_os_profile import exec_os_profile_remove
+
     exec_with_error_printing(exec_os_profile_remove, SimpleNamespace(name=name))
+
 
 os_profile.add_alias('l', 'list')
 os_profile.add_alias('rm', 'remove')
@@ -244,13 +271,16 @@ def icons():
     """Windows icon library: inspect the registry and dump icons from a target."""
     pass
 
+
 @icons.command(name='list')
 @output_options
 @click.option('--os-key', default='windows', help='OS profile / build key (cache separation)')
 def icons_list(os_key):
     """List every icon term in the registry with its resolver spec."""
     from adare.cli.icons import exec_icons_list
+
     exec_with_error_printing(exec_icons_list, SimpleNamespace(os_key=os_key))
+
 
 @icons.command(name='dump-all')
 @click.option('--host', default='localhost', help='adarevm host')
@@ -260,10 +290,12 @@ def icons_list(os_key):
 def icons_dump_all(host, port, os_key, force):
     """Resolve every registry term on a connected target; write PNGs + contact sheet."""
     from adare.cli.icons import exec_icons_dump_all
+
     exec_with_error_printing(
         exec_icons_dump_all,
         SimpleNamespace(host=host, port=port, os_key=os_key, force=force),
     )
+
 
 icons.add_alias('l', 'list')
 icons.add_alias('dump', 'dump-all')
@@ -277,17 +309,21 @@ def runtime():
     """VM runtime management for current project."""
     pass
 
+
 @runtime.command(name='refresh')
 def runtime_refresh():
     """Refresh VM runtime files in current project, ensuring they are up-to-date."""
     from adare.cli.manage import exec_manage_vm_runtime_refresh
+
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_vm_runtime_refresh, args)
+
 
 @runtime.command(name='build')
 def runtime_build():
     """Build fresh VM runtime wheels (adarelib, adarevm) for current project."""
     from adare.cli.manage import exec_manage_vm_runtime_build
+
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_vm_runtime_build, args)
 
@@ -300,30 +336,37 @@ def project():
     """Project-related commands."""
     pass
 
+
 @project.command()
 @click.argument('name')
 @click.option('--description', '-d', help='Description of the project')
 def create(name, description):
     """Create a new project."""
     from adare.cli.project import exec_create_project
+
     args = SimpleNamespace(name=name, description=description)
     exec_with_error_printing(exec_create_project, args)
+
 
 @project.command()
 @click.argument('name')
 def remove(name):
     """Remove a project."""
     from adare.cli.project import exec_remove_project
+
     args = SimpleNamespace(name=name)
     exec_with_error_printing(exec_remove_project, args)
+
 
 @project.command(name='list')
 @output_options
 def list_projects():
     """List all projects."""
     from adare.cli.project import exec_list_projects
+
     args = SimpleNamespace()
     exec_with_error_printing(exec_list_projects, args)
+
 
 # Add aliases for project commands
 project.add_alias('l', 'list')
@@ -360,6 +403,7 @@ from adare.cli.groups.vlm_commands import register as register_vlm_commands
 
 register_vlm_commands(cli, AliasedGroup, exec_with_error_printing)
 
+
 # ------------------------------
 # Test commands (was: testfunction)
 # ------------------------------
@@ -367,6 +411,7 @@ register_vlm_commands(cli, AliasedGroup, exec_with_error_printing)
 def test():
     """Test function management commands."""
     pass
+
 
 @test.command(name='create')
 @click.argument('name', type=click.Path(exists=False))
@@ -379,8 +424,10 @@ def test_create(name, project):
     - Relative path: testfunctions/my_test
     """
     from adare.cli.testfunction import exec_create_testfunction
+
     args = SimpleNamespace(name=name, project=project)
     exec_with_error_printing(exec_create_testfunction, args)
+
 
 @test.command(name='remove')
 @click.argument('name')
@@ -392,12 +439,19 @@ def test_remove(name, project):
     This will remove the entire testfunction file and all functions within it.
     """
     from adare.cli.testfunction import exec_remove_testfunction
+
     args = SimpleNamespace(name=name, project=project)
     exec_with_error_printing(exec_remove_testfunction, args)
 
+
 @test.command()
 @click.argument('name', type=click.Path(exists=False))
-@click.option('--force', '-f', is_flag=True, help='Force overwrite if testfunction is used in experiments (will delete associated runs)')
+@click.option(
+    '--force',
+    '-f',
+    is_flag=True,
+    help='Force overwrite if testfunction is used in experiments (will delete associated runs)',
+)
 def load(name, force):
     """Load a testfunction.
 
@@ -410,15 +464,19 @@ def load(name, force):
     Use --force to overwrite and delete associated experiment runs.
     """
     from adare.cli.testfunction import exec_load_testfunction
+
     args = SimpleNamespace(name=name, force=force)
     exec_with_error_printing(exec_load_testfunction, args)
+
 
 @test.command()
 def sync():
     """Sync all testfunctions from appdata: create new, update changed, skip unchanged."""
     from adare.cli.testfunction import exec_sync_testfunctions
+
     args = SimpleNamespace()
     exec_with_error_printing(exec_sync_testfunctions, args)
+
 
 @test.command()
 @click.argument('path', type=click.Path(exists=False))
@@ -430,8 +488,10 @@ def validate(path):
     testnames, import/syntax errors, missing dependencies — with fix hints.
     """
     from adare.cli.testfunction import exec_validate_testfunction
+
     args = SimpleNamespace(path=path)
     exec_with_error_printing(exec_validate_testfunction, args)
+
 
 @test.command(name='dry-run')
 @click.argument('target')
@@ -445,6 +505,7 @@ def dry_run(target, param, file, path):
     Scope: FILE_BASED / FILE_CONTENT tests only.
     """
     from adare.cli.testfunction import exec_dry_run_testfunction
+
     args = SimpleNamespace(target=target, param=param, file=file, path=path)
     exec_with_error_printing(exec_dry_run_testfunction, args)
 
@@ -452,8 +513,12 @@ def dry_run(target, param, file, path):
 _catalog_filters = [
     click.option('--collection', '--set', 'collection', help='Only this collection (e.g. standard, windows)'),
     click.option('--category', help='Only this host-mode category (e.g. FILE_BASED, HOST_NATIVE)'),
-    click.option('--os', 'os_name', type=click.Choice(['windows', 'linux', 'any'], case_sensitive=False),
-                 help='Only testfunctions usable on this guest OS'),
+    click.option(
+        '--os',
+        'os_name',
+        type=click.Choice(['windows', 'linux', 'any'], case_sensitive=False),
+        help='Only testfunctions usable on this guest OS',
+    ),
 ]
 
 
@@ -476,8 +541,10 @@ def list_testfunctions(collection, category, os_name, full):
       adare --format json test list --os windows
     """
     from adare.cli.testfunction_catalog import exec_catalog_list
+
     args = SimpleNamespace(collection=collection, category=category, os=os_name, full=full)
     exec_with_error_printing(exec_catalog_list, args)
+
 
 @test.command()
 @output_options
@@ -496,16 +563,20 @@ def search(query, collection, category, os_name, limit):
       adare --format json test search "registry value" --os windows
     """
     from adare.cli.testfunction_catalog import exec_catalog_search
+
     args = SimpleNamespace(query=query, collection=collection, category=category, os=os_name, limit=limit)
     exec_with_error_printing(exec_catalog_search, args)
+
 
 @test.command(hidden=True)
 @click.option('--file-name', '-n', help='Collection name')
 def show(file_name):
     """Deprecated alias of `adare test list --collection`."""
     from adare.cli.testfunction_catalog import exec_catalog_list
+
     args = SimpleNamespace(collection=file_name, category=None, os=None, full=False)
     exec_with_error_printing(exec_catalog_list, args)
+
 
 @test.command()
 @output_options
@@ -518,8 +589,10 @@ def info(dotnotation, example):
     function name works when it is unique.
     """
     from adare.cli.testfunction_catalog import exec_catalog_info
+
     args = SimpleNamespace(dotnotation=dotnotation, example=example)
     exec_with_error_printing(exec_catalog_info, args)
+
 
 @test.command()
 @output_options
@@ -534,8 +607,10 @@ def catalog(markdown):
       adare test catalog --markdown > skills/adare-testfunction/references/catalog.md
     """
     from adare.cli.testfunction_catalog import exec_catalog_export
+
     args = SimpleNamespace(markdown=markdown)
     exec_with_error_printing(exec_catalog_export, args)
+
 
 @test.command()
 @click.argument('target')
@@ -546,8 +621,10 @@ def versions(target):
     (e.g. mycollection.file_contains_word) for per-method history.
     """
     from adare.cli.testfunction import exec_testfunction_versions
+
     args = SimpleNamespace(target=target)
     exec_with_error_printing(exec_testfunction_versions, args)
+
 
 # Add aliases for test commands
 test.add_alias('l', 'list')
@@ -573,14 +650,17 @@ def run():
     """Experiment run management commands."""
     pass
 
+
 @run.command(name='list')
 @output_options
 @click.option('--filter', help='Filter by dotnotation: [project][.environment][.experiment]')
 def list_runs(filter):
     """List all experiment runs. Use --filter with dotnotation for advanced filtering."""
     from adare.cli.show import exec_show_runs
+
     args = SimpleNamespace(filter=filter)
     exec_with_error_printing(exec_show_runs, args)
+
 
 @run.command(name='info')
 @output_options
@@ -588,16 +668,20 @@ def list_runs(filter):
 def run_info(ulid):
     """Show detailed information about a run. Shows latest run if no ULID provided."""
     from adare.cli.show import exec_show_run
+
     args = SimpleNamespace(ulid=ulid)
     exec_with_error_printing(exec_show_run, args)
+
 
 @run.command(name='remove')
 @click.argument('ulid', required=True)
 def run_remove(ulid):
     """Remove a single experiment run by its ULID."""
     from adare.cli.show import exec_remove_run
+
     args = SimpleNamespace(ulid=ulid)
     exec_with_error_printing(exec_remove_run, args)
+
 
 # Add aliases for run commands
 run.add_alias('l', 'list')
@@ -632,9 +716,15 @@ def mcp():
     """ADARE control-plane MCP server (drive all of ADARE from an MCP client)."""
     pass
 
+
 @mcp.command(name='serve')
-@click.option('--transport', type=click.Choice(['stdio', 'http']), default='stdio',
-              show_default=True, help='MCP transport: stdio (client launches this process) or http')
+@click.option(
+    '--transport',
+    type=click.Choice(['stdio', 'http']),
+    default='stdio',
+    show_default=True,
+    help='MCP transport: stdio (client launches this process) or http',
+)
 @click.option('--host', default='127.0.0.1', show_default=True, help='[http] Bind host')
 @click.option('--port', type=int, default=13111, show_default=True, help='[http] Bind port')
 def mcp_serve(transport, host, port):
@@ -654,6 +744,7 @@ def mcp_serve(transport, host, port):
         Claude Code: claude mcp add adare -- adare mcp serve
     """
     from adare.cli.mcp_control import exec_mcp_serve
+
     args = SimpleNamespace(transport=transport, host=host, port=port)
     exec_with_error_printing(exec_mcp_serve, args)
 
@@ -665,6 +756,7 @@ def mcp_serve(transport, host, port):
 def cv():
     """CV server testing commands for icon/text recognition."""
     pass
+
 
 @cv.command(name='test-icon')
 @click.option('--icon', required=True, type=click.Path(exists=True), help='Path to icon image file')
@@ -682,6 +774,7 @@ def cv_test_icon(icon, screenshot, output, host, port, threshold, mcplog):
     Optionally saves a marked image showing found locations.
     """
     from adare.cli.mcp import exec_mcp_test_icon
+
     args = SimpleNamespace(
         icon_path=icon,
         screenshot_path=screenshot,
@@ -689,9 +782,10 @@ def cv_test_icon(icon, screenshot, output, host, port, threshold, mcplog):
         host=host,
         port=port,
         threshold=threshold,
-        mcplog_path=mcplog
+        mcplog_path=mcplog,
     )
     exec_with_error_printing(exec_mcp_test_icon, args)
+
 
 @cv.command(name='test-text')
 @click.argument('text')
@@ -707,14 +801,10 @@ def cv_test_text(text, screenshot, format, host, port):
     prints coordinates, and stops the server.
     """
     from adare.cli.mcp import exec_mcp_test_text
-    args = SimpleNamespace(
-        text=text,
-        screenshot_path=screenshot,
-        format=format,
-        host=host,
-        port=port
-    )
+
+    args = SimpleNamespace(text=text, screenshot_path=screenshot, format=format, host=host, port=port)
     exec_with_error_printing(exec_mcp_test_text, args)
+
 
 @cv.command(name='get-all-text')
 @click.option('--screenshot', required=True, type=click.Path(exists=True), help='Path to screenshot image file')
@@ -729,12 +819,8 @@ def cv_get_all_text(screenshot, format, host, port):
     then stops the server.
     """
     from adare.cli.mcp import exec_mcp_get_all_text
-    args = SimpleNamespace(
-        screenshot_path=screenshot,
-        format=format,
-        host=host,
-        port=port
-    )
+
+    args = SimpleNamespace(screenshot_path=screenshot, format=format, host=host, port=port)
     exec_with_error_printing(exec_mcp_get_all_text, args)
 
 
@@ -746,6 +832,7 @@ def ws():
     """WebSocket adarevm interaction commands."""
     pass
 
+
 @ws.command()
 @click.argument('action_file', type=click.Path(exists=True))
 @click.option('--host', default='localhost', help='AdareVM host (default: localhost)')
@@ -754,8 +841,12 @@ def ws():
 @click.option('--connect-timeout', type=float, default=10.0, help='Connection timeout in seconds (default: 10.0)')
 @click.option('--default-timeout', type=float, default=30.0, help='Default action timeout in seconds (default: 30.0)')
 @click.option('--continue-on-error', is_flag=True, help='Continue executing actions even if one fails')
-@click.option('--output-format', type=click.Choice(['json', 'yaml', 'summary', 'simple']),
-              default='simple', help='Output format (default: simple)')
+@click.option(
+    '--output-format',
+    type=click.Choice(['json', 'yaml', 'summary', 'simple']),
+    default='simple',
+    help='Output format (default: simple)',
+)
 def action(action_file, host, port, vm_instance, connect_timeout, default_timeout, continue_on_error, output_format):
     """Execute actions from YAML file on adarevm via WebSocket.
 
@@ -766,6 +857,7 @@ def action(action_file, host, port, vm_instance, connect_timeout, default_timeou
         adare ws action test.yml --vm-instance my-vm-instance
     """
     from adare.cli.ws import exec_ws_action
+
     args = SimpleNamespace(
         action_file=action_file,
         host=host,
@@ -774,9 +866,10 @@ def action(action_file, host, port, vm_instance, connect_timeout, default_timeou
         connect_timeout=connect_timeout,
         default_timeout=default_timeout,
         continue_on_error=continue_on_error,
-        output_format=output_format
+        output_format=output_format,
     )
     exec_with_error_printing(exec_ws_action, args)
+
 
 @ws.command(name='example')
 @click.argument('output_file', type=click.Path())
@@ -785,7 +878,9 @@ def ws_create_example(output_file):
     from pathlib import Path
 
     from adare.cli.ws import create_example_action_file
+
     create_example_action_file(Path(output_file))
+
 
 # ------------------------------
 # Web Server commands
@@ -795,6 +890,7 @@ def server():
     """ADARE web server for dev mode session control."""
     pass
 
+
 @server.command()
 @click.option('--port', type=int, default=8089, help='Server port (default: 8089)')
 @click.option('--host', default='127.0.0.1', help='Server host (default: 127.0.0.1)')
@@ -802,6 +898,7 @@ def server():
 def start(port, host, dev):
     """Start the ADARE web server."""
     from adare.cli.webserver import exec_webserver_start
+
     args = SimpleNamespace(port=port, host=host, dev=dev)
     exec_with_error_printing(exec_webserver_start, args)
 
@@ -818,15 +915,25 @@ def agent():
     pass
 
 
-_agent_client_option = click.option('--client', type=click.Choice(['claude', 'opencode', 'all']), default='all',
-                                    show_default=True, help='Which coding agent(s)')
+_agent_client_option = click.option(
+    '--client',
+    type=click.Choice(['claude', 'opencode', 'all']),
+    default='all',
+    show_default=True,
+    help='Which coding agent(s)',
+)
 
 
 @agent.command(name='setup')
 @output_options
 @_agent_client_option
-@click.option('--scope', type=click.Choice(['user', 'project', 'all']), default='user', show_default=True,
-              help='user = every project (~/.claude/skills, ~/.config/opencode/skills); project = this directory')
+@click.option(
+    '--scope',
+    type=click.Choice(['user', 'project', 'all']),
+    default='user',
+    show_default=True,
+    help='user = every project (~/.claude/skills, ~/.config/opencode/skills); project = this directory',
+)
 @click.option('--copy', is_flag=True, help='Copy the skills instead of symlinking (e.g. on Windows)')
 @click.option('--force', is_flag=True, help='Re-point skill symlinks that currently point elsewhere')
 @click.option('--dry-run', is_flag=True, help='Show what would change without touching anything')
@@ -842,6 +949,7 @@ def agent_setup(client, scope, copy, force, dry_run):
       adare agent setup --client claude --scope all
     """
     from adare.cli.agent import exec_agent_setup
+
     args = SimpleNamespace(client=client, scope=scope, copy=copy, force=force, dry_run=dry_run)
     exec_with_error_printing(exec_agent_setup, args)
 
@@ -853,18 +961,20 @@ def agent_setup(client, scope, copy, force, dry_run):
 def agent_status(client, scope):
     """Show where ADARE's skills are installed and whether the links are current."""
     from adare.cli.agent import exec_agent_status
+
     args = SimpleNamespace(client=client, scope=scope)
     exec_with_error_printing(exec_agent_status, args)
 
 
 @cli.command(name='chat')
-@click.option('--model', default=None,
-              help='Chat model id (default: $ADARE_CHAT_MODEL, else the vlm model)')
-@click.option('--base-url', default=None,
-              help='OpenAI-compatible endpoint (default: the active `adare vlm` provider)')
-@click.option('--tool-protocol', type=click.Choice(['native', 'json', 'auto']),
-              default='auto',
-              help='Tool-call protocol: native function-calling, JSON-in-text, or auto (default)')
+@click.option('--model', default=None, help='Chat model id (default: $ADARE_CHAT_MODEL, else the vlm model)')
+@click.option('--base-url', default=None, help='OpenAI-compatible endpoint (default: the active `adare vlm` provider)')
+@click.option(
+    '--tool-protocol',
+    type=click.Choice(['native', 'json', 'auto']),
+    default='auto',
+    help='Tool-call protocol: native function-calling, JSON-in-text, or auto (default)',
+)
 @click.option('--max-tokens', type=int, default=None, help='Max tokens per assistant turn')
 def cli_chat(model, base_url, tool_protocol, max_tokens):
     """Control ADARE conversationally in an embedded agentic REPL.
@@ -886,8 +996,8 @@ def cli_chat(model, base_url, tool_protocol, max_tokens):
         adare chat
     """
     from adare.cli.chat import exec_chat
-    args = SimpleNamespace(model=model, base_url=base_url,
-                           tool_protocol=tool_protocol, max_tokens=max_tokens)
+
+    args = SimpleNamespace(model=model, base_url=base_url, tool_protocol=tool_protocol, max_tokens=max_tokens)
     exec_with_error_printing(exec_chat, args)
 
 
@@ -899,6 +1009,7 @@ def cli_chat(model, base_url, tool_protocol, max_tokens):
 def cli_status():
     """Show quick overview: current project, active sessions, VM count, db status."""
     from adare.cli.status import exec_status
+
     args = SimpleNamespace()
     exec_with_error_printing(exec_status, args)
 

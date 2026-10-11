@@ -80,6 +80,7 @@ def _copy_environment_file(source_path: Path, environment_name: str, file_hash: 
 
         # Simple file copy for YAML files (small, no progress bar needed)
         import shutil
+
         shutil.copy2(source_path, target_path)
 
         log.info(f"Successfully copied environment file to {target_path}")
@@ -92,8 +93,8 @@ def _copy_environment_file(source_path: Path, environment_name: str, file_hash: 
             possible_solutions=[
                 'Check file system permissions',
                 'Ensure sufficient disk space',
-                'Verify the source file is accessible'
-            ]
+                'Verify the source file is accessible',
+            ],
         ) from e
 
 
@@ -161,7 +162,7 @@ def resolve_vm_from_url(url: str, vm_format: str | None = None) -> Path:
             raise EnvironmentLoadFailed(
                 log,
                 f'Downloaded VM file {cached_file_path} is empty or missing',
-                possible_solutions=['Check if the URL is valid', 'Check network connectivity']
+                possible_solutions=['Check if the URL is valid', 'Check network connectivity'],
             )
 
         log.info(f"Successfully downloaded VM to: {cached_file_path}")
@@ -178,8 +179,8 @@ def resolve_vm_from_url(url: str, vm_format: str | None = None) -> Path:
             possible_solutions=[
                 'Check if the URL is accessible',
                 'Check network connectivity',
-                'Ensure the URL points to a valid OVA/OVF file'
-            ]
+                'Ensure the URL points to a valid OVA/OVF file',
+            ],
         ) from e
 
 
@@ -201,9 +202,14 @@ def environment_sync(environment_ulid: str):
     log.info(f'environment {environment_ulid} synced')
 
 
-def environment_load(environment: str, force: bool = False, no_copy: bool = False,
-                     iso_override: Path | None = None, reprovision: bool = False,
-                     allow_emulation: bool = False):
+def environment_load(
+    environment: str,
+    force: bool = False,
+    no_copy: bool = False,
+    iso_override: Path | None = None,
+    reprovision: bool = False,
+    allow_emulation: bool = False,
+):
     """
     Load environment from YAML file.
 
@@ -226,6 +232,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
         updates.
     """
     import time
+
     start_time = time.time()
 
     # Ensure global environments directory exists
@@ -236,10 +243,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
         # It's a full path to an external file
         environment_file = Path(environment)
         if not environment_file.exists():
-            raise EnvironmentLoadFailed(
-                log,
-                f'environment file {environment_file} does not exist'
-            )
+            raise EnvironmentLoadFailed(log, f'environment file {environment_file} does not exist')
     else:
         # It's a name, look in global environments directory
         for ext in ('.yml', '.yaml'):
@@ -254,7 +258,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                     'Did you create the environment file?',
                     'If not, try to create the environment file via [i]adare env create[/i].',
                     f'Check if the environment file exists in {ENVIRONMENTS_DIR}',
-                ]
+                ],
             )
 
     # Check for name collision immediately, before ANY expensive operations
@@ -273,10 +277,12 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                 possible_solutions=[
                     "Use a different filename for your environment",
                     f"Delete the existing environment: adare env remove {environment_name}",
-                    f"Update the existing environment safely with: adare env load --force {environment_file}"
-                ]
+                    f"Update the existing environment safely with: adare env load --force {environment_file}",
+                ],
             )
-        log.info(f"Environment '{environment_name}' already exists, but force=True. Deleting old environment to prevent conflicts...")
+        log.info(
+            f"Environment '{environment_name}' already exists, but force=True. Deleting old environment to prevent conflicts..."
+        )
         try:
             environment_database.delete_environment(existing_ulid, force=True, cleanup_vm=False)
             log.info(f"Successfully deleted previous version of '{environment_name}'")
@@ -287,9 +293,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
     # Calculate environment file hash with progress bar for better UX
     log.info('Calculating environment file hash...')
     environment_file_sha256 = file_sha256_with_progress(
-        environment_file,
-        description=f"Hashing environment file {environment_file.name}",
-        silent=False
+        environment_file, description=f"Hashing environment file {environment_file.name}", silent=False
     )
     log.info(f'Environment file hash: {environment_file_sha256}')
 
@@ -314,7 +318,9 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
     if existing_environment_id:
         if not force:
             elapsed_time = time.time() - start_time
-            log.info(f'Environment with hash {environment_file_sha256} already exists in database - skipping all VM processing!')
+            log.info(
+                f'Environment with hash {environment_file_sha256} already exists in database - skipping all VM processing!'
+            )
             log.info('Optimization: No file copying or VM processing needed!')
             log.info(f'Total time: {elapsed_time:.1f} seconds (vs potentially minutes for full VM processing)')
             return (existing_environment_id, False)
@@ -340,6 +346,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
             # declarative recipe inputs. Integrity is anchored on the inputs
             # (recipe_hash); the produced disk is still hashed into Vm.hash.
             from adare.backend.vm.recipe import build_or_reuse_recipe_vm
+
             log.info('Recipe environment detected; resolving disk from recipe inputs...')
             recipe_result = build_or_reuse_recipe_vm(
                 environment_metadata,
@@ -379,7 +386,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                         possible_solutions=[
                             'Host the disk image at an http(s) URL and reference that',
                             'Use vm_type "path" for a local disk file',
-                        ]
+                        ],
                     )
 
                 # A URL source MUST declare vm_sha256 — it is the only integrity
@@ -392,7 +399,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                             'Add the expected SHA256 of the hosted disk to "vm_sha256"',
                             'Compute it from the local disk with: shasum -a 256 <disk-image>',
                             'Use: adare environment publish-prepare <name> --vm-url <url> --vm-format <fmt>',
-                        ]
+                        ],
                     )
 
                 # Download VM from URL and cache in global vm directory
@@ -409,9 +416,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
 
                 log.info('Verifying downloaded VM against declared vm_sha256...')
                 actual_sha256 = file_sha256_with_progress(
-                    vm_path,
-                    description=f"Verifying {vm_path.name}",
-                    silent=False
+                    vm_path, description=f"Verifying {vm_path.name}", silent=False
                 )
                 expected_sha256 = environment_metadata.vm_sha256.lower()
                 if actual_sha256.lower() != expected_sha256:
@@ -428,7 +433,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                             'Re-run "adare environment load" — the corrupt cache was deleted, so it will re-download',
                             'Verify the "vm_sha256" in the environment file matches the published disk',
                             'Contact the environment author if the mismatch persists',
-                        ]
+                        ],
                     )
                 log.info('VM integrity check passed')
             else:
@@ -445,12 +450,13 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                         possible_solutions=[
                             'Check if the VM file path is correct',
                             'Use absolute path for VM file',
-                            'Ensure VM file exists in the specified location'
-                        ]
+                            'Ensure VM file exists in the specified location',
+                        ],
                     )
 
             if vm_path.exists():
                 from adare.backend.vm.commands import load_vm_file_for_environment
+
                 log.info(f'Processing VM file during environment load: {vm_path}')
 
                 # Removed duplicate hash calculation - let load_vm_file_for_environment handle it
@@ -462,7 +468,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                     vm_path=vm_path,
                     environment_metadata=environment_metadata,
                     no_copy=no_copy if not is_url else False,  # Pass the flag (but never for URLs)
-                    force=force  # Pass force flag for VM overwriting
+                    force=force,  # Pass force flag for VM overwriting
                 )
 
                 # Handle both old return format (vm_id) and new return format (dict with vm_id and was_existing)
@@ -480,6 +486,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                     if existing_vm and existing_vm.created_at:
                         # This is a heuristic - if VM was created very recently, it's probably new
                         import datetime
+
                         now = datetime.datetime.now(datetime.UTC)
                         creation_time = existing_vm.created_at
                         if isinstance(creation_time, str):
@@ -497,13 +504,15 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                         'Check if the VM file path is correct',
                         'Ensure the VM file exists at the specified location',
                         'If using a URL, check if the download completed successfully',
-                        'Check file permissions and accessibility'
-                    ]
+                        'Check file permissions and accessibility',
+                    ],
                 )
 
         # Try to create environment - if this fails, cleanup VM if we created it
         # Use the managed file path (in .adare/environments/) instead of the original user file
-        environment_ulid = environment_database.update_environment(None, environment_metadata, managed_environment_file, environment_file_sha256, vm_id=vm_id, force=force)
+        environment_ulid = environment_database.update_environment(
+            None, environment_metadata, managed_environment_file, environment_file_sha256, vm_id=vm_id, force=force
+        )
         if not environment_ulid:
             log.error('environment update failed')
             raise EnvironmentLoadFailed(log, 'Failed to create environment in database')
@@ -514,6 +523,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
             log.warning(f'Environment creation failed, cleaning up newly created VM {created_vm_id}')
             try:
                 import adare.backend.vm.database as vm_database
+
                 vm_database.delete_vm(created_vm_id)
                 log.info(f'Successfully cleaned up VM {created_vm_id}')
             except (OSError, ValueError, KeyError) as cleanup_error:
@@ -526,6 +536,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
 
     # Protect environment file after loading (protect the managed copy, not the original)
     from adare.helperfunctions.integrity import protect_loaded_files
+
     protected_files = protect_loaded_files([managed_environment_file])
     log.info(f'Protected {len(protected_files)} environment files')
 
@@ -548,7 +559,7 @@ def environment_create(project: Path, environment: str, vm_path: Path = None):
                 'Did you want to update the environment?',
                 'If yes, try to update the environment via [i]adare env load[/i].',
                 'If not, try to create the environment with a different name.',
-            ]
+            ],
         )
 
     environment_file_template = TEMPLATES_DIR / 'environment' / 'environment.yml'
@@ -559,8 +570,8 @@ def environment_create(project: Path, environment: str, vm_path: Path = None):
             possible_solutions=[
                 'Did the installation was done via make install?',
                 'If not, try to reinstall adare via make install.',
-                'If the problem persists, please open an issue on GitHub.'
-            ]
+                'If the problem persists, please open an issue on GitHub.',
+            ],
         )
 
     # Prepare template variables
@@ -594,7 +605,7 @@ def environment_create(project: Path, environment: str, vm_path: Path = None):
                 description='Loaded via environment create --with-vm',
                 scope=scope,
                 project_id=project_id,
-                silent=False
+                silent=False,
             )
             rprint(f"[green]VM loaded successfully: {vm_name}[/green]")
 
@@ -613,9 +624,6 @@ def environment_create(project: Path, environment: str, vm_path: Path = None):
     environment_file_content = jinja2.Template(environment_file_template_content).render(**template_vars)
     environment_file.write_text(environment_file_content)
     log.info(f'environment file {environment_file} created')
-
-
-
 
 
 def environment_delete(environment_ulid: str, force: bool = False):

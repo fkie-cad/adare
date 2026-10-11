@@ -85,9 +85,7 @@ def test_discover_user_dir_overrides_builtin(tmp_path: Path):
     user.mkdir()
 
     _write(builtin, 'builtin.yaml', _VALID_FRONTMATTER)
-    user_body = _VALID_FRONTMATTER.replace(
-        'id: ubuntu-test', 'id: user-override'
-    )
+    user_body = _VALID_FRONTMATTER.replace('id: ubuntu-test', 'id: user-override')
     _write(user, 'user.yaml', user_body)
 
     discovered = discover_templates(builtin, user)

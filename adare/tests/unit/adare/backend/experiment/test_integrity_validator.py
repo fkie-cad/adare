@@ -18,6 +18,7 @@ LOG = logging.getLogger("test_integrity_validator")
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_playbook(test_names: list[str] | None = None):
     """Create a minimal playbook mock with optional testfunction names."""
     playbook = MagicMock()
@@ -37,6 +38,7 @@ def _make_playbook(test_names: list[str] | None = None):
 # verify_playbook_testfunctions
 # ---------------------------------------------------------------------------
 
+
 class TestVerifyPlaybookTestfunctions:
     """Tests for IntegrityValidator.verify_playbook_testfunctions()."""
 
@@ -46,8 +48,18 @@ class TestVerifyPlaybookTestfunctions:
         playbook = _make_playbook(["standard", "csv"])
 
         tf_data = [
-            {"path": "testfunctions/standard/standard.py", "requirements_path": "testfunctions/standard/requirements.txt", "sha256hash": "abc123", "name": "standard"},
-            {"path": "testfunctions/csv/csv.py", "requirements_path": "testfunctions/csv/requirements.txt", "sha256hash": "def456", "name": "csv"},
+            {
+                "path": "testfunctions/standard/standard.py",
+                "requirements_path": "testfunctions/standard/requirements.txt",
+                "sha256hash": "abc123",
+                "name": "standard",
+            },
+            {
+                "path": "testfunctions/csv/csv.py",
+                "requirements_path": "testfunctions/csv/requirements.txt",
+                "sha256hash": "def456",
+                "name": "csv",
+            },
         ]
 
         with (
@@ -65,7 +77,12 @@ class TestVerifyPlaybookTestfunctions:
         playbook = _make_playbook(["nonexistent_tf"])
 
         tf_data = [
-            {"path": "testfunctions/standard/standard.py", "requirements_path": "testfunctions/standard/requirements.txt", "sha256hash": "abc123", "name": "standard"},
+            {
+                "path": "testfunctions/standard/standard.py",
+                "requirements_path": "testfunctions/standard/requirements.txt",
+                "sha256hash": "abc123",
+                "name": "standard",
+            },
         ]
 
         with patch("adare.backend.testfunction.database.get_testfunction_files_data", return_value=tf_data):
@@ -78,7 +95,12 @@ class TestVerifyPlaybookTestfunctions:
         playbook = _make_playbook(["standard"])
 
         tf_data = [
-            {"path": "testfunctions/standard/standard.py", "requirements_path": "testfunctions/standard/requirements.txt", "sha256hash": "abc123", "name": "standard"},
+            {
+                "path": "testfunctions/standard/standard.py",
+                "requirements_path": "testfunctions/standard/requirements.txt",
+                "sha256hash": "abc123",
+                "name": "standard",
+            },
         ]
 
         with (
@@ -86,7 +108,8 @@ class TestVerifyPlaybookTestfunctions:
             patch(
                 "adare.helperfunctions.integrity.verify_testfunction_integrity",
                 side_effect=ExperimentIntegrityError(LOG, "hash mismatch"),
-            ),pytest.raises(ExperimentIntegrityError, match="hash mismatch")
+            ),
+            pytest.raises(ExperimentIntegrityError, match="hash mismatch"),
         ):
             validator.verify_playbook_testfunctions(playbook)
 
@@ -103,6 +126,7 @@ class TestVerifyPlaybookTestfunctions:
 # check_project
 # ---------------------------------------------------------------------------
 
+
 class TestCheckProject:
     """Tests for IntegrityValidator.check_project()."""
 
@@ -111,7 +135,11 @@ class TestCheckProject:
         validator = IntegrityValidator(project_path=Path("/fake/project"))
 
         tf_hashes = [
-            {"file": "testfunctions/standard/standard.py", "requirements": "testfunctions/standard/requirements.txt", "hash": "abc123"},
+            {
+                "file": "testfunctions/standard/standard.py",
+                "requirements": "testfunctions/standard/requirements.txt",
+                "hash": "abc123",
+            },
         ]
         env_hashes = {
             "environments/ubuntu.yml": "env_hash_ok",
@@ -141,7 +169,8 @@ class TestCheckProject:
             patch(
                 "adare.helperfunctions.integrity.verify_environment_integrity",
                 side_effect=ExperimentIntegrityError(LOG, "env modified"),
-            ),pytest.raises(ExperimentIntegrityError, match="environment files have changed")
+            ),
+            pytest.raises(ExperimentIntegrityError, match="environment files have changed"),
         ):
             validator.check_project()
 
@@ -150,7 +179,11 @@ class TestCheckProject:
         validator = IntegrityValidator(project_path=Path("/fake/project"))
 
         tf_hashes = [
-            {"file": "testfunctions/standard/standard.py", "requirements": "testfunctions/standard/requirements.txt", "hash": "abc123"},
+            {
+                "file": "testfunctions/standard/standard.py",
+                "requirements": "testfunctions/standard/requirements.txt",
+                "hash": "abc123",
+            },
         ]
         env_hashes = {}
 
@@ -160,7 +193,8 @@ class TestCheckProject:
             patch(
                 "adare.helperfunctions.integrity.verify_testfunction_integrity",
                 side_effect=ExperimentIntegrityError(LOG, "tf modified"),
-            ),pytest.raises(ExperimentIntegrityError, match="testfunction files have changed")
+            ),
+            pytest.raises(ExperimentIntegrityError, match="testfunction files have changed"),
         ):
             validator.check_project()
 
@@ -168,6 +202,7 @@ class TestCheckProject:
 # ---------------------------------------------------------------------------
 # check_experiment
 # ---------------------------------------------------------------------------
+
 
 class TestCheckExperiment:
     """Tests for IntegrityValidator.check_experiment()."""
@@ -181,7 +216,9 @@ class TestCheckExperiment:
         experiment_dir.playbookfile = Path("playbook.yml")
 
         with (
-            patch("adare.backend.experiment.database.get_experiment_hashes", return_value={"playbook": "matching_hash"}),
+            patch(
+                "adare.backend.experiment.database.get_experiment_hashes", return_value={"playbook": "matching_hash"}
+            ),
             patch("adare.backend.experiment.database.get_experiment_by_project_and_name", return_value="exp_ulid"),
             patch("adare.backend.experiment.database.get_experiment_run_count", return_value=0),
         ):
@@ -197,7 +234,9 @@ class TestCheckExperiment:
         experiment_dir.playbookfile = Path("playbook.yml")
 
         with (
-            patch("adare.backend.experiment.database.get_experiment_hashes", return_value={"playbook": "different_hash"}),
+            patch(
+                "adare.backend.experiment.database.get_experiment_hashes", return_value={"playbook": "different_hash"}
+            ),
             patch("adare.backend.experiment.database.get_experiment_by_project_and_name", return_value="exp_ulid"),
             patch("adare.backend.experiment.database.get_experiment_run_count", return_value=0),
         ):
@@ -213,7 +252,9 @@ class TestCheckExperiment:
         experiment_dir.playbookfile = Path("playbook.yml")
 
         with (
-            patch("adare.backend.experiment.database.get_experiment_hashes", return_value={"playbook": "different_hash"}),
+            patch(
+                "adare.backend.experiment.database.get_experiment_hashes", return_value={"playbook": "different_hash"}
+            ),
             patch("adare.backend.experiment.database.get_experiment_by_project_and_name", return_value="exp_ulid"),
             patch("adare.backend.experiment.database.get_experiment_run_count", return_value=5),
         ):

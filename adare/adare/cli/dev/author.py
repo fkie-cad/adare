@@ -33,8 +33,7 @@ def exec_dev_author(arguments):
     if not script and not interactive:
         print_error_message(
             title='Nothing to author',
-            next_steps=['Pass a script: --script-file steps.txt',
-                        'Or author step-by-step: --interactive'],
+            next_steps=['Pass a script: --script-file steps.txt', 'Or author step-by-step: --interactive'],
         )
         exit(1)
 
@@ -49,12 +48,14 @@ def exec_dev_author(arguments):
         print(f"Recording playbook to: {output_file}")
 
     api = AdareAPI()
-    result = api.devmode.run_gui_author(DevGuiAuthorRequest(
-        session_id=session_id,
-        script=script,
-        output_file=output_file,
-        interactive=interactive,
-    ))
+    result = api.devmode.run_gui_author(
+        DevGuiAuthorRequest(
+            session_id=session_id,
+            script=script,
+            output_file=output_file,
+            interactive=interactive,
+        )
+    )
 
     if not result.success:
         handle_api_error(result)

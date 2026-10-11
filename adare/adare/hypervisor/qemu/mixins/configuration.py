@@ -1,6 +1,7 @@
 """
 Configuration Mixin - VM configuration lifecycle (load, save, defaults).
 """
+
 import contextlib
 import json
 import logging
@@ -58,6 +59,7 @@ def _domain_uuid_for(environment_identity: str | None) -> str:
 # ---------------------------------------------------------------------------
 # Managed QEMU storage locations (single source of truth)
 # ---------------------------------------------------------------------------
+
 
 def get_qemu_disk_dir() -> Path:
     """Directory holding managed disks (base/overlay/nvram): ~/.adare/qemu/disks."""
@@ -118,6 +120,7 @@ def get_active_domain_names() -> set[str] | None:
 
     try:
         from adare.config import HYPERVISOR_CONFIGS
+
         libvirt_uri = HYPERVISOR_CONFIGS.get('qemu', {}).get('libvirt_uri', 'qemu:///session')
     except ImportError:
         libvirt_uri = 'qemu:///session'
@@ -230,17 +233,10 @@ class ConfigurationMixin:
         args = [qemu_img_exe, 'info', '--output=json', str(file_path)]
 
         try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                check=False
-            )
+            result = subprocess.run(args, capture_output=True, text=True, check=False)
 
             if result.returncode != 0:
-                raise HypervisorException(
-                    f"Failed to detect disk format for {file_path}: {result.stderr}"
-                )
+                raise HypervisorException(f"Failed to detect disk format for {file_path}: {result.stderr}")
 
             info = json.loads(result.stdout)
             disk_format = info.get('format', 'unknown')
@@ -249,17 +245,11 @@ class ConfigurationMixin:
             return disk_format
 
         except json.JSONDecodeError as e:
-            raise HypervisorException(
-                f"Failed to parse qemu-img info output: {e}"
-            ) from e
+            raise HypervisorException(f"Failed to parse qemu-img info output: {e}") from e
         except FileNotFoundError:
-            raise HypervisorException(
-                "qemu-img executable not found. Please install QEMU tools."
-            ) from None
+            raise HypervisorException("qemu-img executable not found. Please install QEMU tools.") from None
         except OSError as e:
-            raise HypervisorException(
-                f"Error detecting disk format: {e}"
-            ) from e
+            raise HypervisorException(f"Error detecting disk format: {e}") from e
 
     def _detect_disk_format(self: 'QEMUVM', file_path: Path) -> str:
         """

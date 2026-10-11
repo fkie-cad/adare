@@ -15,7 +15,7 @@ class TestSnapshotMixin(unittest.TestCase):
         self.mixin.config.virtiofs_shares = [{'tag': 'test', 'guest_mount': '/mnt', 'host_path': '/host'}]
         # Initialize _libvirt_domain as None effectively mocking a detached state or initial state
         self.mixin._libvirt_domain = None
-        self.mixin.machine = 'pc' # Add missing machine attribute
+        self.mixin.machine = 'pc'  # Add missing machine attribute
         # Mock _get_libvirt_connection to return a mock connection
         self.mock_conn = MagicMock()
         self.mixin._get_libvirt_connection = MagicMock(return_value=self.mock_conn)
@@ -78,12 +78,24 @@ class TestSnapshotMixin(unittest.TestCase):
         # 3. dumpxml (gets updated config)
         # 4. restore --xml (restores memory with updated config, explicitly stripped of virtiofs)
         self.assertEqual(mock_run.call_count, 4)
-        mock_run.assert_has_calls([
-            call(['virsh', 'destroy', 'test-vm'], capture_output=True, text=True, check=False),
-            call(['virt-xml', 'test-vm', '--edit', '--disk', f'path={disk_path}'], capture_output=True, text=True, check=False),
-            call(['virsh', 'dumpxml', 'test-vm'], check=True, capture_output=True, text=True),
-            call(['virsh', 'restore', memory_path, '--xml', '/tmp/restore.xml'], capture_output=True, text=True, check=False)
-        ])
+        mock_run.assert_has_calls(
+            [
+                call(['virsh', 'destroy', 'test-vm'], capture_output=True, text=True, check=False),
+                call(
+                    ['virt-xml', 'test-vm', '--edit', '--disk', f'path={disk_path}'],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                ),
+                call(['virsh', 'dumpxml', 'test-vm'], check=True, capture_output=True, text=True),
+                call(
+                    ['virsh', 'restore', memory_path, '--xml', '/tmp/restore.xml'],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                ),
+            ]
+        )
 
         # Verify cache invalidation
         self.assertFalse(self.mixin._path_discovery_attempted)
@@ -92,6 +104,7 @@ class TestSnapshotMixin(unittest.TestCase):
         # Verify re-attachment logic
         self.mixin._attach_virtiofs_shares.assert_called()
         self.mixin._refresh_guest_mounts.assert_called()
+
 
 if __name__ == '__main__':
     unittest.main()

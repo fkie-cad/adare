@@ -28,14 +28,16 @@ class Testset:
         self.supported_tests = import_basictest_subclasses(directory=testfunctions_directory)
         self.testsetfile: TestsetFile = parse_testsetfile(testsetfile)
 
-        if get_missing_testfunctions(
-                self.testsetfile, self.supported_tests
-        ):
-            raise TestsetExecutionError(log, 'testset contains tests that are not supported by the testfunction collection')
+        if get_missing_testfunctions(self.testsetfile, self.supported_tests):
+            raise TestsetExecutionError(
+                log, 'testset contains tests that are not supported by the testfunction collection'
+            )
 
         self.tests, self.structure_error_dict = structure_tests(self.testsetfile, self.supported_tests)
         if self.structure_error_dict:
-            raise TestsetExecutionError(log, 'testset contains tests that are not supported by the testfunction collection')
+            raise TestsetExecutionError(
+                log, 'testset contains tests that are not supported by the testfunction collection'
+            )
 
         self.log_func = log_func
 
@@ -46,18 +48,9 @@ class Testset:
         test = self.tests[name]
 
         test.variables = variables
-        with EventCtxManager(
-                TestEvent(
-                    test_name=name, status=StatusEnum.RUNNING
-                ),
-                self.log_func
-        ) as event_ctx:
+        with EventCtxManager(TestEvent(test_name=name, status=StatusEnum.RUNNING), self.log_func) as event_ctx:
             test_result = test.test()
-            event_ctx.update(
-                TestEvent(
-                    test_name=name, status=StatusEnum.FINISHED, result=test_result
-                )
-            )
+            event_ctx.update(TestEvent(test_name=name, status=StatusEnum.FINISHED, result=test_result))
             return test_result
 
     def testall(self, variables: dict):

@@ -43,11 +43,15 @@ class Repository[T](EnhancedDatabaseApi):
         """Find entity by ULID, raises EntityNotFoundError if not found."""
         return self.get_by_ulid_or_404(self.model, ulid_str)
 
-    def find_all(self, filters: dict | None = None, limit: int | None = None,
-                 offset: int | None = None, order_by: str | None = None) -> list[T]:
+    def find_all(
+        self,
+        filters: dict | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        order_by: str | None = None,
+    ) -> list[T]:
         """Find all entities matching optional filters."""
-        return self.list_entities(self.model, filters=filters, limit=limit,
-                                  offset=offset, order_by=order_by)
+        return self.list_entities(self.model, filters=filters, limit=limit, offset=offset, order_by=order_by)
 
     def count(self, filters: dict | None = None) -> int:
         """Count entities matching optional filters."""

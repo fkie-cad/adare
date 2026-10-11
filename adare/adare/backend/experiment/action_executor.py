@@ -59,6 +59,7 @@ class MachineHandles:
     implicit `None` key. Multi-machine playbooks get one per declared machine,
     each with its own VM, websocket client and CV/OCR resolver.
     """
+
     vm: Optional['VirtualBoxVM'] = None
     client: AdareVMClient | None = None
     vm_os: str | None = None
@@ -76,12 +77,21 @@ class ActionExecutor:
     to appropriate specialized executors based on action type.
     """
 
-    def __init__(self, websocket_client: AdareVMClient = None, target_resolver: MCPTargetResolver = None,
-                 condition_checker: MCPConditionChecker = None, experiment_run_id: str | None = None,
-                 playbook = None, execution_context: dict[str, Any] = None,
-                 debug_screenshots: bool = False, screenshots_dir: Path | None = None,
-                 vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Path | None = None,
-                 flow_console = None, machines: dict[str | None, MachineHandles] | None = None):
+    def __init__(
+        self,
+        websocket_client: AdareVMClient = None,
+        target_resolver: MCPTargetResolver = None,
+        condition_checker: MCPConditionChecker = None,
+        experiment_run_id: str | None = None,
+        playbook=None,
+        execution_context: dict[str, Any] = None,
+        debug_screenshots: bool = False,
+        screenshots_dir: Path | None = None,
+        vm: Optional['VirtualBoxVM'] = None,
+        experiment_run_directory: Path | None = None,
+        flow_console=None,
+        machines: dict[str | None, MachineHandles] | None = None,
+    ):
         """
         Initialize the action executor.
 
@@ -107,8 +117,10 @@ class ActionExecutor:
         else:
             self.machines = {
                 None: MachineHandles(
-                    vm=vm, client=websocket_client,
-                    target_resolver=target_resolver, condition_checker=condition_checker,
+                    vm=vm,
+                    client=websocket_client,
+                    target_resolver=target_resolver,
+                    condition_checker=condition_checker,
                 )
             }
         self._primary_machine_key = next(iter(self.machines))
@@ -134,7 +146,7 @@ class ActionExecutor:
             target_resolver=self.target_resolver,
             experiment_run_id=experiment_run_id,
             debug_screenshots=debug_screenshots,
-            screenshots_dir=screenshots_dir
+            screenshots_dir=screenshots_dir,
         )
 
         # CRITICAL: Pass the SAME execution_context reference to both executors
@@ -146,7 +158,7 @@ class ActionExecutor:
             playbook=playbook,
             execution_context=execution_context,  # Pass reference, not self.execution_context
             vm=self.vm,
-            experiment_run_directory=experiment_run_directory
+            experiment_run_directory=experiment_run_directory,
         )
 
         # Wire GUI executor to target resolution for mode-aware screenshots
@@ -158,13 +170,10 @@ class ActionExecutor:
             condition_checker=self.condition_checker,
             experiment_run_id=experiment_run_id,
             execution_context=execution_context,  # Pass reference, not self.execution_context
-            flow_console=flow_console
+            flow_console=flow_console,
         )
 
-        self.test_actions = TestActionsExecutor(
-            experiment_run_directory=experiment_run_directory,
-            playbook=playbook
-        )
+        self.test_actions = TestActionsExecutor(experiment_run_directory=experiment_run_directory, playbook=playbook)
 
     def _rebind_to_machine(self, handles: MachineHandles) -> None:
         """Point this executor and its sub-executors at one machine's handles.
@@ -202,9 +211,14 @@ class ActionExecutor:
         self.test_actions.set_test_loader(test_loader)
         self.test_loader = test_loader  # Keep reference for backward compatibility
 
-    async def execute_action(self, action: ActionType, parent_event_id: str = None,
-                           event_emitter = None, variable_resolver = None,
-                           action_context: str = None) -> ActionResult:
+    async def execute_action(
+        self,
+        action: ActionType,
+        parent_event_id: str = None,
+        event_emitter=None,
+        variable_resolver=None,
+        action_context: str = None,
+    ) -> ActionResult:
         """
         Execute a single playbook action by delegating to appropriate executor.
 
@@ -268,10 +282,14 @@ class ActionExecutor:
                 result = await self.simple_actions.execute_command(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, SaveTimestampAction):
-                result = await self.simple_actions.execute_save_timestamp(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_save_timestamp(
+                    resolved_action, parent_event_id, event_emitter
+                )
 
             elif isinstance(resolved_action, SaveVariableAction):
-                result = await self.simple_actions.execute_save_variable(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_save_variable(
+                    resolved_action, parent_event_id, event_emitter
+                )
 
             elif isinstance(resolved_action, PullAction):
                 result = await self.simple_actions.execute_pull(resolved_action, parent_event_id, event_emitter)
@@ -284,7 +302,7 @@ class ActionExecutor:
                     parent_event_id=parent_event_id,
                     event_emitter=event_emitter,
                     execution_context=self.execution_context,
-                    action_executor=self  # Pass self for nested action execution
+                    action_executor=self,  # Pass self for nested action execution
                 )
 
             elif isinstance(resolved_action, BlockAction):
@@ -293,7 +311,7 @@ class ActionExecutor:
                     parent_event_id=parent_event_id,
                     event_emitter=event_emitter,
                     variable_resolver=variable_resolver,
-                    action_executor=self  # Pass self for nested action execution
+                    action_executor=self,  # Pass self for nested action execution
                 )
 
             elif isinstance(resolved_action, LoopAction):
@@ -302,7 +320,7 @@ class ActionExecutor:
                     parent_event_id=parent_event_id,
                     event_emitter=event_emitter,
                     variable_resolver=variable_resolver,
-                    action_executor=self  # Pass self for nested action execution
+                    action_executor=self,  # Pass self for nested action execution
                 )
 
             elif isinstance(resolved_action, WaitUntilAction):
@@ -318,24 +336,36 @@ class ActionExecutor:
                 result = await self.flow_control.execute_continue(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, SnapshotFilesystemAction):
-                result = await self.simple_actions.execute_snapshot_filesystem(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_snapshot_filesystem(
+                    resolved_action, parent_event_id, event_emitter
+                )
 
             elif isinstance(resolved_action, PullChangedFilesAction):
-                result = await self.simple_actions.execute_pull_changed_files(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_pull_changed_files(
+                    resolved_action, parent_event_id, event_emitter
+                )
 
             else:
-                result = ActionResult(
-                    success=False,
-                    message=f"Unknown action type: {action_type}"
-                )
+                result = ActionResult(success=False, message=f"Unknown action type: {action_type}")
 
             # Post-execution debug screenshot (if enabled and action was successful)
             if self.debug_screenshots and result and result.success:
                 # Only capture for GUI-modifying actions (exclude non-GUI actions)
-                non_gui_actions = (IdleAction, SaveTimestampAction, SaveVariableAction,
-                                   PullAction, BlockAction, LoopAction, ActionTestAction,
-                                   WaitUntilAction, PauseAction, StopAction, ContinueAction,
-                                   SnapshotFilesystemAction, PullChangedFilesAction)
+                non_gui_actions = (
+                    IdleAction,
+                    SaveTimestampAction,
+                    SaveVariableAction,
+                    PullAction,
+                    BlockAction,
+                    LoopAction,
+                    ActionTestAction,
+                    WaitUntilAction,
+                    PauseAction,
+                    StopAction,
+                    ContinueAction,
+                    SnapshotFilesystemAction,
+                    PullChangedFilesAction,
+                )
                 if not isinstance(resolved_action, non_gui_actions):
                     try:
                         # Capture and save post-execution screenshot
@@ -349,10 +379,7 @@ class ActionExecutor:
 
         except Exception as e:  # noqa: BLE001 -- top-level action handler; must convert any failure to ActionResult
             log.error(f"Error executing action: {e}", exc_info=True)
-            return ActionResult(
-                success=False,
-                message=f"Exception: {str(e)}"
-            )
+            return ActionResult(success=False, message=f"Exception: {str(e)}")
 
     async def execute_programmatic_pull(self, src_path: str, description: str = "Programmatic pull") -> ActionResult:
         """

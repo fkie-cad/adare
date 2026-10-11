@@ -82,10 +82,12 @@ class ConsoleHandlerFormatter(BaseAdareFormatter):
         super().__init__(config.CONSOLEHANDLER, CONSOLE_LEVEL_PREFIXES)
 
 
-def setup_logger(loglevel_console: int | None = logging.DEBUG,
-                loglevel_file: int | None = logging.DEBUG,
-                logfile: str | None = None,
-                console: bool = True) -> None:
+def setup_logger(
+    loglevel_console: int | None = logging.DEBUG,
+    loglevel_file: int | None = logging.DEBUG,
+    logfile: str | None = None,
+    console: bool = True,
+) -> None:
     """Setup ADARE application logging with console and file handlers.
 
     Configures the root logger with appropriate handlers based on the

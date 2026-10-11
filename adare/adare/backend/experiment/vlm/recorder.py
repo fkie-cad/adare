@@ -36,7 +36,7 @@ _CLICK_WAIT_TIMEOUT = 30.0
 
 def _slugify(text: str, *, max_len: int = 32) -> str:
     slug = re.sub(r'[^a-z0-9]+', '_', (text or '').lower()).strip('_')
-    return (slug[:max_len] or 'target')
+    return slug[:max_len] or 'target'
 
 
 def crop_around(
@@ -123,8 +123,7 @@ class PlaybookRecorder:
         :meth:`rollback`. Taken by the planning agent *before* it attempts a
         sub-goal, so a dead end can undo exactly the steps it recorded.
         """
-        return (len(self._actions), len(self._meta), len(self._tests),
-                self._step, dict(self._variables))
+        return (len(self._actions), len(self._meta), len(self._tests), self._step, dict(self._variables))
 
     def rollback(self, mark: tuple[int, int, int, int, dict[str, Any]]) -> None:
         """Discard everything recorded since ``mark`` (from :meth:`mark`).
@@ -227,29 +226,41 @@ class PlaybookRecorder:
 
         # Gate the click on its target actually being present, removing the
         # "click into the void" race: wait for the same image crop first.
-        self._actions.append({
-            'wait_until': {
-                'condition': {'exists': {'image': filename}},
-                'timeout': _CLICK_WAIT_TIMEOUT,
-                'description': f'wait for {describe} before click',
+        self._actions.append(
+            {
+                'wait_until': {
+                    'condition': {'exists': {'image': filename}},
+                    'timeout': _CLICK_WAIT_TIMEOUT,
+                    'description': f'wait for {describe} before click',
+                }
             }
-        })
-        self._meta.append({
-            'step': wait_idx, 'kind': 'wait_before_click',
-            'image': filename, 'describe': describe,
-        })
+        )
+        self._meta.append(
+            {
+                'step': wait_idx,
+                'kind': 'wait_before_click',
+                'image': filename,
+                'describe': describe,
+            }
+        )
 
         click_type = 'double' if double else button
-        self._actions.append({
-            'click': {
-                'target': {'image': filename},
-                'type': click_type,
-                'description': describe,
+        self._actions.append(
+            {
+                'click': {
+                    'target': {'image': filename},
+                    'type': click_type,
+                    'description': describe,
+                }
             }
-        })
+        )
         meta: dict[str, Any] = {
-            'step': idx, 'kind': 'click', 'image': filename,
-            'coords': [x, y], 'crop_box': box, 'describe': describe,
+            'step': idx,
+            'kind': 'click',
+            'image': filename,
+            'coords': [x, y],
+            'crop_box': box,
+            'describe': describe,
             'click_type': click_type,
         }
         if bbox is not None:
@@ -275,22 +286,23 @@ class PlaybookRecorder:
 
     def record_scroll(self, direction: str, amount: int, describe: str = '') -> None:
         idx = self._next_index()
-        self._actions.append({
-            'scroll': {'direction': direction, 'amount': int(amount), 'description': describe}
-        })
-        self._meta.append({'step': idx, 'kind': 'scroll', 'direction': direction,
-                           'amount': int(amount), 'describe': describe})
+        self._actions.append({'scroll': {'direction': direction, 'amount': int(amount), 'description': describe}})
+        self._meta.append(
+            {'step': idx, 'kind': 'scroll', 'direction': direction, 'amount': int(amount), 'describe': describe}
+        )
 
     def record_wait(self, until_describe: str, *, timeout: float = 120.0) -> None:
         """Record a screen transition as a ``WaitUntilAction`` (OCR-text exists)."""
         idx = self._next_index()
-        self._actions.append({
-            'wait_until': {
-                'condition': {'exists': {'text': until_describe}},
-                'timeout': timeout,
-                'description': f'wait until: {until_describe}',
+        self._actions.append(
+            {
+                'wait_until': {
+                    'condition': {'exists': {'text': until_describe}},
+                    'timeout': timeout,
+                    'description': f'wait until: {until_describe}',
+                }
             }
-        })
+        )
         self._meta.append({'step': idx, 'kind': 'wait', 'until_describe': until_describe})
 
     def record_idle(self, duration: float, describe: str = '') -> None:
@@ -373,7 +385,6 @@ class PlaybookRecorder:
         if not self._actions:
             raise PlaybookRecordingError('Refusing to write an empty playbook')
         self.playbook_path.write_text(self.to_yaml())
-        self.meta_path.write_text(json.dumps(
-            {'goal': self._goal, 'steps': self._meta}, indent=2))
+        self.meta_path.write_text(json.dumps({'goal': self._goal, 'steps': self._meta}, indent=2))
         log.info('Wrote playbook (%d actions) to %s', len(self._actions), self.playbook_path)
         return self.playbook_path

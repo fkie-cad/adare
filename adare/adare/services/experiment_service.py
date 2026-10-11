@@ -8,6 +8,7 @@ Note: Some complex operations (like experiment_run with async and interactive fl
 are kept in the CLI/backend for now due to their complexity. This service focuses
 on simpler CRUD operations that benefit from the API pattern.
 """
+
 import asyncio
 import contextlib
 import logging
@@ -88,6 +89,7 @@ log = logging.getLogger(__name__)
 class ExperimentRunStartedInfo:
     """Returned from ExperimentService.run() — minimal payload for callers
     that kick off an experiment run as a background task."""
+
     run_ulid: str
     experiment_name: str
 
@@ -129,22 +131,24 @@ class ExperimentService:
                 f'Edit {experiment_dir.playbookfile.name} to define GUI actions and tests',
                 f'Edit {experiment_dir.metadatafile.name} to add experiment details',
                 f'Load the experiment with: adare experiment load {request.name}',
-                f'Run the experiment with: adare experiment run {request.name} -e <environment>'
+                f'Run the experiment with: adare experiment run {request.name} -e <environment>',
             ]
 
-            return Result.ok(ExperimentInfo(
-                id='',  # Not in database yet
-                name=request.name,
-                description='',
-                file_path=experiment_dir.path,
-                sha256='',
-                environment_names=[],
-                run_count=0,
-                productive_run_count=0,
-                is_loaded=False,
-                next_steps=next_steps,
-                tip='See documentation for tutorial on how to write experiments',
-            ))
+            return Result.ok(
+                ExperimentInfo(
+                    id='',  # Not in database yet
+                    name=request.name,
+                    description='',
+                    file_path=experiment_dir.path,
+                    sha256='',
+                    environment_names=[],
+                    run_count=0,
+                    productive_run_count=0,
+                    is_loaded=False,
+                    next_steps=next_steps,
+                    tip='See documentation for tutorial on how to write experiments',
+                )
+            )
 
         except ExperimentDirectoryAlreadyExistsError as e:
             return Result.from_exception(e)
@@ -161,12 +165,7 @@ class ExperimentService:
             or error information on failure.
         """
         try:
-            backend_experiment_load(
-                request.project_path,
-                request.name,
-                force=request.force,
-                silent=request.silent
-            )
+            backend_experiment_load(request.project_path, request.name, force=request.force, silent=request.silent)
 
             # Get experiment info from database
             return self.get_by_name(request.project_path, request.name)
@@ -197,7 +196,7 @@ class ExperimentService:
                 request.project_path,
                 request.source_experiment,
                 request.target_experiment,
-                environments=request.environments
+                environments=request.environments,
             )
 
             # Build cloned experiment info
@@ -206,22 +205,24 @@ class ExperimentService:
             next_steps = [
                 'Edit the cloned playbook to create your variation',
                 f'Load the experiment with: adare experiment load {request.target_experiment}',
-                f'Run the experiment with: adare experiment run {request.target_experiment} -e <environment>'
+                f'Run the experiment with: adare experiment run {request.target_experiment} -e <environment>',
             ]
 
-            return Result.ok(ExperimentInfo(
-                id='',  # Not in database yet
-                name=request.target_experiment,
-                description=f'Cloned from {request.source_experiment}',
-                file_path=experiment_dir.path,
-                sha256='',
-                environment_names=request.environments or [],
-                run_count=0,
-                productive_run_count=0,
-                is_loaded=False,
-                next_steps=next_steps,
-                tip='The cloned experiment has its own independent playbook',
-            ))
+            return Result.ok(
+                ExperimentInfo(
+                    id='',  # Not in database yet
+                    name=request.target_experiment,
+                    description=f'Cloned from {request.source_experiment}',
+                    file_path=experiment_dir.path,
+                    sha256='',
+                    environment_names=request.environments or [],
+                    run_count=0,
+                    productive_run_count=0,
+                    is_loaded=False,
+                    next_steps=next_steps,
+                    tip='The cloned experiment has its own independent playbook',
+                )
+            )
 
         except ExperimentDirectoryDoesNotExistError as e:
             return Result.from_exception(e)
@@ -241,17 +242,16 @@ class ExperimentService:
         """
         try:
             backend_experiment_remove(
-                request.project_path,
-                request.name,
-                force=request.force,
-                keep_files=request.keep_files
+                request.project_path, request.name, force=request.force, keep_files=request.keep_files
             )
 
-            return Result.ok(ExperimentRemoveResult(
-                removed_from_db=True,
-                files_deleted=not request.keep_files,
-                experiment_name=request.name,
-            ))
+            return Result.ok(
+                ExperimentRemoveResult(
+                    removed_from_db=True,
+                    files_deleted=not request.keep_files,
+                    experiment_name=request.name,
+                )
+            )
 
         except ExperimentDirectoryDoesNotExistError as e:
             return Result.from_exception(e)
@@ -271,10 +271,12 @@ class ExperimentService:
             # The backend function prints its own output and returns the count
             deleted_count = backend_experiment_clean(project_path, name)
 
-            return Result.ok(ExperimentCleanResult(
-                deleted_count=deleted_count if deleted_count else 0,
-                experiment_name=name,
-            ))
+            return Result.ok(
+                ExperimentCleanResult(
+                    deleted_count=deleted_count if deleted_count else 0,
+                    experiment_name=name,
+                )
+            )
 
         except ExperimentDirectoryDoesNotExistError as e:
             return Result.from_exception(e)
@@ -299,22 +301,24 @@ class ExperimentService:
             next_steps = [
                 f'Review the example playbook at {experiment_dir.playbookfile}',
                 f'Load the experiment with: adare experiment load {name}',
-                f'Run the experiment with: adare experiment run {name} -e <environment>'
+                f'Run the experiment with: adare experiment run {name} -e <environment>',
             ]
 
-            return Result.ok(ExperimentInfo(
-                id='',
-                name=name,
-                description='Example experiment',
-                file_path=experiment_dir.path,
-                sha256='',
-                environment_names=[],
-                run_count=0,
-                productive_run_count=0,
-                is_loaded=False,
-                next_steps=next_steps,
-                tip='This example demonstrates basic playbook structure',
-            ))
+            return Result.ok(
+                ExperimentInfo(
+                    id='',
+                    name=name,
+                    description='Example experiment',
+                    file_path=experiment_dir.path,
+                    sha256='',
+                    environment_names=[],
+                    run_count=0,
+                    productive_run_count=0,
+                    is_loaded=False,
+                    next_steps=next_steps,
+                    tip='This example demonstrates basic playbook structure',
+                )
+            )
 
         except ExperimentDirectoryAlreadyExistsError as e:
             return Result.from_exception(e)
@@ -343,9 +347,7 @@ class ExperimentService:
         ensure_project_database_exists(target)
         return Result.ok(target)
 
-    def ensure_verify_setup(
-        self, project_path: Path, environment_name: str
-    ) -> Result[str]:
+    def ensure_verify_setup(self, project_path: Path, environment_name: str) -> Result[str]:
         """Idempotently prepare the built-in `verify_vm` experiment for this
         environment: register the example experiment if missing, and attach
         the environment with force=True. Returns the experiment name."""
@@ -355,8 +357,7 @@ class ExperimentService:
         if not example_result.success:
             already_exists = (
                 example_result.error is not None
-                and example_result.error.code
-                == ExperimentDirectoryAlreadyExistsError.__name__
+                and example_result.error.code == ExperimentDirectoryAlreadyExistsError.__name__
             )
             if not already_exists:
                 return Result(success=False, error=example_result.error)
@@ -419,16 +420,16 @@ class ExperimentService:
                         runlog=True,
                     )
                 except (LoggedException, OSError, ValueError, SQLAlchemyError):
-                    log.exception(
-                        "Background experiment run %s failed", ulid_str
-                    )
+                    log.exception("Background experiment run %s failed", ulid_str)
 
             asyncio.create_task(_run_in_background())
 
-            return Result.ok(ExperimentRunStartedInfo(
-                run_ulid=ulid_str,
-                experiment_name=name,
-            ))
+            return Result.ok(
+                ExperimentRunStartedInfo(
+                    run_ulid=ulid_str,
+                    experiment_name=name,
+                )
+            )
 
         except ExperimentDirectoryDoesNotExistError as e:
             return Result.from_exception(e)
@@ -460,10 +461,12 @@ class ExperimentService:
                 environment_name=request.environment,
             )
 
-            return Result.ok(ExperimentValidateResult(
-                name=request.name,
-                checks=checks,
-            ))
+            return Result.ok(
+                ExperimentValidateResult(
+                    name=request.name,
+                    checks=checks,
+                )
+            )
 
         except (ExperimentDirectoryDoesNotExistError, ExperimentIntegrityError) as e:
             return Result.from_exception(e)
@@ -601,16 +604,16 @@ class ExperimentService:
                 solutions=['Check file permissions', 'Verify the experiment directory is writable'],
             )
 
-        version, db_ingested = self._reingest_playbook_db(
-            request.project_path, request.experiment, playbook_file
-        )
+        version, db_ingested = self._reingest_playbook_db(request.project_path, request.experiment, playbook_file)
 
-        return Result.ok(PlaybookWriteResult(
-            path=playbook_file,
-            version=version,
-            backup_path=backup_path,
-            db_ingested=db_ingested,
-        ))
+        return Result.ok(
+            PlaybookWriteResult(
+                path=playbook_file,
+                version=version,
+                backup_path=backup_path,
+                db_ingested=db_ingested,
+            )
+        )
 
     def _reingest_playbook_db(
         self, project_path: Path, experiment: str, playbook_file: Path
@@ -651,18 +654,20 @@ class ExperimentService:
             Result[ExperimentEnvModifyResult] with affected experiments.
         """
         try:
-            result = backend_experiment_add_environments(
-                request.project_path,
-                request.experiment_pattern,
-                request.environments,
-                force=request.force
-            ) or {}
+            result = (
+                backend_experiment_add_environments(
+                    request.project_path, request.experiment_pattern, request.environments, force=request.force
+                )
+                or {}
+            )
 
-            return Result.ok(ExperimentEnvModifyResult(
-                affected_experiments=result.get('affected_experiments', []),
-                environments_changed=request.environments,
-                operation='add',
-            ))
+            return Result.ok(
+                ExperimentEnvModifyResult(
+                    affected_experiments=result.get('affected_experiments', []),
+                    environments_changed=request.environments,
+                    operation='add',
+                )
+            )
 
         except ExperimentDirectoryDoesNotExistError as e:
             return Result.from_exception(e)
@@ -678,18 +683,20 @@ class ExperimentService:
             Result[ExperimentEnvModifyResult] with affected experiments.
         """
         try:
-            result = backend_experiment_remove_environments(
-                request.project_path,
-                request.experiment_pattern,
-                request.environments,
-                force=request.force
-            ) or {}
+            result = (
+                backend_experiment_remove_environments(
+                    request.project_path, request.experiment_pattern, request.environments, force=request.force
+                )
+                or {}
+            )
 
-            return Result.ok(ExperimentEnvModifyResult(
-                affected_experiments=result.get('affected_experiments', []),
-                environments_changed=request.environments,
-                operation='remove',
-            ))
+            return Result.ok(
+                ExperimentEnvModifyResult(
+                    affected_experiments=result.get('affected_experiments', []),
+                    environments_changed=request.environments,
+                    operation='remove',
+                )
+            )
 
         except ExperimentDirectoryDoesNotExistError as e:
             return Result.from_exception(e)
@@ -719,15 +726,19 @@ class ExperimentService:
                     # Count runs
                     run_count = 0
                     with contextlib.suppress(SQLAlchemyError, ValueError):
-                        run_count = experiment_database.get_experiment_run_count(project_path, exp.id, exclude_fake=False)
+                        run_count = experiment_database.get_experiment_run_count(
+                            project_path, exp.id, exclude_fake=False
+                        )
 
-                    items.append(ExperimentListItem(
-                        id=exp.id,
-                        name=exp.name,
-                        description=exp.description or "",
-                        environment_count=env_count,
-                        run_count=run_count,
-                    ))
+                    items.append(
+                        ExperimentListItem(
+                            id=exp.id,
+                            name=exp.name,
+                            description=exp.description or "",
+                            environment_count=env_count,
+                            run_count=run_count,
+                        )
+                    )
 
                 return Result.ok(items)
 
@@ -736,7 +747,7 @@ class ExperimentService:
             return Result.fail(
                 code="ExperimentListError",
                 message=f"Failed to list experiments: {e}",
-                solutions=['Check project directory', 'Ensure database is accessible']
+                solutions=['Check project directory', 'Ensure database is accessible'],
             )
 
     def get_by_name(self, project_path: Path, name: str) -> Result[ExperimentInfo]:
@@ -762,7 +773,7 @@ class ExperimentService:
                             'Use `adare experiment list` to see available experiments',
                             f'Load the experiment with: adare experiment load {name}',
                             'Check if the experiment name is spelled correctly',
-                        ]
+                        ],
                     )
 
                 # Get environment names
@@ -772,31 +783,37 @@ class ExperimentService:
                 run_count = 0
                 productive_run_count = 0
                 try:
-                    run_count = experiment_database.get_experiment_run_count(project_path, experiment.id, exclude_fake=False)
-                    productive_run_count = experiment_database.get_experiment_run_count(project_path, experiment.id, exclude_fake=True)
+                    run_count = experiment_database.get_experiment_run_count(
+                        project_path, experiment.id, exclude_fake=False
+                    )
+                    productive_run_count = experiment_database.get_experiment_run_count(
+                        project_path, experiment.id, exclude_fake=True
+                    )
                 except (SQLAlchemyError, ValueError):
                     pass
 
                 experiment_dir = ExperimentDirectory(project_path, name)
 
-                return Result.ok(ExperimentInfo(
-                    id=experiment.id,
-                    name=experiment.name,
-                    description=experiment.description or "",
-                    file_path=experiment_dir.path if experiment_dir.exists() else Path(""),
-                    sha256=experiment.sha256 or "",
-                    environment_names=env_names,
-                    run_count=run_count,
-                    productive_run_count=productive_run_count,
-                    is_loaded=True,
-                ))
+                return Result.ok(
+                    ExperimentInfo(
+                        id=experiment.id,
+                        name=experiment.name,
+                        description=experiment.description or "",
+                        file_path=experiment_dir.path if experiment_dir.exists() else Path(""),
+                        sha256=experiment.sha256 or "",
+                        environment_names=env_names,
+                        run_count=run_count,
+                        productive_run_count=productive_run_count,
+                        is_loaded=True,
+                    )
+                )
 
         except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to get experiment: {e}")
             return Result.fail(
                 code="ExperimentGetError",
                 message=f"Failed to get experiment: {e}",
-                solutions=['Check if experiment exists', 'Try reloading the experiment']
+                solutions=['Check if experiment exists', 'Try reloading the experiment'],
             )
 
     def get_by_id(self, project_path: Path, experiment_id: str) -> Result[ExperimentInfo]:
@@ -821,7 +838,7 @@ class ExperimentService:
                         solutions=[
                             'Use `adare experiment list` to see available experiments',
                             'Check if the experiment ID is correct',
-                        ]
+                        ],
                     )
 
                 return self.get_by_name(project_path, experiment.name)
@@ -831,5 +848,5 @@ class ExperimentService:
             return Result.fail(
                 code="ExperimentGetError",
                 message=f"Failed to get experiment by ID: {e}",
-                solutions=['Check if experiment exists']
+                solutions=['Check if experiment exists'],
             )

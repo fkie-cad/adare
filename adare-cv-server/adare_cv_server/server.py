@@ -21,6 +21,7 @@ mcp = FastMCP(name="adare-cv-server")
 
 # ========== Aggregation Helper Functions ==========
 
+
 def _normalize_similarity(similarity: float, method: str) -> float:
     """Normalize similarity scores to 0.0-1.0 range.
 
@@ -69,9 +70,7 @@ def _estimate_match_size(scale: float, original_icon_size: tuple[int, int]) -> t
 
 
 def _aggregate_matches(
-    all_matches: list[DetectionMatch],
-    max_results: int,
-    icon_size: tuple[int, int]
+    all_matches: list[DetectionMatch], max_results: int, icon_size: tuple[int, int]
 ) -> dict[str, Any]:
     """Aggregate matches from multiple detection methods.
 
@@ -97,7 +96,7 @@ def _aggregate_matches(
             'similarities': [],
             'methods': [],
             'contributing_methods': [],
-            'method_used': 'no_matches'
+            'method_used': 'no_matches',
         }
 
     log.info(f"Aggregating {len(all_matches)} matches from {len(set(m.method for m in all_matches))} methods")
@@ -119,11 +118,13 @@ def _aggregate_matches(
             'similarities': [],
             'methods': [],
             'contributing_methods': [],
-            'method_used': 'all_suppressed'
+            'method_used': 'all_suppressed',
         }
 
-    log.info(f"After global NMS: {len(filtered_locations)} unique locations "
-             f"(suppressed {len(all_matches) - len(filtered_locations)} duplicates)")
+    log.info(
+        f"After global NMS: {len(filtered_locations)} unique locations "
+        f"(suppressed {len(all_matches) - len(filtered_locations)} duplicates)"
+    )
 
     # Build lookup: location → all matches at that location
     location_to_matches = {}
@@ -164,7 +165,7 @@ def _aggregate_matches(
     sorted_results = sorted(
         zip(final_locations, final_similarities, final_methods, final_contributing_methods),
         key=lambda x: x[1],
-        reverse=True
+        reverse=True,
     )
 
     # Limit to max_results
@@ -197,15 +198,17 @@ def _aggregate_matches(
         log.info(f"Top {top_matches} matches:")
         for i in range(top_matches):
             methods_str = ', '.join(final_contributing_methods[i])
-            log.info(f"  {i+1}. {final_locations[i]} - similarity: {final_similarities[i]:.3f}, "
-                     f"primary: {final_methods[i]}, contributors: [{methods_str}]")
+            log.info(
+                f"  {i + 1}. {final_locations[i]} - similarity: {final_similarities[i]:.3f}, "
+                f"primary: {final_methods[i]}, contributors: [{methods_str}]"
+            )
 
     return {
         'locations': final_locations,
         'similarities': final_similarities,
         'methods': final_methods,
         'contributing_methods': final_contributing_methods,
-        'method_used': method_used
+        'method_used': method_used,
     }
 
 
@@ -223,7 +226,7 @@ async def find_icon(
     use_orb: bool = True,
     orb_min_matches: int = 2,
     orb_max_matches: int = 10,
-    orb_distance_threshold: float = 80.0
+    orb_distance_threshold: float = 80.0,
 ) -> dict[str, Any]:
     """Find icon locations in provided screenshot data using base64 encoded icon.
 
@@ -245,8 +248,10 @@ async def find_icon(
     Global NMS removes cross-method duplicates.
     """
     try:
-        log.info(f"Starting aggregated detection pipeline (SIFT: {use_sift}, ORB: {use_orb}, "
-                 f"aggregation: {CVConstants.ENABLE_AGGREGATION})")
+        log.info(
+            f"Starting aggregated detection pipeline (SIFT: {use_sift}, ORB: {use_orb}, "
+            f"aggregation: {CVConstants.ENABLE_AGGREGATION})"
+        )
         screenshot_bytes = base64.b64decode(screenshot_base64)
         icon_bytes = base64.b64decode(icon_base64)
 
@@ -255,12 +260,12 @@ async def find_icon(
         icon_bytes = ImageDecoder.preprocess_icon(icon_bytes)
 
         # Decode images with alpha channel preservation for masked matching
-        screenshot_img, icon_img, icon_mask = ImageDecoder.decode_images_with_alpha(
-            screenshot_bytes, icon_bytes
-        )
+        screenshot_img, icon_img, icon_mask = ImageDecoder.decode_images_with_alpha(screenshot_bytes, icon_bytes)
 
-        log.info(f"Decoded images - screenshot: {screenshot_img.shape}, "
-                f"icon: {icon_img.shape}, mask: {icon_mask.shape if icon_mask is not None else 'None'}")
+        log.info(
+            f"Decoded images - screenshot: {screenshot_img.shape}, "
+            f"icon: {icon_img.shape}, mask: {icon_mask.shape if icon_mask is not None else 'None'}"
+        )
 
         # Get original icon size for scale estimation
         icon_h, icon_w = icon_img.shape[:2]
@@ -283,18 +288,20 @@ async def find_icon(
                 log.info(f"Stage 0 (Canny edge) found {len(result.locations)} match(es), adding to pool")
                 method_weight = _get_method_weight(result.method)
 
-                for i, (loc, sim, scale, size) in enumerate(zip(
-                    result.locations, result.similarities, result.scales, result.sizes
-                )):
+                for i, (loc, sim, scale, size) in enumerate(
+                    zip(result.locations, result.similarities, result.scales, result.sizes)
+                ):
                     normalized_sim = _normalize_similarity(sim, result.method)
-                    all_matches.append(DetectionMatch(
-                        location=loc,
-                        similarity=normalized_sim,
-                        method=result.method,
-                        scale=scale,
-                        size=size,
-                        weighted_similarity=normalized_sim * method_weight
-                    ))
+                    all_matches.append(
+                        DetectionMatch(
+                            location=loc,
+                            similarity=normalized_sim,
+                            method=result.method,
+                            scale=scale,
+                            size=size,
+                            weighted_similarity=normalized_sim * method_weight,
+                        )
+                    )
             else:
                 log.info("Stage 0 (Canny edge) found no matches")
 
@@ -306,26 +313,26 @@ async def find_icon(
         # ========== Stage 1: Multi-Scale Template Matching (Precision Gate) ==========
         try:
             log.info("Stage 1 - Multi-scale template matching (precision gate)")
-            result = MultiScaleTemplateMatcher.find_icon_locations(
-                screenshot_bytes, icon_bytes, icon_mask=icon_mask
-            )
+            result = MultiScaleTemplateMatcher.find_icon_locations(screenshot_bytes, icon_bytes, icon_mask=icon_mask)
 
             if result.success:
                 log.info(f"Stage 1 (multi-scale template) found {len(result.locations)} match(es), adding to pool")
                 method_weight = _get_method_weight(result.method)
 
-                for i, (loc, sim, scale, size) in enumerate(zip(
-                    result.locations, result.similarities, result.scales, result.sizes
-                )):
+                for i, (loc, sim, scale, size) in enumerate(
+                    zip(result.locations, result.similarities, result.scales, result.sizes)
+                ):
                     normalized_sim = _normalize_similarity(sim, result.method)
-                    all_matches.append(DetectionMatch(
-                        location=loc,
-                        similarity=normalized_sim,
-                        method=result.method,
-                        scale=scale,
-                        size=size,
-                        weighted_similarity=normalized_sim * method_weight
-                    ))
+                    all_matches.append(
+                        DetectionMatch(
+                            location=loc,
+                            similarity=normalized_sim,
+                            method=result.method,
+                            scale=scale,
+                            size=size,
+                            weighted_similarity=normalized_sim * method_weight,
+                        )
+                    )
             else:
                 log.info("Stage 1 (multi-scale template) found no matches")
 
@@ -360,26 +367,27 @@ async def find_icon(
             try:
                 log.info("Stage 3 - ORB feature matching (textured icon)")
                 result = ORBMatcher.find_icon_locations(
-                    screenshot_bytes, icon_bytes,
-                    orb_min_matches, orb_max_matches, orb_distance_threshold
+                    screenshot_bytes, icon_bytes, orb_min_matches, orb_max_matches, orb_distance_threshold
                 )
 
                 if result.success:
                     log.info(f"Stage 3 (ORB) found {len(result.locations)} match(es), adding to pool")
                     method_weight = _get_method_weight(result.method)
 
-                    for i, (loc, sim, scale, size) in enumerate(zip(
-                        result.locations, result.similarities, result.scales, result.sizes
-                    )):
+                    for i, (loc, sim, scale, size) in enumerate(
+                        zip(result.locations, result.similarities, result.scales, result.sizes)
+                    ):
                         normalized_sim = _normalize_similarity(sim, result.method)
-                        all_matches.append(DetectionMatch(
-                            location=loc,
-                            similarity=normalized_sim,
-                            method=result.method,
-                            scale=scale,
-                            size=size if size != (0, 0) else _estimate_match_size(scale, icon_size),
-                            weighted_similarity=normalized_sim * method_weight
-                        ))
+                        all_matches.append(
+                            DetectionMatch(
+                                location=loc,
+                                similarity=normalized_sim,
+                                method=result.method,
+                                scale=scale,
+                                size=size if size != (0, 0) else _estimate_match_size(scale, icon_size),
+                                weighted_similarity=normalized_sim * method_weight,
+                            )
+                        )
                 else:
                     log.info("Stage 3 (ORB) found no matches")
 
@@ -392,26 +400,26 @@ async def find_icon(
         if use_sift:
             try:
                 log.info("Stage 4 - SIFT fallback (gradient/complex icons)")
-                result = SIFTMatcher.find_icon_locations(
-                    screenshot_bytes, icon_bytes, sift_min_matches, sift_ratio
-                )
+                result = SIFTMatcher.find_icon_locations(screenshot_bytes, icon_bytes, sift_min_matches, sift_ratio)
 
                 if result.success:
                     log.info(f"Stage 4 (SIFT) found {len(result.locations)} match(es), adding to pool")
                     method_weight = _get_method_weight(result.method)
 
-                    for i, (loc, sim, scale, size) in enumerate(zip(
-                        result.locations, result.similarities, result.scales, result.sizes
-                    )):
+                    for i, (loc, sim, scale, size) in enumerate(
+                        zip(result.locations, result.similarities, result.scales, result.sizes)
+                    ):
                         normalized_sim = _normalize_similarity(sim, result.method)
-                        all_matches.append(DetectionMatch(
-                            location=loc,
-                            similarity=normalized_sim,
-                            method=result.method,
-                            scale=scale,
-                            size=size if size != (0, 0) else _estimate_match_size(scale, icon_size),
-                            weighted_similarity=normalized_sim * method_weight
-                        ))
+                        all_matches.append(
+                            DetectionMatch(
+                                location=loc,
+                                similarity=normalized_sim,
+                                method=result.method,
+                                scale=scale,
+                                size=size if size != (0, 0) else _estimate_match_size(scale, icon_size),
+                                weighted_similarity=normalized_sim * method_weight,
+                            )
+                        )
                 else:
                     log.info("Stage 4 (SIFT) found no matches")
 
@@ -429,18 +437,20 @@ async def find_icon(
                 log.info(f"Stage 5 (template) found {len(result.locations)} match(es), adding to pool")
                 method_weight = _get_method_weight(result.method)
 
-                for i, (loc, sim, scale, size) in enumerate(zip(
-                    result.locations, result.similarities, result.scales, result.sizes
-                )):
+                for i, (loc, sim, scale, size) in enumerate(
+                    zip(result.locations, result.similarities, result.scales, result.sizes)
+                ):
                     normalized_sim = _normalize_similarity(sim, result.method)
-                    all_matches.append(DetectionMatch(
-                        location=loc,
-                        similarity=normalized_sim,
-                        method=result.method,
-                        scale=scale,
-                        size=size,
-                        weighted_similarity=normalized_sim * method_weight
-                    ))
+                    all_matches.append(
+                        DetectionMatch(
+                            location=loc,
+                            similarity=normalized_sim,
+                            method=result.method,
+                            scale=scale,
+                            size=size,
+                            weighted_similarity=normalized_sim * method_weight,
+                        )
+                    )
             else:
                 log.info("Stage 5 (template) found no matches")
 
@@ -466,31 +476,20 @@ async def find_icon(
             'similarities': [],
             'methods': [],
             'contributing_methods': [],
-            'method_used': 'no_matches'
+            'method_used': 'no_matches',
         }
 
     except (ImageDecodingError, base64.binascii.Error, ValueError) as e:
         log.error(f"Icon search input error: {e}")
-        return {
-            "error": f"Invalid input data: {str(e)}",
-            "matches": []
-        }
+        return {"error": f"Invalid input data: {str(e)}", "matches": []}
     except Exception as e:
         log.error(f"Icon search failed: {e}", exc_info=True)
-        return {
-            "error": f"Icon search failed: {str(e)}",
-            "locations": [],
-            "similarities": [],
-            "method_used": "error"
-        }
+        return {"error": f"Icon search failed: {str(e)}", "locations": [], "similarities": [], "method_used": "error"}
 
 
 @mcp.tool()
 async def get_all_text(
-    screenshot_base64: str,
-    offset_x: int = 0,
-    offset_y: int = 0,
-    format: str = "json"
+    screenshot_base64: str, offset_x: int = 0, offset_y: int = 0, format: str = "json"
 ) -> dict[str, Any]:
     """Get all detected text from screenshot data. Format can be 'json' or 'csv'."""
     try:
@@ -498,16 +497,10 @@ async def get_all_text(
         return await TextDetector.get_all_text(screenshot_bytes, offset_x, offset_y, format)
     except (OCRProcessingError, ImageDecodingError, base64.binascii.Error, ValueError) as e:
         log.error(f"Text detection input error: {e}")
-        return {
-            "error": f"Invalid input data: {str(e)}",
-            "matches": []
-        }
+        return {"error": f"Invalid input data: {str(e)}", "matches": []}
     except Exception as e:
         log.error(f"Get all text failed: {e}", exc_info=True)
-        return {
-            "error": f"Get all text failed: {str(e)}",
-            "all_text": []
-        }
+        return {"error": f"Get all text failed: {str(e)}", "all_text": []}
 
 
 @mcp.tool()
@@ -522,7 +515,7 @@ async def find_text(
     allow_missing_chars: bool | str | list[str] | None = None,
     max_missing: int | None = None,
     min_similarity: float | None = None,
-    case_sensitive: bool = False
+    case_sensitive: bool = False,
 ) -> dict[str, Any]:
     """Find text locations in provided screenshot data with advanced matching.
 
@@ -558,20 +551,14 @@ async def find_text(
             allow_missing_chars,
             max_missing,
             min_similarity,
-            case_sensitive
+            case_sensitive,
         )
     except (OCRProcessingError, ImageDecodingError, base64.binascii.Error, ValueError) as e:
         log.error(f"Text search input error: {e}")
-        return {
-            "error": f"Invalid input data: {str(e)}",
-            "matches": []
-        }
+        return {"error": f"Invalid input data: {str(e)}", "matches": []}
     except Exception as e:
         log.error(f"Text search failed: {e}", exc_info=True)
-        return {
-            "error": f"Text search failed: {str(e)}",
-            "locations": []
-        }
+        return {"error": f"Text search failed: {str(e)}", "locations": []}
 
 
 def create_server():
@@ -583,21 +570,21 @@ def create_server():
 @click.option('--port', type=int, default=DEFAULT_PORT, help='Port to run the MCP server on.')
 @click.option('--host', type=str, default=DEFAULT_HOST, help='Host to bind the server to.')
 @click.option('--debug', is_flag=True, help='Enable debug logging.')
-@click.option('--debug-output-dir', type=click.Path(file_okay=False, dir_okay=True), help='Directory for debug output images.')
+@click.option(
+    '--debug-output-dir', type=click.Path(file_okay=False, dir_okay=True), help='Directory for debug output images.'
+)
 def main(port: int, host: str, debug: bool, debug_output_dir: str = None) -> None:
     """Start the Adare CV server."""
 
     # Configure logging
     log_level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(
-        level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     log.info(f"Starting Adare CV server on {host}:{port}")
 
     if debug_output_dir:
         from pathlib import Path
+
         output_path = Path(debug_output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         log.info(f"Debug output enabled. Saving images to: {output_path}")
@@ -606,12 +593,7 @@ def main(port: int, host: str, debug: bool, debug_output_dir: str = None) -> Non
 
     try:
         # Run FastMCP server
-        mcp.run(
-            transport="streamable-http",
-            host=host,
-            port=port,
-            path=MCP_PATH
-        )
+        mcp.run(transport="streamable-http", host=host, port=port, path=MCP_PATH)
     except Exception as e:
         log.error(f"CV server failed to start: {e}", exc_info=True)
         raise

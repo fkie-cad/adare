@@ -42,7 +42,9 @@ class StageCtxManagerLite:
         if hasattr(self.stage, 'parent') and self.stage.parent:
             if self.stage.parent not in self._active_stages:
                 # For VM tests, be more lenient - just log a warning instead of raising error
-                log.warning(f"VM Test Stage '{self.stage.name}' expects parent '{self.stage.parent}' but no parent stage is active. Continuing anyway for VM tests.")
+                log.warning(
+                    f"VM Test Stage '{self.stage.name}' expects parent '{self.stage.parent}' but no parent stage is active. Continuing anyway for VM tests."
+                )
 
         # Add this stage to active stages registry
         self._active_stages[self.stage.name] = self.stage
@@ -53,10 +55,7 @@ class StageCtxManagerLite:
 
         # Call flow console directly (no events needed)
         self.flow_console.log_spinner(
-            identifier=self.stage_id,
-            message=self.stage.msg,
-            level=self.level,
-            start_time=self.start_time
+            identifier=self.stage_id, message=self.stage.msg, level=self.level, start_time=self.start_time
         )
 
         log.debug(f"Started VM test stage: {self.stage.name} - {self.stage.msg}")
@@ -85,12 +84,7 @@ class StageCtxManagerLite:
         self.stage.status = status
 
         # Call flow console directly (no events needed)
-        self.flow_console.log_spinner_done(
-            identifier=self.stage_id,
-            status=status,
-            message=message,
-            duration=duration
-        )
+        self.flow_console.log_spinner_done(identifier=self.stage_id, status=status, message=message, duration=duration)
 
         log.debug(f"Completed VM test stage: {self.stage.name} - Status: {status.name}, Duration: {duration:.2f}s")
 
@@ -124,8 +118,8 @@ def experiment_clean(project_path: Path, experiment_name: str):
                     location=f'Removed {removed_count} fake run(s)',
                     next_steps=[
                         'Fake runs have been permanently deleted from the database',
-                        f'You can continue testing with: adare experiment run {experiment_name} -e <environment>'
-                    ]
+                        f'You can continue testing with: adare experiment run {experiment_name} -e <environment>',
+                    ],
                 )
             else:
                 log.info(f'No fake runs found for experiment "{experiment_name}"')
@@ -133,9 +127,11 @@ def experiment_clean(project_path: Path, experiment_name: str):
 
     except ValueError as e:
         from adare.exceptions import LoggedException
+
         raise LoggedException(log, str(e)) from e
     except (OSError, KeyError) as e:
         from adare.exceptions import LoggedException
+
         raise LoggedException(log, f'Failed to clean experiment "{experiment_name}": {str(e)}') from e
 
 
@@ -168,8 +164,8 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
             f'experiment directory [b]{experiment_directory.path}[/b] does not exist',
             possible_solutions=[
                 f'check if experiment name "{experiment_name}" is correct',
-                'list available experiments with: adare experiment list'
-            ]
+                'list available experiments with: adare experiment list',
+            ],
         )
 
     try:
@@ -187,8 +183,8 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
                         f'experiment "{experiment_name}" not found in database',
                         possible_solutions=[
                             'use --force to remove the experiment directory anyway',
-                            f'load the experiment first with: adare experiment load {experiment_name}'
-                        ]
+                            f'load the experiment first with: adare experiment load {experiment_name}',
+                        ],
                     )
 
                 # Force removal of directory only
@@ -201,8 +197,8 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
                             location=str(experiment_directory.path),
                             next_steps=[
                                 'Experiment directory has been deleted from filesystem',
-                                'Experiment was not found in database (already removed or never loaded)'
-                            ]
+                                'Experiment was not found in database (already removed or never loaded)',
+                            ],
                         )
                         return
                     except OSError as e:
@@ -211,8 +207,8 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
                             f'failed to remove experiment directory: {e}',
                             possible_solutions=[
                                 'check file permissions',
-                                f'manually delete directory: rm -rf {experiment_directory.path}'
-                            ]
+                                f'manually delete directory: rm -rf {experiment_directory.path}',
+                            ],
                         ) from e
                 else:
                     raise LoggedErrorException(
@@ -220,8 +216,8 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
                         f'experiment "{experiment_name}" not in database and --keep-files specified',
                         possible_solutions=[
                             f'load the experiment first with: adare experiment load {experiment_name}',
-                            'remove --keep-files flag to delete the directory'
-                        ]
+                            'remove --keep-files flag to delete the directory',
+                        ],
                     )
 
             # Count productive runs
@@ -236,8 +232,8 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
                     possible_solutions=[
                         'use --force to remove the experiment and all its runs',
                         f'clean fake runs only with: adare experiment clean {experiment_name}',
-                        'back up important run data before removal'
-                    ]
+                        'back up important run data before removal',
+                    ],
                 )
 
             # Remove experiment from database (cascades to all runs and related data)
@@ -262,7 +258,7 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
             next_steps = [
                 f'Removed experiment from database (ulid: {experiment_ulid})',
                 f'Deleted {total_run_count} run(s) ({productive_run_count} productive, {total_run_count - productive_run_count} fake)',
-                files_status
+                files_status,
             ]
 
             if keep_files:
@@ -273,7 +269,7 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
             print_success_message(
                 title=f'Experiment "{experiment_name}" removed successfully!',
                 location=str(experiment_directory.path),
-                next_steps=next_steps
+                next_steps=next_steps,
             )
 
     except LoggedErrorException:
@@ -288,12 +284,14 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
             possible_solutions=[
                 'check database connectivity',
                 'ensure you have write permissions',
-                'check the log output for specific error details'
-            ]
+                'check the log output for specific error details',
+            ],
         ) from e
 
 
-async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = False, vm_cleanup_mode: str = 'prompt') -> bool:
+async def ova_test(
+    ova_file_path: Path, guest_platform: str, verbose: bool = False, vm_cleanup_mode: str = 'prompt'
+) -> bool:
     """
     Test OVA file compatibility with ADARE.
 
@@ -309,6 +307,7 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
         True if VM is compatible with ADARE, False otherwise
     """
     from adare.backend.experiment.vm_test import ova_test as vm_ova_test
+
     return await vm_ova_test(ova_file_path, guest_platform, verbose, vm_cleanup_mode)
 
 
@@ -318,7 +317,7 @@ async def vm_test_registered(
     guest_platform: str,
     architecture: str = 'x86_64',
     verbose: bool = False,
-    vm_cleanup_mode: str = 'prompt'
+    vm_cleanup_mode: str = 'prompt',
 ) -> bool:
     """
     Test a registered QEMU VM's compatibility with ADARE.
@@ -338,9 +337,8 @@ async def vm_test_registered(
         True if VM is compatible with ADARE, False otherwise
     """
     from adare.backend.experiment.vm_test import vm_test_registered as vm_test_registered_impl
-    return await vm_test_registered_impl(
-        vm_name, disk_path, guest_platform, architecture, verbose, vm_cleanup_mode
-    )
+
+    return await vm_test_registered_impl(vm_name, disk_path, guest_platform, architecture, verbose, vm_cleanup_mode)
 
 
 def publish_run_command(project_directory: Path, run_ulid: str):
@@ -371,11 +369,7 @@ def publish_run_command(project_directory: Path, run_ulid: str):
 
     # Validate login status
     if not is_logged_in():
-        raise NotLoggedInError(
-            log,
-            'You are not logged in to the server.',
-            possible_solutions=['Run: adare web login']
-        )
+        raise NotLoggedInError(log, 'You are not logged in to the server.', possible_solutions=['Run: adare web login'])
 
     # Validate run exists locally
     with ExperimentApi(project_directory) as exp_api:
@@ -384,19 +378,21 @@ def publish_run_command(project_directory: Path, run_ulid: str):
         run = exp_api.get_by_ulid(ExperimentRun, run_ulid)
         if not run:
             from adare.exceptions import ExperimentRunNotFoundError
+
             raise ExperimentRunNotFoundError(
                 log,
                 f'Experiment run {run_ulid} not found in project database.',
-                possible_solutions=['Check the run ULID', 'List runs with: adare run list']
+                possible_solutions=['Check the run ULID', 'List runs with: adare run list'],
             )
 
         experiment = run.experiment
         if not experiment:
             from adare.exceptions import ExperimentNotFoundError as LocalExpNotFound
+
             raise LocalExpNotFound(
                 log,
                 f'Experiment associated with run {run_ulid} not found.',
-                possible_solutions=['Check database integrity']
+                possible_solutions=['Check database integrity'],
             )
         # Read the identity fields while the session is open — the objects are
         # detached afterwards. The *server's* ULID is what the server can be asked
@@ -413,7 +409,7 @@ def publish_run_command(project_directory: Path, run_ulid: str):
             possible_solutions=[
                 'Publish the experiment first: adare web submit experiment <name>',
                 'Already published elsewhere? Fetch its server identity: adare web sync',
-            ]
+            ],
         )
 
     # Create API client
@@ -442,7 +438,7 @@ def publish_run_command(project_directory: Path, run_ulid: str):
                     possible_solutions=[
                         'Publish the experiment first with: adare web submit experiment <name>',
                         'Refresh the local view of the server: adare web sync',
-                    ]
+                    ],
                 )
             progress.update(task1, completed=1, description=f"[green]Experiment {experiment_name} verified on server")
         except ApiConnectionError:

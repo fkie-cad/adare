@@ -18,9 +18,7 @@ class TestRunCommand:
     @patch('adare.hypervisor.qemu.guestfish_client.subprocess.run')
     def test_run_command_basic_args(self, mock_run, mock_redirect, mock_log_file):
         """run_command() calls subprocess with correct guestfish CLI args."""
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout='output', stderr=''
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout='output', stderr='')
         client = GuestfishClient()
 
         # auto_mount=False to avoid detect_root_filesystem subprocess call
@@ -36,9 +34,7 @@ class TestRunCommand:
     @patch('adare.hypervisor.qemu.guestfish_client.subprocess.run')
     def test_run_command_readonly_adds_ro_flag(self, mock_run, mock_redirect, mock_log_file):
         """run_command() with readonly=True adds --ro flag."""
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout='', stderr=''
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout='', stderr='')
         client = GuestfishClient()
 
         client.run_command('/disk.qcow2', ['ls', '/'], readonly=True, auto_mount=False)
@@ -52,9 +48,7 @@ class TestRunCommand:
     @patch('adare.hypervisor.qemu.guestfish_client.subprocess.run')
     def test_run_command_returns_tuple(self, mock_run, mock_redirect, mock_log_file):
         """run_command() returns (returncode, stdout, stderr) tuple."""
-        mock_run.return_value = MagicMock(
-            returncode=1, stdout='some output', stderr='some error'
-        )
+        mock_run.return_value = MagicMock(returncode=1, stdout='some output', stderr='some error')
         client = GuestfishClient()
 
         result = client.run_command('/disk.qcow2', ['ls', '/'], auto_mount=False)
@@ -76,9 +70,7 @@ class TestRunCommand:
         ]
         client = GuestfishClient()
 
-        rc, stdout, stderr = client.run_command(
-            '/disk.qcow2', ['ls', '/'], auto_mount=True
-        )
+        rc, stdout, stderr = client.run_command('/disk.qcow2', ['ls', '/'], auto_mount=True)
 
         assert rc == 0
         # The second call should have run/mount commands
@@ -162,13 +154,7 @@ class TestParseFilesystemsOutput:
 
     def test_multi_partition_output(self):
         """_parse_filesystems_output() parses multi-partition output correctly."""
-        stdout = (
-            '/dev/sda1: ntfs\n'
-            '/dev/sda2: unknown\n'
-            '/dev/sda3: ext4\n'
-            '/dev/sda4: swap\n'
-            '/dev/sda5: xfs\n'
-        )
+        stdout = '/dev/sda1: ntfs\n/dev/sda2: unknown\n/dev/sda3: ext4\n/dev/sda4: swap\n/dev/sda5: xfs\n'
         client = GuestfishClient()
 
         result = client._parse_filesystems_output(stdout)
@@ -261,9 +247,7 @@ class TestIsNtfsHibernated:
     @patch('adare.hypervisor.qemu.guestfish_client.subprocess.run')
     def test_returns_false_for_non_ntfs(self, mock_run):
         """is_ntfs_hibernated() returns (False, fs_type) for non-NTFS filesystems."""
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout='/dev/sda1: ext4\n', stderr=''
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout='/dev/sda1: ext4\n', stderr='')
         client = GuestfishClient()
 
         is_hibernated, fs_type = client.is_ntfs_hibernated('/disk.qcow2', '/dev/sda1')
@@ -280,9 +264,7 @@ class TestRemoveNtfsHibernation:
     @patch('adare.hypervisor.qemu.guestfish_client.subprocess.run')
     def test_calls_ntfsfix_command(self, mock_run):
         """remove_ntfs_hibernation() calls guestfish with ntfsfix command."""
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout='ntfsfix output', stderr=''
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout='ntfsfix output', stderr='')
         client = GuestfishClient()
 
         client.remove_ntfs_hibernation('/disk.qcow2', '/dev/sda4')
@@ -326,9 +308,7 @@ class TestRunScript:
     @patch('adare.hypervisor.qemu.guestfish_client.subprocess.run')
     def test_creates_temp_file_runs_guestfish_cleans_up(self, mock_run):
         """run_script() creates temp file, runs guestfish, and cleans up."""
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout='', stderr=''
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout='', stderr='')
         client = GuestfishClient()
 
         result = client.run_script('/disk.qcow2', ['run', 'mount /dev/sda1 /'])
@@ -346,9 +326,7 @@ class TestRunScript:
     @patch('adare.hypervisor.qemu.guestfish_client.subprocess.run')
     def test_returns_false_on_failure(self, mock_run):
         """run_script() returns False when guestfish fails."""
-        mock_run.return_value = MagicMock(
-            returncode=1, stdout='', stderr='mount error'
-        )
+        mock_run.return_value = MagicMock(returncode=1, stdout='', stderr='mount error')
         client = GuestfishClient()
 
         result = client.run_script('/disk.qcow2', ['run', 'mount /dev/sda1 /'])
@@ -358,9 +336,7 @@ class TestRunScript:
     @patch('adare.hypervisor.qemu.guestfish_client.subprocess.run')
     def test_temp_file_cleaned_up_after_success(self, mock_run):
         """run_script() cleans up temp file after successful execution."""
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout='', stderr=''
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout='', stderr='')
         client = GuestfishClient()
 
         client.run_script('/disk.qcow2', ['run'])
@@ -370,14 +346,13 @@ class TestRunScript:
         script_path_idx = cmd.index('-f') + 1
         script_path = cmd[script_path_idx]
         from pathlib import Path
+
         assert not Path(script_path).exists()
 
     @patch('adare.hypervisor.qemu.guestfish_client.subprocess.run')
     def test_temp_file_cleaned_up_after_failure(self, mock_run):
         """run_script() cleans up temp file even when guestfish fails."""
-        mock_run.return_value = MagicMock(
-            returncode=1, stdout='', stderr='error'
-        )
+        mock_run.return_value = MagicMock(returncode=1, stdout='', stderr='error')
         client = GuestfishClient()
 
         client.run_script('/disk.qcow2', ['run'])
@@ -386,6 +361,7 @@ class TestRunScript:
         script_path_idx = cmd.index('-f') + 1
         script_path = cmd[script_path_idx]
         from pathlib import Path
+
         assert not Path(script_path).exists()
 
     @patch('adare.hypervisor.qemu.guestfish_client.subprocess.run')

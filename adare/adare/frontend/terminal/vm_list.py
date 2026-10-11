@@ -28,11 +28,7 @@ class VMTablePanel:
             if len(description) > 40:
                 description = description[:37] + "..."
 
-            table.add_row(
-                vm['name'],
-                vm['id'],
-                description or "No description"
-            )
+            table.add_row(vm['name'], vm['id'], description or "No description")
 
         title = f"[b gold3]VMs ({len(self.vms)} found)[/b gold3]"
         return Panel(table, title=title, border_style="blue", title_align="left")
@@ -67,6 +63,7 @@ def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=Fa
     # Get formatter if not provided
     if formatter is None:
         from adare.run import get_formatter_from_context
+
         formatter, output_file, dual_output = get_formatter_from_context()
 
     try:
@@ -84,31 +81,35 @@ def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=Fa
             # Prepare structured data
             structured_vms = []
             for vm in vms:
-                structured_vms.append({
-                    'name': vm['name'],
-                    'id': vm['id'],
-                    'description': vm.get('description', ''),
-                    'hypervisor': vm.get('hypervisor', '')
-                })
+                structured_vms.append(
+                    {
+                        'name': vm['name'],
+                        'id': vm['id'],
+                        'description': vm.get('description', ''),
+                        'hypervisor': vm.get('hypervisor', ''),
+                    }
+                )
 
             structured_instances = []
             for instance in instances:
-                structured_instances.append({
-                    'instance_name': instance.instance_name,
-                    'id': instance.id,
-                    'vm_id': instance.vm_id,
-                    'vm_name': instance.vm.name if instance.vm else None,
-                    'hypervisor': instance.vm.hypervisor if instance.vm else None,
-                    'status': instance.status,
-                    'websocket_port': instance.websocket_port,
-                    'last_used_at': instance.last_used_at.isoformat() if instance.last_used_at else None
-                })
+                structured_instances.append(
+                    {
+                        'instance_name': instance.instance_name,
+                        'id': instance.id,
+                        'vm_id': instance.vm_id,
+                        'vm_name': instance.vm.name if instance.vm else None,
+                        'hypervisor': instance.vm.hypervisor if instance.vm else None,
+                        'status': instance.status,
+                        'websocket_port': instance.websocket_port,
+                        'last_used_at': instance.last_used_at.isoformat() if instance.last_used_at else None,
+                    }
+                )
 
             structured_data = {
                 'vms': structured_vms,
                 'instances': structured_instances,
                 'vm_count': len(vms),
-                'instance_count': len(instances)
+                'instance_count': len(instances),
             }
 
             formatter.print_or_save(structured_data, output_file, dual_output)
@@ -129,17 +130,19 @@ def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=Fa
                 if len(description) > 40:
                     description = description[:37] + "..."
 
-                vm_table.add_row(
-                    vm['name'],
-                    vm['id'],
-                    vm.get('hypervisor', 'unknown'),
-                    description or "No description"
-                )
+                vm_table.add_row(vm['name'], vm['id'], vm.get('hypervisor', 'unknown'), description or "No description")
 
-            vm_panel = Panel(vm_table, title=f"[b gold3]Base VMs ({len(vms)} found)[/b gold3]", border_style="blue", title_align="left")
+            vm_panel = Panel(
+                vm_table,
+                title=f"[b gold3]Base VMs ({len(vms)} found)[/b gold3]",
+                border_style="blue",
+                title_align="left",
+            )
             console.print(vm_panel)
         else:
-            console.print(Panel("[yellow]No base VMs found[/yellow]", title="[b gold3]Base VMs[/b gold3]", border_style="blue"))
+            console.print(
+                Panel("[yellow]No base VMs found[/yellow]", title="[b gold3]Base VMs[/b gold3]", border_style="blue")
+            )
 
         # Create instance table
         if instances:
@@ -165,13 +168,24 @@ def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=Fa
                     hypervisor,
                     Text(instance.status, style=status_color),
                     port,
-                    last_used
+                    last_used,
                 )
 
-            instance_panel = Panel(instance_table, title=f"[b gold3]VM Instances ({len(instances)} found)[/b gold3]", border_style="blue", title_align="left")
+            instance_panel = Panel(
+                instance_table,
+                title=f"[b gold3]VM Instances ({len(instances)} found)[/b gold3]",
+                border_style="blue",
+                title_align="left",
+            )
             console.print(instance_panel)
         else:
-            console.print(Panel("[yellow]No VM instances found[/yellow]", title="[b gold3]VM Instances[/b gold3]", border_style="blue"))
+            console.print(
+                Panel(
+                    "[yellow]No VM instances found[/yellow]",
+                    title="[b gold3]VM Instances[/b gold3]",
+                    border_style="blue",
+                )
+            )
 
     except Exception as e:
         log.error(f"Failed to list VMs and instances: {e}")

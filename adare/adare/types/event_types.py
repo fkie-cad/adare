@@ -219,7 +219,9 @@ class EventTypeResolver:
         is_complete = has_success or "Complete" in class_name or class_name.endswith("Complete")
 
         # Extract action type from class name
-        action_type_raw = class_name.replace("Event", "").replace("Action", "").replace("Start", "").replace("Complete", "").lower()
+        action_type_raw = (
+            class_name.replace("Event", "").replace("Action", "").replace("Start", "").replace("Complete", "").lower()
+        )
 
         # Dispatch via lookup table
         event_pair = _ACTION_RAW_TO_EVENT.get(action_type_raw)

@@ -9,18 +9,22 @@ from adarelib.event.ws import EVENT
 
 log = logging.getLogger(__name__)
 
+
 class EventCtxManager(contextlib.AbstractContextManager):
     """
     Context manager for handling events with WebSocket streaming support.
-    
+
     This manager can work with both the legacy EVENT/WS format and
     the new WebSocket event streaming format.
     """
+
     event: Event
     log_func: Callable[[str], Awaitable[None]]
     websocket_broadcaster: Callable | None = None
 
-    def __init__(self, event: Event, log_func: Callable[[str], Awaitable[None]], websocket_broadcaster: Callable | None = None):
+    def __init__(
+        self, event: Event, log_func: Callable[[str], Awaitable[None]], websocket_broadcaster: Callable | None = None
+    ):
         self.log_func = log_func
         self.event = event
         self.websocket_broadcaster = websocket_broadcaster
@@ -84,10 +88,7 @@ class EventCtxManager(contextlib.AbstractContextManager):
         if hasattr(self.event, 'error_msg'):
             data['error_message'] = self.event.error_msg
         if hasattr(self.event, 'result'):
-            data['result'] = {
-                'status': self.event.result.status,
-                'details': getattr(self.event.result, 'details', [])
-            }
+            data['result'] = {'status': self.event.result.status, 'details': getattr(self.event.result, 'details', [])}
 
         return data
 
@@ -125,10 +126,12 @@ class EventCtxManager(contextlib.AbstractContextManager):
 # Global WebSocket broadcaster reference
 _websocket_broadcaster: Callable | None = None
 
+
 def set_websocket_broadcaster(broadcaster: Callable):
     """Set the global WebSocket event broadcaster."""
     global _websocket_broadcaster
     _websocket_broadcaster = broadcaster
+
 
 def get_websocket_broadcaster() -> Callable | None:
     """Get the global WebSocket event broadcaster."""

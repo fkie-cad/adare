@@ -20,6 +20,7 @@ pytestmark = pytest.mark.unit
 # gui-doctor coordinate classifier
 # ---------------------------------------------------------------------------
 
+
 def test_classifier_detects_absolute():
     # Model returns the target's actual pixel coordinates.
     detected, err_abs, err_norm = _classify_coords(740, 250)
@@ -49,6 +50,7 @@ def test_calibration_image_is_valid_png():
 # ---------------------------------------------------------------------------
 # dev-agent service mixin: graceful failure when the session/VM is absent
 # ---------------------------------------------------------------------------
+
 
 class _FakeManager:
     def __init__(self, session):

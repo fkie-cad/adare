@@ -153,7 +153,28 @@ async def _recompute_run_tally(experiment_run_context):
         return None
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', export_disk_image: bool = None, capture_pcap: bool = None, export_memory_dump: bool = None, allow_emulation: bool = False, file_log_level: int = logging.INFO, run_ulid: str | None = None):
+async def experiment_run(
+    project_path: Path,
+    experiment_name: str,
+    environment_name: str,
+    disable_printing: bool = False,
+    test: bool = True,
+    debug_screenshots: bool = False,
+    preserve_snapshot: bool = False,
+    runlog: bool = True,
+    vm_memory: int = None,
+    vm_cpus: int = None,
+    gui_mode: str = None,
+    test_exec_mode: str = None,
+    diff: bool = None,
+    diff_mode: str = 'auto',
+    export_disk_image: bool = None,
+    capture_pcap: bool = None,
+    export_memory_dump: bool = None,
+    allow_emulation: bool = False,
+    file_log_level: int = logging.INFO,
+    run_ulid: str | None = None,
+):
     import signal
 
     log.info(f"Starting experiment run {experiment_name} in project {project_path}")
@@ -167,7 +188,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         runlog=runlog,
         test_mode=test,
         allow_emulation=allow_emulation,
-        file_log_level=file_log_level
+        file_log_level=file_log_level,
     )
 
     # Determine guest platform early to set platform-specific defaults
@@ -176,12 +197,14 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         environment_file = None
         if environment_name:
             from adare.backend.environment import database as environment_database
+
             environment_file = environment_database.get_environment_path_by_project_and_name(
                 project_path, environment_name
             )
 
         if environment_file:
             from adare.types.environment import parse_environment_file
+
             environment_metadata = parse_environment_file(environment_file)
             guest_platform = environment_metadata.os.platform
 
@@ -316,11 +339,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         # there would trade a leaked VM for a run with no evidence — strictly
         # worse for a forensic tool. So: first signal collects the artifacts,
         # second signal forfeits them.
-        log.warning(
-            f"Second {name} received — skipping graceful wind-down and destroying "
-            f"the VM domain(s) immediately"
-        )
+        log.warning(f"Second {name} received — skipping graceful wind-down and destroying the VM domain(s) immediately")
         from adare.backend.experiment.vm_lifecycle_manager import destroy_domain_by_name
+
         # Multi-machine runs have one VM per machine key (not just the primary/None
         # one `experiment_run_context.vm_name` would read) -- destroy every one so a
         # second SIGTERM cannot leak a sibling VM.
@@ -355,7 +376,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             log.warning(f"Could not install handler for signal {_sig}: {e}")
 
     # Create and start the flow console.
-    flow_console = create_and_start_flow_console(experiment_run_context.experiment_run_ulid, disable_printing, user_interrupt_event)
+    flow_console = create_and_start_flow_console(
+        experiment_run_context.experiment_run_ulid, disable_printing, user_interrupt_event
+    )
 
     # Start experiment timer header row
     if not disable_printing:
@@ -376,10 +399,11 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     video_recorder = None
 
     try:
-
         # Experiment Preparation Phase
         if not stop_event.is_set():
-            with StageCtxManager(ExperimentPreparationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
+            with StageCtxManager(
+                ExperimentPreparationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event
+            ):
                 initial_steps = [
                     step_setup_experiment_environment,
                     step_validate_integrity,
@@ -404,7 +428,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
         # Virtual Machine Setup Phase
         if not stop_event.is_set():
-            with StageCtxManager(VirtualMachineSetupStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
+            with StageCtxManager(
+                VirtualMachineSetupStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event
+            ):
                 await step_runner.run_async_step(vm_manager.create_and_prepare_vm, experiment_run_context)
                 await step_runner.run_async_step(vm_manager.setup_file_transfer, experiment_run_context)
                 await step_runner.run_async_step(vm_manager.setup_networking, experiment_run_context)
@@ -422,24 +448,30 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 EXPERIMENT_VIDEO,
                 FFMPEG,
             )
+
             if EXPERIMENT_VIDEO and experiment_run_context.vm is not None:
                 from adare.backend.experiment.execution.qemu_video_recorder import (
                     VideoUnavailable,
                 )
+
                 video_out = experiment_run_context.experiment_run_directory.path / 'run.mp4'
                 try:
                     if AGENT_VIDEO_BACKEND == 'spice':
                         from adare.backend.experiment.execution.spice_video_recorder import (
                             SpiceVideoRecorder,
                         )
+
                         video_recorder = SpiceVideoRecorder(
-                            experiment_run_context.vm, video_out, fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
+                            experiment_run_context.vm, video_out, fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG
+                        )
                     else:
                         from adare.backend.experiment.execution.qemu_video_recorder import (
                             QemuVideoRecorder,
                         )
+
                         video_recorder = QemuVideoRecorder(
-                            experiment_run_context.vm, video_out, fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
+                            experiment_run_context.vm, video_out, fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG
+                        )
                     await video_recorder.start()
                 except VideoUnavailable as exc:
                     log.warning(f"Could not start experiment video recording: {exc}")
@@ -452,14 +484,17 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         # Software Installation Phase
         if not stop_event.is_set():
             is_host_test_mode = experiment_run_context.test_execution_mode == 'host'
-            is_host_gui_mode = (experiment_run_context.config.gui_mode_override == 'host' or
-                               (experiment_run_context.config.gui_mode_override is None and
-                                experiment_run_context.hypervisor_type == 'qemu'))
+            is_host_gui_mode = experiment_run_context.config.gui_mode_override == 'host' or (
+                experiment_run_context.config.gui_mode_override is None
+                and experiment_run_context.hypervisor_type == 'qemu'
+            )
 
             # In full host mode (both GUI and tests via host), skip agent entirely
             needs_agent = not (is_host_test_mode and is_host_gui_mode)
 
-            with StageCtxManager(SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
+            with StageCtxManager(
+                SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event
+            ):
                 if needs_agent:
                     await step_runner.run_async_step(step_install_and_run_websocket_server, experiment_run_context)
                     await step_runner.run_async_step(step_connect_websocket, experiment_run_context)
@@ -470,7 +505,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
         # Experiment Execution Phase
         if not stop_event.is_set():
-            with StageCtxManager(ExperimentExecutionStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
+            with StageCtxManager(
+                ExperimentExecutionStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event
+            ):
                 await step_runner.run_async_step(step_execute_experiment, experiment_run_context)
 
                 # Collect system information after experiment execution (if enabled in playbook settings)
@@ -493,6 +530,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         experiment_run_context.stop_event.set()
         log.info("LoggedException: send stop events")
         from adare.exceptions import LoggedErrorException
+
         status = StatusEnum.FAILED if isinstance(e, LoggedErrorException) else StatusEnum.INTERRUPTED
         experiment_database.update_experiment_run_status(
             experiment_run_context.project_directory.path,
@@ -543,7 +581,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             # Wrap cleanup in proper stage context (don't pass interrupt event - we want to show actual cleanup work)
             with StageCtxManager(CleanupShutdownStage(), experiment_run_context.experiment_run_ulid, event=None):
                 await step_runner.run_cleanup_step(step_finalize, experiment_run_context, post_interrupt=True)
-                await step_runner.run_cleanup_step(step_shutdown_mcp_server, experiment_run_context, post_interrupt=True)
+                await step_runner.run_cleanup_step(
+                    step_shutdown_mcp_server, experiment_run_context, post_interrupt=True
+                )
                 await step_runner.run_cleanup_step(step_shutdown_ws, experiment_run_context, post_interrupt=True)
 
                 # Finalize the video (idempotent) before the VM goes away.
@@ -555,7 +595,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                     # BEFORE retrieve_artifacts/stop_vm below (which may themselves stop
                     # the VM depending on transfer mode) -- unlike host_diff/disk_export,
                     # which need the still-live overlay AFTER shutdown.
-                    await step_runner.run_cleanup_step(vm_manager.perform_memory_dump, experiment_run_context, post_interrupt=True)
+                    await step_runner.run_cleanup_step(
+                        vm_manager.perform_memory_dump, experiment_run_context, post_interrupt=True
+                    )
                     # Force shutdown by default for QEMU guests: the overlay is discarded
                     # on cleanup regardless (ephemeral run), so waiting up to 60s for a
                     # graceful ACPI shutdown buys nothing -- except when --preserve-snapshot
@@ -571,19 +613,33 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
                     # Retrieve artifacts BEFORE stopping VM (critical for QGA/VirtioFS which need a running VM)
                     # The lifecycle strategy handles stop internally in the correct order per transfer mode
-                    await step_runner.run_cleanup_step(vm_manager.retrieve_artifacts, experiment_run_context, post_interrupt=True, force_stop=force_shutdown)
+                    await step_runner.run_cleanup_step(
+                        vm_manager.retrieve_artifacts,
+                        experiment_run_context,
+                        post_interrupt=True,
+                        force_stop=force_shutdown,
+                    )
                     # Safety net: stop VM if retrieve_artifacts didn't already (idempotent)
-                    await step_runner.run_cleanup_step(vm_manager.stop_vm, experiment_run_context, post_interrupt=True, force=force_shutdown)
+                    await step_runner.run_cleanup_step(
+                        vm_manager.stop_vm, experiment_run_context, post_interrupt=True, force=force_shutdown
+                    )
                     # Perform host-side diff AFTER VM stopped, BEFORE overlay cleanup
-                    await step_runner.run_cleanup_step(vm_manager.perform_host_diff, experiment_run_context, post_interrupt=True)
+                    await step_runner.run_cleanup_step(
+                        vm_manager.perform_host_diff, experiment_run_context, post_interrupt=True
+                    )
                     # Disk image export needs the same still-live overlay as the diff above
-                    await step_runner.run_cleanup_step(vm_manager.perform_disk_export, experiment_run_context, post_interrupt=True)
-                    await step_runner.run_cleanup_step(vm_manager.cleanup_vm, experiment_run_context, post_interrupt=True)
+                    await step_runner.run_cleanup_step(
+                        vm_manager.perform_disk_export, experiment_run_context, post_interrupt=True
+                    )
+                    await step_runner.run_cleanup_step(
+                        vm_manager.cleanup_vm, experiment_run_context, post_interrupt=True
+                    )
             # Give time for all events to be processed before stopping
             await asyncio.sleep(2)
 
             # Stop the stage event coordinator
             from adare.backend.events.coordinator import stop_stage_coordinator
+
             stop_stage_coordinator()
             log.info("Stage event coordinator stopped")
 
@@ -628,21 +684,27 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                     total_tests=execution_result.total_tests,
                     successful_tests=execution_result.successful_tests,
                     failed_tests=execution_result.failed_tests,
-                    duration=total_duration
+                    duration=total_duration,
                 )
             else:
                 flow_console.log_experiment_summary(
                     ulid=experiment_run_context.experiment_run_ulid,
                     success=False,
-                    total_actions=0, successful_actions=0, failed_actions=0,
-                    total_tests=0, successful_tests=0, failed_tests=0,
+                    total_actions=0,
+                    successful_actions=0,
+                    failed_actions=0,
+                    total_tests=0,
+                    successful_tests=0,
+                    failed_tests=0,
                     duration=total_duration,
-                    was_interrupted=user_interrupt_event.is_set()
+                    was_interrupted=user_interrupt_event.is_set(),
                 )
 
             if test:
                 # Test mode: fake runs are kept until manually cleaned with 'adare experiment clean <name>'
-                log.info(f"Test mode run {experiment_run_context.experiment_run_ulid} completed and preserved for analysis")
+                log.info(
+                    f"Test mode run {experiment_run_context.experiment_run_ulid} completed and preserved for analysis"
+                )
             # Give the flow console time to display the summary before stopping
             await asyncio.sleep(3)
 
@@ -657,6 +719,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             # Ensure coordinator is stopped even if cleanup fails
             try:
                 from adare.backend.events.coordinator import stop_stage_coordinator
+
                 stop_stage_coordinator()
             except Exception as cleanup_error:
                 # Intentionally broad: last-resort cleanup must not raise.
@@ -703,8 +766,13 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     try:
         from adare.database.api.experiment import ExperimentApi
         from adare.database.models.project_models import ExperimentRun
+
         with ExperimentApi(experiment_run_context.project_directory.path) as api:
-            experiment_run_row = api._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_context.experiment_run_ulid).first()
+            experiment_run_row = (
+                api._session.query(ExperimentRun)
+                .filter(ExperimentRun.id == experiment_run_context.experiment_run_ulid)
+                .first()
+            )
             experiment_success, diagnostics = _resolve_experiment_verdict(
                 experiment_run_row, test_mode=test, execution_success=execution_success
             )
@@ -733,21 +801,24 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     try:
         # Check if forensic logging is enabled (default: True)
         forensic_enabled = True
-        if (hasattr(experiment_run_context, 'playbook') and
-            experiment_run_context.playbook and
-            hasattr(experiment_run_context.playbook, 'settings') and
-            experiment_run_context.playbook.settings):
+        if (
+            hasattr(experiment_run_context, 'playbook')
+            and experiment_run_context.playbook
+            and hasattr(experiment_run_context.playbook, 'settings')
+            and experiment_run_context.playbook.settings
+        ):
             forensic_enabled = experiment_run_context.playbook.settings.forensic_logging
 
         if forensic_enabled and hasattr(experiment_run_context, 'experiment_run_directory'):
             from adare.backend.experiment.forensic_reporter import generate_forensic_report_for_run
+
             forensic_log_path = experiment_run_context.experiment_run_directory.forensic_log_file
 
             log.info(f"Generating forensic report for run {experiment_run_context.experiment_run_ulid}")
             forensic_success = generate_forensic_report_for_run(
                 experiment_run_context.experiment_run_ulid,
                 forensic_log_path,
-                experiment_run_context.project_directory.path
+                experiment_run_context.project_directory.path,
             )
 
             if forensic_success:
@@ -759,6 +830,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
     # Return both interruption status and actual success status
     return user_interrupt_event.is_set(), experiment_success
+
 
 def experiment_test(project_path: Path, experiment_name: str, environment_name: str):
     """Test an experiment in development mode - creates fake run that gets cleaned up.
@@ -776,13 +848,15 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
     log.info(f'Starting experiment test: {experiment_name} in environment {environment_name}')
 
     # Run experiment in test mode (creates fake run that gets cleaned up)
-    asyncio.run(experiment_run(
-        project_path=project_path,
-        experiment_name=experiment_name,
-        environment_name=environment_name,
-        disable_printing=False,  # Show output for development feedback
-        test=True,  # This creates fake runs that are cleaned up automatically
-        debug_screenshots=True,  # Enable debug screenshots for development
-        preserve_snapshot=False,  # Don't preserve snapshots in test mode
-        runlog=True   # Save logs for test runs to aid debugging
-    ))
+    asyncio.run(
+        experiment_run(
+            project_path=project_path,
+            experiment_name=experiment_name,
+            environment_name=environment_name,
+            disable_printing=False,  # Show output for development feedback
+            test=True,  # This creates fake runs that are cleaned up automatically
+            debug_screenshots=True,  # Enable debug screenshots for development
+            preserve_snapshot=False,  # Don't preserve snapshots in test mode
+            runlog=True,  # Save logs for test runs to aid debugging
+        )
+    )

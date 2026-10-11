@@ -55,7 +55,6 @@ __all__ = [
     'OsInfo',
     'PostsetupInstallations',
     'parse_environment_file',
-
     # Backend types
     'UsbDevice',
     'CopyData',
@@ -69,10 +68,8 @@ __all__ = [
     'SMBShare',
     'SMBConfiguration',
     'NetworkdriveMountData',
-
     # Experiment types
     'ExperimentMetadata',
-
     # Playbook types
     'Playbook',
     'Settings',

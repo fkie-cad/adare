@@ -12,6 +12,7 @@ from adare.backend.experiment.filesystem_diff_manager import FilesystemDiffManag
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_manager(
     vm=None,
     execution_context=None,
@@ -44,6 +45,7 @@ def _make_vbox_vm():
 # ---------------------------------------------------------------------------
 # determine_diff_enabled
 # ---------------------------------------------------------------------------
+
 
 class TestDetermineEnabled:
     """Test determine_diff_enabled precedence logic."""
@@ -99,6 +101,7 @@ class TestDetermineEnabled:
 # resolve_diff_mode
 # ---------------------------------------------------------------------------
 
+
 class TestResolveDiffMode:
     """Test diff mode auto-resolution logic."""
 
@@ -152,6 +155,7 @@ class TestResolveDiffMode:
 # _is_qemu_vm
 # ---------------------------------------------------------------------------
 
+
 class TestIsQemuVM:
     """Test QEMU VM detection."""
 
@@ -171,6 +175,7 @@ class TestIsQemuVM:
 # ---------------------------------------------------------------------------
 # validate_host_mode_support
 # ---------------------------------------------------------------------------
+
 
 class TestValidateHostModeSupport:
     """Test host mode validation raises on bad config."""

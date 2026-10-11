@@ -8,6 +8,7 @@ ADARE's forensic-focused architecture (QMP, Guest Agent, overlays).
 The heavy lifting is done by DomainXMLBuilder in libvirt_xml_builder.py.
 This module provides the backward-compatible public API.
 """
+
 import logging
 import os
 import xml.etree.ElementTree as ET
@@ -22,7 +23,7 @@ def generate_domain_xml(
     vm_config,  # QEMUVMConfig instance
     display_enabled: bool = False,
     vnc_port: int | None = None,
-    virtiofs_shares: list[dict[str, Any]] | None = None
+    virtiofs_shares: list[dict[str, Any]] | None = None,
 ) -> str:
     """
     Generate libvirt XML domain definition from QEMU VM config.
@@ -57,12 +58,7 @@ def generate_domain_xml(
 
 
 def generate_virtiofs_xml_element(
-    share: dict[str, Any],
-    is_q35: bool,
-    index: int,
-    base_bus: int = 6,
-    base_slot: int = 7,
-    is_virt: bool = False
+    share: dict[str, Any], is_q35: bool, index: int, base_bus: int = 6, base_slot: int = 7, is_virt: bool = False
 ) -> ET.Element:
     """
     Generate a single virtiofs filesystem XML element.
@@ -105,13 +101,15 @@ def generate_virtiofs_xml_element(
     elif is_q35:
         # Each device gets its own bus (6, 7, 8, 9, 10...)
         bus = base_bus + index
-        ET.SubElement(filesystem, 'address', type='pci', domain='0x0000',
-                        bus=f'0x{bus:02x}', slot='0x00', function='0x0')
+        ET.SubElement(
+            filesystem, 'address', type='pci', domain='0x0000', bus=f'0x{bus:02x}', slot='0x00', function='0x0'
+        )
     else:
         # For pc machine, use slots on bus 0 (7, 8, 9, 10, 11...)
         slot = base_slot + index
-        ET.SubElement(filesystem, 'address', type='pci', domain='0x0000',
-                        bus='0x00', slot=f'0x{slot:02x}', function='0x0')
+        ET.SubElement(
+            filesystem, 'address', type='pci', domain='0x0000', bus='0x00', slot=f'0x{slot:02x}', function='0x0'
+        )
 
     log.debug(f"Generated virtio-fs XML for '{tag}' -> {host_path}")
     return filesystem

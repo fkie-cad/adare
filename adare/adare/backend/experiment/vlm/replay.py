@@ -81,10 +81,13 @@ async def _locate(
         'point to click. Coordinates refer to the exact image shown.'
     )
     messages = [
-        {'role': 'user', 'content': [
-            client.text_content(prompt),
-            client.image_content(screenshot_b64),
-        ]},
+        {
+            'role': 'user',
+            'content': [
+                client.text_content(prompt),
+                client.image_content(screenshot_b64),
+            ],
+        },
     ]
     reply = await client.chat(messages, temperature=0.0, max_tokens=200)
     obj = _extract_json_object(reply)
@@ -156,13 +159,19 @@ async def run_playbook(
     img_dir = experiment_dir / 'img'
 
     resolver = MCPTargetResolver(
-        experiment_dir=experiment_dir, mcp_gui_url=mcp_gui_url,
-        vm_client=None, os_key=os_key,
+        experiment_dir=experiment_dir,
+        mcp_gui_url=mcp_gui_url,
+        vm_client=None,
+        os_key=os_key,
     )
     checker = MCPConditionChecker(resolver)
     executor = ActionExecutor(
-        websocket_client=None, target_resolver=resolver, condition_checker=checker,
-        vm=vm, experiment_run_directory=experiment_dir, playbook=playbook,
+        websocket_client=None,
+        target_resolver=resolver,
+        condition_checker=checker,
+        vm=vm,
+        experiment_run_directory=experiment_dir,
+        playbook=playbook,
     )
     gui_executor = executor.simple_actions.gui_executor
 
@@ -183,13 +192,18 @@ async def run_playbook(
                 healed.append(i)
 
         if not recovered:
-            failures.append({
-                'index': i,
-                'action': type(action).__name__,
-                'message': result.message,
-            })
+            failures.append(
+                {
+                    'index': i,
+                    'action': type(action).__name__,
+                    'message': result.message,
+                }
+            )
 
     return ReplayResult(
-        success=not failures, total=len(playbook.actions),
-        executed=executed, healed=healed, failures=failures,
+        success=not failures,
+        total=len(playbook.actions),
+        executed=executed,
+        healed=healed,
+        failures=failures,
     )

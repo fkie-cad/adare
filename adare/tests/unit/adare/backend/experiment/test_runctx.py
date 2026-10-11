@@ -31,6 +31,7 @@ def _make_ctx(
 
 # --- is_interrupted ---
 
+
 class TestIsInterrupted:
     def test_false_initially(self):
         ctx = _make_ctx()
@@ -49,6 +50,7 @@ class TestIsInterrupted:
 
 
 # --- is_host_test_mode ---
+
 
 class TestIsHostTestMode:
     def test_true_when_host(self):
@@ -69,6 +71,7 @@ class TestIsHostTestMode:
 
 
 # --- is_host_gui_mode ---
+
 
 class TestIsHostGuiMode:
     def test_true_with_explicit_host_override(self):
@@ -106,6 +109,7 @@ class TestIsHostGuiMode:
 
 
 # --- needs_agent ---
+
 
 class TestNeedsAgent:
     def test_false_when_both_host(self):

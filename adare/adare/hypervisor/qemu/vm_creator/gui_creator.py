@@ -68,8 +68,15 @@ def _template_stems(os_def: OsDefinition, override: str | None) -> list[str]:
 class GUIVMCreator(BaseVMCreator):
     """Create a VM by driving its GUI installer with a vision-LLM agent."""
 
-    def __init__(self, *args, record: bool = False, relearn: bool = False,
-                 display: bool = False, template: str | None = None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        record: bool = False,
+        relearn: bool = False,
+        display: bool = False,
+        template: str | None = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.record = record
         self.relearn = relearn
@@ -81,8 +88,7 @@ class GUIVMCreator(BaseVMCreator):
     def _ensure_iso(self) -> None:
         if self.iso_path is None:
             raise GUIVMCreationError(
-                f'ISO required for GUI-automated install. '
-                f'Use --iso /path/to/{self.os_def.display_name}.iso'
+                f'ISO required for GUI-automated install. Use --iso /path/to/{self.os_def.display_name}.iso'
             )
         if not self.iso_path.is_file():
             raise GUIVMCreationError(f'ISO file not found: {self.iso_path}')
@@ -176,8 +182,9 @@ class GUIVMCreator(BaseVMCreator):
         vm._save_vm_config()
         return vm
 
-    async def _drive(self, disk_path: Path, goal_spec: dict, playbook_path: Path,
-                     should_record: bool, run_dir: Path) -> None:
+    async def _drive(
+        self, disk_path: Path, goal_spec: dict, playbook_path: Path, should_record: bool, run_dir: Path
+    ) -> None:
         from adare.backend.experiment.execution.qemu_host_gui_executor import QEMUHostGUIExecutor
         from adare.backend.experiment.vlm import (
             GuiAgent,
@@ -208,10 +215,16 @@ class GUIVMCreator(BaseVMCreator):
                 print_step('[cyan]Recording[/cyan] a new playbook with the vision agent...')
                 recorder = PlaybookRecorder(playbook_path, goal=goal)
                 agent = GuiAgent(
-                    executor, client, goal,
-                    acceptance_spec=acceptance, recorder=recorder,
-                    run_dir=run_dir, hints=hints, coord_space=VLLM_COORD_SPACE,
-                    max_steps=GUI_AGENT_MAX_STEPS, stall_limit=GUI_AGENT_STALL_LIMIT,
+                    executor,
+                    client,
+                    goal,
+                    acceptance_spec=acceptance,
+                    recorder=recorder,
+                    run_dir=run_dir,
+                    hints=hints,
+                    coord_space=VLLM_COORD_SPACE,
+                    max_steps=GUI_AGENT_MAX_STEPS,
+                    stall_limit=GUI_AGENT_STALL_LIMIT,
                     wall_clock_seconds=GUI_AGENT_WALL_CLOCK_SECONDS,
                 )
                 result = await agent.run()
@@ -221,13 +234,15 @@ class GUIVMCreator(BaseVMCreator):
             else:
                 print_step(f'[cyan]Replaying[/cyan] cached playbook: {playbook_path}')
                 replay = await run_playbook(
-                    vm, playbook_path, heal=client is not None, client=client,
-                    coord_space=VLLM_COORD_SPACE, goal=goal,
+                    vm,
+                    playbook_path,
+                    heal=client is not None,
+                    client=client,
+                    coord_space=VLLM_COORD_SPACE,
+                    goal=goal,
                 )
                 if not replay.success:
-                    raise GUIVMCreationError(
-                        f'replay failed at {len(replay.failures)} step(s): {replay.failures}'
-                    )
+                    raise GUIVMCreationError(f'replay failed at {len(replay.failures)} step(s): {replay.failures}')
                 if replay.healed:
                     console.print(f'[yellow]Self-healed steps[/yellow]: {replay.healed}')
         except GUIVMCreationError:
@@ -248,16 +263,18 @@ class GUIVMCreator(BaseVMCreator):
         # ── 3. acceptance checks ──────────────────────────────────────────
         try:
             checks = await run_acceptance_checks(
-                vm, acceptance, client=client, disk_path=disk_path, run_dir=run_dir,
+                vm,
+                acceptance,
+                client=client,
+                disk_path=disk_path,
+                run_dir=run_dir,
             )
             console.print(checks.to_markdown())
         finally:
             await vm.stop()
 
         if not checks.passed:
-            raise GUIVMCreationError(
-                f'acceptance checks failed — see {run_dir / "acceptance.md"}'
-            )
+            raise GUIVMCreationError(f'acceptance checks failed — see {run_dir / "acceptance.md"}')
 
     def _make_client(self):
         from adare.backend.experiment.vlm import VLMClient

@@ -29,32 +29,48 @@ RUN = "01KYMNJDBDCX3EHAZ9PN2ERXK5"
 # helpers
 # --------------------------------------------------------------------------- #
 
-def make_action(group_id, kind, *, success=True, parent=None, complete=True,
-                 sequence_order=0, **extra):
+
+def make_action(group_id, kind, *, success=True, parent=None, complete=True, sequence_order=0, **extra):
     """Build the start (+ complete) rows of one executed action."""
-    rows = [EventRow(
-        group_id=group_id, category='action', event_type_specific=f'{kind}_start',
-        parent_group_id=parent, sequence_order=sequence_order, **extra,
-    )]
+    rows = [
+        EventRow(
+            group_id=group_id,
+            category='action',
+            event_type_specific=f'{kind}_start',
+            parent_group_id=parent,
+            sequence_order=sequence_order,
+            **extra,
+        )
+    ]
     if complete:
-        rows.append(EventRow(
-            group_id=group_id, category='action', event_type_specific=f'{kind}_complete',
-            parent_group_id=parent, success=success, sequence_order=sequence_order, **extra,
-        ))
+        rows.append(
+            EventRow(
+                group_id=group_id,
+                category='action',
+                event_type_specific=f'{kind}_complete',
+                parent_group_id=parent,
+                success=success,
+                sequence_order=sequence_order,
+                **extra,
+            )
+        )
     return rows
 
 
 def make_test(group_id, *, status=StatusEnum.SUCCESS, parent=None, complete=True):
     """Build the start (+ complete) rows of one executed test."""
-    rows = [EventRow(group_id=group_id, category='test',
-                     event_type_specific='test_start', parent_group_id=parent)]
+    rows = [EventRow(group_id=group_id, category='test', event_type_specific='test_start', parent_group_id=parent)]
     if complete:
-        rows.append(EventRow(
-            group_id=group_id, category='test', event_type_specific='test_complete',
-            parent_group_id=parent,
-            success=status in (StatusEnum.SUCCESS, StatusEnum.WARNING),
-            test_status=int(status),
-        ))
+        rows.append(
+            EventRow(
+                group_id=group_id,
+                category='test',
+                event_type_specific='test_complete',
+                parent_group_id=parent,
+                success=status in (StatusEnum.SUCCESS, StatusEnum.WARNING),
+                test_status=int(status),
+            )
+        )
     return rows
 
 
@@ -78,8 +94,9 @@ def pecmd_shaped_run(*, iterations=10, failing_iterations=()):
     for i in range(iterations):
         if stopped:
             break
-        for j, kind in enumerate(('action', 'command', 'keyboard', 'idle', 'keyboard',
-                                  'keyboard', 'savetimestamp', 'command', 'command')):
+        for j, kind in enumerate(
+            ('action', 'command', 'keyboard', 'idle', 'keyboard', 'keyboard', 'savetimestamp', 'command', 'command')
+        ):
             rows += make_action(f'loop_{i}_action_{j}', kind, parent=loop_id, sequence_order=j)
         failing = i in failing_iterations
         for t in range(4):
@@ -93,7 +110,10 @@ def pecmd_shaped_run(*, iterations=10, failing_iterations=()):
             completed += 1
 
     rows += make_action(
-        loop_id, 'loop', success=not failing_iterations, sequence_order=3,
+        loop_id,
+        'loop',
+        success=not failing_iterations,
+        sequence_order=3,
         loop_iterations_planned=iterations,
         loop_iterations_completed=completed,
     )
@@ -104,17 +124,21 @@ def pecmd_shaped_run(*, iterations=10, failing_iterations=()):
 # event_kind
 # --------------------------------------------------------------------------- #
 
+
 class TestEventKind:
-    @pytest.mark.parametrize("specific,expected", [
-        ('command_complete', 'command'),
-        ('command_start', 'command'),
-        ('wait_until_complete', 'wait_until'),
-        ('action_complete', 'action'),
-        ('pull_changed_files_complete', 'pull_changed_files'),
-        ('loop_start', 'loop'),
-        ('', ''),
-        (None, ''),
-    ])
+    @pytest.mark.parametrize(
+        "specific,expected",
+        [
+            ('command_complete', 'command'),
+            ('command_start', 'command'),
+            ('wait_until_complete', 'wait_until'),
+            ('action_complete', 'action'),
+            ('pull_changed_files_complete', 'pull_changed_files'),
+            ('loop_start', 'loop'),
+            ('', ''),
+            (None, ''),
+        ],
+    )
     def test_kind(self, specific, expected):
         assert event_kind(specific) == expected
 
@@ -126,6 +150,7 @@ class TestEventKind:
 # --------------------------------------------------------------------------- #
 # build_tally
 # --------------------------------------------------------------------------- #
+
 
 class TestLoopBodiesAreCounted:
     def test_pecmd_shape_reports_41_tests_not_1(self):
@@ -205,8 +230,7 @@ class TestPartialFailure:
                     status=StatusEnum.FAILED if (failing and t == 3) else StatusEnum.SUCCESS,
                     parent='loop_0',
                 )
-        rows += make_action('loop_0', 'loop', success=False,
-                             loop_iterations_planned=10, loop_iterations_completed=7)
+        rows += make_action('loop_0', 'loop', success=False, loop_iterations_planned=10, loop_iterations_completed=7)
         tally = build_tally(rows)
         assert tally.total_tests == 40
         assert tally.failed_tests == 3
@@ -215,8 +239,7 @@ class TestPartialFailure:
 
     def test_a_short_loop_does_not_read_as_all_passed(self):
         """Loop stopped after 8 of 10 iterations with nothing marked failed."""
-        rows = make_action('loop_0', 'loop', loop_iterations_planned=10,
-                            loop_iterations_completed=8)
+        rows = make_action('loop_0', 'loop', loop_iterations_planned=10, loop_iterations_completed=8)
         rows += make_test('loop_0_test_0', parent='loop_0')
         tally = build_tally(rows)
         assert tally.failed_tests == 0
@@ -228,7 +251,7 @@ class TestPartialFailure:
         rows += make_action('c1', 'command', complete=False)
         rows += make_test('t0', complete=False, parent='loop_0')
         tally = build_tally(rows)
-        assert tally.incomplete_actions == 2   # the command and the test action
+        assert tally.incomplete_actions == 2  # the command and the test action
         assert tally.incomplete_tests == 1
         assert tally.all_passed is False
 
@@ -243,8 +266,13 @@ class TestResultStatusIsAuthoritative:
     def test_result_status_beats_the_event_success_flag(self):
         rows = [
             EventRow(group_id='t', category='test', event_type_specific='test_start'),
-            EventRow(group_id='t', category='test', event_type_specific='test_complete',
-                     success=True, test_status=int(StatusEnum.FAILED)),
+            EventRow(
+                group_id='t',
+                category='test',
+                event_type_specific='test_complete',
+                success=True,
+                test_status=int(StatusEnum.FAILED),
+            ),
         ]
         tally = build_tally(rows)
         assert tally.failed_tests == 1
@@ -252,8 +280,7 @@ class TestResultStatusIsAuthoritative:
     def test_event_success_used_when_no_result_row_exists(self):
         rows = [
             EventRow(group_id='t', category='test', event_type_specific='test_start'),
-            EventRow(group_id='t', category='test', event_type_specific='test_complete',
-                     success=False),
+            EventRow(group_id='t', category='test', event_type_specific='test_complete', success=False),
         ]
         assert build_tally(rows).failed_tests == 1
 
@@ -269,6 +296,7 @@ class TestEmptyTally:
 # --------------------------------------------------------------------------- #
 # load_event_rows against a real (temporary) project schema
 # --------------------------------------------------------------------------- #
+
 
 @pytest.fixture
 def project_session(tmp_path):
@@ -297,25 +325,31 @@ def _status(session, status_enum):
     return row
 
 
-def _add_action_event(session, counter, *, group_id, specific, success=None,
-                      parent=None, sequence_order=0, extra=None):
+def _add_action_event(session, counter, *, group_id, specific, success=None, parent=None, sequence_order=0, extra=None):
     from adare.database.models.project_models import ActionEvent
 
     data = {'action_id': group_id, 'sequence_order': sequence_order}
     if success is not None:
         data['success'] = success
     data.update(extra or {})
-    session.add(ActionEvent(
-        id=f"E{next(counter):025d}",
-        event_type='action_event', category='action', experiment_run_id=RUN,
-        parent_event_id=parent, success=success, event_group_id=group_id,
-        event_type_specific=specific, action_type=specific.rsplit('_', 1)[0],
-        action_id=group_id, action_data=json.dumps(data),
-    ))
+    session.add(
+        ActionEvent(
+            id=f"E{next(counter):025d}",
+            event_type='action_event',
+            category='action',
+            experiment_run_id=RUN,
+            parent_event_id=parent,
+            success=success,
+            event_group_id=group_id,
+            event_type_specific=specific,
+            action_type=specific.rsplit('_', 1)[0],
+            action_id=group_id,
+            action_data=json.dumps(data),
+        )
+    )
 
 
-def _add_test_event(session, counter, *, group_id, specific, success=None,
-                    status=None, parent=None):
+def _add_test_event(session, counter, *, group_id, specific, success=None, status=None, parent=None):
     from adare.database.models.project_models import Result, TestEvent
 
     result = None
@@ -323,47 +357,85 @@ def _add_test_event(session, counter, *, group_id, specific, success=None,
         result = Result(id=f"R{next(counter):025d}", status_id=_status(session, status).id)
         session.add(result)
         session.flush()
-    session.add(TestEvent(
-        id=f"E{next(counter):025d}",
-        event_type='test_event', category='test', experiment_run_id=RUN,
-        parent_event_id=parent, success=success, event_group_id=group_id,
-        event_type_specific=specific, result=result,
-    ))
+    session.add(
+        TestEvent(
+            id=f"E{next(counter):025d}",
+            event_type='test_event',
+            category='test',
+            experiment_run_id=RUN,
+            parent_event_id=parent,
+            success=success,
+            event_group_id=group_id,
+            event_type_specific=specific,
+            result=result,
+        )
+    )
 
 
 class TestLoadEventRows:
     def test_partial_failure_loop_round_trips_through_the_database(self, project_session):
         """Ten iterations, three of which fail an assertion, read back from SQL."""
         from itertools import count
+
         counter = count(1)
         loop_id = 'action_0_loopaction'
 
-        _add_action_event(project_session, counter, group_id=loop_id,
-                          specific='loop_start', extra={'iteration_count': 10})
+        _add_action_event(
+            project_session, counter, group_id=loop_id, specific='loop_start', extra={'iteration_count': 10}
+        )
         for i in range(10):
             failing = i in (2, 5, 7)
-            _add_action_event(project_session, counter, group_id=f'loop_{i}_action_0',
-                              specific='command_start', parent=loop_id)
-            _add_action_event(project_session, counter, group_id=f'loop_{i}_action_0',
-                              specific='command_complete', success=True, parent=loop_id)
+            _add_action_event(
+                project_session, counter, group_id=f'loop_{i}_action_0', specific='command_start', parent=loop_id
+            )
+            _add_action_event(
+                project_session,
+                counter,
+                group_id=f'loop_{i}_action_0',
+                specific='command_complete',
+                success=True,
+                parent=loop_id,
+            )
             # A target-resolution substep, which must not become an action.
-            _add_action_event(project_session, counter, group_id=f'find_step_{i}',
-                              specific='action_start', parent=f'loop_{i}_action_0',
-                              sequence_order=-1)
-            _add_action_event(project_session, counter, group_id=f'find_step_{i}',
-                              specific='action_complete', success=True,
-                              parent=f'loop_{i}_action_0', sequence_order=-1)
+            _add_action_event(
+                project_session,
+                counter,
+                group_id=f'find_step_{i}',
+                specific='action_start',
+                parent=f'loop_{i}_action_0',
+                sequence_order=-1,
+            )
+            _add_action_event(
+                project_session,
+                counter,
+                group_id=f'find_step_{i}',
+                specific='action_complete',
+                success=True,
+                parent=f'loop_{i}_action_0',
+                sequence_order=-1,
+            )
             for t in range(2):
                 failed = failing and t == 1
-                _add_test_event(project_session, counter, group_id=f'loop_{i}_test_{t}',
-                                specific='test_start', parent=loop_id)
-                _add_test_event(project_session, counter, group_id=f'loop_{i}_test_{t}',
-                                specific='test_complete', success=not failed,
-                                status=StatusEnum.FAILED if failed else StatusEnum.SUCCESS,
-                                parent=loop_id)
-        _add_action_event(project_session, counter, group_id=loop_id,
-                          specific='loop_complete', success=False,
-                          extra={'iterations_completed': 7, 'actions_executed': 30})
+                _add_test_event(
+                    project_session, counter, group_id=f'loop_{i}_test_{t}', specific='test_start', parent=loop_id
+                )
+                _add_test_event(
+                    project_session,
+                    counter,
+                    group_id=f'loop_{i}_test_{t}',
+                    specific='test_complete',
+                    success=not failed,
+                    status=StatusEnum.FAILED if failed else StatusEnum.SUCCESS,
+                    parent=loop_id,
+                )
+        _add_action_event(
+            project_session,
+            counter,
+            group_id=loop_id,
+            specific='loop_complete',
+            success=False,
+            extra={'iterations_completed': 7, 'actions_executed': 30},
+        )
         project_session.commit()
 
         tally = build_tally(load_event_rows(project_session, RUN))
@@ -383,10 +455,10 @@ class TestLoadEventRows:
 
     def test_other_runs_are_not_mixed_in(self, project_session):
         from itertools import count
+
         counter = count(1)
         _add_action_event(project_session, counter, group_id='a', specific='command_start')
-        _add_action_event(project_session, counter, group_id='a',
-                          specific='command_complete', success=True)
+        _add_action_event(project_session, counter, group_id='a', specific='command_complete', success=True)
         project_session.commit()
         assert load_event_rows(project_session, 'SOME-OTHER-RUN') == []
 
@@ -394,6 +466,7 @@ class TestLoadEventRows:
 # --------------------------------------------------------------------------- #
 # summary rendering
 # --------------------------------------------------------------------------- #
+
 
 class TestFormatNestingDetail:
     def test_nothing_nested_renders_nothing(self):
@@ -407,8 +480,7 @@ class TestFormatNestingDetail:
         assert "40 in a loop of 10 iterations" in detail
 
     def test_short_loop_shows_the_shortfall(self):
-        rows = make_action('loop_0', 'loop', loop_iterations_planned=10,
-                            loop_iterations_completed=8)
+        rows = make_action('loop_0', 'loop', loop_iterations_planned=10, loop_iterations_completed=8)
         rows += make_test('loop_0_test_0', parent='loop_0')
         tally = build_tally(rows)
         detail = format_nesting_detail(tally.top_level_tests, tally.nested_tests, tally.loops)
@@ -441,14 +513,16 @@ class TestSummaryLine:
 
         console = ExperimentFlowConsole(disable=True)
         console.log_experiment_summary(
-            ulid=RUN, success=success,
+            ulid=RUN,
+            success=success,
             total_actions=tally.total_actions,
             successful_actions=tally.successful_actions,
             failed_actions=tally.failed_actions,
             total_tests=tally.total_tests,
             successful_tests=tally.successful_tests,
             failed_tests=tally.failed_tests,
-            duration=683.9, breakdown=tally,
+            duration=683.9,
+            breakdown=tally,
         )
         return console.state.messages['EXPERIMENT_SUMMARY']['message']
 
@@ -477,8 +551,14 @@ class TestSummaryLine:
 
         console = ExperimentFlowConsole(disable=True)
         console.log_experiment_summary(
-            ulid=RUN, success=True, total_actions=5, successful_actions=5,
-            failed_actions=0, total_tests=1, successful_tests=1, failed_tests=0,
+            ulid=RUN,
+            success=True,
+            total_actions=5,
+            successful_actions=5,
+            failed_actions=0,
+            total_tests=1,
+            successful_tests=1,
+            failed_tests=0,
             duration=683.9,
         )
         message = console.state.messages['EXPERIMENT_SUMMARY']['message']

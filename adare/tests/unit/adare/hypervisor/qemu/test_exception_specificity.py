@@ -6,6 +6,7 @@ use more specific Exception that are expected instead'.
 This test scans all Python files under hypervisor/qemu/ and asserts that
 only intentionally marked exemptions use 'except Exception'.
 """
+
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -33,7 +34,4 @@ def test_no_generic_exception_catching():
                     rel_path = py_file.relative_to(qemu_dir)
                     violations.append(f"{rel_path}:{i}: {line.strip()}")
 
-    assert not violations, (
-        "Found generic exception catching without '# Intentional:' marker:\n"
-        + "\n".join(violations)
-    )
+    assert not violations, "Found generic exception catching without '# Intentional:' marker:\n" + "\n".join(violations)

@@ -19,17 +19,16 @@ def exec_create_testfunction(arguments):
         testfunction_name = resolve_testfunction_path(arguments.name, project_directory)
 
         api = AdareAPI()
-        result = api.testfunction.create(TestfunctionCreateRequest(
-            project_path=project_directory,
-            name=testfunction_name
-        ))
+        result = api.testfunction.create(
+            TestfunctionCreateRequest(project_path=project_directory, name=testfunction_name)
+        )
 
         if result.success:
             print_success_message(
                 title=f'Testfunction "{result.data.name}" created successfully!',
                 location=str(result.data.file_path) if result.data.file_path else None,
                 next_steps=result.data.next_steps,
-                tip=result.data.tip
+                tip=result.data.tip,
             )
         else:
             handle_api_error(result)
@@ -47,9 +46,7 @@ def exec_remove_testfunction(arguments):
     result = api.testfunction.remove(arguments.name, force=force)
 
     if result.success:
-        print_success_message(
-            title=f'Testfunction "{result.data.name}" removed successfully!'
-        )
+        print_success_message(title=f'Testfunction "{result.data.name}" removed successfully!')
     else:
         handle_api_error(result)
 
@@ -67,6 +64,7 @@ def exec_load_testfunction(arguments):
     # Resolve appdata via APPDATA_DIR (matching exec_sync_testfunctions); the
     # source layout is <APPDATA_DIR>/adare/adare/appdata/testfunctions/<name>.
     from adare.config.configdirectory import APPDATA_DIR
+
     appdata_testfunctions_root = APPDATA_DIR / 'adare' / 'adare' / 'appdata' / 'testfunctions'
 
     # If it's an absolute path or exists as given, use it directly
@@ -95,20 +93,19 @@ def exec_load_testfunction(arguments):
 
     # If we couldn't resolve the path, error out
     if resolved_path is None:
-        raise TestFunctionNotFoundError(log, message=f'testfunction "{arguments.name}" not found in any accessible location')
+        raise TestFunctionNotFoundError(
+            log, message=f'testfunction "{arguments.name}" not found in any accessible location'
+        )
 
     # Use the API to load
     api = AdareAPI()
-    result = api.testfunction.load(TestfunctionLoadRequest(
-        path=resolved_path,
-        force=force
-    ))
+    result = api.testfunction.load(TestfunctionLoadRequest(path=resolved_path, force=force))
 
     if result.success:
         print_success_message(
             title=f'Testfunction "{result.data.name}" loaded successfully!',
             next_steps=result.data.next_steps,
-            tip=result.data.tip
+            tip=result.data.tip,
         )
     else:
         handle_api_error(result)
@@ -154,11 +151,13 @@ def _locate_collection_pyfile(lib: str, explicit_path: str | None):
             candidates.append(p / f'{p.name}.py')
             candidates.append(p / f'{lib}.py')
 
-    candidates.extend([
-        Path.cwd() / 'testfunctions' / lib / f'{lib}.py',
-        STATE_DIR / 'testfunctions' / lib / f'{lib}.py',
-        APPDATA_DIR / 'adare' / 'adare' / 'appdata' / 'testfunctions' / lib / f'{lib}.py',
-    ])
+    candidates.extend(
+        [
+            Path.cwd() / 'testfunctions' / lib / f'{lib}.py',
+            STATE_DIR / 'testfunctions' / lib / f'{lib}.py',
+            APPDATA_DIR / 'adare' / 'adare' / 'appdata' / 'testfunctions' / lib / f'{lib}.py',
+        ]
+    )
 
     for candidate in candidates:
         if candidate.is_file():
@@ -228,9 +227,7 @@ def exec_validate_testfunction(arguments):
         else:
             issues.append(f"no .py file found in {collection_dir}")
     else:
-        raise TestFunctionNotFoundError(
-            log, message=f'"{arguments.path}" must be a testfunction directory or .py file'
-        )
+        raise TestFunctionNotFoundError(log, message=f'"{arguments.path}" must be a testfunction directory or .py file')
 
     discovered: dict = {}
     if py_file is not None:
@@ -246,7 +243,8 @@ def exec_validate_testfunction(arguments):
     req_note = None
     if req.is_file():
         deps = [
-            ln.strip() for ln in req.read_text(encoding='utf-8').splitlines()
+            ln.strip()
+            for ln in req.read_text(encoding='utf-8').splitlines()
             if ln.strip() and not ln.strip().startswith('#')
         ]
         if deps:
@@ -254,6 +252,7 @@ def exec_validate_testfunction(arguments):
 
     # Documentation gaps are advisory: they never fail validation.
     from adare.backend.testfunction.catalog import docstring_warnings
+
     doc_warnings = docstring_warnings(py_file) if py_file is not None else []
 
     from adare.console import console
@@ -261,8 +260,10 @@ def exec_validate_testfunction(arguments):
     def _print_doc_warnings():
         if not doc_warnings:
             return
-        console.print(f'\n  [yellow]⚠ {len(doc_warnings)} documentation warning(s)[/yellow] '
-                      f'(non-blocking; docs feed `adare test search/info` and agents):')
+        console.print(
+            f'\n  [yellow]⚠ {len(doc_warnings)} documentation warning(s)[/yellow] '
+            f'(non-blocking; docs feed `adare test search/info` and agents):'
+        )
         for warning in doc_warnings:
             console.print(f'    [yellow]-[/yellow] {warning}')
 
@@ -303,7 +304,8 @@ def exec_dry_run_testfunction(arguments):
     target = arguments.target
     if '.' not in target:
         raise TestFunctionNotFoundError(
-            log, message=f'target "{target}" must be in <collection>.<function> form (e.g. mycollection.file_contains_word)'
+            log,
+            message=f'target "{target}" must be in <collection>.<function> form (e.g. mycollection.file_contains_word)',
         )
     lib, func = target.split('.', 1)
 
@@ -319,6 +321,7 @@ def exec_dry_run_testfunction(arguments):
     failures = get_module_load_failures()
     if lib in failures:
         from adare.console import console
+
         console.print(f'[red]✗ {failures[lib].get_user_friendly_message()}[/red]')
         exit(1)
 
@@ -359,6 +362,7 @@ def exec_dry_run_testfunction(arguments):
     }
 
     from adare.console import console
+
     try:
         test_instance = cattrs.structure(test_dict, testclass)
     except cattrs.errors.ClassValidationError as e:
@@ -369,6 +373,7 @@ def exec_dry_run_testfunction(arguments):
     result = test_instance.test()
 
     from adarelib.constants import StatusEnum
+
     status_name = StatusEnum(result.status).name
     color = StatusEnum.get_color(result.status) or 'white'
     console.print(f'\n[bold]{target}[/bold] (sample: {sample or params.get("dst", "—")})')
@@ -407,7 +412,9 @@ def exec_testfunction_versions(arguments):
             console.print(f'\n[yellow]method "{func}" not found in {lib}[/yellow]')
         else:
             status = '' if method['is_current'] else ' [red](removed / not current)[/red]'
-            console.print(f'\n[bold]{lib}.{func}[/bold] — current method version: [b]v{method["current_version"]}[/b]{status}')
+            console.print(
+                f'\n[bold]{lib}.{func}[/bold] — current method version: [b]v{method["current_version"]}[/b]{status}'
+            )
             for entry in method['versions']:
                 marker = ' [green](current)[/green]' if entry['is_current'] else ''
                 created = entry['created_at'] or '—'

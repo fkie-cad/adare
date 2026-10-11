@@ -24,7 +24,9 @@ class PlaybookApi(ProjectDatabaseApi):
     def __init__(self, project_path: Path):
         super().__init__(project_path)
 
-    def populate_playbook_from_file(self, experiment: Experiment, playbook_file_path: Path, parsed_playbook: PlaybookType | None = None) -> Playbook:
+    def populate_playbook_from_file(
+        self, experiment: Experiment, playbook_file_path: Path, parsed_playbook: PlaybookType | None = None
+    ) -> Playbook:
         """Parse YAML playbook file and populate database models."""
         try:
             # Read original YAML content for storage
@@ -40,14 +42,19 @@ class PlaybookApi(ProjectDatabaseApi):
 
                 from adare.database.api.base import GlobalDatabaseApi
                 from adare.database.models.global_models import Environment, Vm
+
                 with GlobalDatabaseApi() as global_api:
-                    env = global_api._session.query(Environment).options(
-                        joinedload(Environment.vm).joinedload(Vm.osinfo)
-                    ).filter(Environment.id == env_id).first()
+                    env = (
+                        global_api._session.query(Environment)
+                        .options(joinedload(Environment.vm).joinedload(Vm.osinfo))
+                        .filter(Environment.id == env_id)
+                        .first()
+                    )
                     if env and env.vm and env.vm.osinfo:
                         vm_os = env.vm.osinfo.platform  # 'windows' or 'linux'
                         # Get VM user from config - import here to avoid circular imports
                         from adare.config import get_vm_credentials
+
                         if vm_os:
                             vm_user, _ = get_vm_credentials(vm_os)
 
@@ -61,9 +68,7 @@ class PlaybookApi(ProjectDatabaseApi):
             self._session.flush()
 
             # Clear existing items (for updates)
-            self._session.query(PlaybookItem).filter(
-                PlaybookItem.playbook_id == playbook.id
-            ).delete()
+            self._session.query(PlaybookItem).filter(PlaybookItem.playbook_id == playbook.id).delete()
 
             # Convert actions to database items
             for order, action in enumerate(config.actions):
@@ -90,11 +95,11 @@ class PlaybookApi(ProjectDatabaseApi):
             log.error(f"Database error populating playbook from {playbook_file_path}: {e}", exc_info=True)
             raise
 
-    def _get_or_create_playbook(self, experiment: Experiment, config: PlaybookType, original_yaml_content: str) -> Playbook:
+    def _get_or_create_playbook(
+        self, experiment: Experiment, config: PlaybookType, original_yaml_content: str
+    ) -> Playbook:
         """Get existing playbook or create new one."""
-        playbook = self._session.query(Playbook).filter(
-            Playbook.experiment_id == experiment.id
-        ).first()
+        playbook = self._session.query(Playbook).filter(Playbook.experiment_id == experiment.id).first()
 
         if playbook:
             # Update existing
@@ -107,7 +112,7 @@ class PlaybookApi(ProjectDatabaseApi):
                 experiment_id=experiment.id,
                 name=f"{experiment.name} Playbook",
                 settings=self._config_to_settings_json(config),
-                original_yaml_content=original_yaml_content
+                original_yaml_content=original_yaml_content,
             )
             self._session.add(playbook)
 
@@ -140,7 +145,7 @@ class PlaybookApi(ProjectDatabaseApi):
             parameters=parameters,
             conditions=conditions_json,
             description=getattr(action, 'description', ''),
-            is_enabled=True
+            is_enabled=True,
         )
 
         self._session.add(item)
@@ -151,9 +156,7 @@ class PlaybookApi(ProjectDatabaseApi):
         if not config.settings:
             return {}
 
-        result = {
-            "idle": config.settings.idle
-        }
+        result = {"idle": config.settings.idle}
 
         # Add optional settings if they exist
         if hasattr(config.settings, 'timeout') and config.settings.timeout is not None:
@@ -216,10 +219,7 @@ class PlaybookApi(ProjectDatabaseApi):
 
         # Serialize all non-callable attributes
         for attr_name in dir(condition):
-            if (not attr_name.startswith('_') and
-                attr_name != '__class__' and
-                hasattr(condition, attr_name)):
-
+            if not attr_name.startswith('_') and attr_name != '__class__' and hasattr(condition, attr_name):
                 attr_value = getattr(condition, attr_name)
                 if not callable(attr_value) and attr_value is not None:
                     result[attr_name] = self._serialize_value(attr_value)
@@ -234,10 +234,7 @@ class PlaybookApi(ProjectDatabaseApi):
         exclude_attrs = {'target', 'when', 'description'}
 
         for attr_name in dir(action):
-            if (not attr_name.startswith('_') and
-                attr_name not in exclude_attrs and
-                hasattr(action, attr_name)):
-
+            if not attr_name.startswith('_') and attr_name not in exclude_attrs and hasattr(action, attr_name):
                 value = getattr(action, attr_name)
                 if not callable(value):
                     parameters[attr_name] = self._serialize_value(value)
@@ -274,6 +271,7 @@ class PlaybookApi(ProjectDatabaseApi):
         # CRITICAL: Check WaitCondition BEFORE hasattr(__dict__) because attrs classes
         # may not have __dict__ (they use __slots__ by default)
         from adare.types.playbook import Target, WaitCondition
+
         if isinstance(value, WaitCondition):
             return self._serialize_wait_condition(value)
         # Target is a slots-based attrs class (no __dict__), so it would fall
@@ -286,6 +284,7 @@ class PlaybookApi(ProjectDatabaseApi):
         if hasattr(value, '__dict__'):
             # Check if this is an attrs class
             import attrs
+
             if attrs.has(value):
                 # Use attrs.asdict() for attrs-defined classes
                 return attrs.asdict(value, recurse=True, filter=lambda attr, val: val is not None)
@@ -302,15 +301,11 @@ class PlaybookApi(ProjectDatabaseApi):
 
     def get_playbook_by_experiment(self, experiment_id: str) -> Playbook | None:
         """Get playbook for an experiment."""
-        return self._session.query(Playbook).filter(
-            Playbook.experiment_id == experiment_id
-        ).first()
+        return self._session.query(Playbook).filter(Playbook.experiment_id == experiment_id).first()
 
     def get_playbook_items(self, playbook_id: str, parent_id: str | None = None) -> list[PlaybookItem]:
         """Get playbook items, optionally filtered by parent."""
-        query = self._session.query(PlaybookItem).filter(
-            PlaybookItem.playbook_id == playbook_id
-        )
+        query = self._session.query(PlaybookItem).filter(PlaybookItem.playbook_id == playbook_id)
 
         if parent_id:
             query = query.filter(PlaybookItem.parent_id == parent_id)
@@ -321,22 +316,17 @@ class PlaybookApi(ProjectDatabaseApi):
 
     def get_playbook_by_experiment_id(self, experiment_id: str) -> Playbook | None:
         """Get playbook by experiment ID."""
-        return self._session.query(Playbook).filter(
-            Playbook.experiment_id == experiment_id
-        ).first()
+        return self._session.query(Playbook).filter(Playbook.experiment_id == experiment_id).first()
 
     def create_action_execution(
-        self,
-        playbook_item_id: str,
-        experiment_run_id: str,
-        status: str = 'pending'
+        self, playbook_item_id: str, experiment_run_id: str, status: str = 'pending'
     ) -> ActionExecution:
         """Create a new action execution record."""
         execution = ActionExecution(
             playbook_item_id=playbook_item_id,
             experiment_run_id=experiment_run_id,
             status=status,
-            created_at=datetime.now(UTC)
+            created_at=datetime.now(UTC),
         )
         self._session.add(execution)
         self._session.flush()  # Get ID assigned
@@ -344,9 +334,7 @@ class PlaybookApi(ProjectDatabaseApi):
 
     def update_action_execution_start(self, execution_id: str) -> None:
         """Mark action execution as started."""
-        execution = self._session.query(ActionExecution).filter(
-            ActionExecution.id == execution_id
-        ).first()
+        execution = self._session.query(ActionExecution).filter(ActionExecution.id == execution_id).first()
         if execution:
             execution.status = 'running'
             execution.started_at = datetime.now(UTC)
@@ -358,12 +346,10 @@ class PlaybookApi(ProjectDatabaseApi):
         success: bool,
         result_data: dict | None = None,
         error_message: str | None = None,
-        attempt_number: int = 1
+        attempt_number: int = 1,
     ) -> None:
         """Mark action execution as completed."""
-        execution = self._session.query(ActionExecution).filter(
-            ActionExecution.id == execution_id
-        ).first()
+        execution = self._session.query(ActionExecution).filter(ActionExecution.id == execution_id).first()
         if execution:
             execution.status = 'success' if success else 'failed'
             execution.completed_at = datetime.now(UTC)
@@ -374,9 +360,12 @@ class PlaybookApi(ProjectDatabaseApi):
 
     def get_action_executions_by_run(self, experiment_run_id: str) -> list[ActionExecution]:
         """Get all action executions for an experiment run."""
-        return self._session.query(ActionExecution).filter(
-            ActionExecution.experiment_run_id == experiment_run_id
-        ).order_by(ActionExecution.created_at).all()
+        return (
+            self._session.query(ActionExecution)
+            .filter(ActionExecution.experiment_run_id == experiment_run_id)
+            .order_by(ActionExecution.created_at)
+            .all()
+        )
 
     def recover_playbook_yaml(self, experiment_id: str) -> str:
         """Recover the original playbook YAML from database.
@@ -407,9 +396,11 @@ class PlaybookApi(ProjectDatabaseApi):
         """Convert settings JSON to Settings object."""
         if not settings_json:
             from adare.types.playbook import Settings
+
             return Settings()
 
         from adare.types.playbook import Settings
+
         return Settings(
             idle=settings_json.get('idle', 0.1),
             timeout=settings_json.get('timeout'),
@@ -418,7 +409,7 @@ class PlaybookApi(ProjectDatabaseApi):
             auto_pull_on_test_failure=settings_json.get('auto_pull_on_test_failure', True),
             collect_system_info=settings_json.get('collect_system_info', True),
             forensic_logging=settings_json.get('forensic_logging', True),
-            resolution=settings_json.get('resolution')
+            resolution=settings_json.get('resolution'),
         )
 
     def _json_to_target(self, target_json: dict[str, Any] | None):
@@ -449,7 +440,7 @@ class PlaybookApi(ProjectDatabaseApi):
             position=target_json.get('position'),
             strategy=strategy,
             offset=offset,
-            use_cache=target_json.get('use_cache')
+            use_cache=target_json.get('use_cache'),
         )
 
     def _json_to_strategy(self, strategy_json: dict[str, Any]):
@@ -479,7 +470,7 @@ class PlaybookApi(ProjectDatabaseApi):
             'BottomLeftStrategy': BottomLeftStrategy,
             'BottomRightStrategy': BottomRightStrategy,
             'LargestStrategy': LargestStrategy,
-            'SmallestStrategy': SmallestStrategy
+            'SmallestStrategy': SmallestStrategy,
         }
 
         strategy_class = strategy_map.get(strategy_class_name)
@@ -500,15 +491,9 @@ class PlaybookApi(ProjectDatabaseApi):
             cond_type = cond_json.get('type')
 
             if cond_type == 'exists':
-                conditions.append(ExistsCondition(
-                    text=cond_json.get('text'),
-                    image=cond_json.get('image')
-                ))
+                conditions.append(ExistsCondition(text=cond_json.get('text'), image=cond_json.get('image')))
             elif cond_type == 'notexists':
-                conditions.append(NotExistsCondition(
-                    text=cond_json.get('text'),
-                    image=cond_json.get('image')
-                ))
+                conditions.append(NotExistsCondition(text=cond_json.get('text'), image=cond_json.get('image')))
             else:
                 log.warning(f"Unknown condition type: {cond_type}")
 
@@ -560,20 +545,14 @@ class PlaybookApi(ProjectDatabaseApi):
 
         if action_type == 'click':
             return ClickAction(
-                target=self._json_to_target(item.target),
-                type=params.get('type', 'left'),
-                description=description
+                target=self._json_to_target(item.target), type=params.get('type', 'left'), description=description
             )
 
         if action_type == 'drag':
             # Drag has src and dst targets in parameters
             src_target = self._json_to_target(params.get('src'))
             dst_target = self._json_to_target(params.get('dst'))
-            return DragAction(
-                src=src_target,
-                dst=dst_target,
-                description=description
-            )
+            return DragAction(src=src_target, dst=dst_target, description=description)
 
         if action_type == 'keyboard':
             return KeyboardAction(
@@ -581,33 +560,22 @@ class PlaybookApi(ProjectDatabaseApi):
                 text=params.get('text'),
                 combination=params.get('combination'),
                 when=conditions,
-                description=description
+                description=description,
             )
 
         if action_type == 'idle':
-            return IdleAction(
-                duration=params.get('duration', 0.0),
-                description=description
-            )
+            return IdleAction(duration=params.get('duration', 0.0), description=description)
 
         if action_type == 'scroll':
             return ScrollAction(
-                direction=params.get('direction', 'down'),
-                amount=params.get('amount', 1),
-                description=description
+                direction=params.get('direction', 'down'), amount=params.get('amount', 1), description=description
             )
 
         if action_type == 'goto':
-            return GotoAction(
-                target=self._json_to_target(item.target),
-                description=description
-            )
+            return GotoAction(target=self._json_to_target(item.target), description=description)
 
         if action_type == 'actiontest':
-            return ActionTestAction(
-                name=params.get('name', ''),
-                description=description
-            )
+            return ActionTestAction(name=params.get('name', ''), description=description)
 
         if action_type == 'command':
             return CommandAction(
@@ -620,7 +588,7 @@ class PlaybookApi(ProjectDatabaseApi):
                 timeout=params.get('timeout'),
                 shell=params.get('shell', False),
                 admin=params.get('admin', False),
-                background=params.get('background', False)
+                background=params.get('background', False),
             )
 
         if action_type == 'screenshot':
@@ -630,14 +598,11 @@ class PlaybookApi(ProjectDatabaseApi):
                 x=params.get('x'),
                 y=params.get('y'),
                 width=params.get('width'),
-                height=params.get('height')
+                height=params.get('height'),
             )
 
         if action_type == 'savetimestamp':
-            return SaveTimestampAction(
-                variable=params.get('variable', ''),
-                description=description
-            )
+            return SaveTimestampAction(variable=params.get('variable', ''), description=description)
 
         if action_type == 'pull':
             # Handle both old format (src as string) and new format (src as list)
@@ -646,15 +611,11 @@ class PlaybookApi(ProjectDatabaseApi):
                 src=src,  # Already Union[str, List[str]], cattrs handles it
                 dst=params.get('dst'),
                 mode=params.get('mode', 'hypervisor'),  # Add mode with default
-                description=description
+                description=description,
             )
 
         if action_type == 'pause':
-            return PauseAction(
-                message=params.get('message'),
-                name=params.get('name'),
-                description=description
-            )
+            return PauseAction(message=params.get('message'), name=params.get('name'), description=description)
 
         if action_type == 'waituntil':
             # Reconstruct WaitCondition recursively
@@ -665,7 +626,7 @@ class PlaybookApi(ProjectDatabaseApi):
                 timeout=params.get('timeout', 60.0),
                 check_interval=params.get('check_interval', 0.0),
                 initial_delay=params.get('initial_delay', 0.0),
-                description=description
+                description=description,
             )
 
         if action_type == 'block':
@@ -674,18 +635,14 @@ class PlaybookApi(ProjectDatabaseApi):
             # Note: Nested actions would need to be stored as child PlaybookItems
             # For now, log warning if block actions are encountered
             log.warning("Block actions not yet fully supported in database deserialization")
-            return BlockAction(
-                actions=nested_actions,
-                description=description,
-                when=conditions
-            )
+            return BlockAction(actions=nested_actions, description=description, when=conditions)
 
         if action_type == 'snapshotfilesystem':
             return SnapshotFilesystemAction(
                 variable=params.get('variable', ''),
                 root_path=params.get('root_path'),
                 timeout=params.get('timeout', 300.0),
-                description=description
+                description=description,
             )
 
         if action_type == 'pullchangedfiles':
@@ -696,7 +653,7 @@ class PlaybookApi(ProjectDatabaseApi):
                 mode=params.get('mode', 'websocket'),
                 include_modified=params.get('include_modified', True),
                 include_added=params.get('include_added', True),
-                description=description
+                description=description,
             )
 
         raise ValueError(f"Unknown action type in database: {action_type}")
@@ -731,6 +688,7 @@ class PlaybookApi(ProjectDatabaseApi):
         variables = None
         if 'variables' in data and data['variables']:
             from adarelib.common.variables import VariableRegistry
+
             variables = VariableRegistry.from_dict(data['variables'])
 
         # Extract tests (keep as-is from YAML parsing)
@@ -771,10 +729,6 @@ class PlaybookApi(ProjectDatabaseApi):
             variables, tests = self._load_variables_and_tests_from_yaml(playbook.original_yaml_content)
 
         from adare.types.playbook import Playbook as PlaybookType
+
         log.info(f"Playbook reconstruction complete - {len(actions)} actions, {len(tests)} tests")
-        return PlaybookType(
-            actions=actions,
-            settings=settings,
-            variables=variables,
-            tests=tests
-        )
+        return PlaybookType(actions=actions, settings=settings, variables=variables, tests=tests)

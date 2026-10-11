@@ -190,8 +190,9 @@ def send_keypress_via_qmp(socket_path: Path, key: str = 'ret') -> bool:
         sock.close()
 
 
-def repeatedly_send_keypress(socket_path: Path, interval: float = 1.0,
-                             duration: float = 15.0, key: str = 'ret') -> None:
+def repeatedly_send_keypress(
+    socket_path: Path, interval: float = 1.0, duration: float = 15.0, key: str = 'ret'
+) -> None:
     """Send repeated keypresses to the VM over a period of time.
 
     Used to catch the "Press any key to boot from CD or DVD..." prompt

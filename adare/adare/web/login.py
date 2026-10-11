@@ -46,7 +46,9 @@ class RedirectHandler(http.server.SimpleHTTPRequestHandler):
         # Shut down the HTTP server
         resp = exchange_code_for_token(GITEA_CLIENT_ID, authorization_code, self.code_verifier, self.redirect_uri)
         self.server.gitea_access_token = resp['access_token']
-        self.server.gitea_access_token_expiry = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=resp['expires_in'])
+        self.server.gitea_access_token_expiry = datetime.datetime.now(datetime.UTC) + datetime.timedelta(
+            seconds=resp['expires_in']
+        )
         self.server.gitea_refresh_token = resp.get('refresh_token', None)
         log.info("Received access token")
 
@@ -99,7 +101,9 @@ def start_oauth_flow(redirect_uri, port):
         auth_url = f"{GITEA_URL}login/oauth/authorize?response_type=code&client_id={GITEA_CLIENT_ID}&redirect_uri={urllib.parse.quote_plus(redirect_uri)}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256"
         webbrowser.open(auth_url, new=0, autoraise=True)
         console_print("A browser window has been opened. Please log in and authorize the application.")
-        console_print(f'\nIf the browser does not open, please visit the following URL manually: [i blue]{auth_url}[/i blue]')
+        console_print(
+            f'\nIf the browser does not open, please visit the following URL manually: [i blue]{auth_url}[/i blue]'
+        )
 
         # Wait for a single request and get self.path from the handler
         try:
@@ -139,7 +143,7 @@ def exchange_code_for_token(client_id, code, code_verifier, redirect_uri):
         'code': code,
         'grant_type': 'authorization_code',
         'redirect_uri': redirect_uri,
-        'code_verifier': code_verifier
+        'code_verifier': code_verifier,
     }
     response = requests.post(token_url, headers=headers, data=payload)
     return response.json()
@@ -177,12 +181,9 @@ def exchange_gitea_for_django(gitea_access_token):
     try:
         response = requests.post(f'{WEBSERVER_URL}api/auth/gitea/', data={'access_token': gitea_access_token})
         if response.status_code != 200:
-            raise LoginFailedError(log,
-                                   f"Failed to retrieve Django token ({response.status_code}): {response.text}")
+            raise LoginFailedError(log, f"Failed to retrieve Django token ({response.status_code}): {response.text}")
     except requests.exceptions.RequestException as e:
-        raise LoginFailedError(
-            log, "Failed to retrieve Django token"
-        ) from e
+        raise LoginFailedError(log, "Failed to retrieve Django token") from e
 
     log.info("Received Django token")
 
@@ -254,23 +255,17 @@ def login():
             raise AlreadyLoggedIn(
                 log,
                 f"User {user_session.username} is already logged in",
-                [
-                    'if you want to login as a different user, please logout first via [i]adare logout[/i]'
-                ],
+                ['if you want to login as a different user, please logout first via [i]adare logout[/i]'],
             )
 
     redirect_handler_port = next(
-        (
-            port
-            for port in PORT_OAUTH2_REDIRECT
-            if is_localhost_port_free(port)
-        ),
+        (port for port in PORT_OAUTH2_REDIRECT if is_localhost_port_free(port)),
         -1,
     )
     if redirect_handler_port == -1:
         raise LoginFailedError(
             log,
-            f"No free port found for OAuth2 redirect handler. Please close some applications and try again. (Ports tried: {PORT_OAUTH2_REDIRECT})"
+            f"No free port found for OAuth2 redirect handler. Please close some applications and try again. (Ports tried: {PORT_OAUTH2_REDIRECT})",
         )
     redirect_uri = f"http://localhost:{redirect_handler_port}/oauth/callback"
     log.info(f"Using redirect URI: {redirect_uri}")
@@ -279,7 +274,7 @@ def login():
     start_oauth_flow(redirect_uri, redirect_handler_port)
 
 
-def is_logged_in(username: str = None, silent:bool = False):
+def is_logged_in(username: str = None, silent: bool = False):
     refresh_session_if_needed(username)
     with UserSessionApi() as db:
         db.remove_expired_user_sessions()
@@ -292,7 +287,6 @@ def is_logged_in(username: str = None, silent:bool = False):
         if not silent:
             log_print(log, f"User [b]{username}[/b] is currently logged in")
         return True
-
 
 
 def logout(username: str = None):

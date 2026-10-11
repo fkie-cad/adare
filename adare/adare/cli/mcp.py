@@ -33,9 +33,11 @@ class MCPServerManager:
             # Prepare command
             cmd = [
                 'adare-cv-server',
-                '--host', self.host,
-                '--port', str(self.port),
-                '--debug'  # Always use debug for detailed logs
+                '--host',
+                self.host,
+                '--port',
+                str(self.port),
+                '--debug',  # Always use debug for detailed logs
             ]
 
             # Set up log file redirection if specified
@@ -43,15 +45,11 @@ class MCPServerManager:
                 log_file_handle = open(self.log_file, 'w')
                 print(f"📋 MCP server logs will be saved to: {self.log_file}")
                 # Start the server process with logs redirected to file
-                self.process = subprocess.Popen(cmd,
-                                              stdout=log_file_handle,
-                                              stderr=subprocess.STDOUT)
+                self.process = subprocess.Popen(cmd, stdout=log_file_handle, stderr=subprocess.STDOUT)
                 self._log_file_handle = log_file_handle
             else:
                 # Start the server process with logs captured but not shown
-                self.process = subprocess.Popen(cmd,
-                                              stdout=subprocess.PIPE,
-                                              stderr=subprocess.PIPE)
+                self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
             # Wait for server to start
             for attempt in range(30):  # 30 second timeout
@@ -173,11 +171,10 @@ async def exec_mcp_test_icon(args):
                 print("✅ Connected to MCP server")
                 print(f"🔍 Finding icon with threshold: {threshold}")
 
-                result = await client.call_tool("find_icon", {
-                    "icon_base64": icon_base64,
-                    "screenshot_base64": screenshot_base64,
-                    "threshold": threshold
-                })
+                result = await client.call_tool(
+                    "find_icon",
+                    {"icon_base64": icon_base64, "screenshot_base64": screenshot_base64, "threshold": threshold},
+                )
 
                 # Parse result
                 if result.data is not None:
@@ -218,7 +215,7 @@ async def exec_mcp_test_icon(args):
                             if isinstance(similarity, float):
                                 similarity = f"{similarity:.3f}"
 
-                            print(f"   Match {i+1}: x={x}, y={y}, similarity={similarity}")
+                            print(f"   Match {i + 1}: x={x}, y={y}, similarity={similarity}")
 
                         # Create marked image if output path provided
                         if hasattr(args, 'output_path') and args.output_path:
@@ -309,10 +306,14 @@ async def exec_mcp_test_icon(args):
                                         rect_y = y
 
                                     # Draw colored circle at center of found icon
-                                    draw.ellipse([center_x-8, center_y-8, center_x+8, center_y+8], fill=color)
+                                    draw.ellipse([center_x - 8, center_y - 8, center_x + 8, center_y + 8], fill=color)
 
                                     # Draw colored rectangle around the match
-                                    draw.rectangle([rect_x, rect_y, rect_x + icon_width, rect_y + icon_height], outline=color, width=3)
+                                    draw.rectangle(
+                                        [rect_x, rect_y, rect_x + icon_width, rect_y + icon_height],
+                                        outline=color,
+                                        width=3,
+                                    )
 
                                     # Add similarity text near the match
                                     try:
@@ -328,7 +329,9 @@ async def exec_mcp_test_icon(args):
                                 result_img.save(str(output_path))
                                 print(f"💾 Saved marked image to: {output_path}")
                                 if valid_similarities:
-                                    print(f"🎨 Color coding scaled to range: {min_sim:.3f} (red) → {max_sim:.3f} (green)")
+                                    print(
+                                        f"🎨 Color coding scaled to range: {min_sim:.3f} (red) → {max_sim:.3f} (green)"
+                                    )
                                 else:
                                     print("🎨 Color coding: Red=low similarity, Yellow=medium, Green=high similarity")
 
@@ -396,10 +399,9 @@ async def exec_mcp_get_all_text(args):
                 print("✅ Connected to MCP server")
                 print(f"🔍 Getting all detected text (format: {format_type})")
 
-                result = await client.call_tool("get_all_text", {
-                    "screenshot_base64": screenshot_base64,
-                    "format": format_type
-                })
+                result = await client.call_tool(
+                    "get_all_text", {"screenshot_base64": screenshot_base64, "format": format_type}
+                )
 
                 # Parse result
                 if result.data is not None:
@@ -427,7 +429,7 @@ async def exec_mcp_get_all_text(args):
                             x = detection.get("x", 0)
                             y = detection.get("y", 0)
                             confidence = detection.get("confidence", 0)
-                            print(f"   {i+1}: '{text}' at x={x}, y={y} (confidence: {confidence:.3f})")
+                            print(f"   {i + 1}: '{text}' at x={x}, y={y} (confidence: {confidence:.3f})")
                     else:
                         print("ℹ️  No text detected")
                 else:
@@ -491,11 +493,9 @@ async def exec_mcp_test_text(args):
                 print("✅ Connected to MCP server")
                 print(f"🔍 Finding text: '{text}' (format: {format_type})")
 
-                result = await client.call_tool("find_text", {
-                    "text": text,
-                    "screenshot_base64": screenshot_base64,
-                    "format": format_type
-                })
+                result = await client.call_tool(
+                    "find_text", {"text": text, "screenshot_base64": screenshot_base64, "format": format_type}
+                )
 
                 # Parse result
                 if result.data is not None:
@@ -523,7 +523,7 @@ async def exec_mcp_test_text(args):
                             location = match.get("location", {})
                             x = location.get("x", 0)
                             y = location.get("y", 0)
-                            print(f"   Match {i+1}: '{found_text}' at x={x}, y={y}")
+                            print(f"   Match {i + 1}: '{found_text}' at x={x}, y={y}")
                     else:
                         print("ℹ️  No text matches found")
                 else:

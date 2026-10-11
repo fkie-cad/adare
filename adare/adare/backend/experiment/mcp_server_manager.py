@@ -60,13 +60,11 @@ def find_free_cv_port(preferred: int = DEFAULT_CV_PORT, window: int = CV_PORT_SC
     for port in range(preferred, preferred + window):
         if is_localhost_port_free(port):
             if port != preferred:
-                log.info(
-                    f"CV/OCR port {preferred} is in use (likely a concurrent run); "
-                    f"using {port} instead"
-                )
+                log.info(f"CV/OCR port {preferred} is in use (likely a concurrent run); using {port} instead")
             return port
 
     from adare.exceptions import LoggedException
+
     raise LoggedException(
         log,
         message=(
@@ -142,7 +140,6 @@ class MCPServerManager:
     that provides image and text detection services for playbook execution.
     """
 
-
     # How long to wait for the freshly-launched server to actually serve its
     # /mcp endpoint. The cv-server imports cv2 + PaddleOCR at module load
     # (several seconds cold) before it binds, so a naive fixed sleep is not
@@ -150,7 +147,13 @@ class MCPServerManager:
     STARTUP_PROBE_TIMEOUT = 60.0
     STARTUP_PROBE_INTERVAL = 1.0
 
-    def __init__(self, server_port: int = DEFAULT_CV_PORT, log_file: Path | None = None, debug: bool = False, debug_output_dir: Path | None = None):
+    def __init__(
+        self,
+        server_port: int = DEFAULT_CV_PORT,
+        log_file: Path | None = None,
+        debug: bool = False,
+        debug_output_dir: Path | None = None,
+    ):
         """
         Initialize MCP server manager.
 
@@ -224,7 +227,7 @@ class MCPServerManager:
                 stdout=log_file_handle or subprocess.PIPE,
                 stderr=subprocess.STDOUT if log_file_handle else subprocess.PIPE,
                 text=True,
-                start_new_session=True
+                start_new_session=True,
             )
             # We spawned it, so we own it — this is what later entitles
             # stop(force_external=True) to terminate it after our Popen handle is
@@ -277,8 +280,7 @@ class MCPServerManager:
                     await client.list_tools()
                 log.info(f"MCP GUI server is serving at {self.server_url}")
                 return True
-            except (OSError, ConnectionError, TimeoutError, RuntimeError,
-                    httpx.HTTPError) as exc:
+            except (OSError, ConnectionError, TimeoutError, RuntimeError, httpx.HTTPError) as exc:
                 # httpx.ConnectError ("connection refused" while the server is
                 # still binding) is an httpx.HTTPError, NOT an OSError — it must
                 # be listed explicitly or the probe crashes instead of retrying.
@@ -366,6 +368,7 @@ class MCPServerManager:
     def _is_port_in_use(self, port: int) -> bool:
         """Check if a port is in use."""
         import socket
+
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 # Set timeout to avoid hanging
@@ -381,9 +384,7 @@ class MCPServerManager:
         which the previous single-``int()`` parse turned into a ValueError.
         """
         try:
-            out = subprocess.check_output(
-                ["lsof", "-t", f"-i:{port}"], stderr=subprocess.DEVNULL
-            ).decode()
+            out = subprocess.check_output(["lsof", "-t", f"-i:{port}"], stderr=subprocess.DEVNULL).decode()
         except subprocess.CalledProcessError:
             return []  # lsof exits non-zero when nothing holds the port
         except (OSError, ValueError) as e:
@@ -437,9 +438,11 @@ class MCPServerManager:
             return False
 
         try:
-            cmdline = subprocess.check_output(
-                ["ps", "-o", "command=", "-p", str(pid)], stderr=subprocess.DEVNULL
-            ).decode().strip()
+            cmdline = (
+                subprocess.check_output(["ps", "-o", "command=", "-p", str(pid)], stderr=subprocess.DEVNULL)
+                .decode()
+                .strip()
+            )
         except subprocess.CalledProcessError:
             return False  # process is already gone
         except (OSError, ValueError) as e:
@@ -447,10 +450,7 @@ class MCPServerManager:
             return False
 
         if "adare-cv-server" not in cmdline:
-            log.warning(
-                f"Refusing to kill PID {pid} on port {port}: not an adare-cv-server "
-                f"({cmdline[:120]!r})"
-            )
+            log.warning(f"Refusing to kill PID {pid} on port {port}: not an adare-cv-server ({cmdline[:120]!r})")
             return False
 
         # The port is in the spawn argv (see start()), so this pins the match to the
@@ -459,14 +459,12 @@ class MCPServerManager:
         # "--port 13109", which would let a manager for 1310 claim 13109's server.
         tokens = cmdline.split()
         names_port = any(
-            (tok == "--port" and idx + 1 < len(tokens) and tokens[idx + 1] == str(port))
-            or tok == f"--port={port}"
+            (tok == "--port" and idx + 1 < len(tokens) and tokens[idx + 1] == str(port)) or tok == f"--port={port}"
             for idx, tok in enumerate(tokens)
         )
         if not names_port:
             log.warning(
-                f"Refusing to kill cv-server PID {pid}: its command line does not "
-                f"name port {port} ({cmdline[:120]!r})"
+                f"Refusing to kill cv-server PID {pid}: its command line does not name port {port} ({cmdline[:120]!r})"
             )
             return False
 

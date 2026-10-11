@@ -1,4 +1,3 @@
-
 TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
 TIMESTAMP_FORMAT_SECONDS = '%Y-%m-%d %H:%M:%S'
 TIMESTAMP_FORMAT_DATE = '%Y-%m-%d'
@@ -39,6 +38,7 @@ STATUS_SYMBOL_MAPPING = {
     'unknown': 'question_mark',
 }
 
+
 def __generate_status_table_slot():
     slot_string = """<q-td :props="props" auto-width>"""
     for index, status in enumerate(STATUS_ICON_MAPPING.keys()):
@@ -53,5 +53,6 @@ def __generate_status_table_slot():
         slot_string += """<q-tooltip> {{ props.value }} </q-tooltip></q-icon>"""
     slot_string += """<p v-else>{{ props.value }} </p></q-td>"""
     return slot_string
+
 
 SLOT_STATUS_TABLE = __generate_status_table_slot()

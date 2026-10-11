@@ -21,6 +21,7 @@ CLI (handy for interactive poking):
   qmp_drive.py --sock S tap 512 384 1024 768
   qmp_drive.py --sock S stable --settle 20 --timeout 600
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,19 +34,43 @@ import time
 
 # --- character -> QEMU qcode (QKeyCode) mapping for type() -------------------
 _BASE = {
-    '\n': ('ret', False), ' ': ('spc', False), '\t': ('tab', False),
-    '-': ('minus', False), '=': ('equal', False), '.': ('dot', False),
-    ',': ('comma', False), '/': ('slash', False), ';': ('semicolon', False),
-    "'": ('apostrophe', False), '`': ('grave_accent', False),
-    '[': ('bracket_left', False), ']': ('bracket_right', False),
+    '\n': ('ret', False),
+    ' ': ('spc', False),
+    '\t': ('tab', False),
+    '-': ('minus', False),
+    '=': ('equal', False),
+    '.': ('dot', False),
+    ',': ('comma', False),
+    '/': ('slash', False),
+    ';': ('semicolon', False),
+    "'": ('apostrophe', False),
+    '`': ('grave_accent', False),
+    '[': ('bracket_left', False),
+    ']': ('bracket_right', False),
     '\\': ('backslash', False),
 }
 _SHIFTED = {
-    '_': 'minus', '+': 'equal', ':': 'semicolon', '"': 'apostrophe',
-    '?': 'slash', '<': 'comma', '>': 'dot', '~': 'grave_accent',
-    '{': 'bracket_left', '}': 'bracket_right', '|': 'backslash',
-    '!': '1', '@': '2', '#': '3', '$': '4', '%': '5', '^': '6',
-    '&': '7', '*': '8', '(': '9', ')': '0',
+    '_': 'minus',
+    '+': 'equal',
+    ':': 'semicolon',
+    '"': 'apostrophe',
+    '?': 'slash',
+    '<': 'comma',
+    '>': 'dot',
+    '~': 'grave_accent',
+    '{': 'bracket_left',
+    '}': 'bracket_right',
+    '|': 'backslash',
+    '!': '1',
+    '@': '2',
+    '#': '3',
+    '$': '4',
+    '%': '5',
+    '^': '6',
+    '&': '7',
+    '*': '8',
+    '(': '9',
+    ')': '0',
 }
 
 
@@ -79,7 +104,7 @@ class QMP:
                     raise SystemExit(f'QMP socket not ready: {sock_path}')
                 time.sleep(0.2)
         self.f = self.s.makefile('r')
-        self._readline()             # greeting
+        self._readline()  # greeting
         self.cmd('qmp_capabilities')
 
     # -- low level ----------------------------------------------------------
@@ -118,17 +143,18 @@ class QMP:
     def move(self, x: int, y: int, w: int, h: int):
         ax = round(x / max(w - 1, 1) * 32767)
         ay = round(y / max(h - 1, 1) * 32767)
-        self.cmd('input-send-event', events=[
-            {'type': 'abs', 'data': {'axis': 'x', 'value': ax}},
-            {'type': 'abs', 'data': {'axis': 'y', 'value': ay}},
-        ])
+        self.cmd(
+            'input-send-event',
+            events=[
+                {'type': 'abs', 'data': {'axis': 'x', 'value': ax}},
+                {'type': 'abs', 'data': {'axis': 'y', 'value': ay}},
+            ],
+        )
 
     def click(self, button: str = 'left'):
-        self.cmd('input-send-event',
-                 events=[{'type': 'btn', 'data': {'button': button, 'down': True}}])
+        self.cmd('input-send-event', events=[{'type': 'btn', 'data': {'button': button, 'down': True}}])
         time.sleep(0.05)
-        self.cmd('input-send-event',
-                 events=[{'type': 'btn', 'data': {'button': button, 'down': False}}])
+        self.cmd('input-send-event', events=[{'type': 'btn', 'data': {'button': button, 'down': False}}])
 
     def tap(self, x: int, y: int, w: int, h: int):
         self.move(x, y, w, h)
@@ -150,14 +176,19 @@ class QMP:
         if out_path.endswith('.png'):
             if _pnmtopng(self._ppm, out_path) or _pil_convert(self._ppm, out_path):
                 return out_path
-            out_path = out_path[:-4] + '.ppm'   # fall back to PPM
+            out_path = out_path[:-4] + '.ppm'  # fall back to PPM
         with open(out_path, 'wb') as fh:
             fh.write(data)
         return out_path
 
-    def wait_stable(self, settle: float = 20.0, timeout: float = 600.0,
-                    poll: float = 3.0, tol: float = 0.001,
-                    min_elapsed: float = 0.0) -> bool:
+    def wait_stable(
+        self,
+        settle: float = 20.0,
+        timeout: float = 600.0,
+        poll: float = 3.0,
+        tol: float = 0.001,
+        min_elapsed: float = 0.0,
+    ) -> bool:
         """Block until the screen is unchanged for ``settle`` seconds.
 
         Two consecutive frames count as "same" when fewer than ``tol`` of their
@@ -183,8 +214,7 @@ class QMP:
             if same:
                 if stable_since is None:
                     stable_since = time.time()
-                elif (time.time() - stable_since >= settle
-                      and time.time() - start >= min_elapsed):
+                elif time.time() - stable_since >= settle and time.time() - start >= min_elapsed:
                     return True
             else:
                 stable_since = None
@@ -206,8 +236,7 @@ def _pnmtopng(ppm: str, png: str) -> bool:
         return False
     try:
         with open(png, 'wb') as out:
-            subprocess.run(['pnmtopng', ppm], stdout=out, stderr=subprocess.DEVNULL,
-                           check=True)
+            subprocess.run(['pnmtopng', ppm], stdout=out, stderr=subprocess.DEVNULL, check=True)
         return True
     except (subprocess.CalledProcessError, OSError):
         return False
@@ -230,9 +259,12 @@ def _main():
     ap.add_argument('--sock', default=os.environ.get('QMP_SOCK', '/tmp/gui-install/qmp.sock'))
     sub = ap.add_subparsers(dest='op', required=True)
     sub.add_parser('shot').add_argument('out')
-    kp = sub.add_parser('key'); kp.add_argument('qcodes', nargs='+')
-    tp = sub.add_parser('type'); tp.add_argument('text')
-    mp = sub.add_parser('tap'); mp.add_argument('coords', nargs=4, type=int)
+    kp = sub.add_parser('key')
+    kp.add_argument('qcodes', nargs='+')
+    tp = sub.add_parser('type')
+    tp.add_argument('text')
+    mp = sub.add_parser('tap')
+    mp.add_argument('coords', nargs=4, type=int)
     st = sub.add_parser('stable')
     st.add_argument('--settle', type=float, default=20.0)
     st.add_argument('--timeout', type=float, default=600.0)

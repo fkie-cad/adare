@@ -49,21 +49,25 @@ READ_BUFFER_SIZE = 1024 * 1024
 
 class MFTReaderException(Exception):
     """Base exception for MFT reading errors."""
+
     pass
 
 
 class PrivilegeError(MFTReaderException):
     """Administrator privileges missing."""
+
     pass
 
 
 class MFTExtractionError(MFTReaderException):
     """MFT volume reading failed."""
+
     pass
 
 
 class MFTParsingError(MFTReaderException):
     """MFT parsing failed."""
+
     pass
 
 
@@ -106,10 +110,7 @@ class NTFSVolumeReader:
 
         if handle == INVALID_HANDLE_VALUE:
             error_code = self._kernel32.GetLastError()
-            raise MFTExtractionError(
-                f"Failed to open volume {device_path}: "
-                f"Win32 error {error_code}"
-            )
+            raise MFTExtractionError(f"Failed to open volume {device_path}: Win32 error {error_code}")
 
         self._handle = handle
 
@@ -127,10 +128,7 @@ class NTFSVolumeReader:
         )
         if not success:
             error_code = self._kernel32.GetLastError()
-            raise MFTExtractionError(
-                f"SetFilePointerEx failed at offset {offset}: "
-                f"Win32 error {error_code}"
-            )
+            raise MFTExtractionError(f"SetFilePointerEx failed at offset {offset}: Win32 error {error_code}")
 
         # Read data
         buf = ctypes.create_string_buffer(size)
@@ -144,12 +142,9 @@ class NTFSVolumeReader:
         )
         if not success:
             error_code = self._kernel32.GetLastError()
-            raise MFTExtractionError(
-                f"ReadFile failed at offset {offset}: "
-                f"Win32 error {error_code}"
-            )
+            raise MFTExtractionError(f"ReadFile failed at offset {offset}: Win32 error {error_code}")
 
-        return buf.raw[:bytes_read.value]
+        return buf.raw[: bytes_read.value]
 
     def close(self):
         """Close the volume handle."""
@@ -177,16 +172,12 @@ class NTFSBootSector:
 
     def __init__(self, boot_data: bytes):
         if len(boot_data) < 512:
-            raise MFTParsingError(
-                f"Boot sector too short: {len(boot_data)} bytes"
-            )
+            raise MFTParsingError(f"Boot sector too short: {len(boot_data)} bytes")
 
         # Verify NTFS signature at offset 0x03
         oem_id = boot_data[0x03:0x0B]
         if b'NTFS' not in oem_id:
-            raise MFTParsingError(
-                f"Not an NTFS volume (OEM ID: {oem_id!r})"
-            )
+            raise MFTParsingError(f"Not an NTFS volume (OEM ID: {oem_id!r})")
 
         self.bytes_per_sector = struct.unpack('<H', boot_data[0x0B:0x0D])[0]
         self.sectors_per_cluster = struct.unpack('<B', boot_data[0x0D:0x0E])[0]
@@ -196,9 +187,7 @@ class NTFSBootSector:
         # If positive: size in clusters. If negative: size is 2^|value| bytes.
         raw = struct.unpack('<b', boot_data[0x40:0x41])[0]
         if raw > 0:
-            self.mft_record_size = (
-                raw * self.sectors_per_cluster * self.bytes_per_sector
-            )
+            self.mft_record_size = raw * self.sectors_per_cluster * self.bytes_per_sector
         else:
             self.mft_record_size = 1 << (-raw)
 
@@ -246,13 +235,13 @@ def parse_data_runs(run_data: bytes) -> list:
             break
 
         # Parse run length (unsigned)
-        length_bytes = run_data[pos:pos + length_size]
+        length_bytes = run_data[pos : pos + length_size]
         run_length = int.from_bytes(length_bytes, byteorder='little', signed=False)
         pos += length_size
 
         # Parse run offset delta (signed)
         if offset_size > 0:
-            offset_bytes = run_data[pos:pos + offset_size]
+            offset_bytes = run_data[pos : pos + offset_size]
             offset_delta = int.from_bytes(offset_bytes, byteorder='little', signed=True)
             pos += offset_size
         else:
@@ -285,8 +274,10 @@ class MFTRecord:
         self.mft_modified = None
 
     def __repr__(self):
-        return (f"MFTRecord(#{self.record_number}, filename={self.filename}, "
-                f"parent={self.parent_ref}, size={self.file_size})")
+        return (
+            f"MFTRecord(#{self.record_number}, filename={self.filename}, "
+            f"parent={self.parent_ref}, size={self.file_size})"
+        )
 
 
 class MFTParser:
@@ -358,7 +349,7 @@ class MFTParser:
                 log.warning("Filename truncated in $FILE_NAME")
                 return (parent_ref, None, is_directory)
 
-            filename_bytes = attr_data[66:66 + (filename_length * 2)]
+            filename_bytes = attr_data[66 : 66 + (filename_length * 2)]
             filename = filename_bytes.decode('utf-16le', errors='replace')
 
             return (parent_ref, filename, is_directory)
@@ -368,8 +359,7 @@ class MFTParser:
             return (None, None, False)
 
     @staticmethod
-    def apply_fixup(data: bytes, update_seq_offset: int,
-                    update_seq_size: int) -> bytes:
+    def apply_fixup(data: bytes, update_seq_offset: int, update_seq_size: int) -> bytes:
         """Apply NTFS update sequence (fixup array) to restore original data.
 
         The last 2 bytes of each 512-byte sector are replaced with an update
@@ -379,21 +369,21 @@ class MFTParser:
             return data
 
         try:
-            update_seq_num = data[update_seq_offset:update_seq_offset + 2]
+            update_seq_num = data[update_seq_offset : update_seq_offset + 2]
 
             update_seq_array = []
             for i in range(1, update_seq_size):
                 offset = update_seq_offset + (i * 2)
-                update_seq_array.append(data[offset:offset + 2])
+                update_seq_array.append(data[offset : offset + 2])
 
             data_bytearray = bytearray(data)
             for i, fixup_value in enumerate(update_seq_array):
                 sector_offset = (i + 1) * 512 - 2
 
                 if sector_offset + 2 <= len(data_bytearray):
-                    if data_bytearray[sector_offset:sector_offset + 2] != update_seq_num:
+                    if data_bytearray[sector_offset : sector_offset + 2] != update_seq_num:
                         log.warning(f"Update sequence mismatch at sector {i}")
-                    data_bytearray[sector_offset:sector_offset + 2] = fixup_value
+                    data_bytearray[sector_offset : sector_offset + 2] = fixup_value
 
             return bytes(data_bytearray)
 
@@ -435,25 +425,21 @@ class MFTParser:
             current_namespace_priority = -1
 
             while attr_offset + 16 <= used_size:
-                attr_type = struct.unpack('<I', data[attr_offset:attr_offset + 4])[0]
+                attr_type = struct.unpack('<I', data[attr_offset : attr_offset + 4])[0]
 
                 if attr_type == ATTR_END:
                     break
 
-                attr_length = struct.unpack('<I', data[attr_offset + 4:attr_offset + 8])[0]
+                attr_length = struct.unpack('<I', data[attr_offset + 4 : attr_offset + 8])[0]
 
                 if attr_length == 0 or attr_offset + attr_length > used_size:
                     break
 
-                non_resident = struct.unpack('<B', data[attr_offset + 8:attr_offset + 9])[0]
+                non_resident = struct.unpack('<B', data[attr_offset + 8 : attr_offset + 9])[0]
 
                 if non_resident == 0:  # Resident attribute
-                    content_length = struct.unpack(
-                        '<I', data[attr_offset + 16:attr_offset + 20]
-                    )[0]
-                    content_offset = struct.unpack(
-                        '<H', data[attr_offset + 20:attr_offset + 22]
-                    )[0]
+                    content_length = struct.unpack('<I', data[attr_offset + 16 : attr_offset + 20])[0]
+                    content_offset = struct.unpack('<H', data[attr_offset + 20 : attr_offset + 22])[0]
 
                     content_start = attr_offset + content_offset
                     content_end = content_start + content_length
@@ -461,11 +447,8 @@ class MFTParser:
                     if content_end <= used_size:
                         attr_content = data[content_start:content_end]
 
-                        if (attr_type == ATTR_STANDARD_INFORMATION
-                                and not timestamps_found):
-                            timestamps = MFTParser.parse_standard_information(
-                                attr_content
-                            )
+                        if attr_type == ATTR_STANDARD_INFORMATION and not timestamps_found:
+                            timestamps = MFTParser.parse_standard_information(attr_content)
                             if timestamps:
                                 record.created = timestamps.get('created')
                                 record.modified = timestamps.get('modified')
@@ -474,26 +457,16 @@ class MFTParser:
                                 timestamps_found = True
 
                         elif attr_type == ATTR_FILE_NAME:
-                            parent_ref, filename, is_dir = (
-                                MFTParser.parse_file_name(attr_content)
-                            )
+                            parent_ref, filename, is_dir = MFTParser.parse_file_name(attr_content)
 
                             if len(attr_content) >= 56:
-                                file_size = struct.unpack(
-                                    '<Q', attr_content[48:56]
-                                )[0]
+                                file_size = struct.unpack('<Q', attr_content[48:56])[0]
                             else:
                                 file_size = 0
 
                             if parent_ref is not None and filename:
-                                namespace = (
-                                    attr_content[65]
-                                    if len(attr_content) > 65
-                                    else 0
-                                )
-                                new_priority = NAMESPACE_PRIORITY.get(
-                                    namespace, 0
-                                )
+                                namespace = attr_content[65] if len(attr_content) > 65 else 0
+                                new_priority = NAMESPACE_PRIORITY.get(namespace, 0)
 
                                 if new_priority > current_namespace_priority:
                                     record.parent_ref = parent_ref
@@ -529,9 +502,7 @@ class MFTParser:
 
         signature = data[0:4]
         if signature != FILE_SIGNATURE:
-            raise MFTParsingError(
-                f"MFT entry 0 has invalid signature: {signature!r}"
-            )
+            raise MFTParsingError(f"MFT entry 0 has invalid signature: {signature!r}")
 
         update_seq_offset = struct.unpack('<H', data[4:6])[0]
         update_seq_size = struct.unpack('<H', data[6:8])[0]
@@ -542,44 +513,33 @@ class MFTParser:
 
         attr_offset = first_attr_offset
         while attr_offset + 16 <= used_size:
-            attr_type = struct.unpack('<I', data[attr_offset:attr_offset + 4])[0]
+            attr_type = struct.unpack('<I', data[attr_offset : attr_offset + 4])[0]
 
             if attr_type == ATTR_END:
                 break
 
-            attr_length = struct.unpack(
-                '<I', data[attr_offset + 4:attr_offset + 8]
-            )[0]
+            attr_length = struct.unpack('<I', data[attr_offset + 4 : attr_offset + 8])[0]
             if attr_length == 0 or attr_offset + attr_length > used_size:
                 break
 
-            non_resident = struct.unpack(
-                '<B', data[attr_offset + 8:attr_offset + 9]
-            )[0]
+            non_resident = struct.unpack('<B', data[attr_offset + 8 : attr_offset + 9])[0]
 
             if attr_type == ATTR_DATA and non_resident == 1:
                 # Non-resident $DATA attribute
                 # Data runs offset is at attribute offset + 0x20
-                run_offset_in_attr = struct.unpack(
-                    '<H', data[attr_offset + 0x20:attr_offset + 0x22]
-                )[0]
+                run_offset_in_attr = struct.unpack('<H', data[attr_offset + 0x20 : attr_offset + 0x22])[0]
                 run_data_start = attr_offset + run_offset_in_attr
                 run_data_end = attr_offset + attr_length
                 run_data = data[run_data_start:run_data_end]
 
                 runs = parse_data_runs(run_data)
                 if runs:
-                    log.info(
-                        f"CLAUDE: Parsed {len(runs)} data run(s) from "
-                        f"MFT entry 0"
-                    )
+                    log.info(f"CLAUDE: Parsed {len(runs)} data run(s) from MFT entry 0")
                     return runs
 
             attr_offset += attr_length
 
-        raise MFTParsingError(
-            "No non-resident $DATA attribute found in MFT entry 0"
-        )
+        raise MFTParsingError("No non-resident $DATA attribute found in MFT entry 0")
 
     @staticmethod
     def parse_mft_from_volume(
@@ -610,7 +570,7 @@ class MFTParser:
         total_entries = total_bytes // record_size
         log.info(
             f"CLAUDE: MFT spans {total_clusters} clusters "
-            f"({total_bytes / (1024*1024):.1f} MB), "
+            f"({total_bytes / (1024 * 1024):.1f} MB), "
             f"~{total_entries} entries across {len(data_runs)} run(s)"
         )
 
@@ -641,7 +601,7 @@ class MFTParser:
                 # Parse each entry in the chunk
                 entries_in_chunk = len(chunk) // record_size
                 for i in range(entries_in_chunk):
-                    entry_data = chunk[i * record_size:(i + 1) * record_size]
+                    entry_data = chunk[i * record_size : (i + 1) * record_size]
                     record = MFTParser.parse_mft_entry(entry_data, record_number)
                     if record:
                         records[record_number] = record
@@ -650,21 +610,13 @@ class MFTParser:
                 bytes_read_in_run += len(chunk)
 
             if record_number % 50000 > 0 and run_idx == len(data_runs) - 1:
-                log.info(
-                    f"CLAUDE: Processed {record_number} MFT records, "
-                    f"{len(records)} valid"
-                )
+                log.info(f"CLAUDE: Processed {record_number} MFT records, {len(records)} valid")
 
             # Progress logging after each run
             if len(data_runs) > 1:
-                log.info(
-                    f"CLAUDE: Completed data run {run_idx + 1}/{len(data_runs)}"
-                )
+                log.info(f"CLAUDE: Completed data run {run_idx + 1}/{len(data_runs)}")
 
-        log.info(
-            f"CLAUDE: MFT parsing complete. Total records: {record_number}, "
-            f"Valid: {len(records)}"
-        )
+        log.info(f"CLAUDE: MFT parsing complete. Total records: {record_number}, Valid: {len(records)}")
         return records
 
 
@@ -826,19 +778,14 @@ class MFTReader:
 
         try:
             import ctypes
+
             is_admin = ctypes.windll.shell32.IsUserAnAdmin()
 
             if not is_admin:
-                error_msg = (
-                    "Administrator privileges required for MFT reading. "
-                    "Please run adarevm as Administrator."
-                )
+                error_msg = "Administrator privileges required for MFT reading. Please run adarevm as Administrator."
                 return (False, error_msg)
 
-            log.info(
-                "CLAUDE: Running with Administrator privileges — "
-                "MFT access enabled"
-            )
+            log.info("CLAUDE: Running with Administrator privileges — MFT access enabled")
             return (True, "")
 
         except (AttributeError, OSError) as e:

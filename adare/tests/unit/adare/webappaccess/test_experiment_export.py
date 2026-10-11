@@ -24,16 +24,25 @@ UBUNTU_ISO_URL = 'https://releases.ubuntu.com/24.04/ubuntu-24.04-live-server-amd
 SHA = 'a' * 64
 
 _WINDOWS_OS = {
-    'os': 'Windows 11 (ARM64)', 'platform': 'windows', 'distribution': 'Home',
-    'version': '11', 'language': 'English', 'architecture': 'aarch64',
+    'os': 'Windows 11 (ARM64)',
+    'platform': 'windows',
+    'distribution': 'Home',
+    'version': '11',
+    'language': 'English',
+    'architecture': 'aarch64',
 }
 _LINUX_OS = {
-    'os': 'Ubuntu 24.04', 'platform': 'linux', 'distribution': 'ubuntu',
-    'version': '24.04', 'language': 'English', 'architecture': 'x86_64',
+    'os': 'Ubuntu 24.04',
+    'platform': 'linux',
+    'distribution': 'ubuntu',
+    'version': '24.04',
+    'language': 'English',
+    'architecture': 'x86_64',
 }
 
 
 # --- Helpers ---
+
 
 def _write(tmp_path: Path, env: dict, name: str = 'env.yml') -> Path:
     path = tmp_path / name
@@ -43,9 +52,9 @@ def _write(tmp_path: Path, env: dict, name: str = 'env.yml') -> Path:
 
 def _recipe_env(os_block: dict | None = None, **recipe) -> dict:
     return {
-        'vm_type': 'recipe', 'hypervisor': 'qemu',
-        'recipe': {'profile': 'windows11arm64', 'iso': WIN_ISO_URL,
-                   'iso_sha256': SHA, **recipe},
+        'vm_type': 'recipe',
+        'hypervisor': 'qemu',
+        'recipe': {'profile': 'windows11arm64', 'iso': WIN_ISO_URL, 'iso_sha256': SHA, **recipe},
         'os': _WINDOWS_OS if os_block is None else os_block,
     }
 
@@ -53,13 +62,17 @@ def _recipe_env(os_block: dict | None = None, **recipe) -> dict:
 def _baked_env(**overrides) -> dict:
     env = {
         'vm': 'https://files.example.org/disks/ubuntu.qcow2',
-        'vm_type': 'url', 'vm_sha256': SHA, 'hypervisor': 'qemu', 'os': _LINUX_OS,
+        'vm_type': 'url',
+        'vm_sha256': SHA,
+        'hypervisor': 'qemu',
+        'os': _LINUX_OS,
     }
     env.update(overrides)
     return env
 
 
 # --- Recipe, URL form ---
+
 
 def test_url_form_with_lowercase_sha_passes(tmp_path):
     _preflight_environment(_write(tmp_path, _recipe_env()))
@@ -78,13 +91,16 @@ def test_local_iso_path_error_suggests_recipe_byo_for_windows(tmp_path):
         _preflight_environment(_write(tmp_path, env))
 
 
-@pytest.mark.parametrize('bad_sha,reason', [
-    ('', 'missing'),
-    ('a' * 63, 'too short'),
-    ('a' * 65, 'too long'),
-    ('z' * 64, 'non-hex'),
-    ('A' * 64, 'uppercase: verify_iso_hash compares case-sensitively'),
-])
+@pytest.mark.parametrize(
+    'bad_sha,reason',
+    [
+        ('', 'missing'),
+        ('a' * 63, 'too short'),
+        ('a' * 65, 'too long'),
+        ('z' * 64, 'non-hex'),
+        ('A' * 64, 'uppercase: verify_iso_hash compares case-sensitively'),
+    ],
+)
 def test_bad_iso_sha256_is_rejected(tmp_path, bad_sha, reason):
     env = _recipe_env(iso_sha256=bad_sha)
     with pytest.raises(EnvironmentSubmissionError, match='iso_sha256'):
@@ -93,6 +109,7 @@ def test_bad_iso_sha256_is_rejected(tmp_path, bad_sha, reason):
 
 # --- Recipe, BYO form ---
 
+
 def test_byo_with_a_windows_profile_passes(tmp_path):
     env = _recipe_env(iso=None, iso_name='Win11_25H2_English_Arm64_v2.iso')
     del env['recipe']['iso']
@@ -100,8 +117,7 @@ def test_byo_with_a_windows_profile_passes(tmp_path):
 
 
 def test_byo_with_iso_notes_passes(tmp_path):
-    env = _recipe_env(iso_name='Win11_25H2_English_Arm64_v2.iso',
-                      iso_notes='Download from microsoft.com')
+    env = _recipe_env(iso_name='Win11_25H2_English_Arm64_v2.iso', iso_notes='Download from microsoft.com')
     del env['recipe']['iso']
     _preflight_environment(_write(tmp_path, env))
 
@@ -109,9 +125,9 @@ def test_byo_with_iso_notes_passes(tmp_path):
 def test_byo_with_a_linux_profile_is_rejected_naming_the_real_url(tmp_path):
     """The error tells the publisher the exact URL to host, not just "no"."""
     env = {
-        'vm_type': 'recipe', 'hypervisor': 'qemu',
-        'recipe': {'profile': 'ubuntu2404', 'iso_sha256': SHA,
-                   'iso_name': 'ubuntu-24.04-live-server-amd64.iso'},
+        'vm_type': 'recipe',
+        'hypervisor': 'qemu',
+        'recipe': {'profile': 'ubuntu2404', 'iso_sha256': SHA, 'iso_name': 'ubuntu-24.04-live-server-amd64.iso'},
         'os': _LINUX_OS,
     }
     with pytest.raises(EnvironmentSubmissionError) as excinfo:
@@ -124,9 +140,9 @@ def test_byo_with_a_linux_profile_is_rejected_naming_the_real_url(tmp_path):
 def test_byo_with_a_urlless_linux_profile_uses_the_fallback_wording(tmp_path):
     """ubuntu2404arm64 has an empty catalog iso_url — the user supplies the ISO."""
     env = {
-        'vm_type': 'recipe', 'hypervisor': 'qemu',
-        'recipe': {'profile': 'ubuntu2404arm64', 'iso_sha256': SHA,
-                   'iso_name': 'ubuntu-24.04-live-server-arm64.iso'},
+        'vm_type': 'recipe',
+        'hypervisor': 'qemu',
+        'recipe': {'profile': 'ubuntu2404arm64', 'iso_sha256': SHA, 'iso_name': 'ubuntu-24.04-live-server-arm64.iso'},
         'os': {**_LINUX_OS, 'architecture': 'aarch64'},
     }
     with pytest.raises(EnvironmentSubmissionError) as excinfo:
@@ -136,10 +152,19 @@ def test_byo_with_a_urlless_linux_profile_uses_the_fallback_wording(tmp_path):
     assert 'declares no download URL' in message
 
 
-@pytest.mark.parametrize('bad_name', [
-    '../../etc/passwd', '/absolute/Win11.iso', 'sub/dir/w.iso', 'C:\\ISO\\Win11.iso',
-    'https://example.com/Win11.iso', 'Win11.img', '', 'x' * 250 + '.iso',
-])
+@pytest.mark.parametrize(
+    'bad_name',
+    [
+        '../../etc/passwd',
+        '/absolute/Win11.iso',
+        'sub/dir/w.iso',
+        'C:\\ISO\\Win11.iso',
+        'https://example.com/Win11.iso',
+        'Win11.img',
+        '',
+        'x' * 250 + '.iso',
+    ],
+)
 def test_bad_iso_name_is_rejected(tmp_path, bad_name):
     env = _recipe_env(iso_name=bad_name)
     del env['recipe']['iso']
@@ -156,6 +181,7 @@ def test_over_long_iso_notes_is_rejected(tmp_path):
 
 
 # --- exactly-one-of ---
+
 
 def test_both_iso_and_iso_name_is_rejected(tmp_path):
     env = _recipe_env(iso_name='Win11.iso')
@@ -181,6 +207,7 @@ def test_misspelled_iso_key_is_reported_as_no_iso_source(tmp_path):
 
 # --- profile / platform agreement ---
 
+
 def test_unknown_profile_is_rejected(tmp_path):
     env = _recipe_env()
     env['recipe']['profile'] = 'windows12quantum'
@@ -190,7 +217,8 @@ def test_unknown_profile_is_rejected(tmp_path):
 
 def test_windows_platform_over_a_linux_profile_is_rejected(tmp_path):
     env = {
-        'vm_type': 'recipe', 'hypervisor': 'qemu',
+        'vm_type': 'recipe',
+        'hypervisor': 'qemu',
         'recipe': {'profile': 'ubuntu2404', 'iso': UBUNTU_ISO_URL, 'iso_sha256': SHA},
         'os': _WINDOWS_OS,
     }
@@ -207,7 +235,8 @@ def test_linux_platform_over_a_windows_profile_is_rejected(tmp_path):
 
 def test_linux_recipe_with_a_published_url_passes(tmp_path):
     env = {
-        'vm_type': 'recipe', 'hypervisor': 'qemu',
+        'vm_type': 'recipe',
+        'hypervisor': 'qemu',
         'recipe': {'profile': 'ubuntu2404', 'iso': UBUNTU_ISO_URL, 'iso_sha256': SHA},
         'os': _LINUX_OS,
     }
@@ -215,6 +244,7 @@ def test_linux_recipe_with_a_published_url_passes(tmp_path):
 
 
 # --- baked branch: regression cover for previously untested code ---
+
 
 def test_baked_url_with_sha_passes(tmp_path):
     _preflight_environment(_write(tmp_path, _baked_env()))
@@ -269,6 +299,7 @@ def test_vagrantbox_is_left_to_the_server(tmp_path):
 
 
 # --- baked branch: optional source-profile provenance (informational only) ---
+
 
 def test_baked_with_source_profile_and_iso_sha256_passes(tmp_path):
     env = _baked_env(source_profile='ubuntu2404', source_iso_sha256='b' * 64)

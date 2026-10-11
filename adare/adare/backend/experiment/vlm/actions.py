@@ -128,7 +128,7 @@ def _extract_json_object(reply: str) -> dict[str, Any]:
         elif ch == '}':
             depth -= 1
             if depth == 0:
-                blob = text[start:idx + 1]
+                blob = text[start : idx + 1]
                 try:
                     return json.loads(blob)
                 except json.JSONDecodeError as exc:
@@ -169,8 +169,7 @@ def _normalize_point(x_raw, y_raw):
     "missing x/y").
     """
     # Unwrap one nested level: [[px, py]] -> [px, py].
-    if (isinstance(x_raw, (list, tuple)) and len(x_raw) == 1
-            and isinstance(x_raw[0], (list, tuple))):
+    if isinstance(x_raw, (list, tuple)) and len(x_raw) == 1 and isinstance(x_raw[0], (list, tuple)):
         x_raw = x_raw[0]
     # A 2+ element point in x with no usable y -> x carries the whole point.
     y_empty = y_raw is None or (isinstance(y_raw, (list, tuple)) and not y_raw)
@@ -224,9 +223,7 @@ def parse_action(
             x_val = _coerce_coord(x_raw)
             y_val = _coerce_coord(y_raw)
         except ValueError as exc:
-            raise VLMError(
-                f'{kind} action has non-numeric x/y ({x_raw!r}, {y_raw!r}): {obj!r}'
-            ) from exc
+            raise VLMError(f'{kind} action has non-numeric x/y ({x_raw!r}, {y_raw!r}): {obj!r}') from exc
         action.x = _scale_coord(x_val, w, coord_space)
         action.y = _scale_coord(y_val, h, coord_space)
         action.button = str(obj.get('button', 'left')).lower()
@@ -258,8 +255,6 @@ def parse_action(
             try:
                 action.memory_mb = int(float(mem_raw))
             except (TypeError, ValueError) as exc:
-                raise VLMError(
-                    f'restart_vm action has non-numeric memory_mb ({mem_raw!r}): {obj!r}'
-                ) from exc
+                raise VLMError(f'restart_vm action has non-numeric memory_mb ({mem_raw!r}): {obj!r}') from exc
 
     return action

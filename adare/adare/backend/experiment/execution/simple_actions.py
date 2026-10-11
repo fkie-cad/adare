@@ -47,9 +47,16 @@ def sanitize_filename(name: str) -> str:
 class SimpleActionsExecutor(GUIActionsMixin, DataActionsMixin, FilesystemActionsMixin):
     """Handles execution of simple playbook actions (GUI and system operations)."""
 
-    def __init__(self, websocket_client, target_resolution_executor, experiment_run_id: str | None = None,
-                 playbook = None, execution_context: dict = None, vm = None,
-                 experiment_run_directory: Path | None = None):
+    def __init__(
+        self,
+        websocket_client,
+        target_resolution_executor,
+        experiment_run_id: str | None = None,
+        playbook=None,
+        execution_context: dict = None,
+        vm=None,
+        experiment_run_directory: Path | None = None,
+    ):
         """
         Initialize simple actions executor.
 
@@ -74,6 +81,7 @@ class SimpleActionsExecutor(GUIActionsMixin, DataActionsMixin, FilesystemActions
 
         # Initialize GUI executor based on VM type and playbook settings
         from .gui_executor_factory import create_gui_executor, resolve_gui_execution_mode
+
         playbook_settings = playbook.settings if playbook and hasattr(playbook, 'settings') else None
         # Get CLI override from config if available
         cli_override = None
@@ -90,7 +98,7 @@ class SimpleActionsExecutor(GUIActionsMixin, DataActionsMixin, FilesystemActions
             experiment_run_id=experiment_run_id,
             playbook=playbook,
             execution_context=execution_context,
-            experiment_run_directory=experiment_run_directory
+            experiment_run_directory=experiment_run_directory,
         )
         log.info(f"SimpleActionsExecutor initialized with GUI mode: {gui_mode.value}")
 
@@ -109,6 +117,7 @@ class SimpleActionsExecutor(GUIActionsMixin, DataActionsMixin, FilesystemActions
     def _is_qemu_vm(self) -> bool:
         """Check if current VM is a QEMU instance."""
         from adare.hypervisor.qemu.vm import QEMUVM
+
         return isinstance(self.vm, QEMUVM)
 
     def get_click_handler(self, click_type: str):
@@ -142,7 +151,7 @@ class SimpleActionsExecutor(GUIActionsMixin, DataActionsMixin, FilesystemActions
             raw_output = {
                 'stdout': command_result.get('stdout', ''),
                 'stderr': command_result.get('stderr', ''),
-                'returncode': command_result.get('returncode', -1)
+                'returncode': command_result.get('returncode', -1),
             }
         else:
             raise ValueError(f"Invalid capture source: {capture_spec.source}")

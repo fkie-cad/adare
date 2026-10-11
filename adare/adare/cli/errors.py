@@ -15,6 +15,7 @@ Every failure that reaches the CLI boundary is reported the same way:
 * the traceback only with ``--very-verbose``;
 * a stable exit code (see ``EXIT_*``).
 """
+
 from __future__ import annotations
 
 import json
@@ -87,6 +88,7 @@ def exit_code_for(code: str) -> int:
 
 def _clean(text: str) -> str:
     from adare.helperfunctions.text import clean_rich_inline_str
+
     return clean_rich_inline_str(str(text)).strip()
 
 
@@ -96,8 +98,7 @@ def _verbose_traceback_enabled() -> bool:
     return bool(getattr(obj, 'very_verbose', False))
 
 
-def report_error(code: str, message: str, solutions: Iterable[str] | None = None,
-                 exit_code: int | None = None) -> int:
+def report_error(code: str, message: str, solutions: Iterable[str] | None = None, exit_code: int | None = None) -> int:
     """Print one error to stderr in the active format and return its exit code."""
     from rich.console import Console
 
@@ -116,6 +117,7 @@ def report_error(code: str, message: str, solutions: Iterable[str] | None = None
         payload = {'error': {'code': code, 'message': message, 'hint': hint, 'solutions': solutions}}
         if resolve_output_format() == 'yaml':
             import yaml
+
             sys.stderr.write(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
         else:
             sys.stderr.write(json.dumps(payload, ensure_ascii=False) + '\n')
@@ -148,6 +150,7 @@ def report_exception(exc: BaseException) -> int:
     message = getattr(exc, 'message', None) or str(exc)
     if getattr(exc, 'informational', False):
         from rich.console import Console
+
         Console(stderr=True, highlight=False).print(_clean(message), markup=False)
         return EXIT_OK
 
@@ -162,7 +165,6 @@ def report_exception(exc: BaseException) -> int:
     return report_error(code, message, solutions, getattr(exc, 'exit_code', None))
 
 
-def fail(code: str, message: str, solutions: Iterable[str] | None = None,
-         exit_code: int | None = None) -> None:
+def fail(code: str, message: str, solutions: Iterable[str] | None = None, exit_code: int | None = None) -> None:
     """Report an error and exit (for CLI code that has no exception to raise)."""
     sys.exit(report_error(code, message, solutions, exit_code))

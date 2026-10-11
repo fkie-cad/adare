@@ -29,72 +29,57 @@ DEFAULT_START_OS_IDLE = "60"
 # default variables for network drives
 SUPPORTED_NETWORKDRIVE_TYPES = ["smb", "nfs"]
 
-DEFAULT_NETWORKSHARES_VM = {
-    'cpu': "2",
-    'memory': "1024",
-    'ip': "192.168.142.100"
-}
+DEFAULT_NETWORKSHARES_VM = {'cpu': "2", 'memory': "1024", 'ip': "192.168.142.100"}
 
 DEFAULT_NETWORKSHARE_BOX = "networkshares"
 
 DEFAULT_SMB_CONF = {
     'name': 'SMB share',
     'workgroup': 'WORKGROUP',
-    'share':
-        {
-            'name': 'SMBshare',
-            'remote_path': '/mnt/smb_share_0',
-            'path': '/mnt/smb',
-            'comment': 'This is an SMB share',
-            'user': 'adare',
-            'writable': True,
-            'uid': 1000,
-            'gid': 1000
-        },
-    'user':
-        {
-            'name': 'adare',
-            'password': 'adare',
-        }
+    'share': {
+        'name': 'SMBshare',
+        'remote_path': '/mnt/smb_share_0',
+        'path': '/mnt/smb',
+        'comment': 'This is an SMB share',
+        'user': 'adare',
+        'writable': True,
+        'uid': 1000,
+        'gid': 1000,
+    },
+    'user': {
+        'name': 'adare',
+        'password': 'adare',
+    },
 }
 
 DEFAULT_NFS_CONF = {
     'name': 'NFS share',
-    'share':
-        {
-            'name': 'NFSshare',
-            'remote_path': '/mnt/nfs_share_0',
-            'path': '/mnt/nfs',
-            'host': '*',
-            'options': ["rw"]
-        }
-
+    'share': {
+        'name': 'NFSshare',
+        'remote_path': '/mnt/nfs_share_0',
+        'path': '/mnt/nfs',
+        'host': '*',
+        'options': ["rw"],
+    },
 }
 
 DEFAULT_NETWORKDRIVE_SHARENAME = "share"
 
 
-SCRIPTS_SUFFIX = {
-    'linux': '.sh',
-    'windows': '.ps1'
-}
+SCRIPTS_SUFFIX = {'linux': '.sh', 'windows': '.ps1'}
 
 
 # WEBAPP
 PORT_WEBAPP = 8000
 
 
-
 # Additional constants needed by adarevm
-SHARE_POINT_VM = {
-    'linux': '/adare/',
-    'windows': 'C:/adare/'
-}
+SHARE_POINT_VM = {'linux': '/adare/', 'windows': 'C:/adare/'}
 
 # VM Guest Credentials
 DEFAULT_VM_CREDENTIALS = {
     'linux': {'username': 'adare', 'password': 'adare'},
-    'windows': {'username': 'adare', 'password': 'adare'}
+    'windows': {'username': 'adare', 'password': 'adare'},
 }
 
 
@@ -109,10 +94,8 @@ def get_vm_credentials(guest_os: str) -> tuple[str, str]:
         Tuple of (username, password)
     """
     if 'windows' in guest_os.lower():
-        return (DEFAULT_VM_CREDENTIALS['windows']['username'],
-                DEFAULT_VM_CREDENTIALS['windows']['password'])
-    return (DEFAULT_VM_CREDENTIALS['linux']['username'],
-            DEFAULT_VM_CREDENTIALS['linux']['password'])
+        return (DEFAULT_VM_CREDENTIALS['windows']['username'], DEFAULT_VM_CREDENTIALS['windows']['password'])
+    return (DEFAULT_VM_CREDENTIALS['linux']['username'], DEFAULT_VM_CREDENTIALS['linux']['password'])
 
 
 # Hypervisor Configuration
@@ -131,7 +114,7 @@ HYPERVISOR_CONFIGS = {
     'virtualbox': {
         'vboxmanage_exe': 'VBoxManage',  # Will be auto-detected based on platform
         'default_graphics': 'vmsvga',
-        'default_vram': 128
+        'default_vram': 128,
     },
     'qemu': {
         'architecture': _host_qemu_arch,
@@ -141,15 +124,14 @@ HYPERVISOR_CONFIGS = {
         'default_accel': 'hvf' if _is_mac else 'kvm',
         'default_drive_format': 'qcow2',
         'default_network': 'user',
-        'monitor_socket': True,           # Use QMP socket for control
-        'guest_agent': True,              # Require QEMU Guest Agent
-        'guest_agent_socket': True,       # Use Unix socket for guest agent
-        'use_libguestfs': True,           # Use libguestfs for file ops when stopped
+        'monitor_socket': True,  # Use QMP socket for control
+        'guest_agent': True,  # Require QEMU Guest Agent
+        'guest_agent_socket': True,  # Use Unix socket for guest agent
+        'use_libguestfs': True,  # Use libguestfs for file ops when stopped
         # libvirt integration
-        'use_libvirt': True,              # Use libvirt for VM management (makes VMs visible in virsh/virt-manager)
+        'use_libvirt': True,  # Use libvirt for VM management (makes VMs visible in virsh/virt-manager)
         'libvirt_uri': 'qemu:///session' if _host_os == 'darwin' else 'qemu:///system',
-        'default_display_enabled': False, # Headless by default (virt-manager can still connect)
-        'default_vnc_port': None          # Auto-assign VNC port (None = autoport)
-    }
+        'default_display_enabled': False,  # Headless by default (virt-manager can still connect)
+        'default_vnc_port': None,  # Auto-assign VNC port (None = autoport)
+    },
 }
-

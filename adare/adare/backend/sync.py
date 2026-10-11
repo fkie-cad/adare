@@ -44,6 +44,3 @@ def sync(project: Path = None):
     sync_testfunctions_all(project)
 
     log_print(log, 'Sync done')
-
-
-

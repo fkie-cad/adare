@@ -58,12 +58,14 @@ class DevModeActionExecutionMixin:
         """
         if not self.is_running:
             from adare.backend.experiment.execution.base import ActionResult
+
             return ActionResult(success=False, message="Session not running")
 
         # Ensure controller is initialized
         controller_result = await self._ensure_playbook_controller()
         if not controller_result.success:
             from adare.backend.experiment.execution.base import ActionResult
+
             return ActionResult(success=False, message=controller_result.error.message)
 
         try:
@@ -82,7 +84,7 @@ class DevModeActionExecutionMixin:
                     action,
                     parent_event_id=None,  # No event tracking in dev mode
                     event_emitter=None,  # No event emission in dev mode
-                    variable_resolver=self.playbook_controller.variable_resolver
+                    variable_resolver=self.playbook_controller.variable_resolver,
                 )
 
                 if result.success:
@@ -96,17 +98,22 @@ class DevModeActionExecutionMixin:
         except (HypervisorException, ExperimentException) as e:
             log.error(f"Action execution failed: {e}", exc_info=True)
             from adare.backend.experiment.execution.base import ActionResult
+
             return ActionResult(success=False, message=str(e))
         except (WebSocketTimeoutError, ConnectionError, OSError) as e:
             log.error(f"Action execution failed: {e}", exc_info=True)
             from adare.backend.experiment.execution.base import ActionResult
+
             return ActionResult(success=False, message=str(e))
         except LoggedErrorException as e:
             log.error(f"Action execution failed: {e}", exc_info=True)
             from adare.backend.experiment.execution.base import ActionResult
+
             return ActionResult(success=False, message=str(e))
 
-    async def execute_playbook(self, playbook: Playbook, experiment_dir: Path | None = None, indices: list[int] | None = None) -> PlaybookExecutionResult:
+    async def execute_playbook(
+        self, playbook: Playbook, experiment_dir: Path | None = None, indices: list[int] | None = None
+    ) -> PlaybookExecutionResult:
         """
         Execute a full playbook (for testing sequences).
 
@@ -161,10 +168,7 @@ class DevModeActionExecutionMixin:
         # Update statistics
         self.actions_executed += result.total_actions
 
-        log.info(
-            f"Playbook execution complete: {result.successful_actions}/"
-            f"{result.total_actions} actions succeeded"
-        )
+        log.info(f"Playbook execution complete: {result.successful_actions}/{result.total_actions} actions succeeded")
 
         return result
 
@@ -290,12 +294,14 @@ class DevModeActionExecutionMixin:
             # Debug output dir
             new_debug_output_dir = debug_output_dir
             if new_debug_output_dir is None:
-                 if current_server and current_server.debug_output_dir:
-                     new_debug_output_dir = current_server.debug_output_dir
-                 elif new_debug and self.experiment_ctx.experiment_run_directory:
-                     # Auto-configure if enabling debug for first time
-                     new_debug_output_dir = self.experiment_ctx.experiment_run_directory.screenshots_directory / 'cv_debug'
-                     new_debug_output_dir.mkdir(parents=True, exist_ok=True)
+                if current_server and current_server.debug_output_dir:
+                    new_debug_output_dir = current_server.debug_output_dir
+                elif new_debug and self.experiment_ctx.experiment_run_directory:
+                    # Auto-configure if enabling debug for first time
+                    new_debug_output_dir = (
+                        self.experiment_ctx.experiment_run_directory.screenshots_directory / 'cv_debug'
+                    )
+                    new_debug_output_dir.mkdir(parents=True, exist_ok=True)
 
             # Log file (keep existing)
             log_file = current_server.log_file if current_server else None
@@ -317,10 +323,7 @@ class DevModeActionExecutionMixin:
             # 3. Create new manager
             log.info(f"Creating new MCP server manager (debug={new_debug}, output={new_debug_output_dir})")
             new_manager = MCPServerManager(
-                server_port=new_port,
-                log_file=log_file,
-                debug=new_debug,
-                debug_output_dir=new_debug_output_dir
+                server_port=new_port, log_file=log_file, debug=new_debug, debug_output_dir=new_debug_output_dir
             )
 
             # 4. Start new server

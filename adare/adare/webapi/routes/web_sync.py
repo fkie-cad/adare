@@ -1,4 +1,5 @@
 """Web integration and sync endpoints."""
+
 import logging
 
 from fastapi import APIRouter
@@ -12,12 +13,15 @@ router = APIRouter(prefix="/api/web", tags=["web-sync"])
 
 # ---- Helpers ----
 
+
 def _api():
     from adare.api import AdareAPI
+
     return AdareAPI()
 
 
 # ---- Endpoints ----
+
 
 @router.post("/login")
 async def login():

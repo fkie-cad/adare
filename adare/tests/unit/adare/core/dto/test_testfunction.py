@@ -29,9 +29,13 @@ class TestTestfunctionInfo:
 
     def test_full_construction(self):
         info = TestfunctionInfo(
-            id="1", name="tf", file_path=None,
-            is_published=True, remote_url="http://x",
-            usage_count=5, experiments_using=["e1"],
+            id="1",
+            name="tf",
+            file_path=None,
+            is_published=True,
+            remote_url="http://x",
+            usage_count=5,
+            experiments_using=["e1"],
         )
         assert info.is_published is True
         assert info.file_path is None

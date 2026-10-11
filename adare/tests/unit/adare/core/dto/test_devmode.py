@@ -20,7 +20,8 @@ from adare.core.dto.devmode import (
 class TestDevSessionStartRequest:
     def test_defaults(self):
         req = DevSessionStartRequest(
-            project_path=Path("/p"), environment_name="env1",
+            project_path=Path("/p"),
+            environment_name="env1",
         )
         assert req.gui_mode is None
         assert req.vm_memory is None
@@ -29,9 +30,13 @@ class TestDevSessionStartRequest:
 
     def test_full_construction(self):
         req = DevSessionStartRequest(
-            project_path=Path("/p"), environment_name="env1",
-            gui_mode="headless", vm_memory=4096, vm_cpus=2,
-            debug_screenshots=True, console_ulid="abc",
+            project_path=Path("/p"),
+            environment_name="env1",
+            gui_mode="headless",
+            vm_memory=4096,
+            vm_cpus=2,
+            debug_screenshots=True,
+            console_ulid="abc",
         )
         assert req.vm_memory == 4096
         assert req.vm_cpus == 2
@@ -53,8 +58,10 @@ class TestDevActionResult:
 class TestDevPlaybookResult:
     def test_construction(self):
         r = DevPlaybookResult(
-            success=True, total_actions=10,
-            successful_actions=9, failed_actions=1,
+            success=True,
+            total_actions=10,
+            successful_actions=9,
+            failed_actions=1,
             execution_time=30.0,
         )
         assert r.action_results == []

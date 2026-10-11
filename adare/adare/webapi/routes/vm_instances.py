@@ -1,5 +1,6 @@
 """VM instance and snapshot management endpoints (running VMs, not the
 locally-registered VM images served by ``local_vms.py``)."""
+
 import logging
 
 from fastapi import APIRouter, Query
@@ -13,12 +14,15 @@ router = APIRouter(prefix="/api/vm-instances", tags=["vm-instances"])
 
 # ---- Helpers ----
 
+
 def _api():
     from adare.api import AdareAPI
+
     return AdareAPI()
 
 
 # ---- Endpoints ----
+
 
 @router.get("")
 async def list_instances(vm_id: str | None = Query(None)):

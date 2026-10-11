@@ -73,15 +73,12 @@ def resolve_shell(shell: str, platform: str) -> str:
     # later, as a guest-exec error, on a platform provisioning cannot serve at all.
     allowed = _SHELLS_BY_PLATFORM.get(platform)
     if allowed is None:
-        raise ProvisionSchemaError(
-            f"build-time provisioning is not supported for platform {platform!r}"
-        )
+        raise ProvisionSchemaError(f"build-time provisioning is not supported for platform {platform!r}")
     if shell == 'auto':
         return 'powershell' if platform == 'windows' else 'bash'
     if shell not in allowed:
         raise ProvisionSchemaError(
-            f"shell {shell!r} is not available on a {platform!r} guest "
-            f"(available: {', '.join(sorted(allowed))})"
+            f"shell {shell!r} is not available on a {platform!r} guest (available: {', '.join(sorted(allowed))})"
         )
     return shell
 
@@ -103,8 +100,7 @@ def _render(template_text: str, item: str, *, step_name: str, field: str) -> str
         ) from e
 
 
-def _render_command(command: ProvisionCommand, item: str | None,
-                    platform: str) -> ProvisionCommand:
+def _render_command(command: ProvisionCommand, item: str | None, platform: str) -> ProvisionCommand:
     """Return a copy of *command* with templates rendered and shell resolved.
 
     With ``item is None`` (no ``for_each``) nothing is templated — a literal
@@ -127,8 +123,7 @@ def _render_command(command: ProvisionCommand, item: str | None,
                 values[field] = _render(text, item, step_name=label, field=field)
         if command.log_files:
             values['log_files'] = [
-                _render(path, item, step_name=label, field='log_files')
-                for path in command.log_files
+                _render(path, item, step_name=label, field='log_files') for path in command.log_files
             ]
 
     values['shell'] = resolve_shell(command.shell, platform)
@@ -162,22 +157,23 @@ def _step_commands(step: ProvisionStep) -> list[ProvisionCommand]:
         if not step.description:
             return list(step.steps)
         return [
-            command if command.description
-            else attrs.evolve(command, description=step.description)
+            command if command.description else attrs.evolve(command, description=step.description)
             for command in step.steps
         ]
-    return [ProvisionCommand(
-        name=step.name,
-        command=step.command,
-        description=step.description,
-        cwd=step.cwd,
-        shell=step.shell,
-        allow_exit_codes=list(step.allow_exit_codes),
-        verify=step.verify,
-        log_files=list(step.log_files),
-        timeout_minutes=step.timeout_minutes,
-        reboot=step.reboot,
-    )]
+    return [
+        ProvisionCommand(
+            name=step.name,
+            command=step.command,
+            description=step.description,
+            cwd=step.cwd,
+            shell=step.shell,
+            allow_exit_codes=list(step.allow_exit_codes),
+            verify=step.verify,
+            log_files=list(step.log_files),
+            timeout_minutes=step.timeout_minutes,
+            reboot=step.reboot,
+        )
+    ]
 
 
 def expand_provision(steps: list[ProvisionStep], platform: str) -> list[ProvisionCommand]:
@@ -209,9 +205,7 @@ def expand_provision(steps: list[ProvisionStep], platform: str) -> list[Provisio
             for command in commands:
                 rendered = _render_command(command, item, platform)
                 if not rendered.command.strip():
-                    raise ProvisionSchemaError(
-                        f"provision step {rendered.name!r} expanded to an empty command"
-                    )
+                    raise ProvisionSchemaError(f"provision step {rendered.name!r} expanded to an empty command")
                 expanded.append(rendered)
 
     # Names are the error identity, the host-log label and the progress line, so

@@ -48,6 +48,7 @@ class ChatREPL:
 
         if console is None:
             from adare.console import console as default_console
+
             console = default_console
         self._brain = brain
         self._console = console
@@ -61,8 +62,10 @@ class ChatREPL:
         """Run the interactive REPL until EOF / quit."""
         c = self._console
         self._brain.start(SYSTEM_PROMPT, self._tool_list)
-        c.print(f"[bold cyan]ADARE chat[/bold cyan] — brain: {self._brain.name}, "
-                f"{len(self._tool_list)} tools. Type 'exit' to quit.\n")
+        c.print(
+            f"[bold cyan]ADARE chat[/bold cyan] — brain: {self._brain.name}, "
+            f"{len(self._tool_list)} tools. Type 'exit' to quit.\n"
+        )
         while True:
             try:
                 user = c.input('[bold green]adare[/bold green] › ').strip()
@@ -108,8 +111,10 @@ class ChatREPL:
 
         tool = self._tools.get(tc.name)
         if tool is None:
-            out = {'ok': False, 'error': {'code': 'UNKNOWN_TOOL',
-                                          'message': f'No such tool: {tc.name}', 'solutions': []}}
+            out = {
+                'ok': False,
+                'error': {'code': 'UNKNOWN_TOOL', 'message': f'No such tool: {tc.name}', 'solutions': []},
+            }
         else:
             if tool.serialized_vm:
                 c.print('    [dim](live VM — this can take a while)[/dim]')
@@ -120,8 +125,7 @@ class ChatREPL:
             c.print('    [green]✓[/green] [dim]' + _summarize(out.get('data')) + '[/dim]')
         else:
             err = out.get('error', {})
-            c.print(f'    [red]✗ {err.get("code", "ERROR")}[/red] '
-                    f'[dim]{err.get("message", "")}[/dim]')
+            c.print(f'    [red]✗ {err.get("code", "ERROR")}[/red] [dim]{err.get("message", "")}[/dim]')
         return ToolResult(id=tc.id, name=tc.name, output=out, is_error=not ok)
 
 

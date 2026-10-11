@@ -25,8 +25,7 @@ log = logging.getLogger(__name__)
 class FileToolsMixin:
     """Mixin providing file-related tool methods."""
 
-    async def _pull_file_chunk(self, websocket, guest_path: str, chunk_index: int,
-                              chunk_size: int = 1048576):
+    async def _pull_file_chunk(self, websocket, guest_path: str, chunk_index: int, chunk_size: int = 1048576):
         """
         Read and send a file chunk from guest to host.
 
@@ -46,17 +45,14 @@ class FileToolsMixin:
 
             # Validate file exists
             if not file_path.exists():
-                return {
-                    "status": "error",
-                    "error": f"File not found: {guest_path}"
-                }
+                return {"status": "error", "error": f"File not found: {guest_path}"}
 
             # Check if directory
             if file_path.is_dir():
                 return {
                     "status": "error",
                     "error": f"Path is a directory: {guest_path}. Use hypervisor mode for directories.",
-                    "is_directory": True
+                    "is_directory": True,
                 }
 
             # Get file size and calculate chunks
@@ -72,10 +68,7 @@ class FileToolsMixin:
 
             # Validate chunk index
             if chunk_index >= total_chunks:
-                return {
-                    "status": "error",
-                    "error": f"Chunk index {chunk_index} out of range (total: {total_chunks})"
-                }
+                return {"status": "error", "error": f"Chunk index {chunk_index} out of range (total: {total_chunks})"}
 
             # Read chunk
             offset = chunk_index * chunk_size
@@ -92,7 +85,7 @@ class FileToolsMixin:
                 "total_chunks": total_chunks,
                 "chunk_data": encoded_chunk,
                 "file_size": file_size,
-                "is_directory": False
+                "is_directory": False,
             }
 
             # Include metadata only in first chunk
@@ -102,20 +95,24 @@ class FileToolsMixin:
                     "filename": file_path.name,
                     "permissions": oct(stat.S_IMODE(file_stat.st_mode)),
                     "modified_time": file_stat.st_mtime,
-                    "is_symlink": file_path.is_symlink()
+                    "is_symlink": file_path.is_symlink(),
                 }
 
             # Send progress event
             percent = ((chunk_index + 1) / total_chunks) * 100
-            await self.send_event(websocket, EventType.PROGRESS, {
-                "operation": "file_transfer",
-                "file_path": str(guest_path),
-                "bytes_transferred": offset + len(chunk_data),
-                "total_bytes": file_size,
-                "chunk_index": chunk_index,
-                "total_chunks": total_chunks,
-                "percent_complete": percent
-            })
+            await self.send_event(
+                websocket,
+                EventType.PROGRESS,
+                {
+                    "operation": "file_transfer",
+                    "file_path": str(guest_path),
+                    "bytes_transferred": offset + len(chunk_data),
+                    "total_bytes": file_size,
+                    "chunk_index": chunk_index,
+                    "total_chunks": total_chunks,
+                    "percent_complete": percent,
+                },
+            )
 
             return result
 
@@ -150,30 +147,28 @@ class FileToolsMixin:
         log.info(f"Starting filesystem snapshot from {root_path} on {platform_name}")
 
         try:
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Starting filesystem snapshot from {root_path}"
-            })
+            await self.send_event(
+                websocket, EventType.LOG, {"message": f"Starting filesystem snapshot from {root_path}"}
+            )
 
             if platform_name == 'windows':
                 from adarevm.platforms.mft_reader import MFTReader, MFTReaderException
+
                 try:
                     snapshot_data = MFTReader.get_mft_snapshot(volume='C:', root_path=root_path)
                 except MFTReaderException as e:
                     log.error(f"MFT snapshot failed: {e}")
-                    await self.send_event(websocket, EventType.ERROR, {
-                        "message": f"MFT snapshot failed: {e}"
-                    })
+                    await self.send_event(websocket, EventType.ERROR, {"message": f"MFT snapshot failed: {e}"})
                     return {"status": "error", "message": str(e)}
 
             elif platform_name == 'linux':
                 from adarevm.platforms.linux_fs_snapshot import LinuxFSSnapshot, LinuxFSSnapshotException
+
                 try:
                     snapshot_data = LinuxFSSnapshot.get_snapshot(root_path=root_path)
                 except LinuxFSSnapshotException as e:
                     log.error(f"Linux filesystem snapshot failed: {e}")
-                    await self.send_event(websocket, EventType.ERROR, {
-                        "message": f"Filesystem snapshot failed: {e}"
-                    })
+                    await self.send_event(websocket, EventType.ERROR, {"message": f"Filesystem snapshot failed: {e}"})
                     return {"status": "error", "message": str(e)}
             else:
                 error_msg = f"Unsupported platform: {platform_name}"
@@ -184,21 +179,21 @@ class FileToolsMixin:
 
             log.info(f"Filesystem snapshot complete: {len(snapshot_data)} files in {collection_time:.2f}s")
 
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Snapshot complete: {len(snapshot_data)} files in {collection_time:.2f}s"
-            })
+            await self.send_event(
+                websocket,
+                EventType.LOG,
+                {"message": f"Snapshot complete: {len(snapshot_data)} files in {collection_time:.2f}s"},
+            )
 
             return {
                 "status": "success",
                 "snapshot": snapshot_data,
                 "file_count": len(snapshot_data),
-                "collection_time": collection_time
+                "collection_time": collection_time,
             }
 
         except ImportError as e:
             error_msg = f"Snapshot module not available: {e}"
             log.error(error_msg)
-            await self.send_event(websocket, EventType.ERROR, {
-                "message": error_msg
-            })
+            await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
             return {"status": "error", "message": error_msg}

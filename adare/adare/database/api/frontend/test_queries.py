@@ -12,7 +12,12 @@ class TestQueryMixin:
 
     def get_tests(self, run_ulid: str) -> dict:
         tests_data = {}
-        test_events = self._project_api._session.query(Event).filter_by(experiment_run_id=run_ulid).filter(Event.category == 'test').all()
+        test_events = (
+            self._project_api._session.query(Event)
+            .filter_by(experiment_run_id=run_ulid)
+            .filter(Event.category == 'test')
+            .all()
+        )
         for event in test_events:
             if event.abstract_test.name not in tests_data:
                 pinned_fv = getattr(event.abstract_test, 'testfunction_file_version', None)
@@ -34,7 +39,12 @@ class TestQueryMixin:
                     'testfunction_drift': drift,
                     'result_status': int(event.stage_result) if event.result else None,
                     'result_details': event.result.details if event.result else None,
-                    'result_status_name': self._project_api._session.query(Status).filter_by(id=event.result.status).one().name if event.result else None,
+                    'result_status_name': self._project_api._session.query(Status)
+                    .filter_by(id=event.result.status)
+                    .one()
+                    .name
+                    if event.result
+                    else None,
                 }
                 parameter_data = [
                     {
@@ -49,7 +59,9 @@ class TestQueryMixin:
                 # update results
                 tests_data[event.abstract_test.name]['result_status'] = int(event.stage_result)
                 tests_data[event.abstract_test.name]['result_details'] = event.result.details
-                tests_data[event.abstract_test.name]['result_status_name'] = self._project_api._session.query(Status).filter_by(id=event.result.status).one().name
+                tests_data[event.abstract_test.name]['result_status_name'] = (
+                    self._project_api._session.query(Status).filter_by(id=event.result.status).one().name
+                )
         return tests_data
 
     def get_abstract_tests(self, experiment_ulid: str) -> dict:

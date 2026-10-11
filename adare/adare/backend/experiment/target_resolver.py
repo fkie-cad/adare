@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class TargetMatch:
     """Represents a found target with confidence and location."""
+
     coordinates: tuple[int, int]
     confidence: float
     method: str  # 'image', 'text', 'position'
@@ -51,8 +52,12 @@ class MCPTargetResolver:
     """
 
     def __init__(
-        self, experiment_dir: Path, mcp_gui_url: str = "http://localhost:13109/mcp",
-        experiment_run_ulid: str | None = None, vm_client=None, os_key: str = "windows",
+        self,
+        experiment_dir: Path,
+        mcp_gui_url: str = "http://localhost:13109/mcp",
+        experiment_run_ulid: str | None = None,
+        vm_client=None,
+        os_key: str = "windows",
         confidence_floor: float = 0.7,
     ):
         """
@@ -92,10 +97,13 @@ class MCPTargetResolver:
         """Lazily build the IconLibrary bound to this resolver's VM client."""
         if self._icon_library is None:
             from adare.backend.experiment.icon_library import IconLibrary
+
             self._icon_library = IconLibrary(os_key=self._os_key, vm_client=self._vm_client)
         return self._icon_library
 
-    def _select_match_by_strategy(self, matches: list[TargetMatch], strategy, reference_coords: tuple[int, int] | None = None) -> TargetMatch | None:
+    def _select_match_by_strategy(
+        self, matches: list[TargetMatch], strategy, reference_coords: tuple[int, int] | None = None
+    ) -> TargetMatch | None:
         """
         Select a single match from multiple matches based on strategy.
 
@@ -115,8 +123,10 @@ class MCPTargetResolver:
             return matches[0]
 
         if strategy is None:
-            raise ValueError(f"Found {len(matches)} matches but no strategy was provided to select from them. "
-                           f"Please specify a strategy (e.g., BestConfidence, TopLeft, etc.) to handle multiple matches.")
+            raise ValueError(
+                f"Found {len(matches)} matches but no strategy was provided to select from them. "
+                f"Please specify a strategy (e.g., BestConfidence, TopLeft, etc.) to handle multiple matches."
+            )
 
         # Dispatch to strategy-specific handler
         handler = self._get_strategy_handler(strategy)
@@ -132,8 +142,7 @@ class MCPTargetResolver:
             (SweepStrategy, self._select_by_sweep),
             (BestConfidenceStrategy, self._select_by_best_confidence),
             (ClosestToStrategy, self._select_by_closest_to),
-            ((TopLeftStrategy, TopRightStrategy, BottomLeftStrategy, BottomRightStrategy),
-             self._select_by_corner),
+            ((TopLeftStrategy, TopRightStrategy, BottomLeftStrategy, BottomRightStrategy), self._select_by_corner),
             (LargestStrategy, self._select_by_largest),
             (SmallestStrategy, self._select_by_smallest),
         ]
@@ -158,7 +167,9 @@ class MCPTargetResolver:
         best_confidence = max(m.confidence for m in matches)
         best_matches = [m for m in matches if m.confidence == best_confidence]
         if len(best_matches) > 1:
-            log.warning(f"BestConfidenceStrategy: {len(best_matches)} matches tied with confidence {best_confidence}, using first")
+            log.warning(
+                f"BestConfidenceStrategy: {len(best_matches)} matches tied with confidence {best_confidence}, using first"
+            )
         return best_matches[0]
 
     @staticmethod
@@ -192,12 +203,15 @@ class MCPTargetResolver:
         min_dist = min(distance(m) for m in matches)
         closest_matches = [m for m in matches if distance(m) == min_dist]
         if len(closest_matches) > 1:
-            log.warning(f"ClosestToStrategy: {len(closest_matches)} matches tied at distance {min_dist:.1f}, using first")
+            log.warning(
+                f"ClosestToStrategy: {len(closest_matches)} matches tied at distance {min_dist:.1f}, using first"
+            )
         return closest_matches[0]
 
     @staticmethod
     def _select_closest_to_coords(matches, strategy):
         """Select match closest to explicit (x, y) coordinates."""
+
         def distance(match):
             x, y = match.coordinates
             return ((x - strategy.x) ** 2 + (y - strategy.y) ** 2) ** 0.5
@@ -205,7 +219,9 @@ class MCPTargetResolver:
         min_dist = min(distance(m) for m in matches)
         closest_matches = [m for m in matches if distance(m) == min_dist]
         if len(closest_matches) > 1:
-            log.warning(f"ClosestToStrategy: {len(closest_matches)} matches tied at distance {min_dist:.1f}, using first")
+            log.warning(
+                f"ClosestToStrategy: {len(closest_matches)} matches tied at distance {min_dist:.1f}, using first"
+            )
         return closest_matches[0]
 
     @staticmethod
@@ -221,12 +237,15 @@ class MCPTargetResolver:
         if len(edge_matches) > 1:
             edge_label = "top" if y_sign == 1 else "bottom"
             side_label = "leftmost" if x_sign == 1 else "rightmost"
-            log.warning(f"{strategy_name}: {len(edge_matches)} matches at same {edge_label} row y={edge_y}, using {side_label}")
+            log.warning(
+                f"{strategy_name}: {len(edge_matches)} matches at same {edge_label} row y={edge_y}, using {side_label}"
+            )
         return edge_matches[0]
 
     @staticmethod
     def _select_by_largest(matches, _strategy, _reference_coords):
         """Select match with largest bounding region area."""
+
         def area(match):
             if match.region:
                 return match.region[2] * match.region[3]
@@ -241,6 +260,7 @@ class MCPTargetResolver:
     @staticmethod
     def _select_by_smallest(matches, _strategy, _reference_coords):
         """Select match with smallest bounding region area."""
+
         def area(match):
             if match.region:
                 return match.region[2] * match.region[3]
@@ -278,7 +298,9 @@ class MCPTargetResolver:
         self._connection_tested = True
         return self._connection_available
 
-    async def resolve_target(self, target: Target, screenshot_base64: str = None, offset_x: int = 0, offset_y: int = 0) -> TargetMatch | None:
+    async def resolve_target(
+        self, target: Target, screenshot_base64: str = None, offset_x: int = 0, offset_y: int = 0
+    ) -> TargetMatch | None:
         """
         Resolve a playbook target to screen coordinates using MCP GUI server.
 
@@ -296,9 +318,7 @@ class MCPTargetResolver:
 
             # Handle ClosestToStrategy with target reference
             if isinstance(target.strategy, ClosestToStrategy) and (target.strategy.text or target.strategy.image):
-                result = await self._resolve_closest_to_reference(
-                    target, screenshot_base64, offset_x, offset_y
-                )
+                result = await self._resolve_closest_to_reference(target, screenshot_base64, offset_x, offset_y)
                 if result is None:
                     return None
                 reference_coords, screenshot_base64, offset_x, offset_y = result
@@ -332,7 +352,15 @@ class MCPTargetResolver:
 
             except FileNotFoundError:
                 raise
-            except (OSError, ConnectionError, TimeoutError, RuntimeError, json.JSONDecodeError, ValueError, KeyError) as mcp_error:
+            except (
+                OSError,
+                ConnectionError,
+                TimeoutError,
+                RuntimeError,
+                json.JSONDecodeError,
+                ValueError,
+                KeyError,
+            ) as mcp_error:
                 log.error(f"MCP connection failed: {mcp_error}", exc_info=True)
                 log.error(f"Ensure MCP GUI server is running at {self.mcp_gui_url}")
                 return None
@@ -381,9 +409,7 @@ class MCPTargetResolver:
         client = LocateAnythingClient(LOCATE_URL, mode=LOCATE_MODE)
         near_f = (float(near[0]), float(near[1])) if near else None
         try:
-            det = await asyncio.to_thread(
-                client.best_for, screenshot_base64, description, near=near_f
-            )
+            det = await asyncio.to_thread(client.best_for, screenshot_base64, description, near=near_f)
         except LocateAnythingError as exc:
             log.error(f"LocateAnything grounding failed for '{description}': {exc}")
             return None
@@ -395,12 +421,14 @@ class MCPTargetResolver:
         x1, y1, x2, y2 = det.box
         cx = int(round((x1 + x2) / 2)) + offset_x
         cy = int(round((y1 + y2) / 2)) + offset_y
-        region = (int(round(x1)) + offset_x, int(round(y1)) + offset_y,
-                  int(round(x2 - x1)), int(round(y2 - y1)))
+        region = (int(round(x1)) + offset_x, int(round(y1)) + offset_y, int(round(x2 - x1)), int(round(y2 - y1)))
         log.info(f"LocateAnything grounded '{description}' to {(cx, cy)} region={region}")
         return TargetMatch(
-            coordinates=(cx, cy), confidence=1.0, method='element',
-            region=region, text=description,
+            coordinates=(cx, cy),
+            confidence=1.0,
+            method='element',
+            region=region,
+            text=description,
         )
 
     async def _resolve_closest_to_reference(self, target, screenshot_base64, offset_x, offset_y):
@@ -452,13 +480,16 @@ class MCPTargetResolver:
         if icon_base64 is None:
             return None
 
-        result = await client.call_tool("find_icon", {
-            "icon_base64": icon_base64,
-            "screenshot_base64": screenshot_base64,
-            "offset_x": offset_x,
-            "offset_y": offset_y,
-            "threshold": self.confidence_floor
-        })
+        result = await client.call_tool(
+            "find_icon",
+            {
+                "icon_base64": icon_base64,
+                "screenshot_base64": screenshot_base64,
+                "offset_x": offset_x,
+                "offset_y": offset_y,
+                "threshold": self.confidence_floor,
+            },
+        )
 
         locations_data = self._parse_mcp_result(result)
         if locations_data is None:
@@ -493,13 +524,16 @@ class MCPTargetResolver:
         if icon_base64 is None:
             return None
 
-        result = await client.call_tool("find_icon", {
-            "icon_base64": icon_base64,
-            "screenshot_base64": screenshot_base64,
-            "offset_x": offset_x,
-            "offset_y": offset_y,
-            "threshold": self.confidence_floor
-        })
+        result = await client.call_tool(
+            "find_icon",
+            {
+                "icon_base64": icon_base64,
+                "screenshot_base64": screenshot_base64,
+                "offset_x": offset_x,
+                "offset_y": offset_y,
+                "threshold": self.confidence_floor,
+            },
+        )
 
         locations_data = self._parse_mcp_result(result)
         if locations_data is None:
@@ -634,9 +668,9 @@ class MCPTargetResolver:
         log.info(f"Found {len(matches)} matches for {target_desc}:")
         for i, match in enumerate(matches):
             if match.text:
-                log.info(f"  Match {i+1}: '{match.text}' at {match.coordinates} (confidence: {match.confidence:.3f})")
+                log.info(f"  Match {i + 1}: '{match.text}' at {match.coordinates} (confidence: {match.confidence:.3f})")
             else:
-                log.info(f"  Match {i+1}: at {match.coordinates} (confidence: {match.confidence:.3f})")
+                log.info(f"  Match {i + 1}: at {match.coordinates} (confidence: {match.confidence:.3f})")
 
         # Log strategy info
         self._log_strategy_info(target.strategy, len(matches))
@@ -654,7 +688,9 @@ class MCPTargetResolver:
                     return None
                 selected_index = matches.index(selected_match) + 1
                 if selected_match.text:
-                    log.info(f"Selected match {selected_index}: '{selected_match.text}' at {selected_match.coordinates} via MCP")
+                    log.info(
+                        f"Selected match {selected_index}: '{selected_match.text}' at {selected_match.coordinates} via MCP"
+                    )
                 else:
                     log.info(f"Selected match {selected_index}: {target_desc} at {selected_match.coordinates} via MCP")
                 return selected_match
@@ -672,6 +708,7 @@ class MCPTargetResolver:
         strategy_params = ""
         if strategy and hasattr(strategy, '__dict__'):
             import attrs
+
             if attrs.has(strategy):
                 params = attrs.asdict(strategy)
                 if params:
@@ -679,12 +716,7 @@ class MCPTargetResolver:
         log.info(f"Applying {strategy_name} strategy{strategy_params} to select from {match_count} matches")
 
     async def _crop_screenshot_region(
-        self,
-        screenshot_base64: str,
-        center_coords: tuple[int, int],
-        padding: int,
-        offset_x: int = 0,
-        offset_y: int = 0
+        self, screenshot_base64: str, center_coords: tuple[int, int], padding: int, offset_x: int = 0, offset_y: int = 0
     ) -> tuple[str, int, int]:
         """Crop screenshot to region around reference coordinates for optimization.
 
@@ -774,10 +806,7 @@ class MCPConditionChecker:
         for condition in conditions:
             if isinstance(condition, ExistsCondition):
                 # Check if target exists
-                target = Target(
-                    image=condition.image,
-                    text=condition.text
-                )
+                target = Target(image=condition.image, text=condition.text)
                 match = await self.resolver.resolve_target(target, screenshot_base64)
                 if not match:
                     log.debug("Exists condition failed: target not found")
@@ -785,10 +814,7 @@ class MCPConditionChecker:
 
             elif isinstance(condition, NotExistsCondition):
                 # Check if target does NOT exist
-                target = Target(
-                    image=condition.image,
-                    text=condition.text
-                )
+                target = Target(image=condition.image, text=condition.text)
                 match = await self.resolver.resolve_target(target, screenshot_base64)
                 if match:
                     log.debug("NotExists condition failed: target found")

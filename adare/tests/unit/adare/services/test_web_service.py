@@ -11,36 +11,42 @@ pytestmark = pytest.mark.unit
 @pytest.fixture
 def service():
     from adare.services.web_service import WebService
+
     return WebService()
 
 
 @pytest.fixture
 def download_env_request():
     from adare.core.dto.web import DownloadEnvironmentRequest
+
     return DownloadEnvironmentRequest(project_path=Path("/tmp/proj"), environment_name="test-env")
 
 
 @pytest.fixture
 def sync_request():
     from adare.core.dto.web import SyncRequest
+
     return SyncRequest(project_path=Path("/tmp/proj"))
 
 
 @pytest.fixture
 def check_experiment_request():
     from adare.core.dto.web import CheckExperimentRequest
+
     return CheckExperimentRequest(ulid="01ABC123")
 
 
 @pytest.fixture
 def check_run_request():
     from adare.core.dto.web import CheckRunRequest
+
     return CheckRunRequest(ulid="01RUN456")
 
 
 @pytest.fixture
 def upload_run_request(tmp_path):
     from adare.core.dto.web import UploadRunRequest
+
     # project_path is required: the run lives in that project's database, so the
     # serializer has to be pointed at it rather than at the global one.
     return UploadRunRequest(project_path=tmp_path, ulid="01RUN456")
@@ -53,6 +59,7 @@ class TestWebServiceLogin:
     def test_login_success(self, mock_login):
         from adare.core.dto.web import WebLoginResult
         from adare.core.result import Result
+
         mock_login.return_value = Result.ok(WebLoginResult(logged_in=True, message="Login successful"))
 
         result = mock_login()
@@ -93,6 +100,7 @@ class TestWebServiceGetStatus:
     def test_get_status_logged_in(self, mock_status):
         from adare.core.dto.web import WebStatusResult
         from adare.core.result import Result
+
         mock_status.return_value = Result.ok(WebStatusResult(logged_in=True, username="alice"))
 
         result = mock_status()
@@ -105,6 +113,7 @@ class TestWebServiceGetStatus:
     def test_get_status_not_logged_in(self, mock_status):
         from adare.core.dto.web import WebStatusResult
         from adare.core.result import Result
+
         mock_status.return_value = Result.ok(WebStatusResult(logged_in=False))
 
         result = mock_status()
@@ -124,8 +133,9 @@ class TestWebServiceDownloadEnvironment:
         assert result.data.downloaded is True
 
     def test_download_environment_failure(self, service, download_env_request):
-        with patch("adare.backend.environment.commands.environment_download",
-                    side_effect=ConnectionError("network error")):
+        with patch(
+            "adare.backend.environment.commands.environment_download", side_effect=ConnectionError("network error")
+        ):
             result = service.download_environment(download_env_request)
 
         assert result.success is False
@@ -187,8 +197,7 @@ class TestWebServiceCheckRun:
         assert result.data.exists is True
 
     def test_check_run_failure(self, service, check_run_request):
-        with patch("adare.webappaccess.api_client.check_run_exists",
-                    side_effect=ConnectionError("server down")):
+        with patch("adare.webappaccess.api_client.check_run_exists", side_effect=ConnectionError("server down")):
             result = service.check_run(check_run_request)
 
         assert result.success is False
@@ -206,8 +215,7 @@ class TestWebServiceUploadRun:
         assert result.data.published is True
 
     def test_upload_run_failure(self, service, upload_run_request):
-        with patch("adare.webappaccess.upload.publish_experiment_run",
-                    side_effect=ConnectionError("upload failed")):
+        with patch("adare.webappaccess.upload.publish_experiment_run", side_effect=ConnectionError("upload failed")):
             result = service.upload_run(upload_run_request)
 
         assert result.success is False

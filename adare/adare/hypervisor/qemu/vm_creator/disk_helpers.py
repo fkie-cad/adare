@@ -63,19 +63,23 @@ def compress_qcow2_zstd(src: Path, dst: Path) -> None:
     qemu_img = HYPERVISOR_CONFIGS['qemu']['qemu_img_exe']
 
     convert = subprocess.run(
-        [qemu_img, 'convert', '-O', 'qcow2', '-c', '-o', 'compression_type=zstd',
-         str(src), str(dst)],
-        capture_output=True, text=True,
+        [qemu_img, 'convert', '-O', 'qcow2', '-c', '-o', 'compression_type=zstd', str(src), str(dst)],
+        capture_output=True,
+        text=True,
     )
     if convert.returncode != 0:
         raise DiskCompressionError(f'qemu-img convert failed: {convert.stderr.strip()}', stage='convert')
 
     check = subprocess.run(
-        [qemu_img, 'check', str(dst)], capture_output=True, text=True,
+        [qemu_img, 'check', str(dst)],
+        capture_output=True,
+        text=True,
     )
     if check.returncode != 0:
         dst.unlink(missing_ok=True)
-        raise DiskCompressionError(f'qemu-img check failed on the compressed output: {check.stderr.strip()}', stage='check')
+        raise DiskCompressionError(
+            f'qemu-img check failed on the compressed output: {check.stderr.strip()}', stage='check'
+        )
 
 
 def disk_device_args(

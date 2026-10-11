@@ -16,15 +16,18 @@ def tools(tmp_path, monkeypatch):
         "@testfunction(name='file_exists', description='tests if file exists')\n"
         "def file_exists(ctx, dst: str):\n    pass\n\n"
         "@testfunction(name='file_does_not_exist', description='tests if file does NOT exist')\n"
-        "def file_does_not_exist(ctx, dst: str):\n    pass\n")
+        "def file_does_not_exist(ctx, dst: str):\n    pass\n"
+    )
     monkeypatch.setattr(catalog, 'default_sources', lambda: [(tmp_path / 'tf', True)])
     return {t.name: t for t in build_tools(api=object())}
 
 
 def test_list_is_compact(tools):
     result = call_tool(tools['testfunction_list'], {})
-    assert result['ok'] and [e['dotnotation'] for e in result['data']] == ['demo.file_does_not_exist',
-                                                                           'demo.file_exists']
+    assert result['ok'] and [e['dotnotation'] for e in result['data']] == [
+        'demo.file_does_not_exist',
+        'demo.file_exists',
+    ]
     assert 'example' not in result['data'][0]
 
 

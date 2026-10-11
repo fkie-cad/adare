@@ -10,6 +10,7 @@ Supported transfer modes (chosen automatically):
 - Libguestfs: offline guestfish disk access (fallback on Linux)
 - QGA: QEMU Guest Agent file operations (macOS fallback)
 """
+
 import logging
 import os
 import shutil
@@ -81,8 +82,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             parent_dir = disk_path.parent
             if not parent_dir.exists():
                 raise HypervisorException(
-                    f"Parent directory does not exist: {parent_dir}\n"
-                    f"Cannot create converted qcow2 file."
+                    f"Parent directory does not exist: {parent_dir}\nCannot create converted qcow2 file."
                 )
             if not os.access(parent_dir, os.W_OK):
                 raise HypervisorException(
@@ -109,14 +109,11 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         # Query database for source VM to get disk path and architecture
         env_data = environment_database.get_environment_by_ulid(
-            context.environment_ulid,
-            fields=['vm_id', 'vm_architecture']
+            context.environment_ulid, fields=['vm_id', 'vm_architecture']
         )
 
         if not env_data or not env_data.get('vm_id'):
-            raise HypervisorException(
-                "No VM associated with environment. Run 'adare environment load' first."
-            )
+            raise HypervisorException("No VM associated with environment. Run 'adare environment load' first.")
 
         # Get source VM file path from database
         with VmApi() as api:
@@ -151,8 +148,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             # Detect file format
             try:
                 detected_format = QEMUVM._detect_disk_format_static(
-                    source_vm_path,
-                    self.qemu_manager.executables.qemu_img
+                    source_vm_path, self.qemu_manager.executables.qemu_img
                 )
                 log.debug(f"Detected format: {detected_format}")
             except HypervisorException as e:
@@ -179,8 +175,9 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             log.debug("Managed VM detected, using managed storage")
 
         # Determine guest architecture
-        vm_architecture = (env_data.get('vm_architecture') if env_data else None) or \
-                          getattr(context, 'guest_architecture', None)
+        vm_architecture = (env_data.get('vm_architecture') if env_data else None) or getattr(
+            context, 'guest_architecture', None
+        )
         if not vm_architecture:
             vm_architecture = 'x86_64'
             log.warning("Guest architecture not set in environment — defaulting to x86_64")
@@ -188,7 +185,8 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         # Opt-in cross-arch emulation: CLI flag OR a persisted environment setting.
         allow_emulation = getattr(context.config, 'allow_emulation', False) or (
             bool(environment_metadata.hypervisor_config.get('allow_emulation', False))
-            if environment_metadata else False
+            if environment_metadata
+            else False
         )
         vm_accel = resolve_accel(vm_architecture, allow_emulation)
 
@@ -270,18 +268,11 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         experiment_id = context.experiment_run_ulid or 'default'
 
         # Wrap entire disk preparation with parent stage
-        with StageCtxManager(
-            VMDiskPreparationStage(),
-            context.experiment_run_ulid,
-            context.user_interrupt_event
-        ):
-
+        with StageCtxManager(VMDiskPreparationStage(), context.experiment_run_ulid, context.user_interrupt_event):
             # Step 1: Format detection (for external VMs only)
             if is_external:
                 with StageCtxManager(
-                    VMDiskFormatDetectionStage(),
-                    context.experiment_run_ulid,
-                    context.user_interrupt_event
+                    VMDiskFormatDetectionStage(), context.experiment_run_ulid, context.user_interrupt_event
                 ) as detect_stage:
                     # Detection already happened at lines 518-526, just update stage message
                     detect_stage.stage.sub_msg = f"Detected: {detected_format}"
@@ -300,18 +291,14 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 base_disk_path = context.vm.get_base_disk_path()
                 if not Path(base_disk_path).exists():
                     with StageCtxManager(
-                        VMDiskConversionStage(),
-                        context.experiment_run_ulid,
-                        context.user_interrupt_event
+                        VMDiskConversionStage(), context.experiment_run_ulid, context.user_interrupt_event
                     ) as conv_stage:
                         conv_stage.stage.sub_msg = f"Converting {detected_format} → qcow2"
                         conv_stage.set_status(conv_stage.stage.status)
 
                         log.debug(f"Converting {detected_format} to qcow2 base disk...")
                         return_code, message = await context.vm.create_from_ovf_or_ova(
-                            source_vm_path,
-                            silent=False,
-                            try_extract=True
+                            source_vm_path, silent=False, try_extract=True
                         )
 
                         if return_code != 0:
@@ -321,9 +308,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
             # Step 3: Create overlay disk (always happens)
             with StageCtxManager(
-                VMDiskOverlayCreationStage(),
-                context.experiment_run_ulid,
-                context.user_interrupt_event
+                VMDiskOverlayCreationStage(), context.experiment_run_ulid, context.user_interrupt_event
             ):
                 try:
                     overlay_path = await context.vm.create_overlay_disk(experiment_id)
@@ -369,7 +354,6 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                         f"VM: {context.vm_name}, External: {is_external}"
                     ) from e
 
-
     async def setup_file_transfer(self, context):
         """
         Setup file transfer mechanism for the experiment.
@@ -397,11 +381,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         log.info("Setting up port forwarding for WebSocket communication")
 
         # Clean up any existing 'adarevm' port forwarding rule first
-        await context.vm.remove_port_forwarding(
-            name='adarevm',
-            stop_event=context.user_interrupt_event,
-            silent=True
-        )
+        await context.vm.remove_port_forwarding(name='adarevm', stop_event=context.user_interrupt_event, silent=True)
 
         # Add port forwarding: host uses allocated unique port, guest always uses 18765
         if context.config.websocket_port is None:
@@ -413,10 +393,9 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             host_port=context.config.websocket_port,
             guest_port=18765,
             stop_event=context.user_interrupt_event,
-            silent=False
+            silent=False,
         )
         log.info(f'Added port forwarding for websocket server: host:{context.config.websocket_port} -> guest:18765')
-
 
     _DEFAULT_BOOT_ATTEMPTS = 3
 
@@ -441,8 +420,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             attempts = max(1, int(raw))
         except ValueError:
             log.warning(
-                f"ADARE_VM_BOOT_ATTEMPTS={raw!r} is not an integer; "
-                f"using the default {cls._DEFAULT_BOOT_ATTEMPTS}"
+                f"ADARE_VM_BOOT_ATTEMPTS={raw!r} is not an integer; using the default {cls._DEFAULT_BOOT_ATTEMPTS}"
             )
             return cls._DEFAULT_BOOT_ATTEMPTS
 
@@ -455,8 +433,8 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                     "large fraction of the time, and this run will fail on the first "
                     "such hang instead of retrying it. Unset the variable unless you "
                     "are deliberately measuring the single-attempt success rate."
-                    if attempts == 1 else
-                    ". Windows cold-boot hangs will be retried fewer times."
+                    if attempts == 1
+                    else ". Windows cold-boot hangs will be retried fewer times."
                 )
             )
         return attempts
@@ -584,13 +562,14 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         max_attempts = self._boot_attempts()
         # Budget escalates per attempt; total is what a full exhaustion costs.
         attempt_budgets = [
-            self._ready_timeout_for_attempt(a, context.guest_platform)
-            for a in range(1, max_attempts + 1)
+            self._ready_timeout_for_attempt(a, context.guest_platform) for a in range(1, max_attempts + 1)
         ]
 
-        playbook_settings = context.playbook.settings if context.playbook and hasattr(context.playbook, 'settings') else None
+        playbook_settings = (
+            context.playbook.settings if context.playbook and hasattr(context.playbook, 'settings') else None
+        )
         gui_mode = resolve_gui_execution_mode(context.vm, playbook_settings)
-        skip_x11 = (gui_mode == GUIExecutionMode.HOST)
+        skip_x11 = gui_mode == GUIExecutionMode.HOST
 
         for attempt in range(1, max_attempts + 1):
             if context.user_interrupt_event and context.user_interrupt_event.is_set():
@@ -609,26 +588,18 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
             # Stage 1: Start VM
             with StageCtxManager(
-                VMStartStage(),
-                context.experiment_run_ulid,
-                context.user_interrupt_event
+                VMStartStage(), context.experiment_run_ulid, context.user_interrupt_event
             ) as start_stage:
                 log.info(f"Starting VM '{context.vm.vm_name}' via libvirt (attempt {attempt}/{max_attempts})")
                 await context.vm.start(stop_event=context.user_interrupt_event, stage_ctx=start_stage)
                 log.debug("VM visible in virt-manager (use 'Open' button to access display)")
 
             # Stage 2: Wait for guest agent
-            with StageCtxManager(
-                VMGuestAgentWaitStage(),
-                context.experiment_run_ulid,
-                context.user_interrupt_event
-            ):
+            with StageCtxManager(VMGuestAgentWaitStage(), context.experiment_run_ulid, context.user_interrupt_event):
                 log.info(f'Waiting until VM is ready (QEMU Guest Agent), budget {ready_timeout}s')
                 start_wait = time.time()
                 ready = await context.vm.wait_until_fully_booted(
-                    timeout=ready_timeout,
-                    stop_event=context.user_interrupt_event,
-                    skip_x11_discovery=skip_x11
+                    timeout=ready_timeout, stop_event=context.user_interrupt_event, skip_x11_discovery=skip_x11
                 )
                 elapsed = time.time() - start_wait
 
@@ -636,9 +607,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 log.info(f'VM is ready (waited {elapsed:.1f}s, attempt {attempt}/{max_attempts})')
                 break
         else:
-            raise GuestAgentTimeoutException(
-                context.vm.vm_name, sum(attempt_budgets), attempt_budgets
-            )
+            raise GuestAgentTimeoutException(context.vm.vm_name, sum(attempt_budgets), attempt_budgets)
 
         # Repair guest networking before anything depends on it. ADARE pins the
         # NIC to a PCI address that renames the interface away from the name the
@@ -730,11 +699,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         if context.vm:
             event = None if post_interrupt else context.user_interrupt_event
             log.info('Cleaning up port forwarding rules before VM instance release')
-            await context.vm.remove_port_forwarding(
-                name='adarevm',
-                stop_event=event,
-                silent=True
-            )
+            await context.vm.remove_port_forwarding(name='adarevm', stop_event=event, silent=True)
 
         # Cleanup file transfer resources (e.g. SMB temp directory)
         if hasattr(self.file_transfer, 'cleanup'):
@@ -743,11 +708,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         log.debug("QEMU VM cleanup completed")
 
     def compare_disk_images_with_virt_diff(
-        self,
-        base_disk_path: str,
-        overlay_disk_path: str,
-        all: bool = False,
-        extract_dir: Path | None = None
+        self, base_disk_path: str, overlay_disk_path: str, all: bool = False, extract_dir: Path | None = None
     ) -> dict[str, list[dict]] | None:
         """Compare base and overlay disks using manual virt-ls diff.
 
@@ -764,6 +725,4 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             Diff dict: {added: [...], removed: [...], modified: [...]}
             None on failure
         """
-        return self.disk_diff.compare(
-            base_disk_path, overlay_disk_path, extract_dir
-        )
+        return self.disk_diff.compare(base_disk_path, overlay_disk_path, extract_dir)

@@ -65,8 +65,11 @@ def _classify(skill_dir: Path, target: Path) -> tuple[str, str]:
             return 'ok', ''
         return 'foreign-link', f'links to {pointee.resolve()}'
     if target.exists():
-        if (target / 'SKILL.md').is_file() and (skill_dir / 'SKILL.md').is_file() and \
-                (target / 'SKILL.md').read_bytes() == (skill_dir / 'SKILL.md').read_bytes():
+        if (
+            (target / 'SKILL.md').is_file()
+            and (skill_dir / 'SKILL.md').is_file()
+            and (target / 'SKILL.md').read_bytes() == (skill_dir / 'SKILL.md').read_bytes()
+        ):
             return 'ok', 'copy (up to date)'
         return 'conflict', 'a real directory/file is in the way (left untouched)'
     return 'missing', ''
@@ -83,8 +86,16 @@ def status(source: Path, clients=CLIENTS, scopes=SCOPES, cwd: Path | None = None
     return links
 
 
-def setup(source: Path, clients=CLIENTS, scopes=('user',), *, copy: bool = False, force: bool = False,
-          dry_run: bool = False, cwd: Path | None = None) -> list[SkillLink]:
+def setup(
+    source: Path,
+    clients=CLIENTS,
+    scopes=('user',),
+    *,
+    copy: bool = False,
+    force: bool = False,
+    dry_run: bool = False,
+    cwd: Path | None = None,
+) -> list[SkillLink]:
     """Install every skill for every (client, scope); returns what happened per skill."""
     results = []
     for link in status(source, clients, scopes, cwd):
@@ -107,6 +118,7 @@ def setup(source: Path, clients=CLIENTS, scopes=('user',), *, copy: bool = False
                 shutil.copytree(skill_dir, link.target)
             else:
                 link.target.symlink_to(skill_dir.resolve(), target_is_directory=True)
-        results.append(SkillLink(link.client, link.scope, link.skill, link.target, action,
-                                 'dry run' if dry_run else link.detail))
+        results.append(
+            SkillLink(link.client, link.scope, link.skill, link.target, action, 'dry run' if dry_run else link.detail)
+        )
     return results

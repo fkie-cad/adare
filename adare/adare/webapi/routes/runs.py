@@ -1,4 +1,5 @@
 """Run management endpoints."""
+
 import logging
 from pathlib import Path
 
@@ -14,8 +15,10 @@ router = APIRouter(prefix="/api/runs", tags=["runs"])
 
 # ---- Helpers ----
 
+
 def _api():
     from adare.api import AdareAPI
+
     return AdareAPI()
 
 
@@ -49,6 +52,7 @@ def _resolve_run_dir(ulid: str) -> Path | None:
 
 
 # ---- Endpoints ----
+
 
 @router.get("")
 async def list_runs(
@@ -102,11 +106,13 @@ async def list_run_artifacts(ulid: str):
         if not entry.is_file():
             continue
         rel_path = entry.relative_to(run_dir).as_posix()
-        artifacts.append({
-            "path": rel_path,
-            "kind": _classify_artifact(rel_path),
-            "size": entry.stat().st_size,
-        })
+        artifacts.append(
+            {
+                "path": rel_path,
+                "kind": _classify_artifact(rel_path),
+                "size": entry.stat().st_size,
+            }
+        )
     return {"success": True, "data": artifacts}
 
 

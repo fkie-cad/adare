@@ -37,7 +37,7 @@ def exec_experiment_load(arguments):
     external_source_path = None
     potential_copied_name = None
 
-    if ('/' in original_input or '\\' in original_input):
+    if '/' in original_input or '\\' in original_input:
         input_path = Path(original_input)
         # "External" means outside the project's own experiments/ directory, and that is
         # decided by where the path POINTS, not by whether it was typed absolute. The
@@ -46,9 +46,7 @@ def exec_experiment_load(arguments):
         # external -- which made target_path equal external_source_path, and the
         # rmtree/copytree pair below then deleted the directory it was about to copy from.
         # Both sides are resolved so symlinks and '..' cannot defeat the comparison.
-        resolved_input = (
-            input_path if input_path.is_absolute() else Path.cwd() / input_path
-        ).resolve()
+        resolved_input = (input_path if input_path.is_absolute() else Path.cwd() / input_path).resolve()
         if not resolved_input.is_relative_to(project_dir_obj.experiments.resolve()):
             # This is an external path
             if input_path.exists() and input_path.is_dir():
@@ -73,13 +71,16 @@ def exec_experiment_load(arguments):
 
             # Check if experiment has productive runs
             from adare.backend.experiment import database as experiment_database
+
             experiment_ulid = experiment_database.get_experiment_by_project_and_name(
                 project_directory, experiment_name, trigger_error=False
             )
 
             has_productive_runs = False
             if experiment_ulid:
-                run_count = experiment_database.get_experiment_run_count(project_directory, experiment_ulid, exclude_fake=True)
+                run_count = experiment_database.get_experiment_run_count(
+                    project_directory, experiment_ulid, exclude_fake=True
+                )
                 has_productive_runs = run_count > 0
 
             # --force is the flag that authorises discarding existing runs, so it must
@@ -92,13 +93,16 @@ def exec_experiment_load(arguments):
                 # any future path-classification slip, so it is guarded here rather than
                 # only at the point where is_external_path is decided: losing a playbook
                 # and its GUI crops is not an acceptable outcome for a load command.
-                log.info(
-                    f'Experiment directory {target_path} is itself the source; '
-                    f'loading in place without copying.'
-                )
+                log.info(f'Experiment directory {target_path} is itself the source; loading in place without copying.')
             elif not has_productive_runs or arguments.force:
-                reason = 'no productive runs found' if not has_productive_runs else f'--force given ({run_count} productive runs)'
-                log.info(f'Overwriting experiment directory {target_path} with fresh copy from {external_source_path} ({reason})')
+                reason = (
+                    'no productive runs found'
+                    if not has_productive_runs
+                    else f'--force given ({run_count} productive runs)'
+                )
+                log.info(
+                    f'Overwriting experiment directory {target_path} with fresh copy from {external_source_path} ({reason})'
+                )
                 shutil.rmtree(target_path)
                 shutil.copytree(external_source_path, target_path)
                 copy_was_performed = True
@@ -110,19 +114,18 @@ def exec_experiment_load(arguments):
 
         # Use API for the actual load
         api = AdareAPI()
-        result = api.experiment.load(ExperimentLoadRequest(
-            project_path=project_directory,
-            name=experiment_name,
-            force=arguments.force,
-            silent=False
-        ))
+        result = api.experiment.load(
+            ExperimentLoadRequest(
+                project_path=project_directory, name=experiment_name, force=arguments.force, silent=False
+            )
+        )
 
         if result.success:
             print_success_message(
                 title=f'Experiment "{result.data.name}" loaded successfully!',
                 location=str(result.data.file_path) if result.data.file_path else None,
                 next_steps=result.data.next_steps,
-                tip=result.data.tip
+                tip=result.data.tip,
             )
         else:
             handle_api_error(result)
@@ -146,17 +149,14 @@ def exec_experiment_create(arguments):
     experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
 
     api = AdareAPI()
-    result = api.experiment.create(ExperimentCreateRequest(
-        project_path=project_directory,
-        name=experiment_name
-    ))
+    result = api.experiment.create(ExperimentCreateRequest(project_path=project_directory, name=experiment_name))
 
     if result.success:
         print_success_message(
             title=f'Experiment "{result.data.name}" created successfully!',
             location=str(result.data.file_path) if result.data.file_path else None,
             next_steps=result.data.next_steps,
-            tip=result.data.tip
+            tip=result.data.tip,
         )
     else:
         handle_api_error(result)
@@ -175,7 +175,7 @@ def exec_experiment_example(arguments):
             title=f'Example experiment "{result.data.name}" created successfully!',
             location=str(result.data.file_path) if result.data.file_path else None,
             next_steps=result.data.next_steps,
-            tip=result.data.tip
+            tip=result.data.tip,
         )
     else:
         handle_api_error(result)
@@ -202,12 +202,14 @@ def _handle_environment_interruption(environments, current_index, results):
             print("Terminating all remaining environments...\n")
             # Mark remaining environments as skipped
             for remaining_env in remaining_envs:
-                results.append({
-                    'environment': remaining_env.name,
-                    'status': 'SKIPPED',
-                    'duration': 0,
-                    'error': 'Skipped due to user termination'
-                })
+                results.append(
+                    {
+                        'environment': remaining_env.name,
+                        'status': 'SKIPPED',
+                        'duration': 0,
+                        'error': 'Skipped due to user termination',
+                    }
+                )
             return False
         print("Please enter 'y' (yes) or 'n' (no)")
 
@@ -228,36 +230,41 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
     with ExperimentApi(project_directory) as api:
         experiment = api.get_experiment_by_project_and_name(project_directory, experiment_name)
         if not experiment:
-            raise LoggedErrorException(log,
+            raise LoggedErrorException(
+                log,
                 f'Experiment "{experiment_name}" not found in project "{project_directory.name}". '
                 'Please load the experiment first.',
                 possible_solutions=[
                     f'Load the experiment with: adare experiment load {experiment_name}',
                     'Check if you are in the correct project directory',
-                    'List available experiments with: adare experiment list'
-                ]
+                    'List available experiments with: adare experiment list',
+                ],
             )
         environments = experiment.environments
 
     if not environments:
-        raise LoggedErrorException(log,
+        raise LoggedErrorException(
+            log,
             f'No environments configured for experiment "{experiment_name}". '
             'The experiment metadata.yml has no environments specified.',
             possible_solutions=[
                 f'Add environments to experiment with: adare experiment add-env {experiment_name} <env_name>',
                 'Edit the experiment metadata.yml file to specify environments',
-                'Check if the experiment was loaded correctly'
-            ]
+                'Check if the experiment was loaded correctly',
+            ],
         )
 
     # Load experiment once before running on all environments
     if not arguments.test:  # Production mode
         from adare.backend.experiment import database as experiment_database
+
         experiment_ulid = experiment_database.get_experiment_by_project_and_name(
             project_directory, experiment_name, trigger_error=False
         )
         if experiment_ulid:
-            run_count = experiment_database.get_experiment_run_count(project_directory, experiment_ulid, exclude_fake=True)
+            run_count = experiment_database.get_experiment_run_count(
+                project_directory, experiment_ulid, exclude_fake=True
+            )
             if run_count > 0:
                 # In production mode with existing runs, load without force (strict integrity)
                 experiment_load(project_directory, experiment_name, force=False, silent=True)
@@ -303,22 +310,21 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
                 env_run_kwargs['file_log_level'] = env_file_log_level
 
             was_interrupted, was_successful = await experiment_run(
-                project_directory,
-                experiment_name,
-                env_name,
-                **env_run_kwargs
+                project_directory, experiment_name, env_name, **env_run_kwargs
             )
 
             env_end_time = datetime.now(UTC)
             duration = (env_end_time - env_start_time).total_seconds()
 
             if was_interrupted:
-                results.append({
-                    'environment': env_name,
-                    'status': 'INTERRUPTED',
-                    'duration': duration,
-                    'error': 'User interrupted'
-                })
+                results.append(
+                    {
+                        'environment': env_name,
+                        'status': 'INTERRUPTED',
+                        'duration': duration,
+                        'error': 'User interrupted',
+                    }
+                )
                 print(f"⏸️  Environment '{env_name}' interrupted by user ({duration:.1f}s)")
 
                 # Handle interruption and check if user wants to continue
@@ -326,32 +332,31 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
                     break  # Exit the main environment loop
 
             elif was_successful:
-                results.append({
-                    'environment': env_name,
-                    'status': 'SUCCESS',
-                    'duration': duration,
-                    'error': None
-                })
+                results.append({'environment': env_name, 'status': 'SUCCESS', 'duration': duration, 'error': None})
                 print(f"✅ Environment '{env_name}' completed successfully ({duration:.1f}s)")
             else:
-                results.append({
-                    'environment': env_name,
-                    'status': 'FAILED',
-                    'duration': duration,
-                    'error': 'Experiment tests failed'
-                })
+                results.append(
+                    {
+                        'environment': env_name,
+                        'status': 'FAILED',
+                        'duration': duration,
+                        'error': 'Experiment tests failed',
+                    }
+                )
                 print(f"❌ Environment '{env_name}' failed - tests did not pass ({duration:.1f}s)")
 
         except KeyboardInterrupt:
             env_end_time = datetime.now(UTC)
             duration = (env_end_time - env_start_time).total_seconds()
 
-            results.append({
-                'environment': env_name,
-                'status': 'INTERRUPTED',
-                'duration': duration,
-                'error': 'User interrupted (Ctrl-C)'
-            })
+            results.append(
+                {
+                    'environment': env_name,
+                    'status': 'INTERRUPTED',
+                    'duration': duration,
+                    'error': 'User interrupted (Ctrl-C)',
+                }
+            )
 
             print(f"⏸️  Environment '{env_name}' interrupted by user ({duration:.1f}s)")
 
@@ -365,12 +370,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
             error_msg = str(e)
             log.error(f"Environment '{env_name}' failed with unexpected error: {e}", exc_info=True)
 
-            results.append({
-                'environment': env_name,
-                'status': 'FAILED',
-                'duration': duration,
-                'error': error_msg
-            })
+            results.append({'environment': env_name, 'status': 'FAILED', 'duration': duration, 'error': error_msg})
 
             print(f"❌ Environment '{env_name}' failed ({duration:.1f}s): {error_msg}")
 
@@ -379,7 +379,6 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
     # Print summary
     end_time = datetime.now(UTC)
     total_duration = (end_time - start_time).total_seconds()
-
 
     # Create and use flow console for beautiful summary
     import time
@@ -395,10 +394,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
 
     # Log the beautiful multi-experiment summary
     summary_console.log_multi_experiment_summary(
-        experiment_name=experiment_name,
-        environments=environments,
-        results=results,
-        total_duration=total_duration
+        experiment_name=experiment_name, environments=environments, results=results, total_duration=total_duration
     )
 
     # Let it display for a moment, then stop
@@ -426,7 +422,9 @@ def exec_experiment_run(arguments):
 
         # Resolve experiment and environment paths to names
         experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
-        environment_name = resolve_environment_path(arguments.environment, project_directory) if arguments.environment else None
+        environment_name = (
+            resolve_environment_path(arguments.environment, project_directory) if arguments.environment else None
+        )
 
         # Check if we need batch execution (multiple environments OR glob patterns)
         from adare.backend.experiment.batch_runner import has_glob_patterns, run_batch_experiments
@@ -438,6 +436,7 @@ def exec_experiment_run(arguments):
         if not environment_name or has_glob_patterns(experiment_name, environment_pattern):
             # Load experiment if needed (similar to old exec_experiment_run_all_environments logic)
             from adare.backend.experiment.commands import experiment_load
+
             if not environment_name:  # Only auto-load for "all environments" case
                 experiment_load(project_directory, experiment_name, force=False, silent=True)
 
@@ -470,6 +469,7 @@ def exec_experiment_run(arguments):
 
                 # Print summary using configured output format
                 from adare.run import get_formatter_from_context
+
                 formatter, output_file, dual_output = get_formatter_from_context()
 
                 if dual_output or formatter.format_type.value != 'rich':
@@ -498,6 +498,7 @@ def exec_experiment_run(arguments):
         # testfunction-load diagnostics ([!]/[-] lines) go to the run log file(s)
         # only and cannot corrupt the live UI. Restored in the finally below.
         from adare.setup_logging import set_console_log_level
+
         original_console_level = None
         if not disable_printing:
             root_logger = logging.getLogger()
@@ -510,11 +511,14 @@ def exec_experiment_run(arguments):
             # In production mode, use strict loading; in test mode, allow modifications
             if not arguments.test:  # Production mode
                 from adare.backend.experiment import database as experiment_database
+
                 experiment_ulid = experiment_database.get_experiment_by_project_and_name(
                     project_directory, experiment_name, trigger_error=False
                 )
                 if experiment_ulid:
-                    run_count = experiment_database.get_experiment_run_count(project_directory, experiment_ulid, exclude_fake=True)
+                    run_count = experiment_database.get_experiment_run_count(
+                        project_directory, experiment_ulid, exclude_fake=True
+                    )
                     if run_count > 0:
                         # Production mode with existing runs - strict integrity
                         experiment_load(project_directory, experiment_name, force=False, silent=True)
@@ -530,15 +534,19 @@ def exec_experiment_run(arguments):
             # Validate environment and experiment compatibility before starting execution
             from adare.database.api.experiment import ExperimentApi
             from adare.exceptions import EnvironmentNotFoundError, ExperimentNotFoundError
+
             with ExperimentApi(project_directory) as api:
                 environment = api.get_environment(environment_name, project_directory.name)
                 if environment is None:
-                    raise EnvironmentNotFoundError(log, f'environment {environment_name} does not exist in project {project_directory.name}',
+                    raise EnvironmentNotFoundError(
+                        log,
+                        f'environment {environment_name} does not exist in project {project_directory.name}',
                         possible_solutions=[
                             f'Check if environment name "{environment_name}" is spelled correctly',
                             'List available environments with: adare environment list',
-                            'If not found via list, create or load: adare environment create <name> OR adare environment load <path>'
-                        ])
+                            'If not found via list, create or load: adare environment create <name> OR adare environment load <path>',
+                        ],
+                    )
 
                 # Try WITH environment validation first
                 experiment = api.get_experiment(experiment_name, environment.id)
@@ -547,14 +555,19 @@ def exec_experiment_run(arguments):
                 if experiment is None:
                     experiment = api.get_experiment_by_project_and_name(project_directory, experiment_name)
                     if experiment is None:
-                        raise ExperimentNotFoundError(log, f'experiment {experiment_name} not found',
+                        raise ExperimentNotFoundError(
+                            log,
+                            f'experiment {experiment_name} not found',
                             possible_solutions=[
                                 f'Check if experiment name "{experiment_name}" is spelled correctly',
                                 'List available experiments with: adare experiment list',
-                            ])
+                            ],
+                        )
 
                     # Environment is unlisted - print warning but continue
-                    log.warning(f'WARNING: environment "{environment_name}" is not listed in {experiment_name}/metadata.yml')
+                    log.warning(
+                        f'WARNING: environment "{environment_name}" is not listed in {experiment_name}/metadata.yml'
+                    )
                     log.warning('         Running experiment anyway as explicitly requested via -e flag')
 
             # Build kwargs, including file_log_level if specified
@@ -579,7 +592,9 @@ def exec_experiment_run(arguments):
             if file_log_level is not None:
                 run_kwargs['file_log_level'] = file_log_level
 
-            was_interrupted, was_successful = asyncio.run(experiment_run(project_directory, experiment_name, environment_name, **run_kwargs))
+            was_interrupted, was_successful = asyncio.run(
+                experiment_run(project_directory, experiment_name, environment_name, **run_kwargs)
+            )
 
             # Handle output formatting for single runs
             from datetime import timedelta
@@ -611,14 +626,12 @@ def exec_experiment_run(arguments):
                     error_message=error_msg,
                     run_ulid=None,  # Would need to get this from the experiment run
                     start_time=None,
-                    end_time=None
+                    end_time=None,
                 )
 
                 # Create summary with single result
                 summary = BatchRunSummary(
-                    results=[single_result],
-                    total_combinations=1,
-                    total_duration=timedelta(seconds=0)
+                    results=[single_result], total_combinations=1, total_duration=timedelta(seconds=0)
                 )
 
                 # Output using formatter
@@ -633,6 +646,7 @@ def exec_experiment_run(arguments):
                 set_console_log_level(original_console_level)
     else:
         raise NoProjectFoundError(log, message='no project directory found')
+
 
 def exec_experiment_replicate(arguments):
     """Download a published experiment bundle and run it, end to end.
@@ -652,10 +666,12 @@ def exec_experiment_replicate(arguments):
     api = AdareAPI()
 
     print(f'Downloading experiment bundle {arguments.ulid}...')
-    download_result = api.web.download_bundle(DownloadBundleRequest(
-        project_path=project_directory,
-        ulid=arguments.ulid,
-    ))
+    download_result = api.web.download_bundle(
+        DownloadBundleRequest(
+            project_path=project_directory,
+            ulid=arguments.ulid,
+        )
+    )
     if not download_result.success:
         handle_api_error(download_result)
         return
@@ -663,43 +679,51 @@ def exec_experiment_replicate(arguments):
     bundle = download_result.data
     experiment_name = bundle.experiment_name
     environment_names = bundle.environment_names
-    print(f'Downloaded experiment "{experiment_name}" '
-          f'({len(environment_names)} environment(s), {len(bundle.testfunction_names)} testfunction set(s))')
+    print(
+        f'Downloaded experiment "{experiment_name}" '
+        f'({len(environment_names)} environment(s), {len(bundle.testfunction_names)} testfunction set(s))'
+    )
 
     if arguments.environment:
         env_name = arguments.environment
         if env_name not in environment_names:
-            raise LoggedErrorException(log,
+            raise LoggedErrorException(
+                log,
                 f'Environment "{env_name}" is not part of experiment "{experiment_name}"\'s bundle',
-                possible_solutions=[f'Available environments: {", ".join(environment_names)}']
+                possible_solutions=[f'Available environments: {", ".join(environment_names)}'],
             )
     elif len(environment_names) == 1:
         env_name = environment_names[0]
     else:
-        raise LoggedErrorException(log,
+        raise LoggedErrorException(
+            log,
             f'Experiment "{experiment_name}" has {len(environment_names)} environments; '
             'specify which one to use with -e/--environment',
-            possible_solutions=[f'Available environments: {", ".join(environment_names)}']
+            possible_solutions=[f'Available environments: {", ".join(environment_names)}'],
         )
 
     print(f'Loading environment "{env_name}" (fetching and verifying VM disk)...')
-    env_result = api.environment.load(EnvironmentLoadRequest(
-        environment=env_name,
-        force=False,
-        no_copy=False,
-    ))
+    env_result = api.environment.load(
+        EnvironmentLoadRequest(
+            environment=env_name,
+            force=False,
+            no_copy=False,
+        )
+    )
     if not env_result.success:
         handle_api_error(env_result)
         return
     env_name = env_result.data.name
 
     print(f'Loading experiment "{experiment_name}"...')
-    load_result = api.experiment.load(ExperimentLoadRequest(
-        project_path=project_directory,
-        name=experiment_name,
-        force=False,
-        silent=True,
-    ))
+    load_result = api.experiment.load(
+        ExperimentLoadRequest(
+            project_path=project_directory,
+            name=experiment_name,
+            force=False,
+            silent=True,
+        )
+    )
     if not load_result.success:
         handle_api_error(load_result)
         return
@@ -740,12 +764,9 @@ def exec_experiment_test(arguments):
 
     # Load experiment first
     api = AdareAPI()
-    load_result = api.experiment.load(ExperimentLoadRequest(
-        project_path=project_directory,
-        name=experiment_name,
-        force=False,
-        silent=True
-    ))
+    load_result = api.experiment.load(
+        ExperimentLoadRequest(project_path=project_directory, name=experiment_name, force=False, silent=True)
+    )
 
     if not load_result.success:
         handle_api_error(load_result)
@@ -754,9 +775,7 @@ def exec_experiment_test(arguments):
     result = api.experiment.test(project_directory, experiment_name, environment_name)
 
     if result.success:
-        print_success_message(
-            title=f'Experiment "{experiment_name}" test completed successfully!'
-        )
+        print_success_message(title=f'Experiment "{experiment_name}" test completed successfully!')
     else:
         handle_api_error(result)
 
@@ -775,9 +794,7 @@ def exec_experiment_clean(arguments):
                 title=f'Cleaned {result.data.deleted_count} fake run(s) from experiment "{result.data.experiment_name}"'
             )
         else:
-            print_success_message(
-                title=f'No fake runs to clean for experiment "{result.data.experiment_name}"'
-            )
+            print_success_message(title=f'No fake runs to clean for experiment "{result.data.experiment_name}"')
     else:
         handle_api_error(result)
 
@@ -788,17 +805,14 @@ def exec_experiment_remove(arguments):
     experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
 
     api = AdareAPI()
-    result = api.experiment.remove(ExperimentRemoveRequest(
-        project_path=project_directory,
-        name=experiment_name,
-        force=arguments.force,
-        keep_files=arguments.keep_files
-    ))
+    result = api.experiment.remove(
+        ExperimentRemoveRequest(
+            project_path=project_directory, name=experiment_name, force=arguments.force, keep_files=arguments.keep_files
+        )
+    )
 
     if result.success:
-        print_success_message(
-            title=f'Experiment "{result.data.experiment_name}" removed successfully!'
-        )
+        print_success_message(title=f'Experiment "{result.data.experiment_name}" removed successfully!')
     else:
         handle_api_error(result)
 
@@ -811,18 +825,18 @@ def exec_experiment_add_env(arguments):
     environment_names = [resolve_environment_path(env, project_directory) for env in arguments.environments]
 
     api = AdareAPI()
-    result = api.experiment.add_environments(ExperimentEnvModifyRequest(
-        project_path=project_directory,
-        experiment_pattern=experiment_pattern,
-        environments=environment_names,
-        force=arguments.force
-    ))
+    result = api.experiment.add_environments(
+        ExperimentEnvModifyRequest(
+            project_path=project_directory,
+            experiment_pattern=experiment_pattern,
+            environments=environment_names,
+            force=arguments.force,
+        )
+    )
 
     if result.success:
         affected = ', '.join(result.data.affected_experiments) if result.data.affected_experiments else 'none'
-        print_success_message(
-            title=f'Environments added to experiments: {affected}'
-        )
+        print_success_message(title=f'Environments added to experiments: {affected}')
     else:
         handle_api_error(result)
 
@@ -835,18 +849,18 @@ def exec_experiment_remove_env(arguments):
     environment_names = [resolve_environment_path(env, project_directory) for env in arguments.environments]
 
     api = AdareAPI()
-    result = api.experiment.remove_environments(ExperimentEnvModifyRequest(
-        project_path=project_directory,
-        experiment_pattern=experiment_pattern,
-        environments=environment_names,
-        force=arguments.force
-    ))
+    result = api.experiment.remove_environments(
+        ExperimentEnvModifyRequest(
+            project_path=project_directory,
+            experiment_pattern=experiment_pattern,
+            environments=environment_names,
+            force=arguments.force,
+        )
+    )
 
     if result.success:
         affected = ', '.join(result.data.affected_experiments) if result.data.affected_experiments else 'none'
-        print_success_message(
-            title=f'Environments removed from experiments: {affected}'
-        )
+        print_success_message(title=f'Environments removed from experiments: {affected}')
     else:
         handle_api_error(result)
 
@@ -862,19 +876,21 @@ def exec_experiment_clone(arguments):
         environments = [resolve_environment_path(env, project_directory) for env in arguments.environments]
 
     api = AdareAPI()
-    result = api.experiment.clone(ExperimentCloneRequest(
-        project_path=project_directory,
-        source_experiment=source_experiment,
-        target_experiment=target_experiment,
-        environments=environments
-    ))
+    result = api.experiment.clone(
+        ExperimentCloneRequest(
+            project_path=project_directory,
+            source_experiment=source_experiment,
+            target_experiment=target_experiment,
+            environments=environments,
+        )
+    )
 
     if result.success:
         print_success_message(
             title=f'Experiment "{result.data.name}" cloned successfully!',
             location=str(result.data.file_path) if result.data.file_path else None,
             next_steps=result.data.next_steps,
-            tip=result.data.tip
+            tip=result.data.tip,
         )
     else:
         handle_api_error(result)
@@ -891,11 +907,13 @@ def exec_experiment_validate(arguments):
         environment_name = resolve_environment_path(arguments.environment, project_directory)
 
     api = AdareAPI()
-    result = api.experiment.validate(ExperimentValidateRequest(
-        project_path=project_directory,
-        name=experiment_name,
-        environment=environment_name,
-    ))
+    result = api.experiment.validate(
+        ExperimentValidateRequest(
+            project_path=project_directory,
+            name=experiment_name,
+            environment=environment_name,
+        )
+    )
 
     if not result.success:
         handle_api_error(result)
@@ -931,5 +949,6 @@ def exec_experiment_validate(arguments):
         console.print('  [bold green]Validation passed[/bold green]')
     else:
         import sys
+
         console.print('  [bold red]Validation failed[/bold red]')
         sys.exit(1)

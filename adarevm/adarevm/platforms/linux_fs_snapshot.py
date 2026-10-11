@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 
 class LinuxFSSnapshotException(Exception):
     """Base exception for Linux filesystem snapshot errors."""
+
     pass
 
 
@@ -67,7 +68,7 @@ class LinuxFSSnapshot:
                 shell=True,
                 capture_output=True,
                 text=True,
-                timeout=600  # 10 minute timeout
+                timeout=600,  # 10 minute timeout
             )
 
             if result.returncode != 0 and result.returncode != 1:
@@ -91,11 +92,7 @@ class LinuxFSSnapshot:
                     files[path] = {
                         'size': size,
                         'mtime': mtime,
-                        'timestamps': {
-                            'modified': mtime,
-                            'accessed': atime,
-                            'changed': ctime
-                        }
+                        'timestamps': {'modified': mtime, 'accessed': atime, 'changed': ctime},
                     }
 
                     # Progress logging for large scans
@@ -145,12 +142,7 @@ class LinuxFSSnapshot:
 
         # Find all regular files, excluding virtual filesystems
         # Output format: path|mtime|atime|ctime|size
-        cmd = (
-            f'find {root_path} '
-            f'\\( {excludes} \\) -prune -o '
-            f'-type f -printf "%p|%T@|%A@|%C@|%s\\n" '
-            f'2>/dev/null'
-        )
+        cmd = f'find {root_path} \\( {excludes} \\) -prune -o -type f -printf "%p|%T@|%A@|%C@|%s\\n" 2>/dev/null'
 
         return cmd
 
@@ -191,10 +183,7 @@ def main():
     """Command-line interface for testing."""
     import sys
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     try:
         result = LinuxFSSnapshot.get_snapshot()

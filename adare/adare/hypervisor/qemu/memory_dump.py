@@ -27,11 +27,11 @@ SUPPORTED_FORMATS = ('elf',)
 
 
 async def dump_guest_memory(
-        vm,
-        dest_path: Path | str,
-        fmt: str = 'elf',
-        timeout: float = 600.0,
-        poll_interval: float = 2.0,
+    vm,
+    dest_path: Path | str,
+    fmt: str = 'elf',
+    timeout: float = 600.0,
+    poll_interval: float = 2.0,
 ) -> Path:
     """Capture the guest's live RAM to ``dest_path`` via QMP ``dump-guest-memory``.
 

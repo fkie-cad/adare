@@ -9,6 +9,7 @@ from adarelib.testset.yaml.customloader import YAML_TESTSET_LOADER
 
 log = logging.getLogger(__name__)
 
+
 def parse_testsetfile(testset_file: Path) -> TestsetFile:
     """
     Parses a testset file and returns a TestsetFile object.
@@ -28,4 +29,3 @@ def parse_testsetfile(testset_file: Path) -> TestsetFile:
     testsetfile: TestsetFile = cattrs.structure(parsed_input, TestsetFile)
     log.debug(f'testsetfile {testset_file} got successfully parsed')
     return testsetfile
-

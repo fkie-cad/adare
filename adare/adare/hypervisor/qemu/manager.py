@@ -3,6 +3,7 @@ QEMU Manager for handling QEMU operations in a thread-safe manner.
 
 Implements AbstractHypervisorManager for QEMU-specific operations.
 """
+
 import logging
 import platform
 import queue
@@ -53,16 +54,19 @@ class QEMUManager(AbstractHypervisorManager):
         if use_libvirt:
             try:
                 import libvirt
+
                 libvirt_uri = qemu_config.get('libvirt_uri', 'qemu:///session')
                 # NOTE: No stderr redirect here - connection errors should be visible during initialization.
                 # LibvirtStderrRedirect requires an experiment log file, which doesn't exist during manager init.
                 # If libvirtd is not running, we want the error to fail loudly.
                 self.libvirt_conn = libvirt.open(libvirt_uri)
                 from adare.hypervisor.qemu.libvirt_errors import install_libvirt_error_logger
+
                 install_libvirt_error_logger()
 
                 if not self.libvirt_conn:
                     from adare.hypervisor.exceptions import HypervisorException
+
                     raise HypervisorException(f"Failed to connect to libvirt at {libvirt_uri}")
 
                 log.info(f"Connected to libvirt ({libvirt_uri})")
@@ -75,12 +79,13 @@ class QEMUManager(AbstractHypervisorManager):
 
             except ImportError:
                 from adare.hypervisor.exceptions import HypervisorException
+
                 raise HypervisorException(
-                    "libvirt Python bindings not found. "
-                    "Install with: pip install libvirt-python"
+                    "libvirt Python bindings not found. Install with: pip install libvirt-python"
                 ) from None
             except libvirt.libvirtError as e:
                 from adare.hypervisor.exceptions import HypervisorException
+
                 if platform.system() == 'Darwin':
                     raise HypervisorException(
                         f"Failed to connect to libvirt daemon: {e}. "
@@ -175,10 +180,7 @@ class QEMUManager(AbstractHypervisorManager):
 
         if is_external:
             # Detect format for external VMs
-            detected_format = QEMUVM._detect_disk_format_static(
-                vm_file_path,
-                self.executables.qemu_img
-            )
+            detected_format = QEMUVM._detect_disk_format_static(vm_file_path, self.executables.qemu_img)
             log.debug(f"External VM detected, format: {detected_format}")
 
             if detected_format == 'qcow2':
@@ -199,7 +201,7 @@ class QEMUManager(AbstractHypervisorManager):
             password=password,
             executables=self.executables,
             disk_path=disk_path,  # Pass disk_path for external VMs
-            hypervisor_config=None  # No hypervisor config for session mode
+            hypervisor_config=None,  # No hypervisor config for session mode
         )
 
         try:
@@ -210,10 +212,7 @@ class QEMUManager(AbstractHypervisorManager):
                 return vm
 
             # Import the VM from OVF/OVA file (converts to qcow2)
-            return_code, stdout = await vm.create_from_ovf_or_ova(
-                file_path=vm_file_path,
-                silent=False
-            )
+            return_code, stdout = await vm.create_from_ovf_or_ova(file_path=vm_file_path, silent=False)
 
             if return_code != 0:
                 error_msg = f"QEMU VM import failed with return code {return_code}"
