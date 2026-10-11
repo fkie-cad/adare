@@ -6,9 +6,16 @@ Implements AbstractSnapshotMixin for VirtualBox-specific snapshot operations.
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adare.hypervisor.base.mixins.snapshots import AbstractSnapshotMixin
 from adare.hypervisor.virtualbox.utils import run_subprocess
+
+if TYPE_CHECKING:
+    from adare.hypervisor.virtualbox.mixins.host import VirtualBoxVMHost as _Host
+else:
+    _Host = object
+
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +82,7 @@ def list_snapshots(vm_name: str, vboxmanage_exe: str = 'VBoxManage') -> list[dic
         return []
 
 
-class SnapshotMixin(AbstractSnapshotMixin):
+class SnapshotMixin(AbstractSnapshotMixin, _Host):
     """Mixin class providing snapshot operations for VirtualBox VMs."""
 
     def create_snapshot(
