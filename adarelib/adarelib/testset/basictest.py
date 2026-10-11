@@ -83,6 +83,9 @@ class BasicTest:
     testdescription: ClassVar[str] = ''
     execute_on_host: ClassVar[bool] = False  # If True, test executes on host instead of VM
     host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.AGENT_ONLY
+    # Suffixes of companion files that belong to parameter.dst (e.g. SQLite '-wal');
+    # host mode pulls those that exist on the guest alongside dst.
+    host_mode_sidecars: ClassVar[tuple[str, ...]] = ()
 
     name: str
     parameter: Parameter
