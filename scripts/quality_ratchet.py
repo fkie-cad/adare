@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Quality ratchet: legacy debt may shrink, never grow.
 
-Two budgets are tracked in ``quality-baseline.json`` at the repo root:
+Three budgets are tracked in ``quality-baseline.json`` at the repo root:
 
 - ``ruff``: violation count per rule code. A rule absent from the baseline must
   have zero violations; a listed rule may not exceed its count.
+- ``mypy``: type-error count per error code over the host package (``MYPY_TARGET``).
+  ``--no-mypy`` skips it (pre-commit); CI always runs it.
 - ``oversized_files``: Python files over ``MAX_LINES`` lines. A file not listed
   may not cross the limit; a listed file may not grow past its recorded size.
 
@@ -14,6 +16,7 @@ needs ``--allow-increase`` and should be a deliberate, reviewed decision.
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from collections import Counter
@@ -22,6 +25,8 @@ from pathlib import Path
 MAX_LINES = 1000
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE = ROOT / 'quality-baseline.json'
+MYPY_TARGET = 'adare/adare'
+MYPY_ERROR = re.compile(r': error: .*\[([a-z0-9-]+)\]$')
 
 
 def ruff_counts() -> dict[str, int]:
@@ -33,6 +38,20 @@ def ruff_counts() -> dict[str, int]:
         check=True,
     )
     return dict(sorted(Counter(v['code'] for v in json.loads(proc.stdout)).items()))
+
+
+def mypy_counts() -> dict[str, int]:
+    proc = subprocess.run(
+        [sys.executable, '-m', 'mypy', MYPY_TARGET, '--no-error-summary', '--no-pretty'],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,  # exits 1 whenever errors exist
+    )
+    if proc.returncode not in (0, 1):
+        raise RuntimeError(f'mypy crashed:\n{proc.stderr or proc.stdout}')
+    codes = (m.group(1) for line in proc.stdout.splitlines() if (m := MYPY_ERROR.search(line)))
+    return dict(sorted(Counter(codes).items()))
 
 
 def oversized_files() -> dict[str, int]:
@@ -66,14 +85,27 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--update', action='store_true', help='rewrite the baseline with current values')
     parser.add_argument('--allow-increase', action='store_true', help='let --update raise budgets')
+    parser.add_argument('--no-mypy', action='store_true', help='skip the (slower) mypy budget')
     args = parser.parse_args()
 
-    baseline = json.loads(BASELINE.read_text()) if BASELINE.exists() else {'ruff': {}, 'oversized_files': {}}
-    current = {'ruff': ruff_counts(), 'oversized_files': oversized_files()}
+    baseline = {'ruff': {}, 'mypy': {}, 'oversized_files': {}}
+    if BASELINE.exists():
+        baseline |= json.loads(BASELINE.read_text())
+    current = {
+        'ruff': ruff_counts(),
+        'mypy': baseline['mypy'] if args.no_mypy else mypy_counts(),
+        'oversized_files': oversized_files(),
+    }
 
-    ruff_reg, ruff_imp = compare('ruff', current['ruff'], baseline['ruff'], 'violations')
-    size_reg, size_imp = compare(f'size>{MAX_LINES}', current['oversized_files'], baseline['oversized_files'], 'lines')
-    regressions, improvements = ruff_reg + size_reg, ruff_imp + size_imp
+    regressions, improvements = [], []
+    for kind, key, unit in [
+        ('ruff', 'ruff', 'violations'),
+        ('mypy', 'mypy', 'errors'),
+        (f'size>{MAX_LINES}', 'oversized_files', 'lines'),
+    ]:
+        reg, imp = compare(kind, current[key], baseline[key], unit)
+        regressions += reg
+        improvements += imp
 
     if args.update:
         if regressions and BASELINE.exists() and not args.allow_increase:
@@ -85,7 +117,10 @@ def main() -> int:
 
     if regressions:
         print('Quality ratchet FAILED — new debt introduced:', *regressions, sep='\n  ')
-        print('\nFix the new violations (`ruff check .` shows them). Files over the size limit must be split.')
+        print(
+            '\nFix the new violations (`ruff check .` / `mypy adare/adare` show them). '
+            'Files over the size limit must be split.'
+        )
         return 1
     if improvements:
         print(
