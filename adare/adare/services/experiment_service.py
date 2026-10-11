@@ -56,6 +56,7 @@ from adare.backend.experiment.exceptions import (
 )
 from adare.backend.experiment.run import experiment_run as backend_experiment_run
 from adare.backend.experiment.run import experiment_test as backend_experiment_test
+from adare.config.configdirectory import STATE_DIR
 from adare.core.dto.experiment import (
     ExperimentCleanResult,
     ExperimentCloneRequest,
@@ -331,7 +332,7 @@ class ExperimentService:
         from adare.backend.project.directory import ProjectDirectory
         from adare.database.init import ensure_project_database_exists
 
-        target = Path.home() / ".adare" / "state" / "verify-runs"
+        target = STATE_DIR / "verify-runs"
         project_directory = ProjectDirectory(target)
         for subdir in (
             target,

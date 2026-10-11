@@ -8,6 +8,7 @@ import time
 import uuid
 from pathlib import Path
 
+from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.console import console, print_section, print_step
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.base_creator import VMCreationError
@@ -44,7 +45,7 @@ def _interactive_socket(disk_path: Path, kind: str) -> Path:
     preferred = disk_path.parent / f'.{disk_path.stem}-interactive-{kind}.sock'
     if len(str(preferred)) < _QMP_SOCK_LIMIT:
         return preferred
-    run_dir = Path.home() / '.adare' / 'qemu' / 'run'
+    run_dir = QEMU_STATE_DIR / 'run'
     run_dir.mkdir(parents=True, exist_ok=True)
     fallback = run_dir / f'.interactive-{uuid.uuid4().hex[:8]}.{kind}'
     if len(str(fallback)) >= _QMP_SOCK_LIMIT:
