@@ -77,7 +77,7 @@ class TestSiblingDescription:
         assert action.description == 'same'
 
     def test_conflicting_inner_and_sibling_raises(self):
-        with pytest.raises(ValueError, match='two different descriptions'):
+        with pytest.raises(ValueError, match='two different description values'):
             structure_action({
                 'keyboard': {'key': 'enter', 'description': 'inner'},
                 'description': 'outer',

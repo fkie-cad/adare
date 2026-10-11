@@ -12,6 +12,8 @@ query_result
 
 This test function executes a SQL query against a SQLite database and validates the results based on expected row counts or specific result content. It supports complex result validation using placeholders and direct result comparison.
 
+The query never runs on the database file itself. The database and its ``-wal`` / ``-journal`` sidecars are copied to a temporary directory and the copy is queried, so the evidence is not modified and changes that only live in the write-ahead log are included. The SHA-256 of every queried file is reported in the result details.
+
 Parameters
 ----------
 
@@ -184,9 +186,18 @@ Query Features
   - Placeholder-based comparison for dynamic content
 
 **Database Access**
-  - Automatic connection management with proper cleanup
-  - Row factory support for dictionary-based results
-  - Error handling for database access and SQL syntax issues
+  - The database file, ``<dst>-wal`` and ``<dst>-journal`` (when present) are copied to a
+    temporary directory; SQLite only ever opens the copy, so the original files are never
+    checkpointed, rolled back or otherwise modified
+  - Committed transactions that are still in the write-ahead log (WAL mode, e.g. browser
+    databases of a running application) are visible to the query; an interrupted transaction
+    in a hot ``-journal`` is rolled back on the copy. ``-shm`` is not copied, SQLite rebuilds it
+  - The SHA-256 of each copied file is reported as ``queried snapshot: <name> sha256=<hash>``
+    in every result after the query ran, so the result is tied to the exact bytes queried
+  - If any of the files changes while it is being copied, a warning detail is added because
+    the snapshot may be inconsistent (e.g. the application was still writing)
+  - In host test mode the sidecars are pulled from the guest together with ``dst`` (never from
+    the pull cache); if a sidecar exists but cannot be pulled, the test ends with an error
 
 Return Values
 -------------
@@ -201,13 +212,13 @@ Return Values
   - Query result content doesn't match expected result
   - Query returns no results when results were expected
   - SQL syntax errors in the query
+  - Database file doesn't exist (no empty database is created)
+  - SQLite database corruption or connection issues
 
 **Execution Error**
   Returns execution error when:
 
-  - Database file doesn't exist or cannot be accessed
-  - Permission denied accessing the database
-  - SQLite database corruption or connection issues
+  - Database file cannot be read or copied (e.g. permission denied)
   - Invalid placeholder comparisons
 
 Example Results
@@ -215,10 +226,12 @@ Example Results
 
 .. code-block:: yaml
 
-   # Success case - row count match
+   # Success case - row count match (WAL-mode database)
    result: success
    details:
      - "query returned 3 rows"
+     - "queried snapshot: places.sqlite sha256=9f2c...e41a"
+     - "queried snapshot: places.sqlite-wal sha256=0b7d...93c5"
 
    # Success case - specific result match
    result: success
@@ -240,6 +253,7 @@ Example Results
    details:
      - "SQLite error executing query: SELECT * FROM nonexistent_table - no such table: nonexistent_table"
 
-   # Execution error case
-   result: execution_error
-   error: "database file /path/to/missing.db does not exist"
+   # Failure case - missing database
+   result: failed
+   details:
+     - "database file /path/to/missing.db does not exist"

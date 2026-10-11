@@ -78,11 +78,16 @@ grounding = [
 ]
 
 [dependency-groups]
+# openpyxl: needed by tests/unit/testfunctions/test_excel.py on the host (the excel
+# testfunction itself gets it in the guest via its requirements.txt). Mirrors the
+# workspace test group so CI can `uv sync --package adare --group test` without
+# pulling the heavy adare-cv-server (paddle) dependencies.
 test = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
     "pytest-mock>=3.11.0",
     "pytest-cov>=4.0.0",
+    "openpyxl>=3.1.0",
 ]
 
 [tool.uv.sources]

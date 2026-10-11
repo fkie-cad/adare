@@ -180,6 +180,7 @@ class GuestToHostTestExecutor:
 
         # Check for glob patterns
         has_glob = any(c in original_dst for c in ['*', '?', '[', ']'])
+        sidecars = getattr(type(test_instance), 'host_mode_sidecars', ())
 
         if has_glob:
             # Resolve glob on guest side, then pull matching files
@@ -195,16 +196,20 @@ class GuestToHostTestExecutor:
             # Pull each matching file
             for guest_path in matching_paths:
                 try:
-                    await self.guest_file.pull_file(guest_path)
+                    await self.guest_file.pull_file(guest_path, force=bool(sidecars))
                 except RuntimeError as e:
                     log.warning(f"GuestToHostTestExecutor: failed to pull {guest_path}: {e}")
+                    continue
+                missing = await self._pull_sidecars(guest_path, sidecars)
+                if missing:
+                    return self._sidecar_error(missing)
 
             # Rewrite dst to local glob pattern
             local_dst = str(self.guest_file._guest_path_to_local(original_dst))
         else:
             # Simple path — pull directly
             try:
-                local_path = await self.guest_file.pull_file(original_dst)
+                local_path = await self.guest_file.pull_file(original_dst, force=bool(sidecars))
                 local_dst = str(local_path)
             except (RuntimeError, FileNotFoundError) as e:
                 # For existence tests, this is expected if file doesn't exist
@@ -216,6 +221,10 @@ class GuestToHostTestExecutor:
                     return TestResult.failed([f'{original_dst} does not exist on guest: {e}'])
                 log.warning(f"GuestToHostTestExecutor: could not pull {original_dst}: {e}")
                 local_dst = str(self.guest_file._guest_path_to_local(original_dst))
+            else:
+                missing = await self._pull_sidecars(original_dst, sidecars)
+                if missing:
+                    return self._sidecar_error(missing)
 
         # Rewrite dst and run test
         object.__setattr__(test_instance.parameter, 'dst', local_dst)
@@ -226,6 +235,34 @@ class GuestToHostTestExecutor:
             object.__setattr__(test_instance.parameter, 'dst', original_dst)
 
         return result
+
+    async def _pull_sidecars(self, guest_path: str, suffixes: tuple[str, ...]) -> list[str]:
+        """Pull the companion files of guest_path (e.g. SQLite -wal/-journal).
+
+        Always re-pulled (no cache) and a local copy is removed when the sidecar
+        no longer exists on the guest, so dst and its sidecars come from the same
+        moment — a stale -wal next to a fresh database would corrupt the result.
+
+        Returns:
+            Guest paths of sidecars that exist but could not be pulled
+        """
+        missing = []
+        for suffix in suffixes:
+            sidecar = guest_path + suffix
+            if await self.guest_file.file_exists(sidecar):
+                try:
+                    await self.guest_file.pull_file(sidecar, force=True)
+                except (RuntimeError, FileNotFoundError) as e:
+                    log.warning(f"GuestToHostTestExecutor: failed to pull sidecar {sidecar}: {e}")
+                    missing.append(sidecar)
+            else:
+                self.guest_file._guest_path_to_local(sidecar).unlink(missing_ok=True)
+        return missing
+
+    @staticmethod
+    def _sidecar_error(missing: list[str]) -> TestResult:
+        return TestResult.error([f"could not pull {', '.join(missing)} from guest; "
+                                 f"testing without it would read stale data"])
 
     async def _execute_qga_probe_test(
         self,

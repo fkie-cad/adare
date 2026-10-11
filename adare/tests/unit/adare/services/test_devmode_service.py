@@ -165,7 +165,9 @@ class TestDevModeServiceListSessions:
         live_session.get_state.return_value = live_state
         service._manager.get_session.return_value = live_session
 
-        result = service.list_sessions(list_request)
+        # VM liveness is a cross-process hypervisor lookup, stubbed here
+        with patch.object(service, "_session_vm_alive", return_value=True):
+            result = service.list_sessions(list_request)
 
         assert result.success is True
         assert len(result.data) == 1
@@ -193,7 +195,8 @@ class TestDevModeServiceListSessions:
         service._db_api.list_sessions.return_value = [db_sess]
         service._manager.get_session.return_value = None
 
-        result = service.list_sessions(list_request)
+        with patch.object(service, "_session_vm_alive", return_value=False):
+            result = service.list_sessions(list_request)
 
         assert result.success is True
         assert result.data[0].vm_running is False
