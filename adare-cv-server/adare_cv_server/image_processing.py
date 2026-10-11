@@ -1,6 +1,9 @@
 """Image processing utilities for computer vision tasks."""
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 import cv2
@@ -10,6 +13,40 @@ from .constants import CVConstants
 from .exceptions import HomographyCalculationError, ImageDecodingError
 
 log = logging.getLogger(__name__)
+
+# Per-request decode memo. find_icon runs up to six stages and each one decodes
+# the same screenshot (and icon) bytes from scratch; inside shared_decodes() the
+# first decode is kept and later ones get a copy of it instead.
+_decode_memo: ContextVar[dict[tuple[bytes, int], np.ndarray] | None] = ContextVar('_decode_memo', default=None)
+
+
+@contextmanager
+def shared_decodes() -> Iterator[None]:
+    """Within this block, decoding the same image bytes again reuses the first decode."""
+    token = _decode_memo.set({})
+    try:
+        yield
+    finally:
+        _decode_memo.reset(token)
+
+
+def _imdecode(data: bytes, flags: int) -> np.ndarray | None:
+    """``cv2.imdecode`` that reuses an earlier decode of the same bytes inside :func:`shared_decodes`.
+
+    Callers always get their own copy, so a stage that modifies its image in place
+    cannot affect the others.
+    """
+    memo = _decode_memo.get()
+    if memo is None:
+        return cv2.imdecode(np.frombuffer(data, np.uint8), flags)
+    key = (bytes(data), flags)
+    img = memo.get(key)
+    if img is None:
+        img = cv2.imdecode(np.frombuffer(data, np.uint8), flags)
+        if img is None:
+            return None
+        memo[key] = img
+    return img.copy()
 
 
 class ImageDecoder:
@@ -320,16 +357,13 @@ class ImageDecoder:
             screenshot_bytes = ImageDecoder._preprocess_image_bytes(screenshot_bytes)
             icon_bytes = ImageDecoder._preprocess_image_bytes(icon_bytes)
 
-            screenshot_array = np.frombuffer(screenshot_bytes, np.uint8)
-            icon_array = np.frombuffer(icon_bytes, np.uint8)
-
             # Screenshot: always BGR (no alpha needed)
-            screenshot_img = cv2.imdecode(screenshot_array, cv2.IMREAD_COLOR)
+            screenshot_img = _imdecode(screenshot_bytes, cv2.IMREAD_COLOR)
             if screenshot_img is None:
                 raise ImageDecodingError("Failed to decode screenshot image")
 
             # Icon: preserve alpha if present
-            icon_img = cv2.imdecode(icon_array, cv2.IMREAD_UNCHANGED)
+            icon_img = _imdecode(icon_bytes, cv2.IMREAD_UNCHANGED)
             if icon_img is None:
                 raise ImageDecodingError("Failed to decode icon image")
 
@@ -366,11 +400,8 @@ class ImageDecoder:
             screenshot_bytes = ImageDecoder._preprocess_image_bytes(screenshot_bytes)
             icon_bytes = ImageDecoder._preprocess_image_bytes(icon_bytes)
 
-            screenshot_array = np.frombuffer(screenshot_bytes, np.uint8)
-            icon_array = np.frombuffer(icon_bytes, np.uint8)
-
-            screenshot_img = cv2.imdecode(screenshot_array, cv2.IMREAD_COLOR)
-            icon_img = cv2.imdecode(icon_array, cv2.IMREAD_COLOR)
+            screenshot_img = _imdecode(screenshot_bytes, cv2.IMREAD_COLOR)
+            icon_img = _imdecode(icon_bytes, cv2.IMREAD_COLOR)
 
             if screenshot_img is None or icon_img is None:
                 raise ImageDecodingError("Failed to decode images from bytes")
