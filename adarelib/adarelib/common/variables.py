@@ -362,10 +362,7 @@ class Variable:
             return True
 
         # Check for r'...' prefix/suffix
-        if text.startswith("r'") and text.endswith("'") and len(text) >= 3:
-            return True
-
-        return False
+        return text.startswith("r'") and text.endswith("'") and len(text) >= 3
 
     @staticmethod
     def _strip_raw_string_literal(text: str) -> str:
