@@ -354,40 +354,102 @@ For workflow patterns and tips, see :doc:`/guide/dev-mode`.
 Testfunction Management
 ========================
 
-Testfunctions are reusable test components that can be shared across experiments.
+Testfunctions are reusable assertions that a playbook's ``tests:`` block calls by
+dotnotation (``<collection>.<function>``; a bare name means ``standard.<name>``).
+``adare test`` is aliased as ``adare tf`` and ``adare testfunction``.
 
-``adare testfunction create <name>``
-  Create a new testfunction with template structure.
-  
+The discovery commands (``list``, ``search``, ``info``, ``catalog``) read the
+collection sources directly. They need no project and no database, include the
+host-native ``visual`` collection, and show exact per-function types, defaults and
+parameter docs (from the function's ``Args:`` docstring). When stdout is piped they
+print tab-separated text; use the global ``--format json`` for structured output.
+
+``adare test search "<goal>"``
+  Find the testfunction for a goal, e.g. ``"deleted file is gone"``. Ranks by name,
+  summary and parameter docs with synonyms (deleted/gone/removed, registry/hive, ...).
+  Each result includes a ready-to-paste ``tests:`` example. Alias: ``find``.
+
   Options:
-    * ``--project TEXT`` - Name of the project
+    * ``--collection/--set TEXT``, ``--category TEXT``, ``--os [windows|linux|any]`` - Filters
+    * ``--limit, -n INTEGER`` - Maximum results (default 8)
 
-``adare testfunction remove <name>``
-  Remove an existing testfunction.
-  
+``adare test list``
+  List every testfunction with its parameters (optional ones marked ``?``).
+  Collections bundled with ADARE but not yet synced are flagged. Aliases: ``l``, ``ls``.
+
   Options:
-    * ``--project TEXT`` - Name of the project
+    * ``--collection/--set TEXT``, ``--category TEXT``, ``--os [windows|linux|any]`` - Filters
+    * ``--full`` - Structured output with every field (default: compact)
 
-``adare testfunction load <name>``
-  Load a testfunction into the current project.
-  
+``adare test info <dotnotation>``
+  Signature, parameter types/defaults/docs, the current installed version and an
+  example ``tests:`` entry. Unknown names suggest close matches.
+
   Options:
-    * ``--project TEXT`` - Name of the project
+    * ``--example`` - Print only the ``tests:`` YAML block
 
-``adare testfunction list``
-  List all available testfunctions.
-  
+``adare test catalog``
+  Export the catalog of the collections bundled with ADARE (machine-independent,
+  ignores local collections).
+
   Options:
-    * ``--project TEXT`` - Name of the project
+    * ``--markdown`` - Render a Markdown reference (used for the agent skill reference)
 
-``adare testfunction show``
-  Show testfunctions with optional filtering.
-  
+``adare test create <name>``
+  Create a new testfunction collection from a template.
+
   Options:
-    * ``--file-name TEXT`` - Filter by file name
+    * ``--project, -p TEXT`` - Name of the project
 
-``adare testfunction info <dotnotation>``
-  Show detailed information about a specific testfunction using dotnotation.
+``adare test validate <path>``
+  Offline contract check of a collection directory or ``.py`` file. Warns (without
+  failing) when a function or parameter lacks documentation.
+
+``adare test dry-run <collection>.<function>``
+  Execute one ``FILE_BASED``/``FILE_CONTENT`` testfunction against a local sample.
+
+  Options:
+    * ``--param, -P TEXT`` - Parameter as ``key=value`` (repeatable)
+    * ``--file, -f TEXT`` - Local sample file used as the ``dst`` parameter
+    * ``--path TEXT`` - Collection dir/.py to load
+
+``adare test load <name>``
+  Register a collection in the global database.
+
+  Options:
+    * ``--force, -f`` - Overwrite a testfunction used in experiments (deletes the associated runs)
+
+``adare test sync``
+  Hash-based create/update of all bundled collections (``visual`` is host-native and never synced).
+
+``adare test versions <collection>[.<function>]``
+  Version history of a collection or one function. Editing only a docstring does
+  not bump a function's version.
+
+``adare test remove <name>``
+  Remove a collection file. Alias: ``rm``.
+
+Agent Integration
+=================
+
+``adare agent setup``
+  Install ADARE's workflow skills (``skills/adare-*``) for AI coding agents by
+  symlinking them into the agent's skill directories. Real directories are never
+  touched; symlinks that point elsewhere are only re-pointed with ``--force``.
+  Not to be confused with ``adare dev agent`` (the GUI vision agent).
+
+  Options:
+    * ``--client [claude|opencode|all]`` - Target agent(s) (default: all)
+    * ``--scope [user|project|all]`` - ``user`` = ``~/.claude/skills`` and
+      ``~/.config/opencode/skills``; ``project`` = ``.claude/skills`` and
+      ``.opencode/skills`` in the current directory (default: user)
+    * ``--copy`` - Copy instead of symlink
+    * ``--force`` - Re-point symlinks that point elsewhere
+    * ``--dry-run`` - Show what would change
+
+``adare agent status``
+  Show where the skills are installed and whether each link is current
+  (``ok``, ``missing``, ``stale``, ``foreign-link``, ``conflict``).
 
 Virtual Machine Management
 ==========================

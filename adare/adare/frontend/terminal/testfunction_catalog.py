@@ -70,7 +70,7 @@ def render_entries(entries: list[CatalogEntry], formatter, output_file=None, *, 
 # info
 # ---------------------------------------------------------------------------
 
-def _info_panel(entry: CatalogEntry) -> Panel:
+def _info_panel(entry: CatalogEntry, version: int | None) -> Panel:
     params = Table(expand=True, header_style='bold')
     for column in ('parameter', 'type', 'default', 'description'):
         params.add_column(column, ratio=3 if column == 'description' else 1)
@@ -86,11 +86,12 @@ def _info_panel(entry: CatalogEntry) -> Panel:
         parts.append(Text(entry.doc.split('\nArgs:')[0].strip()))
     parts += [params, Text('example (paste into the playbook):', style='bold'),
               Syntax(entry.example_yaml(), 'yaml', background_color='default')]
-    return Panel(Group(*parts), title=f'[b gold3]{entry.dotnotation}[/b gold3]', border_style='blue',
-                 title_align='left')
+    title = f'[b gold3]{entry.dotnotation}[/b gold3]' + (f' [dim]v{version}[/dim]' if version else '')
+    return Panel(Group(*parts), title=title, border_style='blue', title_align='left')
 
 
-def render_entry(entry: CatalogEntry, formatter, output_file=None, *, example_only: bool = False) -> None:
+def render_entry(entry: CatalogEntry, formatter, output_file=None, *, example_only: bool = False,
+                 version: int | None = None) -> None:
     mode = output_mode(formatter)
     if example_only:
         if mode in ('json', 'yaml'):
@@ -98,14 +99,15 @@ def render_entry(entry: CatalogEntry, formatter, output_file=None, *, example_on
         else:
             print(entry.example_yaml(), end='')
     elif mode in ('json', 'yaml'):
-        formatter.print_or_save(entry.to_dict(), output_file, False)
+        formatter.print_or_save({**entry.to_dict(), 'version': version}, output_file, False)
     elif mode == 'plain':
-        lines = [entry.signature(), entry.summary, '', 'parameter\ttype\trequired\tdefault\tdescription']
+        header = entry.signature() + (f'  v{version}' if version else '')
+        lines = [header, entry.summary, '', 'parameter\ttype\trequired\tdefault\tdescription']
         lines += [f'{p.name}\t{p.type}\t{str(p.required).lower()}\t{_default_text(p)}\t{p.doc}' for p in entry.params]
         lines += ['', entry.example_yaml().rstrip()]
         print('\n'.join(lines))
     else:
-        DefaultConsole().print(_info_panel(entry))
+        DefaultConsole().print(_info_panel(entry, version))
 
 
 # ---------------------------------------------------------------------------
