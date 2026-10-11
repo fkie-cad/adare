@@ -22,6 +22,17 @@ dependencies = [
 [project.scripts]
 adarevm = "adarevm.main:run"
 
+[dependency-groups]
+test = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "--strict-markers"
+
 [tool.uv.sources]
 adarelib = { workspace = true }
 

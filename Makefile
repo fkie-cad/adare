@@ -1,5 +1,5 @@
 .DEFAULT_GOAL = help
-.PHONY: help install update adare-clean docs docs-sphinx install-skills test lint lint-fix lint-baseline typecheck hooks
+.PHONY: help install update adare-clean docs docs-sphinx install-skills test test-agent lint lint-fix lint-baseline typecheck hooks
 
 help:
 	@echo "--------------- HELP -----------------"
@@ -13,6 +13,7 @@ help:
 	@echo "  docs            Build HTML documentation with Sphinx."
 	@echo "  docs-sphinx     Build HTML documentation with Sphinx."
 	@echo "  test            Run the client unit suite."
+	@echo "  test-agent      Run the guest agent suite on Python 3.10 (own venv, like CI)."
 	@echo "  lint            Format check + quality ratchet (ruff, mypy, file size) - same as CI."
 	@echo "  lint-fix        Apply ruff format and safe autofixes."
 	@echo "  lint-baseline   Lock in paid-down debt (lowers quality-baseline.json)."
@@ -84,6 +85,14 @@ LINT_SYNC = $(LINT_ENV) uv sync --package adare --extra qemu --group lint --quie
 
 test:
 	cd adare && uv run --no-sync pytest tests -q
+
+# The guest agent targets the guest's Python (3.10+); the workspace needs 3.13,
+# so the agent suite runs in its own venv, as in CI's `agent` job.
+AGENT_VENV = .venv-agent
+test-agent:
+	uv venv -q --allow-existing --python 3.10 $(AGENT_VENV)
+	uv pip install -q --python $(AGENT_VENV) --reinstall-package adarevm --reinstall-package adarelib ./adarelib ./adarevm 'pytest>=7.4.0' 'pytest-asyncio>=0.21.0'
+	cd adarevm && ../$(AGENT_VENV)/bin/python -m pytest -q
 
 lint:
 	$(LINT_SYNC)

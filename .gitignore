@@ -93,3 +93,4 @@ graphify-out/
 
 # Isolated env for the quality ratchet (make lint), mirrors the CI lint job
 .venv-lint/
+.venv-agent/
