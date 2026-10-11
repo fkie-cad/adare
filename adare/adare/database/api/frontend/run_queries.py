@@ -1,6 +1,7 @@
 """Mixin for experiment run related queries."""
 
 import logging
+from typing import TYPE_CHECKING
 
 import pandas as pd
 from sqlalchemy.exc import SQLAlchemyError
@@ -19,10 +20,16 @@ from adare.database.models.project_models import (
     Status,
 )
 
+if TYPE_CHECKING:
+    from adare.database.api.frontend._base import DataRetrievalBase as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class RunQueryMixin:
+class RunQueryMixin(_Host):
     """Mixin providing experiment run query methods."""
 
     def get_experiment_runs(self, experiment_ulid: str) -> pd.DataFrame:

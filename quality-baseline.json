@@ -9,15 +9,15 @@
     "RET504": 7,
     "S110": 15,
     "S112": 1,
-    "SIM102": 20,
+    "SIM102": 19,
     "SIM105": 10,
     "SIM108": 12,
     "SIM117": 16
   },
   "mypy": {
     "arg-type": 492,
-    "assignment": 402,
-    "attr-defined": 733,
+    "assignment": 400,
+    "attr-defined": 656,
     "call-arg": 30,
     "call-overload": 4,
     "dict-item": 2,
