@@ -6,7 +6,6 @@ import pandas as pd
 import sqlalchemy
 
 from adare.database.models.global_models import (
-    Project,
     TestFunction,
     TestFunctionFile,
     TestParameter,
@@ -102,7 +101,7 @@ class TestQueryMixin:
         data = pd.read_sql(self._global_api._session.query(TestFunction).statement, self._global_api._session.bind).map(str)
         return self._enrich_testfunction_data(data)
 
-    def get_testfunction(self, testfunction_id: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def get_testfunction(self, testfunction_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         try:
             testfunction_data = pd.read_sql(self._global_api._session.query(TestFunction).filter_by(id=testfunction_id).statement, self._global_api._session.bind).map(str)
         except sqlalchemy.orm.exc.NoResultFound:
@@ -114,7 +113,7 @@ class TestQueryMixin:
         parameter_data = pd.read_sql(self._global_api._session.query(TestParameter).filter(TestParameter.id.in_(parameter_ids)).statement, self._global_api._session.bind).map(str)
         return testfunction_data, parameter_data
 
-    def testfunction_dotnotation_to_id(self, dotnotation: str) -> int:
+    def testfunction_dotnotation_to_id(self, dotnotation: str) -> str:
         from adare.database.api.dotnotation_parser import DotNotationParser
 
         parser = DotNotationParser()
@@ -122,25 +121,15 @@ class TestQueryMixin:
 
         file_name = parsed['file_name']
         function_name = parsed['function_name']
-        project_name = parsed['project_name']
 
-        file_name_with_extension = file_name + '.py'
-
-        try:
-            if project_name:
-                # 3-part notation: project.file.function
-                # Filter by project to ensure we get the right testfunction
-                testfunction_file = self._global_api._session.query(TestFunctionFile).filter(
-                    TestFunctionFile.name == file_name_with_extension).filter(
-                    TestFunctionFile.projects.any(Project.name == project_name)).one()
-            else:
-                # 2-part notation: file.function (current project context)
-                # Get from current project or first match if no project specified
-                testfunction_file = self._global_api._session.query(TestFunctionFile).filter_by(name=file_name_with_extension).one()
-
-            testfunction = self._global_api._session.query(TestFunction).filter_by(file_id=testfunction_file.id, name=function_name).one()
-        except sqlalchemy.orm.exc.NoResultFound:
-            if project_name:
-                raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found in project "{project_name}"') from None
-            raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found') from None
+        # Testfunctions are global: files are stored by stem (``standard``, not
+        # ``standard.py``) and no longer belong to a project, so a 3-part
+        # ``project.file.function`` notation resolves the same as ``file.function``.
+        testfunction = self._global_api._session.query(TestFunction).join(TestFunctionFile).filter(
+            TestFunctionFile.name == file_name.removesuffix('.py'),
+            TestFunction.name == function_name,
+        ).one_or_none()
+        if testfunction is None:
+            raise TestFunctionNotFoundError(
+                log, f'Testfunction with dotnotation "{dotnotation}" not found (see `adare test list`)')
         return testfunction.id

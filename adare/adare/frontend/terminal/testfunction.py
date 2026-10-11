@@ -77,7 +77,7 @@ def print_testfunction(dotnotation: str = None, testfunction_id: str = None, for
         formatter, output_file, dual_output = get_formatter_from_context()
 
     with DataRetrievalApi() as api:
-        testfunction_id = api.testfunction_dotnotation_to_id(dotnotation) if dotnotation else int(testfunction_id)
+        testfunction_id = api.testfunction_dotnotation_to_id(dotnotation) if dotnotation else testfunction_id
         testfunction, parameters = api.get_testfunction(testfunction_id)
 
         # Check if structured output is needed
