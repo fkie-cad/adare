@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any
 from xml.dom import minidom
 
+from adare.hypervisor.port_forward import qemu_hostfwd
+
 from .accel import cpu_mode_and_model, native_accel
 from .firmware import create_nvram_for_vm, find_ovmf_firmware
 
@@ -846,17 +848,13 @@ class DomainXMLBuilder:
 
         # Port forwarding (can coexist with SMB on same netdev)
         for _name, rule in self._config.port_forwarding_rules.items():
-            protocol = rule['protocol']
-            host_port = rule['host_port']
-            guest_port = rule['guest_port']
-            host_ip = rule.get('host_ip', '')
-            guest_ip = rule.get('guest_ip', '')
-
-            if host_ip:
-                hostfwd = f"{protocol}:{host_ip}:{host_port}-{guest_ip}:{guest_port}"
-            else:
-                hostfwd = f"{protocol}::{host_port}-:{guest_port}"
-
+            hostfwd = qemu_hostfwd(
+                rule['protocol'],
+                rule['host_port'],
+                rule['guest_port'],
+                rule.get('host_ip', ''),
+                rule.get('guest_ip', ''),
+            )
             netdev_args += f",hostfwd={hostfwd}"
 
         _add_qemu_arg(qemu_commandline, '-netdev')

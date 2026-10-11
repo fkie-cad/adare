@@ -123,9 +123,7 @@ class InteractiveDevelopmentServer:
             await self.session.vm_manager.mount_shared_directories(self.session.context)
 
             # Create WebSocket client for VM communication
-            self.session.context.client = AdareVMClient(
-                host="localhost", port=self.session.context.config.websocket_port
-            )
+            self.session.context.client = AdareVMClient(port=self.session.context.config.websocket_port)
             await self.session.context.client.connect()
 
             # Initialize playbook controller for command execution

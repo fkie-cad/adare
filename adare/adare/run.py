@@ -283,7 +283,7 @@ def icons_list(os_key):
 
 
 @icons.command(name='dump-all')
-@click.option('--host', default='localhost', help='adarevm host')
+@click.option('--host', default='127.0.0.1', help='adarevm host')
 @click.option('--port', default=18765, type=int, help='adarevm WebSocket port')
 @click.option('--os-key', default='windows', help='OS profile / build key (cache separation)')
 @click.option('--force', is_flag=True, help='Re-extract even if a cached PNG exists')
@@ -835,7 +835,7 @@ def ws():
 
 @ws.command()
 @click.argument('action_file', type=click.Path(exists=True))
-@click.option('--host', default='localhost', help='AdareVM host (default: localhost)')
+@click.option('--host', default='127.0.0.1', help='AdareVM host (default: 127.0.0.1)')
 @click.option('--port', type=int, default=18765, help='AdareVM WebSocket port (default: 18765)')
 @click.option('--vm-instance', help='VM instance name to look up WebSocket port (overrides --port)')
 @click.option('--connect-timeout', type=float, default=10.0, help='Connection timeout in seconds (default: 10.0)')

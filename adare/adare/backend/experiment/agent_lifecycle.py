@@ -740,7 +740,7 @@ async def connect_websocket(context, stage_ctx):
             )
 
     # Create websocket client with host port forwarding
-    context.client = AdareVMClient(host='localhost', port=context.config.websocket_port)
+    context.client = AdareVMClient(port=context.config.websocket_port)
 
     # Set up event handlers for logging
     def log_event_handler(event_type: str, data: dict):

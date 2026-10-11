@@ -188,7 +188,9 @@ Agent Lifecycle
    the ``AdareVMServer`` on ``0.0.0.0:18765``.
 
 3. **Connection** -- the host's ``AdareVMClient`` connects to the agent's
-   WebSocket server through the forwarded port. The agent sends a welcome
+   WebSocket server through the forwarded port. Forwards (QEMU ``hostfwd``,
+   VirtualBox NAT rules) listen on ``127.0.0.1`` only; set
+   ``ADARE_FORWARD_BIND`` to another host address to expose them deliberately. The agent sends a welcome
    event listing available tools.
 
    Before the agent is installed, a setup command opens port 18765 in the

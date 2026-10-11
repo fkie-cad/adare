@@ -13,6 +13,7 @@ from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.config import SHARE_POINT_VM, get_vm_credentials
 from adare.exceptions import LoggedException
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
+from adare.hypervisor.port_forward import forward_bind_host
 from adare.hypervisor.virtualbox import VirtualBoxManager, VirtualBoxVM
 
 log = logging.getLogger(__name__)
@@ -77,6 +78,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
             protocol='tcp',
             host_port=context.config.websocket_port,
             guest_port=18765,
+            host_ip=forward_bind_host(),
             stop_event=context.user_interrupt_event,
         )
         log.info(f'Added port forwarding for websocket server: host:{context.config.websocket_port} -> guest:18765')
