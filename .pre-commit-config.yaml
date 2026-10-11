@@ -1,0 +1,36 @@
+# Pre-commit hooks for the adare client workspace.
+#
+# Install once per clone:  brew install pre-commit && make hooks
+# Run over the whole tree: pre-commit run --all-files
+#
+# The quality ratchet runs here without mypy (it needs the full lint env);
+# `make lint` and CI run the complete check.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.11  # keep in sync with the ruff pin in pyproject.toml
+    hooks:
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: quality-ratchet
+        name: quality ratchet (ruff budgets, file size)
+        entry: python scripts/quality_ratchet.py --no-mypy
+        language: python
+        additional_dependencies: ["ruff==0.15.11"]
+        pass_filenames: false
+        types: [python]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: check-merge-conflict
+      - id: detect-private-key

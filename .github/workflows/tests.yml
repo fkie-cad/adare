@@ -15,6 +15,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Formatting, strict mypy on adare.core, and the quality ratchet (ruff/mypy
+  # budgets + 1000-line file limit, see quality-baseline.json). Mirrors `make lint`;
+  # the install line must match LINT_SYNC there or the mypy counts drift.
+  lint:
+    name: Lint & types
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libvirt headers (qemu extra)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvirt-dev pkg-config
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install
+        run: uv sync --locked --package adare --extra qemu --group lint
+
+      - name: Formatting
+        run: uv run --no-sync ruff format --check .
+
+      - name: Strict types (adare.core)
+        run: uv run --no-sync mypy adare/adare/core
+
+      - name: Quality ratchet
+        run: uv run --no-sync python scripts/quality_ratchet.py
+
   # Whole client unit suite. live_vm tests are deselected by the pytest addopts.
   # `--package adare` keeps adare-cv-server (paddle) out; the unit suite never imports it.
   unit:
@@ -37,7 +68,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
 
       - name: Install
-        run: uv sync --package adare --group test --extra qemu
+        run: uv sync --locked --package adare --group test --extra qemu
 
       - name: Run unit tests
         run: uv run --no-sync pytest tests -q
@@ -65,7 +96,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
 
       - name: Install
-        run: uv sync --package adare --group test
+        run: uv sync --locked --package adare --group test
 
       - name: Run testfunction tests
         run: uv run --no-sync pytest tests/unit/testfunctions -q
