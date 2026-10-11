@@ -8,7 +8,7 @@ import logging
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from adare.types.playbook import (
     CommandAction,
@@ -19,10 +19,16 @@ from adare.types.playbook import (
 
 from .base import ActionResult
 
+if TYPE_CHECKING:
+    from adare.backend.experiment.execution.executor_core import ActionsExecutorCore as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class DataActionsMixin:
+class DataActionsMixin(_Host):
     """Mixin providing data/command action execution methods for SimpleActionsExecutor."""
 
     async def execute_command(

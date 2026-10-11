@@ -9,7 +9,7 @@ import subprocess
 import time
 from datetime import UTC
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from adare.backend.experiment.filesystem_snapshot import (
     FilesystemSnapshot,
@@ -22,10 +22,16 @@ from adare.types.playbook import (
 
 from .base import ActionResult
 
+if TYPE_CHECKING:
+    from adare.backend.experiment.execution.executor_core import ActionsExecutorCore as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class FilesystemActionsMixin:
+class FilesystemActionsMixin(_Host):
     """Mixin providing filesystem action execution methods for SimpleActionsExecutor."""
 
     async def execute_snapshot_filesystem(

@@ -10,6 +10,7 @@ import binascii
 import logging
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adare.backend.events.emitters import emit_action
 from adare.types.playbook import (
@@ -25,10 +26,16 @@ from adare.types.step_actions import ExecuteAction
 
 from .base import ActionResult
 
+if TYPE_CHECKING:
+    from adare.backend.experiment.execution.executor_core import ActionsExecutorCore as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class GUIActionsMixin:
+class GUIActionsMixin(_Host):
     """Mixin providing GUI action execution methods for SimpleActionsExecutor."""
 
     async def execute_click(self, action: ClickAction, parent_event_id: str = None, event_emitter=None) -> ActionResult:
