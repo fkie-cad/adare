@@ -107,24 +107,29 @@ def test_recorder_emits_valid_playbook(tmp_path):
     # Re-parses through ADARE's own loader.
     pb = parse_playbook(path)
     kinds = [type(a).__name__ for a in pb.actions]
-    assert kinds == ['ClickAction', 'KeyboardAction', 'KeyboardAction',
+    # every click is preceded by a wait_until gate on its own image crop
+    assert kinds == ['WaitUntilAction', 'ClickAction', 'KeyboardAction', 'KeyboardAction',
                      'WaitUntilAction', 'IdleAction']
 
-    click = pb.actions[0]
+    gate = pb.actions[0]
+    assert isinstance(gate, WaitUntilAction)
+    assert gate.condition.exists.image == imgs[0].name
+
+    click = pb.actions[1]
     assert isinstance(click, ClickAction)
     assert click.target.image == imgs[0].name
     assert click.description == 'the Install button'
 
-    typed = pb.actions[1]
+    typed = pb.actions[2]
     assert isinstance(typed, KeyboardAction) and typed.text == 'adare'
-    pressed = pb.actions[2]
+    pressed = pb.actions[3]
     assert isinstance(pressed, KeyboardAction) and pressed.key == 'enter'
 
-    wait = pb.actions[3]
+    wait = pb.actions[4]
     assert isinstance(wait, WaitUntilAction)
     assert wait.condition.exists.text == 'the partitioning screen'
 
-    assert isinstance(pb.actions[4], IdleAction)
+    assert isinstance(pb.actions[5], IdleAction)
 
 
 def test_recorder_key_combination(tmp_path):
@@ -224,7 +229,7 @@ async def test_agent_happy_path_records_playbook(tmp_path):
     assert result.playbook_path is not None
     pb = parse_playbook(result.playbook_path)
     assert [type(a).__name__ for a in pb.actions] == [
-        'ClickAction', 'KeyboardAction', 'KeyboardAction', 'WaitUntilAction']
+        'WaitUntilAction', 'ClickAction', 'KeyboardAction', 'KeyboardAction', 'WaitUntilAction']
     # The illustrated report exists.
     assert (tmp_path / 'run' / 'install_report.md').exists()
 

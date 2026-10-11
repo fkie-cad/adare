@@ -100,9 +100,8 @@ class TestFileExists:
         result = test.test()
 
         assert_test_failed(result)
-        # When path doesn't exist, resolve_globfilepath returns it as-is
-        # Then FileExists checks if it's a file, which it's not (doesn't exist)
-        assert "does not exist" in result.details[0] or "matched but none are files" in result.details[0]
+        # A missing plain path is reported as missing, not as "not a file"
+        assert result.details[0] == f"no files match pattern {test_file}"
 
     def test_file_exists_failure_is_directory(self, tmp_path):
         """Test failure when path exists but is a directory."""
@@ -203,8 +202,7 @@ class TestFileDoesNotExist:
         result = test.test()
 
         assert_test_success(result)
-        # Can be either message depending on whether path resolves
-        assert "does not exist" in result.details[0] or "matched but none are files" in result.details[0]
+        assert result.details[0] == f"no files match pattern {test_file}"
 
     def test_file_does_not_exist_failure_file_exists(self, tmp_path):
         """Test failure when file exists."""
@@ -298,8 +296,8 @@ class TestDirExists:
         result = test.test()
 
         assert_test_failed(result)
-        # Path is returned as-is but it's not a directory
-        assert "does not exist" in result.details[0] or "matched but none are directories" in result.details[0]
+        # A missing plain path is reported as missing, not as "not a directory"
+        assert result.details[0] == f"no directories match pattern {test_dir}"
 
     def test_dir_exists_failure_is_file(self, tmp_path):
         """Test failure when path exists but is a file."""
@@ -352,8 +350,7 @@ class TestDirDoesNotExist:
         result = test.test()
 
         assert_test_success(result)
-        # Can be either message
-        assert "does not exist" in result.details[0] or "matched but none are directories" in result.details[0]
+        assert result.details[0] == f"no directories match pattern {test_dir}"
 
     def test_dir_does_not_exist_failure_dir_exists(self, tmp_path):
         """Test failure when directory exists."""

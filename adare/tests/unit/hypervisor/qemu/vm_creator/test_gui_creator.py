@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import pytest
@@ -47,9 +48,16 @@ def test_bogus_install_mode_is_skipped(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def kubuntu_def() -> OsDefinition:
+def kubuntu_def(tmp_path, monkeypatch) -> OsDefinition:
+    # Only the bundled profiles: a user profile in ~/.adare/os-profiles must not
+    # decide the outcome. The bundled kubuntu2404 is a replayed `playbook` profile
+    # now, so the gui-auto variant with its version-pinned template is built here.
+    monkeypatch.setattr(os_catalog, 'OS_PROFILES_DIR', tmp_path)
     os_catalog.reload_catalog()
-    return os_catalog.get_os_definition('kubuntu2404')
+    bundled = os_catalog.get_os_definition('kubuntu2404')
+    yield dataclasses.replace(bundled, install_mode='gui-auto', template='kubuntu2404')
+    monkeypatch.undo()
+    os_catalog.reload_catalog()
 
 
 def test_template_stems_derives_kubuntu(kubuntu_def):
