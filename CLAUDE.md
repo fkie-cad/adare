@@ -167,7 +167,10 @@ tests:
 3. VM executes test within timeout limit
 
 ## Testing
-- Manual only (experiment commands, interactive mode) - so never built or perform tests
+- Unit suite: `cd adare && uv run pytest tests -q` (~10 s; `live_vm` tests are deselected by default — never opt into them without being asked, they boot real VMs)
+- CI (`.github/workflows/tests.yml`) runs it on every push/PR to dev and main, plus the testfunction tests on Linux, Windows and macOS; keep it green
+- Every built-in testfunction needs tests in `tests/unit/testfunctions/test_<collection>.py` and a reference page (enforced by `test_testfunction_coverage.py`)
+- Experiments / interactive mode against real VMs remain manual
 
 ## Guidelines
 - Prefix temp logs with `CLAUDE:`

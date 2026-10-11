@@ -28,10 +28,11 @@ class TestDefaults:
         assert cfg.vm_user is None
         assert cfg.test_mode is False
         assert cfg.config is None
+        assert cfg.machines is None
 
     def test_field_count(self):
         """Ensure we don't accidentally drop or add fields without updating tests."""
-        assert len(fields(PlaybookControllerConfig)) == 12
+        assert len(fields(PlaybookControllerConfig)) == 13
 
 
 class TestConstruction:

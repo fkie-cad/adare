@@ -570,7 +570,7 @@ class TestAsyncDecoratorGeneratesClasses:
         mock_context.screenshot = MagicMock()
         mock_context.screenshot.take = AsyncMock(return_value=b"fake")
 
-        result = asyncio.get_event_loop().run_until_complete(instance.test(mock_context))
+        result = asyncio.run(instance.test(mock_context))
         assert result.status == StatusEnum.SUCCESS
         assert 'found: hello' in result.details[0]
         mock_context.screenshot.take.assert_awaited_once()
@@ -583,7 +583,7 @@ class TestAsyncDecoratorGeneratesClasses:
         test_cls = async_fail._test_class
         param_cls = async_fail._parameter_class
         instance = test_cls(name='t', parameter=param_cls(value='x'), description='', variable_metadata=None)
-        result = asyncio.get_event_loop().run_until_complete(instance.test())
+        result = asyncio.run(instance.test())
         assert result.status == StatusEnum.FAILED
         assert 'async fail' in result.details[0]
 
@@ -595,7 +595,7 @@ class TestAsyncDecoratorGeneratesClasses:
         test_cls = async_err._test_class
         param_cls = async_err._parameter_class
         instance = test_cls(name='t', parameter=param_cls(value='x'), description='', variable_metadata=None)
-        result = asyncio.get_event_loop().run_until_complete(instance.test())
+        result = asyncio.run(instance.test())
         assert result.status == StatusEnum.ERROR
 
 
