@@ -239,9 +239,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             if not success:
                 return {'status': 'error', 'message': f'QMP screendump failed: {error_msg}'}
 
-            # Wait briefly for file to be written
-            await asyncio.sleep(0.1)
-
+            # No settle wait: QEMU replies to screendump only after the file is written and closed
             # Check file exists
             if not temp_ppm.exists():
                 return {'status': 'error', 'message': f'Screenshot file not created: {temp_ppm}'}
@@ -452,9 +450,9 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
                     height = region.get('height', img.height)
                     img = img.crop((x, y, x + width, y + height))
 
-                # Convert to PNG in memory
+                # Convert to PNG in memory (zlib level 1: same pixels, ~2x faster, ~1.5x bigger)
                 png_buffer = io.BytesIO()
-                img.save(png_buffer, format='PNG')
+                img.save(png_buffer, format='PNG', compress_level=1)
                 png_bytes = png_buffer.getvalue()
 
                 # Base64 encode
