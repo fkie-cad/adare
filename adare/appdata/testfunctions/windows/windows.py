@@ -87,6 +87,22 @@ def _format_registry_type(reg_type):
     category=HostModeCategory.QGA_PROBE,
 )
 def registry_key_exists(ctx: TestContext, key_path: str):
+    r"""Pass when the registry key ``key_path`` can be opened with ``winreg.OpenKey``.
+
+    Use for: checking an install/config action created a key. Windows guests only (other
+    OSes error). A key that exists but denies read access is an execution error, not a pass.
+
+    Args:
+        key_path: ``HIVE/sub/key`` with ``/`` or ``\`` separators. Hive is case-insensitive:
+            ``HKEY_CLASSES_ROOT``/``HKCR``, ``HKEY_CURRENT_USER``/``HKCU``,
+            ``HKEY_LOCAL_MACHINE``/``HKLM``, ``HKEY_USERS``/``HKU``, ``HKEY_CURRENT_CONFIG``/``HKCC``.
+            A bare hive or unknown hive is an execution error. HKCU is the agent's user.
+
+    Example:
+        function: windows.registry_key_exists
+        parameter:
+          key_path: HKCU/Software/Microsoft/Office/16.0/Word
+    """
     if platform.system() != 'Windows':
         return TestResult.execution_error(None, "This test only runs on Windows")
 
@@ -125,6 +141,29 @@ def registry_key_exists(ctx: TestContext, key_path: str):
 def registry_value_matches(ctx: TestContext, key_path: str, value_name: str,
                            expected_value: str | int | bytes,
                            value_type: str | None = None):
+    r"""Pass when registry value ``value_name`` under ``key_path`` equals ``expected_value``.
+
+    Use for: asserting a setting/MRU value written by an application. Windows only. A missing
+    key or value fails.
+
+    Args:
+        key_path: ``HIVE/sub/key`` (see windows.registry_key_exists), ``/`` or ``\`` separators.
+        value_name: Name of the value; ``''`` selects the key's default value.
+        expected_value: Compared with Python ``==`` against the ``winreg`` data, so the type
+            matters: REG_DWORD/QWORD -> int, REG_SZ/REG_EXPAND_SZ -> str (unexpanded),
+            REG_BINARY -> bytes. REG_MULTI_SZ (a list) can never match. A ``{{ }}``
+            placeholder still present at run time is resolved, and all-digit results become int.
+        value_type: Optional type name check, case-insensitive, e.g. ``REG_SZ``. REG_DWORD values
+            are reported as ``REG_DWORD_LITTLE_ENDIAN`` and REG_QWORD as ``UNKNOWN_TYPE_11``,
+            so use those strings (``REG_DWORD`` never matches). ``None`` skips the check.
+
+    Example:
+        function: windows.registry_value_matches
+        parameter:
+          key_path: HKCU/Control Panel/Desktop
+          value_name: ScreenSaveActive
+          expected_value: '1'
+    """
     if platform.system() != 'Windows':
         return TestResult.execution_error(None, "This test only runs on Windows")
 

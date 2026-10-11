@@ -210,6 +210,24 @@ def _parse_escape_sequences(text):
     category=HostModeCategory.FILE_BASED
 )
 def file_exists(ctx, dst: str = '', match_mode: str = "any"):
+    """Pass when a regular file exists at ``dst`` (for globs: at least one match is a file).
+
+    Use for: verifying a GUI action created/saved a file. Opposite: standard.file_does_not_exist.
+
+    Args:
+        dst: Guest path to the file. Glob characters ``* ? [ ]`` are expanded with Python
+            ``glob`` (not recursive: ``**`` acts like ``*``; ``*`` skips dotfiles), e.g.
+            ``C:/Users/*/Desktop/*.txt``. Case sensitivity follows the guest filesystem.
+            A path that exists but is a directory fails.
+        match_mode: ``any`` (default; any value except ``single`` behaves the same): passes
+            if at least one match is a regular file. ``single``: a glob must match exactly
+            one path, otherwise the test ERRORS (not fails).
+
+    Example:
+        function: standard.file_exists
+        parameter:
+          dst: /home/user/Documents/report.odt
+    """
     try:
         paths, status = ctx.resolve_globfilepath(
             dst,
@@ -247,6 +265,23 @@ def file_exists(ctx, dst: str = '', match_mode: str = "any"):
     category=HostModeCategory.FILE_BASED
 )
 def file_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
+    """Pass when no regular file exists at ``dst`` (for globs: no match is a file).
+
+    Use for: verifying a file was deleted or never written. Opposite: standard.file_exists.
+    A directory at ``dst`` does not count as a file, so it passes.
+
+    Args:
+        dst: Guest path; glob characters ``* ? [ ]`` expanded with Python ``glob``
+            (not recursive). Case sensitivity follows the guest filesystem.
+        match_mode: ``any`` (default; anything except ``single``): passes when zero matches
+            are files. ``single``: a glob must match exactly one path, else the test ERRORS
+            -- so a glob with no matches errors instead of passing; keep ``any`` for globs.
+
+    Example:
+        function: standard.file_does_not_exist
+        parameter:
+          dst: C:/Users/*/AppData/Local/Temp/secret.tmp
+    """
     try:
         paths, status = ctx.resolve_globfilepath(
             dst,
@@ -283,6 +318,21 @@ def file_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
     category=HostModeCategory.FILE_BASED
 )
 def dir_exists(ctx, dst: str = '', match_mode: str = "any"):
+    """Pass when a directory exists at ``dst`` (for globs: at least one match is a directory).
+
+    Use for: verifying an install/extract step created a folder. Opposite: standard.dir_does_not_exist.
+
+    Args:
+        dst: Guest path to the directory; glob characters ``* ? [ ]`` expanded with Python
+            ``glob`` (not recursive). A path that exists but is a file fails.
+        match_mode: ``any`` (default; anything except ``single``): passes if one match is a
+            directory. ``single``: a glob must match exactly one path, else the test ERRORS.
+
+    Example:
+        function: standard.dir_exists
+        parameter:
+          dst: /home/user/.config/libreoffice
+    """
     try:
         paths, status = ctx.resolve_globfilepath(
             dst,
@@ -320,6 +370,22 @@ def dir_exists(ctx, dst: str = '', match_mode: str = "any"):
     category=HostModeCategory.FILE_BASED
 )
 def dir_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
+    """Pass when no directory exists at ``dst`` (for globs: no match is a directory).
+
+    Use for: verifying a folder was removed or never created. Opposite: standard.dir_exists.
+    A regular file at ``dst`` does not count as a directory, so it passes.
+
+    Args:
+        dst: Guest path; glob characters ``* ? [ ]`` expanded with Python ``glob`` (not recursive).
+        match_mode: ``any`` (default; anything except ``single``): passes when zero matches
+            are directories. ``single``: a glob must match exactly one path, else the test
+            ERRORS -- a glob with no matches errors instead of passing.
+
+    Example:
+        function: standard.dir_does_not_exist
+        parameter:
+          dst: C:/Users/user/AppData/Roaming/OldApp
+    """
     try:
         paths, status = ctx.resolve_globfilepath(
             dst,
@@ -356,6 +422,23 @@ def dir_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
     category=HostModeCategory.FILE_BASED
 )
 def dir_content(ctx, dst: str = '', files: list = None):
+    """Pass when every name in ``files`` is a direct entry of directory ``dst``.
+
+    Use for: checking a folder contains expected files/subfolders. Extra entries are allowed
+    (only listed in the failure details); the listing is not recursive.
+
+    Args:
+        dst: Guest path to the directory. A glob must match exactly one path, otherwise the
+            test errors. A missing or unreadable directory is an execution error, not a failure.
+        files: Entry names (not paths) that must be present, compared exactly and
+            case-sensitively against the directory listing. ``None``/empty always passes.
+
+    Example:
+        function: standard.dir_content
+        parameter:
+          dst: /home/user/Documents/export
+          files: [report.csv, images]
+    """
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
@@ -388,6 +471,27 @@ def dir_content(ctx, dst: str = '', files: list = None):
     category=HostModeCategory.FILE_BASED
 )
 def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: str = 'utf-8', strip_bom: bool = False):
+    """Pass when the regex ``regex`` is found anywhere in the text of file ``dst``.
+
+    Use for: loose content checks (a value appears, a line has a given shape). For exact
+    content use standard.file_content_equals; for a plain substring standard.file_content_contains.
+
+    Args:
+        dst: Guest path to the file. A glob must match exactly one path, otherwise the test
+            errors. A missing file fails.
+        regex: Python ``re`` pattern applied with ``re.search`` to the whole file. Default
+            flags: case-sensitive, ``^``/``$`` match only file start/end; use inline flags
+            such as ``(?im)``. An empty pattern always passes; an invalid one errors.
+        encoding: Python codec used to decode the file (strict: undecodable bytes error).
+            ``BOM`` detects UTF-8/16/32 from the byte-order mark and errors if there is none.
+        strip_bom: Remove a leading U+FEFF from the decoded text before matching.
+
+    Example:
+        function: standard.file_content_matches_regex
+        parameter:
+          dst: /home/user/notes.txt
+          regex: '(?m)^Total: [0-9]+$'
+    """
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
@@ -437,6 +541,27 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
     category=HostModeCategory.FILE_BASED
 )
 def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = 'utf-8', strip_bom: bool = False):
+    r"""Pass when the text of file ``dst`` equals ``content`` (leading/trailing whitespace ignored).
+
+    Use for: exact output checks, e.g. a tool's exit code or a saved text document.
+
+    Args:
+        dst: Guest path to the file. A glob must match exactly one path, otherwise the test
+            errors. A missing file fails; a failure includes a unified diff.
+        content: Expected text. Both sides are ``strip()``-ed; inner whitespace must match
+            (line endings are normalised to ``\n`` by text-mode reading). ``!re``/``!timestamp``
+            tags inside the value become placeholders matched by type; the literal text
+            around them must match exactly.
+        encoding: Python codec used to decode the file (strict). ``BOM`` detects UTF-8/16/32
+            from the byte-order mark and errors if there is none.
+        strip_bom: Remove a leading U+FEFF from the decoded text before comparing.
+
+    Example:
+        function: standard.file_content_equals
+        parameter:
+          dst: '{{ out_dir }}/exit_code.txt'
+          content: '0'
+    """
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
@@ -514,6 +639,24 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
     category=HostModeCategory.FILE_BASED
 )
 def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: str = 'sha256'):
+    """Pass when the ``hash_type`` digest of file ``dst`` equals ``expected_hash``.
+
+    Use for: verifying a file is byte-identical to a known artifact.
+
+    Args:
+        dst: Guest path to the file. A glob must match exactly one path, otherwise the test
+            errors. A missing file fails.
+        expected_hash: Hex digest; compared case-insensitively but otherwise exactly (no
+            whitespace stripping, no prefix such as ``sha256:``).
+        hash_type: ``md5``, ``sha1``, ``sha256`` (default) or ``sha512`` (case-insensitive);
+            anything else is an execution error.
+
+    Example:
+        function: standard.file_hash_matches
+        parameter:
+          dst: C:/Users/user/Downloads/setup.exe
+          expected_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    """
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
@@ -551,6 +694,37 @@ def file_timestamps(ctx, dst: str = '', timestamp_type: str = 'modified', compar
                     expected_time: str | int | float = None, time_format: str = None,
                     tolerance_seconds: int = None, start_time: str | int | float = None,
                     end_time: str | int | float = None, within_duration: str = None):
+    """Pass when the chosen timestamp of file ``dst`` satisfies ``comparison_type``.
+
+    Use for: MACB timestamp assertions (modified recently, accessed after an action, ...).
+
+    Args:
+        dst: Guest path to the file. A glob must match exactly one path, otherwise the test
+            errors. A missing file fails.
+        timestamp_type: ``modified`` (mtime, default), ``accessed`` (atime) or ``created``:
+            creation time on Windows; elsewhere ``st_birthtime`` if Python exposes it, else
+            ``st_ctime`` (inode change time on Linux). Other values error.
+        comparison_type: ``equals`` (default, within ``tolerance_seconds``), ``before`` /
+            ``after`` (strict, vs ``expected_time``), ``between`` (inclusive, ``start_time``..
+            ``end_time``) or ``within_last`` (``within_duration`` before the guest's now).
+        expected_time: Reference for equals/before/after: Unix epoch seconds or a date string
+            (see ``time_format``). Naive strings are read in the guest's local timezone (the
+            trailing ``Z`` format too). Missing/unparseable values error.
+        time_format: ``strptime`` format tried first; then ``%Y-%m-%d %H:%M:%S``,
+            ``%Y-%m-%dT%H:%M:%S``, ``%Y-%m-%dT%H:%M:%SZ``, ``%Y-%m-%d``, ``%m/%d/%Y %H:%M:%S``, ``%m/%d/%Y``.
+        tolerance_seconds: Allowed absolute difference for ``equals``; ``None`` means 0, which
+            rarely matches sub-second filesystem times.
+        start_time: Lower bound for ``between`` (same formats as ``expected_time``).
+        end_time: Upper bound for ``between``.
+        within_duration: For ``within_last``: integer plus unit ``s``/``m``/``h``/``d``, e.g. ``15m``.
+
+    Example:
+        function: standard.file_timestamps
+        parameter:
+          dst: /home/user/Documents/report.odt
+          comparison_type: within_last
+          within_duration: 10m
+    """
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
@@ -617,6 +791,27 @@ def file_timestamps(ctx, dst: str = '', timestamp_type: str = 'modified', compar
     category=HostModeCategory.QGA_PROBE
 )
 def file_permissions(ctx, dst: str = '', expected_permissions: str = '', check_owner: str = None, check_group: str = None):
+    """Pass when the permission bits (and optional owner/group) of ``dst`` match exactly.
+
+    Use for: Unix mode/ownership checks after chmod/chown or a file save. Only meaningful on
+    Linux guests: Windows reports synthetic mode bits and no owner/group (owner checks fail).
+
+    Args:
+        dst: Guest path to the file or directory. A glob must match exactly one path,
+            otherwise the test errors. A missing path fails.
+        expected_permissions: Octal digits (``'644'``, ``'0755'``) or 9-char symbolic
+            (``rwxr-xr-x``), compared with ``st_mode & 0o777`` (no setuid/sticky). Quote it in
+            YAML (unquoted ``0644`` is read as decimal 420). Empty/invalid values error.
+        check_owner: Expected owner user name (not UID); ``None`` skips the check.
+        check_group: Expected group name (not GID); ``None`` skips the check.
+
+    Example:
+        function: standard.file_permissions
+        parameter:
+          dst: /home/user/.ssh/id_ed25519
+          expected_permissions: '600'
+          check_owner: user
+    """
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
@@ -679,6 +874,28 @@ def file_permissions(ctx, dst: str = '', expected_permissions: str = '', check_o
     category=HostModeCategory.FILE_BASED
 )
 def file_content_contains(ctx, dst: str = '', content: str = '', content_type: str = 'string', encoding: str = 'utf-8', strip_bom: bool = False):
+    r"""Pass when file ``dst`` contains ``content`` as a substring (text) or byte sequence.
+
+    Use for: checking a value/marker was written into a file. For patterns use
+    standard.file_content_matches_regex.
+
+    Args:
+        dst: Guest path to the file. A glob must match exactly one path, otherwise the test
+            errors. A missing file fails.
+        content: Text to find (case-sensitive). In ``bytes`` mode Python escape sequences
+            are decoded first (``\x00``, ``\n``) to latin-1 bytes. An empty value always passes.
+        content_type: ``bytes`` searches the raw file bytes; any other value (default
+            ``string``) searches the decoded text.
+        encoding: Codec for ``string`` mode; undecodable bytes are silently dropped.
+            ``BOM`` detects UTF-8/16/32 from the byte-order mark and errors if there is none.
+        strip_bom: Remove a leading U+FEFF from the decoded text (``string`` mode only).
+
+    Example:
+        function: standard.file_content_contains
+        parameter:
+          dst: /home/user/.bash_history
+          content: rm -rf ~/evidence
+    """
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:

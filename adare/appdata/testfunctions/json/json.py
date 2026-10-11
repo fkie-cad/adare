@@ -165,6 +165,25 @@ def _handle_wildcard_matching(ctx, values, expected_value, wildcard_mode, key_pa
     category=HostModeCategory.FILE_CONTENT,
 )
 def contains_key(ctx, dst: str, key_path: str):
+    """Pass when ``key_path`` resolves to at least one value in JSON file ``dst`` (``null`` counts).
+
+    Use for: checking a settings/config file gained a key. To also check the value use
+    json.value_matches.
+
+    Args:
+        dst: Guest path to the JSON file; a glob must match exactly one path. A missing file
+            or invalid JSON fails. Read with the guest's default encoding.
+        key_path: Dot path from the root object, e.g. ``user.profile.name``. ``*`` expands
+            all values of an object (``config.*.enabled``), ``name[*]`` all elements of array
+            ``name`` (``users[*].email``). No numeric indexes; keys containing ``.`` and
+            top-level arrays cannot be addressed.
+
+    Example:
+        function: json.contains_key
+        parameter:
+          dst: /home/user/.config/Code/User/settings.json
+          key_path: editor.fontSize
+    """
     try:
         dst_path, status = ctx.resolve_globfilepath(dst)
         if not dst_path:
@@ -200,6 +219,33 @@ def contains_key(ctx, dst: str, key_path: str):
     category=HostModeCategory.FILE_CONTENT,
 )
 def value_matches(ctx, dst: str, key_path: str, expected_value: str | int | float | bool | None = None, regex_match: bool = False, wildcard_mode: str = "any"):
+    """Pass when the JSON value at ``key_path`` in ``dst`` equals (or matches) ``expected_value``.
+
+    Use for: asserting a setting/field value. If the path yields several values (a wildcard,
+    or a JSON array value, whose elements are then compared one by one) ``wildcard_mode``
+    decides; a one-element array is unwrapped. Whole arrays cannot be compared.
+
+    Args:
+        dst: Guest path to the JSON file; a glob must match exactly one path. A missing file,
+            invalid JSON or unresolvable path fails.
+        key_path: Dot path from the root object, e.g. ``user.profile.name``. ``*`` expands
+            all values of an object (``config.*.enabled``), ``name[*]`` all elements of array
+            ``name`` (``users[*].email``). No numeric indexes; keys containing ``.`` and
+            top-level arrays cannot be addressed.
+        expected_value: Compared with Python ``==``, which is type-sensitive (``5`` != ``"5"``;
+            ``null`` needs ``None``/``null``). A ``!re``/``!timestamp`` tag compares ``str(value)`` by type.
+        regex_match: Treat a string ``expected_value`` as a regex searched (``re.search``,
+            unanchored) in ``str(value)``.
+        wildcard_mode: ``any`` (default): one value must match; ``all``: every value must
+            match. Other values are an execution error (checked only for multiple values).
+
+    Example:
+        function: json.value_matches
+        parameter:
+          dst: /home/user/.mozilla/firefox/profile/sessionstore.json
+          key_path: windows[*].tabs[*].title
+          expected_value: Example Domain
+    """
     try:
         dst_path, status = ctx.resolve_globfilepath(dst)
         if not dst_path:
@@ -248,6 +294,25 @@ def value_matches(ctx, dst: str, key_path: str, expected_value: str | int | floa
     category=HostModeCategory.FILE_CONTENT,
 )
 def array_contains(ctx, dst: str, array_path: str, expected_element: str | int | float | bool | dict | list = None):
+    """Pass when the JSON array at ``array_path`` in ``dst`` contains ``expected_element``.
+
+    Use for: checking a list (recent files, bookmarks, accounts) includes an entry.
+
+    Args:
+        dst: Guest path to the JSON file; a glob must match exactly one path. A missing file,
+            invalid JSON, unresolvable path or non-array value fails.
+        array_path: Dot path to the array (same syntax as json.value_matches ``key_path``);
+            a wildcard yielding several values is treated as the array of those values.
+        expected_element: Element tested with Python ``in`` (type-sensitive; dicts and lists
+            must match exactly). A ``!re``/``!timestamp`` tag passes if any element's ``str()`` matches.
+
+    Example:
+        function: json.array_contains
+        parameter:
+          dst: /home/user/.config/app/recent.json
+          array_path: recent_files
+          expected_element: /home/user/Documents/report.odt
+    """
     try:
         dst_path, status = ctx.resolve_globfilepath(dst)
         if not dst_path:
