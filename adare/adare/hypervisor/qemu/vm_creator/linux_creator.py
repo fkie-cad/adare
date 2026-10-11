@@ -15,6 +15,7 @@ from pathlib import Path
 
 from adare.config.configdirectory import QEMU_CACHE_DIR
 from adare.console import console, print_section, print_step
+from adare.helperfunctions.digest_cache import record_file_sha256
 from adare.helperfunctions.web.download import download
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.autoinstall import seed_filename, write_autoinstall_dir
@@ -251,7 +252,9 @@ def _download_and_cache_iso(os_def: OsDefinition) -> Path:
             return iso_path
 
     print_step(f'Downloading {os_def.display_name} ISO...')
-    download(os_def.iso_url, iso_path)
+    # The digest is computed while streaming; caching it lets the check below
+    # skip re-reading the multi-GB file.
+    record_file_sha256(iso_path, download(os_def.iso_url, iso_path))
 
     if os_def.iso_sha256 and not verify_iso_hash(iso_path, os_def.iso_sha256):
         iso_path.unlink()
