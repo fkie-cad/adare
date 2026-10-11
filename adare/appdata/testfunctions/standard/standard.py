@@ -496,51 +496,44 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
           dst: /home/user/notes.txt
           regex: '(?m)^Total: [0-9]+$'
     """
+    dst, status = ctx.resolve_globfilepath(dst)
+    if not dst:
+        return TestResult.error(
+            [f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+        )
+
+    log.debug(f'dst file {dst} will be used for test')
+
+    # Handle BOM detection and encoding
+    if encoding and encoding.upper() == 'BOM':
+        detected_encoding, bom_length = _detect_encoding_from_bom(dst)
+        if detected_encoding:
+            encoding = detected_encoding
+        else:
+            return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
+
     try:
-        dst, status = ctx.resolve_globfilepath(dst)
-        if not dst:
-            return TestResult.error(
-                [
-                    f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status})'
-                ]
-            )
+        with open(dst, encoding=encoding) as f:
+            data = f.read()
 
-        log.debug(f'dst file {dst} will be used for test')
+        # Strip BOM if requested
+        if strip_bom:
+            data = _strip_bom_from_text(data, encoding)
 
-        # Handle BOM detection and encoding
-        if encoding and encoding.upper() == 'BOM':
-            detected_encoding, bom_length = _detect_encoding_from_bom(dst)
-            if detected_encoding:
-                encoding = detected_encoding
-            else:
-                return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
+    except FileNotFoundError:
+        return TestResult.failed([f'file with path {dst} does not exist'])
+    except (PermissionError, OSError, UnicodeDecodeError) as e:
+        return TestResult.execution_error(e, f"Cannot read file {dst}")
 
-        try:
-            with open(dst, encoding=encoding) as f:
-                data = f.read()
+    # Test regex compilation first
+    try:
+        pattern = re.compile(regex)
+    except re.error as e:
+        return TestResult.execution_error(e, f"Invalid regex pattern: {regex}")
 
-            # Strip BOM if requested
-            if strip_bom:
-                data = _strip_bom_from_text(data, encoding)
-
-        except FileNotFoundError:
-            return TestResult.failed([f'file with path {dst} does not exist'])
-        except (PermissionError, OSError, UnicodeDecodeError) as e:
-            return TestResult.execution_error(e, f"Cannot read file {dst}")
-
-        # Test regex compilation first
-        try:
-            pattern = re.compile(regex)
-        except re.error as e:
-            return TestResult.execution_error(e, f"Invalid regex pattern: {regex}")
-
-        if pattern.search(data):
-            return TestResult.success()
-        return TestResult.failed(['file content does not match regex expression'])
-
-    except Exception as e:
-        log.error(f"Unexpected error in file content regex test: {e}", exc_info=True)
-        return TestResult.execution_error(e, "Unexpected error in file content regex test")
+    if pattern.search(data):
+        return TestResult.success()
+    return TestResult.failed(['file content does not match regex expression'])
 
 
 @testfunction(
@@ -570,79 +563,64 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
           dst: '{{ out_dir }}/exit_code.txt'
           content: '0'
     """
-    try:
-        dst, status = ctx.resolve_globfilepath(dst)
-        if not dst:
-            return TestResult.error(
-                [
-                    f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status})'
-                ]
-            )
+    dst, status = ctx.resolve_globfilepath(dst)
+    if not dst:
+        return TestResult.error(
+            [f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+        )
 
-        log.debug(f'dst file {dst} will be used for test')
+    log.debug(f'dst file {dst} will be used for test')
 
-        # Handle BOM detection and encoding
-        if encoding and encoding.upper() == 'BOM':
-            detected_encoding, bom_length = _detect_encoding_from_bom(dst)
-            if detected_encoding:
-                encoding = detected_encoding
-            else:
-                return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
-
-        try:
-            with open(dst, encoding=encoding) as f:
-                data = f.read()
-
-            # Strip BOM if requested
-            if strip_bom:
-                data = _strip_bom_from_text(data, encoding)
-
-        except FileNotFoundError:
-            return TestResult.failed([f'file with path {dst} does not exist'])
-        except (PermissionError, OSError, UnicodeDecodeError) as e:
-            return TestResult.execution_error(e, f"Cannot read file {dst}")
-
-        # Check if we have placeholders that need special handling
-        expected_content = content
-
-        if not ctx.has_placeholders(expected_content):
-            # No placeholders - direct comparison (content already fully resolved by client)
-            success = data.strip() == expected_content.strip()
-            message = "Direct content comparison"
+    # Handle BOM detection and encoding
+    if encoding and encoding.upper() == 'BOM':
+        detected_encoding, bom_length = _detect_encoding_from_bom(dst)
+        if detected_encoding:
+            encoding = detected_encoding
         else:
-            # Has placeholders - special handling needed
-            try:
-                success, message = ctx.handle_placeholders_comparison(data.strip(), expected_content)
-            except Exception as e:
-                log.error(f"Error in placeholder comparison logic: {e}", exc_info=True)
-                return TestResult.execution_error(e, "Error in placeholder comparison logic")
+            return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
 
-        if success:
-            return TestResult.success([message])
-        # Show diff for debugging
-        try:
-            import difflib
+    try:
+        with open(dst, encoding=encoding) as f:
+            data = f.read()
 
-            expected_for_diff = expected_content
-            diff_lines = list(
-                difflib.unified_diff(
-                    expected_for_diff.splitlines(keepends=True),
-                    data.splitlines(keepends=True),
-                    fromfile='expected',
-                    tofile='actual',
-                    lineterm='',
-                )
-            )
-            diff_output = ''.join(diff_lines) if diff_lines else 'Content differs but no line-by-line diff available'
+        # Strip BOM if requested
+        if strip_bom:
+            data = _strip_bom_from_text(data, encoding)
 
-            return TestResult.failed([message, f'Diff:\n{diff_output}'])
-        except Exception as e:
-            log.error(f"Error generating diff output: {e}", exc_info=True)
-            return TestResult.execution_error(e, "Error generating diff output")
+    except FileNotFoundError:
+        return TestResult.failed([f'file with path {dst} does not exist'])
+    except (PermissionError, OSError, UnicodeDecodeError) as e:
+        return TestResult.execution_error(e, f"Cannot read file {dst}")
 
-    except Exception as e:
-        log.error(f"Unexpected error in file content equals test: {e}", exc_info=True)
-        return TestResult.execution_error(e, "Unexpected error in file content equals test")
+    # Check if we have placeholders that need special handling
+    expected_content = content
+
+    if not ctx.has_placeholders(expected_content):
+        # No placeholders - direct comparison (content already fully resolved by client)
+        success = data.strip() == expected_content.strip()
+        message = "Direct content comparison"
+    else:
+        # Has placeholders - special handling needed
+        success, message = ctx.handle_placeholders_comparison(data.strip(), expected_content)
+
+    if success:
+        return TestResult.success([message])
+    # Show diff for debugging
+    import difflib
+
+    expected_for_diff = expected_content
+    diff_lines = list(
+        difflib.unified_diff(
+            expected_for_diff.splitlines(keepends=True),
+            data.splitlines(keepends=True),
+            fromfile='expected',
+            tofile='actual',
+            lineterm='',
+        )
+    )
+    diff_output = ''.join(diff_lines) if diff_lines else 'Content differs but no line-by-line diff available'
+
+    return TestResult.failed([message, f'Diff:\n{diff_output}'])
 
 
 @testfunction(
@@ -669,36 +647,29 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
           dst: C:/Users/user/Downloads/setup.exe
           expected_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
     """
+    dst, status = ctx.resolve_globfilepath(dst)
+    if not dst:
+        return TestResult.error(
+            [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+        )
+
+    log.debug(f'dst file {dst} will be used for test')
+
+    expected_hash = expected_hash.lower()
+
     try:
-        dst, status = ctx.resolve_globfilepath(dst)
-        if not dst:
-            return TestResult.error(
-                [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
-            )
+        actual_hash = _calculate_hash(dst, hash_type)
 
-        log.debug(f'dst file {dst} will be used for test')
+        if actual_hash == expected_hash:
+            return TestResult.success([f'{hash_type.upper()} hash matches: {actual_hash}'])
+        return TestResult.failed([f'{hash_type.upper()} hash mismatch. Expected: {expected_hash}, Got: {actual_hash}'])
 
-        expected_hash = expected_hash.lower()
-
-        try:
-            actual_hash = _calculate_hash(dst, hash_type)
-
-            if actual_hash == expected_hash:
-                return TestResult.success([f'{hash_type.upper()} hash matches: {actual_hash}'])
-            return TestResult.failed(
-                [f'{hash_type.upper()} hash mismatch. Expected: {expected_hash}, Got: {actual_hash}']
-            )
-
-        except FileNotFoundError:
-            return TestResult.failed([f'file {dst} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read file {dst}")
-        except ValueError as e:
-            return TestResult.execution_error(e, "Hash calculation error")
-
-    except Exception as e:
-        log.error(f"Unexpected error in file hash test: {e}", exc_info=True)
-        return TestResult.execution_error(e, "Unexpected error in file hash test")
+    except FileNotFoundError:
+        return TestResult.failed([f'file {dst} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read file {dst}")
+    except ValueError as e:
+        return TestResult.execution_error(e, "Hash calculation error")
 
 
 @testfunction(
@@ -749,88 +720,75 @@ def file_timestamps(
           comparison_type: within_last
           within_duration: 10m
     """
+    dst, status = ctx.resolve_globfilepath(dst)
+    if not dst:
+        return TestResult.error(
+            [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+        )
+
+    log.debug(f'dst file {dst} will be used for test')
+
     try:
-        dst, status = ctx.resolve_globfilepath(dst)
-        if not dst:
-            return TestResult.error(
-                [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+        actual_time = _get_file_timestamp(dst, timestamp_type)
+
+        if comparison_type == 'equals':
+            expected = _parse_timestamp(expected_time, time_format)
+
+            tolerance = tolerance_seconds or 0
+            if abs(actual_time - expected) <= tolerance:
+                return TestResult.success(
+                    [f'{timestamp_type} timestamp matches (±{tolerance}s): {datetime.fromtimestamp(actual_time)}']
+                )
+            return TestResult.failed(
+                [
+                    f'{timestamp_type} timestamp mismatch. Expected: {datetime.fromtimestamp(expected)}, Got: {datetime.fromtimestamp(actual_time)}'
+                ]
             )
 
-        log.debug(f'dst file {dst} will be used for test')
+        if comparison_type == 'before':
+            expected = _parse_timestamp(expected_time, time_format)
+            if actual_time < expected:
+                return TestResult.success([f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected)}'])
+            return TestResult.failed([f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected)}'])
 
-        try:
-            actual_time = _get_file_timestamp(dst, timestamp_type)
+        if comparison_type == 'after':
+            expected = _parse_timestamp(expected_time, time_format)
+            if actual_time > expected:
+                return TestResult.success([f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected)}'])
+            return TestResult.failed([f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected)}'])
 
-            if comparison_type == 'equals':
-                expected = _parse_timestamp(expected_time, time_format)
-
-                tolerance = tolerance_seconds or 0
-                if abs(actual_time - expected) <= tolerance:
-                    return TestResult.success(
-                        [f'{timestamp_type} timestamp matches (±{tolerance}s): {datetime.fromtimestamp(actual_time)}']
-                    )
-                return TestResult.failed(
+        if comparison_type == 'between':
+            start = _parse_timestamp(start_time, time_format)
+            end = _parse_timestamp(end_time, time_format)
+            if start <= actual_time <= end:
+                return TestResult.success(
                     [
-                        f'{timestamp_type} timestamp mismatch. Expected: {datetime.fromtimestamp(expected)}, Got: {datetime.fromtimestamp(actual_time)}'
+                        f'{timestamp_type} timestamp is between {datetime.fromtimestamp(start)} and {datetime.fromtimestamp(end)}'
                     ]
                 )
+            return TestResult.failed(
+                [
+                    f'{timestamp_type} timestamp is not between {datetime.fromtimestamp(start)} and {datetime.fromtimestamp(end)}'
+                ]
+            )
 
-            if comparison_type == 'before':
-                expected = _parse_timestamp(expected_time, time_format)
-                if actual_time < expected:
-                    return TestResult.success(
-                        [f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected)}']
-                    )
-                return TestResult.failed(
-                    [f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected)}']
-                )
+        if comparison_type == 'within_last':
+            duration_seconds = _parse_duration(within_duration)
+            current_time = datetime.now().timestamp()
+            threshold_time = current_time - duration_seconds
 
-            if comparison_type == 'after':
-                expected = _parse_timestamp(expected_time, time_format)
-                if actual_time > expected:
-                    return TestResult.success(
-                        [f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected)}']
-                    )
-                return TestResult.failed(
-                    [f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected)}']
-                )
+            if actual_time >= threshold_time:
+                return TestResult.success([f'{timestamp_type} timestamp is within last {within_duration}'])
+            return TestResult.failed([f'{timestamp_type} timestamp is not within last {within_duration}'])
 
-            if comparison_type == 'between':
-                start = _parse_timestamp(start_time, time_format)
-                end = _parse_timestamp(end_time, time_format)
-                if start <= actual_time <= end:
-                    return TestResult.success(
-                        [
-                            f'{timestamp_type} timestamp is between {datetime.fromtimestamp(start)} and {datetime.fromtimestamp(end)}'
-                        ]
-                    )
-                return TestResult.failed(
-                    [
-                        f'{timestamp_type} timestamp is not between {datetime.fromtimestamp(start)} and {datetime.fromtimestamp(end)}'
-                    ]
-                )
+        return TestResult.error([f'Unsupported comparison type: {comparison_type}'])
 
-            if comparison_type == 'within_last':
-                duration_seconds = _parse_duration(within_duration)
-                current_time = datetime.now().timestamp()
-                threshold_time = current_time - duration_seconds
-
-                if actual_time >= threshold_time:
-                    return TestResult.success([f'{timestamp_type} timestamp is within last {within_duration}'])
-                return TestResult.failed([f'{timestamp_type} timestamp is not within last {within_duration}'])
-
-            return TestResult.error([f'Unsupported comparison type: {comparison_type}'])
-
-        except FileNotFoundError:
-            return TestResult.failed([f'file {dst} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot access file {dst}")
-        except ValueError as e:
-            return TestResult.execution_error(e, "Timestamp parsing/comparison error")
-
-    except Exception as e:
-        log.error(f"Unexpected error in file timestamps test: {e}", exc_info=True)
-        return TestResult.execution_error(e, "Unexpected error in file timestamps test")
+    except FileNotFoundError:
+        return TestResult.failed([f'file {dst} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot access file {dst}")
+    except ValueError as e:
+        return TestResult.execution_error(e, "Timestamp parsing/comparison error")
 
 
 @testfunction(
@@ -860,64 +818,57 @@ def file_permissions(
           expected_permissions: '600'
           check_owner: user
     """
+    dst, status = ctx.resolve_globfilepath(dst)
+    if not dst:
+        return TestResult.error(
+            [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+        )
+
+    log.debug(f'dst file {dst} will be used for test')
+
     try:
-        dst, status = ctx.resolve_globfilepath(dst)
-        if not dst:
-            return TestResult.error(
-                [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
-            )
+        stat_info = os.stat(dst)
+        actual_perms = stat_info.st_mode & 0o777
+        expected_perms = _parse_permissions(expected_permissions)
 
-        log.debug(f'dst file {dst} will be used for test')
+        results = []
+        success = True
 
-        try:
-            stat_info = os.stat(dst)
-            actual_perms = stat_info.st_mode & 0o777
-            expected_perms = _parse_permissions(expected_permissions)
+        # Check permissions
+        if actual_perms == expected_perms:
+            results.append(f'permissions match: {oct(actual_perms)[-3:]}')
+        else:
+            results.append(f'permission mismatch. Expected: {oct(expected_perms)[-3:]}, Got: {oct(actual_perms)[-3:]}')
+            success = False
 
-            results = []
-            success = True
+        # Check owner and group if specified
+        if check_owner or check_group:
+            owner, group = _get_owner_group(dst)
 
-            # Check permissions
-            if actual_perms == expected_perms:
-                results.append(f'permissions match: {oct(actual_perms)[-3:]}')
-            else:
-                results.append(
-                    f'permission mismatch. Expected: {oct(expected_perms)[-3:]}, Got: {oct(actual_perms)[-3:]}'
-                )
-                success = False
+            if check_owner:
+                if owner == check_owner:
+                    results.append(f'owner matches: {owner}')
+                else:
+                    results.append(f'owner mismatch. Expected: {check_owner}, Got: {owner}')
+                    success = False
 
-            # Check owner and group if specified
-            if check_owner or check_group:
-                owner, group = _get_owner_group(dst)
+            if check_group:
+                if group == check_group:
+                    results.append(f'group matches: {group}')
+                else:
+                    results.append(f'group mismatch. Expected: {check_group}, Got: {group}')
+                    success = False
 
-                if check_owner:
-                    if owner == check_owner:
-                        results.append(f'owner matches: {owner}')
-                    else:
-                        results.append(f'owner mismatch. Expected: {check_owner}, Got: {owner}')
-                        success = False
+        if success:
+            return TestResult.success(results)
+        return TestResult.failed(results)
 
-                if check_group:
-                    if group == check_group:
-                        results.append(f'group matches: {group}')
-                    else:
-                        results.append(f'group mismatch. Expected: {check_group}, Got: {group}')
-                        success = False
-
-            if success:
-                return TestResult.success(results)
-            return TestResult.failed(results)
-
-        except FileNotFoundError:
-            return TestResult.failed([f'file {dst} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot access file {dst}")
-        except ValueError as e:
-            return TestResult.execution_error(e, "Permission parsing error")
-
-    except Exception as e:
-        log.error(f"Unexpected error in file permissions test: {e}", exc_info=True)
-        return TestResult.execution_error(e, "Unexpected error in file permissions test")
+    except FileNotFoundError:
+        return TestResult.failed([f'file {dst} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot access file {dst}")
+    except ValueError as e:
+        return TestResult.execution_error(e, "Permission parsing error")
 
 
 @testfunction(
@@ -955,56 +906,51 @@ def file_content_contains(
           dst: /home/user/.bash_history
           content: rm -rf ~/evidence
     """
+    dst, status = ctx.resolve_globfilepath(dst)
+    if not dst:
+        return TestResult.error(
+            [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+        )
+
+    log.debug(f'dst file {dst} will be used for test')
+
     try:
-        dst, status = ctx.resolve_globfilepath(dst)
-        if not dst:
-            return TestResult.error(
-                [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
-            )
+        if content_type == 'bytes':
+            # Read file in binary mode
+            with open(dst, 'rb') as f:
+                file_data = f.read()
 
-        log.debug(f'dst file {dst} will be used for test')
+            # Parse escape sequences in the string to get actual bytes
+            search_content = _parse_escape_sequences(content)
 
-        try:
-            if content_type == 'bytes':
-                # Read file in binary mode
-                with open(dst, 'rb') as f:
-                    file_data = f.read()
+            if search_content in file_data:
+                return TestResult.success(['byte pattern found in file'])
+            return TestResult.failed(['byte pattern not found in file'])
 
-                # Parse escape sequences in the string to get actual bytes
-                search_content = _parse_escape_sequences(content)
+        # default: string content
+        # Handle BOM detection and encoding for string content
+        if encoding and encoding.upper() == 'BOM':
+            detected_encoding, bom_length = _detect_encoding_from_bom(dst)
+            if detected_encoding:
+                encoding = detected_encoding
+            else:
+                return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
 
-                if search_content in file_data:
-                    return TestResult.success(['byte pattern found in file'])
-                return TestResult.failed(['byte pattern not found in file'])
+        # Read file as text
+        with open(dst, encoding=encoding, errors='ignore') as f:
+            file_content = f.read()
 
-            # default: string content
-            # Handle BOM detection and encoding for string content
-            if encoding and encoding.upper() == 'BOM':
-                detected_encoding, bom_length = _detect_encoding_from_bom(dst)
-                if detected_encoding:
-                    encoding = detected_encoding
-                else:
-                    return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
+        # Strip BOM if requested
+        if strip_bom:
+            file_content = _strip_bom_from_text(file_content, encoding)
 
-            # Read file as text
-            with open(dst, encoding=encoding, errors='ignore') as f:
-                file_content = f.read()
+        search_string = content
 
-            # Strip BOM if requested
-            if strip_bom:
-                file_content = _strip_bom_from_text(file_content, encoding)
+        if search_string in file_content:
+            return TestResult.success(['string content found in file'])
+        return TestResult.failed(['string content not found in file'])
 
-            search_string = content
-
-            if search_string in file_content:
-                return TestResult.success(['string content found in file'])
-            return TestResult.failed(['string content not found in file'])
-
-        except FileNotFoundError:
-            return TestResult.failed([f'file {dst} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read file {dst}")
-
-    except Exception as e:
-        log.error(f"Unexpected error in file content contains test: {e}", exc_info=True)
-        return TestResult.execution_error(e, "Unexpected error in file content contains test")
+    except FileNotFoundError:
+        return TestResult.failed([f'file {dst} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read file {dst}")
