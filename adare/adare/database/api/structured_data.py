@@ -1,12 +1,10 @@
 # external imports
 # configure logging
 import logging
-from pathlib import Path
 
 from sqlalchemy.orm import joinedload, selectinload
 
-import adare.config.database as config_database
-from adare.database.api.database import DatabaseApi
+from adare.database.api.base import EnhancedDatabaseApi
 
 # internal imports
 from adare.database.models.global_models import Environment, Project, TestFunction, TestFunctionFile, Vm
@@ -28,18 +26,13 @@ from adare.types.output_models import EnvironmentInfo, ExperimentInfo, ProjectIn
 log = logging.getLogger(__name__)
 
 
-class StructuredDataApi(DatabaseApi):
+class StructuredDataApi(EnhancedDatabaseApi):
     """
     Database API for retrieving data as structured objects (not DataFrames).
 
     This API is designed for JSON/YAML output and automation use cases.
     For Rich terminal display, use DataRetrievalApi instead.
     """
-
-    def __init__(self, db_path: Path | None = None):
-        if db_path is None:
-            db_path = config_database.get_database_location()
-        super().__init__(db_path)
 
     def get_projects_structured(self) -> list[ProjectInfo]:
         """Get all projects as structured ProjectInfo objects."""

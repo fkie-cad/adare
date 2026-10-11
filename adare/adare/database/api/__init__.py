@@ -9,7 +9,6 @@ domain areas and a unified base class.
 from .base import EnhancedDatabaseApi
 
 # Import existing APIs for backward compatibility
-from .database import DatabaseApi
 from .environment import EnvironmentDbApi
 from .event import EventDbApi
 from .experiment import ExperimentApi
@@ -27,7 +26,6 @@ __all__ = [
     'SyncMetadataApi',
     'TagApi',
     # Existing APIs
-    'DatabaseApi',
     'ProjectDbApi',
     'EnvironmentDbApi',
     'ExperimentApi',

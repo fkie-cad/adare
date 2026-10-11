@@ -21,6 +21,15 @@ def pytest_unconfigure(config):
     shutil.rmtree(_TEST_HOME, ignore_errors=True)
 
 
+@pytest.fixture(autouse=True)
+def _dispose_db_engines():
+    """Database engines are cached per file for the process; drop them between tests."""
+    yield
+    from adare.database.api.base import dispose_engines
+
+    dispose_engines()
+
+
 @pytest.fixture
 def fixtures_dir():
     """Path to test fixtures directory."""

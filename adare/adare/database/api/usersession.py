@@ -2,26 +2,16 @@
 # configure logging
 import logging
 from datetime import UTC, datetime
-from pathlib import Path
 
-# internal imports
-import adare.config.database as config_database
-from adare.database.api.database import DatabaseApi
+from adare.database.api.base import GlobalDatabaseApi
 from adare.database.exceptions import TokenExpired
-from adare.database.models.login import Base as BaseLogin
 from adare.database.models.login import Token, UserSession
 
 log = logging.getLogger(__name__)
 
 
-class UserSessionApi(DatabaseApi):
-    """Database API for managing authenticated user sessions and their tokens."""
-
-    def __init__(self, db_path: Path | None = None):
-        if db_path is None:
-            db_path = config_database.get_database_location()
-        super().__init__(db_path)
-        BaseLogin.metadata.create_all(self.engine)
+class UserSessionApi(GlobalDatabaseApi):
+    """Database API for managing authenticated user sessions and their tokens (global database)."""
 
     def add_user_session(
         self,
