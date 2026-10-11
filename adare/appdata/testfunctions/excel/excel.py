@@ -562,6 +562,23 @@ def _validate_columns(
     category=HostModeCategory.FILE_CONTENT,
 )
 def sheet_exists(ctx: TestContext, dst: str = '', sheet_name: str = '', regex_match: bool = False):
+    """Pass when workbook ``dst`` (.xlsx, read with openpyxl) has a sheet named ``sheet_name``.
+
+    Use for: checking a GUI action added/renamed a worksheet.
+
+    Args:
+        dst: Guest path to the .xlsx; a glob must match exactly one path. Missing or
+            unreadable files fail (permission/OS errors are execution errors).
+        sheet_name: Exact, case-sensitive sheet name, or a regex if ``regex_match``.
+        regex_match: Treat ``sheet_name`` as a Python regex applied with ``re.match``
+            (anchored at the start only); an invalid regex fails.
+
+    Example:
+        function: excel.sheet_exists
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet_name: Q3
+    """
     try:
         # Resolve file path
         dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -626,6 +643,31 @@ def sheet_exists(ctx: TestContext, dst: str = '', sheet_name: str = '', regex_ma
     category=HostModeCategory.FILE_CONTENT,
 )
 def cell_value_matches(ctx: TestContext, dst: str = '', row: int = 0, column: int = 0, expected_value: str | int | float | bool | None = None, sheet: str | int = 0, regex_match: bool = False):
+    """Pass when the cell at (``row``, ``column``) of a sheet equals ``expected_value``.
+
+    Use for: asserting one value a user typed or a formula result saved in a workbook.
+    Cells are read via pandas and stringified: empty -> ``''``; numbers via ``str()`` (an int
+    may read as ``5.0`` if pandas upcasts the column/row to float); dates as
+    ``2024-01-31 00:00:00`` or ``2024-01-31T00:00:00`` depending on the row's other cells --
+    use ``!re`` for dates and numbers when unsure.
+
+    Args:
+        dst: Guest path to the .xlsx; a glob must match exactly one path. Missing file fails.
+        row: 0-based row index in the raw sheet (row 0 = spreadsheet row 1); out of range fails.
+        column: 0-based column index (A = 0); out of range fails.
+        expected_value: Compared exactly with ``str(expected_value)`` (``None`` -> ``''``).
+            A single ``!re``/``!timestamp`` tag is matched by type.
+        sheet: Sheet name (str) or 0-based sheet index (int); unknown sheets fail.
+        regex_match: Treat ``expected_value`` as a regex applied with ``re.match`` (start-anchored).
+
+    Example:
+        function: excel.cell_value_matches
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          row: 1
+          column: 2
+          expected_value: '1500'
+    """
     try:
         # Resolve file path
         dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -725,6 +767,24 @@ def cell_value_matches(ctx: TestContext, dst: str = '', row: int = 0, column: in
     category=HostModeCategory.FILE_CONTENT,
 )
 def contains_row(ctx: TestContext, dst: str = '', entry: list[str] = None, sheet: str | int = 0, header_row: int | None = None):
+    """Pass when at least one row of a sheet matches ``entry`` column by column.
+
+    Use for: checking a record exists anywhere in a sheet. Cells are stringified as in
+    excel.cell_value_matches (beware float/date formatting).
+
+    Args:
+        dst: Guest path to the .xlsx; a glob must match exactly one path. Missing file fails.
+        entry: Expected row; a row must have exactly as many columns as the sheet's used width.
+            Items compared as exact strings, or by type for ``!re``/``!timestamp`` tags.
+        sheet: Sheet name (str) or 0-based index (int); unknown sheets fail.
+        header_row: Number of top rows to skip before searching (not a row index); ``None`` skips none.
+
+    Example:
+        function: excel.contains_row
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          entry: [Laptop, '3', Office]
+    """
     try:
         # Resolve file path
         dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -815,6 +875,26 @@ def contains_row(ctx: TestContext, dst: str = '', entry: list[str] = None, sheet
     category=HostModeCategory.FILE_CONTENT,
 )
 def validate_columns(ctx: TestContext, dst: str = '', expected_columns: list[str] = None, sheet: str | int = 0, column_row: int = 0, allow_extra_columns: bool = False, allow_missing_columns: bool = False, ignore_order: bool = False):
+    """Pass when the header names in row ``column_row`` match ``expected_columns``.
+
+    Use for: verifying a sheet's column layout/schema.
+
+    Args:
+        dst: Guest path to the .xlsx; a glob must match exactly one path. Missing file fails.
+        expected_columns: Non-empty list of header names; whitespace-stripped, case-sensitive.
+            Empty header cells read as ``''`` and count as extra columns.
+        sheet: Sheet name (str) or 0-based index (int).
+        column_row: 0-based row holding the headers; out of range or empty row fails.
+        allow_extra_columns: Do not fail on headers not in ``expected_columns``.
+        allow_missing_columns: Do not fail on expected headers absent from the sheet.
+        ignore_order: Skip the order check (order is only checked when the names match exactly).
+
+    Example:
+        function: excel.validate_columns
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          expected_columns: [Item, Count, Location]
+    """
     try:
         # Resolve file path
         dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -896,6 +976,31 @@ def validate_columns(ctx: TestContext, dst: str = '', expected_columns: list[str
     category=HostModeCategory.FILE_CONTENT,
 )
 def compare_rows(ctx: TestContext, dst: str = '', reference_rows: list[list[str]] | None = None, reference_file: str | None = None, reference_sheet: str | int = 0, reference_header_row: int | None = None, sheet: str | int = 0, columns: list[int] | None = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False, header_row: int | None = None):
+    """Pass when the rows of a sheet match inline ``reference_rows`` or a sheet of ``reference_file``.
+
+    Use for: asserting sheet contents. Give exactly one of ``reference_rows``/``reference_file``
+    (both or neither fails). Cells are stringified as in excel.cell_value_matches.
+
+    Args:
+        dst: Guest path to the .xlsx under test; a glob must match exactly one path.
+        reference_rows: Expected rows as a list of lists of strings; ``!re``/``!timestamp`` tags allowed.
+        reference_file: Guest path to a reference .xlsx (not pulled in agentless host mode).
+        reference_sheet: Sheet name or 0-based index in ``reference_file``.
+        reference_header_row: Number of top rows to skip in ``reference_file``.
+        sheet: Sheet name or 0-based index in ``dst``.
+        columns: 0-based column indices to compare; ``None`` compares all.
+        ignore_order: ``True`` matches rows as a multiset instead of position by position.
+        allow_extra_rows: Do not fail on extra actual rows (ordered mode: trailing rows only).
+        allow_missing_rows: Do not fail on missing reference rows (ordered mode: trailing only).
+        header_row: Number of top rows of ``dst`` to skip (not a row index).
+
+    Example:
+        function: excel.compare_rows
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          header_row: 1
+          reference_rows: [[Laptop, '3'], [Monitor, '5']]
+    """
     try:
         # Resolve file path
         dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -1005,6 +1110,30 @@ def compare_rows(ctx: TestContext, dst: str = '', reference_rows: list[list[str]
     category=HostModeCategory.FILE_CONTENT,
 )
 def compare_sheets(ctx: TestContext, actual: str = '', reference: str = '', actual_sheet: str | int = 0, reference_sheet: str | int = 0, columns: list[int] | None = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False, header_row: int | None = None):
+    """Pass when sheet ``actual_sheet`` of ``actual`` matches ``reference_sheet`` of ``reference``.
+
+    Use for: comparing two sheets of the same or different workbooks. Needs the in-guest
+    agent (agentless host mode only pulls a ``dst`` parameter).
+
+    Args:
+        actual: Guest path to the workbook under test; glob must match exactly one path.
+        reference: Guest path to the reference workbook (may equal ``actual``).
+        actual_sheet: Sheet name or 0-based index in ``actual``.
+        reference_sheet: Sheet name or 0-based index in ``reference``.
+        columns: 0-based column indices to compare; ``None`` compares all.
+        ignore_order: ``True`` matches rows as a multiset instead of position by position.
+        allow_extra_rows: Do not fail on extra actual rows (ordered mode: trailing rows only).
+        allow_missing_rows: Do not fail on missing reference rows (ordered mode: trailing only).
+        header_row: Number of top rows to skip in BOTH sheets.
+
+    Example:
+        function: excel.compare_sheets
+        parameter:
+          actual: /home/user/Documents/budget.xlsx
+          reference: /home/user/Documents/budget.xlsx
+          actual_sheet: Q3
+          reference_sheet: Q2
+    """
     try:
         # Resolve actual file path
         actual_path, actual_status = ctx.resolve_globfilepath(actual)
@@ -1088,6 +1217,33 @@ def compare_sheets(ctx: TestContext, actual: str = '', reference: str = '', actu
     category=HostModeCategory.FILE_CONTENT,
 )
 def compare_files(ctx: TestContext, actual: str = '', reference: str = '', sheet_mode: str = "by_name", specific_sheets: list[str] | None = None, columns: list[int] | None = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False, allow_extra_sheets: bool = False, allow_missing_sheets: bool = False, header_row: int | None = None):
+    """Pass when all paired sheets of ``actual`` and ``reference`` match and no sheet is missing/extra.
+
+    Use for: whole-workbook comparison. Needs the in-guest agent (agentless host mode only
+    pulls a ``dst`` parameter).
+
+    Args:
+        actual: Guest path to the workbook under test; glob must match exactly one path.
+        reference: Guest path to the reference workbook.
+        sheet_mode: ``by_name`` (default; pair equal names), ``by_index`` (pair by position)
+            or ``specific`` (only ``specific_sheets`` present in both; extra sheets ignored).
+            Other values fail.
+        specific_sheets: Sheet names for ``specific`` mode; names absent from ``actual`` count as
+            missing, names absent only from ``reference`` are skipped. Empty passes vacuously.
+        columns: 0-based column indices to compare; ``None`` compares all.
+        ignore_order: ``True`` matches rows as a multiset instead of position by position.
+        allow_extra_rows: Do not fail on extra actual rows (ordered mode: trailing rows only).
+        allow_missing_rows: Do not fail on missing reference rows (ordered mode: trailing only).
+        allow_extra_sheets: Do not fail on sheets only in ``actual``.
+        allow_missing_sheets: Do not fail on sheets only in ``reference``.
+        header_row: Number of top rows to skip in every sheet.
+
+    Example:
+        function: excel.compare_files
+        parameter:
+          actual: C:/Users/user/Documents/report.xlsx
+          reference: C:/reference/report.xlsx
+    """
     try:
         # Resolve actual file path
         actual_path, actual_status = ctx.resolve_globfilepath(actual)
