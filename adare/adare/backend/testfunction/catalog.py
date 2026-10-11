@@ -12,10 +12,12 @@ Parameter docs come from a Google-style ``Args:`` section in the function docstr
 """
 
 import ast
+import copy
 import difflib
+import hashlib
 import logging
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +83,7 @@ class CatalogEntry:
     execute_on_host: bool = False
     doc: str = ''
     params: tuple[ParamSpec, ...] = field(default_factory=tuple)
+    code_sha: str = field(default='', compare=False, repr=False)  # docstring-free code hash
 
     @classmethod
     def from_dict(cls, data: dict) -> 'CatalogEntry':
@@ -142,6 +145,7 @@ class CatalogEntry:
             return {'dotnotation': self.dotnotation, 'summary': self.summary,
                     'signature': self.signature(), 'os': self.os, 'installed': self.installed}
         data = asdict(self)
+        data.pop('code_sha')
         data['signature'] = self.signature()
         data['example'] = self.example()
         return data
@@ -150,6 +154,21 @@ class CatalogEntry:
 # ---------------------------------------------------------------------------
 # Source parsing
 # ---------------------------------------------------------------------------
+
+def testfunction_code_without_docstring(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    """Source of a testfunction for hashing, docstring excluded.
+
+    Documentation (the catalog's ``Args:`` section) must not bump the function's
+    version: only code changes do.
+    """
+    body = func_node.body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+            and isinstance(body[0].value.value, str):
+        body = body[1:] or [ast.Pass()]
+    stripped = copy.copy(func_node)
+    stripped.body = body
+    return ast.unparse(stripped)
+
 
 def _decorator_call(node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.Call | None:
     for decorator in node.decorator_list:
@@ -265,6 +284,7 @@ def parse_collection(path: Path, installed: bool) -> list[CatalogEntry]:
             execute_on_host=bool(_kwarg(call, 'execute_on_host', False)),
             doc=doc,
             params=_params(node, parse_args_section(doc)),
+            code_sha=hashlib.sha256(testfunction_code_without_docstring(node).encode()).hexdigest(),
         ))
     return entries
 
@@ -328,8 +348,24 @@ def load_catalog(sources: list[tuple[Path, bool]] | None = None) -> list[Catalog
                 continue
             available = installed or path.stem in always_available
             for entry in parse_collection(path, available):
-                seen.setdefault(entry.dotnotation, entry)
+                if entry.dotnotation not in seen:
+                    seen[entry.dotnotation] = entry
+                else:
+                    seen[entry.dotnotation] = _borrow_docs(seen[entry.dotnotation], entry)
     return sorted(seen.values(), key=lambda e: e.dotnotation)
+
+
+def _borrow_docs(installed: CatalogEntry, bundled: CatalogEntry) -> CatalogEntry:
+    """Give an undocumented installed function the docs of its *identical* bundled copy.
+
+    Docstrings don't change a function's version, so ``test sync`` is not needed
+    to see newly written docs; differing code keeps the installed entry as is.
+    """
+    if installed.doc or not bundled.doc or installed.code_sha != bundled.code_sha:
+        return installed
+    docs = {p.name: p.doc for p in bundled.params}
+    params = tuple(replace(p, doc=p.doc or docs.get(p.name, '')) for p in installed.params)
+    return replace(installed, doc=bundled.doc, params=params)
 
 
 def close_matches(entries: list[CatalogEntry], dotnotation: str, n: int = 3) -> list[CatalogEntry]:

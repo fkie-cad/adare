@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from adare.database.api.testfunction import testfunction_code_without_docstring
+from adare.backend.testfunction.catalog import testfunction_code_without_docstring
 
 pytestmark = pytest.mark.unit
 
