@@ -147,8 +147,7 @@ class NetworkDrive:
         smb_conf_template = self.__jinja.get_template('smb.conf')
         try:
             f_path = self.vg_directory / "setup_smb.sh"
-            f = open(f_path.as_posix(), mode="w")
-            f.write(setup_smb_template.render({'configuration': self.smb}))
+            f_path.write_text(setup_smb_template.render({'configuration': self.smb}))
         except OSError as e:
             log.error(e)
             return -1
@@ -156,8 +155,7 @@ class NetworkDrive:
 
         try:
             f_path = self.vg_directory / "config" / "smb.conf"
-            f = open(f_path.as_posix(), mode="w")
-            f.write(smb_conf_template.render({'configuration': self.smb}))
+            f_path.write_text(smb_conf_template.render({'configuration': self.smb}))
         except OSError as e:
             log.error(e)
             return -1
@@ -171,8 +169,7 @@ class NetworkDrive:
         setup_nfs_template = self.__jinja.get_template('setup_nfs.sh')
         try:
             f_path = self.vg_directory / "setup_nfs.sh"
-            f = open(f_path.as_posix(), mode="w")
-            f.write(setup_nfs_template.render({'configuration': self.nfs}))
+            f_path.write_text(setup_nfs_template.render({'configuration': self.nfs}))
         except (OSError, KeyError) as e:
             log.error(e)
             return -1

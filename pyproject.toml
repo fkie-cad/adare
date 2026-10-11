@@ -136,6 +136,10 @@ quote-style = "preserve"
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "B", "BLE", "S110", "S112", "C901", "I", "UP", "SIM", "RET"]
+# The formatter owns line length; what it can't wrap (strings, comments, URLs) is fine.
+# Legacy violations of the selected rules are budgeted in quality-baseline.json and
+# enforced by scripts/quality_ratchet.py: counts may only go down.
+ignore = ["E501"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15

@@ -42,7 +42,7 @@ class MCPServerManager:
 
             # Set up log file redirection if specified
             if self.log_file:
-                log_file_handle = open(self.log_file, 'w')
+                log_file_handle = open(self.log_file, 'w')  # noqa: SIM115 - handed to the child process as stdout
                 print(f"📋 MCP server logs will be saved to: {self.log_file}")
                 # Start the server process with logs redirected to file
                 self.process = subprocess.Popen(cmd, stdout=log_file_handle, stderr=subprocess.STDOUT)
