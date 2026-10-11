@@ -17,7 +17,7 @@
   "mypy": {
     "arg-type": 492,
     "assignment": 400,
-    "attr-defined": 656,
+    "attr-defined": 594,
     "call-arg": 30,
     "call-overload": 4,
     "dict-item": 2,
