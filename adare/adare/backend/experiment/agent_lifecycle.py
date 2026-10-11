@@ -11,6 +11,8 @@ import logging
 import threading
 from typing import TYPE_CHECKING
 
+from adare.backend.experiment.agent_token import ensure_agent_token
+
 if TYPE_CHECKING:
     from adare.hypervisor.base.models import CommandResult
 
@@ -254,12 +256,14 @@ async def verify_guest_agent_readiness(
 # ---------------------------------------------------------------------------
 
 
-async def install_and_run_adare_vm(context, stop_event: threading.Event):
+async def install_and_run_adare_vm(context, stop_event: threading.Event, force_install: bool = False):
     """Install and run the adarevm agent in the VM.
 
     Uses the command builder pattern for platform-specific commands.
     The heavy lifting is delegated to ``_run_command_with_retry`` to avoid
-    duplicated retry/backoff logic.
+    duplicated retry/backoff logic. ``force_install`` ignores a cached dev-mode
+    start command and the installed-version check (used when the running agent
+    turned out to speak an older protocol).
     """
     from adare.backend.experiment.exceptions import VMSetupError
     from adare.database.api.devmode import DevModeApi
@@ -277,7 +281,7 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
 
     # Check for cached start command in database (dev mode restores)
     cached_command_str = None
-    if context.experiment_run_ulid:
+    if context.experiment_run_ulid and not force_install:
         try:
             with DevModeApi() as api:
                 session = api.get_session(context.experiment_run_ulid)
@@ -344,6 +348,7 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
             skip_xhost=skip_xhost,
             hypervisor_type=context.hypervisor_type or 'virtualbox',
             installation_mode=context.config.installation_mode,
+            agent_token=ensure_agent_token(context),
         )
 
         if context.guest_platform == 'windows':
@@ -356,6 +361,8 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
 
         # Step 4: Build all commands
         commands = await builder.build_commands(env_info, vm, stop_event)
+        if force_install:
+            commands.skip_installation = False
 
     # ---- Common path: Verification & Execution ----
 
@@ -679,6 +686,28 @@ async def _diagnose_websocket_connection(vm, guest_platform: str, stop_event, fu
 # ---------------------------------------------------------------------------
 
 
+# Matches the agent's command line but not the shell running the kill command
+# itself (whose command line contains the bracketed pattern, not "adarevm").
+_AGENT_PROCESS_PATTERN = '[a]darevm'
+
+
+async def stop_agent(context, stop_event: threading.Event) -> None:
+    """Best-effort: stop every adarevm process in the guest (before starting another)."""
+    if context.guest_platform == 'windows':
+        command = (
+            'Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '
+            f"'{_AGENT_PROCESS_PATTERN}' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}"
+        )
+    else:
+        command = f"pkill -f '{_AGENT_PROCESS_PATTERN}' || true"
+    try:
+        result = await context.vm.run_command(command, stop_event=stop_event, admin=True)
+        log.info(f"Stopped running adarevm agent (exit {result.returncode})")
+    except (OSError, TimeoutError, RuntimeError) as e:
+        log.warning(f"Could not stop the running adarevm agent: {e}")
+    context.adarevm_pid = None
+
+
 async def connect_websocket(context, stage_ctx):
     """Establish WebSocket connection to the adarevm agent with retries.
 
@@ -740,7 +769,7 @@ async def connect_websocket(context, stage_ctx):
             )
 
     # Create websocket client with host port forwarding
-    context.client = AdareVMClient(port=context.config.websocket_port)
+    context.client = AdareVMClient(port=context.config.websocket_port, token=ensure_agent_token(context))
 
     # Set up event handlers for logging
     def log_event_handler(event_type: str, data: dict):

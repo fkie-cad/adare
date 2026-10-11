@@ -123,7 +123,11 @@ class InteractiveDevelopmentServer:
             await self.session.vm_manager.mount_shared_directories(self.session.context)
 
             # Create WebSocket client for VM communication
-            self.session.context.client = AdareVMClient(port=self.session.context.config.websocket_port)
+            from adare.backend.experiment.agent_token import ensure_agent_token
+
+            self.session.context.client = AdareVMClient(
+                port=self.session.context.config.websocket_port, token=ensure_agent_token(self.session.context)
+            )
             await self.session.context.client.connect()
 
             # Initialize playbook controller for command execution

@@ -82,7 +82,7 @@ async def exec_ws_action(args: SimpleNamespace):
             raise WSActionError("'actions' must be a list")
 
         # Connect to adarevm
-        client = AdareVMClient(host=host, port=port)
+        client = AdareVMClient(host=host, port=port, token=getattr(args, 'token', None))
 
         try:
             connected = await client.connect(timeout=args.connect_timeout)

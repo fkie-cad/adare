@@ -6,9 +6,11 @@ using a custom WebSocket protocol for real-time GUI automation and test executio
 """
 
 import asyncio
+import hmac
 import json
 import logging
 import platform
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
@@ -18,9 +20,13 @@ log = logging.getLogger(__name__)
 
 # Import our WebSocket protocol
 from adarelib.websocket.protocol import (
+    AUTH_HEADER,
+    AUTH_SCHEME,
+    PROTOCOL_VERSION,
     EventMessage,
     EventType,
     MessageType,
+    Tool,
     ToolResultMessage,
 )
 from adarevm.core.tools.file_tools import FileToolsMixin
@@ -77,9 +83,12 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
         tools_paths: list[str] = None,
         data_paths: list[str] = None,
         installation_mode: str = "wheel",
+        token: str | None = None,
     ):
         self.host = host
         self.port = port
+        # Per-run secret from config.json; required on the WebSocket upgrade when set.
+        self.token = token
         self.clients: set[websockets.WebSocketServerProtocol] = set()
 
         # Shared data paths (project and experiment data directories)
@@ -103,32 +112,12 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
         self.running_tasks: dict[str, asyncio.Task] = {}
         self.client_tasks: dict[websockets.WebSocketServerProtocol, set[str]] = {}
 
-        # Tool registry
-        self.tools = {
-            "screenshot": self._screenshot,
-            "click": self._click,
-            "right_click": self._right_click,
-            "double_click": self._double_click,
-            "drag": self._drag,
-            "keyboard": self._keyboard,
-            "scroll": self._scroll,
-            "goto": self._goto,
-            "idle": self._idle,
-            "screenshot_window": self._screenshot_window,
-            "upload_testfunctions": self._upload_testfunctions,
-            "install_dependencies": self._install_dependencies,
-            "set_variables": self._set_variables,
-            "run_test": self._run_test,
-            "execute_shell": self._execute_shell,
-            "get_status": self._get_status,
-            "collect_system_info": self._collect_system_info,
-            "set_screenshot_method": self._set_screenshot_method,
-            "pull_file_chunk": self._pull_file_chunk,
-            "get_filesystem_snapshot": self._get_filesystem_snapshot,
-            "get_timestamp": self._get_timestamp,
-            "chain_commands": self._chain_commands,
-            "extract_icon": self._extract_icon,
-        }
+        # Tool registry: exactly the tools the protocol declares
+        self.tools = {}
+        for tool in Tool:
+            handler = getattr(self, f"_{tool.value}", None)
+            assert handler is not None, f"protocol tool {tool.value!r} has no _{tool.value} handler"
+            self.tools[tool.value] = handler
 
     async def start_server(self):
         """Start the WebSocket server."""
@@ -171,9 +160,40 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
                     "This is normal when using host-based GUI automation."
                 )
 
-        server = await websockets.serve(self.handle_client, self.host, self.port)
+        if not self.token:
+            log.warning("No agent token configured: accepting unauthenticated connections (development only)")
+        server = await websockets.serve(self.handle_client, self.host, self.port, process_request=self._authenticate)
         log.info("Server started successfully")
         return server
+
+    def _authenticate(self, connection, request):
+        """Reject the WebSocket upgrade unless it carries this run's token."""
+        if not self.token:
+            return None
+        supplied = request.headers.get(AUTH_HEADER, "")
+        expected = f"{AUTH_SCHEME} {self.token}"
+        if hmac.compare_digest(supplied.encode(), expected.encode()):
+            return None
+        log.warning(f"Rejected connection from {connection.remote_address}: missing or wrong agent token")
+        return connection.respond(HTTPStatus.UNAUTHORIZED, "missing or invalid agent token\n")
+
+    def welcome_data(self) -> dict[str, Any]:
+        """First message on every connection: protocol version, package versions, tools."""
+        from importlib.metadata import PackageNotFoundError, version
+
+        def _version(package: str) -> str:
+            try:
+                return version(package)
+            except PackageNotFoundError:
+                return "unknown"
+
+        return {
+            "message": "Connected to AdareVM server",
+            "protocol_version": PROTOCOL_VERSION,
+            "adarevm_version": _version("adarevm"),
+            "adarelib_version": _version("adarelib"),
+            "tools": sorted(self.tools),
+        }
 
     async def handle_client(self, websocket):
         """Handle a new client connection."""
@@ -183,15 +203,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
         log.info(f"Client connected: {client_address}")
 
         try:
-            # Send welcome message
-            await self.send_event(
-                websocket,
-                EventType.LOG,
-                {
-                    "message": "Connected to AdareVM server",
-                    "server_info": {"host": self.host, "port": self.port, "available_tools": list(self.tools.keys())},
-                },
-            )
+            await self.send_event(websocket, EventType.WELCOME, self.welcome_data())
 
             async for message in websocket:
                 await self.handle_message(websocket, message)
@@ -213,6 +225,13 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
 
             if msg_type == MessageType.TOOL_CALL:
                 await self.handle_tool_call(websocket, message)
+            elif msg_type == MessageType.CONNECT:
+                client_info = message.get('client_info') or {}
+                log.info(f"Client hello: {client_info}")
+                if client_info.get('protocol_version') != PROTOCOL_VERSION:
+                    log.warning(
+                        f"Client speaks protocol {client_info.get('protocol_version')}, this agent {PROTOCOL_VERSION}"
+                    )
             else:
                 log.warning(f"Unknown message type: {msg_type}")
 
