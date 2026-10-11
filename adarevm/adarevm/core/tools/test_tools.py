@@ -11,6 +11,7 @@ import base64
 import binascii
 import json
 import logging
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -22,6 +23,42 @@ if TYPE_CHECKING:
 from adarelib.websocket.protocol import EventType
 
 log = logging.getLogger(__name__)
+
+_IMPORT_FAILURES = ('ModuleNotFoundError', 'ImportError')
+_MISSING_MODULE = re.compile(r"No module named '([^']+)'")
+
+
+def _installed_adarelib_version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version('adarelib')
+    except PackageNotFoundError:
+        return 'unknown'
+
+
+def load_failure_hints(exception_type: str, exception_message: str) -> list[str]:
+    """Remediation hints for a testfunction collection that failed to import.
+
+    Collections are uploaded fresh for every run, but adarelib is whatever wheel
+    the guest was provisioned with; an import error naming adarelib means that
+    wheel predates an API the collection uses, not a missing third-party package.
+    """
+    if exception_type not in _IMPORT_FAILURES:
+        return []
+    if 'adarelib' in exception_message:
+        return [
+            f"The guest's adarelib {_installed_adarelib_version()} lacks an API this collection uses "
+            '(testfunctions are uploaded fresh, adarelib is installed with the agent)',
+            'Rerun the experiment so the agent wheels are rebuilt and reinstalled, or run `adare runtime build`',
+        ]
+    match = _MISSING_MODULE.search(exception_message)
+    if not match:
+        return []
+    return [
+        f'Install missing dependency: uv add {match.group(1)}',
+        'Or run experiment with dependency auto-installation enabled',
+    ]
 
 
 class TestToolsMixin:
@@ -190,18 +227,8 @@ class TestToolsMixin:
                     error_msg = f"Test function '{function_name}' unavailable: {failure.get_user_friendly_message()}"
                     log.error(error_msg)
 
-                    # Extract dependency name for hint
-                    hint_lines = [error_msg]
-                    if failure.exception_type == 'ModuleNotFoundError':
-                        import re
-
-                        match = re.search(r"No module named '([^']+)'", failure.exception_message)
-                        if match:
-                            dep_name = match.group(1)
-                            hint_lines.append(f"Install missing dependency: uv add {dep_name}")
-                            hint_lines.append("Or run experiment with dependency auto-installation enabled")
-
-                    return TestResult.error(hint_lines)
+                    hints = load_failure_hints(failure.exception_type, failure.exception_message)
+                    return TestResult.error([error_msg, *hints])
                 available_functions = []
                 for coll_name, coll_funcs in supported_tests.items():
                     for func_name in coll_funcs:
