@@ -1,54 +1,44 @@
-# external imports
-# configure logging
 import logging
 import os
 import platform
 from pathlib import Path
 
-# internal imports
-
 log = logging.getLogger(__name__)
 
 
-def __get_default_appdata_directory(create_if_missing: bool = False, program_name: str = 'adare') -> Path | None:
-    """
-    get the default config directory for the tool
+# Overrides the whole state directory (tests point it at a temp dir).
+ADARE_HOME_ENV_VAR = 'ADARE_HOME'
 
-    :param create_if_missing: if True, the directory will be created if it does not exist
-    :param program_name: the name of the program
-    :return:
+# Subdirectories ensure_directories() creates below the appdata directory.
+_REQUIRED_SUBDIRS = (
+    'state/vms',
+    'state/environments',
+    'state/testfunctions',
+    'os-profiles',
+    'vm-templates',
+    'icons',
+    'isos',
+)
+
+
+def _resolve_appdata_directory(program_name: str = 'adare') -> Path:
     """
-    system = platform.system()
-    if system == 'Windows':
-        appdata_path = Path(os.getenv('APPDATA'))
-        appdata_path = appdata_path / program_name.lower()
-    elif system in ("Linux", "Darwin"):
-        appdata_path = Path(f'~/.{program_name.lower()}/').expanduser()
-        if not appdata_path.exists():
-            appdata_path.mkdir(parents=False)
-    else:
-        print(f'the os {system} is not supported by the tool')
-        return None
-    if create_if_missing:
-        appdata_path.mkdir(parents=False, exist_ok=True)
-        # Create state directory structure
-        state_dir = appdata_path / 'state'
-        state_dir.mkdir(exist_ok=True, parents=True)
-        (state_dir / 'vms').mkdir(exist_ok=True, parents=True)
-        (state_dir / 'environments').mkdir(exist_ok=True, parents=True)
-        (state_dir / 'testfunctions').mkdir(exist_ok=True, parents=True)
-        (appdata_path / 'os-profiles').mkdir(exist_ok=True, parents=True)
-        (appdata_path / 'vm-templates').mkdir(exist_ok=True, parents=True)
-        (appdata_path / 'icons').mkdir(exist_ok=True, parents=True)
-        (appdata_path / 'isos').mkdir(exist_ok=True, parents=True)
-    if not appdata_path.is_dir():
-        print(f'the appdata directory ({appdata_path}) of the tool is missing')
-        return None
-    return appdata_path
+    Resolve the tool's appdata directory without touching the filesystem.
+
+    ``$ADARE_HOME`` wins; otherwise ``%APPDATA%\\adare`` on Windows and ``~/.adare`` elsewhere.
+    """
+    override = os.getenv(ADARE_HOME_ENV_VAR)
+    if override:
+        return Path(override).expanduser()
+    if platform.system() == 'Windows':
+        appdata = os.getenv('APPDATA')
+        if appdata:
+            return Path(appdata) / program_name.lower()
+    return Path.home() / f'.{program_name.lower()}'
 
 
 # Resolve paths at import time without creating directories (no side effects)
-APPDATA_DIR: Path = __get_default_appdata_directory(create_if_missing=False)
+APPDATA_DIR: Path = _resolve_appdata_directory()
 ADARE_DIR = APPDATA_DIR / 'adare'
 ADAREVM_DIR = ADARE_DIR / 'adarevm'
 ADARELIB_DIR = ADARE_DIR / 'adarelib'
@@ -66,6 +56,11 @@ VAGRANTFILE_TEMPLATE: Path = APPDATA_DIR / 'VagrantfileTemplate' / 'VagrantfileM
 STATE_DIR: Path = APPDATA_DIR / 'state'  # Global state directory
 VMS_DIR: Path = STATE_DIR / 'vms'  # Global VM storage
 ENVIRONMENTS_DIR: Path = STATE_DIR / 'environments'  # Global environment storage
+
+# Managed QEMU disks, runtime sockets and per-VM configs. They live under ~/.adare on
+# every OS (Windows included), unlike the rest of the appdata directory, unless
+# $ADARE_HOME relocates everything.
+QEMU_STATE_DIR: Path = (APPDATA_DIR if os.getenv(ADARE_HOME_ENV_VAR) else Path.home() / '.adare') / 'qemu'
 
 # QEMU cache directory for ISOs and other large downloads
 QEMU_CACHE_DIR: Path = APPDATA_DIR / 'qemu' / 'cache'
@@ -109,4 +104,5 @@ def ensure_directories() -> None:
     Call this explicitly during application startup instead of relying on
     import-time side effects. This function is idempotent.
     """
-    __get_default_appdata_directory(create_if_missing=True)
+    for sub in _REQUIRED_SUBDIRS:
+        (APPDATA_DIR / sub).mkdir(parents=True, exist_ok=True)

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from adare.config import DEFAULT_RESOLUTION_WH
+from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.models import QEMUVMConfig
 from adare.hypervisor.qemu.utilities.disk_utils import resolve_boot_mode
@@ -63,21 +64,21 @@ def _domain_uuid_for(environment_identity: str | None) -> str:
 
 def get_qemu_disk_dir() -> Path:
     """Directory holding managed disks (base/overlay/nvram): ~/.adare/qemu/disks."""
-    disk_dir = Path.home() / '.adare' / 'qemu' / 'disks'
+    disk_dir = QEMU_STATE_DIR / 'disks'
     disk_dir.mkdir(parents=True, exist_ok=True)
     return disk_dir
 
 
 def get_qemu_runtime_dir() -> Path:
     """Directory holding runtime sockets/pids (QMP/QGA/pid): ~/.adare/qemu/run."""
-    runtime_dir = Path.home() / '.adare' / 'qemu' / 'run'
+    runtime_dir = QEMU_STATE_DIR / 'run'
     runtime_dir.mkdir(parents=True, exist_ok=True)
     return runtime_dir
 
 
 def get_qemu_vm_config_dir() -> Path:
     """Directory holding per-VM config JSON: ~/.adare/qemu/vms."""
-    config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+    config_dir = QEMU_STATE_DIR / 'vms'
     config_dir.mkdir(parents=True, exist_ok=True)
     return config_dir
 

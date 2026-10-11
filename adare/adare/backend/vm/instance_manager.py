@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError
 
 from adare.backend.vm.exceptions import VMError
 from adare.backend.vm.port_manager import reserve_port_atomically
+from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.database.models.global_models import VmInstance
 from adare.hypervisor.base.identifier_strategy import (
     get_identifier_strategy,
@@ -772,7 +773,6 @@ class VmInstanceManager:
             instances_by_id = {instance.id: instance for instance in instances}
             updates_to_apply = []
             deletes_to_apply = []
-            qemu_config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
 
             for result in results:
                 if isinstance(result, Exception):
@@ -791,7 +791,7 @@ class VmInstanceManager:
                     instance = instances_by_id.get(instance_id)
                     is_qemu_orphan = False
                     if instance is not None and instance.vm is not None and instance.vm.hypervisor == 'qemu':
-                        config_path = qemu_config_dir / f"{instance.instance_name}.json"
+                        config_path = QEMU_STATE_DIR / "vms" / f"{instance.instance_name}.json"
                         if not config_path.exists():
                             is_qemu_orphan = True
 

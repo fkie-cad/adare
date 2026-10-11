@@ -5,6 +5,8 @@ Provides REST and WebSocket endpoints for dev mode session control.
 """
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
@@ -14,6 +16,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from adare.api import AdareAPI
+from adare.config.configdirectory import ensure_directories
 from adare.core.dto.devmode import (
     DevActionExecuteRequest,
     DevCheckpointCreateRequest,
@@ -33,11 +36,20 @@ from adare.webapi.websocket_manager import ws_manager
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Create the appdata directory tree before serving requests."""
+    ensure_directories()
+    yield
+
+
 # Initialize FastAPI app
 app = FastAPI(
     title="ADARE Web API",
     description="Web API for ADARE dev mode session control",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS middleware for development

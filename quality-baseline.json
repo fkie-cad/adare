@@ -5,7 +5,7 @@
     "B905": 19,
     "BLE001": 195,
     "C901": 96,
-    "E402": 182,
+    "E402": 177,
     "RET504": 7,
     "S110": 15,
     "S112": 1,
@@ -15,8 +15,8 @@
     "SIM117": 16
   },
   "mypy": {
-    "arg-type": 498,
-    "assignment": 405,
+    "arg-type": 497,
+    "assignment": 404,
     "attr-defined": 1065,
     "call-arg": 31,
     "call-overload": 4,

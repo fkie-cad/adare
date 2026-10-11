@@ -57,6 +57,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.console import console, print_section, print_step
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.firmware import create_nvram_for_vm
@@ -175,7 +176,7 @@ def _socket_path(kind: str) -> Path:
     ``sun_path`` limit is 104 bytes and a work overlay under ``$TMPDIR`` already
     eats ~49 of them.
     """
-    run_dir = Path.home() / '.adare' / 'qemu' / 'run'
+    run_dir = QEMU_STATE_DIR / 'run'
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir / f'.provision-{os.getpid()}-{kind}.sock'
 

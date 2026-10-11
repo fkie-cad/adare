@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.hypervisor.exceptions import HypervisorException
 
 if TYPE_CHECKING:
@@ -213,7 +214,7 @@ class DiskManagementMixin:
 
             # For external VMs, store overlays in managed storage (not next to original file)
             if self._external_disk_path:
-                overlay_dir = Path.home() / '.adare' / 'qemu' / 'disks'
+                overlay_dir = QEMU_STATE_DIR / 'disks'
                 overlay_dir.mkdir(parents=True, exist_ok=True)
                 log.debug(f"Using managed storage for external VM overlay: {overlay_dir}")
                 return str(overlay_dir / overlay_name)
@@ -362,7 +363,7 @@ class DiskManagementMixin:
             # Determine overlay directory based on VM type
             if self._external_disk_path:
                 # External VM: overlays are in managed storage, not next to base
-                overlay_dir = Path.home() / '.adare' / 'qemu' / 'disks'
+                overlay_dir = QEMU_STATE_DIR / 'disks'
                 # External qcow2: use the original filename stem
                 vm_name_stem = Path(self._external_disk_path).stem
                 log.debug(f"Cleaning external VM overlays from managed storage: {overlay_dir}")

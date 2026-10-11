@@ -10,6 +10,8 @@ import logging
 import os
 from pathlib import Path
 
+from adare.config.configdirectory import APPDATA_DIR
+
 log = logging.getLogger(__name__)
 
 
@@ -330,7 +332,7 @@ def _get_common_file_locations(file_path: Path) -> list[Path]:
     # Common config directories
     config_dirs = [
         Path.home() / '.config',
-        Path.home() / '.adare',
+        APPDATA_DIR,
         Path('/etc'),
         Path('/usr/local/etc'),
     ]
