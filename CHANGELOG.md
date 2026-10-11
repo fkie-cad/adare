@@ -41,6 +41,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   suite runs against a temp dir and never touches the real one.
 - `ADARE_FORWARD_BIND` sets the host address VM port forwards listen on.
 - `ADARE_MCP_PORT` sets the `adare mcp serve --transport http` port.
+- Guest agent test suite (`adarevm/tests`, `make test-agent`) run on Python 3.10
+  in CI on Linux and Windows; a non-blocking CI job runs the CV server tests.
+- `adarelib.testset.compare`: row/column comparison, diff report, nested lookup
+  and placeholder helpers shared by the csv/excel/json/jsonl/xml collections.
 - Guest agent protocol 2 (`adarevm`/`adarelib` 0.2.0): the agent requires the
   run's token (`agent_token` in `config.json`, sent as `Authorization: Bearer`),
   opens every connection with a `welcome` carrying `protocol_version`, versions
@@ -52,6 +56,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - Whole workspace formatted with `ruff format`; safe ruff autofixes applied.
 - `uv.lock` is committed; CI installs with `--locked`.
 - ruff and mypy pinned exactly in a `lint` dependency group.
+- Built-in testfunctions report an unexpected exception as ERROR (they used to
+  catch everything; Excel read errors even became FAILED). Unreadable workbooks
+  and uninterpretable placeholder values still fail the test.
+- Sphinx output is no longer committed: `make docs` builds to
+  `docsrc/build/html` and the docs workflow publishes it; `docs/mcp-clients.md`
+  moved to `docsrc/mcp-clients.md`, design notes to `docsrc/design/`.
 - `adare mcp serve --transport http` defaults to port 13112 (was 13111, which the
   LocateAnything grounding server also uses).
 - Guest agent wheels carry a content-hash version (`0.1.1+g<hash12>`); guests
@@ -99,6 +109,8 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 
 ### Removed
 - Broken console scripts `adareexp` and `mcp_gui` (their modules no longer exist).
+- Stale CV server scripts (`reproduce_ocr.py`, a pipeline test for an API that
+  no longer exists, sample images).
 - Dead code: `networkdrive`, `helperfunctions.subprocess`, `webappaccess.request`,
   the experiment backup model, adarevm templating, legacy `setup.py` files and the
   root `requirements.txt`.

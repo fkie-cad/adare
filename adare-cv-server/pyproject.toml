@@ -22,6 +22,9 @@ dependencies = [
 adare-cv-server = "adare_cv_server.server:main"
 
 [dependency-groups]
+test = [
+    "pytest>=8.0.0",
+]
 dev = [
     "pytest>=8.0.0",
     "black>=24.0.0",

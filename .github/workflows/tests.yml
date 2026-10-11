@@ -110,6 +110,28 @@ jobs:
           [ -x "$PY" ] || PY=../.venv-agent/Scripts/python.exe
           "$PY" -m pytest -q
 
+  # CV server: PaddleOCR/OpenCV make this install heavy and the suite is young,
+  # so it is reported but does not block merges (yet).
+  cv-server:
+    name: CV server (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install
+        run: uv sync --locked --package adare-cv-server --group test
+
+      - name: Run CV server tests
+        run: uv run --no-sync pytest adare-cv-server/tests -q
+
   # Testfunctions run inside Linux and Windows guests and on the macOS host (host
   # test mode), so their behaviour is checked on all three.
   testfunctions:

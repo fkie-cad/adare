@@ -15,7 +15,7 @@ value", "is this deleted file actually gone". Test-functions live in **collectio
 assertions. Writing a new one is the authoring loop: **scaffold → author (per the
 contract) → validate → dry-run → install → integrate**. Pure `adare` CLI + Bash + file editing —
 no VM needed until end-to-end integration. Auto-loads as a skill in **Claude Code**;
-portable to any agent with a shell (on **OpenCode** see `docs/mcp-clients.md`). The
+portable to any agent with a shell (on **OpenCode** see `docsrc/mcp-clients.md`). The
 authoring contract and the validate/dry-run detail live in `references/`.
 
 ## 0. Find an existing test-function (do this first)
