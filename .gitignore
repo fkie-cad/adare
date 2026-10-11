@@ -26,7 +26,7 @@ venv/
 poetry.lock
 
 # uv stuff
-uv.lock
+# uv.lock is committed: CI and the quality ratchet need reproducible dependency versions.
 
 # Installer logs
 pip-log.txt
@@ -90,3 +90,6 @@ graphify-out/
 # file they rewrite; 45 of those were once committed into the paper artifact.
 *.bak
 *.bak_*
+
+# Isolated env for the quality ratchet (make lint), mirrors the CI lint job
+.venv-lint/
