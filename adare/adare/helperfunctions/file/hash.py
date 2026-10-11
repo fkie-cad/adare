@@ -10,6 +10,8 @@ from tqdm import tqdm
 
 log = logging.getLogger(__name__)
 
+_CHUNK_SIZE = 1024 * 1024  # 1 MiB: these files are multi-GB disks and ISOs
+
 
 def file_sha256_with_progress(
     file_path: Path,
@@ -34,13 +36,16 @@ def file_sha256_with_progress(
     """
     if silent:
         log.debug(f'Calculating hash for {file_path} in silent mode')
-        hash_sha256 = hashlib.sha256()
         with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                if interrupt_event and interrupt_event.is_set():
-                    raise InterruptedError(f"Hash calculation interrupted by user for {file_path}")
-                hash_sha256.update(chunk)
-        result = hash_sha256.hexdigest()
+            if interrupt_event is None:
+                result = hashlib.file_digest(f, 'sha256').hexdigest()
+            else:
+                hash_sha256 = hashlib.sha256()
+                for chunk in iter(lambda: f.read(_CHUNK_SIZE), b""):
+                    if interrupt_event.is_set():
+                        raise InterruptedError(f"Hash calculation interrupted by user for {file_path}")
+                    hash_sha256.update(chunk)
+                result = hash_sha256.hexdigest()
         log.debug(f'Hash calculation completed for {file_path}')
         return result
 
@@ -61,7 +66,7 @@ def file_sha256_with_progress(
             unit_divisor=1024,
         ) as bar,
     ):
-        chunk_size = 64 * 1024  # 64KB chunks
+        chunk_size = _CHUNK_SIZE
         while True:
             if interrupt_event and interrupt_event.is_set():
                 raise InterruptedError(f"Hash calculation interrupted by user for {file_path}")
