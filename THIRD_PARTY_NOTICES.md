@@ -18,6 +18,17 @@ license at <https://huggingface.co/nvidia/LocateAnything-3B/blob/main/LICENSE>
 (non-commercial). The weights are not part of this repository; they are
 downloaded only when the opt-in `grounding` extra is used (`adare dev agent --ground`).
 
+## RBCmd (bundled example tool)
+
+- `adare/appdata/examples/experiments/win_deletefile/shared/tools/RBCmd.exe`
+- `adare/appdata/examples/experiments/test_windows_admin/shared/tools/RBCmd.exe`
+
+RBCmd, the Recycle Bin artifact parser by Eric Zimmerman
+(<https://github.com/EricZimmerman/RBCmd>), is distributed under the MIT License,
+Copyright (c) Eric R. Zimmerman. The binaries are included unmodified so the
+example experiments run offline; `adare experiment create` downloads the same
+tool from <https://download.ericzimmermanstools.com/RBCmd.zip>.
+
 ## Bundled documentation assets
 
 - `docs/_static/` contains build output of the Furo Sphinx theme (MIT); see

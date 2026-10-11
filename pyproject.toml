@@ -175,7 +175,9 @@ disallow_untyped_defs = false
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["adare.core.*"]
+# core is held at zero errors by `make typecheck`; services new defs must be
+# typed too (its legacy untyped defs are budgeted by the ratchet).
+module = ["adare.core.*", "adare.services.*"]
 disallow_untyped_defs = true
 
 [build-system]

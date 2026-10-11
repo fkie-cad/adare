@@ -9,6 +9,8 @@ drive ADARE conversationally with zero brain code.
 
 import logging
 
+from adare.config.server import MCP_CONTROL_PORT
+
 log = logging.getLogger(__name__)
 
 
@@ -18,7 +20,7 @@ def exec_mcp_serve(arguments):
 
     transport = getattr(arguments, 'transport', 'stdio')
     host = getattr(arguments, 'host', '127.0.0.1')
-    port = getattr(arguments, 'port', 13111)
+    port = getattr(arguments, 'port', None) or MCP_CONTROL_PORT
 
     if transport == 'stdio':
         # Do NOT print to stdout on stdio: it carries the MCP JSON-RPC stream.

@@ -198,6 +198,10 @@ EXPERIMENT_VIDEO = os.environ.get('ADARE_EXPERIMENT_VIDEO', '0').lower() in ('1'
 # (OpenCode / Claude Code / any MCP client) connects here to author playbooks.
 # Distinct from the CV/OCR server's 13109 so both can run against one session.
 GUI_MCP_PORT = int(os.environ.get('ADARE_GUI_MCP_PORT', '13110'))
+
+# Control-plane MCP server (`adare mcp serve --transport http`). Must differ from
+# LOCATE_PORT: both used to default to 13111, so the two could not run together.
+MCP_CONTROL_PORT = int(os.environ.get('ADARE_MCP_PORT', '13112'))
 GUI_MCP_HOST = os.environ.get('ADARE_GUI_MCP_HOST', '127.0.0.1')
 
 # PORTS FOR OAuth2 Redirects
