@@ -81,9 +81,15 @@ from adare.core.dto.playbook import (
 )
 from adare.core.result import Result
 from adare.database.api.experiment import ExperimentApi
-from adare.exceptions import LoggedException
+from adare.exceptions import LoggedErrorException, LoggedException
 
 log = logging.getLogger(__name__)
+
+# asyncio keeps only weak references to tasks; a fire-and-forget run must be
+# held here until it finishes or it can be garbage-collected mid-run.
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+_RUN_ERRORS = (LoggedException, OSError, ValueError, SQLAlchemyError)
 
 
 @dataclass
@@ -420,10 +426,12 @@ class ExperimentService:
                         test=False,
                         runlog=True,
                     )
-                except (LoggedException, OSError, ValueError, SQLAlchemyError):
+                except _RUN_ERRORS:
                     log.exception("Background experiment run %s failed", ulid_str)
 
-            asyncio.create_task(_run_in_background())
+            task = asyncio.create_task(_run_in_background())
+            _BACKGROUND_TASKS.add(task)
+            task.add_done_callback(_BACKGROUND_TASKS.discard)
 
             return Result.ok(
                 ExperimentRunStartedInfo(
@@ -444,6 +452,40 @@ class ExperimentService:
                     'Verify the environment exists and is attached to the experiment',
                 ],
             )
+
+    async def run_to_completion(
+        self,
+        project_path: Path,
+        name: str,
+        environment_name: str,
+    ) -> Result[ExperimentRunStartedInfo]:
+        """
+        Run an experiment and return only once it has finished.
+
+        For callers without a long-lived event loop (the chat tools run each
+        call under ``asyncio.run``): a task started by ``run()`` would be
+        cancelled the moment that loop closes.
+        """
+        ulid_str = str(ulid.ULID())
+        try:
+            await backend_experiment_run(
+                project_path,
+                name,
+                environment_name,
+                run_ulid=ulid_str,
+                test=False,
+                runlog=True,
+            )
+        except LoggedErrorException as e:
+            return Result.from_exception(e)
+        except _RUN_ERRORS as e:
+            log.error(f"Experiment run {ulid_str} failed: {e}")
+            return Result.fail(
+                code="ExperimentRunError",
+                message=f"Experiment run {ulid_str} failed: {e}",
+                solutions=[f'Inspect the run log with `adare run info {ulid_str}`'],
+            )
+        return Result.ok(ExperimentRunStartedInfo(run_ulid=ulid_str, experiment_name=name))
 
     def validate(self, request: ExperimentValidateRequest) -> Result[ExperimentValidateResult]:
         """

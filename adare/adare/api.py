@@ -200,6 +200,10 @@ class ExperimentAPI:
         """Run experiment in the background."""
         return await self._service.run(project_path, name, environment_name)
 
+    async def run_to_completion(self, project_path, name, environment_name):
+        """Run experiment and wait until it has finished."""
+        return await self._service.run_to_completion(project_path, name, environment_name)
+
     def ensure_verify_setup(self, project_path, environment_name):
         """Idempotently prep the built-in verify_vm experiment for an environment."""
         return self._service.ensure_verify_setup(project_path, environment_name)
