@@ -1,0 +1,71 @@
+name: Tests
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Whole client unit suite. live_vm tests are deselected by the pytest addopts.
+  # `--package adare` keeps adare-cv-server (paddle) out; the unit suite never imports it.
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: adare
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libvirt headers (qemu extra)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvirt-dev pkg-config
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install
+        run: uv sync --package adare --group test --extra qemu
+
+      - name: Run unit tests
+        run: uv run --no-sync pytest tests -q
+
+  # Testfunctions run inside Linux and Windows guests and on the macOS host (host
+  # test mode), so their behaviour is checked on all three.
+  testfunctions:
+    name: Testfunctions (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: adare
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install
+        run: uv sync --package adare --group test
+
+      - name: Run testfunction tests
+        run: uv run --no-sync pytest tests/unit/testfunctions -q
