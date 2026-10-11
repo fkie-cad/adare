@@ -127,7 +127,7 @@ def experiment_clean(project_path: Path, experiment_name: str):
                     location=f'Removed {removed_count} fake run(s)',
                     next_steps=[
                         'Fake runs have been permanently deleted from the database',
-                        f'You can continue testing with: adare experiment test {experiment_name} -e <environment>'
+                        f'You can continue testing with: adare experiment run {experiment_name} -e <environment>'
                     ]
                 )
             else:

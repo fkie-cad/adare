@@ -101,6 +101,15 @@ class ExperimentPanel:
         return Panel(layout, title=title, border_style="blue", title_align="left")
 
 
+def _as_list(value) -> list[str]:
+    """A DataFrame cell holding a ", "-joined string (or a list) as a list."""
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(',') if item.strip()]
+    if value is None or isinstance(value, float):
+        return []
+    return list(value)
+
+
 def print_experiment(name: str = None, dotnotation: str = None, ulid: str = None, project_name: str = None, environment_name: str = None, experiment_name: str = None, formatter=None, output_file=None, dual_output=False):
     # Get formatter if not provided
     if formatter is None:
@@ -142,8 +151,9 @@ def print_experiment(name: str = None, dotnotation: str = None, ulid: str = None
                 'name': experiment['name'].values[0],
                 'ulid': ulid,
                 'created_at': str(experiment['created_at'].values[0]),
-                'environments': experiment['environments'].values[0],
-                'tags': experiment['tags'].values[0] if 'tags' in experiment.columns else [],
+                # Lists, never ", "-joined strings (the DataFrame view joins them).
+                'environments': _as_list(experiment['environments'].values[0]),
+                'tags': _as_list(experiment['tags'].values[0]) if 'tags' in experiment.columns else [],
                 'dotnotation': experiment.get('dotnotation', experiment['name']).values[0] if 'dotnotation' in experiment.columns else experiment['name'].values[0],
                 'abstract_tests': abstract_tests
             }

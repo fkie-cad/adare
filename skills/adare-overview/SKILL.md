@@ -42,16 +42,19 @@ the assertions) → `adare-experiment` (run on every environment, compare).
 
 ## Driving the CLI as an agent
 
-- **Ask for machine-readable output.** The global `--format json|yaml` must come
-  **before** the subcommand: `adare --format json test search "file deleted"`.
-  When stdout is piped, list commands print plain tab-separated text with full IDs.
+- **Ask for machine-readable output.** Add `--json` to read commands
+  (`adare test search "file deleted" --json`, `adare env list --json`) or set
+  `ADARE_FORMAT=json` for a whole session. When stdout is piped, output defaults to
+  plain tab-separated text with full IDs. Data goes to stdout and messages to stderr.
+- **Exit codes:** 0 ok, 1 error, 2 usage, 3 not found. In JSON mode errors are
+  `{"error": {"code", "message", "hint", "solutions"}}`.
 - **Discover, don't guess.** Use `adare <group> --help`, then `--help` on the
   subcommand. For assertions: `adare test search "<goal>"` → `adare test info <dotnotation> --example`.
   Never invent a test-function name or parameter; the catalog has the exact signature.
 - **Project scope.** Experiment and run commands resolve the project from the
   current directory. `cd` into the project first. Test-function commands work anywhere.
-- **Errors carry fixes.** Read the "Possible Solutions" or `error.solutions` before
-  retrying. A not-found error lists close matches.
+- **Errors carry fixes.** Read the `Hint:` line or `error.solutions` before retrying.
+  A not-found error lists close matches.
 
 ## Rules
 

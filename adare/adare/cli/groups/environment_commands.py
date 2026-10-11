@@ -10,6 +10,8 @@ from types import SimpleNamespace
 
 import click
 
+from adare.cli.output import output_options
+
 
 def register(cli, AliasedGroup, exec_with_error_printing):
     """Register environment management commands with the CLI."""
@@ -203,6 +205,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_environment_delete, args)
 
     @env.command(name='list')
+    @output_options
     def list_environments():
         """List all environments in a project."""
         from adare.cli.show import exec_show_environments
@@ -210,6 +213,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_show_environments, args)
 
     @env.command()
+    @output_options
     @click.argument('environment_name')
     def info(environment_name):
         """Show detailed information about a specific environment."""

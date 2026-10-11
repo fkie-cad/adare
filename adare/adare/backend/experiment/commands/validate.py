@@ -45,7 +45,7 @@ def __validate_testset_compatibility(experiment_directory: ExperimentDirectory):
 
     if not testfunctions_dir.exists():
         log.warning(f"Global testfunctions directory not found: {testfunctions_dir} - skipping validation")
-        log.info("Load testfunctions using 'adare testfunction load-global <path>' to enable validation")
+        log.info("Load testfunctions using 'adare test load <path>' to enable validation")
         return
 
     log.debug(f"Using global testfunctions directory: {testfunctions_dir}")
@@ -82,7 +82,7 @@ def __validate_testset_compatibility(experiment_directory: ExperimentDirectory):
                 log,
                 f"Testset contains unsupported testfunctions: {missing}",
                 possible_solutions=[
-                    "Load missing testfunction implementations using 'adare testfunction load-global <path>'",
+                    "Load missing testfunction implementations using 'adare test load <path>'",
                     "Remove invalid tests from testset.yml",
                     "Check testfunction naming matches class names",
                     "Ensure testfunction files are properly structured"

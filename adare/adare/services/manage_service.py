@@ -433,7 +433,7 @@ class ManageService:
                 solutions=[
                     'Ensure uv is installed',
                     'Check that adarelib and adarevm have valid pyproject.toml files',
-                    'Run "adare manage vm-runtime refresh" first to get fresh source files'
+                    'Run "adare runtime refresh" first to get fresh source files'
                 ]
             )
         except NoProjectFoundError as e:
@@ -444,7 +444,7 @@ class ManageService:
                 code="VmRuntimeBuildError",
                 message=f"Required file not found: {e}",
                 solutions=[
-                    'Run "adare manage vm-runtime refresh" first to copy source files',
+                    'Run "adare runtime refresh" first to copy source files',
                     'Ensure uv is installed and in PATH'
                 ]
             )

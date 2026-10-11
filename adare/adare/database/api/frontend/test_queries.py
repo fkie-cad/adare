@@ -57,11 +57,25 @@ class TestQueryMixin:
         tests = experiment.abstract_tests
         tests_data = {}
         for test in tests:
+            # A test can reference a testfunction that is no longer (or not yet) in
+            # the global DB. Render it as missing instead of crashing the whole view.
+            testfunction = test.testfunction
+            if testfunction is not None:
+                testfunction_name = testfunction.dotnotation
+                testfunction_description = testfunction.description
+            else:
+                pinned = test.testfunction_file_name or test.testfunction_id
+                testfunction_name = f'{pinned} (missing)'
+                testfunction_description = (
+                    f'testfunction {test.testfunction_id} is not in the database; '
+                    'load or sync it with `adare test load` / `adare test sync`'
+                )
             tests_data[test.name] = {
                 'name': test.name,
                 'description': test.description,
-                'testfunction_name': test.testfunction.dotnotation,
-                'testfunction_description': test.testfunction.description,
+                'testfunction_name': testfunction_name,
+                'testfunction_description': testfunction_description,
+                'testfunction_missing': testfunction is None,
                 'parameters': [
                     {
                         'name': parameter.parameter.name if parameter.parameter else parameter.parameter_id,

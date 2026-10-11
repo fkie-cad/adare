@@ -7,6 +7,7 @@ import json
 
 # setup logging
 import logging
+import math
 import re
 from datetime import datetime, timedelta
 from enum import Enum
@@ -14,19 +15,43 @@ from pathlib import Path
 from typing import Any
 
 import attrs
+import numpy as np
 import yaml
 from rich.console import Console
+from rich.errors import MarkupError
+from rich.markup import render as render_markup
 from rich.panel import Panel
 from rich.table import Table
+
+from adare.helperfunctions.plain_output import render_plain
 
 log = logging.getLogger(__name__)
 
 
 class OutputFormat(Enum):
-    """Supported output formats."""
+    """Supported output formats.
+
+    ``PLAIN`` is the script-friendly text form: tab-separated, one header row,
+    full untruncated values, no colour/box-drawing/emoji. It is what a command
+    prints when stdout is not a terminal and no format was requested.
+    """
     RICH = "rich"
+    PLAIN = "plain"
     JSON = "json"
     YAML = "yaml"
+
+    @property
+    def is_structured(self) -> bool:
+        """True for the formats rendered from structured data (everything but rich)."""
+        return self is not OutputFormat.RICH
+
+
+class RawText(str):
+    """A string emitted verbatim: no Rich-markup stripping, no whitespace trimming.
+
+    For values that are documents in their own right (a playbook's YAML), where
+    ``[tag]``-looking text or a trailing newline is data, not decoration.
+    """
 
 
 class StructuredOutputFormatter:
@@ -46,17 +71,8 @@ class StructuredOutputFormatter:
         """
         if data is None:
             return None
-        if isinstance(data, (str, int, float, bool)):
-            # Clean Rich markup from strings
-            if isinstance(data, str):
-                return self._strip_rich_markup(data)
-            return data
-        if isinstance(data, datetime):
-            return data.isoformat()
-        if isinstance(data, timedelta):
-            return data.total_seconds()
-        if isinstance(data, Path):
-            return str(data)
+        if isinstance(data, (np.generic, Enum, str, int, float, bool, datetime, timedelta, Path)):
+            return self._prepare_scalar(data)
         if hasattr(data, '__attrs_attrs__'):
             # Handle attrs/dataclass objects
             return self._attrs_to_dict(data)
@@ -76,12 +92,47 @@ class StructuredOutputFormatter:
         # Fallback: convert to string and clean markup
         return self._strip_rich_markup(str(data))
 
+    def _prepare_scalar(self, data: Any) -> Any:
+        """Normalize one scalar value to its JSON form."""
+        if isinstance(data, np.generic):
+            # numpy scalars from DataFrame-backed views: a numpy bool used to fall
+            # through to str() and serialize as "True" instead of true.
+            return self.prepare_data(data.item())
+        if isinstance(data, Enum):
+            # Enum values are strings in structured output: a str-valued enum keeps
+            # its value, an IntEnum such as StatusEnum.FINISHED becomes "finished"
+            # (it used to leak out as the bare integer 9).
+            if isinstance(data.value, str):
+                return self.prepare_data(data.value)
+            return data.name.lower()
+        if isinstance(data, float) and math.isnan(data):
+            return None  # NaN is not valid JSON; missing DataFrame cells are NaN
+        if isinstance(data, RawText):
+            return str(data)
+        if isinstance(data, str):
+            # Clean Rich markup from strings
+            return self._strip_rich_markup(data)
+        if isinstance(data, datetime):
+            return data.isoformat()
+        if isinstance(data, timedelta):
+            return data.total_seconds()
+        if isinstance(data, Path):
+            return str(data)
+        return data  # int / float / bool
+
     def _strip_rich_markup(self, text: str) -> str:
-        """Remove Rich markup from text."""
-        # Remove Rich style tags like [bold], [red], etc.
-        clean_text = re.sub(r'\[[^\]]*\]', '', text)
-        # Remove Rich emoji codes like :white_check_mark:
-        clean_text = re.sub(r':[a-zA-Z_]+:', '', clean_text)
+        """Remove Rich markup from text.
+
+        Only real Rich tags (``[bold]``, ``[/red]``, ``[b gold3]``) are removed, via
+        Rich's own markup parser: the old "anything in brackets" regex also ate
+        data such as ``[WIP]`` or ``[1, 2]``. Emoji codes are only stripped when they
+        stand alone, so path- or URL-like values (``a:b:c``) survive intact.
+        """
+        try:
+            clean_text = render_markup(text, emoji=False).plain
+        except MarkupError:
+            clean_text = text
+        clean_text = re.sub(r'(?<!\S):[a-z0-9_+-]+:(?!\S)', '', clean_text)
         return clean_text.strip()
 
     def _attrs_to_dict(self, obj) -> dict[str, Any]:
@@ -200,6 +251,8 @@ class OutputFormatter:
             return self.structured_formatter.serialize_json(clean_data)
         if self.format_type == OutputFormat.YAML:
             return self.structured_formatter.serialize_yaml(clean_data)
+        if self.format_type == OutputFormat.PLAIN:
+            return render_plain(clean_data)
         raise ValueError(f"Unsupported output format: {self.format_type}")
 
     def _format_rich(self, data: Any) -> str:
@@ -231,8 +284,9 @@ class OutputFormatter:
             # (the Rich output has already been shown during the command execution)
 
             # Save structured data to file (use format specified or default to JSON)
-            if self.format_type == OutputFormat.RICH:
-                # When Rich is specified but we need structured output, default to JSON
+            if self.format_type in (OutputFormat.RICH, OutputFormat.PLAIN):
+                # Rich (or the auto-selected plain form) is a console format; the
+                # file keeps getting machine-readable JSON as it always did.
                 json_formatter = StructuredOutputFormatter()
                 clean_data = json_formatter.prepare_data(data)
                 file_output = json_formatter.serialize_json(clean_data)
@@ -252,7 +306,7 @@ class OutputFormatter:
             else:
                 console.print(str(data))
         else:
-            # Structured format (JSON/YAML)
+            # Structured format (plain/JSON/YAML)
             formatted_output = self.format(data)
 
             if output_file:
@@ -260,9 +314,10 @@ class OutputFormatter:
                 with open(output_file, 'w', encoding='utf-8') as f:
                     f.write(formatted_output)
                 log.info(f"Output saved to {output_file}")
-            else:
-                # Print to console
-                print(formatted_output)
+            elif formatted_output:
+                # Data goes to stdout and nowhere else. An empty plain rendering
+                # (an empty list) prints nothing rather than a blank line.
+                print(formatted_output.rstrip('\n'))
 
 
 def get_formatter(format_type: OutputFormat | str = OutputFormat.RICH) -> OutputFormatter:

@@ -314,7 +314,7 @@ def exec_remove_run(arguments):
         print_success_message(
             title=f"Successfully removed run {result.data.ulid}",
             location="Database",
-            next_steps=["Run 'adare show runs' to see remaining runs"]
+            next_steps=["Run 'adare run list' to see remaining runs"]
         )
     else:
         handle_api_error(result)

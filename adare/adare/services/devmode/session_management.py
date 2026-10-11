@@ -150,11 +150,11 @@ class SessionManagementMixin:
                 f"Execute single action: adare dev action {session_id} -y '<action_yaml>'",
                 f"Execute playbook: adare dev playbook {session_id} -f <playbook.yml>",
                 f"View session state: adare dev state {session_id}",
-                f"Reset session: adare dev reset-soft {session_id}  (or reset-hard)",
+                f"Reset session: adare dev reset soft -s {session_id}  (or reset hard)",
                 f"Stop session: adare dev stop {session_id}"
             ]
 
-            tip = "Use 'adare dev checkpoint-create' to save snapshots before risky operations"
+            tip = "Use 'adare dev checkpoint create' to save snapshots before risky operations"
 
             return Result.ok(DevSessionInfo(
                 session_id=state.session_id,
@@ -292,7 +292,7 @@ class SessionManagementMixin:
                 f"Execute single action: adare dev action {session_id} -y '<action_yaml>'",
                 f"Execute playbook: adare dev playbook {session_id} -f <playbook.yml>",
                 f"View session state: adare dev state {session_id}",
-                f"Reset session: adare dev reset-soft {session_id}  (or reset-hard)",
+                f"Reset session: adare dev reset soft -s {session_id}  (or reset hard)",
                 f"Stop session: adare dev stop {session_id}"
             ]
 

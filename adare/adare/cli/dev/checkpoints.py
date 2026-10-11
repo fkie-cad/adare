@@ -118,9 +118,13 @@ def exec_dev_checkpoint_list(arguments):
     ))
 
     if result.success:
+        from adare.cli.output import emit, is_structured_output
+        if is_structured_output():
+            emit({'session_id': session_id, 'checkpoints': result.data or []})
+            return
         if not result.data:
             print(f"No checkpoints found for session {session_id}")
-            print(f"\nCreate a checkpoint with: adare dev checkpoint-create -s {session_id} <name>")
+            print(f"\nCreate a checkpoint with: adare dev checkpoint create -s {session_id} <name>")
         else:
             # Use Rich table panel for display
             import pandas as pd
