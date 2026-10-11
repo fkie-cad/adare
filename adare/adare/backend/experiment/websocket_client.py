@@ -90,12 +90,13 @@ class AdareVMClient:
         # Connection lock (event-loop-aware, recreated in current loop)
         self._connection_lock = None
 
-    async def connect(self, timeout: float = 10.0) -> bool:
+    async def connect(self, timeout: float = 10.0, quiet: bool = False) -> bool:
         """
         Connect to the adarevm WebSocket server.
 
         Args:
             timeout: Connection timeout in seconds
+            quiet: Log the attempt and its failure at debug level (readiness polling expects failures)
 
         Returns:
             True if connected successfully
@@ -105,8 +106,9 @@ class AdareVMClient:
             if self.connected:
                 return True
 
+            report = log.debug if quiet else log.error
             try:
-                log.info(f"Connecting to adarevm server at {self.server_url}")
+                (log.debug if quiet else log.info)(f"Connecting to adarevm server at {self.server_url}")
                 headers = {AUTH_HEADER: f'{AUTH_SCHEME} {self.token}'} if self.token else None
 
                 websocket = await asyncio.wait_for(
@@ -137,7 +139,7 @@ class AdareVMClient:
                 return True
 
             except TimeoutError:
-                log.error(f"Connection timeout after {timeout} seconds")
+                report(f"Connection timeout after {timeout} seconds")
                 return False
             except websockets.exceptions.InvalidStatus as e:
                 if e.response.status_code == 401:
@@ -145,10 +147,10 @@ class AdareVMClient:
                         f"adarevm at {self.server_url} rejected the agent token "
                         f"({'none sent' if not self.token else 'token mismatch'})"
                     ) from e
-                log.error(f"Failed to connect to adarevm server: {e}")
+                report(f"Failed to connect to adarevm server: {e}")
                 return False
             except (websockets.exceptions.WebSocketException, ConnectionError, OSError) as e:
-                log.error(f"Failed to connect to adarevm server: {e}")
+                report(f"Failed to connect to adarevm server: {e}")
                 return False
 
     async def _read_welcome(self, websocket) -> None:

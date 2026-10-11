@@ -262,7 +262,7 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
         # the venv (the slow first-run build; cached in the shared .venv after),
         # grant the guest-agent (root) access to the autologin user's X display
         # (DISPLAY/XAUTHORITY + `xhost +SI:localuser:root`), then run adarevm.
-        import asyncio
+        from adare.backend.experiment.agent_readiness import wait_for_agent
 
         sync_command = "cd /adare/vm/adarevm && uv sync 2>&1 | tail -3"
         log.info("Pre-syncing adarevm venv in guest (first run builds deps)...")
@@ -276,8 +276,8 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
         )
         start_result = await context.vm.run_command(start_command, stop_event=context.user_interrupt_event)
         if start_result.returncode == 0:
-            log.info("AdareVM server launched; waiting for it to initialize")
-            await asyncio.sleep(6.0)
+            log.info("AdareVM server launched; waiting for it to answer")
+            await wait_for_agent(context.config.websocket_port, stop_event=context.user_interrupt_event)
             return True, None
         log.warning(f"Failed to start adarevm server. Exit code: {start_result.returncode}")
         return False, f"Failed to start adarevm server. Exit code: {start_result.returncode}"

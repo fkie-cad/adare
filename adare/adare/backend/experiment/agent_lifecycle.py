@@ -708,6 +708,33 @@ async def stop_agent(context, stop_event: threading.Event) -> None:
     context.adarevm_pid = None
 
 
+# Quiet handshake polling before the first diagnostics / loud retries (was a flat 3 s sleep).
+_STARTUP_GRACE = 3.0
+
+
+async def _finish_connection(context, stage_ctx) -> None:
+    """Clear the stage message, then smoke-test a fresh connection (ping + status)."""
+    from websockets.exceptions import ConnectionClosed
+
+    stage_ctx.stage.sub_msg = ""
+    stage_ctx.set_status(stage_ctx.stage.status)
+    log.info("Successfully connected to AdareVM WebSocket server")
+
+    # Test the connection with ping
+    ping_success = await context.client.ping()
+    if ping_success:
+        log.info("Ping test successful - WebSocket connection is working")
+    else:
+        log.warning("Ping test failed but connection established")
+
+    # Get server status
+    try:
+        status = await context.client.get_status()
+        log.info(f"AdareVM server status: {status}")
+    except (TimeoutError, ConnectionClosed) as e:
+        log.warning(f"Could not get server status: {e}")
+
+
 async def connect_websocket(context, stage_ctx):
     """Establish WebSocket connection to the adarevm agent with retries.
 
@@ -717,6 +744,7 @@ async def connect_websocket(context, stage_ctx):
     """
     from websockets.exceptions import ConnectionClosed, WebSocketException
 
+    from adare.backend.experiment.agent_readiness import connect_with_backoff
     from adare.backend.experiment.websocket_client import AdareVMClient
     from adare.exceptions import LoggedException
 
@@ -749,25 +777,6 @@ async def connect_websocket(context, stage_ctx):
         except (OSError, TimeoutError, RuntimeError) as e:
             log.warning(f"Could not verify adarevm process status: {e}")
 
-    # Pre-flight guest-side diagnostics (uses guest agent, not network)
-    if context.hypervisor_type == 'qemu':
-        log.info("Running pre-flight guest diagnostics (waiting 3s for adarevm startup)...")
-        await asyncio.sleep(3)
-        process_alive = await _diagnose_websocket_connection(
-            context.vm, context.guest_platform or 'linux', context.stop_event, full=False
-        )
-
-        if not process_alive:
-            log.error("adarevm process is not running — skipping connection retries")
-            log.info("Running full guest diagnostics to determine cause...")
-            await _diagnose_websocket_connection(
-                context.vm, context.guest_platform or 'linux', context.stop_event, full=True
-            )
-            raise LoggedException(
-                log,
-                "adarevm process exited immediately after startup. Check diagnostics above for guest-side error logs.",
-            )
-
     # Create websocket client with host port forwarding
     context.client = AdareVMClient(port=context.config.websocket_port, token=ensure_agent_token(context))
 
@@ -783,8 +792,38 @@ async def connect_websocket(context, stage_ctx):
     context.client.add_event_handler('log', log_event_handler)
     context.client.add_event_handler('error', error_event_handler)
 
-    # Retry delays: 2, 3, 5, 7, 10 seconds (increased initial delay)
-    retry_delays = [2, 3, 5, 7, 10]
+    # A healthy agent usually answers within a second or two (and a restored one
+    # at once): poll the real handshake quietly for up to the old 3 s startup grace.
+    stage_ctx.stage.sub_msg = "Attempting connection..."
+    stage_ctx.set_status(stage_ctx.stage.status)
+    if await connect_with_backoff(context.client, _STARTUP_GRACE, stop_event=context.stop_event):
+        await _finish_connection(context, stage_ctx)
+        return
+    if context.stop_event.is_set():
+        log.info("Connection cancelled by stop event")
+        return
+
+    # Still not answering: check, via the guest agent (not the network), that the
+    # process did not die at startup before spending the retries on it.
+    if context.hypervisor_type == 'qemu':
+        log.info(f"adarevm not answering after {_STARTUP_GRACE:.0f}s; running pre-flight guest diagnostics...")
+        process_alive = await _diagnose_websocket_connection(
+            context.vm, context.guest_platform or 'linux', context.stop_event, full=False
+        )
+
+        if not process_alive:
+            log.error("adarevm process is not running — skipping connection retries")
+            log.info("Running full guest diagnostics to determine cause...")
+            await _diagnose_websocket_connection(
+                context.vm, context.guest_platform or 'linux', context.stop_event, full=True
+            )
+            raise LoggedException(
+                log,
+                "adarevm process exited immediately after startup. Check diagnostics above for guest-side error logs.",
+            )
+
+    # Retry delays (same attempt count and total wait as before, denser at the start)
+    retry_delays = [1, 2, 4, 8, 12]
     max_attempts = len(retry_delays) + 1  # +1 for the initial attempt
 
     last_error = None
@@ -805,24 +844,7 @@ async def connect_websocket(context, stage_ctx):
             connected = await context.client.connect(timeout=60.0)
 
             if connected:
-                stage_ctx.stage.sub_msg = ""
-                stage_ctx.set_status(stage_ctx.stage.status)
-                log.info("Successfully connected to AdareVM WebSocket server")
-
-                # Test the connection with ping
-                ping_success = await context.client.ping()
-                if ping_success:
-                    log.info("Ping test successful - WebSocket connection is working")
-                else:
-                    log.warning("Ping test failed but connection established")
-
-                # Get server status
-                try:
-                    status = await context.client.get_status()
-                    log.info(f"AdareVM server status: {status}")
-                except (TimeoutError, ConnectionClosed) as e:
-                    log.warning(f"Could not get server status: {e}")
-
+                await _finish_connection(context, stage_ctx)
                 return  # Success
             raise ConnectionRefusedError("Failed to establish websocket connection")
 
