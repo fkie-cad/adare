@@ -269,6 +269,24 @@ def parse_collection(path: Path, installed: bool) -> list[CatalogEntry]:
     return entries
 
 
+def docstring_warnings(path: Path) -> list[str]:
+    """Documentation gaps in one collection file, for ``adare test validate``.
+
+    Reports testfunctions without a docstring and non-ctx parameters without an
+    ``Args:`` entry. Advisory only: undocumented functions still load and run.
+    """
+    warnings = []
+    for entry in parse_collection(path, installed=False):
+        if not entry.doc.strip():
+            warnings.append(f"{entry.dotnotation}: no docstring (add a summary line and an 'Args:' section)")
+            continue
+        documented = parse_args_section(entry.doc)
+        missing = [p.name for p in entry.params if p.name not in documented]
+        if missing:
+            warnings.append(f"{entry.dotnotation}: no 'Args:' entry for parameter(s) {', '.join(missing)}")
+    return warnings
+
+
 # ---------------------------------------------------------------------------
 # Loading
 # ---------------------------------------------------------------------------

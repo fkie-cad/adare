@@ -328,6 +328,25 @@ def _format_diff_report(
     category=HostModeCategory.FILE_CONTENT,
 )
 def contains_line(ctx: TestContext, dst: str, entry: list = None):
+    """Pass when at least one row of CSV file ``dst`` matches ``entry`` column by column.
+
+    Use for: checking a tool's CSV output (e.g. a timeline) contains a specific record.
+
+    Args:
+        dst: Guest path to the CSV file. A glob must match exactly one path; no/ambiguous
+            match or a missing file fails. Parsed with the default ``csv`` dialect (comma,
+            double quotes) in the guest's default encoding; the header row is a normal row.
+        entry: Expected row as a list, one item per column; a row must have exactly this many
+            columns. Items are compared as exact, case-sensitive strings (``str(item)``), or by
+            type for ``!re``/``!timestamp`` tags (``!re`` uses ``re.match``, anchored at the start).
+            Required in practice: omitting it is an execution error unless the file is empty.
+
+    Example:
+        function: csv.contains_line
+        parameter:
+          dst: '{{ out_dir }}/timeline.csv'
+          entry: [report.docx, !re '.*', Created]
+    """
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:
@@ -421,6 +440,33 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
     category=HostModeCategory.FILE_CONTENT,
 )
 def compare_rows(ctx: TestContext, dst: str, reference_rows: list[list[str]] = None, columns: list[int] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False):
+    """Pass when the rows of CSV file ``dst`` match the embedded ``reference_rows``.
+
+    Use for: asserting a whole (small) CSV export. To compare against a second CSV file use
+    csv.compare_files.
+
+    Args:
+        dst: Guest path to the CSV file. A glob must match exactly one path; no/ambiguous
+            match or a missing file fails. Default ``csv`` dialect; header row included.
+        reference_rows: Expected rows, a non-empty list of lists of strings (quote numbers in
+            YAML). ``!re``/``!timestamp`` tags are matched by type; other cells exactly.
+        columns: 0-based column indices to compare (others ignored; out-of-range indices are
+            silently dropped). ``None`` compares all columns.
+        ignore_order: ``False`` (default) compares row N with row N; ``True`` matches rows as
+            a multiset regardless of position.
+        allow_extra_rows: Do not fail on actual rows without a reference counterpart (in
+            ordered mode only trailing rows count as extra).
+        allow_missing_rows: Do not fail on reference rows missing from the file (in ordered
+            mode only trailing rows count as missing).
+
+    Example:
+        function: csv.compare_rows
+        parameter:
+          dst: /home/user/export.csv
+          reference_rows:
+            - [name, size]
+            - [report.docx, '1024']
+    """
     try:
         # Resolve file path
         dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -500,6 +546,28 @@ def compare_rows(ctx: TestContext, dst: str, reference_rows: list[list[str]] = N
     category=HostModeCategory.FILE_CONTENT,
 )
 def compare_files(ctx: TestContext, actual: str = '', reference: str = '', columns: list[int] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False):
+    """Pass when CSV file ``actual`` matches CSV file ``reference`` row by row.
+
+    Use for: diffing a produced CSV against a reference CSV available on the same machine.
+    For inline expectations use csv.compare_rows. Needs the in-guest agent: agentless host
+    mode only pulls a ``dst`` parameter, and this function has none.
+
+    Args:
+        actual: Guest path to the CSV under test; a glob must match exactly one path, a
+            missing or ambiguous file fails.
+        reference: Guest path to the reference CSV, resolved like ``actual``.
+        columns: 0-based column indices to compare; ``None`` compares all columns.
+        ignore_order: ``False`` (default) compares row N with row N; ``True`` matches rows as a multiset.
+        allow_extra_rows: Do not fail on rows only in ``actual`` (ordered mode: trailing rows only).
+        allow_missing_rows: Do not fail on rows only in ``reference`` (ordered mode: trailing rows only).
+
+    Example:
+        function: csv.compare_files
+        parameter:
+          actual: /home/user/export.csv
+          reference: /home/user/reference/export.csv
+          ignore_order: true
+    """
     try:
         # Resolve actual file path
         actual_path, actual_status = ctx.resolve_globfilepath(actual)
