@@ -75,7 +75,7 @@ class ProjectListItem:
         }
 
     @classmethod
-    def from_model(cls, project) -> "ProjectListItem":
+    def from_model(cls, project: Any) -> "ProjectListItem":  # legacy Column-typed model
         """Create from SQLAlchemy Project model."""
         return cls(
             id=project.id,
