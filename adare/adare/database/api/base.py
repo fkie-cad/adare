@@ -11,9 +11,10 @@ This module provides a robust foundation for database operations with:
 
 import functools
 import logging
+import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import sqlalchemy
 import ulid
@@ -26,6 +27,47 @@ from adare.database.exceptions import DatabaseConnectionError, DatabaseError, En
 log = logging.getLogger(__name__)
 
 T = TypeVar('T')
+
+# One engine (connection pool) and session factory per database file for the
+# whole process, instead of a new engine per API instance.
+_ENGINES: dict[str, tuple[sqlalchemy.Engine, sessionmaker]] = {}
+# Database files whose schema was created and migrated in this process.
+_SCHEMA_READY: set[str] = set()
+_ENGINES_LOCK = threading.Lock()
+
+
+def _engine_for(db_path: Path) -> tuple[sqlalchemy.Engine, sessionmaker]:
+    """Cached engine + session factory for ``db_path``.
+
+    A file deleted behind our back (``adare db reset``, tests) drops its cached
+    engine and schema state, so the recreated database is set up from scratch
+    rather than served by connections to the unlinked file.
+    """
+    key = str(db_path)
+    with _ENGINES_LOCK:
+        cached = _ENGINES.get(key)
+        if cached is not None and db_path.exists():
+            return cached
+        if cached is not None:
+            cached[0].dispose()
+            _SCHEMA_READY.discard(key)
+        engine = sqlalchemy.create_engine(
+            f'sqlite:///{db_path.as_posix()}',
+            echo=False,  # Set to True for SQL debugging
+            pool_pre_ping=True,  # Verify connections before use
+        )
+        factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+        _ENGINES[key] = (engine, factory)
+        return engine, factory
+
+
+def dispose_engines() -> None:
+    """Close every cached engine and forget schema state (before deleting a database file, and in tests)."""
+    with _ENGINES_LOCK:
+        for engine, _factory in _ENGINES.values():
+            engine.dispose()
+        _ENGINES.clear()
+        _SCHEMA_READY.clear()
 
 
 def experiment_name_from_run_path(run_path: str | Path | None) -> str | None:
@@ -92,24 +134,26 @@ class EnhancedDatabaseApi:
     - Query optimization helpers
     """
 
+    # Nesting depth of `with` blocks on this instance; only the outermost one
+    # commits/rolls back and closes the session.
+    _depth = 0
+
+    # None outside a `with` block. Any rather than Session | None: subclasses
+    # query it without narrowing (typing it as Session surfaces ~50 latent
+    # errors in the domain APIs; tighten once those are fixed).
+    _session: Any
+    _engine: sqlalchemy.Engine
+    _session_factory: sessionmaker
+
     def __init__(self, db_path: Path | None = None):
         self.db_path = db_path or config_database.get_database_location()
-        self._engine = None
         self._session = None
-        self._session_factory = None
         self._setup_database()
 
     def _setup_database(self):
-        """Initialize database connection and session factory."""
+        """Attach to the process-wide engine and session factory for this database."""
         try:
-            self._engine = sqlalchemy.create_engine(
-                f'sqlite:///{self.db_path.as_posix()}',
-                echo=False,  # Set to True for SQL debugging
-                pool_pre_ping=True,  # Verify connections before use
-            )
-            self._session_factory = sessionmaker(
-                bind=self._engine, autoflush=False, autocommit=False, expire_on_commit=False
-            )
+            self._engine, self._session_factory = _engine_for(self.db_path)
         except (SQLAlchemyError, OSError, PermissionError) as e:
             log.error(f"Failed to setup database: {e}")
             raise DatabaseConnectionError(log, f"Cannot connect to database: {e}") from e
@@ -121,12 +165,22 @@ class EnhancedDatabaseApi:
         return self._engine
 
     def __enter__(self):
-        """Context manager entry - start session."""
+        """Context manager entry - start session (or join the one an outer `with` opened)."""
         self._start_session()
+        self._depth += 1
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit - handle session cleanup."""
+        """Context manager exit - the outermost block commits or rolls back and closes."""
+        self._depth = max(self._depth - 1, 0)
+        if self._depth > 0:
+            # Nested block: committing here would persist the outer block's
+            # half-done work even if it later fails. A failure still discards
+            # the pending changes now, as it always has.
+            if exc_type and self._session:
+                log.debug(f"Rolling back transaction due to {exc_type.__name__}: {exc_val}")
+                self._session.rollback()
+            return
         if self._session:
             try:
                 if exc_type:
@@ -196,7 +250,7 @@ class EnhancedDatabaseApi:
         except ValueError:
             raise ValidationError(log, f"Invalid ULID format: {ulid_str}") from None
 
-        return self._session.query(model).filter(model.id == ulid_str).first()
+        return cast('T | None', self._session.query(model).filter(cast(Any, model).id == ulid_str).first())
 
     @validate_input
     @handle_db_errors
@@ -219,7 +273,7 @@ class EnhancedDatabaseApi:
         entity = self.get_by_ulid(model, ulid_str)
         if not entity:
             raise EntityNotFoundError(log, f"{model.__name__} with ULID {ulid_str} not found")
-        return entity
+        return cast(T, entity)
 
     @validate_input
     @handle_db_errors
@@ -381,7 +435,7 @@ class EnhancedDatabaseApi:
         if limit:
             query = query.limit(limit)
 
-        return query.all()
+        return cast(list[T], query.all())
 
     @validate_input
     @handle_db_errors
@@ -406,7 +460,7 @@ class EnhancedDatabaseApi:
         if filters:
             query = query.filter_by(**filters)
 
-        return query.count()
+        return int(query.count())
 
     def expunge(self, entity: T) -> T:
         """Remove entity from session."""
@@ -508,7 +562,7 @@ class EnhancedDatabaseApi:
         if return_objects:
             # Query back the created objects (slower but returns objects)
             ids = [item['id'] for item in items if 'id' in item]
-            return self._session.query(model).filter(model.id.in_(ids)).all()
+            return cast(list[T], self._session.query(model).filter(cast(Any, model).id.in_(ids)).all())
 
         return []
 
@@ -559,7 +613,9 @@ class GlobalDatabaseApi(EnhancedDatabaseApi):
         self._ensure_global_database()
 
     def _ensure_global_database(self):
-        """Ensure global database schema exists and is migrated to the current shape."""
+        """Ensure global database schema exists and is migrated to the current shape (once per process)."""
+        if str(self.db_path) in _SCHEMA_READY:
+            return
         try:
             from adare.database.migrations.runner import apply_pending
             from adare.database.models.global_models import GlobalBase
@@ -568,6 +624,7 @@ class GlobalDatabaseApi(EnhancedDatabaseApi):
             # create_all builds missing tables but never ALTERs existing ones —
             # heal schema drift from model changes on already-installed databases.
             apply_pending(self.engine, 'global')
+            _SCHEMA_READY.add(str(self.db_path))
             log.debug("Global database schema ensured")
         except (SQLAlchemyError, ImportError) as e:
             log.error(f"Failed to create global database schema: {e}")
@@ -597,7 +654,9 @@ class ProjectDatabaseApi(EnhancedDatabaseApi):
         self._ensure_project_database()
 
     def _ensure_project_database(self):
-        """Ensure project database schema exists and is migrated to the current shape."""
+        """Ensure project database schema exists and is migrated to the current shape (once per process)."""
+        if str(self.db_path) in _SCHEMA_READY:
+            return
         try:
             from adare.database.migrations.runner import apply_pending
             from adare.database.models.project_models import ProjectBase
@@ -606,6 +665,7 @@ class ProjectDatabaseApi(EnhancedDatabaseApi):
             # create_all builds missing tables but never ALTERs existing ones —
             # heal schema drift from model changes on already-installed databases.
             apply_pending(self.engine, 'project')
+            _SCHEMA_READY.add(str(self.db_path))
             log.debug(f"Project database schema ensured for {self.project_path}")
         except (SQLAlchemyError, ImportError) as e:
             log.error(f"Failed to create project database schema: {e}")

@@ -125,6 +125,10 @@ Adding one: idempotent `upgrade(conn)` in `database/migrations/<name>.py` (never
 inside it — that recurses), then append a `Migration(...)` to `MIGRATIONS` — append only, never
 reorder. Full recipe: `docsrc/source/architecture/database-migrations.rst`.
 
+Database APIs share one engine per database file for the process (`database/api/base.py`), and
+schema creation + migrations run once per file. Call `dispose_engines()` before deleting a database
+file. Nested `with api:` blocks on one instance join the outer session; only the outermost commits.
+
 ## Test Execution Performance
 
 ### Testfunction Caching (2026-02-06)

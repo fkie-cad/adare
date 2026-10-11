@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from adare.config.configdirectory import ENVIRONMENTS_DIR, VMS_DIR
 from adare.config.database import get_global_database_location, get_project_database_location
-from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
+from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi, dispose_engines
 from adare.database.exceptions import DatabaseError
 from adare.database.fixtures import fixture_stages, fixture_status
 from adare.database.migrations.runner import Scope, apply_pending, invalidate_cache, pending
@@ -456,6 +456,8 @@ def clean_install_database_system() -> dict[str, Any]:
         # Remove existing global database if it exists
         global_db_location = get_global_database_location()
         if global_db_location.exists():
+            # Close pooled connections first: Windows cannot delete an open file.
+            dispose_engines()
             global_db_location.unlink()
             # The ledger went with the file — drop the cached applied-state so
             # the fresh database is stamped again.
