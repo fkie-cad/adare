@@ -3,6 +3,7 @@ name = "adare-cv-server"
 version = "0.1.0"
 description = "Computer vision and OCR server for Adare framework"
 authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 
