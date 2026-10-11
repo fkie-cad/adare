@@ -7,13 +7,20 @@ both deprecated VM-level snapshots and current instance-level snapshots.
 
 import logging
 import warnings
+from typing import TYPE_CHECKING
 
 from adare.database.models.global_models import VmSnapshot
+
+if TYPE_CHECKING:
+    from adare.database.api.base import GlobalDatabaseApi as _Host
+else:
+    _Host = object
+
 
 log = logging.getLogger(__name__)
 
 
-class VmSnapshotMixin:
+class VmSnapshotMixin(_Host):
     """Mixin providing VM snapshot management operations."""
 
     def create_snapshot_record(
