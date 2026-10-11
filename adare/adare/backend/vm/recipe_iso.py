@@ -195,7 +195,8 @@ def verify_iso(recipe: Recipe, iso_path: Path) -> None:
         # Name both digests. `verify_iso_hash` already hashed the file, but it
         # only returns a bool, and re-hashing a 5 GB ISO purely to print the
         # actual value is the kind of avoidable minutes-long pause that makes
-        # people stop reading error messages.
+        # people stop reading error messages -- `compute_iso_sha256` is served
+        # from the digest cache `verify_iso_hash` just wrote.
         actual = compute_iso_sha256(iso_path)
         raise EnvironmentLoadFailed(
             log,

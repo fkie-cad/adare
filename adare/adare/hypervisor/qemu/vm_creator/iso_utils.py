@@ -1,9 +1,9 @@
 """ISO extraction utilities using pycdlib (pure Python, cross-platform)."""
 
-import hashlib
 import logging
 from pathlib import Path
 
+from adare.helperfunctions.digest_cache import cached_file_sha256
 from adare.hypervisor.exceptions import HypervisorException
 
 log = logging.getLogger(__name__)
@@ -636,15 +636,11 @@ def iso_sha256(iso_path: Path) -> str:
     Exists so a mismatch error can name the *actual* digest alongside the
     declared one without hashing a multi-gigabyte file a second time in the
     caller. :func:`verify_iso_hash` only answers yes/no.
+
+    Served from the ``<iso>.sha256`` sidecar cache while the file's size, mtime
+    and inode are unchanged (see :mod:`adare.helperfunctions.digest_cache`).
     """
-    digest = hashlib.sha256()
-    with open(iso_path, 'rb') as f:
-        while True:
-            chunk = f.read(8192)
-            if not chunk:
-                break
-            digest.update(chunk)
-    return digest.hexdigest()
+    return cached_file_sha256(iso_path)
 
 
 def verify_iso_hash(iso_path: Path, expected_sha256: str) -> bool:
@@ -668,15 +664,9 @@ def verify_iso_hash(iso_path: Path, expected_sha256: str) -> bool:
         return True
 
     log.info(f'Verifying SHA256 hash of {iso_path}...')
-    sha256 = hashlib.sha256()
-    with open(iso_path, 'rb') as f:
-        while True:
-            chunk = f.read(8192)
-            if not chunk:
-                break
-            sha256.update(chunk)
-
-    actual = sha256.hexdigest()
+    # Cached ISOs used to be re-hashed on every `vm create` / `env load`; the
+    # sidecar cache re-hashes only when the file's size, mtime or inode changed.
+    actual = cached_file_sha256(iso_path)
     if actual != expected_sha256:
         log.error(f'SHA256 mismatch for {iso_path}: expected {expected_sha256}, got {actual}')
         return False

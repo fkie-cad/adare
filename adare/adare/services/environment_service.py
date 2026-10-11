@@ -40,7 +40,7 @@ from adare.core.dto.environment import (
 )
 from adare.core.result import Result
 from adare.database.api.environment import EnvironmentDbApi
-from adare.helperfunctions.hash import hash_file_sha256
+from adare.helperfunctions.digest_cache import cached_file_sha256
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.vm_creator.os_catalog import (
     SetupLevel,
@@ -451,7 +451,7 @@ class EnvironmentService:
             iso_sha256 = request.iso_sha256
         else:
             iso_source = request.iso_path
-            iso_sha256 = hash_file_sha256(request.iso_path)
+            iso_sha256 = cached_file_sha256(request.iso_path)
 
         env_file_path = build_recipe_environment_file(
             os_name=request.os_profile,
@@ -742,24 +742,19 @@ class EnvironmentService:
         """
         import tempfile
 
-        from adare.helperfunctions.file.hash import file_sha256_with_progress
         from adare.helperfunctions.web.download import download
 
         tmp = Path(tempfile.mkdtemp(prefix='adare-verify-')) / 'hosted.bin'
         try:
             log.info(f'Verifying hosted URL bytes against local disk: {vm_url}')
-            download(vm_url, tmp, quiet=False)
+            # The digest is computed while streaming, so the temp file is never re-read.
+            hosted_sha256 = download(vm_url, tmp, quiet=False)
             if not tmp.is_file() or tmp.stat().st_size == 0:
                 return Result.fail(
                     code='VerifyUrlFailed',
                     message=f'Downloaded nothing from {vm_url} (empty response).',
                     solutions=['Check the URL is a direct download link, not an HTML page'],
                 )
-            hosted_sha256 = file_sha256_with_progress(
-                tmp,
-                description='Hashing hosted object',
-                silent=False,
-            )
             if hosted_sha256.lower() != expected_sha256.lower():
                 return Result.fail(
                     code='VerifyUrlMismatch',

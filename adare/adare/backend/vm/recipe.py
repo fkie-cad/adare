@@ -87,6 +87,7 @@ from adare.config.configdirectory import (
     VMS_DIR,
 )
 from adare.console import console, print_section, print_step
+from adare.helperfunctions.digest_cache import record_file_sha256
 from adare.helperfunctions.file.lock import exclusive_lock
 from adare.helperfunctions.hash import hash_file_sha256, hash_recipe, hash_string_sha256
 from adare.helperfunctions.web.download import download
@@ -337,7 +338,9 @@ def resolve_iso_from_url(url: str) -> Path:
 
     try:
         log.info(f"Downloading ISO from URL: {url}")
-        download(url, cached_file_path, quiet=False)
+        # Digest computed while streaming; caching it lets `_verify_iso` skip a
+        # second multi-GB read.
+        record_file_sha256(cached_file_path, download(url, cached_file_path, quiet=False))
 
         if not cached_file_path.exists() or cached_file_path.stat().st_size == 0:
             raise EnvironmentLoadFailed(
