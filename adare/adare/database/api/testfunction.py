@@ -1,6 +1,4 @@
 # external imports
-import ast
-import copy
 
 # configure logging
 import logging
@@ -8,6 +6,8 @@ import shutil
 from pathlib import Path
 
 import sqlalchemy
+
+from adare.backend.testfunction.catalog import testfunction_code_without_docstring
 
 # internal imports
 from adare.database.api.base import GlobalDatabaseApi
@@ -30,21 +30,6 @@ from adare.helperfunctions.hash import combine_hashes, hash_file_sha256, hash_st
 from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
 
 log = logging.getLogger(__name__)
-
-
-def testfunction_code_without_docstring(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-    """Source of a testfunction for hashing, docstring excluded.
-
-    Documentation (the catalog's ``Args:`` section) must not bump the function's
-    version: only code changes do.
-    """
-    body = func_node.body
-    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
-            and isinstance(body[0].value.value, str):
-        body = body[1:] or [ast.Pass()]
-    stripped = copy.copy(func_node)
-    stripped.body = body
-    return ast.unparse(stripped)
 
 
 class TestfunctionDbApi(GlobalDatabaseApi):

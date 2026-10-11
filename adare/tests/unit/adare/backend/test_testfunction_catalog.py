@@ -139,3 +139,22 @@ def test_find_bare_name_means_standard_like_runtime(tmp_path):
         "@testfunction(name='file_exists', description='tests if file exists')\ndef file_exists(ctx, dst: str):\n    pass\n")
     entries = load_catalog([(tmp_path, True)])
     assert find(entries, 'file_exists').dotnotation == 'standard.file_exists'
+
+
+def test_undocumented_installed_copy_borrows_docs_only_when_code_is_identical(tmp_path):
+    code = "def file_exists(ctx, dst: str):\n{doc}    return dst\n"
+    doc = '    """Pass when it exists.\n\n    Args:\n        dst: Guest path.\n    """\n'
+    for root, body in (('installed', code.format(doc='')), ('bundled', code.format(doc=doc))):
+        (tmp_path / root / 'same').mkdir(parents=True)
+        (tmp_path / root / 'same' / 'same.py').write_text("@testfunction(name='file_exists', description='d')\n" + body)
+    changed = code.format(doc='').replace('return dst', 'return None')
+    (tmp_path / 'installed' / 'diff').mkdir()
+    (tmp_path / 'installed' / 'diff' / 'diff.py').write_text("@testfunction(name='file_exists', description='d')\n" + changed)
+    (tmp_path / 'bundled' / 'diff').mkdir()
+    (tmp_path / 'bundled' / 'diff' / 'diff.py').write_text(
+        "@testfunction(name='file_exists', description='d')\n" + code.format(doc=doc))
+    entries = load_catalog([(tmp_path / 'installed', True), (tmp_path / 'bundled', False)])
+    same, diff = find(entries, 'same.file_exists'), find(entries, 'diff.file_exists')
+    assert same.installed and same.params[0].doc == 'Guest path.' and same.doc.startswith('Pass when')
+    assert diff.installed and diff.params[0].doc == '' and diff.doc == ''
+    assert 'code_sha' not in same.to_dict()
