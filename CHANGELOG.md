@@ -77,6 +77,11 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - Web API handlers run services off the event loop (threadpool / `to_thread`).
 - Mixins declare their host for type checking (`QEMUVMHost`, `VirtualBoxVMHost`,
   `ActionsExecutorCore`, DB API hosts): ~720 fewer mypy errors.
+- Fewer fixed waits on the VM path: guest-agent polls back off from 50 ms instead
+  of a flat 0.5 s (≥0.5 s saved per guest command), the agent connection probes
+  the real WebSocket handshake instead of sleeping 3 s (6 s in `vm test`), dev
+  snapshot create/restore run off the event loop, and host-mode screenshots skip
+  a 0.1 s settle and encode PNGs faster (level 1: same pixels, ~1.5x larger files).
 
 ### Fixed
 - Every dev-session web route failed: async handlers called services that run
