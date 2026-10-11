@@ -1,6 +1,6 @@
 [project]
 name = "adarelib"
-version = "0.1.1"
+version = "0.2.0"
 description = "ADARE shared library: testfunction API, protocol and utilities used by host and guest"
 authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
 license = "MIT"

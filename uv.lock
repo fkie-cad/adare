@@ -321,7 +321,7 @@ test = [
 
 [[package]]
 name = "adarelib"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "adarelib" }
 dependencies = [
     { name = "cattrs" },
@@ -338,7 +338,7 @@ requires-dist = [
 
 [[package]]
 name = "adarevm"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "adarevm" }
 dependencies = [
     { name = "adarelib" },

@@ -190,8 +190,20 @@ Agent Lifecycle
 3. **Connection** -- the host's ``AdareVMClient`` connects to the agent's
    WebSocket server through the forwarded port. Forwards (QEMU ``hostfwd``,
    VirtualBox NAT rules) listen on ``127.0.0.1`` only; set
-   ``ADARE_FORWARD_BIND`` to another host address to expose them deliberately. The agent sends a welcome
-   event listing available tools.
+   ``ADARE_FORWARD_BIND`` to another host address to expose them deliberately.
+
+   The connection is authenticated and versioned (protocol 2,
+   ``adarelib.websocket.protocol``). Every run gets a random token
+   (``agent_token`` in the run's ``config.json``); the client sends it as
+   ``Authorization: Bearer <token>`` and the agent answers anything else with
+   HTTP 401 (an agent without a configured token accepts all connections and
+   logs a warning). The agent's first message is a ``welcome`` event with
+   ``protocol_version``, its package versions and the tools it serves (the
+   ``Tool`` enum). The host refuses any other protocol version, reinstalls the
+   agent once if it meets an older one (e.g. a dev session restored from an old
+   snapshot), and only calls tools the agent advertised. The token is redacted
+   from host logs; ``adare ws action`` and ``adare icons dump-all`` take it via
+   ``--token`` or ``ADARE_AGENT_TOKEN``.
 
    Before the agent is installed, a setup command opens port 18765 in the
    guest's firewall on both platforms: ``New-NetFirewallRule`` on Windows, and

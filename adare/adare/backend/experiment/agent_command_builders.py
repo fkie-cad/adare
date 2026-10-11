@@ -78,8 +78,10 @@ class AgentCommandBuilder(ABC):
         skip_xhost: bool = False,
         hypervisor_type: str = 'virtualbox',
         installation_mode: str = "wheel",
+        agent_token: str | None = None,
     ):
         self.wheels_dir = wheels_dir
+        self.agent_token = agent_token
         self.shared_folders = shared_folders
         self.websocket_port = websocket_port
         self.skip_xhost = skip_xhost
@@ -143,6 +145,8 @@ class AgentCommandBuilder(ABC):
             "logfile": log_path,
             "installation_mode": self.installation_mode,
         }
+        if self.agent_token:
+            config["agent_token"] = self.agent_token
         return json.dumps(config)
 
     async def build_commands(self, env_info: EnvironmentInfo, vm, stop_event: threading.Event) -> CommandSet:

@@ -14,6 +14,7 @@ import logging
 import shutil
 from typing import Any
 
+from adare.backend.experiment.agent_token import ensure_agent_token
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
 from adare.hypervisor.qemu.file_transfer.shares import build_config_json, build_share_list
@@ -64,6 +65,7 @@ class VirtioFSStrategy(FileTransferStrategy):
             is_windows=is_windows,
             file_transfer_mode='virtiofs',
             installation_mode=context.config.installation_mode,
+            agent_token=ensure_agent_token(context),
         )
         with open(run_dir / 'config.json', 'w') as f:
             json.dump(config_data, f, indent=2)

@@ -154,7 +154,6 @@ cli.add_alias('testfunction', 'test')
 @cli.group(cls=AliasedGroup)
 def db():
     """Database management commands."""
-    pass
 
 
 @db.command(name='init')
@@ -219,7 +218,6 @@ def db_clean_install(force):
 @cli.group(name='os-profile', cls=AliasedGroup)
 def os_profile():
     """OS profile management for VM creation."""
-    pass
 
 
 @os_profile.command(name='list')
@@ -269,7 +267,6 @@ os_profile.add_alias('rm', 'remove')
 @cli.group(cls=AliasedGroup)
 def icons():
     """Windows icon library: inspect the registry and dump icons from a target."""
-    pass
 
 
 @icons.command(name='list')
@@ -287,13 +284,14 @@ def icons_list(os_key):
 @click.option('--port', default=18765, type=int, help='adarevm WebSocket port')
 @click.option('--os-key', default='windows', help='OS profile / build key (cache separation)')
 @click.option('--force', is_flag=True, help='Re-extract even if a cached PNG exists')
-def icons_dump_all(host, port, os_key, force):
+@click.option('--token', envvar='ADARE_AGENT_TOKEN', help='Agent token (agent_token in the run config.json)')
+def icons_dump_all(host, port, os_key, force, token):
     """Resolve every registry term on a connected target; write PNGs + contact sheet."""
     from adare.cli.icons import exec_icons_dump_all
 
     exec_with_error_printing(
         exec_icons_dump_all,
-        SimpleNamespace(host=host, port=port, os_key=os_key, force=force),
+        SimpleNamespace(host=host, port=port, os_key=os_key, force=force, token=token),
     )
 
 
@@ -307,7 +305,6 @@ icons.add_alias('dump', 'dump-all')
 @cli.group(cls=AliasedGroup)
 def runtime():
     """VM runtime management for current project."""
-    pass
 
 
 @runtime.command(name='refresh')
@@ -334,7 +331,6 @@ def runtime_build():
 @cli.group(cls=AliasedGroup)
 def project():
     """Project-related commands."""
-    pass
 
 
 @project.command()
@@ -410,7 +406,6 @@ register_vlm_commands(cli, AliasedGroup, exec_with_error_printing)
 @cli.group(name='test', cls=AliasedGroup)
 def test():
     """Test function management commands."""
-    pass
 
 
 @test.command(name='create')
@@ -648,7 +643,6 @@ register_vm_commands(cli, AliasedGroup, exec_with_error_printing)
 @cli.group(cls=AliasedGroup)
 def run():
     """Experiment run management commands."""
-    pass
 
 
 @run.command(name='list')
@@ -714,7 +708,6 @@ web.add_command(web_install_spice, "install-spice")
 @cli.group(name='mcp', cls=AliasedGroup)
 def mcp():
     """ADARE control-plane MCP server (drive all of ADARE from an MCP client)."""
-    pass
 
 
 @mcp.command(name='serve')
@@ -755,7 +748,6 @@ def mcp_serve(transport, host, port):
 @cli.group(cls=AliasedGroup)
 def cv():
     """CV server testing commands for icon/text recognition."""
-    pass
 
 
 @cv.command(name='test-icon')
@@ -830,7 +822,6 @@ def cv_get_all_text(screenshot, format, host, port):
 @cli.group(cls=AliasedGroup)
 def ws():
     """WebSocket adarevm interaction commands."""
-    pass
 
 
 @ws.command()
@@ -841,13 +832,16 @@ def ws():
 @click.option('--connect-timeout', type=float, default=10.0, help='Connection timeout in seconds (default: 10.0)')
 @click.option('--default-timeout', type=float, default=30.0, help='Default action timeout in seconds (default: 30.0)')
 @click.option('--continue-on-error', is_flag=True, help='Continue executing actions even if one fails')
+@click.option('--token', envvar='ADARE_AGENT_TOKEN', help='Agent token (agent_token in the run config.json)')
 @click.option(
     '--output-format',
     type=click.Choice(['json', 'yaml', 'summary', 'simple']),
     default='simple',
     help='Output format (default: simple)',
 )
-def action(action_file, host, port, vm_instance, connect_timeout, default_timeout, continue_on_error, output_format):
+def action(
+    action_file, host, port, vm_instance, connect_timeout, default_timeout, continue_on_error, token, output_format
+):
     """Execute actions from YAML file on adarevm via WebSocket.
 
     ACTION_FILE: Path to YAML file containing actions to execute
@@ -866,6 +860,7 @@ def action(action_file, host, port, vm_instance, connect_timeout, default_timeou
         connect_timeout=connect_timeout,
         default_timeout=default_timeout,
         continue_on_error=continue_on_error,
+        token=token,
         output_format=output_format,
     )
     exec_with_error_printing(exec_ws_action, args)
@@ -888,7 +883,6 @@ def ws_create_example(output_file):
 @cli.group(name='server', cls=AliasedGroup)
 def server():
     """ADARE web server for dev mode session control."""
-    pass
 
 
 @server.command()
@@ -912,7 +906,6 @@ def agent():
 
     Not the GUI vision agent: that is `adare dev agent`.
     """
-    pass
 
 
 _agent_client_option = click.option(
@@ -1020,7 +1013,6 @@ def cli_status():
 @cli.group()
 def help():
     """Show help for special options."""
-    pass
 
 
 def main():

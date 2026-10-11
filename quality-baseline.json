@@ -1,9 +1,9 @@
 {
   "ruff": {
     "B007": 10,
-    "B904": 14,
+    "B904": 13,
     "B905": 19,
-    "BLE001": 195,
+    "BLE001": 194,
     "C901": 96,
     "E402": 172,
     "RET504": 7,
@@ -51,7 +51,7 @@
     "adare/adare/hypervisor/qemu/libvirt_xml_builder.py": 1036,
     "adare/adare/hypervisor/qemu/mixins/commands.py": 1067,
     "adare/adare/hypervisor/qemu/vm.py": 1816,
-    "adare/adare/run.py": 1034,
+    "adare/adare/run.py": 1026,
     "adare/adare/types/playbook.py": 1115,
     "adare/appdata/testfunctions/excel/excel.py": 1543,
     "adare/appdata/testfunctions/standard/standard.py": 1010,

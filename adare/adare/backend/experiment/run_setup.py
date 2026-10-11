@@ -484,13 +484,39 @@ async def step_install_and_run_websocket_server(context: ExperimentRunCtx):
 
 
 async def step_connect_websocket(context: ExperimentRunCtx):
-    from adare.backend.experiment.agent_lifecycle import connect_websocket
+    from adare.backend.experiment.agent_lifecycle import connect_websocket, stop_agent
+    from adare.backend.experiment.exceptions import AgentAuthenticationError, AgentProtocolMismatchError
+    from adare.backend.experiment.websocket_client import AgentAuthError, AgentProtocolError
 
     with StageCtxManager(
         ConnectToVMStage(), context.experiment_run_ulid, event=context.user_interrupt_event
     ) as stage_ctx:
         for _key, view in _machine_views(context):
-            await connect_websocket(view, stage_ctx)
+            try:
+                try:
+                    await connect_websocket(view, stage_ctx)
+                except AgentProtocolError as e:
+                    # An agent from before the current protocol (e.g. a dev session
+                    # restored from an older snapshot): replace it once, then retry.
+                    log.warning(f"{e}; reinstalling the guest agent")
+                    await stop_agent(view, context.user_interrupt_event)
+                    await install_and_run_adare_vm(view, stop_event=context.user_interrupt_event, force_install=True)
+                    await connect_websocket(view, stage_ctx)
+            except AgentProtocolError as e:
+                raise AgentProtocolMismatchError(
+                    log,
+                    f"The guest agent is still incompatible after reinstalling it: {e}",
+                    [
+                        'Restart the VM (or start a fresh dev session) so no old adarevm keeps the port',
+                        'Rebuild the agent wheels with `adare runtime build` and run again',
+                    ],
+                ) from e
+            except AgentAuthError as e:
+                raise AgentAuthenticationError(
+                    log,
+                    str(e),
+                    ["The run's config.json and the running agent disagree; restart the VM or the dev session"],
+                ) from e
 
 
 async def step_execute_installations(context: ExperimentRunCtx):

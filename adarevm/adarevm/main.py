@@ -74,10 +74,17 @@ def __parse_args():
     return parser.parse_args()
 
 
-async def main(tools_paths: list[str] = None, data_paths: list[str] = None, installation_mode: str = "wheel"):
+async def main(
+    tools_paths: list[str] = None,
+    data_paths: list[str] = None,
+    installation_mode: str = "wheel",
+    token: str | None = None,
+):
     from adarevm.core.server import AdareVMServer
 
-    server_instance = AdareVMServer(tools_paths=tools_paths, data_paths=data_paths, installation_mode=installation_mode)
+    server_instance = AdareVMServer(
+        tools_paths=tools_paths, data_paths=data_paths, installation_mode=installation_mode, token=token
+    )
     log.info("Starting AdareVM server...")
     server = await server_instance.start_server()
     log.info("AdareVM server started successfully.")
@@ -178,7 +185,14 @@ def run():
     # Hosts older than this key don't write it
     _log_shared_paths(tools_paths + data_paths, config.get('file_transfer_mode', 'unknown'))
     try:
-        asyncio.run(main(tools_paths=tools_paths, data_paths=data_paths, installation_mode=installation_mode))
+        asyncio.run(
+            main(
+                tools_paths=tools_paths,
+                data_paths=data_paths,
+                installation_mode=installation_mode,
+                token=config.get('agent_token'),
+            )
+        )
     except KeyboardInterrupt:
         log.info("adarevm interrupted by user")
     except Exception as e:
