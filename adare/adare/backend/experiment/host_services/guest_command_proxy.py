@@ -7,12 +7,18 @@ common system-state queries used by testfunctions.
 
 import contextlib
 import logging
+import shlex
 
 from adare.hypervisor.base.models import CommandResult
 
 from .vm_operation_proxy import VMOperationProxy
 
 log = logging.getLogger(__name__)
+
+
+def _ps_quote(value: str) -> str:
+    """PowerShell single-quoted string literal (no expansion; ``'`` is doubled)."""
+    return "'" + value.replace("'", "''") + "'"
 
 
 class GuestCommandProxy(VMOperationProxy):
@@ -173,14 +179,17 @@ class GuestCommandProxy(VMOperationProxy):
         Returns:
             Tuple of (found: bool, matching_lines: list[str])
         """
+        # Both values come from the playbook: quote them so the guest shell takes
+        # them literally instead of running whatever they contain.
+        max_lines = int(max_lines)
         if self.is_windows:
             cmd = (
-                f'Get-Content -Path "{log_path}" -Tail {max_lines} '
-                f'| Select-String -Pattern "{pattern}" '
+                f'Get-Content -LiteralPath {_ps_quote(log_path)} -Tail {max_lines} '
+                f'| Select-String -Pattern {_ps_quote(pattern)} '
                 f'| ForEach-Object {{ $_.Line }}'
             )
         else:
-            cmd = f"tail -n {max_lines} '{log_path}' | grep -E '{pattern}'"
+            cmd = f'tail -n {max_lines} -- {shlex.quote(log_path)} | grep -E -- {shlex.quote(pattern)}'
 
         result = await self.run(cmd, silent=True)
         if result.returncode == 0 and result.stdout.strip():
