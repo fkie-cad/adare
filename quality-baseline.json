@@ -48,7 +48,7 @@
     "adare/adare/backend/vm/commands.py": 1006,
     "adare/adare/backend/vm/instance_manager.py": 1005,
     "adare/adare/hypervisor/qemu/libvirt_xml_builder.py": 1036,
-    "adare/adare/hypervisor/qemu/mixins/commands.py": 1067,
+    "adare/adare/hypervisor/qemu/mixins/commands.py": 1058,
     "adare/adare/hypervisor/qemu/vm.py": 1816,
     "adare/adare/run.py": 1026,
     "adare/adare/types/playbook.py": 1115,
