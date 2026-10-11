@@ -178,13 +178,13 @@ claude mcp add adare -- adare mcp serve
 ### HTTP variant (shared / long-lived server)
 
 ```sh
-adare mcp serve --transport http --port 13111
+adare mcp serve --transport http --port 13112
 # Claude Code:
-claude mcp add --transport http adare http://127.0.0.1:13111/mcp
+claude mcp add --transport http adare http://127.0.0.1:13112/mcp
 ```
 
 OpenCode HTTP equivalent: a `"type": "remote"` entry with
-`"url": "http://127.0.0.1:13111/mcp"`.
+`"url": "http://127.0.0.1:13112/mcp"`.
 
 ## The "fix a playbook" loop (over MCP tools)
 

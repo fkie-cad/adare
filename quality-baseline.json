@@ -30,6 +30,7 @@
     "name-defined": 2,
     "no-any-return": 261,
     "no-redef": 7,
+    "no-untyped-def": 27,
     "operator": 22,
     "override": 8,
     "return": 2,
