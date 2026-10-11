@@ -146,10 +146,11 @@ async def test_click_while_recording_appends_and_crops(tmp_path):
     await server.click(640, 400, describe='trash icon')
 
     recorder = server._recorder
-    assert recorder.action_count == 1
+    assert recorder.action_count == 2  # wait_until gate + click
     crops = list(recorder.img_dir.glob('*.png'))
     assert len(crops) == 1  # the click cropped an image target
-    action = recorder._actions[0]
+    gate, action = recorder._actions
+    assert gate['wait_until']['condition'] == {'exists': {'image': crops[0].name}}
     assert 'click' in action
     assert action['click']['target']['image'] == crops[0].name
     assert action['click']['description'] == 'trash icon'
@@ -162,7 +163,7 @@ async def test_click_without_prior_screenshot_still_crops(tmp_path):
     server = _server(tmp_path)
     server.start_recording()
     await server.click(10, 10, describe='corner')  # no screenshot() first
-    assert server._recorder.action_count == 1
+    assert server._recorder.action_count == 2  # wait_until gate + click
     assert list(server._recorder.img_dir.glob('*.png'))
 
 

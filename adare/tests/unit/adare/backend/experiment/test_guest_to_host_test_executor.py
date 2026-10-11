@@ -49,6 +49,25 @@ class FileContentTest(BasicTest):
 
 
 @attrs.define
+class SidecarParam(Parameter):
+    dst: str = '/home/user/places.sqlite'
+
+
+@attrs.define
+class SidecarTest(BasicTest):
+    """A FILE_CONTENT test whose dst comes with companion files (like SQLite)."""
+    testname: ClassVar[str] = 'query_result'
+    testdescription: ClassVar[str] = 'dummy query_result'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
+    host_mode_sidecars: ClassVar[tuple[str, ...]] = ('-wal', '-journal')
+
+    name: str = 'test_query_result'
+    parameter: SidecarParam = attrs.Factory(SidecarParam)
+    description: str | None = ''
+    variable_metadata: dict | None = None
+
+
+@attrs.define
 class QGAProbeParam(Parameter):
     process_name: str = 'nginx'
 
@@ -353,3 +372,83 @@ class TestValidatePlaybookTests:
         ok, issues = GuestToHostTestExecutor.validate_playbook_tests([], {})
         assert ok is True
         assert issues == []
+
+
+# ============================================================================
+# Test sidecar pulling in _execute_file_based_test
+# ============================================================================
+
+class TestSidecarPulling:
+    """dst companion files (host_mode_sidecars) are pulled fresh alongside dst."""
+
+    def _make_executor(self, tmp_path, existing):
+        guest_file = MagicMock()
+        guest_file.pull_file = AsyncMock(side_effect=lambda p, force=False: tmp_path / p.lstrip('/'))
+        guest_file.file_exists = AsyncMock(side_effect=lambda p: p in existing)
+        guest_file._guest_path_to_local = lambda p: tmp_path / p.lstrip('/')
+        executor = GuestToHostTestExecutor(
+            guest_file=guest_file,
+            guest_command=MagicMock(),
+            testfunction_collection={},
+        )
+        executor._run_test = AsyncMock(return_value=TestResult.success(['ok']))
+        return executor, guest_file
+
+    @pytest.mark.asyncio
+    async def test_pulls_existing_sidecars_without_cache(self, tmp_path):
+        executor, guest_file = self._make_executor(tmp_path, {'/home/user/places.sqlite-wal'})
+
+        result = await executor._execute_file_based_test('t', 'sqlite.query_result', SidecarTest())
+
+        assert result.status == StatusEnum.SUCCESS
+        assert guest_file.pull_file.await_args_list == [
+            (('/home/user/places.sqlite',), {'force': True}),
+            (('/home/user/places.sqlite-wal',), {'force': True}),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_removes_stale_local_sidecar_gone_from_guest(self, tmp_path):
+        stale = tmp_path / 'home/user/places.sqlite-wal'
+        stale.parent.mkdir(parents=True)
+        stale.write_bytes(b'from an earlier pull')
+        executor, _ = self._make_executor(tmp_path, set())
+
+        await executor._execute_file_based_test('t', 'sqlite.query_result', SidecarTest())
+
+        assert not stale.exists()
+
+    @pytest.mark.asyncio
+    async def test_sidecar_pull_failure_is_an_error(self, tmp_path):
+        executor, guest_file = self._make_executor(tmp_path, {'/home/user/places.sqlite-wal'})
+
+        async def pull(path, force=False):
+            if path.endswith('-wal'):
+                raise RuntimeError('transfer failed')
+            return tmp_path / path.lstrip('/')
+        guest_file.pull_file.side_effect = pull
+
+        result = await executor._execute_file_based_test('t', 'sqlite.query_result', SidecarTest())
+
+        assert result.status == StatusEnum.ERROR
+        assert 'places.sqlite-wal' in result.details[0]
+        executor._run_test.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_glob_pulls_sidecars_of_each_match(self, tmp_path):
+        executor, guest_file = self._make_executor(tmp_path, {'/home/user/places.sqlite-journal'})
+        guest_file.resolve_guest_glob = AsyncMock(return_value=['/home/user/places.sqlite'])
+        instance = SidecarTest(parameter=SidecarParam(dst='/home/*/places.sqlite'))
+
+        await executor._execute_file_based_test('t', 'sqlite.query_result', instance)
+
+        pulled = [c.args[0] for c in guest_file.pull_file.await_args_list]
+        assert pulled == ['/home/user/places.sqlite', '/home/user/places.sqlite-journal']
+
+    @pytest.mark.asyncio
+    async def test_tests_without_sidecars_keep_cached_pull(self, tmp_path):
+        executor, guest_file = self._make_executor(tmp_path, set())
+
+        await executor._execute_file_based_test('t', 'json.contains_key', FileContentTest())
+
+        guest_file.pull_file.assert_awaited_once_with('/tmp/testfile', force=False)
+        guest_file.file_exists.assert_not_awaited()
