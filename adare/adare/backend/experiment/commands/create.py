@@ -15,8 +15,6 @@ log = logging.getLogger(__name__)
 
 
 def experiment_create(project_path: Path, experiment: str):
-    from adare.console import print_success_message
-
     experiment_directory = ExperimentDirectory(project_path, experiment)
     if experiment_directory.exists():
         raise ExperimentDirectoryAlreadyExistsError(
@@ -24,21 +22,6 @@ def experiment_create(project_path: Path, experiment: str):
         )
     experiment_directory.create()
     log.info(f'experiment directory {experiment_directory.path} created')
-
-    # Provide clear user feedback with next steps
-    next_steps = [
-        f'Edit {experiment_directory.playbookfile.name} to define a sequence of gui actions and tests',
-        f'Edit {experiment_directory.metadatafile.name} to add experiment details, such as possible environments, tags, and more',
-        f'Before run load the experiment with: adare experiment load {experiment}',
-        f'Run the experiment with: adare experiment run {experiment} -e <environment>',
-    ]
-
-    print_success_message(
-        title=f'Experiment "{experiment}" created successfully!',
-        location=str(experiment_directory.path),
-        next_steps=next_steps,
-        tip='See documentation for an tutorial on how write an experiment here: https://adare.seclab-bonn.de/docs/gettingstarted/index.html#create-an-experiment',
-    )
 
 
 def experiment_clone(
@@ -55,7 +38,6 @@ def experiment_clone(
     import shutil
 
     from adare.backend.experiment.commands.load import experiment_load
-    from adare.console import print_success_message
 
     source_dir = ExperimentDirectory(project_path, source_experiment)
     target_dir = ExperimentDirectory(project_path, target_experiment)
@@ -98,25 +80,6 @@ def experiment_clone(
 
     experiment_load(project_path, target_experiment, force=False, silent=True)
     log.info(f'loaded cloned experiment {target_experiment} into database')
-
-    source_metadata = source_dir.load_metadata()
-
-    next_steps = [
-        f'Edit cloned experiment files in: {target_dir.path}',
-        f'Run the cloned experiment with: adare experiment run {target_experiment} -e <environment>',
-    ]
-
-    if environments:
-        env_info = f'Cloned with custom environments: {", ".join(environments)}'
-    else:
-        env_info = f'Cloned with original environments: {", ".join(source_metadata.environments)}'
-
-    print_success_message(
-        title=f'Experiment "{target_experiment}" cloned from "{source_experiment}" successfully!',
-        location=str(target_dir.path),
-        next_steps=next_steps,
-        tip=env_info,
-    )
 
 
 def experiment_example(project_path: Path, experiment: str):

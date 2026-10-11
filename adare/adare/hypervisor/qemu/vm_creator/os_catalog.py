@@ -823,6 +823,8 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     continue
 
                 install_mode = data.get('install_mode', 'auto')
+                if install_mode == 'gui-script':  # renamed to 'playbook' in b499800; keep old copies working
+                    install_mode = 'playbook'
                 if install_mode not in _INSTALL_MODES:
                     log.warning(
                         'Skipping %s: install_mode must be one of %s, got "%s"',
