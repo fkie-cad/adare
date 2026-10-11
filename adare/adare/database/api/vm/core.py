@@ -7,6 +7,7 @@ and OS info entries.
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -15,10 +16,16 @@ from adare.database.models.global_models import OsInfo, Vm
 
 from .exceptions import VMLoadError, VMNameConflictError, VMNotFoundError
 
+if TYPE_CHECKING:
+    from adare.database.api.base import GlobalDatabaseApi as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class VmCrudMixin:
+class VmCrudMixin(_Host):
     """Mixin providing core VM CRUD operations."""
 
     def create_osinfo(

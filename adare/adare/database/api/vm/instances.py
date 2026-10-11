@@ -7,6 +7,7 @@ or previously-run copies of VM templates.
 
 import logging
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
@@ -15,10 +16,16 @@ from adare.database.models.global_models import Vm, VmInstance
 
 from .exceptions import VMLoadError, VMNotFoundError
 
+if TYPE_CHECKING:
+    from adare.database.api.base import GlobalDatabaseApi as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class VmInstanceMixin:
+class VmInstanceMixin(_Host):
     """Mixin providing VM instance management operations."""
 
     def create_vm_instance(
