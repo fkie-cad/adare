@@ -450,7 +450,7 @@ class ExperimentApi(ProjectDatabaseApi):
                 log,
                 message=f'testfunction [b]{test.function}[/b] mentioned in test [b]{test.name}[/b] does not exist in the database.',
                 possible_solutions=[
-                    'ensure spelling and check if the testfunction is loaded by running: [i]adare testfunction list --filter type={test.function}[/i]',
+                    'ensure spelling and check if the testfunction is loaded by running: [i]adare test list[/i]',
                 ]
             )
 

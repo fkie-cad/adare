@@ -103,7 +103,7 @@ class EnvironmentService:
                     f'Verify the VM is ready: adare env verify {stored_name}',
                     f'Run experiments in this environment with: adare experiment run <experiment> -e {stored_name}',
                     'List available environments with: adare environment list',
-                    f'View environment details with: adare environment show {stored_name}'
+                    f'View environment details with: adare env info {stored_name}'
                 ]
                 if reused_existing:
                     tip = (
