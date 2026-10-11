@@ -89,6 +89,12 @@ test = [
     "pytest-cov>=4.0.0",
     "openpyxl>=3.1.0",
 ]
+# Mirrors the workspace lint group (keep the pins identical) so the CI lint job and
+# `make lint` can install it with `--package adare`.
+lint = [
+    "ruff==0.15.11",
+    "mypy==2.4.0",
+]
 
 [tool.uv.sources]
 adarelib = { workspace = true }

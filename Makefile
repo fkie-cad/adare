@@ -1,5 +1,5 @@
 .DEFAULT_GOAL = help
-.PHONY: help install update adare-clean docs docs-sphinx install-skills
+.PHONY: help install update adare-clean docs docs-sphinx install-skills test lint lint-fix lint-baseline typecheck hooks
 
 help:
 	@echo "--------------- HELP -----------------"
@@ -12,6 +12,12 @@ help:
 	@echo "  install-skills  Symlink the workflow skills in skills/ into Claude Code's skill dirs (project + global)."
 	@echo "  docs            Build HTML documentation with Sphinx."
 	@echo "  docs-sphinx     Build HTML documentation with Sphinx."
+	@echo "  test            Run the client unit suite."
+	@echo "  lint            Format check + quality ratchet (ruff, mypy, file size) - same as CI."
+	@echo "  lint-fix        Apply ruff format and safe autofixes."
+	@echo "  lint-baseline   Lock in paid-down debt (lowers quality-baseline.json)."
+	@echo "  typecheck       Strict mypy on adare.core (must stay at zero errors)."
+	@echo "  hooks           Install the pre-commit hooks."
 	@echo "---------------------------------------"
 
 install:
@@ -68,3 +74,35 @@ docs-sphinx:
 	mkdir -p docs/demo
 	cp paper/demo/*.mp4 docs/demo/
 	touch docs/.nojekyll
+
+# --- Quality -----------------------------------------------------------------
+# The ratchet's mypy counts depend on which packages are installed, so lint runs
+# in its own env (.venv-lint) built exactly like the CI lint job. This also keeps
+# `uv sync` from stripping extras (e.g. qemu) out of your main .venv.
+LINT_ENV = UV_PROJECT_ENVIRONMENT=.venv-lint
+LINT_SYNC = $(LINT_ENV) uv sync --package adare --extra qemu --group lint --quiet
+
+test:
+	cd adare && uv run --no-sync pytest tests -q
+
+lint:
+	$(LINT_SYNC)
+	$(LINT_ENV) uv run --no-sync ruff format --check .
+	$(LINT_ENV) uv run --no-sync mypy adare/adare/core
+	$(LINT_ENV) uv run --no-sync python scripts/quality_ratchet.py
+
+lint-fix:
+	$(LINT_SYNC)
+	$(LINT_ENV) uv run --no-sync ruff format .
+	$(LINT_ENV) uv run --no-sync ruff check . --fix
+
+lint-baseline:
+	$(LINT_SYNC)
+	$(LINT_ENV) uv run --no-sync python scripts/quality_ratchet.py --update
+
+typecheck:
+	$(LINT_SYNC)
+	$(LINT_ENV) uv run --no-sync mypy adare/adare/core
+
+hooks:
+	pre-commit install
