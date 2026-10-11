@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import subprocess
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -24,6 +25,7 @@ try:
 except ImportError:
     libvirt = None
 
+from adare.helperfunctions.backoff import backoff_delays
 from adare.hypervisor.base.mixins.snapshots import AbstractSnapshotMixin
 from adare.hypervisor.exceptions import HypervisorException
 
@@ -413,10 +415,12 @@ class SnapshotMixin(AbstractSnapshotMixin, _Host):
 
         self._run_guest_agent_command_sync(full_cmd)
 
-    def _run_guest_agent_command_sync(self, cmd_str: str) -> None:
-        """Helper to run QGA commands synchronously via libvirt qemu-agent-command."""
-        import json
+    def _run_guest_agent_command_sync(self, cmd_str: str) -> int | None:
+        """Start *cmd_str* in the guest via ``virsh qemu-agent-command``; returns its guest pid, if reported.
 
+        ``guest-exec`` only launches the command, it does not wait for it (see
+        :meth:`_wait_guest_exec_exit`).
+        """
         try:
             # Construct QMP command for guest-exec
             # We use capture-output to avoid hanging if the command produces output
@@ -431,11 +435,31 @@ class SnapshotMixin(AbstractSnapshotMixin, _Host):
                     "arguments": {"path": "/bin/sh", "arg": ["-c", cmd_str], "capture-output": True},
                 }
 
-            cmd_json = json.dumps(qmp_cmd)
-            subprocess.run(['virsh', 'qemu-agent-command', self.vm_name, cmd_json], check=False, capture_output=True)
+            return self._virsh_agent_return(qmp_cmd).get('pid')
 
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
             log.warning(f"Failed to run sync guest command: {e}")
+            return None
+
+    def _virsh_agent_return(self, qga_cmd: dict) -> dict:
+        """Send *qga_cmd* via ``virsh qemu-agent-command``; its ``return`` object, or {} if none."""
+        cmd = ['virsh', 'qemu-agent-command', self.vm_name, json.dumps(qga_cmd)]
+        result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+        try:
+            ret = json.loads(result.stdout).get('return') if result.returncode == 0 else None
+        except (json.JSONDecodeError, AttributeError):
+            ret = None
+        return ret if isinstance(ret, dict) else {}
+
+    def _wait_guest_exec_exit(self, pid: int | None, timeout: float) -> None:
+        """Wait until guest process *pid* has exited, at most *timeout* s (the whole *timeout* if pid unknown)."""
+        deadline = time.monotonic() + timeout
+        delays = backoff_delays()
+        while pid is not None and time.monotonic() < deadline:
+            if self._virsh_agent_return({"execute": "guest-exec-status", "arguments": {"pid": pid}}).get('exited'):
+                return
+            time.sleep(min(next(delays), max(0.0, deadline - time.monotonic())))
+        time.sleep(max(0.0, deadline - time.monotonic()))
 
     def _sync_guest_filesystem(self) -> None:
         """
@@ -447,17 +471,11 @@ class SnapshotMixin(AbstractSnapshotMixin, _Host):
             if 'windows' in self.guest_os.lower():
                 # No direct 'sync' in Windows, but we can try to wait or run a dummy command
                 # The user suggested ensuring disk is safe.
-                # We'll rely on the wait that follows, or we could try a Powershell flush if we had one.
-                # For now, just logging.
-                pass
+                # We rely on this fixed wait, or we could try a Powershell flush if we had one.
+                time.sleep(2)
             else:
-                # Linux
-                self._run_guest_agent_command_sync("sync")
-
-            # Wait a bit to ensure flush completes
-            import time
-
-            time.sleep(2)
+                # Linux: wait (at most the old fixed 2 s) for the sync to finish flushing
+                self._wait_guest_exec_exit(self._run_guest_agent_command_sync("sync"), timeout=2.0)
 
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
             log.warning(f"Failed to sync guest filesystem: {e}")
@@ -548,9 +566,10 @@ class SnapshotMixin(AbstractSnapshotMixin, _Host):
                     log.info("Suspending VM for snapshot...")
                     domain.suspend()
                     vm_was_suspended = True
-                    import time
-
-                    time.sleep(1)  # Give it a moment
+                    # suspend() returns once QEMU has stopped; confirm the pause (at most the old 1 s)
+                    deadline, delays = time.monotonic() + 1.0, backoff_delays()
+                    while self.get_state() != "paused" and time.monotonic() < deadline:
+                        time.sleep(next(delays))
             except libvirt.libvirtError as e:
                 log.warning(f"Failed to suspend VM: {e}")
                 # We proceed, but warn

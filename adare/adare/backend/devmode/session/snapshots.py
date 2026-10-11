@@ -79,9 +79,11 @@ class DevModeSnapshotsMixin:
                             await self.experiment_ctx.client.disconnect()
                             log.debug("WebSocket disconnected")
 
-                        # Restore external snapshot
-                        success = vm.restore_external_snapshot(
-                            memory_path=initial_snapshot.memory_file_path, disk_path=initial_snapshot.disk_file_path
+                        # Restore external snapshot (blocking virsh/libvirt work: keep it off the loop)
+                        success = await asyncio.to_thread(
+                            vm.restore_external_snapshot,
+                            memory_path=initial_snapshot.memory_file_path,
+                            disk_path=initial_snapshot.disk_file_path,
                         )
 
                         if not success:
@@ -407,8 +409,11 @@ class DevModeSnapshotsMixin:
 
                     # Restore snapshot. QMP internal: loadvm in place (VM keeps
                     # running, agent restored alive). External: destroy/redefine/restore.
-                    success = vm.restore_external_snapshot(
-                        memory_path=snapshot.memory_file_path, disk_path=snapshot.disk_file_path
+                    # Blocking virsh/libvirt work, so it runs off the event loop.
+                    success = await asyncio.to_thread(
+                        vm.restore_external_snapshot,
+                        memory_path=snapshot.memory_file_path,
+                        disk_path=snapshot.disk_file_path,
                     )
 
                     if not success:
@@ -574,9 +579,13 @@ class DevModeSnapshotsMixin:
             memory_file_path = str(snapshot_dir / f"{snapshot_name}_RAM.save")
             disk_file_path = str(snapshot_dir / f"{snapshot_name}_DISK.qcow2")
 
-            # Create external snapshot
-            success = vm.create_external_snapshot(
-                snapshot_name=snapshot_name, memory_path=memory_file_path, disk_path=disk_file_path, use_quiesce=True
+            # Create external snapshot (blocking virsh/libvirt work: keep it off the loop)
+            success = await asyncio.to_thread(
+                vm.create_external_snapshot,
+                snapshot_name=snapshot_name,
+                memory_path=memory_file_path,
+                disk_path=disk_file_path,
+                use_quiesce=True,
             )
 
             if not success:
