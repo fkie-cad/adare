@@ -7,6 +7,10 @@ import click
 from trogon import tui
 
 
+# Upper bound for one-line command summaries in group listings (see format_commands).
+_SHORT_HELP_LIMIT = 200
+
+
 class AliasedGroup(click.Group):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -23,8 +27,17 @@ class AliasedGroup(click.Group):
         # Only the canonical command names
         return sorted(super().list_commands(ctx))
 
+    def add_command(self, cmd, name=None):
+        # Commands decorated with @output_options advertise --json in their help
+        # footer. Done here because the Command object does not exist yet when
+        # the decorator runs.
+        from adare.cli.output import OUTPUT_EPILOG, has_output_options
+        if has_output_options(cmd) and not cmd.epilog:
+            cmd.epilog = OUTPUT_EPILOG
+        super().add_command(cmd, name)
+
     def format_commands(self, ctx, formatter):
-        rows = []
+        entries = []
         for name in self.list_commands(ctx):
             cmd = self.get_command(ctx, name)
             if cmd is None or cmd.hidden:
@@ -32,36 +45,44 @@ class AliasedGroup(click.Group):
             # collect aliases pointing to this command
             alias_list = [a for a, target in self.aliases.items() if target == name]
             suffix = f" (aliases: {', '.join(alias_list)})" if alias_list else ""
-            rows.append((name, cmd.get_short_help_str() + suffix))
+            entries.append((name, cmd, suffix))
+        if not entries:
+            return
+        # get_short_help_str() defaults to 45 characters, which cut most one-line
+        # summaries mid-sentence. Show the whole first sentence instead and let
+        # write_dl wrap it onto continuation lines on narrow terminals.
+        rows = [(name, cmd.get_short_help_str(limit=_SHORT_HELP_LIMIT) + suffix)
+                for name, cmd, suffix in entries]
         with formatter.section("Commands"):
             formatter.write_dl(rows)
 
 
 # Internal imports - NOW LAZY LOADED inside functions
-from adare.exceptions import LoggedErrorException, LoggedException
-from adare.helperfunctions.output_formatter import get_formatter
+from adare.cli.errors import report_exception
+from adare.cli.output import FORMAT_CHOICES, FORMAT_ENV_VAR, output_options
+from adare.cli.output import get_formatter_from_context as _get_formatter_from_context
+from adare.exceptions import LoggedException
 from adare.setup_logging import setup_logging
 
 
 def get_formatter_from_context():
-    """Get output formatter from current Click context."""
-    try:
-        ctx = click.get_current_context()
-        output_format = ctx.obj.output_format
-        output_file = ctx.obj.output_file
+    """Get the output formatter for the running command.
 
-        # Determine if dual output is desired:
-        # When output-file is specified, user wants Rich console + structured file
-        # (regardless of the format specified)
-        dual_output = (output_file is not None)
-
-        return get_formatter(output_format), output_file, dual_output
-    except (RuntimeError, AttributeError):
-        # Fallback if no context or missing attributes
-        return get_formatter('rich'), None, False
+    Kept here because most commands import it from ``adare.run``; the format
+    resolution itself (subcommand flag > global flag > $ADARE_FORMAT > auto)
+    lives in ``adare.cli.output``.
+    """
+    return _get_formatter_from_context()
 
 
 def exec_with_error_printing(func, args):
+    """Run a command implementation; report a LoggedException once and exit.
+
+    Exit codes: 0 ok (or an informational message), 1 error, 2 usage error,
+    3 not found -- see ``adare.cli.errors``. The message goes to stderr (a JSON
+    ``{"error": {...}}`` document in json mode); the traceback only with
+    --very-verbose.
+    """
     import asyncio
     import inspect
 
@@ -71,11 +92,7 @@ def exec_with_error_printing(func, args):
         else:
             func(args)
     except LoggedException as e:
-        e.print()
-        if isinstance(e, LoggedErrorException):
-            sys.exit(-1)
-        else:
-            sys.exit(0)
+        sys.exit(report_exception(e))
 
 
 # Global start time for runtime logging
@@ -84,15 +101,22 @@ START_TIME = time.time()
 
 # Global CLI group with logging and version options
 @tui()
-@click.group(cls=AliasedGroup)
+@click.group(cls=AliasedGroup, context_settings={'max_content_width': 120},
+             epilog='Output: list/info/status commands take --json or --format '
+                    '[rich|plain|json|yaml] after the subcommand (adare env list --json). '
+                    f'Precedence: subcommand flag > adare --format > ${FORMAT_ENV_VAR} > auto '
+                    '(rich on a terminal, plain tab-separated text when piped). Data goes to '
+                    'stdout, logs and errors to stderr. Exit codes: 0 ok, 1 error, 2 usage, '
+                    '3 not found.')
 @click.option('--logfile', type=click.Path(), help='Path to logfile')
 @click.option('--verbose', is_flag=True, help='Verbose output (loglevel=INFO)')
-@click.option('--very-verbose', is_flag=True, help='Very verbose output (loglevel=DEBUG)')
+@click.option('--very-verbose', is_flag=True, help='Very verbose output (loglevel=DEBUG, tracebacks on errors)')
 @click.option('--log-level', help='Log level for logfile')
 @click.option('--output-format', '--format', 'output_format',
-              type=click.Choice(['rich', 'json', 'yaml'], case_sensitive=False),
-              default='rich', show_default=True,
-              help='Output format for commands that support structured data')
+              type=click.Choice(FORMAT_CHOICES, case_sensitive=False),
+              default=None,
+              help='Output format for commands that support structured data '
+                   f'(default: ${FORMAT_ENV_VAR}, else rich on a terminal and plain when piped)')
 @click.option('--output-file', type=click.Path(),
               help='Save output to file instead of printing to console')
 @click.version_option()  # Uses the package version if configured
@@ -106,8 +130,9 @@ def cli(ctx, logfile, verbose, very_verbose, log_level, output_format, output_fi
     ctx.obj.verbose = verbose
     ctx.obj.very_verbose = very_verbose
     ctx.obj.log_level = log_level
-    ctx.obj.output_format = output_format
+    ctx.obj.output_format = output_format.lower() if output_format else None
     ctx.obj.output_file = output_file
+    ctx.obj.command_output_format = None  # set by a subcommand's --json/--format
     setup_logging(ctx.obj, sys.argv)
 
 
@@ -134,6 +159,7 @@ def db_init():
     exec_with_error_printing(exec_manage_init_db, args)
 
 @db.command(name='status')
+@output_options
 def db_status():
     """Check database system status."""
     from adare.cli.manage import exec_manage_db_status
@@ -179,6 +205,7 @@ def os_profile():
     pass
 
 @os_profile.command(name='list')
+@output_options
 def os_profile_list():
     """List all available OS profiles."""
     from adare.cli.manage_os_profile import exec_os_profile_list
@@ -192,6 +219,7 @@ def os_profile_add(profile_file):
     exec_with_error_printing(exec_os_profile_add, SimpleNamespace(profile_file=profile_file))
 
 @os_profile.command(name='show')
+@output_options
 @click.argument('name')
 def os_profile_show(name):
     """Show detailed information about an OS profile."""
@@ -218,6 +246,7 @@ def icons():
     pass
 
 @icons.command(name='list')
+@output_options
 @click.option('--os-key', default='windows', help='OS profile / build key (cache separation)')
 def icons_list(os_key):
     """List every icon term in the registry with its resolver spec."""
@@ -290,6 +319,7 @@ def remove(name):
     exec_with_error_printing(exec_remove_project, args)
 
 @project.command(name='list')
+@output_options
 def list_projects():
     """List all projects."""
     from adare.cli.project import exec_list_projects
@@ -479,6 +509,7 @@ def run():
     pass
 
 @run.command(name='list')
+@output_options
 @click.option('--filter', help='Filter by dotnotation: [project][.environment][.experiment]')
 def list_runs(filter):
     """List all experiment runs. Use --filter with dotnotation for advanced filtering."""
@@ -487,6 +518,7 @@ def list_runs(filter):
     exec_with_error_printing(exec_show_runs, args)
 
 @run.command()
+@output_options
 @click.argument('ulid', required=False)
 def info(ulid):
     """Show detailed information about a run. Shows latest run if no ULID provided."""
@@ -750,6 +782,7 @@ def cli_chat(model, base_url, tool_protocol, max_tokens):
 # Status command
 # ------------------------------
 @cli.command(name='status')
+@output_options
 def cli_status():
     """Show quick overview: current project, active sessions, VM count, db status."""
     from adare.cli.status import exec_status

@@ -15,10 +15,24 @@ All ADARE commands support the following global options:
 
 * ``--logfile PATH`` - Path to logfile for detailed logging
 * ``--verbose`` - Verbose output (loglevel=INFO)
-* ``--very-verbose`` - Very verbose output (loglevel=DEBUG)  
+* ``--very-verbose`` - Very verbose output (loglevel=DEBUG; also prints tracebacks on errors)
 * ``--log-level LEVEL`` - Specific log level for logfile
+* ``--output-format``/``--format [rich|plain|json|yaml]`` - Output format for commands that print data
+* ``--output-file PATH`` - Also save the structured result to a file
 * ``--version`` - Show version information
 * ``--help`` - Show help message
+
+Output, errors and exit codes
+=============================
+
+Every read-only ``list``/``info``/``show``/``status`` command also accepts
+``--json`` and ``--format [rich|plain|json|yaml]`` *after* the subcommand
+(``adare env list --json``). Precedence: subcommand flag > global ``--format`` >
+``ADARE_FORMAT`` environment variable > auto (``rich`` on a terminal, ``plain``
+tab-separated text when stdout is piped). stdout carries only data; logs,
+progress, warnings and errors go to stderr. Errors are one concise message
+(``{"error": {...}}`` in json mode). Exit codes: ``0`` ok, ``1`` error,
+``2`` usage error, ``3`` not found. Details: :doc:`output-formats`.
 
 Command Groups
 **************

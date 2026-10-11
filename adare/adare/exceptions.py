@@ -1,32 +1,43 @@
 # configure logging
 import logging
 
-from adare.console import console
+from adare.console import err_console
 from adare.helperfunctions.text import clean_rich_inline_str
+
+
+# Marks log records emitted by an exception's constructor. The console log
+# handler hides them at the default verbosity because the CLI boundary
+# (``exec_with_error_printing``) reports the same exception once, on stderr; the
+# log file and --verbose/--very-verbose still get them.
+EXCEPTION_LOG_MARKER = 'adare_exception'
 
 
 class LoggedException(Exception):
     log: logging.Logger
     rich_message: str
+    # True for "exceptions" that are really status messages (exit 0), e.g.
+    # "no projects found". Everything else is a failure at the CLI boundary.
+    informational: bool = False
 
     def __init__(self, log: logging.Logger, message: str, level: str = 'info'):
         self.log = log
         self.rich_message = message
         self.message = clean_rich_inline_str(message)
+        extra = {EXCEPTION_LOG_MARKER: True}
         if level == 'critical':
-            self.log.critical(self.message)
+            self.log.critical(self.message, extra=extra)
         elif level == 'debug':
-            self.log.debug(self.message)
+            self.log.debug(self.message, extra=extra)
         elif level == 'error':
-            self.log.error(self.message)
+            self.log.error(self.message, extra=extra)
         elif level == 'info':
-            self.log.info(self.message)
+            self.log.info(self.message, extra=extra)
         elif level == 'warning':
-            self.log.warning(self.message)
+            self.log.warning(self.message, extra=extra)
         super().__init__(self.message)
 
     def print(self):
-        console.print(self.rich_message, highlight=False)
+        err_console.print(self.rich_message, highlight=False)
 
 
 class LoggedErrorException(LoggedException):
@@ -39,16 +50,16 @@ class LoggedErrorException(LoggedException):
         self.possible_solutions = possible_solutions
 
     def print(self):
-        console.print()
-        console.print(f'{self.error_name}:', highlight=False, style='underline bold')
-        console.print(f'{self.message}', highlight=False)
+        err_console.print()
+        err_console.print(f'{self.error_name}:', highlight=False, style='underline bold')
+        err_console.print(f'{self.message}', highlight=False)
         if self.possible_solutions:
-            console.print('\nPossible Solutions:', highlight=False, style='')
+            err_console.print('\nPossible Solutions:', highlight=False, style='')
             prefix_whitespace_count = 3
             for index, mitigation in enumerate(self.possible_solutions):
                 print_string = ' ' * prefix_whitespace_count + f'([b][cyan]{index + 1}[/cyan][/b]) {mitigation}'
-                console.print(print_string, highlight=False)
-        console.print()
+                err_console.print(print_string, highlight=False)
+        err_console.print()
 
 
 class DataStructuringError(LoggedErrorException):
@@ -137,7 +148,7 @@ class NotLoggedInError(LoggedErrorException):
 class RunNotFoundError(LoggedErrorException):
     def __init__(self, log, run_ulid):
         super().__init__(log, f'Experiment run "{run_ulid}" not found', possible_solutions=[
-            'Use `adare show runs` to list available experiment runs',
+            'Use `adare run list` to list available experiment runs',
             'Check if the run ULID is correct',
             'Make sure the experiment run was completed successfully'
         ])
