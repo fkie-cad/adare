@@ -27,7 +27,7 @@ _NEXT_STEPS = '''
 Next steps:
   Claude Code  skills load automatically (restart running sessions); start with the adare-overview skill.
   OpenCode     enable the skills plugin: add "plugin": ["opencode-skills"] to opencode.json,
-               or reference skills/*/SKILL.md from AGENTS.md (see docs/mcp-clients.md).
+               or reference skills/*/SKILL.md from AGENTS.md (see docsrc/mcp-clients.md).
   MCP          only for hosts without a shell or for live VM hands:
                claude mcp add adare -- adare mcp serve        (whole lifecycle as tools)
                adare dev mcp -s <session>                     (click/type/screenshot one running VM)

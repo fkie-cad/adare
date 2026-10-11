@@ -14,7 +14,7 @@ the exploration/debugging counterpart to the productized `adare exp run`
 Pure `adare` CLI + Bash. The one genuinely non-CLI capability — stateful,
 step-by-step live-VM hands for an external harness — is the `dev mcp` server,
 covered as an appendix. Auto-loads as a skill in **Claude Code**; portable to any
-agent with a shell (on **OpenCode** see `docs/mcp-clients.md` for skill setup).
+agent with a shell (on **OpenCode** see `docsrc/mcp-clients.md` for skill setup).
 
 Keep SKILL.md's common path in view; pull `references/*.md` for full flag matrices
 and agent/grounding depth.
@@ -145,4 +145,4 @@ claude mcp add --transport http adare-gui http://127.0.0.1:13110/mcp
 ```
 
 OpenCode: a `"type": "remote"` entry pointing at `http://127.0.0.1:13110/mcp`. See
-`docs/mcp-clients.md` for the full client setup.
+`docsrc/mcp-clients.md` for the full client setup.

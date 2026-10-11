@@ -62,19 +62,21 @@ install-skills:
 	done
 	@echo "Claude Code: skills are now project-local and global (also via 'ollama launch claude')."
 	@echo "OpenCode: 'ln -sfn $(CURDIR)/skills .opencode/skills' + enable the opencode-skills plugin,"
-	@echo "          or use an AGENTS.md reference. See docs/mcp-clients.md."
+	@echo "          or use an AGENTS.md reference. See docsrc/mcp-clients.md."
 
 # Documentation targets
 docs: docs-sphinx
 
+# Build output is not committed (GitHub Pages is deployed by the docs workflow).
+DOCS_BUILD = docsrc/build/html
 docs-sphinx:
 	@echo "Building documentation with Sphinx..."
 	uv sync --group docs
-	uv run sphinx-build -b html -a -E docsrc/source docs
+	uv run sphinx-build -b html -a -E docsrc/source $(DOCS_BUILD)
 	@echo "Copying demo assets..."
-	mkdir -p docs/demo
-	cp paper/demo/*.mp4 docs/demo/
-	touch docs/.nojekyll
+	mkdir -p $(DOCS_BUILD)/demo
+	cp paper/demo/*.mp4 $(DOCS_BUILD)/demo/
+	touch $(DOCS_BUILD)/.nojekyll
 
 # --- Quality -----------------------------------------------------------------
 # The ratchet's mypy counts depend on which packages are installed, so lint runs

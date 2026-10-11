@@ -20,7 +20,7 @@ for non-CLI hosts (Claude Desktop / web).
 This skill auto-loads in **Claude Code** (which reads `.claude/skills/`); the loop
 itself is pure Bash + the `adare` CLI, so it's portable to any agent with a shell. On
 **OpenCode** — which does *not* natively read `.claude/skills/` — load skills via the
-`opencode-skills` plugin or an `AGENTS.md` reference (see `docs/mcp-clients.md`).
+`opencode-skills` plugin or an `AGENTS.md` reference (see `docsrc/mcp-clients.md`).
 
 **Related skills** (this one owns *editing/authoring/validating/replaying the
 `playbook.yml` file*; hand off when the job is really something else):
@@ -144,7 +144,7 @@ already the `adare` CLI you're running via Bash. It's useful for **non-CLI hosts
 - **OpenCode** (`opencode.json`): a `"type": "local"` entry with
   `"command": ["adare", "mcp", "serve"]`.
 
-See `docs/mcp-clients.md` for the human-facing copy of this setup.
+See `docsrc/mcp-clients.md` for the human-facing copy of this setup.
 
 ## Guardrails
 

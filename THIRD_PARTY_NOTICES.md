@@ -28,8 +28,3 @@ RBCmd, the Recycle Bin artifact parser by Eric Zimmerman
 Copyright (c) Eric R. Zimmerman. The binaries are included unmodified so the
 example experiments run offline; `adare experiment create` downloads the same
 tool from <https://download.ericzimmermanstools.com/RBCmd.zip>.
-
-## Bundled documentation assets
-
-- `docs/_static/` contains build output of the Furo Sphinx theme (MIT); see
-  `docs/_static/scripts/furo.js.LICENSE.txt`.

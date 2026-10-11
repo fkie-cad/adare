@@ -733,7 +733,7 @@ def mcp_serve(transport, host, port):
         adare mcp serve --transport http --port 13112
 
     Client setup (Claude Code / OpenCode) and the playbook fix loop:
-        docs/mcp-clients.md   ·   skill: .claude/skills/adare-playbook/SKILL.md
+        docsrc/mcp-clients.md   ·   skill: .claude/skills/adare-playbook/SKILL.md
         Claude Code: claude mcp add adare -- adare mcp serve
     """
     from adare.cli.mcp_control import exec_mcp_serve

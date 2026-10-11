@@ -11,7 +11,7 @@ from scratch), **environments** (a VM + declarative post-setup software), and
 doctors and image housekeeping.
 
 Pure `adare` CLI + Bash. Auto-loads as a skill in **Claude Code**; portable to any
-agent with a shell (on **OpenCode** see `docs/mcp-clients.md` for skill setup).
+agent with a shell (on **OpenCode** see `docsrc/mcp-clients.md` for skill setup).
 Building a VM is long-running and host-tool-heavy — always start with the doctors. Keep SKILL.md's
 path in view; the deep flag/recipe detail and the hard-won Windows-ARM64
 troubleshooting live in `references/*.md`.

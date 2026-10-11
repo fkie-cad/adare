@@ -554,7 +554,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         Example:
             adare dev mcp -s <id> --port 13110
 
-        Client setup (Claude Code / OpenCode): docs/mcp-clients.md
+        Client setup (Claude Code / OpenCode): docsrc/mcp-clients.md
             Claude Code: claude mcp add --transport http adare-gui \\
                 http://127.0.0.1:13110/mcp
         """
