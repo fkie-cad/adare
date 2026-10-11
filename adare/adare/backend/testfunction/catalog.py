@@ -343,29 +343,69 @@ def default_sources() -> list[tuple[Path, bool]]:
     ]
 
 
+# load_catalog() runs on every agent tool call (chat tools, MCP serving, playbook
+# checks). Parsing and hashing every collection each time is wasted work while no
+# source changed, so the result is kept per input, guarded by a fingerprint of the
+# collection files that any edit, addition or removal invalidates.
+_CATALOG_CACHE: dict[tuple, tuple[tuple, list[CatalogEntry]]] = {}
+
+
+def _collection_files(sources: tuple[tuple[Path, bool], ...]) -> list[tuple[Path, bool]]:
+    files = []
+    for root, installed in sources:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob('*/*.py')):
+            if path.stem == path.parent.name:  # collection file must be named after its dir
+                files.append((path, installed))
+    return files
+
+
+def _fingerprint(files: list[tuple[Path, bool]]) -> tuple:
+    stamps: list[tuple[str, int | None, int | None]] = []
+    for path, _ in files:
+        try:
+            st = path.stat()
+        except OSError:
+            stamps.append((path.as_posix(), None, None))  # vanished mid-scan: parse_collection logs it
+            continue
+        stamps.append((path.as_posix(), st.st_mtime_ns, st.st_size))
+    return tuple(stamps)
+
+
 def load_catalog(sources: list[tuple[Path, bool]] | None = None) -> list[CatalogEntry]:
     """All testfunctions from ``sources`` (default: installed + bundled), deduplicated by dotnotation.
 
     A host-native collection (``visual``) is never synced into the installed dir, so
     its bundled copy is reported as installed: it is always available at run time.
+
+    Cached per ``sources`` while the collection files' paths, mtimes and sizes are
+    unchanged; each call still re-scans the directories (cheap) to check that.
     """
     from adare.backend.testfunction.commands import testfunction_sync_all
 
     always_available = testfunction_sync_all.__defaults__[0]
+    resolved = tuple(
+        (Path(root), installed) for root, installed in (sources if sources is not None else default_sources())
+    )
+    files = _collection_files(resolved)
+    fingerprint = _fingerprint(files)
+    key = (resolved, tuple(always_available))
+    cached = _CATALOG_CACHE.get(key)
+    if cached is not None and cached[0] == fingerprint:
+        return list(cached[1])
+
     seen: dict[str, CatalogEntry] = {}
-    for root, installed in sources if sources is not None else default_sources():
-        if not root.is_dir():
-            continue
-        for path in sorted(root.glob('*/*.py')):
-            if path.stem != path.parent.name:  # collection file must be named after its dir
-                continue
-            available = installed or path.stem in always_available
-            for entry in parse_collection(path, available):
-                if entry.dotnotation not in seen:
-                    seen[entry.dotnotation] = entry
-                else:
-                    seen[entry.dotnotation] = _borrow_docs(seen[entry.dotnotation], entry)
-    return sorted(seen.values(), key=lambda e: e.dotnotation)
+    for path, installed in files:
+        available = installed or path.stem in always_available
+        for entry in parse_collection(path, available):
+            if entry.dotnotation not in seen:
+                seen[entry.dotnotation] = entry
+            else:
+                seen[entry.dotnotation] = _borrow_docs(seen[entry.dotnotation], entry)
+    entries = sorted(seen.values(), key=lambda e: e.dotnotation)
+    _CATALOG_CACHE[key] = (fingerprint, entries)
+    return list(entries)
 
 
 def _borrow_docs(installed: CatalogEntry, bundled: CatalogEntry) -> CatalogEntry:
