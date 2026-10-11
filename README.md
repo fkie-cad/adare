@@ -20,3 +20,8 @@ Full documentation is available at **https://fkie-cad.github.io/adare/**.
 ## Development
 
 See [ROADMAP.md](ROADMAP.md) for current development tasks, planned features, and known issues.
+
+## License
+
+MIT — see [LICENSE](LICENSE). The optional LocateAnything grounding server is excluded;
+see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

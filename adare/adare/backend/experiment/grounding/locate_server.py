@@ -22,7 +22,9 @@ the process manager. Run directly:
 
     python -m adare.backend.experiment.grounding.locate_server --port 13111
 
-License: **NVIDIA LocateAnything is non-commercial** — local testing only.
+License: **not MIT.** The worker code is adapted from NVIDIA's LocateAnything demo
+(huggingface.co/spaces/nvidia/LocateAnything, no open-source license) and the model
+is NVIDIA non-commercial — local testing only. See THIRD_PARTY_NOTICES.md.
 """
 
 from __future__ import annotations

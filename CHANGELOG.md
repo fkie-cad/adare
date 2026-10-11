@@ -31,6 +31,8 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - Pre-commit hooks (`make hooks`): ruff-format, ratchet, gitleaks, file checks.
 - `make test`, `lint`, `lint-fix`, `lint-baseline`, `typecheck` targets.
 - Import smoke test covering every host-package module.
+- MIT license (Fraunhofer FKIE); `THIRD_PARTY_NOTICES.md` lists the NVIDIA-derived
+  grounding server, which is excluded from it.
 
 ### Changed
 - Whole workspace formatted with `ruff format`; safe ruff autofixes applied.
