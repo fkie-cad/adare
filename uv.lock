@@ -352,6 +352,12 @@ dependencies = [
     { name = "websockets" },
 ]
 
+[package.dev-dependencies]
+test = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "adarelib", editable = "adarelib" },
@@ -363,6 +369,12 @@ requires-dist = [
     { name = "python-ulid", specifier = ">=2.7.0" },
     { name = "pytz", specifier = ">=2025.2" },
     { name = "websockets", specifier = ">=15.0" },
+]
+
+[package.metadata.requires-dev]
+test = [
+    { name = "pytest", specifier = ">=7.4.0" },
+    { name = "pytest-asyncio", specifier = ">=0.21.0" },
 ]
 
 [[package]]

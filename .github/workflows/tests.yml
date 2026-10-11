@@ -79,6 +79,37 @@ jobs:
         run: |
           echo "Unit-test line coverage: $(uv run --no-sync coverage report --format=total)%" >> "$GITHUB_STEP_SUMMARY"
 
+  # The guest agent runs on the guest's Python (3.10+), outside the uv workspace
+  # (which requires 3.13), so it gets its own venv with just adarelib + adarevm,
+  # installed from the sources the way the agent wheels are installed in guests.
+  agent:
+    name: Guest agent (${{ matrix.os }}, Python 3.10)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install
+        run: |
+          uv venv --python 3.10 .venv-agent
+          uv pip install --python .venv-agent ./adarelib ./adarevm 'pytest>=7.4.0' 'pytest-asyncio>=0.21.0'
+
+      - name: Run agent tests
+        working-directory: adarevm
+        run: |
+          PY=../.venv-agent/bin/python
+          [ -x "$PY" ] || PY=../.venv-agent/Scripts/python.exe
+          "$PY" -m pytest -q
+
   # Testfunctions run inside Linux and Windows guests and on the macOS host (host
   # test mode), so their behaviour is checked on all three.
   testfunctions:
