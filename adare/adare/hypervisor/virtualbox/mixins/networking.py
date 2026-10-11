@@ -9,15 +9,22 @@ import contextlib
 import logging
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adare.hypervisor.base.mixins.networking import AbstractNetworkingMixin
 from adare.hypervisor.virtualbox.models import PortForwardingRule, SharedFolderConfig
 from adare.hypervisor.virtualbox.utils import run_subprocess
 
+if TYPE_CHECKING:
+    from adare.hypervisor.virtualbox.mixins.host import VirtualBoxVMHost as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class NetworkingMixin(AbstractNetworkingMixin):
+class NetworkingMixin(AbstractNetworkingMixin, _Host):
     """Mixin class providing networking operations for VirtualBox VMs."""
 
     async def list_port_forwarding_rules(

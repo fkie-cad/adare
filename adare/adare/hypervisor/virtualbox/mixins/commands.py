@@ -15,13 +15,20 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adare.hypervisor.base.mixins.commands import AbstractCommandMixin
+
+if TYPE_CHECKING:
+    from adare.hypervisor.virtualbox.mixins.host import VirtualBoxVMHost as _Host
+else:
+    _Host = object
+
 
 log = logging.getLogger(__name__)
 
 
-class CommandExecutionMixin(AbstractCommandMixin):
+class CommandExecutionMixin(AbstractCommandMixin, _Host):
     """Mixin class providing command execution operations for VirtualBox VMs."""
 
     def _stream_vboxmanage_command(self, args: list[str], stop_event: threading.Event | None = None) -> Iterator[str]:

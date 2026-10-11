@@ -17,7 +17,7 @@
   "mypy": {
     "arg-type": 492,
     "assignment": 398,
-    "attr-defined": 509,
+    "attr-defined": 379,
     "call-arg": 29,
     "call-overload": 4,
     "dict-item": 2,
@@ -39,7 +39,7 @@
     "union-attr": 203,
     "unused-coroutine": 1,
     "valid-type": 36,
-    "var-annotated": 52
+    "var-annotated": 50
   },
   "oversized_files": {
     "adare-cv-server/adare_cv_server/feature_matching.py": 1147,
