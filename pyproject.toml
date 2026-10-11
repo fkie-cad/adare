@@ -1,8 +1,8 @@
 [project]
 name = "adaredepend"
 version = "0.1.0"
-description = ""
-authors = [{name = "Your Name", email = "you@example.com"}]
+description = "ADARE workspace root: host client, guest agent, shared library and CV server"
+authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 
@@ -15,8 +15,6 @@ dependencies = [
 
 [project.scripts]
 adare = "adare.run:main"
-adareexp = "adare.example:main"
-mcp_gui = "adare.mcp_gui:main"
 
 [project.optional-dependencies]
 docs = ["sphinx", "furo", "sphinx-design"]

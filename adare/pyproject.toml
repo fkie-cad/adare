@@ -1,7 +1,7 @@
 [project]
 name = "adare"
 version = "0.1.0"
-description = ""
+description = "Automated Desktop Analysis framework for Reproducible Experiments: host client for projects, VMs and experiments"
 authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
