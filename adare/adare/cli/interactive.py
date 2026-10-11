@@ -9,5 +9,5 @@ def exec_experiment_dev(arguments):
     """Execute interactive development mode."""
     raise NotImplementedError(
         "Interactive development mode is not currently implemented. "
-        "Use 'adare experiment develop' for testing experiments instead."
+        "Use 'adare dev start' for developing experiments instead."
     )

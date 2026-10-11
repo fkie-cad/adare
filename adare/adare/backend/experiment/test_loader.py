@@ -115,7 +115,7 @@ class TestLoader:
                 log.info("No testfunctions used in playbook - skipping testfunction upload")
         else:
             log.warning(f"Global testfunctions directory not found: {global_testfunctions_path}")
-            log.info("Load testfunctions using 'adare testfunction load-global <path>' to enable testfunction uploads")
+            log.info("Load testfunctions using 'adare test load <path>' to enable testfunction uploads")
 
         # Individual tests are sent via WebSocket when executed
         # No need to upload entire testset file to VM

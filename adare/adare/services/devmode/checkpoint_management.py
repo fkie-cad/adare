@@ -84,7 +84,7 @@ class CheckpointManagementMixin:
             return Result.fail(
                 result.error.code if result.error else "RESET_FAILED",
                 result.error.message if result.error else "Soft reset failed",
-                ["Try hard reset instead: adare dev reset-hard"]
+                ["Try hard reset instead: adare dev reset hard"]
             )
 
         except RuntimeError as e:
@@ -295,7 +295,7 @@ class CheckpointManagementMixin:
                 result.error.code if result.error else "CHECKPOINT_NOT_FOUND",
                 result.error.message if result.error else f"Checkpoint '{request.name}' not found",
                 [
-                    f"List available checkpoints with: adare dev checkpoint-list {request.session_id}"
+                    f"List available checkpoints with: adare dev checkpoint list -s {request.session_id}"
                 ]
             )
 
