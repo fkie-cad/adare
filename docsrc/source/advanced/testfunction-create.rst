@@ -125,7 +125,8 @@ Inspect the history:
    adare test versions mycollection                     # file (collection) history
    adare test versions mycollection.file_contains_word  # per-method history
 
-The current version is also shown by ``adare test list`` and ``adare test info``.
+The current version is also shown by ``adare test info``. Editing only a
+function's docstring does not bump its version (the hash excludes the docstring).
 
 **Reproducibility = drift detection.** When an experiment is created, ADARE pins
 the collection version + hash and the method version + hash it was built against.
@@ -223,6 +224,32 @@ Parameters are derived from the function signature:
 This generates a parameter class with fields: ``path`` (required str), ``count`` (optional int, default 5), ``regex`` (optional bool, default False).
 
 Type annotations are used for cattrs structuring from YAML playbooks. Always annotate your parameters.
+
+Documenting parameters
+~~~~~~~~~~~~~~~~~~~~~~
+
+Give every testfunction a docstring with a Google-style ``Args:`` section. It is
+what ``adare test info``/``search``, the generated catalog and the agent tools
+(``testfunction_search``, ``list_testfunctions``) show, and ``adare test validate``
+warns when it is missing. The docstring is excluded from the function's version
+hash, so documenting never creates a new version.
+
+.. code-block:: python
+
+   @testfunction(name='my_test', description='tests if the file matches')
+   def my_test(ctx, path: str, count: int = 5, regex: bool = False):
+       """Pass when ``path`` holds at least ``count`` matching lines.
+
+       Use for: verifying an application wrote its log entry.
+
+       Args:
+           path: Guest path of the file; glob patterns allowed.
+           count: Minimum number of matching lines.
+           regex: Treat the pattern as a regular expression.
+       """
+
+Do not add new ``@testfunction(...)`` keyword arguments for metadata. Guests may
+run an older ``adarelib`` that rejects them.
 
 Category
 --------

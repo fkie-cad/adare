@@ -62,9 +62,31 @@ def exec_catalog_search(arguments) -> None:
                    with_example=True)
 
 
+def installed_version(entry: CatalogEntry) -> int | None:
+    """Current method version from the global DB (best effort; None if not loaded)."""
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from adare.database.api.base import GlobalDatabaseApi
+    from adare.database.models.global_models import TestFunction, TestFunctionFile
+
+    try:
+        with GlobalDatabaseApi() as api:
+            row = api._session.query(TestFunction.version).join(TestFunctionFile).filter(
+                TestFunctionFile.name == entry.collection,
+                TestFunction.name == entry.name.split('.')[-1],
+                TestFunction.is_current.is_(True),
+            ).first()
+    except (SQLAlchemyError, OSError) as e:
+        log.debug(f'No version for {entry.dotnotation}: {e}')
+        return None
+    return row[0] if row else None
+
+
 def exec_catalog_info(arguments) -> None:
     formatter, output_file = _formatter()
-    render_entry(resolve_entry(arguments.dotnotation), formatter, output_file, example_only=arguments.example)
+    entry = resolve_entry(arguments.dotnotation)
+    version = None if arguments.example or not entry.installed else installed_version(entry)
+    render_entry(entry, formatter, output_file, example_only=arguments.example, version=version)
 
 
 def exec_catalog_export(arguments) -> None:

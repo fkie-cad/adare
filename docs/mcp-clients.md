@@ -41,8 +41,8 @@ stays even though Claude Code / OpenCode lead with the CLI.
 ## Using the ADARE skills across agents
 
 ADARE ships a suite of workflow **skills** in the tracked `skills/` directory —
-`adare-playbook`, `adare-experiment`, `adare-devvm`, `adare-vm-build`,
-`adare-testfunction`. A skill is just a Markdown file (workflow + guardrails + a
+`adare-overview` (start here), `adare-playbook`, `adare-experiment`, `adare-devvm`,
+`adare-vm-build`, `adare-testfunction`. A skill is just a Markdown file (workflow + guardrails + a
 trigger line); its value is portable prose that tells any agent the ADARE workflow
 and to drive the `adare` CLI over a shell. What differs between agents is only *how
 the skill file gets discovered and loaded* — not the model.
@@ -54,12 +54,21 @@ Claude Code auto-loads skills from `.claude/skills/` (this project) and
 `skills/` directory; install it into both locations with the make target:
 
 ```sh
-make install-skills
+adare agent setup --client claude --scope all   # or, from a checkout: make install-skills
+adare agent status                              # where each skill is linked, stale links
 ```
 
-It symlinks each `skills/adare-*` into `.claude/skills/` **and** `~/.claude/skills/`,
+Both symlink each `skills/adare-*` into `.claude/skills/` **and** `~/.claude/skills/`,
 so `skills/` stays the single version-controlled source and edits propagate
-everywhere. Undo with `rm ~/.claude/skills/adare-* .claude/skills/adare-*`.
+everywhere. `adare agent setup` never touches real directories and only re-points
+links that point elsewhere with `--force` (`--dry-run` shows the plan). Undo with
+`rm ~/.claude/skills/adare-* .claude/skills/adare-*`.
+
+Start with **`adare-overview`**: the mental model, which skill to use for which
+step, and the agent rules. For picking assertions, agents should use
+`adare test search "<goal>"` / `adare test info <dotnotation> --example` (CLI) or the
+`testfunction_search` (`adare mcp serve`) and `list_testfunctions(query=…)`
+(`adare dev mcp`) tools, never guess names.
 
 This applies whether you start Claude Code directly (`claude`) or via
 `ollama launch claude` — the latter launches the *same* Claude Code binary wired to a
@@ -80,7 +89,7 @@ Native OpenCode has no Anthropic-style skills. Pick one:
    It scans `.opencode/skills/`, `~/.opencode/skills/`,
    `~/.config/opencode/skills/` — **not** `.claude/skills/`. Point it at ours:
    ```sh
-   ln -sfn "$PWD/skills" .opencode/skills
+   adare agent setup --client opencode            # ~/.config/opencode/skills
    ```
 2. **Plugin-free — `AGENTS.md` lazy `@`-references** (OpenCode's native rules file).
    A short always-in-context index that the model reads on demand, reusing the same
@@ -90,6 +99,7 @@ Native OpenCode has no Anthropic-style skills. Pick one:
    CRITICAL: when a reference below is relevant, use the Read tool to load it
    on a need-to-know basis (lazy). Treat loaded content as mandatory.
 
+   - Unsure / multi-step task       → @skills/adare-overview/SKILL.md
    - Run/inspect/share experiments → @skills/adare-experiment/SKILL.md
    - Drive/debug a live VM          → @skills/adare-devvm/SKILL.md
    - Edit/validate/replay a playbook → @skills/adare-playbook/SKILL.md
