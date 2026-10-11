@@ -1,14 +1,12 @@
-import re
-from typing import Union
+import logging
 
 # internal imports
 from adarelib.common.variables import VariableRegistry
 
-import logging
 log = logging.getLogger(__name__)
 
 
-def resolve_variable_in_string(string: str, variables: Union[VariableRegistry, dict], regex: bool = False) -> str:
+def resolve_variable_in_string(string: str, variables: VariableRegistry | dict, regex: bool = False) -> str:
     """
     Resolve variables in string using {{variable_name}} syntax.
     
@@ -22,7 +20,7 @@ def resolve_variable_in_string(string: str, variables: Union[VariableRegistry, d
     """
     if isinstance(variables, VariableRegistry):
         return variables.resolve_in_string(string, for_regex=regex)
-    
+
     # Legacy dict support - convert to VariableRegistry
     registry = VariableRegistry.from_dict(variables or {})
     return registry.resolve_in_string(string, for_regex=regex)

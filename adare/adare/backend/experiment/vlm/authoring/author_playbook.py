@@ -29,7 +29,6 @@ import argparse
 import json
 import logging
 import re
-import socket
 import subprocess
 import sys
 import tempfile
@@ -205,7 +204,7 @@ def ollama_chat(
             body = resp.read().decode('utf-8')
     except urllib.error.HTTPError as exc:
         raise OllamaError(f'Ollama HTTP {exc.code}: {exc.reason}') from exc
-    except (urllib.error.URLError, socket.timeout, TimeoutError) as exc:
+    except (urllib.error.URLError, TimeoutError) as exc:
         raise OllamaError(f'Ollama request failed ({model}): {exc}') from exc
 
     try:

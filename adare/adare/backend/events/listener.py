@@ -42,6 +42,8 @@ _MIN_SPINNER_DISPLAY_TIME = 0.05  # Minimum 50ms spinner display (reduced from 1
 _stage_tracking_lock = threading.Lock()
 
 # Import shared action display logic
+from datetime import UTC
+
 from adare.frontend.terminal.action_display import (
     determine_action_status,
     format_action_message,
@@ -487,15 +489,15 @@ def _handle_action_event(event, console, ulid):
             message = format_action_message(action_type, display_info)
 
             # Extract start time from action data for live duration tracking
-            from datetime import datetime, timezone
+            from datetime import datetime
             start_time = None
             if action_data.get('timestamp'):
                 try:
                     start_time = datetime.fromisoformat(action_data['timestamp'].replace('Z', '+00:00'))
                 except (ValueError, TypeError):
-                    start_time = datetime.now(timezone.utc)
+                    start_time = datetime.now(UTC)
             else:
-                start_time = datetime.now(timezone.utc)
+                start_time = datetime.now(UTC)
 
             console.log_spinner(identifier=action_id, message=message, level=level,
                               spinner='dots', spinner_style='bold blue', start_time=start_time)

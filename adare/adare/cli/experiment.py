@@ -6,7 +6,7 @@ from datetime import UTC
 from adare.api import AdareAPI
 from adare.backend.basics import determine_projectdirectory
 from adare.cli.utils import get_project_path, handle_api_error
-from adare.console import print_error_message, print_success_message
+from adare.console import print_success_message
 from adare.core.dto.experiment import (
     ExperimentCloneRequest,
     ExperimentCreateRequest,

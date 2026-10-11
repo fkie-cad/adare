@@ -1,15 +1,17 @@
 # external imports
-import sys
 import inspect
-import attrs
-from typing import ClassVar, Optional, Dict, Any
-
-# internal imports
-from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
-from adarelib.event.event import TestResult
 
 # configure logging
 import logging
+import sys
+from typing import Any, Optional
+
+import attrs
+
+from adarelib.event.event import TestResult
+
+# internal imports
+from adarelib.testset.basictest import BasicTest, HostModeCategory, Parameter
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +68,7 @@ class TestContext:
     def compare_with_placeholder(self, placeholder_name: str, actual_value: str):
         return self._test.compare_with_placeholder(placeholder_name, actual_value)
 
-    def get_placeholder_metadata(self, placeholder_name: str) -> Dict[str, Any]:
+    def get_placeholder_metadata(self, placeholder_name: str) -> dict[str, Any]:
         return self._test.get_placeholder_metadata(placeholder_name)
 
     def has_tolerance_metadata(self, placeholder_name: str) -> bool:
@@ -76,7 +78,7 @@ class TestContext:
         return self._test._handle_placeholders_comparison(actual_content, expected_template)
 
     @property
-    def variable_metadata(self) -> Optional[Dict[str, Any]]:
+    def variable_metadata(self) -> dict[str, Any] | None:
         return self._test.variable_metadata
 
 
@@ -151,14 +153,13 @@ def _make_test_class(func_name: str, testname: str, testdescription: str,
         """Convert a test function's return value to a TestResult."""
         if isinstance(result, TestResult):
             return result
-        elif result is None:
+        if result is None:
             return TestResult.success([])
-        elif isinstance(result, str):
+        if isinstance(result, str):
             return TestResult.success([result])
-        elif isinstance(result, list):
+        if isinstance(result, list):
             return TestResult.success(result)
-        else:
-            return TestResult.success([str(result)])
+        return TestResult.success([str(result)])
 
     if is_async:
         async def test_method(self, context=None):

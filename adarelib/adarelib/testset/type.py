@@ -1,12 +1,12 @@
 # external imports
+# configure logging
+import logging
+
 import attrs
-from typing import Optional
 
 # internal imports
 from adarelib.common.variables import VariableRegistry
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -16,7 +16,7 @@ class Test:
     function: str
     description: str = ''
     parameter: dict = {}
-    variables: Optional[VariableRegistry] = None
+    variables: VariableRegistry | None = None
     expect_to_fail: bool = False
     timeout: float = 120.0  # Default 2 minutes (conservative with testfunction caching)
 

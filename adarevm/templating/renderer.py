@@ -1,23 +1,24 @@
 """Simple server-side template rendering."""
 
-from jinja2 import Environment, BaseLoader
-from typing import Dict, Any
 import logging
+from typing import Any
+
+from jinja2 import BaseLoader, Environment
 
 log = logging.getLogger(__name__)
 
 
 class TemplateRenderer:
     """Simple Jinja2 renderer for enriched templates."""
-    
+
     def __init__(self):
         """Initialize basic Jinja2 environment."""
         self.env = Environment(
             loader=BaseLoader(),
             autoescape=False  # Plain text templates
         )
-    
-    def render(self, template_str: str, variables: Dict[str, Any]) -> str:
+
+    def render(self, template_str: str, variables: dict[str, Any]) -> str:
         """Render template with enriched variables.
         
         Args:

@@ -1,14 +1,14 @@
 """Feature matching algorithms for icon detection."""
 
 import logging
-from typing import List, Tuple, Optional
-import numpy as np
+
 import cv2
+import numpy as np
 from sklearn.cluster import DBSCAN
 
 from .constants import CVConstants
-from .image_processing import ImageDecoder, FeatureMatchingResult, HomographyCalculator, non_maximum_suppression
-from .exceptions import FeatureMatchingError, ImageDecodingError, HomographyCalculationError
+from .exceptions import HomographyCalculationError, ImageDecodingError
+from .image_processing import FeatureMatchingResult, HomographyCalculator, ImageDecoder, non_maximum_suppression
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class SIFTMatcher:
         return FeatureMatchingResult([], [], "sift")
 
     @staticmethod
-    def _apply_ratio_test(matches: List, ratio_threshold: float) -> List:
+    def _apply_ratio_test(matches: list, ratio_threshold: float) -> list:
         """Apply Lowe's ratio test to filter good matches."""
         good_matches = []
         for match_pair in matches:
@@ -186,7 +186,7 @@ class ORBMatcher:
         )
 
     @staticmethod
-    def _match_and_filter_features(des1: np.ndarray, des2: np.ndarray, distance_threshold: float) -> List:
+    def _match_and_filter_features(des1: np.ndarray, des2: np.ndarray, distance_threshold: float) -> list:
         """Match features and filter by distance threshold."""
         matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
         matches = matcher.match(des1, des2)
@@ -199,12 +199,12 @@ class ORBMatcher:
     def _find_multiple_instances(
         src_pts: np.ndarray,
         dst_pts: np.ndarray,
-        good_matches: List,
-        icon_shape: Tuple[int, int],
+        good_matches: list,
+        icon_shape: tuple[int, int],
         min_matches: int,
         max_matches: int,
-        screenshot_shape: Tuple[int, int]
-    ) -> Tuple[List[Tuple[int, int]], List[float]]:
+        screenshot_shape: tuple[int, int]
+    ) -> tuple[list[tuple[int, int]], list[float]]:
         """Find multiple icon instances using clustering."""
         try:
             # Determine clustering strategy
@@ -258,10 +258,10 @@ class ORBMatcher:
     def _process_cluster(
         cluster_src: np.ndarray,
         cluster_dst: np.ndarray,
-        cluster_matches: List,
-        icon_shape: Tuple[int, int],
-        screenshot_shape: Tuple[int, int]
-    ) -> Tuple[Optional[Tuple[int, int]], float]:
+        cluster_matches: list,
+        icon_shape: tuple[int, int],
+        screenshot_shape: tuple[int, int]
+    ) -> tuple[tuple[int, int] | None, float]:
         """Process a single cluster to find icon center and similarity."""
         if len(cluster_src) >= CVConstants.MIN_HOMOGRAPHY_POINTS:
             # Use homography for larger clusters
@@ -305,7 +305,7 @@ class TemplateMatcher:
         screenshot_bytes: bytes,
         icon_bytes: bytes,
         threshold: float = CVConstants.DEFAULT_TEMPLATE_THRESHOLD,
-        icon_mask: Optional[np.ndarray] = None
+        icon_mask: np.ndarray | None = None
     ) -> FeatureMatchingResult:
         """Find best icon location using template matching.
 
@@ -361,8 +361,8 @@ class TemplateMatcher:
 
         # Validate results for inf/nan (edge case with masked matching)
         if np.isinf(max_val) or np.isnan(max_val):
-            log.warning(f"Template matching failed - invalid similarity "
-                       f"(inf/nan detected, likely edge case with masked region)")
+            log.warning("Template matching failed - invalid similarity "
+                       "(inf/nan detected, likely edge case with masked region)")
             return FeatureMatchingResult([], [], "template")
 
         log.info(f"Template matching best similarity: {max_val:.3f} at {max_loc}")
@@ -385,12 +385,10 @@ class TemplateMatcher:
                     [(center_x, center_y)], [float(max_val)], "template",
                     scales=[1.0], sizes=[(icon_w, icon_h)]
                 )
-            else:
-                log.warning(f"Best match at ({x}, {y}) would extend outside bounds, no match")
-                return FeatureMatchingResult([], [], "template")
-        else:
-            log.info(f"Best similarity {max_val:.3f} below threshold {threshold}, no match")
+            log.warning(f"Best match at ({x}, {y}) would extend outside bounds, no match")
             return FeatureMatchingResult([], [], "template")
+        log.info(f"Best similarity {max_val:.3f} below threshold {threshold}, no match")
+        return FeatureMatchingResult([], [], "template")
 
 
 class CannyEdgeMatcher:
@@ -406,7 +404,7 @@ class CannyEdgeMatcher:
     making it ideal for UI icons that may appear in different color schemes.
     """
 
-    _debug_output_dir: Optional[any] = None  # Class variable for debug output directory
+    _debug_output_dir: any | None = None  # Class variable for debug output directory
 
     @classmethod
     def set_debug_output_dir(cls, output_dir: any) -> None:
@@ -712,8 +710,8 @@ class CannyEdgeMatcher:
         cls,
         screenshot_edges: np.ndarray,
         icon_edges: np.ndarray,
-        final_locations: List[Tuple[int, int]],
-        final_similarities: List[float],
+        final_locations: list[tuple[int, int]],
+        final_similarities: list[float],
         screenshot_bgr: np.ndarray,
         icon_bgr: np.ndarray,
         best_scale: float,
@@ -744,8 +742,9 @@ class CannyEdgeMatcher:
             return
 
         try:
-            from .constants import DebugConstants
             from pathlib import Path
+
+            from .constants import DebugConstants
 
             # Ensure output directory exists
             output_dir = Path(cls._debug_output_dir)
@@ -895,7 +894,7 @@ class MultiScaleTemplateMatcher:
         scale_step_fine: float = CVConstants.MULTISCALE_TEMPLATE_SCALE_STEP_FINE,
         scale_step_coarse: float = CVConstants.MULTISCALE_TEMPLATE_SCALE_STEP_COARSE,
         min_icon_size: int = CVConstants.MULTISCALE_TEMPLATE_MIN_ICON_SIZE,
-        icon_mask: Optional[np.ndarray] = None
+        icon_mask: np.ndarray | None = None
     ) -> FeatureMatchingResult:
         """Multi-scale template matching in grayscale with extended scale range.
 

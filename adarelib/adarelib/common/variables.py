@@ -1,23 +1,23 @@
 from __future__ import annotations
-from enum import Enum
-from typing import Any, Dict, Union, Optional, Type
-from abc import ABC, abstractmethod
-import attrs
-import re
+
 import datetime
+import logging
+import re
+from enum import Enum
+from pathlib import Path
+from typing import Any
+
+import attrs
 import dateutil.parser
 import dateutil.tz
-from pathlib import Path
-import pytz
 
-import logging
 log = logging.getLogger(__name__)
 
 
 class VariableType(Enum):
     """Variable types with semantic meaning for validation and processing."""
     STRING = "string"
-    REGEX = "regex" 
+    REGEX = "regex"
     TIMESTAMP = "timestamp"
     PATH = "path"
     INTEGER = "integer"
@@ -35,14 +35,14 @@ class ValidationError(Exception):
 @attrs.define
 class TimestampMetadata:
     """Metadata for timestamp variables supporting timezone, format, tolerance, and localtime conversion."""
-    
-    timezone: Optional[str] = None
-    format_str: Optional[str] = None
+
+    timezone: str | None = None
+    format_str: str | None = None
     tolerance_upper: int = 0
     tolerance_lower: int = 0
     localtime: bool = False
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dict."""
         result = {}
         if self.timezone:
@@ -54,9 +54,9 @@ class TimestampMetadata:
         if self.localtime:
             result['localtime'] = self.localtime
         return result
-    
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'TimestampMetadata':
+    def from_dict(cls, data: dict[str, Any]) -> TimestampMetadata:
         """Create from dict."""
         tolerance = data.get('tolerance', [0, 0])
         if isinstance(tolerance, (list, tuple)) and len(tolerance) >= 2:
@@ -65,7 +65,7 @@ class TimestampMetadata:
             tolerance_upper = tolerance_lower = tolerance
         else:
             tolerance_upper = tolerance_lower = 0
-            
+
         return cls(
             timezone=data.get('timezone'),
             format_str=data.get('format'),
@@ -73,10 +73,10 @@ class TimestampMetadata:
             tolerance_lower=tolerance_lower,
             localtime=data.get('localtime', False)
         )
-    
-    def get_jinja_filters(self, variable_registry: 'VariableRegistry') -> Dict[str, Any]:
+
+    def get_jinja_filters(self, variable_registry: VariableRegistry) -> dict[str, Any]:
         """Get Jinja2 filters for timestamp operations with metadata capture."""
-        
+
         def timezone_filter(value, tz_name):
             """Convert timestamp to specified timezone and capture metadata."""
             # Find the variable this filter is being applied to
@@ -88,13 +88,13 @@ class TimestampMetadata:
                 source_var.structured_metadata.timezone = tz_name
                 source_var.metadata['timezone'] = tz_name
                 log.debug(f"Captured timezone filter '{tz_name}' for variable")
-            
+
             # Return the original value for continued processing
             return value
-        
+
         def format_filter(value, format_str):
             """Set timestamp format and capture metadata."""
-            # Find the variable this filter is being applied to  
+            # Find the variable this filter is being applied to
             source_var = self._find_variable_by_value(variable_registry, value, VariableType.TIMESTAMP)
             if source_var:
                 # Update the variable's metadata
@@ -103,15 +103,15 @@ class TimestampMetadata:
                 source_var.structured_metadata.format_str = format_str
                 source_var.metadata['format'] = format_str
                 log.debug(f"Captured format filter '{format_str}' for variable")
-            
+
             # Return the original value for continued processing
             return value
-        
+
         def tolerance_filter(value, upper, lower=None):
             """Set timestamp tolerance and return placeholder for test-specific processing."""
             if lower is None:
                 lower = -upper  # Symmetric tolerance
-            
+
             # Find the variable this filter is being applied to
             source_var = self._find_variable_by_value(variable_registry, value, VariableType.TIMESTAMP)
             if source_var:
@@ -122,37 +122,37 @@ class TimestampMetadata:
                 source_var.structured_metadata.tolerance_lower = lower
                 source_var.metadata['tolerance'] = [lower, upper]
                 log.debug(f"Captured tolerance filter '{upper},{lower}' for variable '{source_var.name}'")
-                
+
                 # Create placeholder name and register metadata
                 placeholder_name = f"{source_var.name.upper()}_RESOLVED"
-                
+
                 # Register this placeholder in the variable registry for context generation
                 if not hasattr(variable_registry, '_placeholder_metadata'):
                     variable_registry._placeholder_metadata = {}
-                
+
                 # Create flattened metadata structure for easier access
                 flattened_metadata = {
                     'original_name': source_var.name,
                     'type': source_var.type.value,
                     'raw_value': source_var.get_string_value(),
                 }
-                
+
                 # Add structured metadata fields directly to the top level
                 flattened_metadata.update(source_var.structured_metadata.to_dict())
-                
+
                 # Also include any additional metadata
                 flattened_metadata.update(source_var.metadata)
-                
+
                 variable_registry._placeholder_metadata[placeholder_name] = flattened_metadata
-                
+
                 log.debug(f"Created placeholder '{placeholder_name}' for tolerance filter")
-                
+
                 # Return placeholder instead of original value - this is the key change!
                 return f"{{{{ {placeholder_name} }}}}"
-            
+
             # Fallback: return original value if variable not found
             return value
-        
+
         def localtime_filter(value):
             """Capture localtime filter metadata for server-side processing."""
             # Find the variable this filter is being applied to
@@ -163,8 +163,8 @@ class TimestampMetadata:
                     source_var.structured_metadata = TimestampMetadata()
                 source_var.structured_metadata.localtime = True
                 source_var.metadata['localtime'] = True
-                log.debug(f"Captured localtime filter for variable")
-            
+                log.debug("Captured localtime filter for variable")
+
             # Return the original value for continued processing (like timezone/format filters)
             return value
 
@@ -174,20 +174,20 @@ class TimestampMetadata:
             'tolerance': tolerance_filter,
             'localtime': localtime_filter
         }
-    
-    def _find_variable_by_value(self, variable_registry: 'VariableRegistry', value: Any, var_type: VariableType) -> Optional['Variable']:
+
+    def _find_variable_by_value(self, variable_registry: VariableRegistry, value: Any, var_type: VariableType) -> Variable | None:
         """Find a variable in the registry by matching its value and type."""
         log.debug(f"Finding variable by value='{value}' (type: {type(value).__name__}) with var_type={var_type}")
-        
+
         for var_name, variable in variable_registry.variables.items():
             log.debug(f"Checking variable '{var_name}': value='{variable.value}' (type: {type(variable.value).__name__}), var_type={variable.type}")
-            
+
             # For timestamp variables, try both exact match and string representation match
             if variable.type == var_type:
                 if variable.value == value:
                     log.debug(f"Exact match found for variable '{var_name}'")
                     return variable
-                elif var_type == VariableType.TIMESTAMP:
+                if var_type == VariableType.TIMESTAMP:
                     # Try comparing string representations
                     var_str = variable.get_string_value()
                     value_str = str(value)
@@ -195,7 +195,7 @@ class TimestampMetadata:
                     if var_str == value_str:
                         log.debug(f"String match found for timestamp variable '{var_name}'")
                         return variable
-        
+
         log.debug(f"No variable found for value='{value}' with var_type={var_type}")
         return None
 
@@ -211,10 +211,10 @@ class Variable:
     value: Any
     type: VariableType
     description: str = ""
-    metadata: Dict[str, Any] = attrs.field(factory=dict)
-    structured_metadata: Optional[Any] = None  # Type-specific metadata objects
+    metadata: dict[str, Any] = attrs.field(factory=dict)
+    structured_metadata: Any | None = None  # Type-specific metadata objects
     name: str = ""  # Variable name for reference in filters
-    
+
     def __attrs_post_init__(self):
         """Validate and coerce value on creation."""
         log.info(f"CLAUDE: Variable.__attrs_post_init__ called - value='{self.value}', type={self.type}, metadata={self.metadata}")
@@ -222,15 +222,15 @@ class Variable:
         # Create structured metadata if available
         if self.metadata and not self.structured_metadata:
             self.structured_metadata = self._create_structured_metadata()
-    
-    def _create_structured_metadata(self) -> Optional[Any]:
+
+    def _create_structured_metadata(self) -> Any | None:
         """Create type-specific structured metadata from metadata dict."""
         if self.type == VariableType.TIMESTAMP:
             return TimestampMetadata.from_dict(self.metadata)
         return None
-    
+
     @classmethod
-    def from_dict(cls, data: dict) -> 'Variable':
+    def from_dict(cls, data: dict) -> Variable:
         """Create Variable from explicit dict definition."""
         log.info(f"CLAUDE: Variable.from_dict called with data: {data}")
 
@@ -253,25 +253,23 @@ class Variable:
             metadata=metadata,
             structured_metadata=data.get("structured_metadata")
         )
-    
+
     @classmethod
-    def from_yaml_tag(cls, yaml_obj) -> 'Variable':
+    def from_yaml_tag(cls, yaml_obj) -> Variable:
         """Create Variable from YAML custom tag with type inference."""
-        from adarelib.testset.yaml.customtags import (
-            YamlString, YamlRegexString, YamlTimestamp, YamlPath
-        )
-        
+        from adarelib.testset.yaml.customtags import YamlPath, YamlRegexString, YamlString, YamlTimestamp
+
         type_mapping = {
             YamlString: VariableType.STRING,
             YamlRegexString: VariableType.REGEX,
-            YamlTimestamp: VariableType.TIMESTAMP, 
+            YamlTimestamp: VariableType.TIMESTAMP,
             YamlPath: VariableType.PATH,
         }
-        
+
         var_type = type_mapping.get(type(yaml_obj))
         if not var_type:
             raise ValueError(f"Unknown YAML tag type: {type(yaml_obj)}")
-        
+
         # Extract metadata from YAML tag if available
         metadata = {}
         if hasattr(yaml_obj, 'metadata') and yaml_obj.metadata:
@@ -283,11 +281,11 @@ class Variable:
             }
             if hasattr(yaml_obj, 'timestamp_format_comparison') and yaml_obj.timestamp_format_comparison:
                 metadata['format'] = yaml_obj.timestamp_format_comparison
-        
+
         return cls(yaml_obj.string, var_type, metadata=metadata)
-    
+
     @classmethod
-    def auto_infer(cls, value: Any, description: str = "", metadata: Dict[str, Any] = None) -> 'Variable':
+    def auto_infer(cls, value: Any, description: str = "", metadata: dict[str, Any] = None) -> Variable:
         """Create Variable with automatic type inference."""
         log.info(f"CLAUDE: Variable.auto_infer called with value='{value}', metadata={metadata}")
 
@@ -316,18 +314,18 @@ class Variable:
 
         log.info(f"CLAUDE: auto_infer determined type: {var_type}")
         return cls(value, var_type, description, metadata or {})
-    
+
     @classmethod
-    def with_metadata(cls, value: Any, var_type: VariableType, metadata: Dict[str, Any], description: str = "") -> 'Variable':
+    def with_metadata(cls, value: Any, var_type: VariableType, metadata: dict[str, Any], description: str = "") -> Variable:
         """Create Variable with explicit type and metadata."""
         return cls(value, var_type, description, metadata)
-    
+
     @staticmethod
     def _looks_like_regex(value: str) -> bool:
         """Heuristic to detect regex patterns."""
         regex_chars = ['*', '+', '?', '[', ']', '(', '{', '}', '|', '^', '$']
         return any(char in value for char in regex_chars)
-    
+
     @staticmethod
     def _looks_like_timestamp(value: str) -> bool:
         """Heuristic to detect timestamp strings."""
@@ -335,7 +333,7 @@ class Variable:
         # If it contains only digits and dots, and has more than one dot, it's likely a version
         if all(c.isdigit() or c == '.' for c in value) and value.count('.') > 1:
             return False
-            
+
         try:
             dateutil.parser.parse(value)
             return True
@@ -347,24 +345,24 @@ class Variable:
         """Check if text is a Python-style raw string literal (e.g. r"..." or r'...')."""
         if not isinstance(text, str):
             return False
-        
+
         # Check for r"..." prefix/suffix
         if text.startswith('r"') and text.endswith('"') and len(text) >= 3:
             return True
-            
+
         # Check for r'...' prefix/suffix
         if text.startswith("r'") and text.endswith("'") and len(text) >= 3:
             return True
-            
+
         return False
-        
+
     @staticmethod
     def _strip_raw_string_literal(text: str) -> str:
         """Strip raw string literal wrapper."""
         if text.startswith('r"') or text.startswith("r'"):
             return text[2:-1]
         return text
-    
+
     def _validate_and_coerce(self, value: Any, var_type: VariableType) -> Any:
         """Validate and coerce value to match the specified type."""
         log.info(f"CLAUDE: _validate_and_coerce called with value='{value}', type={var_type}")
@@ -378,21 +376,21 @@ class Variable:
 
             if var_type == VariableType.STRING:
                 return str(value)
-            
-            elif var_type == VariableType.INTEGER:
+
+            if var_type == VariableType.INTEGER:
                 return int(value)
-            
-            elif var_type == VariableType.FLOAT:
+
+            if var_type == VariableType.FLOAT:
                 return float(value)
-            
-            elif var_type == VariableType.BOOLEAN:
+
+            if var_type == VariableType.BOOLEAN:
                 if isinstance(value, bool):
                     return value
                 if isinstance(value, str):
                     return value.lower() in ('true', 'yes', '1', 'on')
                 return bool(value)
-            
-            elif var_type == VariableType.PATH:
+
+            if var_type == VariableType.PATH:
                 path_str = str(value)
                 # Validate path format but don't require existence
                 try:
@@ -400,7 +398,7 @@ class Variable:
                     return path_str
                 except (ValueError, OSError) as e:
                     raise ValidationError(f"Invalid path format '{path_str}': {e}")
-            
+
             elif var_type == VariableType.REGEX:
                 regex_str = str(value)
                 # Validate regex compiles
@@ -409,7 +407,7 @@ class Variable:
                     return regex_str
                 except re.error as e:
                     raise ValidationError(f"Invalid regex '{regex_str}': {e}")
-            
+
             elif var_type == VariableType.TIMESTAMP:
                 if isinstance(value, datetime.datetime):
                     # Already a datetime - convert to Unix timestamp if has timezone info
@@ -451,52 +449,49 @@ class Variable:
                         unix_timestamp = parsed_dt.timestamp()
                         log.info(f"CLAUDE: Converted timezone-aware timestamp to Unix timestamp: {unix_timestamp}")
                         return unix_timestamp
-                    else:
-                        # Keep naive datetime as-is for backward compatibility
-                        log.info(f"CLAUDE: Keeping naive datetime (no timezone): {parsed_dt}")
-                        return parsed_dt
+                    # Keep naive datetime as-is for backward compatibility
+                    log.info(f"CLAUDE: Keeping naive datetime (no timezone): {parsed_dt}")
+                    return parsed_dt
 
                 except (dateutil.parser.ParserError, ValueError) as e:
                     raise ValidationError(f"Invalid timestamp '{timestamp_str}': {e}")
-            
+
             elif var_type == VariableType.LIST:
                 if isinstance(value, list):
                     return value
                 raise ValidationError(f"Expected list, got {type(value)}")
-            
+
             elif var_type == VariableType.DICT:
                 if isinstance(value, dict):
                     return value
                 raise ValidationError(f"Expected dict, got {type(value)}")
-            
+
             else:
                 return value
-                
+
         except (ValueError, TypeError) as e:
             raise ValidationError(f"Cannot convert '{value}' to {var_type.value}: {e}")
-    
+
     def to_yaml_tag(self):
         """Convert Variable back to YAML custom tag for processing."""
-        from adarelib.testset.yaml.customtags import (
-            YamlString, YamlRegexString, YamlTimestamp, YamlPath
-        )
-        
+        from adarelib.testset.yaml.customtags import YamlPath, YamlRegexString, YamlString, YamlTimestamp
+
         tag_mapping = {
             VariableType.STRING: YamlString,
             VariableType.REGEX: YamlRegexString,
             VariableType.TIMESTAMP: YamlTimestamp,
             VariableType.PATH: YamlPath,
         }
-        
+
         tag_class = tag_mapping.get(self.type, YamlString)
         return tag_class(str(self.value))
-    
+
     def get_string_value(self) -> str:
         """Get string representation for variable substitution."""
         if self.type == VariableType.TIMESTAMP:
             if isinstance(self.value, datetime.datetime):
                 return self.value.isoformat()
-            elif isinstance(self.value, (int, float)):
+            if isinstance(self.value, (int, float)):
                 # Unix timestamp - return as string
                 return str(self.value)
         elif self.type == VariableType.BOOLEAN:
@@ -506,33 +501,32 @@ class Variable:
             import json
             return json.dumps(self.value)
         return str(self.value)
-    
+
     def get_escaped_string_value(self, for_regex: bool = False) -> str:
         """Get escaped string value for safe substitution."""
         string_val = self.get_string_value()
-        
+
         if for_regex and self.type != VariableType.REGEX:
             # Escape special regex chars for non-regex variables in regex context
             return re.escape(string_val)
-        else:
-            return string_val
+        return string_val
 
 
 class VariableRegistry:
     """Registry for managing collections of typed variables."""
-    
-    def __init__(self, variables: Optional[Dict[str, Variable]] = None):
+
+    def __init__(self, variables: dict[str, Variable] | None = None):
         self.variables = variables or {}
-    
+
     def add(self, name: str, variable: Variable) -> None:
         """Add a variable to the registry."""
         variable.name = name  # Set the variable name for reference in filters
         self.variables[name] = variable
-    
-    def get(self, name: str) -> Optional[Variable]:
+
+    def get(self, name: str) -> Variable | None:
         """Get a variable by name."""
         return self.variables.get(name)
-    
+
     def resolve_in_string(self, text: str, for_regex: bool = False) -> str:
         """
         Resolve variables in string using {{variable_name}} syntax.
@@ -544,20 +538,20 @@ class VariableRegistry:
         def replace_var(match):
             var_name = match.group(1).strip()
             variable = self.get(var_name)
-            
+
             if not variable:
                 log.warning(f'Variable "{var_name}" not found in registry')
                 return match.group(0)  # Return original {{var}} if not found
-            
+
             return variable.get_escaped_string_value(for_regex=for_regex)
-        
+
         return re.sub(r'{{([^}]+)}}', replace_var, text)
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to plain dict for serialization/legacy compatibility."""
         return {name: var.get_string_value() for name, var in self.variables.items()}
-    
-    def to_enriched_dict(self) -> Dict[str, Any]:
+
+    def to_enriched_dict(self) -> dict[str, Any]:
         """Convert to enriched dict with type and metadata information."""
         result = {}
         for name, var in self.variables.items():
@@ -570,8 +564,8 @@ class VariableRegistry:
                 var_dict["structured_metadata"] = var.structured_metadata.to_dict()
             result[name] = var_dict
         return result
-    
-    def to_execution_context(self, for_tests: bool = False) -> Dict[str, Any]:
+
+    def to_execution_context(self, for_tests: bool = False) -> dict[str, Any]:
         """Convert to execution context with smart resolution based on usage.
 
         Args:
@@ -620,7 +614,7 @@ class VariableRegistry:
                     elif placeholder_type == 'timestamp':
                         self._create_timestamp_tolerance_metadata(placeholder_name, var)
                         log.debug(f"Created tolerance placeholder '{placeholder_name}' for variable '{name}'")
-                    
+
                     # IMPORTANT: Add the RESOLVED value of the placeholder to the context as well
                     # This enables recursive resolution: {{ var }} -> {{ var_resolved }} -> value
                     # which is required for CommandAction and others that need a fully resolved string
@@ -646,7 +640,7 @@ class VariableRegistry:
     # extract_referenced_variables().
     _MAX_DEPENDENCY_EXPANSION = 200
 
-    def _build_lazy_resolution_context(self, referenced_variables: set) -> Dict[str, str]:
+    def _build_lazy_resolution_context(self, referenced_variables: set) -> dict[str, str]:
         """Build the context used to resolve nested templates on the lazy (test) path.
 
         Resolves chained references - ``tool_dir`` -> ``out_dir`` ->
@@ -668,8 +662,8 @@ class VariableRegistry:
         Raises:
             ValidationError: If the referenced variables form a dependency cycle
         """
-        resolution_context: Dict[str, str] = {}
-        pending: Dict[str, str] = {}
+        resolution_context: dict[str, str] = {}
+        pending: dict[str, str] = {}
 
         # Walk the dependency closure: a referenced variable's own references have to be
         # resolved too, even when the caller did not list them.
@@ -737,7 +731,7 @@ class VariableRegistry:
 
         return resolution_context
 
-    def to_execution_context_lazy(self, referenced_variables: set = None, for_tests: bool = False) -> Dict[str, Any]:
+    def to_execution_context_lazy(self, referenced_variables: set = None, for_tests: bool = False) -> dict[str, Any]:
         """Convert to execution context with lazy resolution - only process referenced variables.
 
         Args:
@@ -808,7 +802,7 @@ class VariableRegistry:
                         metadata = self._create_timestamp_tolerance_metadata(placeholder_name, var, local_only=True)
                         current_call_metadata[placeholder_name] = metadata
                         log.debug(f"Created tolerance placeholder '{placeholder_name}' for variable '{name}'")
-                    
+
                     # IMPORTANT: Add the RESOLVED value of the placeholder to the context as well
                     placeholder_value = self._get_variable_resolved_value(var, resolution_context)
                     context[placeholder_name] = placeholder_value
@@ -907,7 +901,7 @@ class VariableRegistry:
         matches = re.findall(variable_pattern, template_str)
         return set(matches)
 
-    def _create_regex_metadata(self, placeholder_name: str, var: 'Variable', local_only: bool = False):
+    def _create_regex_metadata(self, placeholder_name: str, var: Variable, local_only: bool = False):
         """Create placeholder metadata for regex variable."""
         # Get regex pattern value
         regex_pattern = var.get_string_value()
@@ -930,7 +924,7 @@ class VariableRegistry:
 
         return metadata
 
-    def _create_timestamp_tolerance_metadata(self, placeholder_name: str, var: 'Variable', local_only: bool = False):
+    def _create_timestamp_tolerance_metadata(self, placeholder_name: str, var: Variable, local_only: bool = False):
         """Create placeholder metadata for timestamp variable with tolerance."""
         # Get base timestamp value
         if isinstance(var.value, datetime.datetime):
@@ -976,7 +970,7 @@ class VariableRegistry:
 
         return metadata
 
-    def _get_variable_resolved_value(self, var: 'Variable', resolution_context: Dict[str, str] = None) -> Any:
+    def _get_variable_resolved_value(self, var: Variable, resolution_context: dict[str, str] = None) -> Any:
         """Get fully resolved value for variable (apply timezone, format, and template resolution).
 
         Args:
@@ -1048,8 +1042,7 @@ class VariableRegistry:
                                 unix_timestamp = result.timestamp()
                                 log.info(f"CLAUDE: SUCCESS! Converted timezone-aware timestamp to UTC Unix timestamp: {unix_timestamp}")
                                 return unix_timestamp
-                            else:
-                                log.warning(f"CLAUDE: No timezone info available after conversion attempt")
+                            log.warning("CLAUDE: No timezone info available after conversion attempt")
 
                         except Exception as e:
                             log.warning(f"CLAUDE: Exception during timezone conversion: {e}")
@@ -1081,15 +1074,14 @@ class VariableRegistry:
 
             # For datetime objects, return as ISO string if no format specified
             return result.isoformat()
-        else:
-            # For non-timestamp variables, get string value and apply template resolution
-            base_value = var.get_string_value()
+        # For non-timestamp variables, get string value and apply template resolution
+        base_value = var.get_string_value()
 
-            # Apply template resolution to resolve nested variables like {{username}}
-            resolved_value = self._resolve_nested_templates(base_value, resolution_context)
-            return resolved_value
-    
-    def _assert_automatic_references_resolvable(self, text: str, context: Optional[Dict[str, Any]] = None) -> None:
+        # Apply template resolution to resolve nested variables like {{username}}
+        resolved_value = self._resolve_nested_templates(base_value, resolution_context)
+        return resolved_value
+
+    def _assert_automatic_references_resolvable(self, text: str, context: dict[str, Any] | None = None) -> None:
         """Fail loudly when a value references an ``adare_*`` built-in that cannot resolve.
 
         Jinja2's default Undefined renders a missing name as the empty string, so
@@ -1117,7 +1109,7 @@ class VariableRegistry:
                 f"and thus a wrong path. Available variables: {sorted(available)}"
             )
 
-    def _resolve_nested_templates(self, text: str, context: Dict[str, Any] = None) -> str:
+    def _resolve_nested_templates(self, text: str, context: dict[str, Any] = None) -> str:
         """Resolve nested template variables in a string value.
 
         Args:
@@ -1172,20 +1164,20 @@ class VariableRegistry:
                 new_result = template.render(simple_context)
                 self._warn_on_empty_substitutions(result, simple_context, new_result)
                 log.debug(f"Nested template resolution iteration {i+1}: '{result}' -> '{new_result}'")
-                
+
                 # If no change occurred, break to avoid infinite loops
                 if new_result == result:
                     break
-                    
+
                 result = new_result
-            
+
             # Warn if we hit max iterations (possible infinite loop)
             if i == max_iterations - 1 and '{{' in result:
                 log.warning(f"Nested template resolution hit max iterations for: {text}")
-            
+
             log.debug(f"Final nested template resolution: '{text}' -> '{result}'")
             return result
-            
+
         # Fail soft only for the errors a malformed template can actually produce, so that
         # a bad template does not hide unrelated bugs (and cannot swallow the
         # ValidationError raised above). Determined by probing bare Template().render():
@@ -1203,7 +1195,7 @@ class VariableRegistry:
             log.warning(f"Failed to resolve nested template '{text}': {e}")
             return text
 
-    def _warn_on_empty_substitutions(self, template_str: str, context: Dict[str, Any],
+    def _warn_on_empty_substitutions(self, template_str: str, context: dict[str, Any],
                                      rendered: str) -> None:
         """Log a WARNING for each ``{{ name }}`` in ``template_str`` that rendered empty.
 
@@ -1247,52 +1239,52 @@ class VariableRegistry:
                 f"'{template_str}' -> '{rendered}' because {reason}"
             )
 
-    def _has_test_specific_filters(self, var: 'Variable') -> bool:
+    def _has_test_specific_filters(self, var: Variable) -> bool:
         """Check if variable has test-specific filters that require placeholder resolution."""
         log.debug(f"Checking test-specific filters for variable '{var.name}', has metadata: {var.structured_metadata is not None}")
-        
+
         if not var.structured_metadata:
             return False
-        
+
         # For timestamp variables, check for test-specific filters
         if var.type == VariableType.TIMESTAMP:
             if isinstance(var.structured_metadata, TimestampMetadata):
-                has_tolerance = (var.structured_metadata.tolerance_upper != 0 or 
+                has_tolerance = (var.structured_metadata.tolerance_upper != 0 or
                                var.structured_metadata.tolerance_lower != 0)
                 log.debug(f"Variable '{var.name}' tolerance check: upper={var.structured_metadata.tolerance_upper}, lower={var.structured_metadata.tolerance_lower}, has_tolerance={has_tolerance}")
                 return has_tolerance
-        
+
         # Add checks for other variable types as they're implemented
         return False
-    
-    def _has_variable_level_metadata(self, var: 'Variable') -> bool:
+
+    def _has_variable_level_metadata(self, var: Variable) -> bool:
         """Check if variable has variable-level metadata (timezone, format)."""
         if not var.structured_metadata:
             return False
-        
+
         # For timestamp variables, check for variable-level filters
         if var.type == VariableType.TIMESTAMP:
             if isinstance(var.structured_metadata, TimestampMetadata):
-                return (var.structured_metadata.timezone or 
+                return (var.structured_metadata.timezone or
                        var.structured_metadata.format_str)
-        
+
         # Add checks for other variable types as they're implemented
         return False
-    
-    def get_all_jinja_filters(self) -> Dict[str, Any]:
+
+    def get_all_jinja_filters(self) -> dict[str, Any]:
         """Collect all Jinja2 filters based on variable types (not just existing metadata)."""
         all_filters = {}
-        
+
         # Always provide timestamp filters if we have ANY timestamp variables
         has_timestamp_vars = any(var.type == VariableType.TIMESTAMP for var in self.variables.values())
-        
+
         if has_timestamp_vars:
             # Create a temporary TimestampMetadata to get the filters
             temp_metadata = TimestampMetadata()
             timestamp_filters = temp_metadata.get_jinja_filters(self)
             all_filters.update(timestamp_filters)
             log.debug(f"Added timestamp filters: {list(timestamp_filters.keys())}")
-        
+
         # Also include filters from variables that already have structured metadata
         for variable in self.variables.values():
             if variable.structured_metadata and hasattr(variable.structured_metadata, 'get_jinja_filters'):
@@ -1301,7 +1293,7 @@ class VariableRegistry:
                     if filter_name in all_filters:
                         log.debug(f"Filter '{filter_name}' already exists from type-based registration")
                     all_filters[filter_name] = filter_func
-        
+
 
         # Add general path utility filters
         all_filters.update({
@@ -1311,9 +1303,9 @@ class VariableRegistry:
         })
 
         return all_filters
-    
+
     @classmethod
-    def from_dict(cls, var_dict: Dict[str, Any]) -> 'VariableRegistry':
+    def from_dict(cls, var_dict: dict[str, Any]) -> VariableRegistry:
         """Create registry from mixed variable definitions."""
         log.info(f"CLAUDE: VariableRegistry.from_dict called with: {var_dict}")
         registry = cls()
@@ -1339,6 +1331,6 @@ class VariableRegistry:
         return registry
 
 
-def parse_variables(var_dict: Dict[str, Any]) -> VariableRegistry:
+def parse_variables(var_dict: dict[str, Any]) -> VariableRegistry:
     """Parse mixed format variables into a VariableRegistry."""
     return VariableRegistry.from_dict(var_dict)

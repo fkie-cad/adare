@@ -1,9 +1,12 @@
-import attrs
 import base64
-import yaml
 from typing import ClassVar
+
+import attrs
+import yaml
+
 from adarelib.event.event import Event, transform_data_to_event
 from adarelib.testset.yaml.customloader import YAML_STATUS_DUMPER, YAML_STATUS_LOADER
+
 
 @attrs.define
 class WsCommand:

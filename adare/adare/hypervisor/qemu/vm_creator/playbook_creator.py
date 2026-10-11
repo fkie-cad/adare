@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import json
 import logging
-import platform
 import socket
 import subprocess
 import time
@@ -326,8 +325,9 @@ class PlaybookVMCreator(BaseVMCreator):
         import asyncio
         import base64
         import io
-        from PIL import Image
+
         from adare_cv_server import server as cv
+        from PIL import Image
 
         buf = io.BytesIO()
         Image.open(io.BytesIO(ppm_bytes)).save(buf, 'PNG')
@@ -354,8 +354,9 @@ class PlaybookVMCreator(BaseVMCreator):
         except PlaybookVMCreationError:
             return
         try:
-            from PIL import Image
             import io
+
+            from PIL import Image
             Image.open(io.BytesIO(data)).save(path)
         except (ImportError, OSError):
             # ImportError: no Pillow on this host. OSError: Pillow could not

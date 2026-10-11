@@ -28,7 +28,6 @@ class TestClaimAvailableVmInstance:
     """Two racing claims on the same instance: first wins, second loses."""
 
     def test_second_claim_on_same_instance_fails(self):
-        from adare.database.models.global_models import VmInstance
 
         # Simulate SQLite's serialized single-statement UPDATE semantics:
         # the first UPDATE ... WHERE status='available' matches and flips

@@ -383,8 +383,8 @@ class ShowService:
         from pathlib import Path
 
         from adare.database.api.base import GlobalDatabaseApi
-        from adare.database.models.global_models import Vm
         from adare.database.api.structured_data import StructuredDataApi
+        from adare.database.models.global_models import Vm
 
         try:
             with StructuredDataApi() as api:

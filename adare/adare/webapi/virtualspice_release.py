@@ -22,8 +22,8 @@ import io
 import logging
 import platform
 import tarfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 logger = logging.getLogger(__name__)
 

@@ -1,15 +1,16 @@
 # external imports
-from typing import Literal, Optional
-import attrs
-import cattrs
-from datetime import datetime, timezone
-import ulid
-import traceback
-
-from adarelib.constants import StatusEnum, TIMESTAMP_FORMAT
-
 # configure logging
 import logging
+import traceback
+from datetime import datetime, timezone
+from typing import Literal
+
+import attrs
+import cattrs
+import ulid
+
+from adarelib.constants import TIMESTAMP_FORMAT, StatusEnum
+
 log = logging.getLogger(__name__)
 
 
@@ -47,12 +48,12 @@ class TestResult:
     def failed(cls, details: list = None):
         """Create a failed test result (test ran but condition not met)."""
         return cls(status=StatusEnum.FAILED, details=details or [])
-    
+
     @classmethod
     def error(cls, details: list = None):
         """Create an error test result (test could not execute)."""
         return cls(status=StatusEnum.ERROR, details=details or [])
-    
+
     @classmethod
     def execution_error(cls, exception: Exception, context: str = None):
         """Create an error result from an exception."""
@@ -75,7 +76,7 @@ class TestResult:
 @attrs.define
 class TestEvent(Event):
     test_name: str
-    result: Optional[TestResult] = None
+    result: TestResult | None = None
     category: str = 'test'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now(timezone.utc).strftime(TIMESTAMP_FORMAT)))
     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
@@ -109,6 +110,5 @@ def transform_data_to_event(data: dict) -> Event:
     if data['category'] in supported_events:
         event_class = supported_events[data['category']]
         return cattrs.structure(data, event_class)
-    else:
-        log.warning(f'Legacy event category {data["category"]} not supported - use new ActionEvent system')
-        raise ValueError(f'Legacy event category {data["category"]} not supported')
+    log.warning(f'Legacy event category {data["category"]} not supported - use new ActionEvent system')
+    raise ValueError(f'Legacy event category {data["category"]} not supported')

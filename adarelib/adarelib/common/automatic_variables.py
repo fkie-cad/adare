@@ -6,13 +6,11 @@ without needing to be explicitly defined. These variables resolve to platform-ap
 values at runtime.
 """
 
+import logging
 import os
 import platform
-from pathlib import Path
-from typing import Dict, Any, Optional
-import logging
 
-from .variables import VariableRegistry, Variable, VariableType
+from .variables import Variable, VariableRegistry, VariableType
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +22,7 @@ class AutomaticVariables:
     These variables are available in all playbooks and resolve to appropriate
     values based on the target system/VM configuration.
     """
-    
+
     @classmethod
     def get_automatic_variables(cls, vm_os: str, vm_user: str) -> VariableRegistry:
         """
@@ -42,7 +40,7 @@ class AutomaticVariables:
         # Use provided VM parameters directly (no fallback logic)
         target_os = vm_os
         target_user = vm_user
-        
+
         # Add automatic variables
         cls._add_user_variables(registry, target_os, target_user)
         cls._add_system_variables(registry, target_os)
@@ -50,34 +48,33 @@ class AutomaticVariables:
         log.info(f"CLAUDE: Created automatic variables for OS='{target_os}', user='{target_user}': {list(registry.variables.keys())}")
 
         return registry
-    
+
     @classmethod
     def _detect_os(cls) -> str:
         """Detect current OS."""
         system = platform.system().lower()
         if system == 'windows':
             return 'windows'
-        else:
-            return 'linux'
-    
+        return 'linux'
+
     @classmethod
     def _get_default_user(cls, target_os: str) -> str:
         """Get default username for target OS."""
         current_user = os.getenv('USER') or os.getenv('USERNAME')
-        
+
         # Common VM usernames by OS
         defaults = {
             'windows': 'Admin',
             'linux': 'adare'
         }
-        
+
         # Use current user if available, otherwise use OS default
         return current_user or defaults.get(target_os, 'user')
-    
-    @classmethod 
+
+    @classmethod
     def _add_user_variables(cls, registry: VariableRegistry, target_os: str, username: str):
         """Add user-related automatic variables."""
-        
+
         # adare_user_home - main requested variable
         home_path = cls._get_user_home_path(target_os, username)
         registry.add('adare_user_home', Variable(
@@ -85,14 +82,14 @@ class AutomaticVariables:
             type=VariableType.PATH,
             description=f"Home directory for user '{username}' on {target_os}"
         ))
-        
+
         # adare_username - the resolved username
         registry.add('adare_username', Variable(
             value=username,
             type=VariableType.STRING,
-            description=f"Username on target system"
+            description="Username on target system"
         ))
-        
+
         # Additional user-specific paths
         if target_os == 'windows':
             registry.add('adare_user_documents', Variable(
@@ -101,7 +98,7 @@ class AutomaticVariables:
                 description="User's Documents folder on Windows"
             ))
             registry.add('adare_user_desktop', Variable(
-                value=f"C:/Users/{username}/Desktop", 
+                value=f"C:/Users/{username}/Desktop",
                 type=VariableType.PATH,
                 description="User's Desktop folder on Windows"
             ))
@@ -126,7 +123,7 @@ class AutomaticVariables:
                 type=VariableType.PATH,
                 description="User's Downloads folder on Linux"
             ))
-    
+
     @classmethod
     def _add_system_variables(cls, registry: VariableRegistry, target_os: str):
         """Add system-related automatic variables."""
@@ -224,11 +221,11 @@ class AutomaticVariables:
         """Get the user home directory path for the target OS."""
         if target_os == 'windows':
             return f"C:/Users/{username}"
-        else:  # linux
-            return f"/home/{username}"
-    
+        # linux
+        return f"/home/{username}"
+
     @classmethod
-    def merge_with_user_variables(cls, automatic_vars: VariableRegistry, user_vars: Optional[VariableRegistry]) -> VariableRegistry:
+    def merge_with_user_variables(cls, automatic_vars: VariableRegistry, user_vars: VariableRegistry | None) -> VariableRegistry:
         """
         Merge automatic variables with user-defined variables.
         
@@ -243,7 +240,7 @@ class AutomaticVariables:
         """
         if not user_vars:
             return automatic_vars
-        
+
         merged = VariableRegistry()
 
         # First add all automatic variables
