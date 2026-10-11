@@ -1,5 +1,6 @@
 """OS definitions with ISO download URLs and SHA256 hashes."""
 
+import functools
 import logging
 import os
 from dataclasses import dataclass, field
@@ -11,6 +12,10 @@ import yaml
 from adare.config.configdirectory import OS_PROFILES_DIR
 
 log = logging.getLogger(__name__)
+
+# libyaml's C loader parses the ~26 bundled profiles several times faster than
+# the pure-Python SafeLoader; fall back when PyYAML was built without libyaml.
+_YAML_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
 
 
 class SetupLevel(IntEnum):
@@ -812,7 +817,7 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
             continue
         for yml_file in sorted(profiles_dir.glob('*.yml')):
             try:
-                data = yaml.safe_load(yml_file.read_text())
+                data = yaml.load(yml_file.read_text(), Loader=_YAML_LOADER)
                 if not isinstance(data, dict):
                     log.warning('Skipping %s: not a valid YAML mapping', yml_file)
                     continue
@@ -890,13 +895,26 @@ def _build_catalog() -> dict[str, OsDefinition]:
     return catalog
 
 
-OS_CATALOG: dict[str, OsDefinition] = _build_catalog()
+@functools.cache
+def _catalog() -> dict[str, OsDefinition]:
+    """The OS catalog, built on first use rather than at import time.
+
+    Building it parses every YAML profile, which every importer of this module
+    (most of the CLI) used to pay for whether or not it looked up an OS.
+    """
+    return _build_catalog()
 
 
 def reload_catalog() -> None:
     """Reload the OS catalog from built-in definitions and YAML profiles."""
-    global OS_CATALOG
-    OS_CATALOG = _build_catalog()
+    _catalog.cache_clear()
+
+
+def __getattr__(name: str) -> dict[str, OsDefinition]:
+    # Keeps `os_catalog.OS_CATALOG` / `from ... import OS_CATALOG` working.
+    if name == 'OS_CATALOG':
+        return _catalog()
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
 
 
 def get_os_definition(os_name: str) -> OsDefinition:
@@ -911,12 +929,13 @@ def get_os_definition(os_name: str) -> OsDefinition:
     Raises:
         KeyError: If os_name is not in the catalog
     """
-    if os_name not in OS_CATALOG:
-        available = ', '.join(sorted(OS_CATALOG.keys()))
+    catalog = _catalog()
+    if os_name not in catalog:
+        available = ', '.join(sorted(catalog.keys()))
         raise KeyError(
             f"Unknown OS '{os_name}'. Available: {available}\nRun 'adare os-profile list' to see all profiles."
         )
-    return OS_CATALOG[os_name]
+    return catalog[os_name]
 
 
 def list_os_definitions() -> list[OsDefinition]:
@@ -925,4 +944,5 @@ def list_os_definitions() -> list[OsDefinition]:
     Read-only convenience for callers (e.g. the webapi) that need to list
     all available profiles rather than look one up.
     """
-    return [OS_CATALOG[name] for name in sorted(OS_CATALOG)]
+    catalog = _catalog()
+    return [catalog[name] for name in sorted(catalog)]
