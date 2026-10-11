@@ -153,13 +153,15 @@ class GuiMcpServer:
             return await self.find_icon(image_name)
 
         @mcp.tool()
-        async def list_testfunctions() -> list[dict[str, Any]]:
-            """Search the project's testfunctions (name, dotnotation, params, ...).
+        async def list_testfunctions(query: str = '', limit: int = 8) -> list[dict[str, Any]]:
+            """Find the assertion (testfunction) for a goal, then register it with ``add_test``.
 
-            Use this to find an assertion for a goal like "verify the file is
-            gone", then register it with ``add_test``.
+            With ``query`` (e.g. "verify the file is gone", "registry value
+            set"), returns the best matches with full parameter docs, defaults
+            and a ready-to-use example. Without it, returns a compact index of
+            every testfunction (dotnotation, summary, signature).
             """
-            return self.list_testfunctions()
+            return self.list_testfunctions(query=query, limit=limit)
 
         @mcp.tool()
         async def start_recording(goal: str = '', path: str = '') -> dict[str, Any]:
@@ -293,9 +295,14 @@ class GuiMcpServer:
 
     # -- discovery ----------------------------------------------------------
 
-    def list_testfunctions(self) -> list[dict[str, Any]]:
-        """Return the testfunction catalog (host-mode compatibility is checked at replay)."""
-        return [dict(entry) for entry in self._catalog]
+    def list_testfunctions(self, query: str = '', limit: int = 8) -> list[dict[str, Any]]:
+        """Ranked full entries for ``query``, else a compact index (host-mode is checked at replay)."""
+        from adare.backend.testfunction.catalog import CatalogEntry, search
+
+        entries = [CatalogEntry.from_dict(entry) for entry in self._catalog]
+        if query:
+            return [entry.to_dict() for entry in search(entries, query, limit=limit)]
+        return [entry.to_dict(compact=True) for entry in entries]
 
     # -- authoring ----------------------------------------------------------
 

@@ -12,6 +12,7 @@ Parameter docs come from a Google-style ``Args:`` section in the function docstr
 """
 
 import ast
+import difflib
 import logging
 import re
 from dataclasses import asdict, dataclass, field
@@ -53,6 +54,8 @@ _SYNONYM_GROUPS = (
 _NEGATIVE_WORDS = _SYNONYM_GROUPS[0] | {'no', 'longer', 'never', 'without'}
 _NEGATIVE_NAME_MARKERS = ('not_', '_not', 'absent', 'lacks', 'missing')
 
+_RELATIVE_CUTOFF = 0.45
+
 _FIELD_WEIGHTS = (('name', 4.0), ('collection', 2.0), ('summary', 2.0), ('params', 1.0), ('doc', 1.0))
 
 
@@ -79,13 +82,42 @@ class CatalogEntry:
     doc: str = ''
     params: tuple[ParamSpec, ...] = field(default_factory=tuple)
 
+    @classmethod
+    def from_dict(cls, data: dict) -> 'CatalogEntry':
+        """Inverse of :meth:`to_dict` (full form); tolerates the legacy DB-shaped keys."""
+        params = tuple(
+            ParamSpec(
+                name=p['name'],
+                type=p.get('type', p.get('data_type', '')) or '',
+                required=bool(p.get('required', True)),
+                default=p.get('default'),
+                doc=p.get('doc', p.get('description', '')) or '',
+            )
+            for p in data.get('params', data.get('parameters', ())) or ()
+        )
+        dotnotation = data['dotnotation']
+        return cls(
+            dotnotation=dotnotation,
+            collection=data.get('collection', dotnotation.split('.')[0]),
+            name=data.get('name', dotnotation.split('.')[-1]),
+            summary=data.get('summary', data.get('description', '')) or '',
+            category=data.get('category', ''),
+            os=data.get('os', 'any'),
+            installed=data.get('installed', True),
+            path=data.get('path', ''),
+            execute_on_host=data.get('execute_on_host', False),
+            doc=data.get('doc', ''),
+            params=params,
+        )
+
     def example(self) -> dict:
         """A ready-to-paste ``tests:`` list item (required params get a placeholder)."""
         parameter = {}
         for p in self.params:
-            if p.required:
+            # An empty-string default (``dst: str = ''``) is required in practice.
+            if p.required or p.default == '':
                 parameter[p.name] = f'<{p.type or "value"}>'
-            elif p.default not in (None, '', [], {}):
+            elif p.default not in (None, [], {}):
                 parameter[p.name] = p.default
         item = {'name': f'check_{self.name.split(".")[-1]}', 'function': self.dotnotation}
         if parameter:
@@ -241,15 +273,22 @@ def parse_collection(path: Path, installed: bool) -> list[CatalogEntry]:
 # Loading
 # ---------------------------------------------------------------------------
 
+PACKAGE_APPDATA = Path(__file__).resolve().parents[3] / 'appdata' / 'testfunctions'
+
+
+def bundled_sources() -> list[tuple[Path, bool]]:
+    """Only the collections shipped with this checkout: machine-independent (generated docs)."""
+    return [(PACKAGE_APPDATA, False)]
+
+
 def default_sources() -> list[tuple[Path, bool]]:
     """``(root, installed)`` pairs, installed first so it wins on duplicates."""
     from adare.config.configdirectory import APPDATA_DIR, STATE_DIR
 
-    package_appdata = Path(__file__).resolve().parents[3] / 'appdata' / 'testfunctions'
     return [
         (STATE_DIR / 'testfunctions', True),
         (APPDATA_DIR / 'adare' / 'adare' / 'appdata' / 'testfunctions', False),
-        (package_appdata, False),
+        *bundled_sources(),
     ]
 
 
@@ -273,6 +312,14 @@ def load_catalog(sources: list[tuple[Path, bool]] | None = None) -> list[Catalog
             for entry in parse_collection(path, available):
                 seen.setdefault(entry.dotnotation, entry)
     return sorted(seen.values(), key=lambda e: e.dotnotation)
+
+
+def close_matches(entries: list[CatalogEntry], dotnotation: str, n: int = 3) -> list[CatalogEntry]:
+    """Typo-tolerant suggestions for an unknown dotnotation or bare name."""
+    by_key = {e.dotnotation: e for e in entries} | {e.name: e for e in entries}
+    keys = difflib.get_close_matches(dotnotation, list(by_key), n=n * 2, cutoff=0.6)
+    unique = list(dict.fromkeys(by_key[k] for k in keys))
+    return unique[:n]
 
 
 def find(entries: list[CatalogEntry], dotnotation: str) -> CatalogEntry | None:
@@ -352,5 +399,7 @@ def search(entries: list[CatalogEntry], query: str = '', *, collection: str | No
             score -= 1.0
         scored.append((score, entry))
     scored.sort(key=lambda pair: (-pair[0], pair[1].dotnotation))
-    ranked = [entry for _, entry in scored]
+    # Drop the long tail of incidental matches ("file" alone matches half the catalog).
+    cutoff = scored[0][0] * _RELATIVE_CUTOFF if scored else 0
+    ranked = [entry for score, entry in scored if score >= cutoff]
     return ranked[:limit] if limit else ranked

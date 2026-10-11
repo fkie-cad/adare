@@ -114,27 +114,6 @@ def exec_load_testfunction(arguments):
         handle_api_error(result)
 
 
-def exec_list_testfunctions(arguments):
-    """List testfunctions in the configured output format."""
-    from adare.frontend.terminal.testfunction_list import print_testfunction_list
-    from adare.run import get_formatter_from_context
-
-    # Get formatter from CLI context
-    formatter, output_file, dual_output = get_formatter_from_context()
-
-    # Call enhanced frontend function with output format support
-    testfunction_set = getattr(arguments, 'set', None)
-    # Handle string 'None' that might come from Click
-    if testfunction_set == 'None':
-        testfunction_set = None
-    print_testfunction_list(
-        testfunction_file=testfunction_set,
-        formatter=formatter,
-        output_file=output_file,
-        dual_output=dual_output
-    )
-
-
 def exec_sync_testfunctions(arguments):
     """Sync all testfunctions from appdata: hash-based create/update/skip."""
     from adare.backend.testfunction.commands import testfunction_sync_all

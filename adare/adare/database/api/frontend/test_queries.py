@@ -2,16 +2,7 @@
 
 import logging
 
-import pandas as pd
-import sqlalchemy
-
-from adare.database.models.global_models import (
-    TestFunction,
-    TestFunctionFile,
-    TestParameter,
-)
 from adare.database.models.project_models import Event, Experiment, Status
-from adare.exceptions import TestFunctionNotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -82,54 +73,3 @@ class TestQueryMixin:
                 ],
             }
         return tests_data
-
-    def _enrich_testfunction_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        data['object'] = [self._global_api._session.query(TestFunction).filter_by(id=id).one() for id in data['id']]
-        data['testfunction_file'] = [self._global_api._session.query(TestFunctionFile).filter_by(id=file_id).one() for file_id in data['file_id']]
-        data['dotnotation'] = [obj.dotnotation for obj in data['object']]
-        # Add smart display name based on current project context
-        data['display_name'] = [self._get_smart_display_name(obj, 'testfunction') for obj in data['object']]
-        data['num_parameters'] = [obj.num_parameters for obj in data['object']]
-        data['file_path'] = [obj.path for obj in data['testfunction_file']]
-        data['file_name'] = [obj.name for obj in data['testfunction_file']]
-        data['file_sha256'] = [obj.sha256hash for obj in data['testfunction_file']]
-        data['file_description'] = [obj.description for obj in data['testfunction_file']]
-        # remove object and testfunction_file columns
-        return data.drop(columns=['object', 'testfunction_file'])
-
-    def get_testfunction_list(self) -> pd.DataFrame:
-        data = pd.read_sql(self._global_api._session.query(TestFunction).statement, self._global_api._session.bind).map(str)
-        return self._enrich_testfunction_data(data)
-
-    def get_testfunction(self, testfunction_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-        try:
-            testfunction_data = pd.read_sql(self._global_api._session.query(TestFunction).filter_by(id=testfunction_id).statement, self._global_api._session.bind).map(str)
-        except sqlalchemy.orm.exc.NoResultFound:
-            raise TestFunctionNotFoundError(log, f'Testfunction with id "{testfunction_id}" not found') from None
-        testfunction_data = self._enrich_testfunction_data(testfunction_data)
-        # get all parameters for the testfunction in a pandas dataframe (test parameters can be in multiple functions)
-        testfunction = self._global_api._session.query(TestFunction).filter_by(id=testfunction_id).one()
-        parameter_ids = [parameter.id for parameter in testfunction.parameters]
-        parameter_data = pd.read_sql(self._global_api._session.query(TestParameter).filter(TestParameter.id.in_(parameter_ids)).statement, self._global_api._session.bind).map(str)
-        return testfunction_data, parameter_data
-
-    def testfunction_dotnotation_to_id(self, dotnotation: str) -> str:
-        from adare.database.api.dotnotation_parser import DotNotationParser
-
-        parser = DotNotationParser()
-        parsed = parser.parse_testfunction_dotnotation(dotnotation)
-
-        file_name = parsed['file_name']
-        function_name = parsed['function_name']
-
-        # Testfunctions are global: files are stored by stem (``standard``, not
-        # ``standard.py``) and no longer belong to a project, so a 3-part
-        # ``project.file.function`` notation resolves the same as ``file.function``.
-        testfunction = self._global_api._session.query(TestFunction).join(TestFunctionFile).filter(
-            TestFunctionFile.name == file_name.removesuffix('.py'),
-            TestFunction.name == function_name,
-        ).one_or_none()
-        if testfunction is None:
-            raise TestFunctionNotFoundError(
-                log, f'Testfunction with dotnotation "{dotnotation}" not found (see `adare test list`)')
-        return testfunction.id
