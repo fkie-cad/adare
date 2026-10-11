@@ -20,6 +20,7 @@ from adare.backend.environment.exceptions import (
 from adare.backend.project.directory import ProjectDirectory
 from adare.config.configdirectory import ENVIRONMENTS_DIR, TEMPLATES_DIR, VMS_DIR
 from adare.exceptions import NotLoggedInError, TemplateMissingError
+from adare.helperfunctions.digest_cache import cached_file_sha256, record_file_sha256
 from adare.helperfunctions.file.hash import file_sha256_with_progress
 from adare.helperfunctions.web.download import download
 from adare.types.environment import EnvironmentMetadata, parse_environment_file
@@ -156,7 +157,9 @@ def resolve_vm_from_url(url: str, vm_format: str | None = None) -> Path:
     # Download the file
     try:
         log.info(f"Downloading VM from URL: {url}")
-        download(url, cached_file_path, quiet=False)
+        # Digest computed while streaming; caching it lets the vm_sha256 check in
+        # the caller skip a second read of the multi-GB disk.
+        record_file_sha256(cached_file_path, download(url, cached_file_path, quiet=False))
 
         if not cached_file_path.exists() or cached_file_path.stat().st_size == 0:
             raise EnvironmentLoadFailed(
@@ -415,8 +418,11 @@ def environment_load(
                     raise
 
                 log.info('Verifying downloaded VM against declared vm_sha256...')
-                actual_sha256 = file_sha256_with_progress(
-                    vm_path, description=f"Verifying {vm_path.name}", silent=False
+                # Served from the digest cache (seeded by the download, or by the
+                # previous load of this cached disk) unless the file changed.
+                actual_sha256 = cached_file_sha256(
+                    vm_path,
+                    compute=lambda p: file_sha256_with_progress(p, description=f"Verifying {p.name}", silent=False),
                 )
                 expected_sha256 = environment_metadata.vm_sha256.lower()
                 if actual_sha256.lower() != expected_sha256:

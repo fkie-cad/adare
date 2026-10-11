@@ -1,5 +1,6 @@
 """Adare CV Server - Computer vision and OCR capabilities."""
 
+import asyncio
 import base64
 import logging
 from typing import Any
@@ -11,7 +12,13 @@ from fastmcp import FastMCP
 from .constants import DEFAULT_HOST, DEFAULT_MAX_RESULTS, DEFAULT_PORT, MCP_PATH, CVConstants
 from .exceptions import FeatureMatchingError, ImageDecodingError, OCRProcessingError
 from .feature_matching import CannyEdgeMatcher, MultiScaleTemplateMatcher, ORBMatcher, SIFTMatcher, TemplateMatcher
-from .image_processing import DetectionMatch, IconComplexityAnalyzer, ImageDecoder, non_maximum_suppression
+from .image_processing import (
+    DetectionMatch,
+    IconComplexityAnalyzer,
+    ImageDecoder,
+    non_maximum_suppression,
+    shared_decodes,
+)
 from .ocr_processing import TextDetector
 
 log = logging.getLogger(__name__)
@@ -247,6 +254,44 @@ async def find_icon(
     All applicable methods run and results are aggregated using weighted confidences.
     Global NMS removes cross-method duplicates.
     """
+    # The pipeline is seconds of CPU-bound OpenCV work; run it off the event loop
+    # so concurrent requests (and the MCP transport itself) are not stalled.
+    return await asyncio.to_thread(
+        _find_icon_sync,
+        icon_base64,
+        screenshot_base64,
+        offset_x,
+        offset_y,
+        threshold,
+        max_results,
+        use_sift,
+        sift_min_matches,
+        sift_ratio,
+        use_orb,
+        orb_min_matches,
+        orb_max_matches,
+        orb_distance_threshold,
+    )
+
+
+# Each stage decodes the same screenshot/icon bytes; shared_decodes() lets them reuse one decode.
+@shared_decodes()
+def _find_icon_sync(
+    icon_base64: str,
+    screenshot_base64: str,
+    offset_x: int = 0,
+    offset_y: int = 0,
+    threshold: float = CVConstants.DEFAULT_TEMPLATE_THRESHOLD,
+    max_results: int = DEFAULT_MAX_RESULTS,
+    use_sift: bool = True,
+    sift_min_matches: int = 4,
+    sift_ratio: float = 0.8,
+    use_orb: bool = True,
+    orb_min_matches: int = 2,
+    orb_max_matches: int = 10,
+    orb_distance_threshold: float = 80.0,
+) -> dict[str, Any]:
+    """Synchronous body of :func:`find_icon` (runs in a worker thread)."""
     try:
         log.info(
             f"Starting aggregated detection pipeline (SIFT: {use_sift}, ORB: {use_orb}, "
