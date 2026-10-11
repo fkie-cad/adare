@@ -26,6 +26,7 @@ except ImportError:
 
 import contextlib
 
+from adare.helperfunctions.backoff import backoff_delays
 from adare.hypervisor.base.vm import AbstractVM
 from adare.hypervisor.exceptions import (
     HypervisorException,
@@ -734,9 +735,11 @@ class QEMUVM(
                             log.debug(f"Gracefully shutting down VM '{self.vm_name}'")
                         self._libvirt_domain.shutdown()
 
-                        # Wait for VM to stop with timeout
-                        for _ in range(timeout):
-                            await asyncio.sleep(1)
+                        # Wait up to *timeout* seconds for the VM to stop, polling quickly at first
+                        deadline = time.monotonic() + timeout
+                        poll_delays = backoff_delays(initial=0.1, cap=1.0)
+                        while time.monotonic() < deadline:
+                            await asyncio.sleep(next(poll_delays))
                             try:
                                 state, _ = self._libvirt_domain.state()
                                 if state == libvirt.VIR_DOMAIN_SHUTOFF:
@@ -1078,8 +1081,7 @@ class QEMUVM(
         log.info(f"Waiting for VM '{self.vm_name}' to boot (timeout: {timeout}s)")
 
         start_time = time.time()
-        retry_delay = 0.5  # Start with short delay for quick boots
-        max_retry_delay = 2.0  # Reduced from 5s for faster response
+        retry_delays = backoff_delays(initial=0.5, cap=2.0)  # short delays first for quick boots
 
         while time.time() - start_time < timeout:
             if stop_event and stop_event.is_set():
@@ -1110,23 +1112,21 @@ class QEMUVM(
                     error_desc = exec_response.get('error', {}).get('desc', '')
                     log.debug(f"guest-exec test failed: {error_desc}")
                     # Treat as retriable - socket might not be fully ready
-                    await asyncio.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 1.5, max_retry_delay)
+                    await asyncio.sleep(next(retry_delays))
                     continue
 
                 # Get PID from exec response
                 pid = exec_response.get('return', {}).get('pid')
                 if not pid:
                     log.debug("guest-exec returned no PID")
-                    await asyncio.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 1.5, max_retry_delay)
+                    await asyncio.sleep(next(retry_delays))
                     continue
 
-                # Wait for test command to complete (max 10s)
-                test_timeout = 10
-                test_start = time.time()
+                # Wait for test command to complete (max 10s), polling quickly at first
+                test_deadline = time.time() + 10
+                poll_delays = backoff_delays()
 
-                while time.time() - test_start < test_timeout:
+                while time.time() < test_deadline:
                     status_cmd = {"execute": "guest-exec-status", "arguments": {"pid": pid}}
 
                     status_response = await self._send_qga_command_via_libvirt(status_cmd)
@@ -1186,7 +1186,7 @@ class QEMUVM(
                         log.warning(f"guest-exec test returned non-zero: {returncode}")
                         break
 
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(next(poll_delays))
 
                 # Test command didn't complete in time, try again
                 log.debug("guest-exec test timed out, retrying")
