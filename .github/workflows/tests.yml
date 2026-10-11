@@ -71,7 +71,13 @@ jobs:
         run: uv sync --locked --package adare --group test --extra qemu
 
       - name: Run unit tests
-        run: uv run --no-sync pytest tests -q
+        run: uv run --no-sync pytest tests -q --cov --cov-report=
+
+      # Reported, not gated (yet): ~34% when introduced.
+      - name: Coverage summary
+        if: always()
+        run: |
+          echo "Unit-test line coverage: $(uv run --no-sync coverage report --format=total)%" >> "$GITHUB_STEP_SUMMARY"
 
   # Testfunctions run inside Linux and Windows guests and on the macOS host (host
   # test mode), so their behaviour is checked on all three.
