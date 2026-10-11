@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import click
 
+from adare.cli.output import output_options
+
 
 def register(cli, AliasedGroup, exec_with_error_printing):
     """Register `adare vlm` commands (GUI-automation vision-LLM provider config)."""
@@ -60,6 +62,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_vlm_create, SimpleNamespace(no_verify=no_verify))
 
     @vlm.command(name='list')
+    @output_options
     def list_():
         """List saved VLM profiles (active one marked)."""
         from adare.cli.vlm import exec_vlm_list
@@ -82,6 +85,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_vlm_remove, SimpleNamespace(name=name))
 
     @vlm.command()
+    @output_options
     def show():
         """Show the resolved VLM config and where each value comes from."""
         from adare.cli.vlm import exec_vlm_show

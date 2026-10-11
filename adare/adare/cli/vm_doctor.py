@@ -19,18 +19,33 @@ def _install_hint(darwin: str, linux: str) -> str:
     return darwin if platform.system() == 'Darwin' else linux
 
 
-def _check_binary(name: str, label: str, hint: str, missing: list[str]) -> None:
+def _record(checks: list[dict], label: str, found: bool, path: str | None = None,
+            hint: str | None = None, required: bool = True) -> None:
+    """Record one tool check (rendered later as text, or emitted as data)."""
+    checks.append({'name': label, 'found': found, 'required': required,
+                   'path': path, 'hint': None if found else hint})
+
+
+def _check_binary(name: str, label: str, hint: str, checks: list[dict]) -> None:
     path = shutil.which(name)
-    if path:
-        console.print(f'[green]✓ {label} found[/green]: {path}')
-    else:
-        console.print(f'[red]✗ {label} not found[/red]. {hint}')
-        missing.append(f'{label}: {hint}')
+    _record(checks, label, bool(path), path, hint)
+
+
+def _print_checks(checks: list[dict]) -> None:
+    for check in checks:
+        label = check['name']
+        if check['found']:
+            location = f": {check['path']}" if check['path'] else ''
+            console.print(f'[green]✓ {label} found[/green]{location}')
+        elif check['required']:
+            console.print(f"[red]✗ {label} not found[/red]. {check['hint']}")
+        else:
+            console.print(f"[yellow]! {label} not found[/yellow] ({check['hint']})")
 
 
 def exec_vm_doctor(arguments):
     """Report on system-level QEMU/VM-creation tool availability."""
-    missing: list[str] = []
+    checks: list[dict] = []
 
     host_arch = platform.machine().lower()
     qemu_arch = 'aarch64' if host_arch in ('arm64', 'aarch64') else host_arch
@@ -43,45 +58,41 @@ def exec_vm_doctor(arguments):
             'Install with: sudo apt install qemu-system-x86 (Debian/Ubuntu) or '
             'sudo dnf install qemu-system-x86-core (Fedora)',
         ),
-        missing,
+        checks,
     )
     _check_binary(
         'qemu-img', 'qemu-img',
         _install_hint('Install with: brew install qemu', 'Usually included with QEMU.'),
-        missing,
+        checks,
     )
 
     try:
         from adare.hypervisor.qemu.firmware import find_ovmf_firmware
         code_path, _vars_path = find_ovmf_firmware(qemu_arch)
-        console.print(f'[green]✓ OVMF firmware found[/green]: {code_path}')
+        _record(checks, 'OVMF firmware', True, str(code_path))
     except HypervisorException:
         hint = _install_hint(
             'Install with: brew install qemu (includes OVMF)',
             'Install with: sudo apt install ovmf (Debian/Ubuntu) or sudo dnf install edk2-ovmf (Fedora)',
         )
-        console.print(f'[red]✗ OVMF firmware not found[/red]. {hint}')
-        missing.append(f'OVMF firmware: {hint}')
+        _record(checks, 'OVMF firmware', False, hint=hint)
 
     # swtpm — informational only, TPM model already adapts per-arch at VM-create time.
     swtpm_path = shutil.which('swtpm')
-    if swtpm_path:
-        console.print(f'[green]✓ swtpm found[/green]: {swtpm_path}')
-    else:
-        console.print('[yellow]! swtpm not found[/yellow] (optional — Windows TPM requirement '
-                      'will be bypassed via registry hack if absent)')
+    _record(checks, 'swtpm', bool(swtpm_path), swtpm_path,
+            'optional — Windows TPM requirement will be bypassed via registry hack if absent',
+            required=False)
 
     try:
         import libvirt  # noqa: F401
-        console.print('[green]✓ libvirt Python binding importable[/green]')
+        _record(checks, 'libvirt Python binding', True)
     except ImportError:
         hint = _install_hint(
             'Install with: brew install libvirt',
             'Install with: sudo apt install libvirt-dev (Debian/Ubuntu) or sudo dnf install libvirt-devel (Fedora)',
         )
-        console.print(f'[red]✗ libvirt Python binding not importable[/red]. {hint} '
-                      f'then reinstall with: uv sync --extra qemu')
-        missing.append(f'libvirt Python binding: {hint}, then `uv sync --extra qemu`')
+        _record(checks, 'libvirt Python binding', False,
+                hint=f'{hint}, then reinstall with: uv sync --extra qemu')
 
     # aarch64-only: Win11-ARM64 legacy-boot ISO toolchain (see iso_utils.create_legacy_boot_iso).
     if is_arm_host:
@@ -91,27 +102,31 @@ def exec_vm_doctor(arguments):
                 'Install with: brew install wimlib',
                 'Install with: sudo apt install wimtools (Debian/Ubuntu) or sudo dnf install wimlib-utils (Fedora)',
             ),
-            missing,
+            checks,
         )
-        if shutil.which('7z') or shutil.which('7zz') or shutil.which('7za'):
-            path = shutil.which('7z') or shutil.which('7zz') or shutil.which('7za')
-            console.print(f'[green]✓ 7z found[/green]: {path}')
-        else:
-            hint = _install_hint(
-                'Install with: brew install p7zip',
-                'Install with: sudo apt install p7zip-full (Debian/Ubuntu) or sudo dnf install p7zip (Fedora)',
-            )
-            console.print(f'[red]✗ 7z (or 7zz/7za) not found[/red]. {hint}')
-            missing.append(f'7z: {hint}')
+        path = shutil.which('7z') or shutil.which('7zz') or shutil.which('7za')
+        _record(checks, '7z', bool(path), path, _install_hint(
+            'Install with: brew install p7zip',
+            'Install with: sudo apt install p7zip-full (Debian/Ubuntu) or sudo dnf install p7zip (Fedora)',
+        ))
         _check_binary(
             'xorriso', 'xorriso',
             _install_hint(
                 'Install with: brew install xorriso',
                 'Install with: sudo apt install xorriso (Debian/Ubuntu) or sudo dnf install xorriso (Fedora)',
             ),
-            missing,
+            checks,
         )
 
+    missing = [f"{c['name']}: {c['hint']}" for c in checks if c['required'] and not c['found']]
+
+    from adare.cli.output import emit, is_structured_output
+    if is_structured_output():
+        # Still exit 0 when tools are missing: this runs unattended in `make install`.
+        emit({'ok': not missing, 'host_arch': host_arch, 'checks': checks})
+        return
+
+    _print_checks(checks)
     if missing:
         print_error_message(
             title='Some QEMU/system tools are missing (adare vm create may fail until installed)',

@@ -82,6 +82,11 @@ def exec_list_projects(arguments):
         return
 
     if not result.data:
+        from adare.cli.output import emit, is_structured_output
+        if is_structured_output():
+            # Machines get an empty list, not a status message.
+            emit({'projects': []})
+            return
         # No projects found - use existing exception for consistent messaging
         from adare.backend.project.exceptions import NoProjectsFoundMessage
         raise NoProjectsFoundMessage(log, message='no projects found')

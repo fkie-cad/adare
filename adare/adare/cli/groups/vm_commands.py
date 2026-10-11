@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import click
 
+from adare.cli.output import output_options
+
 
 def register(cli, AliasedGroup, exec_with_error_printing):
     """Register VM management commands with the CLI."""
@@ -15,6 +17,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         pass
 
     @vm.command(name='list')
+    @output_options
     def vm_list():
         """List all VMs in the system."""
         from adare.cli.vm import exec_vm_list
@@ -22,6 +25,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_vm_list, args)
 
     @vm.command()
+    @output_options
     @click.argument('vm_id')
     def info(vm_id):
         """Get detailed information about a VM."""
@@ -58,6 +62,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_vm_instance_remove, args)
 
     @vm.command()
+    @output_options
     def usage():
         """Show VM instance usage statistics."""
         from adare.cli.vm import exec_vm_instance_usage
@@ -165,6 +170,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         pass
 
     @snapshot.command(name='list')
+    @output_options
     @click.option('--instance', '-i', 'instance_id', help='Filter by specific VM instance ID')
     def snapshot_list(instance_id):
         """List all snapshots. Use --instance to filter by specific VM instance."""
@@ -259,6 +265,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_vm_create, args)
 
     @vm.command(name='gui-doctor')
+    @output_options(structured=False)
     def vm_gui_doctor():
         """Preflight the vision-LLM used for GUI automation (ADARE_VLLM_*).
 
@@ -270,6 +277,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_vm_gui_doctor, args)
 
     @vm.command(name='doctor')
+    @output_options
     def vm_doctor():
         """Report on system-level QEMU/VM-creation tool availability.
 
