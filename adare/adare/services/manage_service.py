@@ -356,10 +356,10 @@ class ManageService:
         Returns:
             Result[VmRuntimeBuildResult] with build results.
         """
-        import re
         import subprocess
 
         from adare.backend.basics import determine_projectdirectory
+        from adare.backend.experiment.agent_wheels import build_agent_wheels
         from adare.backend.project.directory import ProjectDirectory
         from adare.exceptions import NoProjectFoundError
 
@@ -388,58 +388,16 @@ class ManageService:
                 project_dir = ProjectDirectory(project_path)
                 project_dir.copy_vm_runtime_files()
 
-            # Create wheels directory
-            wheels_dir.mkdir(exist_ok=True)
-
-            # Clean old wheels
-            for old_wheel in wheels_dir.glob('*.whl'):
-                old_wheel.unlink()
-                log.info(f"Removed old wheel: {old_wheel.name}")
-
-            # Build adarelib wheel first (it has no path dependencies)
-            log.info("Building adarelib wheel...")
-            subprocess.run(
-                ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
-                cwd=adarelib_target,
-                check=True,
-                capture_output=True,
-            )
-
-            # Build adarevm wheel without path dependency
-            log.info("Building adarevm wheel...")
-
-            # Temporarily modify pyproject.toml to use version dependency instead of path
-            adarevm_pyproject = adarevm_target / 'pyproject.toml'
-            original_content = adarevm_pyproject.read_text()
-
-            # Replace workspace source with version dependency for wheel build
-            modified_content = re.sub(r'adarelib\s*=\s*\{\s*workspace\s*=\s*true\s*\}', '', original_content)
-            adarevm_pyproject.write_text(modified_content)
-
-            try:
-                subprocess.run(
-                    ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
-                    cwd=adarevm_target,
-                    check=True,
-                    capture_output=True,
-                )
-            finally:
-                # Restore original pyproject.toml
-                adarevm_pyproject.write_text(original_content)
-
-            # Find built wheels
-            adarelib_wheels = list(wheels_dir.glob('adarelib-*.whl'))
-            adarevm_wheels = list(wheels_dir.glob('adarevm-*.whl'))
-
-            log.info(f"Wheels built successfully in {wheels_dir}")
+            wheels = build_agent_wheels({'adarelib': adarelib_target, 'adarevm': adarevm_target}, wheels_dir)
+            adarelib_wheel, adarevm_wheel = wheels.get('adarelib'), wheels.get('adarevm')
 
             return Result.ok(
                 VmRuntimeBuildResult(
                     built=True,
                     project_path=project_path,
                     wheels_dir=wheels_dir,
-                    adarelib_wheel=adarelib_wheels[0].name if adarelib_wheels else None,
-                    adarevm_wheel=adarevm_wheels[0].name if adarevm_wheels else None,
+                    adarelib_wheel=adarelib_wheel.name if adarelib_wheel else None,
+                    adarevm_wheel=adarevm_wheel.name if adarevm_wheel else None,
                 )
             )
 

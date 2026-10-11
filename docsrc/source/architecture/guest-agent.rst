@@ -174,9 +174,11 @@ Agent Lifecycle
 ===============
 
 1. **Wheel installation** -- during experiment setup, the host installs
-   ``adarevm`` and ``adarelib`` wheels inside the guest via pip. Version
-   detection avoids redundant reinstalls (see ``agent_installer.py``). The
-   wheels are placed in the ``/adare/vm`` shared directory by the file
+   ``adarevm`` and ``adarelib`` wheels inside the guest via pip. Each wheel
+   carries a content-hash local version (``0.1.1+g<hash12>``, see
+   ``agent_wheels.py``), so any source change produces a new version; the
+   guest reinstalls only when a package's installed version differs from
+   its wheel (see ``agent_installer.py``). The wheels are placed in the ``/adare/vm`` shared directory by the file
    transfer strategy (see :doc:`file-sharing`).
 
 2. **Startup** -- the host launches ``adarevm`` inside the guest (either

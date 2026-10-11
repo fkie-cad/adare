@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+import subprocess
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 import adare.backend.environment.database as environment_database
 import adare.backend.experiment.database as experiment_database
 import adare.backend.vm.database as vm_database
+from adare.backend.experiment import agent_wheels
 from adare.backend.experiment.directory import ExperimentRunDirectory
 from adare.backend.experiment.runctx import ExperimentRunCtx
 from adare.backend.experiment.stagectxmanager import StageCtxManager
@@ -228,84 +230,19 @@ class VMLifecycleManager:
 
             log.info("Project VM runtime directory ready")
 
-        # Build wheels (separate from copy logic since we check mtime separately)
+        # Wheels carry a content-hash version, so this also catches edits that
+        # mtimes miss and tells the guest-side version check to reinstall.
         wheels_dir = vm_runtime_dir / 'wheels'
-        wheels_dir.mkdir(exist_ok=True)
-
-        adarelib_wheel = list(wheels_dir.glob('adarelib-*.whl'))
-        adarevm_wheel = list(wheels_dir.glob('adarevm-*.whl'))
-
-        # Check if wheels need rebuilding
-        rebuild_wheels = False
-        if not adarelib_wheel or not adarevm_wheel:
-            log.info("Wheels not found - building...")
-            rebuild_wheels = True
-        else:
-            # Check if source is newer than wheels
-            adarelib_wheel_time = adarelib_wheel[0].stat().st_mtime
-            adarevm_wheel_time = adarevm_wheel[0].stat().st_mtime
-
-            # Compare each wheel against its OWN source tree. Deriving both times from
-            # adarevm_source meant an adarelib-only change never rebuilt any wheel, so
-            # the guest kept running a stale adarelib indefinitely.
-            adarelib_source_time = self._get_latest_mtime(adarelib_source)
-            adarevm_source_time = self._get_latest_mtime(adarevm_source)
-
-            if adarelib_source_time > adarelib_wheel_time or adarevm_source_time > adarevm_wheel_time:
-                log.info("Source code newer than wheels - rebuilding...")
-                rebuild_wheels = True
-            else:
-                log.info("Wheels are up-to-date - skipping build")
-
-        if rebuild_wheels:
-            try:
-                # Clean old wheels
-                for old_wheel in wheels_dir.glob('*.whl'):
-                    old_wheel.unlink()
-
-                # Build adarelib wheel first (it has no path dependencies)
-                log.info("Building adarelib wheel...")
-                import subprocess
-
-                subprocess.run(
-                    ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
-                    cwd=adarelib_target,
-                    check=True,
-                    capture_output=True,
-                )
-
-                # Build adarevm wheel without path dependency
-                log.info("Building adarevm wheel...")
-
-                # Temporarily modify pyproject.toml to remove workspace source
-                # This is necessary because uv workspace sources don't exist in the VM filesystem
-                adarevm_pyproject = adarevm_target / 'pyproject.toml'
-                original_content = adarevm_pyproject.read_text()
-
-                # Remove workspace source for adarelib
-                import re
-
-                modified_content = re.sub(r'adarelib\s*=\s*\{\s*workspace\s*=\s*true\s*\}', '', original_content)
-                adarevm_pyproject.write_text(modified_content)
-
-                try:
-                    subprocess.run(
-                        ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
-                        cwd=adarevm_target,
-                        check=True,
-                        capture_output=True,
-                    )
-                finally:
-                    # Restore original pyproject.toml
-                    adarevm_pyproject.write_text(original_content)
-
-                log.info(f"Wheels built in {wheels_dir}")
-            except subprocess.CalledProcessError as e:
-                log.warning(f"Wheel build failed: {e.stderr.decode() if e.stderr else str(e)}")
-                log.warning("Falling back to editable install mode (wheels will not be available)")
-                # Don't raise - let it fall back to editable install
-        else:
-            log.info("Project VM runtime directory up-to-date")
+        package_dirs = {'adarelib': adarelib_target, 'adarevm': adarevm_target}
+        if agent_wheels.wheels_up_to_date(package_dirs, wheels_dir):
+            log.info("Wheels are up-to-date - skipping build")
+            return
+        try:
+            agent_wheels.build_agent_wheels(package_dirs, wheels_dir)
+        except subprocess.CalledProcessError as e:
+            log.warning(f"Wheel build failed: {e.stderr.decode() if e.stderr else str(e)}")
+            log.warning("Falling back to editable install mode (wheels will not be available)")
+            # Don't raise - let it fall back to editable install
 
     def _get_latest_mtime(self, directory: Path) -> float:
         """Get the latest modification time in a directory tree."""
