@@ -17,7 +17,9 @@ from adare.hypervisor.qemu.models import QEMUVMConfig
 from adare.hypervisor.qemu.utilities.disk_utils import resolve_boot_mode
 
 if TYPE_CHECKING:
-    from adare.hypervisor.qemu.vm import QEMUVM
+    from adare.hypervisor.qemu.mixins.host import QEMUVMHost as _Host
+else:
+    _Host = object
 
 log = logging.getLogger(__name__)
 
@@ -201,7 +203,7 @@ def sweep_stale_sockets(runtime_dir: Path | None = None, keep: set[str] | None =
     return removed
 
 
-class ConfigurationMixin:
+class ConfigurationMixin(_Host):
     """
     Mixin for VM configuration operations.
 
@@ -252,7 +254,7 @@ class ConfigurationMixin:
         except OSError as e:
             raise HypervisorException(f"Error detecting disk format: {e}") from e
 
-    def _detect_disk_format(self: 'QEMUVM', file_path: Path) -> str:
+    def _detect_disk_format(self, file_path: Path) -> str:
         """
         Detect disk image format using qemu-img info (instance method wrapper).
 
@@ -268,12 +270,12 @@ class ConfigurationMixin:
         """
         return self._detect_disk_format_static(file_path, self.executables.qemu_img)
 
-    def _get_vm_config_path(self: 'QEMUVM') -> Path:
+    def _get_vm_config_path(self) -> Path:
         """Get path to VM configuration JSON file."""
         # Store VM configs in ~/.adare/qemu/vms/
         return get_qemu_vm_config_dir() / f"{self.vm_name}.json"
 
-    def _load_or_create_vm_config(self: 'QEMUVM') -> QEMUVMConfig:
+    def _load_or_create_vm_config(self) -> QEMUVMConfig:
         """Load VM config from JSON or create new one."""
         config_path = self._get_vm_config_path()
 
@@ -426,11 +428,11 @@ class ConfigurationMixin:
         self._save_vm_config_obj(config)
         return config
 
-    def _save_vm_config(self: 'QEMUVM'):
+    def _save_vm_config(self):
         """Save current VM config to JSON file."""
         self._save_vm_config_obj(self.config)
 
-    def _save_vm_config_obj(self: 'QEMUVM', config: QEMUVMConfig):
+    def _save_vm_config_obj(self, config: QEMUVMConfig):
         """
         Save VM config object to JSON file.
 
