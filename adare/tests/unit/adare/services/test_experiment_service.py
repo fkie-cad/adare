@@ -1,7 +1,9 @@
 """Tests for ExperimentService — experiment lifecycle and query operations."""
 
+import asyncio
+import logging
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -209,3 +211,82 @@ class TestExperimentServiceEnvironments:
         mock_remove.return_value = {'affected_experiments': ['e1']}
         result = service.remove_environments(env_modify_request)
         assert result.success is True and result.data.operation == 'remove'
+
+
+class TestExperimentServiceRun:
+    @pytest.mark.asyncio
+    @patch("adare.services.experiment_service.backend_experiment_run", new_callable=AsyncMock)
+    async def test_run_keeps_background_task_alive_until_done(self, mock_run, service):
+        from adare.services import experiment_service
+
+        release = asyncio.Event()
+        mock_run.side_effect = lambda *a, **kw: release.wait()
+
+        result = await service.run(PP, "exp", "env")
+
+        assert result.success is True
+        (task,) = experiment_service._BACKGROUND_TASKS
+        release.set()
+        await task
+        assert not experiment_service._BACKGROUND_TASKS
+        assert mock_run.await_args.kwargs["run_ulid"] == result.data.run_ulid
+
+    @patch("adare.services.experiment_service.backend_experiment_run", new_callable=AsyncMock)
+    def test_run_to_completion_survives_asyncio_run(self, mock_run, service):
+        """The chat tool wraps the call in asyncio.run; the run must finish before that returns."""
+        finished = []
+
+        async def _slow_run(*args, **kwargs):
+            await asyncio.sleep(0.01)
+            finished.append(kwargs["run_ulid"])
+
+        mock_run.side_effect = _slow_run
+
+        result = asyncio.run(service.run_to_completion(PP, "exp", "env"))
+
+        assert result.success is True
+        assert finished == [result.data.run_ulid]
+        assert result.data.experiment_name == "exp"
+
+    @pytest.mark.asyncio
+    @patch("adare.services.experiment_service.backend_experiment_run", new_callable=AsyncMock)
+    async def test_run_to_completion_maps_logged_error(self, mock_run, service):
+        from adare.backend.experiment.exceptions import ExperimentDirectoryDoesNotExistError
+
+        mock_run.side_effect = ExperimentDirectoryDoesNotExistError(logging.getLogger(__name__), "missing")
+
+        result = await service.run_to_completion(PP, "exp", "env")
+
+        assert result.success is False
+        assert result.error.code == "ExperimentDirectoryDoesNotExistError"
+
+    @pytest.mark.asyncio
+    @patch("adare.services.experiment_service.backend_experiment_run", new_callable=AsyncMock)
+    async def test_run_to_completion_maps_os_error(self, mock_run, service):
+        mock_run.side_effect = OSError("disk full")
+
+        result = await service.run_to_completion(PP, "exp", "env")
+
+        assert result.success is False
+        assert result.error.code == "ExperimentRunError"
+        assert "disk full" in result.error.message
+
+
+def test_chat_experiment_run_tool_awaits_completion():
+    """The chat tool must use run_to_completion: run() only schedules a task that asyncio.run cancels."""
+    from adare.backend.chat.tools import build_tools, call_tool
+    from adare.core.result import Result
+    from adare.services.experiment_service import ExperimentRunStartedInfo
+
+    api = MagicMock()
+    api.experiment.run_to_completion = AsyncMock(
+        return_value=Result.ok(ExperimentRunStartedInfo(run_ulid="01RUN", experiment_name="exp"))
+    )
+    (tool,) = [t for t in build_tools(api) if t.name == "experiment_run"]
+
+    with patch("adare.backend.chat.tools._resolve_project", return_value=PP):
+        envelope = call_tool(tool, {"experiment": "exp", "environment": "env"})
+
+    api.experiment.run_to_completion.assert_awaited_once_with(PP, "exp", "env")
+    api.experiment.run.assert_not_called()
+    assert envelope["ok"] is True
