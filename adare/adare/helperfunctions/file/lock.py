@@ -40,8 +40,7 @@ log = logging.getLogger(__name__)
 
 
 @contextmanager
-def exclusive_lock(lock_path: Path,
-                   on_contention: Callable[[], None] | None = None) -> Iterator[None]:
+def exclusive_lock(lock_path: Path, on_contention: Callable[[], None] | None = None) -> Iterator[None]:
     """Hold an exclusive lock on *lock_path* for the duration of the block.
 
     ``lock_path`` must be a **dedicated lock file that is never unlinked** — never

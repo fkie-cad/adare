@@ -148,15 +148,17 @@ def _cache_key(engine: sqlalchemy.Engine) -> str:
 
 def _ensure_ledger(conn) -> None:
     """Create the applied-migration ledger table if it does not exist yet."""
-    conn.execute(text(
-        f"""
+    conn.execute(
+        text(
+            f"""
         CREATE TABLE IF NOT EXISTS {LEDGER_TABLE} (
             name TEXT PRIMARY KEY,
             applied_at DATETIME,
             adare_version TEXT NULL
         )
         """
-    ))
+        )
+    )
 
 
 def _stamp(conn, name: str) -> None:

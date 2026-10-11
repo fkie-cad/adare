@@ -39,8 +39,12 @@ class TestEnvironmentDeleteRequest:
 class TestEnvironmentInfo:
     def test_construction(self):
         info = EnvironmentInfo(
-            id="1", name="env", description="d",
-            vm_name="vm1", hypervisor="virtualbox", os_platform="windows",
+            id="1",
+            name="env",
+            description="d",
+            vm_name="vm1",
+            hypervisor="virtualbox",
+            os_platform="windows",
             file_path=Path("/f"),
         )
         assert info.next_steps == []
@@ -48,8 +52,12 @@ class TestEnvironmentInfo:
 
     def test_to_dict(self):
         info = EnvironmentInfo(
-            id="1", name="env", description="d",
-            vm_name=None, hypervisor="vbox", os_platform=None,
+            id="1",
+            name="env",
+            description="d",
+            vm_name=None,
+            hypervisor="vbox",
+            os_platform=None,
             file_path=None,
         )
         d = info.to_dict()
@@ -60,8 +68,12 @@ class TestEnvironmentInfo:
 class TestEnvironmentListItem:
     def test_construction(self):
         item = EnvironmentListItem(
-            id="1", name="env", description="d",
-            vm_name="vm", hypervisor="vbox", os_platform="linux",
+            id="1",
+            name="env",
+            description="d",
+            vm_name="vm",
+            hypervisor="vbox",
+            os_platform="linux",
         )
         assert item.os_platform == "linux"
 

@@ -1,4 +1,5 @@
 """Environment management endpoints."""
+
 import logging
 import re
 from pathlib import Path
@@ -29,6 +30,7 @@ SHA256_HEX_RE = re.compile(r'^[0-9a-f]{64}$')
 
 # ---- Pydantic request models ----
 
+
 class EnvironmentCreateBody(BaseModel):
     """Request body for creating an environment.
 
@@ -37,6 +39,7 @@ class EnvironmentCreateBody(BaseModel):
     (``os_profile`` + ``iso_url`` + ``iso_sha256`` plus build params). The web
     variant never sends local paths — those remain CLI-only on the DTO.
     """
+
     project_path: str
     name: str
     # Baked (published URL) source
@@ -66,6 +69,7 @@ class EnvironmentCreateBody(BaseModel):
 
 class CheckUrlBody(BaseModel):
     """Request body for validating a published VM/ISO URL."""
+
     url: str
     sha256: str | None = None
     kind: Literal["vm", "iso"] = "vm"
@@ -74,19 +78,20 @@ class CheckUrlBody(BaseModel):
 
 class EnvironmentVerifyBody(BaseModel):
     """Request body for verifying an environment."""
+
     project_path: str
 
 
 # ---- Helpers ----
 
+
 def _api():
     from adare.api import AdareAPI
+
     return AdareAPI()
 
 
-def _validate_url_format(
-    url: str, sha256: str | None, kind: str, vm_format: str | None = None
-) -> str | None:
+def _validate_url_format(url: str, sha256: str | None, kind: str, vm_format: str | None = None) -> str | None:
     """Return a human-readable reason the URL is invalid, or None if valid.
 
     Mirrors the server's publish contract: an http(s) URL (no disk-extension
@@ -117,6 +122,7 @@ def _validate_url_format(
 
 
 # ---- Endpoints ----
+
 
 @router.get("")
 async def list_environments():
@@ -156,62 +162,87 @@ async def create_environment(body: EnvironmentCreateBody):
     if body.vm_url:
         reason = _validate_url_format(body.vm_url, body.vm_sha256, "vm", body.vm_format)
         if reason is not None:
-            return {"success": False, "error": {
-                "code": "InvalidVmUrl", "message": reason, "solutions": [],
-            }}
+            return {
+                "success": False,
+                "error": {
+                    "code": "InvalidVmUrl",
+                    "message": reason,
+                    "solutions": [],
+                },
+            }
 
     # A recipe ISO URL was previously NOT format-checked here at all -- only
     # `vm_url` was -- so the dialog could create a recipe env with a local path or
     # a malformed sha, which then failed only at publish time. Check it now.
     if body.iso_url:
         if body.iso_name:
-            return {"success": False, "error": {
-                "code": "AmbiguousIsoSource",
-                "message": "Give exactly one ISO source: iso_url or iso_name.",
-                "solutions": ["Drop either iso_url or iso_name"],
-            }}
+            return {
+                "success": False,
+                "error": {
+                    "code": "AmbiguousIsoSource",
+                    "message": "Give exactly one ISO source: iso_url or iso_name.",
+                    "solutions": ["Drop either iso_url or iso_name"],
+                },
+            }
         reason = _validate_url_format(body.iso_url, body.iso_sha256, "iso")
         if reason is not None:
-            return {"success": False, "error": {
-                "code": "InvalidIsoUrl", "message": reason, "solutions": [],
-            }}
+            return {
+                "success": False,
+                "error": {
+                    "code": "InvalidIsoUrl",
+                    "message": reason,
+                    "solutions": [],
+                },
+            }
 
     # BYO ISO is a Windows-only affordance. Rejecting it here (rather than only in
     # the service) keeps the error close to the request that caused it.
     if body.iso_name:
         if not body.os_profile:
-            return {"success": False, "error": {
-                "code": "MissingOsProfile",
-                "message": "iso_name is a recipe field and requires os_profile.",
-                "solutions": ["Send os_profile alongside iso_name"],
-            }}
+            return {
+                "success": False,
+                "error": {
+                    "code": "MissingOsProfile",
+                    "message": "iso_name is a recipe field and requires os_profile.",
+                    "solutions": ["Send os_profile alongside iso_name"],
+                },
+            }
         platform = profile_platform(body.os_profile)
         if platform is None:
-            return {"success": False, "error": {
-                "code": "UnknownOsProfileError",
-                "message": f"Unknown OS profile: {body.os_profile}",
-                "solutions": ["GET /api/environments/os-profiles for the list"],
-            }}
+            return {
+                "success": False,
+                "error": {
+                    "code": "UnknownOsProfileError",
+                    "message": f"Unknown OS profile: {body.os_profile}",
+                    "solutions": ["GET /api/environments/os-profiles for the list"],
+                },
+            }
         if platform != "windows":
-            return {"success": False, "error": {
-                "code": "ByoIsoRequiresWindowsProfile",
-                "message": (
-                    f"Consumer-supplied ISOs ('iso_name') are allowed for Windows "
-                    f"profiles only; '{body.os_profile}' is a {platform} profile. A "
-                    f"Linux ISO is freely redistributable, so it must be published."
-                ),
-                "solutions": [linux_url_hint(body.os_profile).capitalize()],
-            }}
+            return {
+                "success": False,
+                "error": {
+                    "code": "ByoIsoRequiresWindowsProfile",
+                    "message": (
+                        f"Consumer-supplied ISOs ('iso_name') are allowed for Windows "
+                        f"profiles only; '{body.os_profile}' is a {platform} profile. A "
+                        f"Linux ISO is freely redistributable, so it must be published."
+                    ),
+                    "solutions": [linux_url_hint(body.os_profile).capitalize()],
+                },
+            }
         if not ISO_NAME_RE.match(body.iso_name.strip()):
-            return {"success": False, "error": {
-                "code": "InvalidIsoName",
-                "message": (
-                    f"iso_name must be a bare ISO filename (got {body.iso_name!r}): no "
-                    f"directory separators, no '..', no URL, no drive letter, must end "
-                    f"in '.iso'."
-                ),
-                "solutions": ["Use just the filename, e.g. 'Win11_25H2_English_Arm64_v2.iso'"],
-            }}
+            return {
+                "success": False,
+                "error": {
+                    "code": "InvalidIsoName",
+                    "message": (
+                        f"iso_name must be a bare ISO filename (got {body.iso_name!r}): no "
+                        f"directory separators, no '..', no URL, no drive letter, must end "
+                        f"in '.iso'."
+                    ),
+                    "solutions": ["Use just the filename, e.g. 'Win11_25H2_English_Arm64_v2.iso'"],
+                },
+            }
 
     dto = EnvironmentCreateRequest(
         project_path=Path(body.project_path),
@@ -245,25 +276,39 @@ async def check_environment_url(body: CheckUrlBody):
     """
     reason = _validate_url_format(body.url, body.sha256, body.kind, body.vm_format)
     if reason is not None:
-        return {"success": True, "data": {
-            "valid": False, "reachable": False, "status": None, "reason": reason,
-        }}
+        return {
+            "success": True,
+            "data": {
+                "valid": False,
+                "reachable": False,
+                "status": None,
+                "reason": reason,
+            },
+        }
 
     try:
         resp = requests.head(body.url, allow_redirects=True, timeout=10)
     except requests.RequestException as e:
-        return {"success": True, "data": {
-            "valid": True, "reachable": False, "status": None,
-            "reason": f"URL is not reachable: {e}",
-        }}
+        return {
+            "success": True,
+            "data": {
+                "valid": True,
+                "reachable": False,
+                "status": None,
+                "reason": f"URL is not reachable: {e}",
+            },
+        }
 
     reachable = resp.status_code < 400
-    return {"success": True, "data": {
-        "valid": True,
-        "reachable": reachable,
-        "status": resp.status_code,
-        "reason": None if reachable else f"Host returned HTTP {resp.status_code}.",
-    }}
+    return {
+        "success": True,
+        "data": {
+            "valid": True,
+            "reachable": reachable,
+            "status": resp.status_code,
+            "reason": None if reachable else f"Host returned HTTP {resp.status_code}.",
+        },
+    }
 
 
 @router.delete("/{name}")

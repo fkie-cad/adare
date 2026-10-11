@@ -13,39 +13,43 @@ PP = Path("/tmp/test-project")
 @pytest.fixture
 def service():
     from adare.services.experiment_service import ExperimentService
+
     return ExperimentService()
 
 
 @pytest.fixture
 def create_request():
     from adare.core.dto.experiment import ExperimentCreateRequest
+
     return ExperimentCreateRequest(project_path=PP, name="test-exp")
 
 
 @pytest.fixture
 def load_request():
     from adare.core.dto.experiment import ExperimentLoadRequest
+
     return ExperimentLoadRequest(project_path=PP, name="test-exp")
 
 
 @pytest.fixture
 def clone_request():
     from adare.core.dto.experiment import ExperimentCloneRequest
-    return ExperimentCloneRequest(project_path=PP, source_experiment="source-exp",
-                                  target_experiment="cloned-exp")
+
+    return ExperimentCloneRequest(project_path=PP, source_experiment="source-exp", target_experiment="cloned-exp")
 
 
 @pytest.fixture
 def remove_request():
     from adare.core.dto.experiment import ExperimentRemoveRequest
+
     return ExperimentRemoveRequest(project_path=PP, name="test-exp")
 
 
 @pytest.fixture
 def env_modify_request():
     from adare.core.dto.experiment import ExperimentEnvModifyRequest
-    return ExperimentEnvModifyRequest(project_path=PP, experiment_pattern="test-*",
-                                      environments=["win10", "win11"])
+
+    return ExperimentEnvModifyRequest(project_path=PP, experiment_pattern="test-*", environments=["win10", "win11"])
 
 
 def _mock_api_ctx(mock_api_cls):
@@ -60,8 +64,10 @@ class TestExperimentServiceCreate:
     @patch("adare.services.experiment_service.ExperimentDirectory")
     @patch("adare.services.experiment_service.backend_experiment_create")
     def test_create_success(self, mock_create, mock_dir_cls, service, create_request):
-        d = MagicMock(); d.path = PP / "experiments/test-exp"
-        d.playbookfile.name = "playbook.yaml"; d.metadatafile.name = "metadata.yaml"
+        d = MagicMock()
+        d.path = PP / "experiments/test-exp"
+        d.playbookfile.name = "playbook.yaml"
+        d.metadatafile.name = "metadata.yaml"
         mock_dir_cls.return_value = d
         result = service.create(create_request)
         assert result.success is True
@@ -71,6 +77,7 @@ class TestExperimentServiceCreate:
     @patch("adare.services.experiment_service.backend_experiment_create")
     def test_create_already_exists(self, mock_create, service, create_request):
         from adare.backend.experiment.exceptions import ExperimentDirectoryAlreadyExistsError
+
         mock_create.side_effect = ExperimentDirectoryAlreadyExistsError(MagicMock(), "exists")
         assert service.create(create_request).success is False
 
@@ -85,7 +92,9 @@ class TestExperimentServiceLoad:
         exp.name = "test-exp"
         _mock_api_ctx(mock_api_cls).get_experiment_by_project_and_name.return_value = exp
         mock_db.get_experiment_run_count.return_value = 0
-        d = MagicMock(); d.path = PP / "experiments/test-exp"; d.exists.return_value = True
+        d = MagicMock()
+        d.path = PP / "experiments/test-exp"
+        d.exists.return_value = True
         mock_dir_cls.return_value = d
         result = service.load(load_request)
         assert result.success is True and result.data.name == "test-exp"
@@ -93,6 +102,7 @@ class TestExperimentServiceLoad:
     @patch("adare.services.experiment_service.backend_experiment_load")
     def test_load_dir_missing(self, mock_load, service, load_request):
         from adare.backend.experiment.exceptions import ExperimentDirectoryDoesNotExistError
+
         mock_load.side_effect = ExperimentDirectoryDoesNotExistError(MagicMock(), "missing")
         assert service.load(load_request).success is False
 
@@ -109,6 +119,7 @@ class TestExperimentServiceClone:
     @patch("adare.services.experiment_service.backend_experiment_clone")
     def test_clone_target_exists(self, mock_clone, service, clone_request):
         from adare.backend.experiment.exceptions import ExperimentDirectoryAlreadyExistsError
+
         mock_clone.side_effect = ExperimentDirectoryAlreadyExistsError(MagicMock(), "exists")
         assert service.clone(clone_request).success is False
 
@@ -123,6 +134,7 @@ class TestExperimentServiceRemove:
     @patch("adare.services.experiment_service.backend_experiment_remove")
     def test_remove_dir_missing(self, mock_remove, service, remove_request):
         from adare.backend.experiment.exceptions import ExperimentDirectoryDoesNotExistError
+
         mock_remove.side_effect = ExperimentDirectoryDoesNotExistError(MagicMock(), "missing")
         assert service.remove(remove_request).success is False
 
@@ -139,6 +151,7 @@ class TestExperimentServiceValidate:
     @patch("adare.services.experiment_service.backend_experiment_validate")
     def test_validate_success(self, mock_validate, service):
         from adare.core.dto.experiment import ExperimentValidateRequest
+
         mock_validate.return_value = []
         result = service.validate(ExperimentValidateRequest(project_path=PP, name="test-exp"))
         assert result.success is True and result.data.name == "test-exp"
@@ -167,11 +180,12 @@ class TestExperimentServiceGetByName:
     @patch("adare.services.experiment_service.experiment_database")
     @patch("adare.services.experiment_service.ExperimentApi")
     def test_found(self, mock_api_cls, mock_db, mock_dir_cls, service):
-        exp = MagicMock(id="01X", name="my-exp", description="T", sha256="a",
-                        environments=[MagicMock(name="win10")])
+        exp = MagicMock(id="01X", name="my-exp", description="T", sha256="a", environments=[MagicMock(name="win10")])
         _mock_api_ctx(mock_api_cls).get_experiment_by_project_and_name.return_value = exp
         mock_db.get_experiment_run_count.return_value = 3
-        d = MagicMock(); d.path = PP / "experiments/my-exp"; d.exists.return_value = True
+        d = MagicMock()
+        d.path = PP / "experiments/my-exp"
+        d.exists.return_value = True
         mock_dir_cls.return_value = d
         result = service.get_by_name(PP, "my-exp")
         assert result.success is True and result.data.is_loaded is True

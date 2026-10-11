@@ -46,14 +46,14 @@ class TestToolsMixin:
             shutil.unpack_archive(zip_path, self.testfunctions_dir)
             zip_path.unlink()
 
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Testfunctions uploaded to {self.testfunctions_dir}"
-            })
+            await self.send_event(
+                websocket, EventType.LOG, {"message": f"Testfunctions uploaded to {self.testfunctions_dir}"}
+            )
 
             return {
                 "status": "success",
                 "message": f"Testfunctions uploaded to {self.testfunctions_dir}",
-                "path": str(self.testfunctions_dir)
+                "path": str(self.testfunctions_dir),
             }
 
         except binascii.Error as e:
@@ -80,14 +80,12 @@ class TestToolsMixin:
             new_variables = json.loads(variables)
             self.current_variables.update(new_variables)
 
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Set {len(new_variables)} variables"
-            })
+            await self.send_event(websocket, EventType.LOG, {"message": f"Set {len(new_variables)} variables"})
 
             return {
                 "status": "success",
                 "message": f"Set {len(new_variables)} variables",
-                "variables": self.current_variables
+                "variables": self.current_variables,
             }
         except json.JSONDecodeError as e:
             log.error(f"Invalid JSON in variables: {e}")
@@ -109,6 +107,7 @@ class TestToolsMixin:
                 log.error(error_msg)
                 # This is a system error, not a test failure
                 from adarelib.event.event import TestResult
+
                 return TestResult.error([error_msg])
 
             # Check if testfunctions directory is available
@@ -117,6 +116,7 @@ class TestToolsMixin:
                 log.error(error_msg)
                 # This is a system error, not a test failure
                 from adarelib.event.event import TestResult
+
                 return TestResult.error([error_msg])
 
             # Import test function class based on function name
@@ -128,10 +128,12 @@ class TestToolsMixin:
                 if self._testfunction_cache is None:
                     log.info("Discovering testfunctions (first test execution)...")
                     import time
+
                     start_time = time.time()
 
                     # Clear any previous load failures before importing
                     from adarelib.testset.testfunction import clear_module_load_failures
+
                     clear_module_load_failures()
 
                     self._testfunction_cache = import_basictest_subclasses(directory=self.testfunctions_dir)
@@ -144,6 +146,7 @@ class TestToolsMixin:
 
                     # Check if any modules failed to load
                     from adarelib.testset.testfunction import get_module_load_failures
+
                     load_failures = get_module_load_failures()
 
                     if load_failures:
@@ -191,6 +194,7 @@ class TestToolsMixin:
                     hint_lines = [error_msg]
                     if failure.exception_type == 'ModuleNotFoundError':
                         import re
+
                         match = re.search(r"No module named '([^']+)'", failure.exception_message)
                         if match:
                             dep_name = match.group(1)
@@ -203,10 +207,12 @@ class TestToolsMixin:
                     for func_name in coll_funcs.keys():
                         available_functions.append(f"{coll_name}.{func_name}")
 
-                return TestResult.error([
-                    f"Test function '{function_name}' not found",
-                    f"Available: {', '.join(sorted(available_functions)[:10])}{'...' if len(available_functions) > 10 else ''}"
-                ])
+                return TestResult.error(
+                    [
+                        f"Test function '{function_name}' not found",
+                        f"Available: {', '.join(sorted(available_functions)[:10])}{'...' if len(available_functions) > 10 else ''}",
+                    ]
+                )
 
             # Create test instance with required arguments
             test_name = resolved_test_data.get('name', 'unknown_test')
@@ -221,6 +227,7 @@ class TestToolsMixin:
                 if 'parameter' in processed_test_data:
                     # Get parameter class from the test class's type annotations
                     import typing
+
                     type_hints = typing.get_type_hints(test_class)
 
                     if 'parameter' not in type_hints:
@@ -236,7 +243,7 @@ class TestToolsMixin:
                     name=test_name,
                     parameter=parameter_instance,
                     description=test_description,
-                    variable_metadata=variable_metadata
+                    variable_metadata=variable_metadata,
                 )
             except Exception as e:
                 log.error(f"Error creating test instance: {e}", exc_info=True)
@@ -257,11 +264,13 @@ class TestToolsMixin:
             # System-level exception during test setup/teardown
             log.error(f"System error executing resolved test data: {e}")
             from adarelib.event.event import TestResult
+
             return TestResult.execution_error(e, "System error during test execution")
 
     async def _run_test(self, websocket, test_name: str, resolved_test_data: dict):
         """Run a test with pre-resolved test data (variables already substituted)."""
         from adarevm.testing.testset import TestsetExecutionError
+
         log.info(f"Running test: {test_name}")
         log.debug(f"Test '{test_name}' resolved_test_data: {resolved_test_data}")
         try:
@@ -272,6 +281,7 @@ class TestToolsMixin:
 
             # Use TestResultLogger to handle logging and formatting
             from adarevm.testing.result_logger import TestResultLogger
+
             TestResultLogger.log_test_result(test_name, test_result)
             result_data = TestResultLogger.format_result_for_response(test_name, test_result)
 
@@ -282,13 +292,9 @@ class TestToolsMixin:
 
         except TestsetExecutionError as e:
             log.error(f"Test execution error: {test_name}: {e}")
-            await self.send_event(websocket, EventType.TEST_FAILED, {
-                "test_name": test_name, "error": str(e)
-            })
+            await self.send_event(websocket, EventType.TEST_FAILED, {"test_name": test_name, "error": str(e)})
             return {"status": "error", "message": f"Test execution failed: {e}"}
         except Exception as e:
             log.error(f"Unexpected test error: {test_name}: {e}", exc_info=True)
-            await self.send_event(websocket, EventType.TEST_FAILED, {
-                "test_name": test_name, "error": str(e)
-            })
+            await self.send_event(websocket, EventType.TEST_FAILED, {"test_name": test_name, "error": str(e)})
             return {"status": "error", "message": str(e)}

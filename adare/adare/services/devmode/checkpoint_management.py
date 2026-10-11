@@ -46,9 +46,7 @@ class CheckpointManagementMixin:
         # Get or restore session (stays in same event loop)
         session = await self._manager.get_or_restore_session(request.session_id)
         if not session:
-            raise RuntimeError(
-                f"Dev session '{request.session_id}' not found or could not be restored"
-            )
+            raise RuntimeError(f"Dev session '{request.session_id}' not found or could not be restored")
 
         # Perform soft reset (in same event loop!)
         start_time = time.time()
@@ -70,21 +68,21 @@ class CheckpointManagementMixin:
         try:
             # CRITICAL: Execute entire flow in ONE asyncio.run() call
             # This keeps the WebSocket message_handler_task alive throughout execution
-            result, execution_time = asyncio.run(
-                self._reset_soft_async(request)
-            )
+            result, execution_time = asyncio.run(self._reset_soft_async(request))
 
             if result.success:
-                return Result.ok(DevResetResult(
-                    success=True,
-                    reset_type='soft',
-                    execution_time=execution_time,
-                    message="Variables reset to initial state"
-                ))
+                return Result.ok(
+                    DevResetResult(
+                        success=True,
+                        reset_type='soft',
+                        execution_time=execution_time,
+                        message="Variables reset to initial state",
+                    )
+                )
             return Result.fail(
                 result.error.code if result.error else "RESET_FAILED",
                 result.error.message if result.error else "Soft reset failed",
-                ["Try hard reset instead: adare dev reset hard"]
+                ["Try hard reset instead: adare dev reset hard"],
             )
 
         except RuntimeError as e:
@@ -92,18 +90,11 @@ class CheckpointManagementMixin:
             return Result.fail(
                 "SESSION_NOT_FOUND",
                 str(e),
-                [
-                    "Check active sessions with: adare dev list",
-                    "VM may not be running - check with hypervisor tools"
-                ]
+                ["Check active sessions with: adare dev list", "VM may not be running - check with hypervisor tools"],
             )
         except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error during soft reset: {e}", exc_info=True)
-            return Result.fail(
-                "RESET_ERROR",
-                f"Soft reset failed: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("RESET_ERROR", f"Soft reset failed: {str(e)}", ["Check logs for details"])
 
     async def _reset_hard_async(self, request: DevResetRequest):
         """
@@ -121,9 +112,7 @@ class CheckpointManagementMixin:
         # Get or restore session (stays in same event loop)
         session = await self._manager.get_or_restore_session(request.session_id)
         if not session:
-            raise RuntimeError(
-                f"Dev session '{request.session_id}' not found or could not be restored"
-            )
+            raise RuntimeError(f"Dev session '{request.session_id}' not found or could not be restored")
 
         # Perform hard reset (in same event loop!)
         start_time = time.time()
@@ -145,21 +134,21 @@ class CheckpointManagementMixin:
         try:
             # CRITICAL: Execute entire flow in ONE asyncio.run() call
             # This keeps the WebSocket message_handler_task alive throughout execution
-            result, execution_time = asyncio.run(
-                self._reset_hard_async(request)
-            )
+            result, execution_time = asyncio.run(self._reset_hard_async(request))
 
             if result.success:
-                return Result.ok(DevResetResult(
-                    success=True,
-                    reset_type='hard',
-                    execution_time=execution_time,
-                    message="VM restored to initial snapshot"
-                ))
+                return Result.ok(
+                    DevResetResult(
+                        success=True,
+                        reset_type='hard',
+                        execution_time=execution_time,
+                        message="VM restored to initial snapshot",
+                    )
+                )
             return Result.fail(
                 result.error.code if result.error else "RESET_FAILED",
                 result.error.message if result.error else "Hard reset failed",
-                ["Check session state: adare dev state"]
+                ["Check session state: adare dev state"],
             )
 
         except RuntimeError as e:
@@ -167,18 +156,11 @@ class CheckpointManagementMixin:
             return Result.fail(
                 "SESSION_NOT_FOUND",
                 str(e),
-                [
-                    "Check active sessions with: adare dev list",
-                    "VM may not be running - check with hypervisor tools"
-                ]
+                ["Check active sessions with: adare dev list", "VM may not be running - check with hypervisor tools"],
             )
         except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error during hard reset: {e}", exc_info=True)
-            return Result.fail(
-                "RESET_ERROR",
-                f"Hard reset failed: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("RESET_ERROR", f"Hard reset failed: {str(e)}", ["Check logs for details"])
 
     async def _create_checkpoint_async(self, request: DevCheckpointCreateRequest):
         """
@@ -194,14 +176,9 @@ class CheckpointManagementMixin:
             RuntimeError: If session not found
         """
         # Get or restore session (stays in same event loop)
-        session = await self._manager.get_or_restore_session(
-            request.session_id,
-            connect_websocket=False
-        )
+        session = await self._manager.get_or_restore_session(request.session_id, connect_websocket=False)
         if not session:
-            raise RuntimeError(
-                f"Dev session '{request.session_id}' not found or could not be restored"
-            )
+            raise RuntimeError(f"Dev session '{request.session_id}' not found or could not be restored")
 
         # Create checkpoint (in same event loop!)
         return await session.create_checkpoint(request.name, request.description)
@@ -219,16 +196,14 @@ class CheckpointManagementMixin:
         try:
             # CRITICAL: Execute entire flow in ONE asyncio.run() call
             # This keeps the WebSocket message_handler_task alive throughout execution
-            result = asyncio.run(
-                self._create_checkpoint_async(request)
-            )
+            result = asyncio.run(self._create_checkpoint_async(request))
 
             if result.success:
                 return Result.ok(True)
             return Result.fail(
                 result.error.code if result.error else "CHECKPOINT_CREATE_FAILED",
                 result.error.message if result.error else f"Failed to create checkpoint '{request.name}'",
-                ["Check hypervisor is running", "Check VM has sufficient disk space"]
+                ["Check hypervisor is running", "Check VM has sufficient disk space"],
             )
 
         except RuntimeError as e:
@@ -236,18 +211,11 @@ class CheckpointManagementMixin:
             return Result.fail(
                 "SESSION_NOT_FOUND",
                 str(e),
-                [
-                    "Check active sessions with: adare dev list",
-                    "VM may not be running - check with hypervisor tools"
-                ]
+                ["Check active sessions with: adare dev list", "VM may not be running - check with hypervisor tools"],
             )
         except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error creating checkpoint: {e}", exc_info=True)
-            return Result.fail(
-                "CHECKPOINT_ERROR",
-                f"Checkpoint creation failed: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("CHECKPOINT_ERROR", f"Checkpoint creation failed: {str(e)}", ["Check logs for details"])
 
     async def _restore_checkpoint_async(self, request: DevCheckpointRestoreRequest):
         """
@@ -265,9 +233,7 @@ class CheckpointManagementMixin:
         # Get or restore session (stays in same event loop)
         session = await self._manager.get_or_restore_session(request.session_id)
         if not session:
-            raise RuntimeError(
-                f"Dev session '{request.session_id}' not found or could not be restored"
-            )
+            raise RuntimeError(f"Dev session '{request.session_id}' not found or could not be restored")
 
         # Restore checkpoint (in same event loop!)
         return await session.restore_checkpoint(request.name)
@@ -285,18 +251,14 @@ class CheckpointManagementMixin:
         try:
             # CRITICAL: Execute entire flow in ONE asyncio.run() call
             # This keeps the WebSocket message_handler_task alive throughout execution
-            result = asyncio.run(
-                self._restore_checkpoint_async(request)
-            )
+            result = asyncio.run(self._restore_checkpoint_async(request))
 
             if result.success:
                 return Result.ok(True)
             return Result.fail(
                 result.error.code if result.error else "CHECKPOINT_NOT_FOUND",
                 result.error.message if result.error else f"Checkpoint '{request.name}' not found",
-                [
-                    f"List available checkpoints with: adare dev checkpoint list -s {request.session_id}"
-                ]
+                [f"List available checkpoints with: adare dev checkpoint list -s {request.session_id}"],
             )
 
         except RuntimeError as e:
@@ -304,18 +266,11 @@ class CheckpointManagementMixin:
             return Result.fail(
                 "SESSION_NOT_FOUND",
                 str(e),
-                [
-                    "Check active sessions with: adare dev list",
-                    "VM may not be running - check with hypervisor tools"
-                ]
+                ["Check active sessions with: adare dev list", "VM may not be running - check with hypervisor tools"],
             )
         except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error restoring checkpoint: {e}", exc_info=True)
-            return Result.fail(
-                "CHECKPOINT_ERROR",
-                f"Checkpoint restore failed: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("CHECKPOINT_ERROR", f"Checkpoint restore failed: {str(e)}", ["Check logs for details"])
 
     def list_checkpoints(self, request: DevCheckpointListRequest) -> Result[list[DevCheckpointInfo]]:
         """
@@ -334,7 +289,7 @@ class CheckpointManagementMixin:
                 return Result.fail(
                     "SESSION_NOT_FOUND",
                     f"Dev session '{request.session_id}' not found",
-                    ["Check active sessions with: adare dev list"]
+                    ["Check active sessions with: adare dev list"],
                 )
 
             # 2. Query checkpoints directly from database (NO session restoration)
@@ -351,26 +306,24 @@ class CheckpointManagementMixin:
                     file_size_mb += os.path.getsize(checkpoint.disk_file_path) / (1024 * 1024)
 
                 # Map database fields to DTO
-                checkpoints.append(DevCheckpointInfo(
-                    name=checkpoint.name,  # Use name directly from DB (no parsing needed)
-                    description=checkpoint.description or "",
-                    created_at=checkpoint.created_at,
-                    variable_count=len(checkpoint.variable_state or {}),
-                    checkpoint_id=checkpoint.checkpoint_id,
-                    memory_file_path=checkpoint.memory_file_path or "",
-                    disk_file_path=checkpoint.disk_file_path or "",
-                    file_size_mb=file_size_mb
-                ))
+                checkpoints.append(
+                    DevCheckpointInfo(
+                        name=checkpoint.name,  # Use name directly from DB (no parsing needed)
+                        description=checkpoint.description or "",
+                        created_at=checkpoint.created_at,
+                        variable_count=len(checkpoint.variable_state or {}),
+                        checkpoint_id=checkpoint.checkpoint_id,
+                        memory_file_path=checkpoint.memory_file_path or "",
+                        disk_file_path=checkpoint.disk_file_path or "",
+                        file_size_mb=file_size_mb,
+                    )
+                )
 
             return Result.ok(checkpoints)
 
         except (SQLAlchemyError, OSError) as e:
             log.error(f"Error listing checkpoints: {e}", exc_info=True)
-            return Result.fail(
-                "CHECKPOINT_ERROR",
-                f"Failed to list checkpoints: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("CHECKPOINT_ERROR", f"Failed to list checkpoints: {str(e)}", ["Check logs for details"])
 
     def delete_checkpoint(self, request: DevCheckpointDeleteRequest) -> Result[bool]:
         """
@@ -392,7 +345,7 @@ class CheckpointManagementMixin:
                     return Result.fail(
                         "SESSION_NOT_FOUND",
                         f"Dev session '{request.session_id}' not found",
-                        ["Check active sessions with: adare dev list"]
+                        ["Check active sessions with: adare dev list"],
                     )
 
                 # Get checkpoint from database
@@ -401,7 +354,9 @@ class CheckpointManagementMixin:
                     return Result.fail(
                         "CHECKPOINT_NOT_FOUND",
                         f"Checkpoint '{request.name}' not found",
-                        [f"List available checkpoints with: adare dev checkpoint list --session-id {request.session_id}"]
+                        [
+                            f"List available checkpoints with: adare dev checkpoint list --session-id {request.session_id}"
+                        ],
                     )
 
             # Get infrastructure-only session context
@@ -414,7 +369,7 @@ class CheckpointManagementMixin:
                 vm.delete_external_snapshot(
                     snapshot_name=checkpoint.snapshot_name,
                     memory_path=checkpoint.memory_file_path,
-                    disk_path=checkpoint.disk_file_path
+                    disk_path=checkpoint.disk_file_path,
                 )
                 log.info(f"Deleted external snapshot files for checkpoint '{request.name}'")
 
@@ -425,15 +380,12 @@ class CheckpointManagementMixin:
                     return Result.fail(
                         "CHECKPOINT_DELETE_FAILED",
                         f"Failed to delete checkpoint '{request.name}' from database",
-                        ["Check logs for details"]
+                        ["Check logs for details"],
                     )
 
             # Remove from session's in-memory snapshot list
             if session:
-                session.snapshots = [
-                    s for s in session.snapshots
-                    if s.checkpoint_id != checkpoint.checkpoint_id
-                ]
+                session.snapshots = [s for s in session.snapshots if s.checkpoint_id != checkpoint.checkpoint_id]
 
             log.info(f"Checkpoint '{request.name}' deleted successfully")
             return Result.ok(True)
@@ -441,9 +393,7 @@ class CheckpointManagementMixin:
         except (RuntimeError, SQLAlchemyError, OSError) as e:
             log.error(f"Error deleting checkpoint: {e}", exc_info=True)
             return Result.fail(
-                "CHECKPOINT_DELETE_ERROR",
-                f"Failed to delete checkpoint: {str(e)}",
-                ["Check logs for details"]
+                "CHECKPOINT_DELETE_ERROR", f"Failed to delete checkpoint: {str(e)}", ["Check logs for details"]
             )
 
     def _validate_vm_resources(self, db_session) -> Result[bool]:
@@ -458,9 +408,7 @@ class CheckpointManagementMixin:
         """
         try:
             # Get environment metadata
-            environment_ulid = environment_database.resolve_environment_identifier(
-                db_session.environment_name
-            )
+            environment_ulid = environment_database.resolve_environment_identifier(db_session.environment_name)
 
             # Check if VM disk file exists
             vm_file = environment_database.get_environment_vm_file(environment_ulid)
@@ -472,8 +420,8 @@ class CheckpointManagementMixin:
                         "The VM disk file for this session no longer exists",
                         "This session cannot be resumed",
                         f"Clean up orphaned session with: adare dev stop --rm {db_session.session_id}",
-                        f"Create new session with: adare dev start {db_session.experiment_name} -e {db_session.environment_name}"
-                    ]
+                        f"Create new session with: adare dev start {db_session.experiment_name} -e {db_session.environment_name}",
+                    ],
                 )
 
             # Check if checkpoint files exist (non-fatal warning)
@@ -481,7 +429,12 @@ class CheckpointManagementMixin:
             missing_checkpoints = []
 
             for checkpoint in checkpoints:
-                if checkpoint.memory_file_path and not Path(checkpoint.memory_file_path).exists() or checkpoint.disk_file_path and not Path(checkpoint.disk_file_path).exists():
+                if (
+                    checkpoint.memory_file_path
+                    and not Path(checkpoint.memory_file_path).exists()
+                    or checkpoint.disk_file_path
+                    and not Path(checkpoint.disk_file_path).exists()
+                ):
                     missing_checkpoints.append(checkpoint.name)
 
             if missing_checkpoints:
@@ -495,7 +448,5 @@ class CheckpointManagementMixin:
         except (SQLAlchemyError, OSError, ValueError) as e:
             log.error(f"Error validating VM resources: {e}", exc_info=True)
             return Result.fail(
-                "VALIDATION_ERROR",
-                f"Failed to validate VM resources: {str(e)}",
-                ["Check logs for details"]
+                "VALIDATION_ERROR", f"Failed to validate VM resources: {str(e)}", ["Check logs for details"]
             )

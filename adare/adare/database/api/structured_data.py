@@ -59,10 +59,11 @@ class StructuredDataApi(DatabaseApi):
     def get_environments_structured(self) -> list[EnvironmentInfo]:
         """Get all environments as structured EnvironmentInfo objects."""
         # Use eager loading to prevent N+1 queries
-        environments = safe_query_all(self._session.query(Environment).options(
-            joinedload(Environment.vm).joinedload(Vm.osinfo),
-            selectinload(Environment.sync_metadata)
-        ))
+        environments = safe_query_all(
+            self._session.query(Environment).options(
+                joinedload(Environment.vm).joinedload(Vm.osinfo), selectinload(Environment.sync_metadata)
+            )
+        )
         result = []
 
         for env in environments:
@@ -90,7 +91,7 @@ class StructuredDataApi(DatabaseApi):
                 created_at=env.created_at,
                 published=published,
                 in_request=in_request,
-                file=env.file or ""
+                file=env.file or "",
             )
             result.append(env_info)
 
@@ -99,9 +100,7 @@ class StructuredDataApi(DatabaseApi):
     def get_experiments_structured(self, project_name: str = None) -> list[ExperimentInfo]:
         """Get all experiments as structured ExperimentInfo objects."""
         # Use eager loading to prevent N+1 queries
-        experiments = safe_query_all(self._session.query(Experiment).options(
-            selectinload(Experiment.tags)
-        ))
+        experiments = safe_query_all(self._session.query(Experiment).options(selectinload(Experiment.tags)))
         result = []
         dangling_env_refs: list[tuple[str, str]] = []  # (experiment_name, env_id)
 
@@ -120,6 +119,7 @@ class StructuredDataApi(DatabaseApi):
             # Per-id resolution so a single dangling reference doesn't drop the row.
             resolved_env_names: list[str] = []
             from adare.database.reference_manager import reference_manager
+
             for env_id in raw_env_ids:
                 if not env_id:
                     continue
@@ -150,7 +150,7 @@ class StructuredDataApi(DatabaseApi):
                 tags=tags,
                 created_at=exp.created_at,
                 published=published,
-                in_request=in_request
+                in_request=in_request,
             )
             result.append(exp_info)
 
@@ -166,16 +166,16 @@ class StructuredDataApi(DatabaseApi):
 
         return result
 
-    def get_testfunctions_structured(self, include_parameters: bool = True, testfunction_file: str = None) -> list[TestFunctionInfo]:
+    def get_testfunctions_structured(
+        self, include_parameters: bool = True, testfunction_file: str = None
+    ) -> list[TestFunctionInfo]:
         """Get all testfunctions as structured TestFunctionInfo objects."""
         # Validate testfunction_file parameter if provided
         if testfunction_file and not isinstance(testfunction_file, str):
             raise DataRetrievalError("testfunction_file must be a string")
 
         # Build query with eager loading to prevent N+1 queries
-        query_options = [
-            joinedload(TestFunction.file)
-        ]
+        query_options = [joinedload(TestFunction.file)]
         if include_parameters:
             query_options.append(selectinload(TestFunction.parameters))
 
@@ -183,9 +183,7 @@ class StructuredDataApi(DatabaseApi):
 
         # Apply file filtering if specified
         if testfunction_file:
-            file_obj = safe_query_first(
-                self._session.query(TestFunctionFile).filter_by(name=testfunction_file)
-            )
+            file_obj = safe_query_first(self._session.query(TestFunctionFile).filter_by(name=testfunction_file))
             if file_obj:
                 query = query.filter(TestFunction.file_id == file_obj.id)
             else:
@@ -208,7 +206,6 @@ class StructuredDataApi(DatabaseApi):
                 file_name = tf_file.name if tf_file else "unknown"
                 file_name_clean = file_name.replace('.py', '') if file_name.endswith('.py') else file_name
 
-
                 # Use utility function for smart display name
                 display_name = get_smart_display_name(tf, 'testfunction')
 
@@ -218,14 +215,16 @@ class StructuredDataApi(DatabaseApi):
                     for param in tf.parameters:
                         # Validate parameter data
                         if param.id and param.name:
-                            parameters.append({
-                                'id': param.id,
-                                'name': param.name,
-                                'description': param.description or '',
-                                'data_type': param.dtype or '',
-                                'optional': param.optional or False,
-                                'required': not (param.optional or False)
-                            })
+                            parameters.append(
+                                {
+                                    'id': param.id,
+                                    'name': param.name,
+                                    'description': param.description or '',
+                                    'data_type': param.dtype or '',
+                                    'optional': param.optional or False,
+                                    'required': not (param.optional or False),
+                                }
+                            )
 
                 tf_info = TestFunctionInfo(
                     id=tf.id,
@@ -240,7 +239,7 @@ class StructuredDataApi(DatabaseApi):
                     file_path=file_name_clean,
                     full_file_path=tf_file.path if tf_file else "",
                     file_sha256=tf_file.sha256hash if tf_file else "",
-                    file_description=tf_file.description if tf_file else ""
+                    file_description=tf_file.description if tf_file else "",
                 )
                 result.append(tf_info)
             except (AttributeError, TypeError, ValueError) as e:
@@ -249,26 +248,28 @@ class StructuredDataApi(DatabaseApi):
 
         return result
 
-    def get_runs_structured(self, project_name: str = None, environment_name: str = None, experiment_name: str = None) -> list[RunInfo]:
+    def get_runs_structured(
+        self, project_name: str = None, environment_name: str = None, experiment_name: str = None
+    ) -> list[RunInfo]:
         """Get runs as structured RunInfo objects with optional filtering."""
         # Validate input parameters
-        for param_name, param_value in [('project_name', project_name), ('environment_name', environment_name), ('experiment_name', experiment_name)]:
+        for param_name, param_value in [
+            ('project_name', project_name),
+            ('environment_name', environment_name),
+            ('experiment_name', experiment_name),
+        ]:
             if param_value is not None and not isinstance(param_value, str):
                 raise DataRetrievalError(f"{param_name} must be a string")
 
         # Use eager loading to prevent N+1 queries
-        query = self._session.query(ExperimentRun).options(
-            joinedload(ExperimentRun.experiment)
-        )
+        query = self._session.query(ExperimentRun).options(joinedload(ExperimentRun.experiment))
 
         # Apply filters
         # Note: Experiments are stored per-project in separate databases,
         # so the database context already determines the project.
         # Filtering by project_name is not needed at the database level.
         if experiment_name:
-            query = query.join(Experiment).filter(
-                Experiment.name == experiment_name
-            )
+            query = query.join(Experiment).filter(Experiment.name == experiment_name)
 
         runs = safe_query_all(query)
         result = []
@@ -313,7 +314,7 @@ class StructuredDataApi(DatabaseApi):
                 status=run.status,
                 published=run.published or False,
                 fake=run.fake or False,
-                overall_result=run.result_status or ""
+                overall_result=run.result_status or "",
             )
             result.append(run_info)
 
@@ -336,9 +337,7 @@ class StructuredDataApi(DatabaseApi):
         database (callers search across projects the same way `get_run` does).
         """
         run = safe_query_first(
-            self._session.query(ExperimentRun)
-            .options(joinedload(ExperimentRun.files))
-            .filter(ExperimentRun.id == ulid)
+            self._session.query(ExperimentRun).options(joinedload(ExperimentRun.files)).filter(ExperimentRun.id == ulid)
         )
         if run is None:
             return None
@@ -371,6 +370,7 @@ class StructuredDataApi(DatabaseApi):
         if run.environment_id:
             try:
                 from adare.database.reference_manager import reference_manager
+
                 env_obj = reference_manager.get_environment_object(run.environment_id)
                 env_name = env_obj.name if env_obj else ""
             except (AttributeError, KeyError, DataRetrievalError):
@@ -393,5 +393,5 @@ class StructuredDataApi(DatabaseApi):
             status=run.status,
             published=run.published or False,
             fake=run.fake or False,
-            overall_result=run.result_status or ""
+            overall_result=run.result_status or "",
         )

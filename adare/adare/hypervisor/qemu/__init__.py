@@ -1,5 +1,6 @@
 """QEMU hypervisor implementation for ADARE."""
 
+
 def register():
     """Register QEMU hypervisor with the factory."""
     from adare.hypervisor import register_hypervisor

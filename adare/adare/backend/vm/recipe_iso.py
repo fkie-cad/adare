@@ -36,9 +36,9 @@ log = logging.getLogger(__name__)
 ISO_DIR_ENV = 'ADARE_ISO_DIR'
 
 
-def resolve_byo_iso(recipe: Recipe, os_def: OsDefinition,
-                    iso_override: Path | None = None,
-                    base_dir: Path | None = None) -> Path:
+def resolve_byo_iso(
+    recipe: Recipe, os_def: OsDefinition, iso_override: Path | None = None, base_dir: Path | None = None
+) -> Path:
     """Locate the consumer-supplied ISO named by ``recipe.iso_name``.
 
     Search order, first **existing** file wins:
@@ -76,8 +76,7 @@ def resolve_byo_iso(recipe: Recipe, os_def: OsDefinition,
             f"in '.iso'",
             possible_solutions=[
                 "Fix 'iso_name' in the recipe block to just the filename",
-                'The consumer locates the file themselves, so a path from the '
-                'publisher\'s machine is meaningless here',
+                'The consumer locates the file themselves, so a path from the publisher\'s machine is meaningless here',
             ],
         )
 
@@ -127,16 +126,14 @@ def resolve_byo_iso(recipe: Recipe, os_def: OsDefinition,
         f"Searched:\n{searched_block}",
         possible_solutions=[
             f'Put the ISO at: {ISO_DIR / iso_name}',
-            'Or pass its location: adare env load <env> --iso /path/to/'
-            f'{iso_name}   (a directory also works)',
+            f'Or pass its location: adare env load <env> --iso /path/to/{iso_name}   (a directory also works)',
             f'Or point {ISO_DIR_ENV} at the directory holding your ISOs',
             f'Confirm you have the right file: shasum -a 256 {iso_name}',
         ],
     )
 
 
-def resolve_url_iso(recipe: Recipe, base_dir: Path | None,
-                    iso_override: Path | None = None) -> Path:
+def resolve_url_iso(recipe: Recipe, base_dir: Path | None, iso_override: Path | None = None) -> Path:
     """Resolve the publisher-declared ``recipe.iso`` to a local path.
 
     An ``http(s)`` value is downloaded and cached (the web variant's
@@ -158,6 +155,7 @@ def resolve_url_iso(recipe: Recipe, base_dir: Path | None,
 
     if recipe.iso.startswith(('http://', 'https://')):
         from adare.backend.vm.recipe import resolve_iso_from_url
+
         return resolve_iso_from_url(recipe.iso)
 
     iso_path = Path(recipe.iso).expanduser()
@@ -201,9 +199,7 @@ def verify_iso(recipe: Recipe, iso_path: Path) -> None:
         actual = compute_iso_sha256(iso_path)
         raise EnvironmentLoadFailed(
             log,
-            f'ISO SHA256 mismatch for {iso_path}:\n'
-            f'  declared iso_sha256: {declared}\n'
-            f'  actual file sha256:  {actual}',
+            f'ISO SHA256 mismatch for {iso_path}:\n  declared iso_sha256: {declared}\n  actual file sha256:  {actual}',
             possible_solutions=[
                 'A changed ISO is a NEW environment — update iso_sha256 to the new ISO hash',
                 'Verify you supplied the correct ISO for this environment',

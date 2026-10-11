@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 
 class WebSocketTimeoutError(Exception):
     """Raised when a WebSocket operation times out."""
+
     pass
 
 
@@ -88,10 +89,10 @@ class AdareVMClient:
                     websockets.connect(
                         self.server_url,
                         max_size=None,
-                        ping_interval=None,    # Disable automatic WebSocket pings
-                        ping_timeout=None      # Disable ping timeouts
+                        ping_interval=None,  # Disable automatic WebSocket pings
+                        ping_timeout=None,  # Disable ping timeouts
                     ),
-                    timeout=timeout
+                    timeout=timeout,
                 )
 
                 self.connected = True
@@ -202,7 +203,7 @@ class AdareVMClient:
             try:
                 # Calculate delay with exponential backoff (2^attempt * base_delay)
                 if attempt > 0:
-                    delay = (2 ** attempt) * base_delay
+                    delay = (2**attempt) * base_delay
                     log.debug(f"Waiting {delay:.1f}s before reconnection attempt {attempt + 1}")
                     await asyncio.sleep(delay)
 
@@ -365,6 +366,7 @@ class AdareVMClient:
 
         # Enhanced logging for command tracking
         import time
+
         start_time = time.time()
         log.info(f"[{call_msg.id[:8]}] Sending tool call: {tool_name}")
         if tool_name == "execute_shell" and params and "shell_command" in params:
@@ -394,7 +396,9 @@ class AdareVMClient:
 
         except TimeoutError:
             execution_time = time.time() - start_time
-            log.error(f"[{call_msg.id[:8]}] Tool call '{tool_name}' timed out after {timeout}s (actual: {execution_time:.2f}s)")
+            log.error(
+                f"[{call_msg.id[:8]}] Tool call '{tool_name}' timed out after {timeout}s (actual: {execution_time:.2f}s)"
+            )
             # Clean up pending call
             self.pending_calls.pop(call_msg.id, None)
             raise WebSocketTimeoutError(f"Tool call '{tool_name}' timed out after {timeout} seconds") from None
@@ -499,9 +503,9 @@ class AdareVMClient:
         # Encode as base64
         zip_data = base64.b64encode(zip_buffer.getvalue()).decode('utf-8')
 
-        return await self.call_tool(ToolRegistry.UPLOAD_TESTFUNCTIONS, {
-            "testfunctions_data": zip_data
-        }, timeout=300.0)  # Increased timeout for dependency installation (5 minutes)
+        return await self.call_tool(
+            ToolRegistry.UPLOAD_TESTFUNCTIONS, {"testfunctions_data": zip_data}, timeout=300.0
+        )  # Increased timeout for dependency installation (5 minutes)
 
     async def install_testfunction_dependencies(self, dependencies: list[str]) -> dict[str, Any]:
         """
@@ -513,17 +517,17 @@ class AdareVMClient:
         Returns:
             Installation result
         """
-        return await self.call_tool(ToolRegistry.INSTALL_DEPENDENCIES, {
-            "dependencies": dependencies
-        }, timeout=300.0)  # 5 minutes for dependency installation
+        return await self.call_tool(
+            ToolRegistry.INSTALL_DEPENDENCIES, {"dependencies": dependencies}, timeout=300.0
+        )  # 5 minutes for dependency installation
 
     async def set_variables(self, variables: dict[str, Any]) -> dict[str, Any]:
         """Set variables for test execution."""
-        return await self.call_tool(ToolRegistry.SET_VARIABLES, {
-            "variables": json.dumps(variables)
-        })
+        return await self.call_tool(ToolRegistry.SET_VARIABLES, {"variables": json.dumps(variables)})
 
-    async def run_test(self, test_name: str, resolved_test_data: dict[str, Any], timeout: float = 130.0) -> dict[str, Any]:
+    async def run_test(
+        self, test_name: str, resolved_test_data: dict[str, Any], timeout: float = 130.0
+    ) -> dict[str, Any]:
         """Run a test with pre-resolved test data (variables already substituted).
 
         Args:
@@ -534,14 +538,20 @@ class AdareVMClient:
         Returns:
             Test result dictionary
         """
-        params = {
-            "test_name": test_name,
-            "resolved_test_data": resolved_test_data
-        }
+        params = {"test_name": test_name, "resolved_test_data": resolved_test_data}
         return await self.call_tool(ToolRegistry.RUN_TEST, params, timeout=timeout)
 
-
-    async def execute_shell(self, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True, admin: bool = False, websocket_timeout: float = None) -> dict[str, Any]:
+    async def execute_shell(
+        self,
+        shell_command: str,
+        cwd: str = None,
+        env: dict = None,
+        timeout: float = None,
+        shell: bool = False,
+        inherit_env: bool = True,
+        admin: bool = False,
+        websocket_timeout: float = None,
+    ) -> dict[str, Any]:
         """Execute a raw shell command with advanced options."""
         params = {"shell_command": shell_command}
         if cwd is not None:
@@ -601,10 +611,14 @@ class AdareVMClient:
                 "collection_time": 45.23
             }
         """
-        return await self.call_tool(ToolRegistry.GET_FILESYSTEM_SNAPSHOT, {
-            "root_path": root_path,
-            "timeout": timeout - 60  # Subtract buffer for tool timeout
-        }, timeout=timeout)
+        return await self.call_tool(
+            ToolRegistry.GET_FILESYSTEM_SNAPSHOT,
+            {
+                "root_path": root_path,
+                "timeout": timeout - 60,  # Subtract buffer for tool timeout
+            },
+            timeout=timeout,
+        )
 
     async def get_timestamp(self, use_local: bool = False, timeout: float = 10.0) -> dict[str, Any]:
         """
@@ -653,13 +667,11 @@ class AdareVMClient:
             WebSocketTimeoutError: If the call times out
             RuntimeError: If not connected or call fails
         """
-        return await self.call_tool(ToolRegistry.GET_TIMESTAMP, {
-            "use_local": use_local
-        }, timeout=timeout)
+        return await self.call_tool(ToolRegistry.GET_TIMESTAMP, {"use_local": use_local}, timeout=timeout)
 
-    async def pull_file_chunked(self, guest_path: str, host_path: Path,
-                               chunk_size: int = 1048576,
-                               progress_callback = None) -> dict[str, Any]:
+    async def pull_file_chunked(
+        self, guest_path: str, host_path: Path, chunk_size: int = 1048576, progress_callback=None
+    ) -> dict[str, Any]:
         """
         Pull a file from guest to host using chunked transfer.
 
@@ -687,12 +699,8 @@ class AdareVMClient:
             # Get first chunk to determine total chunks
             first_result = await self.call_tool(
                 ToolRegistry.PULL_FILE_CHUNK,
-                {
-                    "guest_path": guest_path,
-                    "chunk_index": 0,
-                    "chunk_size": chunk_size
-                },
-                timeout=60.0
+                {"guest_path": guest_path, "chunk_index": 0, "chunk_size": chunk_size},
+                timeout=60.0,
             )
 
             if first_result.get("status") == "error":
@@ -717,19 +725,12 @@ class AdareVMClient:
             for chunk_idx in range(1, total_chunks):
                 chunk_result = await self.call_tool(
                     ToolRegistry.PULL_FILE_CHUNK,
-                    {
-                        "guest_path": guest_path,
-                        "chunk_index": chunk_idx,
-                        "chunk_size": chunk_size
-                    },
-                    timeout=60.0
+                    {"guest_path": guest_path, "chunk_index": chunk_idx, "chunk_size": chunk_size},
+                    timeout=60.0,
                 )
 
                 if chunk_result.get("status") == "error":
-                    raise RuntimeError(
-                        f"Failed to pull chunk {chunk_idx}/{total_chunks}: "
-                        f"{chunk_result.get('error')}"
-                    )
+                    raise RuntimeError(f"Failed to pull chunk {chunk_idx}/{total_chunks}: {chunk_result.get('error')}")
 
                 # Append chunk to temp file
                 with open(temp_path, 'ab') as f:
@@ -743,9 +744,7 @@ class AdareVMClient:
             # Verify file size
             actual_size = temp_path.stat().st_size
             if actual_size != file_size:
-                raise RuntimeError(
-                    f"File size mismatch: expected {file_size}, got {actual_size}"
-                )
+                raise RuntimeError(f"File size mismatch: expected {file_size}, got {actual_size}")
 
             # Move temp file to final location
             if host_path.exists():
@@ -759,7 +758,7 @@ class AdareVMClient:
                 "file_size": file_size,
                 "chunks_transferred": total_chunks,
                 "metadata": metadata,
-                "destination": str(host_path)
+                "destination": str(host_path),
             }
 
         except (OSError, ConnectionError, RuntimeError, TimeoutError, WebSocketTimeoutError) as e:
@@ -769,9 +768,9 @@ class AdareVMClient:
             log.error(f"Chunked pull failed for {guest_path}: {e}")
             raise
 
-    async def pull_multiple_files_chunked(self, guest_paths: list[str], host_dest_dir: Path,
-                                         chunk_size: int = 1048576,
-                                         progress_callback = None) -> dict[str, Any]:
+    async def pull_multiple_files_chunked(
+        self, guest_paths: list[str], host_dest_dir: Path, chunk_size: int = 1048576, progress_callback=None
+    ) -> dict[str, Any]:
         """
         Pull multiple files from guest to host using chunked transfer.
 
@@ -818,12 +817,12 @@ class AdareVMClient:
                 host_path = host_dest_dir / relative_path
 
                 # Create per-file progress callback that wraps the overall progress callback
-                def file_progress_callback(chunk_idx, total_chunks, bytes_xfer, file_size,
-                                           file_idx=file_idx, guest_path=guest_path):
+                def file_progress_callback(
+                    chunk_idx, total_chunks, bytes_xfer, file_size, file_idx=file_idx, guest_path=guest_path
+                ):
                     if progress_callback:
                         progress_callback(
-                            file_idx, total_files, guest_path,
-                            chunk_idx, total_chunks, bytes_xfer, file_size
+                            file_idx, total_files, guest_path, chunk_idx, total_chunks, bytes_xfer, file_size
                         )
 
                 # Pull the file using existing single-file method
@@ -831,19 +830,21 @@ class AdareVMClient:
                     guest_path=guest_path,
                     host_path=host_path,
                     chunk_size=chunk_size,
-                    progress_callback=file_progress_callback
+                    progress_callback=file_progress_callback,
                 )
 
                 # Track success
                 success_count += 1
                 total_bytes_transferred += result['file_size']
-                file_results.append({
-                    'path': guest_path,
-                    'success': True,
-                    'destination': str(host_path),
-                    'file_size': result['file_size'],
-                    'chunks': result['chunks_transferred']
-                })
+                file_results.append(
+                    {
+                        'path': guest_path,
+                        'success': True,
+                        'destination': str(host_path),
+                        'file_size': result['file_size'],
+                        'chunks': result['chunks_transferred'],
+                    }
+                )
 
                 log.info(f"Successfully pulled {guest_path} ({result['file_size']} bytes)")
 
@@ -853,16 +854,9 @@ class AdareVMClient:
                 error_msg = str(e)
                 log.error(f"Failed to pull {guest_path}: {error_msg}")
 
-                failures.append({
-                    'path': guest_path,
-                    'error': error_msg
-                })
+                failures.append({'path': guest_path, 'error': error_msg})
 
-                file_results.append({
-                    'path': guest_path,
-                    'success': False,
-                    'error': error_msg
-                })
+                file_results.append({'path': guest_path, 'success': False, 'error': error_msg})
 
         # Prepare summary
         summary = {
@@ -871,7 +865,7 @@ class AdareVMClient:
             'total_files': total_files,
             'total_bytes': total_bytes_transferred,
             'failures': failures,
-            'file_results': file_results
+            'file_results': file_results,
         }
 
         log.info(

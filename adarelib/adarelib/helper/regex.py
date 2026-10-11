@@ -9,12 +9,12 @@ log = logging.getLogger(__name__)
 def resolve_variable_in_string(string: str, variables: VariableRegistry | dict, regex: bool = False) -> str:
     """
     Resolve variables in string using {{variable_name}} syntax.
-    
+
     Args:
         string: String containing variable references
         variables: VariableRegistry or legacy dict
         regex: Whether the string will be used as a regex pattern
-    
+
     Returns:
         String with variables resolved
     """

@@ -26,7 +26,9 @@ from adarelib.constants import VMStatus
 log = logging.getLogger(__name__)
 
 
-async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, interrupt_event: threading.Event | None = None, test_mode: bool = False) -> None:
+async def verify_vm_integrity(
+    vm_id: str, experiment_run_ulid: str = None, interrupt_event: threading.Event | None = None, test_mode: bool = False
+) -> None:
     """
     Verify VM file integrity before import/use.
     This ensures the VM file hasn't been tampered with since loading.
@@ -50,6 +52,7 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
     vm_record = vm_database.get_vm_by_id(vm_id)
     if not vm_record:
         from adare.exceptions import LoggedException
+
         raise LoggedException(log, f"VM with ID {vm_id} not found in database")
 
     # Get VM file path
@@ -66,6 +69,7 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
     if is_recipe and not vm_file_path.exists():
         log.warning(f"Cached recipe disk missing for VM '{vm_record.name}'; attempting rebuild from recipe...")
         from adare.backend.vm.recipe import rebuild_recipe_vm_by_id
+
         rebuilt_id = rebuild_recipe_vm_by_id(vm_id)
         if rebuilt_id:
             rebuilt_record = vm_database.get_vm_by_id(rebuilt_id)
@@ -76,6 +80,7 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
 
     if not vm_file_path.exists():
         from adare.backend.experiment.exceptions import ExperimentIntegrityError
+
         if is_external:
             raise ExperimentIntegrityError(
                 log,
@@ -84,8 +89,8 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
                 possible_solutions=[
                     f"Restore the VM file to its original location: {vm_file_path}",
                     "Re-load the environment with a new VM file",
-                    "Use 'adare environment load' without --no-copy to copy the VM to managed storage"
-                ]
+                    "Use 'adare environment load' without --no-copy to copy the VM to managed storage",
+                ],
             )
         raise ExperimentIntegrityError(
             log,
@@ -93,8 +98,8 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
             possible_solutions=[
                 "Check if VM file was moved or deleted",
                 "Re-import VM with correct file path",
-                "Verify file system permissions"
-            ]
+                "Verify file system permissions",
+            ],
         )
 
     # Calculate current hash and compare with stored hash
@@ -107,6 +112,7 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
         # Overlay disks should never be stored in the database
         if '-overlay-' in str(vm_file_path):
             from adare.backend.experiment.exceptions import ExperimentIntegrityError
+
             raise ExperimentIntegrityError(
                 log,
                 f"Cannot verify integrity of overlay disk: {vm_file_path}. "
@@ -114,26 +120,29 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
                 possible_solutions=[
                     "Check database VM record for correct base disk path",
                     "Re-import VM to fix database entry",
-                    "Ensure VM import creates base disk with -base suffix"
-                ]
+                    "Ensure VM import creates base disk with -base suffix",
+                ],
             )
 
         try:
-            current_hash = await vm_manager.calculate_file_hash_async(vm_file_path, silent=True, interrupt_event=interrupt_event)
+            current_hash = await vm_manager.calculate_file_hash_async(
+                vm_file_path, silent=True, interrupt_event=interrupt_event
+            )
         except InterruptedError:
             log.info(f"VM integrity verification interrupted by user for {vm_record.name}")
             return  # Return gracefully, let the stage manager handle the interruption status
 
         if current_hash != vm_record.hash:
             from adare.backend.experiment.exceptions import ExperimentIntegrityError
+
             raise ExperimentIntegrityError(
                 log,
                 f"VM file integrity check failed for '{vm_record.name}'. File has been modified since import.",
                 possible_solutions=[
                     "Re-import VM from original source",
                     "Check for unauthorized file modifications",
-                    "Verify VM file hasn't been corrupted"
-                ]
+                    "Verify VM file hasn't been corrupted",
+                ],
             )
 
         log.info(f"VM integrity verification passed: {vm_record.name}")
@@ -146,9 +155,17 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
         await verify_in_stage()
 
 
-def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_metadata, no_copy: bool = False, force: bool = False,
-                                 build_source: str = 'baked', recipe_hash: str | None = None,
-                                 iso_sha256: str | None = None, profile_name: str | None = None) -> dict:
+def load_vm_file_for_environment(
+    project_path: Path,
+    vm_path: Path,
+    environment_metadata,
+    no_copy: bool = False,
+    force: bool = False,
+    build_source: str = 'baked',
+    recipe_hash: str | None = None,
+    iso_sha256: str | None = None,
+    profile_name: str | None = None,
+) -> dict:
     """
     Load VM file during environment load - only hash calculation and file copying.
     No VirtualBox import happens here!
@@ -225,17 +242,25 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
         build_source=build_source,
         recipe_hash=recipe_hash,
         iso_sha256=iso_sha256,
-        profile_name=profile_name
+        profile_name=profile_name,
     )
 
     log.info(f"VM file loaded into database: {vm.name} (ID: {vm.id})")
     return {'vm_id': vm.id, 'was_existing': False}
 
 
-def load_vm(vm_file: Path, name: str = None, description: str = '',
-           os_platform: str = '', os_type: str = '', os_distribution: str = '',
-           os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
-           force: bool = False) -> str:
+def load_vm(
+    vm_file: Path,
+    name: str = None,
+    description: str = '',
+    os_platform: str = '',
+    os_type: str = '',
+    os_distribution: str = '',
+    os_version: str = '',
+    os_language: str = '',
+    os_architecture: str = 'x86_64',
+    force: bool = False,
+) -> str:
     """
     Load a VM from file into the system.
 
@@ -280,7 +305,7 @@ def load_vm(vm_file: Path, name: str = None, description: str = '',
         os_version=os_version,
         os_language=os_language,
         os_architecture=os_architecture,
-        silent=False
+        silent=False,
     )
 
     log.info(f"Successfully loaded VM: {vm.name} (ID: {vm.id})")
@@ -296,9 +321,13 @@ def list_vms() -> list[dict]:
     """
     # Get all VMs using the database API
     from adare.database.api.vm import VmApi
+
     with VmApi() as api:
         vms = api.get_all_vms()
-        return [{'id': vm.id, 'name': vm.name, 'description': vm.description, 'file': vm.file, 'hash': vm.hash} for vm in vms]
+        return [
+            {'id': vm.id, 'name': vm.name, 'description': vm.description, 'file': vm.file, 'hash': vm.hash}
+            for vm in vms
+        ]
 
 
 def ensure_vm_available_for_environment(vm_id: str, experiment_id: str = None) -> str:
@@ -325,6 +354,7 @@ def ensure_vm_available_for_environment(vm_id: str, experiment_id: str = None) -
     # Generate experiment ID if not provided (for non-experiment use cases)
     if not experiment_id:
         import ulid
+
         experiment_id = str(ulid.ULID())
         log.info(f"Generated experiment ID for VM preparation: {experiment_id}")
 
@@ -356,12 +386,14 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
 
         # Delete associated VmInstance records - they handle VirtualBox VM cleanup
         from adare.database.api.vm import VmApi
+
         with VmApi() as api:
             instances = api.get_vm_instances_for_vm(vm_id)
             if instances:
                 log.info(f"Found {len(instances)} VM instances to delete for '{vm.name}'")
                 from adare.backend.vm.instance_manager import cleanup_vm_instance
                 from adare.hypervisor.exceptions import InstanceStateException
+
                 for instance in instances:
                     try:
                         await cleanup_vm_instance(instance.id)
@@ -384,6 +416,7 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
 # ==========================================
 # PHASE 2: UUID-BASED VM VERIFICATION
 # ==========================================
+
 
 def verify_vm_status(vm_record, auto_cleanup: bool = False, experiment_context: str = None) -> VMStatus:
     """
@@ -412,8 +445,8 @@ def check_base_snapshot_exists(vbox_uuid: str, snapshot_name: str) -> bool:
         True if snapshot exists, False otherwise
     """
     from adare.backend.vm.snapshot_manager import check_snapshot_exists_by_uuid
-    return check_snapshot_exists_by_uuid(vbox_uuid, snapshot_name)
 
+    return check_snapshot_exists_by_uuid(vbox_uuid, snapshot_name)
 
 
 def verify_and_cleanup_vm_for_experiment(vm_id: str, experiment_id: str = None) -> bool:
@@ -470,11 +503,15 @@ def verify_and_cleanup_vm_instance_for_experiment(vm_instance_id: str, experimen
 
     # Verify VM instance exists in VirtualBox using UUID
     if not VirtualBoxVM.verify_vm_exists_by_uuid(vm_instance.vbox_uuid):
-        log.warning(f"VM instance '{vm_instance.instance_name}' (UUID: {vm_instance.vbox_uuid}) missing from VirtualBox")
+        log.warning(
+            f"VM instance '{vm_instance.instance_name}' (UUID: {vm_instance.vbox_uuid}) missing from VirtualBox"
+        )
 
         # Perform automatic cleanup
         context_info = f" (experiment: {experiment_id})" if experiment_id else ""
-        log.info(f"Automatically removing orphaned VM instance '{vm_instance.instance_name}' from database{context_info}")
+        log.info(
+            f"Automatically removing orphaned VM instance '{vm_instance.instance_name}' from database{context_info}"
+        )
 
         try:
             with VmApi() as api:
@@ -493,7 +530,16 @@ def verify_and_cleanup_vm_instance_for_experiment(vm_instance_id: str, experimen
 # PHASE 4: OPTIMIZED EXPERIMENT WORKFLOW
 # ==========================================
 
-async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environment_ulid: str = None, experiment_run_ulid: str | None = None, preserve_experiment_snapshot: bool = False, interrupt_event: threading.Event | None = None, test_mode: bool = False) -> str:
+
+async def ensure_vm_ready_for_experiment(
+    vm_id: str,
+    experiment_id: str,
+    environment_ulid: str = None,
+    experiment_run_ulid: str | None = None,
+    preserve_experiment_snapshot: bool = False,
+    interrupt_event: threading.Event | None = None,
+    test_mode: bool = False,
+) -> str:
     """
     OPTIMIZED VM preparation using instance management for concurrent experiments!
 
@@ -516,6 +562,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         VMError: If VM preparation fails
     """
     import time
+
     start_time = time.time()
 
     from adare.backend.vm.instance_manager import allocate_vm_instance_for_experiment
@@ -525,7 +572,9 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     )
 
     log.info(f"Starting OPTIMIZED VM instance preparation for experiment {experiment_id}")
-    log.debug(f"ensure_vm_ready_for_experiment called with vm_id={vm_id}, experiment_id={experiment_id}, experiment_run_ulid={experiment_run_ulid}")
+    log.debug(
+        f"ensure_vm_ready_for_experiment called with vm_id={vm_id}, experiment_id={experiment_id}, experiment_run_ulid={experiment_run_ulid}"
+    )
     log.debug(f"Performance tracking - function entry at {time.time():.3f}")
 
     # Check for interruption before starting
@@ -539,7 +588,10 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         vm_is_available = verify_and_cleanup_vm_for_experiment(vm_id, experiment_id)
         if not vm_is_available:
             # VM was missing and cleaned up - cannot proceed
-            raise VMError(log, f"VM with ID {vm_id} was missing from VirtualBox and has been removed from database. Cannot proceed with experiment.")
+            raise VMError(
+                log,
+                f"VM with ID {vm_id} was missing from VirtualBox and has been removed from database. Cannot proceed with experiment.",
+            )
         log.debug("VM verification passed - VM is available")
     except Exception as e:
         log.error(f"VM verification failed: {e}")
@@ -554,15 +606,19 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         else:
             # Fallback for non-experiment use cases
             import ulid
+
             temp_run_id = str(ulid.ULID())
             log.debug(f"Allocating instance with temp_run_id={temp_run_id}")
             vm_instance = await allocate_vm_instance_for_experiment(vm_id, temp_run_id)
 
         log.info(f"Allocated VM instance: {vm_instance.instance_name} on port {vm_instance.websocket_port}")
-        log.debug(f"VM instance details - ID={vm_instance.id}, status={vm_instance.status}, vbox_uuid={vm_instance.vbox_uuid}")
+        log.debug(
+            f"VM instance details - ID={vm_instance.id}, status={vm_instance.status}, vbox_uuid={vm_instance.vbox_uuid}"
+        )
     except Exception as e:
         log.error(f"Failed to allocate VM instance: {e}")
         import traceback
+
         log.debug(f"VM instance allocation traceback: {traceback.format_exc()}")
         raise
 
@@ -572,7 +628,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         raise VMError(log, f"Source VM with ID {vm_id} not found in database")
 
     # Detect hypervisor type to skip VirtualBox-specific snapshot operations for QEMU
-    is_qemu = (source_vm.hypervisor == 'qemu')
+    is_qemu = source_vm.hypervisor == 'qemu'
     log.debug(f"Source VM hypervisor: {source_vm.hypervisor} (is_qemu={is_qemu})")
 
     # Check if this is a reused instance or new instance
@@ -583,6 +639,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     elif is_qemu:
         # QEMU check - verify if instance exists in libvirt
         from adare.hypervisor.base.identifier_strategy import get_identifier_strategy
+
         try:
             strategy = get_identifier_strategy('qemu')
             identifier = strategy.get_identifier(vm_instance)
@@ -609,6 +666,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
             else:
                 # Refresh instance data to get updated snapshot name
                 from adare.database.api.vm import VmApi
+
                 with VmApi() as api:
                     vm_instance = api.get_vm_instance_by_id(vm_instance.id)
         elif is_qemu:
@@ -622,14 +680,11 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
                         vm_instance,  # Pass VM instance record
                         silent=False,
                         interrupt_event=interrupt_event,
-                        timeout=180
+                        timeout=180,
                     )
             else:
                 restore_success = restore_instance_to_base_snapshot(
-                    vm_instance,
-                    silent=False,
-                    interrupt_event=interrupt_event,
-                    timeout=180
+                    vm_instance, silent=False, interrupt_event=interrupt_event, timeout=180
                 )
 
             if interrupt_event and interrupt_event.is_set():
@@ -637,9 +692,13 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
                 return None
 
             if not restore_success:
-                log.warning(f"Failed to restore VM instance '{vm_instance.instance_name}' to clean state - will continue anyway")
+                log.warning(
+                    f"Failed to restore VM instance '{vm_instance.instance_name}' to clean state - will continue anyway"
+                )
         elif not is_qemu and not vm_instance.base_snapshot_name:
-            log.warning(f"VM instance '{vm_instance.instance_name}' has no base snapshot available - cannot restore to clean state")
+            log.warning(
+                f"VM instance '{vm_instance.instance_name}' has no base snapshot available - cannot restore to clean state"
+            )
         elif is_qemu:
             log.debug("QEMU instance - skipping snapshot restoration (uses overlay disks)")
 
@@ -658,6 +717,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         # Stage management handled by hypervisor-specific prepare_vm_for_experiment()
         if experiment_run_ulid:
             from adare.types.stages import VMDiskPreparationStage
+
             # Wrap in disk prep stage as parent
             with StageCtxManager(VMDiskPreparationStage(), experiment_run_ulid, interrupt_event):
                 # Wrap in import stage
@@ -691,6 +751,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     # Verify the instance exists before returning
     log.debug(f"Verifying instance exists before returning ID: {vm_instance.id}")
     from adare.database.api.vm import VmApi
+
     with VmApi() as api:
         verification_instance = api.get_vm_instance_by_id(vm_instance.id)
         if not verification_instance:
@@ -727,16 +788,10 @@ async def _import_vm_instance(vm_instance, source_vm, environment_ulid: str = No
     vm_file_path = Path(source_vm.file)
 
     # Import VM with unique instance name
-    vm_obj = await manager.import_vm_async(
-        vm_file_path,
-        vm_instance.instance_name,
-        environment_ulid=environment_ulid
-    )
+    vm_obj = await manager.import_vm_async(vm_file_path, vm_instance.instance_name, environment_ulid=environment_ulid)
 
     # Update instance with hypervisor-specific identifiers
-    update_fields = {
-        'base_snapshot_name': f"{vm_instance.instance_name}_base"
-    }
+    update_fields = {'base_snapshot_name': f"{vm_instance.instance_name}_base"}
 
     # VirtualBox-specific: store vbox_uuid
     if hypervisor == 'virtualbox':
@@ -763,6 +818,7 @@ async def release_vm_instance_for_experiment(vm_instance_id: str):
         vm_instance_id: VM instance ID to release
     """
     from adare.backend.vm.instance_manager import release_vm_instance
+
     await release_vm_instance(vm_instance_id)
 
 
@@ -778,17 +834,14 @@ async def cleanup_vm_instances_for_experiment(experiment_run_id: str):
     from adare.database.models.global_models import VmInstance
 
     with VmApi() as api:
-        instances = api._session.query(VmInstance).filter_by(
-            current_experiment_run_id=experiment_run_id
-        ).all()
+        instances = api._session.query(VmInstance).filter_by(current_experiment_run_id=experiment_run_id).all()
 
         for instance in instances:
             log.info(f"Cleaning up VM instance for experiment {experiment_run_id}: {instance.instance_name}")
             await cleanup_vm_instance(instance.id, force=True)
 
 
-def _reimport_missing_vm(vm_record, vm_path: Path, project_path: Path,
-                        environment_metadata: EnvironmentMetadata):
+def _reimport_missing_vm(vm_record, vm_path: Path, project_path: Path, environment_metadata: EnvironmentMetadata):
     """
     Re-import a VM that exists in database but is missing from VirtualBox.
 
@@ -813,7 +866,7 @@ def _reimport_missing_vm(vm_record, vm_path: Path, project_path: Path,
         os_language=environment_metadata.os.language,
         os_architecture=environment_metadata.os.architecture,
         capture_uuid_after_import=True,
-        silent=False
+        silent=False,
     )
 
     log.info(f"Successfully re-imported VM as '{vm.name}'")
@@ -928,7 +981,7 @@ def get_vm_info(vm_id: str) -> dict:
         'hash': vm.hash,
         'description': vm.description,
         'use_snapshots': getattr(vm, 'use_snapshots', False),
-        'snapshots': snapshot_info
+        'snapshots': snapshot_info,
     }
 
 
@@ -943,6 +996,7 @@ def _is_vm_managed(vm_file_path: Path) -> bool:
         True if VM is in managed storage, False if external
     """
     from adare.config.configdirectory import VMS_DIR
+
     try:
         # Check if vm_file_path is relative to VMS_DIR
         vm_file_path.resolve().relative_to(VMS_DIR.resolve())
@@ -950,4 +1004,3 @@ def _is_vm_managed(vm_file_path: Path) -> bool:
     except ValueError:
         # Path is not relative to VMS_DIR - it's external
         return False
-

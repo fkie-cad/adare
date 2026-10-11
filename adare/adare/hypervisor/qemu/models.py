@@ -3,6 +3,7 @@ QEMU-specific data models.
 
 Extends base hypervisor models with QEMU-specific format conversion.
 """
+
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -83,7 +84,7 @@ class PortForwardingRule(BasePortForwardingRule):
                 host_ip=host_ip,
                 host_port=host_port,
                 guest_ip=guest_ip,
-                guest_port=guest_port
+                guest_port=guest_port,
             )
         except (ValueError, IndexError) as e:
             raise ValueError(f"Invalid QEMU hostfwd format '{hostfwd_string}': {e}") from e
@@ -102,6 +103,7 @@ class QEMUVMConfig:
 
     This configuration is saved to a JSON file for each VM to persist its settings.
     """
+
     vm_name: str
     uuid: str
     guest_os: str
@@ -132,7 +134,7 @@ class QEMUVMConfig:
 
     # VM logging configuration (for experiment runs)
     serial_console_log_path: str | None = None  # Path to serial console log
-    qemu_debug_log_path: str | None = None      # Path to QEMU debug log
+    qemu_debug_log_path: str | None = None  # Path to QEMU debug log
 
     # virtio-fs shared directory configuration
     # When enabled, uses virtio-fs instead of libguestfs for file transfer
@@ -228,12 +230,9 @@ class QEMUVMConfig:
             old_path = data.pop('virtiofs_shared_dir')
             if old_path and 'virtiofs_shares' not in data:
                 # Convert old single-share to new list format
-                data['virtiofs_shares'] = [{
-                    'tag': 'adare',
-                    'host_path': old_path,
-                    'guest_mount': '/adare',
-                    'readonly': False
-                }]
+                data['virtiofs_shares'] = [
+                    {'tag': 'adare', 'host_path': old_path, 'guest_mount': '/adare', 'readonly': False}
+                ]
                 log.debug("Migrated old virtiofs_shared_dir to virtiofs_shares list")
 
         data.setdefault('virtiofs_shares', [])

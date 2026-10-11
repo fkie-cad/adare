@@ -32,6 +32,7 @@ def mock_result_ok():
 
     def _make(data=None, warnings=None):
         return Result.ok(data, warnings=warnings)
+
     return _make
 
 
@@ -42,6 +43,7 @@ def mock_result_fail():
 
     def _make(code="TEST_ERROR", message="Test error", solutions=None, context=None):
         return Result.fail(code, message, solutions=solutions, context=context)
+
     return _make
 
 

@@ -179,8 +179,7 @@ def _require_windows() -> None:
     """Raise UnsupportedPlatformError unless running on Windows."""
     if platform.system().lower() != "windows":
         raise UnsupportedPlatformError(
-            f"Windows icon extraction is only supported on Windows "
-            f"(current platform: {platform.system()})"
+            f"Windows icon extraction is only supported on Windows (current platform: {platform.system()})"
         )
 
 
@@ -266,6 +265,7 @@ def _make_structs():
 # Strategy resolvers: each maps a spec to an (icon_source_path, icon_index)
 # ---------------------------------------------------------------------------
 
+
 def _resolve_stock(name: str) -> tuple[str, int]:
     """Resolve a SHSTOCKICONID name to (path, index) via SHGetStockIconInfo."""
     import ctypes
@@ -278,9 +278,7 @@ def _resolve_stock(name: str) -> tuple[str, int]:
     info = structs["SHSTOCKICONINFO"]()
     info.cbSize = ctypes.sizeof(info)
 
-    hresult = ctypes.windll.shell32.SHGetStockIconInfo(
-        siid, SHGSI_ICONLOCATION, ctypes.byref(info)
-    )
+    hresult = ctypes.windll.shell32.SHGetStockIconInfo(siid, SHGSI_ICONLOCATION, ctypes.byref(info))
     if hresult != 0:
         raise IconResolutionError(
             f"SHGetStockIconInfo failed for {name} (siid={siid}): HRESULT 0x{hresult & 0xFFFFFFFF:08X}"
@@ -388,14 +386,14 @@ def _resolve_spec_to_source(spec: dict) -> tuple[str, int]:
         return _resolve_dll(str(spec["dll"]), spec["index"])
 
     raise IconSpecError(
-        f"Unrecognised resolver spec; expected one of "
-        f"stock/exe/app/fileassoc/dll, got keys {sorted(spec.keys())}"
+        f"Unrecognised resolver spec; expected one of stock/exe/app/fileassoc/dll, got keys {sorted(spec.keys())}"
     )
 
 
 # ---------------------------------------------------------------------------
 # Extraction + rendering
 # ---------------------------------------------------------------------------
+
 
 def _extract_hicon(path: str, index: int, size: int):
     """Extract a single HICON at ``size`` via PrivateExtractIconsW.
@@ -420,8 +418,7 @@ def _extract_hicon(path: str, index: int, size: int):
     )
     if extracted < 1 or not hicon.value:
         raise IconResolutionError(
-            f"PrivateExtractIconsW extracted no icon from {path!r} index {index} "
-            f"at {size}px (returned {extracted})"
+            f"PrivateExtractIconsW extracted no icon from {path!r} index {index} at {size}px (returned {extracted})"
         )
     return hicon
 
@@ -439,9 +436,7 @@ def _dib_bytes(hdc, hbitmap, width: int, height: int, structs) -> bytes:
     bmi.bmiHeader.biCompression = BI_RGB
 
     buf = ctypes.create_string_buffer(width * height * 4)
-    scanlines = ctypes.windll.gdi32.GetDIBits(
-        hdc, hbitmap, 0, height, buf, ctypes.byref(bmi), DIB_RGB_COLORS
-    )
+    scanlines = ctypes.windll.gdi32.GetDIBits(hdc, hbitmap, 0, height, buf, ctypes.byref(bmi), DIB_RGB_COLORS)
     if scanlines == 0:
         raise IconRenderError("GetDIBits returned 0 scanlines")
     return buf.raw
@@ -462,15 +457,11 @@ def _hicon_to_png(hicon, size: int) -> bytes:
     try:
         bmp = structs["BITMAP"]()
         if hbm_color:
-            ctypes.windll.gdi32.GetObjectW(
-                hbm_color, ctypes.sizeof(bmp), ctypes.byref(bmp)
-            )
+            ctypes.windll.gdi32.GetObjectW(hbm_color, ctypes.sizeof(bmp), ctypes.byref(bmp))
             width, height = bmp.bmWidth, bmp.bmHeight
         else:
             # Monochrome icon: mask holds AND+XOR stacked vertically.
-            ctypes.windll.gdi32.GetObjectW(
-                hbm_mask, ctypes.sizeof(bmp), ctypes.byref(bmp)
-            )
+            ctypes.windll.gdi32.GetObjectW(hbm_mask, ctypes.sizeof(bmp), ctypes.byref(bmp))
             width, height = bmp.bmWidth, bmp.bmHeight // 2
 
         color = _dib_bytes(hdc, hbm_color, width, height, structs) if hbm_color else None
@@ -543,18 +534,13 @@ def _encode_png_stdlib(rgba: bytes, width: int, height: int) -> bytes:
     import zlib
 
     def chunk(tag: bytes, data: bytes) -> bytes:
-        return (
-            _struct.pack(">I", len(data))
-            + tag
-            + data
-            + _struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
-        )
+        return _struct.pack(">I", len(data)) + tag + data + _struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
 
     raw = bytearray()
     stride = width * 4
     for y in range(height):
         raw.append(0)  # filter type: none
-        raw.extend(rgba[y * stride:(y + 1) * stride])
+        raw.extend(rgba[y * stride : (y + 1) * stride])
 
     ihdr = _struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
     png = b"\x89PNG\r\n\x1a\n"

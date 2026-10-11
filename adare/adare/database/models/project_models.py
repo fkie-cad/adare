@@ -31,6 +31,7 @@ class SyncMetadata(SerializerMixin, ProjectBase):
     global table — it needs its own. Same columns, same meaning; see
     :mod:`adare.database.models.sync_identity`.
     """
+
     __tablename__ = 'sync_metadata'
     RELATIONSHIPS_TO_DICT = True
 
@@ -68,6 +69,7 @@ class Tag(SerializerMixin, ProjectBase):
     """
     Tag for categorizing experiments in project database.
     """
+
     __tablename__ = 'tag'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id',)
@@ -80,6 +82,7 @@ class Tag(SerializerMixin, ProjectBase):
 
     def __repr__(self):
         return f"<Tag(name='{self.name}')>"
+
 
 StatusEnumType = SAEnum(StatusEnum, name="statusenum")
 
@@ -95,14 +98,14 @@ mapping_experiment_tag = Table(
     "mapping_experiment_tag",
     ProjectBase.metadata,
     Column("experiment_id", ForeignKey("experiment.id")),
-    Column("tag_id", ForeignKey("tag.id"))
+    Column("tag_id", ForeignKey("tag.id")),
 )
 
 mapping_experiment_environment = Table(
     "mapping_experiment_environment",
     ProjectBase.metadata,
     Column("experiment_id", ForeignKey("experiment.id")),
-    Column("environment_id", String)  # Reference to global environment ID, not FK
+    Column("environment_id", String),  # Reference to global environment ID, not FK
 )
 
 mapping_abstracttest_testparameterentry = Table(
@@ -131,6 +134,7 @@ class Status(SerializerMixin, ProjectBase):
     """
     Status for test results or events (project-specific).
     """
+
     __tablename__ = 'status'
     RELATIONSHIPS_TO_DICT = True
 
@@ -148,6 +152,7 @@ class Result(SerializerMixin, ProjectBase):
     """
     Stores the result of a test, including status and optional details.
     """
+
     __tablename__ = 'result'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id', '-status_id')
@@ -181,6 +186,7 @@ class TestParameterEntry(SerializerMixin, ProjectBase):
     """
     Parameter entry for abstract tests - project-specific values.
     """
+
     __tablename__ = 'test_parameter_entry'
     RELATIONSHIPS_TO_DICT = True
 
@@ -192,6 +198,7 @@ class TestParameterEntry(SerializerMixin, ProjectBase):
     def parameter(self):
         """Get the global test parameter object for this entry."""
         from adare.database.reference_manager import reference_manager
+
         return reference_manager.get_testparameter_object(self.parameter_id)
 
     def __str__(self):
@@ -209,6 +216,7 @@ class Tool(SerializerMixin, ProjectBase):
     """
     Represents an external tool or command that can be used in tests or setups.
     """
+
     __tablename__ = 'tool'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id',)
@@ -228,6 +236,7 @@ class AbstractTest(SerializerMixin, ProjectBase):
     """
     Abstract test definition within experiments.
     """
+
     __tablename__ = 'abstract_test'
     RELATIONSHIPS_TO_DICT = True
 
@@ -262,6 +271,7 @@ class AbstractTest(SerializerMixin, ProjectBase):
     def testfunction(self):
         """Get the global test function object for this abstract test."""
         from adare.database.reference_manager import reference_manager
+
         return reference_manager.get_testfunction_object(self.testfunction_id)
 
     def __str__(self):
@@ -275,6 +285,7 @@ class LogFile(SerializerMixin, ProjectBase):
     """
     Represents a log file generated during experiment runs or environment setup.
     """
+
     __tablename__ = 'log_file'
     RELATIONSHIPS_TO_DICT = True
 
@@ -293,6 +304,7 @@ class USBDrive(SerializerMixin, ProjectBase):
     """
     Represents a USB drive, including hardware identifiers and manufacturer info.
     """
+
     __tablename__ = 'usb_drive'
     RELATIONSHIPS_TO_DICT = True
 
@@ -315,6 +327,7 @@ class Experiment(RemoteIdentityMixin, SerializerMixin, ProjectBase):
     """
     Experiment definition within a project.
     """
+
     __tablename__ = 'experiment'
     RELATIONSHIPS_TO_DICT = True
 
@@ -354,6 +367,7 @@ class Experiment(RemoteIdentityMixin, SerializerMixin, ProjectBase):
         if not self.environment_ids:
             return []
         from adare.database.reference_manager import reference_manager
+
         return [reference_manager.get_environment_object(env_id) for env_id in self.environment_ids if env_id]
 
     @property
@@ -372,6 +386,7 @@ class Event(SerializerMixin, ProjectBase):
     """
     Base class for events occurring during experiment runs (polymorphic).
     """
+
     __tablename__ = 'event'
     RELATIONSHIPS_TO_DICT = True
 
@@ -381,18 +396,22 @@ class Event(SerializerMixin, ProjectBase):
     experiment_run_id = Column(String, ForeignKey('experiment_run.id', ondelete='CASCADE'))
     experiment_run = relationship("ExperimentRun", backref=backref("events", cascade="all, delete-orphan"))
     error = Column(String)
-    parent_event_id = Column(CHAR(26), ForeignKey('event.id', ondelete='SET NULL'), nullable=True)  # Parent event ID for nested events
-    parent_event = relationship("Event", remote_side=[id], backref=backref("child_events", cascade="all, delete-orphan"))
+    parent_event_id = Column(
+        CHAR(26), ForeignKey('event.id', ondelete='SET NULL'), nullable=True
+    )  # Parent event ID for nested events
+    parent_event = relationship(
+        "Event", remote_side=[id], backref=backref("child_events", cascade="all, delete-orphan")
+    )
 
     # Success/failure tracking for all events
     success = Column(Boolean, nullable=True)
 
     # Universal event grouping ID to group start/complete event pairs
-    event_group_id = Column(String, nullable=True)     # Groups related events (start/complete pairs)
+    event_group_id = Column(String, nullable=True)  # Groups related events (start/complete pairs)
 
     # Specific event type (e.g., 'TEST_START', 'TEST_COMPLETE', 'CLICK_START', etc.)
     event_type_specific = Column(String, nullable=True)
-    execution_time = Column(Integer, nullable=True)     # Duration in milliseconds
+    execution_time = Column(Integer, nullable=True)  # Duration in milliseconds
 
     timestamp = Column(DateTime)
 
@@ -414,16 +433,14 @@ class Event(SerializerMixin, ProjectBase):
         """Allow setting ulid which maps to the id field."""
         self.id = value
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'event',
-        'polymorphic_on': event_type
-    }
+    __mapper_args__ = {'polymorphic_identity': 'event', 'polymorphic_on': event_type}
 
 
 class TestEvent(Event):
     """
     Event representing the execution of a test during an experiment run.
     """
+
     __tablename__ = 'test_events'
     __mapper_args__ = {
         'polymorphic_identity': 'test_event',
@@ -461,6 +478,7 @@ class ErrorEvent(Event):
     """
     Event representing an error that occurred during an experiment run.
     """
+
     __tablename__ = 'error_events'
     __mapper_args__ = {
         'polymorphic_identity': 'error_event',
@@ -487,6 +505,7 @@ class ActionEvent(Event):
     Event representing any action during experiment execution (click, keyboard, test, etc.).
     This is a flexible event type that can store various action types and their data.
     """
+
     __tablename__ = 'action_events'
     __mapper_args__ = {
         'polymorphic_identity': 'action_event',
@@ -495,7 +514,7 @@ class ActionEvent(Event):
 
     # Action type and event type fields
     action_type = Column(String)  # e.g., 'click', 'keyboard', 'test', etc.
-    action_id = Column(String)    # Unique action identifier for pairing start/complete events
+    action_id = Column(String)  # Unique action identifier for pairing start/complete events
 
     # Generic action data as JSON-like text field
     # This allows us to store any action-specific data flexibly
@@ -532,6 +551,7 @@ class EventFactory:
     """
     Factory for creating event instances based on category.
     """
+
     @staticmethod
     def create_event(category, **kwargs):
         # add category to kwargs
@@ -554,6 +574,7 @@ class ExperimentRunFiles(SerializerMixin, ProjectBase):
     """
     Files associated with experiment runs.
     """
+
     __tablename__ = 'experiment_run_files'
     RELATIONSHIPS_TO_DICT = True
 
@@ -586,12 +607,15 @@ class RunArtifact(SerializerMixin, ProjectBase):
     a new artifact type is a new ``kind`` value, not a new column + migration.
     ``machine_name`` is ``None`` for today's single-VM runs.
     """
+
     __tablename__ = 'run_artifact'
     RELATIONSHIPS_TO_DICT = True
 
     id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
 
-    experiment_run_id = Column(CHAR(26), ForeignKey('experiment_run.id', ondelete='CASCADE'), nullable=False, index=True)
+    experiment_run_id = Column(
+        CHAR(26), ForeignKey('experiment_run.id', ondelete='CASCADE'), nullable=False, index=True
+    )
     experiment_run = relationship("ExperimentRun", backref=backref("artifacts", cascade="all, delete-orphan"))
 
     machine_name = Column(String, nullable=True)  # None = today's single-VM runs
@@ -612,6 +636,7 @@ class Stage(SerializerMixin, ProjectBase):
     """
     Represents a stage in an experiment or test run, possibly hierarchical.
     """
+
     __tablename__ = 'stage'
     RELATIONSHIPS_TO_DICT = True
 
@@ -639,6 +664,7 @@ class StageInRun(SerializerMixin, ProjectBase):
     """
     Stage execution within an experiment run.
     """
+
     __tablename__ = 'stage_in_run'
     RELATIONSHIPS_TO_DICT = True
 
@@ -667,6 +693,7 @@ class ExperimentRun(SerializerMixin, ProjectBase):
     """
     Individual experiment run within a project.
     """
+
     __tablename__ = 'experiment_run'
     RELATIONSHIPS_TO_DICT = True
 
@@ -717,6 +744,7 @@ class ExperimentRun(SerializerMixin, ProjectBase):
         if not self.environment_id:
             return None
         from adare.database.reference_manager import reference_manager
+
         return reference_manager.get_environment_object(self.environment_id)
 
     @property
@@ -731,6 +759,7 @@ class ExperimentRun(SerializerMixin, ProjectBase):
         if not self.vm_instance_id:
             return None
         from adare.database.reference_manager import reference_manager
+
         return reference_manager.get_vm_instance_object(self.vm_instance_id)
 
     @hybrid_property
@@ -749,6 +778,7 @@ class ExperimentRun(SerializerMixin, ProjectBase):
 
         # Handle case where environment.project might be None - get from reference manager
         from adare.database.reference_manager import reference_manager
+
         env_obj = reference_manager.get_environment_object(self.environment_id)
         # Since environments are global and don't have project relationships,
         # we'll use 'unknown' for project name as environments are shared across projects
@@ -764,10 +794,7 @@ class ExperimentRun(SerializerMixin, ProjectBase):
 
     @hybrid_property
     def tests(self):
-        return [
-            event for event in self.events
-            if isinstance(event, TestEvent)
-        ]
+        return [event for event in self.events if isinstance(event, TestEvent)]
 
     @hybrid_property
     def result_status(self):
@@ -819,6 +846,7 @@ class ExperimentRun(SerializerMixin, ProjectBase):
 
 class Playbook(SerializerMixin, ProjectBase):
     """Main playbook container linked to experiment."""
+
     __tablename__ = 'playbook'
     RELATIONSHIPS_TO_DICT = True
 
@@ -839,9 +867,9 @@ class Playbook(SerializerMixin, ProjectBase):
     items = relationship("PlaybookItem", back_populates="playbook", cascade="all, delete-orphan")
 
 
-
 class PlaybookItem(SerializerMixin, ProjectBase):
     """Unified model for actions and blocks with hierarchical support."""
+
     __tablename__ = 'playbook_item'
     RELATIONSHIPS_TO_DICT = True
 
@@ -873,9 +901,9 @@ class PlaybookItem(SerializerMixin, ProjectBase):
     executions = relationship("ActionExecution", back_populates="playbook_item", cascade="all, delete-orphan")
 
 
-
 class ActionExecution(SerializerMixin, ProjectBase):
     """Execution tracking per action step."""
+
     __tablename__ = 'action_execution'
     RELATIONSHIPS_TO_DICT = True
 
@@ -895,4 +923,3 @@ class ActionExecution(SerializerMixin, ProjectBase):
 
     # Relationships
     playbook_item = relationship("PlaybookItem", back_populates="executions")
-

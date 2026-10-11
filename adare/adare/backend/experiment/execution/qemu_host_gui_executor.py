@@ -24,15 +24,43 @@ log = logging.getLogger(__name__)
 # Based on QEMU's qapi/ui.json key definitions
 PYAUTOGUI_TO_QCODE = {
     # Letters (lowercase)
-    'a': 'a', 'b': 'b', 'c': 'c', 'd': 'd', 'e': 'e', 'f': 'f', 'g': 'g',
-    'h': 'h', 'i': 'i', 'j': 'j', 'k': 'k', 'l': 'l', 'm': 'm', 'n': 'n',
-    'o': 'o', 'p': 'p', 'q': 'q', 'r': 'r', 's': 's', 't': 't', 'u': 'u',
-    'v': 'v', 'w': 'w', 'x': 'x', 'y': 'y', 'z': 'z',
-
+    'a': 'a',
+    'b': 'b',
+    'c': 'c',
+    'd': 'd',
+    'e': 'e',
+    'f': 'f',
+    'g': 'g',
+    'h': 'h',
+    'i': 'i',
+    'j': 'j',
+    'k': 'k',
+    'l': 'l',
+    'm': 'm',
+    'n': 'n',
+    'o': 'o',
+    'p': 'p',
+    'q': 'q',
+    'r': 'r',
+    's': 's',
+    't': 't',
+    'u': 'u',
+    'v': 'v',
+    'w': 'w',
+    'x': 'x',
+    'y': 'y',
+    'z': 'z',
     # Numbers
-    '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
-    '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
-
+    '0': '0',
+    '1': '1',
+    '2': '2',
+    '3': '3',
+    '4': '4',
+    '5': '5',
+    '6': '6',
+    '7': '7',
+    '8': '8',
+    '9': '9',
     # Special keys
     'enter': 'ret',
     'return': 'ret',
@@ -42,7 +70,6 @@ PYAUTOGUI_TO_QCODE = {
     'tab': 'tab',
     'space': 'spc',
     ' ': 'spc',
-
     # Modifiers
     'ctrl': 'ctrl',
     'control': 'ctrl',
@@ -51,18 +78,24 @@ PYAUTOGUI_TO_QCODE = {
     'super': 'meta_l',
     'win': 'meta_l',
     'meta': 'meta_l',
-
     # Function keys
-    'f1': 'f1', 'f2': 'f2', 'f3': 'f3', 'f4': 'f4',
-    'f5': 'f5', 'f6': 'f6', 'f7': 'f7', 'f8': 'f8',
-    'f9': 'f9', 'f10': 'f10', 'f11': 'f11', 'f12': 'f12',
-
+    'f1': 'f1',
+    'f2': 'f2',
+    'f3': 'f3',
+    'f4': 'f4',
+    'f5': 'f5',
+    'f6': 'f6',
+    'f7': 'f7',
+    'f8': 'f8',
+    'f9': 'f9',
+    'f10': 'f10',
+    'f11': 'f11',
+    'f12': 'f12',
     # Arrow keys
     'up': 'up',
     'down': 'down',
     'left': 'left',
     'right': 'right',
-
     # Other common keys
     'home': 'home',
     'end': 'end',
@@ -72,7 +105,6 @@ PYAUTOGUI_TO_QCODE = {
     'del': 'delete',
     'insert': 'insert',
     'capslock': 'caps_lock',
-
     # Punctuation/symbols
     '-': 'minus',
     '=': 'equal',
@@ -92,12 +124,27 @@ PYAUTOGUI_TO_QCODE = {
 # This assumes a standard US keyboard layout
 SHIFT_MAP = {
     # Symbols on number keys
-    '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
-    '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
-
+    '!': '1',
+    '@': '2',
+    '#': '3',
+    '$': '4',
+    '%': '5',
+    '^': '6',
+    '&': '7',
+    '*': '8',
+    '(': '9',
+    ')': '0',
     # Symbols on punctuation keys
-    '_': '-', '+': '=', '{': '[', '}': ']', '|': '\\',
-    ':': ';', '"': "'", '<': ',', '>': '.', '?': '/',
+    '_': '-',
+    '+': '=',
+    '{': '[',
+    '}': ']',
+    '|': '\\',
+    ':': ';',
+    '"': "'",
+    '<': ',',
+    '>': '.',
+    '?': '/',
     '~': '`',
 }
 
@@ -118,8 +165,16 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
     TYPE_EVENT_DELAY = 0.008
     TYPE_INTERKEY_DELAY = 0.015
 
-    def __init__(self, vm, target_resolution_executor=None, experiment_run_id=None,
-                 playbook=None, execution_context=None, experiment_run_directory=None, **kwargs):
+    def __init__(
+        self,
+        vm,
+        target_resolution_executor=None,
+        experiment_run_id=None,
+        playbook=None,
+        execution_context=None,
+        experiment_run_directory=None,
+        **kwargs,
+    ):
         """
         Initialize QEMU host-based GUI executor.
 
@@ -175,6 +230,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
 
             # Generate temp file path for PPM screenshot
             import time
+
             temp_ppm = screen_dir / f"screenshot_{int(time.time() * 1000)}.ppm"
 
             # Capture screenshot via QMP
@@ -206,12 +262,9 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
 
             return {
                 'status': 'success',
-                'image': {
-                    'data': png_base64,
-                    'format': 'png'
-                },
+                'image': {'data': png_base64, 'format': 'png'},
                 'message': 'Screenshot captured via QMP',
-                'screenshot_path': screenshot_path
+                'screenshot_path': screenshot_path,
             }
 
         except Exception as e:
@@ -246,10 +299,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
 
             log.info(f"Click executed successfully at ({x}, {y})")
 
-            return {
-                'status': 'success',
-                'message': f'{button_type} click at ({x}, {y}) via QMP'
-            }
+            return {'status': 'success', 'message': f'{button_type} click at ({x}, {y}) via QMP'}
 
         except Exception as e:
             log.error(f"QMP click failed: {e}", exc_info=True)
@@ -274,10 +324,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             if not success:
                 return {'status': 'error', 'message': 'QMP drag failed'}
 
-            return {
-                'status': 'success',
-                'message': f'Drag from ({x1}, {y1}) to ({x2}, {y2}) via QMP'
-            }
+            return {'status': 'success', 'message': f'Drag from ({x1}, {y1}) to ({x2}, {y2}) via QMP'}
 
         except Exception as e:
             log.error(f"QMP drag failed: {e}", exc_info=True)
@@ -313,10 +360,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
                     await asyncio.sleep(self.TYPE_INTERKEY_DELAY)
                 if not success:
                     return {'status': 'error', 'message': 'QMP keyboard command failed'}
-                return {
-                    'status': 'success',
-                    'message': f'Keyboard {action_type}({value}) via QMP'
-                }
+                return {'status': 'success', 'message': f'Keyboard {action_type}({value}) via QMP'}
 
             if action_type == "press":
                 # Single key press
@@ -335,10 +379,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             if not success:
                 return {'status': 'error', 'message': 'QMP keyboard command failed'}
 
-            return {
-                'status': 'success',
-                'message': f'Keyboard {action_type}({value}) via QMP'
-            }
+            return {'status': 'success', 'message': f'Keyboard {action_type}({value}) via QMP'}
 
         except Exception as e:
             log.error(f"QMP keyboard failed: {e}", exc_info=True)
@@ -371,10 +412,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             if not success:
                 return {'status': 'error', 'message': 'QMP scroll failed'}
 
-            return {
-                'status': 'success',
-                'message': f'Scroll {direction} ({amount}) via QMP'
-            }
+            return {'status': 'success', 'message': f'Scroll {direction} ({amount}) via QMP'}
 
         except Exception as e:
             log.error(f"QMP scroll failed: {e}", exc_info=True)
@@ -395,6 +433,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
         Returns:
             Base64-encoded PNG string
         """
+
         # Run in thread pool to avoid blocking
         def _convert():
             try:
@@ -461,7 +500,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
 
         return [
             {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}},
-            {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}}
+            {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}},
         ]
 
     def _create_type_events(self, text: str) -> list:
@@ -485,32 +524,38 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
                 qcode = self._pyautogui_key_to_qcode(char_lower)
                 if qcode:
                     # Shift down, key down, key up, shift up
-                    groups.append([
-                        {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": "shift"}}},
-                        {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}},
-                        {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}},
-                        {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": "shift"}}}
-                    ])
+                    groups.append(
+                        [
+                            {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": "shift"}}},
+                            {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}},
+                            {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}},
+                            {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": "shift"}}},
+                        ]
+                    )
             # Handle shifted symbols
             elif char in SHIFT_MAP:
                 base_char = SHIFT_MAP[char]
                 qcode = self._pyautogui_key_to_qcode(base_char)
                 if qcode:
                     # Shift down, key down, key up, shift up
-                    groups.append([
-                        {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": "shift"}}},
-                        {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}},
-                        {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}},
-                        {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": "shift"}}}
-                    ])
+                    groups.append(
+                        [
+                            {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": "shift"}}},
+                            {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}},
+                            {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}},
+                            {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": "shift"}}},
+                        ]
+                    )
             else:
                 # Regular character
                 qcode = self._pyautogui_key_to_qcode(char)
                 if qcode:
-                    groups.append([
-                        {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}},
-                        {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}}
-                    ])
+                    groups.append(
+                        [
+                            {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}},
+                            {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}},
+                        ]
+                    )
 
         return groups
 
@@ -542,14 +587,10 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
 
         # Press down in order
         for qcode in qcodes:
-            events.append(
-                {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}}
-            )
+            events.append({"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}})
 
         # Release in reverse order
         for qcode in reversed(qcodes):
-            events.append(
-                {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}}
-            )
+            events.append({"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}})
 
         return events

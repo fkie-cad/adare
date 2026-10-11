@@ -4,6 +4,7 @@ Registry Mixin - VM discovery and lookup operations.
 Implements abstract methods from AbstractVM for VM discovery by UUID and name.
 Delegates to QEMUVMRegistry for the actual implementation.
 """
+
 from typing import Any
 
 
@@ -20,6 +21,7 @@ class RegistryMixin:
         Delegates to QEMUVMRegistry.
         """
         from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
+
         return QEMUVMRegistry.get_vm_by_name(vm_name, manager)
 
     @staticmethod
@@ -29,6 +31,7 @@ class RegistryMixin:
         Delegates to QEMUVMRegistry.
         """
         from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
+
         return QEMUVMRegistry.get_vm_uuid_by_name(vm_name)
 
     @staticmethod
@@ -38,6 +41,7 @@ class RegistryMixin:
         Delegates to QEMUVMRegistry.
         """
         from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
+
         return QEMUVMRegistry.verify_vm_exists_by_uuid(uuid)
 
     @staticmethod
@@ -47,6 +51,7 @@ class RegistryMixin:
         Delegates to QEMUVMRegistry.
         """
         from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
+
         return QEMUVMRegistry.get_vm_info_by_uuid(uuid)
 
     @staticmethod
@@ -56,4 +61,5 @@ class RegistryMixin:
         Delegates to QEMUVMRegistry.
         """
         from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
+
         return QEMUVMRegistry.get_vm_name_by_uuid(uuid)

@@ -201,18 +201,7 @@ GUI_MCP_PORT = int(os.environ.get('ADARE_GUI_MCP_PORT', '13110'))
 GUI_MCP_HOST = os.environ.get('ADARE_GUI_MCP_HOST', '127.0.0.1')
 
 # PORTS FOR OAuth2 Redirects
-PORT_OAUTH2_REDIRECT = [
-    13331,
-    13332,
-    13333,
-    13334,
-    13335,
-    14441,
-    14442,
-    14443,
-    14444,
-    14445
-]
+PORT_OAUTH2_REDIRECT = [13331, 13332, 13333, 13334, 13335, 14441, 14442, 14443, 14444, 14445]
 GITEA_CLIENT_ID = '9afe946b-d67f-46ac-8362-4ef479a8e11c'
 GITEA_URL = 'https://adare.click/git/'
 GITEA_API_URL = f'{GITEA_URL}api/v1/'

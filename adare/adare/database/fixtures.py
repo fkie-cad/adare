@@ -21,11 +21,7 @@ def fixture_stages(session: sqlalchemy.orm.Session):
             'description': stage.description,
             'optional': stage.optional,
         }
-        if stage.parent and (
-            parent := session.query(Stage)
-            .filter(Stage.name == stage.parent)
-            .first()
-        ):
+        if stage.parent and (parent := session.query(Stage).filter(Stage.name == stage.parent).first()):
             kwargs['parent_id'] = parent.id
         stage_db = Stage(**kwargs)
         session.add(stage_db)

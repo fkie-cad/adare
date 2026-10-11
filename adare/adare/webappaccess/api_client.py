@@ -70,9 +70,7 @@ class ApiClient:
         """
         if not is_logged_in():
             raise NotLoggedInError(
-                log,
-                'You are not logged in. Please log in first.',
-                possible_solutions=['Run: adare web login']
+                log, 'You are not logged in. Please log in first.', possible_solutions=['Run: adare web login']
             )
         return self.login_handler.get_django_authenticated_request_header()
 
@@ -116,23 +114,18 @@ class ApiClient:
         url = config_server.PUBLISH_RUN_URL
         request_files = {**request_files, 'metadata': (None, json.dumps(data))}
         try:
-            response = requests.post(
-                url,
-                headers=header,
-                files=request_files,
-                timeout=config_server.TIMEOUT_SECONDS
-            )
+            response = requests.post(url, headers=header, files=request_files, timeout=config_server.TIMEOUT_SECONDS)
         except requests.exceptions.Timeout:
             raise ApiConnectionError(
                 log,
                 f'Request to {url} timed out',
-                possible_solutions=['Check your network connection', 'Try again later']
+                possible_solutions=['Check your network connection', 'Try again later'],
             ) from None
         except requests.exceptions.ConnectionError as e:
             raise ApiConnectionError(
                 log,
                 f'Failed to connect to server: {str(e)}',
-                possible_solutions=['Check server URL in config', 'Verify server is running']
+                possible_solutions=['Check server URL in config', 'Verify server is running'],
             ) from e
 
         # Handle response
@@ -152,38 +145,30 @@ class ApiClient:
         # Map error codes to specific exceptions
         if error_code == 'experiment_not_found':
             raise ExperimentNotFoundError(
-                log,
-                error_message,
-                possible_solutions=['Publish the experiment first', 'Verify experiment ULID']
+                log, error_message, possible_solutions=['Publish the experiment first', 'Verify experiment ULID']
             )
         if error_code == 'run_already_exists':
             raise RunAlreadyExistsError(
-                log,
-                error_message,
-                possible_solutions=['Run already published, no action needed']
+                log, error_message, possible_solutions=['Run already published, no action needed']
             )
         if error_code == 'experiment_not_published':
             raise ExperimentNotFoundError(
-                log,
-                error_message,
-                possible_solutions=['Publish the experiment before publishing runs']
+                log, error_message, possible_solutions=['Publish the experiment before publishing runs']
             )
         if error_code in ('gitea_user_not_found', 'environment_not_found'):
             raise PublishPermissionError(
-                log,
-                error_message,
-                possible_solutions=['Contact administrator', 'Check your account setup']
+                log, error_message, possible_solutions=['Contact administrator', 'Check your account setup']
             )
         if error_code in ('validation_error', 'event_validation_error', 'missing_field'):
             raise ApiValidationError(
                 log,
                 f'{error_message}\nDetails: {error_data.get("details", "N/A")}',
-                possible_solutions=['Check run data integrity', 'Report issue if persists']
+                possible_solutions=['Check run data integrity', 'Report issue if persists'],
             )
         raise ApiConnectionError(
             log,
             f'Publishing failed (status {response.status_code}): {error_message}',
-            possible_solutions=['Check server logs', 'Try again later']
+            possible_solutions=['Check server logs', 'Try again later'],
         )
 
     def check_experiment_exists(self, experiment_ulid: str) -> bool:
@@ -208,13 +193,13 @@ class ApiClient:
             raise ApiConnectionError(
                 log,
                 f'Request to {url} timed out',
-                possible_solutions=['Check your network connection', 'Try again later']
+                possible_solutions=['Check your network connection', 'Try again later'],
             ) from None
         except requests.exceptions.ConnectionError as e:
             raise ApiConnectionError(
                 log,
                 f'Failed to connect to server: {str(e)}',
-                possible_solutions=['Check server URL in config', 'Verify server is running']
+                possible_solutions=['Check server URL in config', 'Verify server is running'],
             ) from e
 
         if response.status_code == 200:
@@ -246,13 +231,13 @@ class ApiClient:
             raise ApiConnectionError(
                 log,
                 f'Request to {url} timed out',
-                possible_solutions=['Check your network connection', 'Try again later']
+                possible_solutions=['Check your network connection', 'Try again later'],
             ) from None
         except requests.exceptions.ConnectionError as e:
             raise ApiConnectionError(
                 log,
                 f'Failed to connect to server: {str(e)}',
-                possible_solutions=['Check server URL in config', 'Verify server is running']
+                possible_solutions=['Check server URL in config', 'Verify server is running'],
             ) from e
 
         if response.status_code == 200:
@@ -282,13 +267,13 @@ class ApiClient:
             raise ApiConnectionError(
                 log,
                 f'Request to {url} timed out',
-                possible_solutions=['Check your network connection', 'Try again later']
+                possible_solutions=['Check your network connection', 'Try again later'],
             ) from None
         except requests.exceptions.ConnectionError as e:
             raise ApiConnectionError(
                 log,
                 f'Failed to connect to server: {str(e)}',
-                possible_solutions=['Check server URL in config', 'Verify server is running']
+                possible_solutions=['Check server URL in config', 'Verify server is running'],
             ) from e
 
         if response.status_code == 200:
@@ -299,11 +284,12 @@ class ApiClient:
         raise ApiConnectionError(
             log,
             f'Failed to retrieve run details (status {response.status_code})',
-            possible_solutions=['Check run ULID', 'Verify server is running']
+            possible_solutions=['Check run ULID', 'Verify server is running'],
         )
 
 
 # Convenience functions for backward compatibility and simple usage
+
 
 def publish_experiment_run(run_ulid: str, project_path: Path) -> dict:
     """

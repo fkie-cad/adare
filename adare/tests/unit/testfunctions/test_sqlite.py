@@ -34,6 +34,7 @@ QueryResultParameter = sqlite_module.query_result._parameter_class
 
 # Import test helpers
 import importlib.util
+
 helpers_path = Path(__file__).parent / "helpers.py"
 spec = importlib.util.spec_from_file_location("helpers", helpers_path)
 helpers = importlib.util.module_from_spec(spec)
@@ -48,6 +49,7 @@ assert_test_error = helpers.assert_test_error
 # QueryResult Tests
 # ============================================================================
 
+
 class TestQueryResult:
     """Tests for QueryResult testfunction."""
 
@@ -60,15 +62,11 @@ class TestQueryResult:
                 (1, "Alice", 30),
                 (2, "Bob", 25),
                 (3, "Charlie", 35),
-            ]
+            ],
         )
 
         test = QueryResult(
-            name="test_query",
-            parameter=QueryResultParameter(
-                dst=str(db_file),
-                query="SELECT * FROM test_table"
-            )
+            name="test_query", parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM test_table")
         )
         result = test.test()
 
@@ -83,16 +81,12 @@ class TestQueryResult:
             [
                 (1, "Alice"),
                 (2, "Bob"),
-            ]
+            ],
         )
 
         test = QueryResult(
             name="test_query",
-            parameter=QueryResultParameter(
-                dst=str(db_file),
-                query="SELECT * FROM test_table",
-                expected_rows=2
-            )
+            parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM test_table", expected_rows=2),
         )
         result = test.test()
 
@@ -107,7 +101,7 @@ class TestQueryResult:
                 (1, "Alice"),
                 (2, "Bob"),
                 (3, "Charlie"),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -115,8 +109,8 @@ class TestQueryResult:
             parameter=QueryResultParameter(
                 dst=str(db_file),
                 query="SELECT * FROM test_table",
-                expected_rows=2  # Expect 2, but will get 3
-            )
+                expected_rows=2,  # Expect 2, but will get 3
+            ),
         )
         result = test.test()
 
@@ -131,7 +125,7 @@ class TestQueryResult:
             [
                 (1, "Alice"),
                 (2, "Bob"),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -142,8 +136,8 @@ class TestQueryResult:
                 expected_result=[
                     {"id": 1, "name": "Alice"},
                     {"id": 2, "name": "Bob"},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -157,7 +151,7 @@ class TestQueryResult:
             [
                 (1, "Alice"),
                 (2, "Bob"),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -168,8 +162,8 @@ class TestQueryResult:
                 expected_result=[
                     {"id": 1, "name": "Alice"},
                     {"id": 2, "name": "Charlie"},  # Wrong name
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -181,16 +175,12 @@ class TestQueryResult:
         db_file = create_sqlite_db(
             "test.db",
             "CREATE TABLE test_table (id INTEGER, name TEXT)",
-            []  # No data
+            [],  # No data
         )
 
         test = QueryResult(
             name="test_query",
-            parameter=QueryResultParameter(
-                dst=str(db_file),
-                query="SELECT * FROM test_table",
-                expected_rows=0
-            )
+            parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM test_table", expected_rows=0),
         )
         result = test.test()
 
@@ -199,18 +189,14 @@ class TestQueryResult:
 
     def test_query_result_failure_sql_syntax_error(self, create_sqlite_db):
         """Test failure with invalid SQL syntax."""
-        db_file = create_sqlite_db(
-            "test.db",
-            "CREATE TABLE test_table (id INTEGER, name TEXT)",
-            [(1, "Alice")]
-        )
+        db_file = create_sqlite_db("test.db", "CREATE TABLE test_table (id INTEGER, name TEXT)", [(1, "Alice")])
 
         test = QueryResult(
             name="test_query",
             parameter=QueryResultParameter(
                 dst=str(db_file),
-                query="SELECT * FORM test_table"  # Wrong SQL keyword
-            )
+                query="SELECT * FORM test_table",  # Wrong SQL keyword
+            ),
         )
         result = test.test()
 
@@ -219,18 +205,10 @@ class TestQueryResult:
 
     def test_query_result_failure_table_not_exists(self, create_sqlite_db):
         """Test failure when querying non-existent table."""
-        db_file = create_sqlite_db(
-            "test.db",
-            "CREATE TABLE test_table (id INTEGER, name TEXT)",
-            [(1, "Alice")]
-        )
+        db_file = create_sqlite_db("test.db", "CREATE TABLE test_table (id INTEGER, name TEXT)", [(1, "Alice")])
 
         test = QueryResult(
-            name="test_query",
-            parameter=QueryResultParameter(
-                dst=str(db_file),
-                query="SELECT * FROM nonexistent_table"
-            )
+            name="test_query", parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM nonexistent_table")
         )
         result = test.test()
 
@@ -241,10 +219,7 @@ class TestQueryResult:
         """Test failure when database file doesn't exist, without creating one."""
         test = QueryResult(
             name="test_query",
-            parameter=QueryResultParameter(
-                dst=str(tmp_path / "nonexistent.db"),
-                query="SELECT * FROM test_table"
-            )
+            parameter=QueryResultParameter(dst=str(tmp_path / "nonexistent.db"), query="SELECT * FROM test_table"),
         )
         result = test.test()
 
@@ -261,7 +236,7 @@ class TestQueryResult:
                 (1, "Alice", 30),
                 (2, "Bob", 25),
                 (3, "Charlie", 35),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -272,8 +247,8 @@ class TestQueryResult:
                 expected_result=[
                     {"name": "Alice"},
                     {"name": "Charlie"},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -288,7 +263,7 @@ class TestQueryResult:
                 (1, "Alice", 85),
                 (2, "Bob", 92),
                 (3, "Charlie", 78),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -300,8 +275,8 @@ class TestQueryResult:
                     {"name": "Bob", "score": 92},
                     {"name": "Alice", "score": 85},
                     {"name": "Charlie", "score": 78},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -311,6 +286,7 @@ class TestQueryResult:
         """Test successful query with JOIN operation."""
         db_file = tmp_path / "test.db"
         import sqlite3
+
         conn = sqlite3.connect(str(db_file))
         cursor = conn.cursor()
 
@@ -339,8 +315,8 @@ class TestQueryResult:
                     WHERE users.name = 'Alice'
                     ORDER BY orders.product
                 """,
-                expected_rows=2
-            )
+                expected_rows=2,
+            ),
         )
         result = test.test()
 
@@ -356,7 +332,7 @@ class TestQueryResult:
                 ("A", 20),
                 ("B", 30),
                 ("B", 40),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -367,8 +343,8 @@ class TestQueryResult:
                 expected_result=[
                     {"category": "A", "total": 30},
                     {"category": "B", "total": 70},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -383,7 +359,7 @@ class TestQueryResult:
                 (1, "alpha"),
                 (2, "beta"),
                 (3, "gamma"),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -395,8 +371,8 @@ class TestQueryResult:
                 expected_result=[
                     {"id": 1, "value": "alpha"},
                     {"id": 2, "value": "beta"},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -411,7 +387,7 @@ class TestQueryResult:
                 (1, "alpha"),
                 (2, "beta"),
                 (3, "gamma"),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -424,8 +400,8 @@ class TestQueryResult:
                     {"id": 1, "value": "alpha"},
                     {"id": 2, "value": "beta"},
                     {"id": 3, "value": "gamma"},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -436,6 +412,7 @@ class TestQueryResult:
         """Test successful query with NULL values in result."""
         db_file = tmp_path / "test.db"
         import sqlite3
+
         conn = sqlite3.connect(str(db_file))
         cursor = conn.cursor()
 
@@ -453,8 +430,8 @@ class TestQueryResult:
                 query="SELECT * FROM test_table WHERE name = 'Bob'",
                 expected_result=[
                     {"id": 2, "name": "Bob", "age": None},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -469,7 +446,7 @@ class TestQueryResult:
                 (1, "Hello 'World'"),
                 (2, 'Quote: "test"'),
                 (3, "Line1\nLine2"),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -479,8 +456,8 @@ class TestQueryResult:
                 query="SELECT * FROM test_table WHERE id = 1",
                 expected_result=[
                     {"id": 1, "text": "Hello 'World'"},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -494,7 +471,7 @@ class TestQueryResult:
             [
                 (1, "Alice"),
                 (2, "Bob"),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -505,8 +482,8 @@ class TestQueryResult:
                 expected_rows=1,
                 expected_result=[
                     {"name": "Alice"},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -520,15 +497,11 @@ class TestQueryResult:
             [
                 (1, "Alice"),
                 (2, "Bob"),
-            ]
+            ],
         )
 
         test = QueryResult(
-            name="test_query",
-            parameter=QueryResultParameter(
-                dst=str(db_file),
-                query="SELECT * FROM test_table"
-            )
+            name="test_query", parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM test_table")
         )
         result = test.test()
 
@@ -543,7 +516,7 @@ class TestQueryResult:
             [
                 (1, "Alice", "value1"),
                 (2, "Bob", "value2"),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -553,9 +526,9 @@ class TestQueryResult:
                 query="SELECT id, name, value FROM test_table WHERE id = 2",
                 expected_result=[
                     {"id": 2, "name": "Bob", "value": "{{VAR2}}"},
-                ]
+                ],
             ),
-            variable_metadata=variable_metadata_simple
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -569,7 +542,7 @@ class TestQueryResult:
             [
                 (1, "Alice", "wrong_value"),
                 (2, "Bob", "value2"),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -579,9 +552,9 @@ class TestQueryResult:
                 query="SELECT id, name, value FROM test_table WHERE id = 1",
                 expected_result=[
                     {"id": 1, "name": "Alice", "value": "{{VAR1}}"},
-                ]
+                ],
             ),
-            variable_metadata=variable_metadata_simple
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -596,7 +569,7 @@ class TestQueryResult:
             [
                 (1, "Alice", "value1"),
                 (2, "Bob", "value2"),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -607,9 +580,9 @@ class TestQueryResult:
                 expected_result=[
                     {"id": 1, "name": "Alice", "value": "{{VAR1}}"},
                     {"id": 2, "name": "Bob", "value": "{{VAR2}}"},
-                ]
+                ],
             ),
-            variable_metadata=variable_metadata_simple
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -623,7 +596,7 @@ class TestQueryResult:
             [
                 (1, "Alice", 30),
                 (2, "Bob", 25),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -634,8 +607,8 @@ class TestQueryResult:
                 expected_result=[
                     {"name": "Alice"},
                     {"name": "Bob"},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -650,7 +623,7 @@ class TestQueryResult:
                 (1, "Alice"),
                 (2, "Bob"),
                 (3, "Charlie"),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -660,8 +633,8 @@ class TestQueryResult:
                 query="SELECT COUNT(*) as count FROM test_table",
                 expected_result=[
                     {"count": 3},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -672,7 +645,7 @@ class TestQueryResult:
         db_file = create_sqlite_db(
             "test.db",
             "CREATE TABLE test_table (id INTEGER, name TEXT)",
-            []  # Empty table
+            [],  # Empty table
         )
 
         test = QueryResult(
@@ -680,8 +653,8 @@ class TestQueryResult:
             parameter=QueryResultParameter(
                 dst=str(db_file),
                 query="SELECT * FROM test_table",
-                expected_rows=1  # Expect 1 row but will get 0
-            )
+                expected_rows=1,  # Expect 1 row but will get 0
+            ),
         )
         result = test.test()
 
@@ -698,7 +671,7 @@ class TestQueryResult:
                 (2, "Bob"),
                 (3, "Charlie"),
                 (4, "David"),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -710,8 +683,8 @@ class TestQueryResult:
                 expected_result=[
                     {"id": 1, "name": "Alice"},
                     {"id": 2, "name": "Bob"},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -725,7 +698,7 @@ class TestQueryResult:
             [
                 (1, 19.99),
                 (2, 24.50),
-            ]
+            ],
         )
 
         test = QueryResult(
@@ -735,8 +708,8 @@ class TestQueryResult:
                 query="SELECT id, price FROM test_table WHERE id = 1",
                 expected_result=[
                     {"id": 1, "price": 19.99},
-                ]
-            )
+                ],
+            ),
         )
         result = test.test()
 
@@ -745,23 +718,15 @@ class TestQueryResult:
     def test_query_result_error_ambiguous_glob_pattern(self, create_sqlite_db, tmp_path):
         """Test error when glob pattern matches multiple files in single mode."""
         # Create multiple database files
-        create_sqlite_db(
-            "test1.db",
-            "CREATE TABLE test_table (id INTEGER)",
-            [(1,)]
-        )
-        create_sqlite_db(
-            "test2.db",
-            "CREATE TABLE test_table (id INTEGER)",
-            [(2,)]
-        )
+        create_sqlite_db("test1.db", "CREATE TABLE test_table (id INTEGER)", [(1,)])
+        create_sqlite_db("test2.db", "CREATE TABLE test_table (id INTEGER)", [(2,)])
 
         test = QueryResult(
             name="test_query",
             parameter=QueryResultParameter(
                 dst=str(tmp_path / "*.db"),  # Matches multiple files
-                query="SELECT * FROM test_table"
-            )
+                query="SELECT * FROM test_table",
+            ),
         )
         result = test.test()
 
@@ -769,20 +734,17 @@ class TestQueryResult:
         assert "no unambiguous file could be identified" in result.details[0]
 
 
-
 # ============================================================================
 # Snapshot / sidecar tests
 # ============================================================================
+
 
 def _sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def _query(dst, query, **kwargs):
-    test = QueryResult(
-        name="test_query",
-        parameter=QueryResultParameter(dst=str(dst), query=query, **kwargs)
-    )
+    test = QueryResult(name="test_query", parameter=QueryResultParameter(dst=str(dst), query=query, **kwargs))
     return test.test()
 
 
@@ -819,8 +781,11 @@ class TestQueryResultSnapshot:
     """query_result queries a copy that includes -wal/-journal and leaves the original untouched."""
 
     def test_rows_only_in_wal_are_found(self, wal_only_evidence):
-        result = _query(wal_only_evidence, "SELECT * FROM test_table ORDER BY id",
-                        expected_result=[{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}])
+        result = _query(
+            wal_only_evidence,
+            "SELECT * FROM test_table ORDER BY id",
+            expected_result=[{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}],
+        )
 
         assert_test_success(result)
         assert "2 rows" in result.details[0]

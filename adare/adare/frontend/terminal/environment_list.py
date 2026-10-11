@@ -69,11 +69,13 @@ def print_environment_list(formatter=None, output_file=None, dual_output=False):
     # Get formatter if not provided
     if formatter is None:
         from adare.run import get_formatter_from_context
+
         formatter, output_file, dual_output = get_formatter_from_context()
 
     if dual_output or formatter.format_type.value != 'rich':
         # Use StructuredDataApi for JSON/YAML output
         from adare.database.api.structured_data import StructuredDataApi
+
         with StructuredDataApi() as api:
             environments_structured = api.get_environments_structured()
             environment_list = [env.to_dict() for env in environments_structured]
@@ -98,22 +100,20 @@ def print_environment_list(formatter=None, output_file=None, dual_output=False):
 
                 # Same check as ShowService.list_environments: stat the disk a run would
                 # boot, not the environment YAML. None where there is no local path.
-                disk_present = (
-                    Path(vm.file).is_file()
-                    if vm and vm.file and '://' not in vm.file
-                    else None
-                )
+                disk_present = Path(vm.file).is_file() if vm and vm.file and '://' not in vm.file else None
 
-                data.append({
-                    'display_name': env.name,
-                    'id': env.id,
-                    'file': env.file or 'N/A',
-                    'vm_name': vm.name if vm else 'No VM',
-                    'osinfo': str(osinfo) if osinfo else 'Unknown',
-                    'published': published,
-                    'in_request': in_request,
-                    'disk_present': disk_present,
-                })
+                data.append(
+                    {
+                        'display_name': env.name,
+                        'id': env.id,
+                        'file': env.file or 'N/A',
+                        'vm_name': vm.name if vm else 'No VM',
+                        'osinfo': str(osinfo) if osinfo else 'Unknown',
+                        'published': published,
+                        'in_request': in_request,
+                        'disk_present': disk_present,
+                    }
+                )
 
             environments_df = pd.DataFrame(data)
 

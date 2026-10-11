@@ -63,14 +63,21 @@ log = logging.getLogger(__name__)
 
 # Visual actions that can be executed without agent
 VISUAL_ACTION_TYPES = {
-    ClickAction, KeyboardAction, DragAction, ScrollAction,
-    GotoAction, ScreenshotAction, IdleAction, PauseAction
+    ClickAction,
+    KeyboardAction,
+    DragAction,
+    ScrollAction,
+    GotoAction,
+    ScreenshotAction,
+    IdleAction,
+    PauseAction,
 }
 
 
 @dataclass
 class DiffModeResult:
     """Result of diff mode execution."""
+
     success: bool
     actions_executed: int = 0
     successful_actions: int = 0
@@ -96,16 +103,9 @@ def filter_nested_actions(actions: list[ActionType]) -> list[ActionType]:
             if nested_filtered:  # Keep block if any visual actions remain
                 # Create a copy with filtered actions
                 if isinstance(action, BlockAction):
-                    filtered_action = BlockAction(
-                        when=action.when,
-                        actions=nested_filtered
-                    )
+                    filtered_action = BlockAction(when=action.when, actions=nested_filtered)
                 else:  # LoopAction
-                    filtered_action = LoopAction(
-                        items=action.items,
-                        loop_var=action.loop_var,
-                        actions=nested_filtered
-                    )
+                    filtered_action = LoopAction(items=action.items, loop_var=action.loop_var, actions=nested_filtered)
                 filtered.append(filtered_action)
         elif is_visual_action(action):
             filtered.append(action)
@@ -123,7 +123,9 @@ def filter_playbook_actions(playbook: Playbook) -> Playbook:
     return playbook
 
 
-def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: bool, external_stop_event: threading.Event = None):
+def __create_and_start_flow_console(
+    experiment_run_ulid: str, disable_printing: bool, external_stop_event: threading.Event = None
+):
     """
     Create a flow console and start it.
 
@@ -177,11 +179,7 @@ def __start_event_listeners(experiment_run_ulid: str):
     return cli_thread
 
 
-async def experiment_diff_run(
-    project_path: Path,
-    experiment_name: str,
-    environment_name: str
-) -> DiffModeResult:
+async def experiment_diff_run(project_path: Path, experiment_name: str, environment_name: str) -> DiffModeResult:
     """
     Execute experiment in diff mode (visual-only, no database, QEMU host mode).
 
@@ -204,16 +202,10 @@ async def experiment_diff_run(
         log.info(f"Starting diff mode: {experiment_name} on {environment_name}")
 
         # 1. Get environment file and validate QEMU
-        environment_file = environment_database.get_environment_path_by_project_and_name(
-            project_path, environment_name
-        )
+        environment_file = environment_database.get_environment_path_by_project_and_name(project_path, environment_name)
 
         if not environment_file:
-            raise LoggedException(
-                log,
-                f"Environment not found: {environment_name}",
-                ValueError
-            )
+            raise LoggedException(log, f"Environment not found: {environment_name}", ValueError)
 
         environment_metadata = parse_environment_file(environment_file)
 
@@ -223,7 +215,7 @@ async def experiment_diff_run(
                 f"Diff mode requires QEMU hypervisor. "
                 f"Environment '{environment_name}' uses {environment_metadata.hypervisor}. "
                 f"Please use a QEMU-based environment.",
-                ValueError
+                ValueError,
             )
 
         log.info(f"Environment validated: QEMU, platform={environment_metadata.os.platform}")
@@ -234,11 +226,7 @@ async def experiment_diff_run(
         playbook_path = experiment_directory.path / "playbook.yml"
 
         if not playbook_path.exists():
-            raise LoggedException(
-                log,
-                f"Playbook not found: {playbook_path}",
-                ValueError
-            )
+            raise LoggedException(log, f"Playbook not found: {playbook_path}", ValueError)
 
         playbook = parse_playbook(playbook_path)
         log.info(f"Loaded playbook with {len(playbook.actions)} actions")
@@ -251,10 +239,7 @@ async def experiment_diff_run(
 
         if filtered_action_count == 0:
             raise LoggedException(
-                log,
-                "No visual actions found in playbook. "
-                "Diff mode requires at least one visual action.",
-                ValueError
+                log, "No visual actions found in playbook. Diff mode requires at least one visual action.", ValueError
             )
 
         log.info(f"Filtered to {filtered_action_count} visual actions ({skipped_count} skipped)")
@@ -266,7 +251,7 @@ async def experiment_diff_run(
             environment_name=environment_name,
             test_mode=True,  # Treat diff mode like test mode
             gui_mode_override='host',  # Force HOST mode
-            enable_diff=True  # Enable host-side filesystem diff
+            enable_diff=True,  # Enable host-side filesystem diff
         )
 
         ctx = ExperimentRunCtx(config)
@@ -294,6 +279,7 @@ async def experiment_diff_run(
 
         # Set up logging to diff directory
         from adare.backend.experiment.run import _ensure_and_copy_adare_log_to_run_directory
+
         _ensure_and_copy_adare_log_to_run_directory(diff_run_dir)
 
         # Set up signal handlers for Ctrl-C
@@ -307,9 +293,7 @@ async def experiment_diff_run(
 
         # Create and start flow console BEFORE event listeners
         flow_console = __create_and_start_flow_console(
-            ctx.experiment_run_ulid,
-            disable_printing=False,
-            external_stop_event=ctx.user_interrupt_event
+            ctx.experiment_run_ulid, disable_printing=False, external_stop_event=ctx.user_interrupt_event
         )
         # Start event listeners AFTER flow console
         __start_event_listeners(ctx.experiment_run_ulid)
@@ -336,29 +320,23 @@ async def experiment_diff_run(
                 target_resolver = MCPTargetResolver(
                     experiment_dir=ctx.experiment_directory.path,
                     mcp_gui_url=ctx.mcp_server.server_url,
-                    experiment_run_ulid=ctx.experiment_run_ulid
+                    experiment_run_ulid=ctx.experiment_run_ulid,
                 )
-                condition_checker = MCPConditionChecker(
-                    target_resolver=target_resolver
-                )
+                condition_checker = MCPConditionChecker(target_resolver=target_resolver)
 
                 # Create variable registry using automatic variables system (same as normal run)
-                vm_user = environment_metadata.credentials.user if (
-                    hasattr(environment_metadata, 'credentials') and environment_metadata.credentials
-                ) else 'guest'
+                vm_user = (
+                    environment_metadata.credentials.user
+                    if (hasattr(environment_metadata, 'credentials') and environment_metadata.credentials)
+                    else 'guest'
+                )
 
                 # Get automatic variables (vm.*, adare_*, etc.)
-                automatic_vars = AutomaticVariables.get_automatic_variables(
-                    ctx.guest_platform,
-                    vm_user
-                )
+                automatic_vars = AutomaticVariables.get_automatic_variables(ctx.guest_platform, vm_user)
 
                 # Merge with playbook variables if they exist (user variables take precedence)
                 user_vars = playbook.variables if hasattr(playbook, 'variables') else None
-                variable_registry = AutomaticVariables.merge_with_user_variables(
-                    automatic_vars,
-                    user_vars
-                )
+                variable_registry = AutomaticVariables.merge_with_user_variables(automatic_vars, user_vars)
 
                 # Create execution context with playbook and variables
                 execution_context = {'playbook': playbook}
@@ -374,7 +352,7 @@ async def experiment_diff_run(
                 # Create event manager for action event emission (no database persistence)
                 event_manager = EventManager(
                     experiment_run_id=ctx.experiment_run_ulid,
-                    playbook_items_map={}  # Empty - no database IDs in diff mode
+                    playbook_items_map={},  # Empty - no database IDs in diff mode
                 )
 
                 # Create action executor
@@ -387,7 +365,7 @@ async def experiment_diff_run(
                     execution_context=execution_context,
                     debug_screenshots=True,  # Enable screenshots in diff mode
                     screenshots_dir=diff_run_dir.screenshots_directory,
-                    vm=ctx.vm
+                    vm=ctx.vm,
                 )
 
                 # Execute actions with event emission for visual display
@@ -404,10 +382,7 @@ async def experiment_diff_run(
 
                     # Create and emit start event
                     start_event = event_manager.create_action_start_event(
-                        action=resolved_action,
-                        action_index=action_index,
-                        action_id=action_id,
-                        parent_event_id=None
+                        action=resolved_action, action_index=action_index, action_id=action_id, parent_event_id=None
                     )
                     emit_action(ctx.experiment_run_ulid, start_event, action_id)
 
@@ -421,7 +396,7 @@ async def experiment_diff_run(
                         action_index=action_index,
                         action_id=action_id,
                         result=result,
-                        parent_event_id=None
+                        parent_event_id=None,
                     )
                     emit_action(ctx.experiment_run_ulid, complete_event, action_id)
 
@@ -431,7 +406,7 @@ async def experiment_diff_run(
                     if result.success:
                         log.info(f"Success: {result.message}")
                     else:
-                        log.error(f"Action {action_index+1} failed: {result.message}")
+                        log.error(f"Action {action_index + 1} failed: {result.message}")
                         log.info("Stopping execution due to action failure")
                         action_failed = True
                         break  # Stop immediately - avoid unnecessary diff computation
@@ -468,6 +443,7 @@ async def experiment_diff_run(
 
                 # Stop the stage event coordinator
                 from adare.backend.events.coordinator import stop_stage_coordinator
+
                 stop_stage_coordinator()
                 log.info("Stage event coordinator stopped")
 
@@ -496,14 +472,14 @@ async def experiment_diff_run(
                         successful_tests=0,
                         failed_tests=0,
                         duration=total_duration,
-                        was_interrupted=was_interrupted
+                        was_interrupted=was_interrupted,
                     )
 
                     # Display diff results location
                     flow_console.log_success(
                         identifier='DIFF_RESULTS_LOCATION',
                         message=f"📊 Diff results available in: {diff_run_dir.diff_directory}",
-                        level=0
+                        level=0,
                     )
 
                     # Give the flow console time to display the summary before stopping
@@ -518,6 +494,7 @@ async def experiment_diff_run(
                 # Ensure coordinator and console are stopped even if cleanup fails
                 try:
                     from adare.backend.events.coordinator import stop_stage_coordinator
+
                     stop_stage_coordinator()
                 except (ImportError, RuntimeError):
                     pass
@@ -539,7 +516,7 @@ async def experiment_diff_run(
             failed_actions=failed_actions,
             actions_skipped=skipped_count,
             execution_time=execution_time,
-            diff_run_directory=diff_run_dir.path if diff_run_dir else None
+            diff_run_directory=diff_run_dir.path if diff_run_dir else None,
         )
 
     except Exception as e:
@@ -558,5 +535,5 @@ async def experiment_diff_run(
             actions_skipped=skipped_count,
             execution_time=execution_time,
             error=str(e),
-            diff_run_directory=diff_run_dir.path if diff_run_dir else None
+            diff_run_directory=diff_run_dir.path if diff_run_dir else None,
         )

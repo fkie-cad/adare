@@ -44,9 +44,12 @@ class DataRetrievalBase:
         """
         if project_path is None:
             from adare.backend.basics import determine_projectdirectory
+
             project_path = determine_projectdirectory(None, silent=True)
             if project_path is None and require_project:
-                raise ProjectNotFoundError(log, "No current project found. Please run this command from within a project directory.")
+                raise ProjectNotFoundError(
+                    log, "No current project found. Please run this command from within a project directory."
+                )
 
         self.project_path = project_path
         self.require_project = require_project
@@ -109,9 +112,11 @@ class DataRetrievalBase:
             raise EnvironmentNotFoundError(log, f'Environment with ulid "{environment_ulid}" not found')
 
     def _check_experiment_exists_by_projenvexp(self, project_name: str, environment_name: str, experiment_name: str):
-        if not self._project_api._session.query(Experiment).filter(
-                Experiment.name == experiment_name).count():
-            raise ExperimentNotFoundError(log, f'Experiment "{experiment_name}" not found in project "{project_name}" and environment "{environment_name}"')
+        if not self._project_api._session.query(Experiment).filter(Experiment.name == experiment_name).count():
+            raise ExperimentNotFoundError(
+                log,
+                f'Experiment "{experiment_name}" not found in project "{project_name}" and environment "{environment_name}"',
+            )
 
     def _check_experiment_exists_by_ulid(self, experiment_ulid: str):
         if not self._project_api._session.query(Experiment).filter_by(id=experiment_ulid).count():
@@ -146,6 +151,7 @@ class DataRetrievalBase:
         """
         if current_project_name is None:
             from adare.backend.basics import determine_projectdirectory
+
             if project_path := determine_projectdirectory(None, silent=True):
                 current_project_name = project_path.name
 

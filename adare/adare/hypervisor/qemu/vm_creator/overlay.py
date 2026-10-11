@@ -54,15 +54,20 @@ def create_work_overlay(base_disk: Path, overlay_path: Path) -> Path:
 
     qemu_img = HYPERVISOR_CONFIGS['qemu']['qemu_img_exe']
     create_cmd = [
-        qemu_img, 'create', '-f', 'qcow2', '-F', 'qcow2',
-        '-b', str(base_disk), str(overlay_path),
+        qemu_img,
+        'create',
+        '-f',
+        'qcow2',
+        '-F',
+        'qcow2',
+        '-b',
+        str(base_disk),
+        str(overlay_path),
     ]
     log.info('Creating work overlay: %s', ' '.join(create_cmd))
     result = subprocess.run(create_cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise HypervisorException(
-            f'Failed to create work overlay: {result.stderr.strip()}'
-        )
+        raise HypervisorException(f'Failed to create work overlay: {result.stderr.strip()}')
     return overlay_path
 
 
@@ -96,9 +101,7 @@ def flatten_overlay(overlay_path: Path, dest_disk: Path, compress: bool = True) 
             return dest_disk
         except DiskCompressionError as e:
             log.warning('Disk compression failed, falling back to plain flatten: %s', e)
-            print_step(
-                f'[yellow]Disk compression failed, falling back to plain flatten:[/yellow] {e}'
-            )
+            print_step(f'[yellow]Disk compression failed, falling back to plain flatten:[/yellow] {e}')
             dest_disk.unlink(missing_ok=True)
 
     qemu_img = HYPERVISOR_CONFIGS['qemu']['qemu_img_exe']
@@ -106,8 +109,6 @@ def flatten_overlay(overlay_path: Path, dest_disk: Path, compress: bool = True) 
     log.info('Flattening overlay: %s', ' '.join(convert_cmd))
     result = subprocess.run(convert_cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise HypervisorException(
-            f'Failed to flatten overlay into standalone disk: {result.stderr.strip()}'
-        )
+        raise HypervisorException(f'Failed to flatten overlay into standalone disk: {result.stderr.strip()}')
     print_step(f'Flattened standalone disk: [dim]{dest_disk}[/dim]')
     return dest_disk

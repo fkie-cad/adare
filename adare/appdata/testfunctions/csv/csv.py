@@ -11,6 +11,7 @@ from adarelib.event.event import TestResult
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -22,7 +23,9 @@ def _row_matches_pattern(test_instance, row, entry_pattern):
     """
     column_count_match = len(row) == len(entry_pattern)
     if not column_count_match:
-        log.info(f"Row column count mismatch: got {len(row)} columns {row}, expected {len(entry_pattern)} columns {entry_pattern}")
+        log.info(
+            f"Row column count mismatch: got {len(row)} columns {row}, expected {len(entry_pattern)} columns {entry_pattern}"
+        )
         return False, [f"column_count({len(row)} != {len(entry_pattern)})"], False
 
     failed_columns = []
@@ -44,7 +47,9 @@ def _row_matches_pattern(test_instance, row, entry_pattern):
                     log.error(f"Error in placeholder comparison for column {i}: {e}")
                     failed_columns.append(f"col{i}(placeholder_error: {e})")
             else:
-                failed_columns.append(f"col{i}(invalid_placeholder: expected 1 placeholder, got {len(placeholder_names)})")
+                failed_columns.append(
+                    f"col{i}(invalid_placeholder: expected 1 placeholder, got {len(placeholder_names)})"
+                )
         else:
             # Direct string comparison
             if actual_value != expected_str:
@@ -94,7 +99,7 @@ def _compare_row_sets(
     reference_rows: list[list[str]],
     columns: list[int] | None,
     allow_extra: bool,
-    allow_missing: bool
+    allow_missing: bool,
 ) -> TestResult:
     """
     Compare CSV rows as sets (ignore_order=True).
@@ -137,7 +142,9 @@ def _compare_row_sets(
                     break
 
     # Find missing and extra rows
-    missing_rows = [(i, reference_extracted[i]) for i in range(len(reference_extracted)) if i not in matched_reference_indices]
+    missing_rows = [
+        (i, reference_extracted[i]) for i in range(len(reference_extracted)) if i not in matched_reference_indices
+    ]
     extra_rows = [(i, actual_extracted[i]) for i in range(len(actual_extracted)) if i not in matched_actual_indices]
 
     # Check if comparison passes
@@ -157,7 +164,7 @@ def _compare_row_sets(
         mismatched_rows=[],
         actual_count=len(actual_rows),
         reference_count=len(reference_rows),
-        columns=columns
+        columns=columns,
     )
 
     return TestResult.failed(details)
@@ -169,7 +176,7 @@ def _compare_row_sequences(
     reference_rows: list[list[str]],
     columns: list[int] | None,
     allow_extra: bool,
-    allow_missing: bool
+    allow_missing: bool,
 ) -> TestResult:
     """
     Compare CSV rows as ordered sequences (ignore_order=False).
@@ -249,7 +256,7 @@ def _compare_row_sequences(
         mismatched_rows=mismatched_rows,
         actual_count=len(actual_rows),
         reference_count=len(reference_rows),
-        columns=columns
+        columns=columns,
     )
 
     return TestResult.failed(details)
@@ -261,7 +268,7 @@ def _format_diff_report(
     mismatched_rows: list[tuple[int, list[str], list[str], list[str]]],
     actual_count: int,
     reference_count: int,
-    columns: list[int] | None
+    columns: list[int] | None,
 ) -> list[str]:
     """
     Format detailed comparison report for test failure.
@@ -354,11 +361,19 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
             try:
                 search_path = Path(dst).parent if '/' in dst or '\\' in dst else Path('.')
                 available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-                files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
+                files_info = (
+                    f"Available files in directory: {available_files}"
+                    if available_files
+                    else "No files found in directory"
+                )
             except (OSError, PermissionError, FileNotFoundError) as e:
                 files_info = f"Could not list directory contents: {e}"
 
-            return TestResult.failed([f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'])
+            return TestResult.failed(
+                [
+                    f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'
+                ]
+            )
 
         log.debug(f'dst file {dst_resolved} will be used for test contains_line')
 
@@ -386,13 +401,15 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
                         return TestResult.success()
 
                     # Store match details for error reporting
-                    match_results.append({
-                        'row_index': i,
-                        'row': row,
-                        'failed_columns': failed_columns,
-                        'column_count_match': column_count_match,
-                        'failure_count': len(failed_columns)
-                    })
+                    match_results.append(
+                        {
+                            'row_index': i,
+                            'row': row,
+                            'failed_columns': failed_columns,
+                            'column_count_match': column_count_match,
+                            'failure_count': len(failed_columns),
+                        }
+                    )
 
             # Log file contents for debugging when test fails
             log.info(f"CSV file '{dst_resolved}' contents for failed test 'contains_line':")
@@ -408,20 +425,19 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
                 # Build structured failure details
                 failure_details = [
                     f'no matching row found for pattern: {entry_pattern}',
-                    f'analyzed {len(rows)} rows in CSV file'
+                    f'analyzed {len(rows)} rows in CSV file',
                 ]
 
                 # Add up to 3 best matching rows with detailed failures
                 failure_details.append('closest matches:')
                 for i, match in enumerate(best_matches[:3]):
-                    failure_details.append(f'  [{i+1}] row {match["row_index"]}: {match["row"]}')
+                    failure_details.append(f'  [{i + 1}] row {match["row_index"]}: {match["row"]}')
                     failure_details.append(f'      failures: {", ".join(match["failed_columns"])}')
 
                 return TestResult.failed(failure_details)
-            return TestResult.failed([
-                f'no matching row found for pattern: {entry_pattern}',
-                'no rows found in CSV file to analyze'
-            ])
+            return TestResult.failed(
+                [f'no matching row found for pattern: {entry_pattern}', 'no rows found in CSV file to analyze']
+            )
         except FileNotFoundError:
             return TestResult.failed([f'file with path {dst} does not exist'])
         except (PermissionError, OSError) as e:
@@ -439,7 +455,15 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
     description='compares all rows in CSV against embedded reference data',
     category=HostModeCategory.FILE_CONTENT,
 )
-def compare_rows(ctx: TestContext, dst: str, reference_rows: list[list[str]] = None, columns: list[int] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False):
+def compare_rows(
+    ctx: TestContext,
+    dst: str,
+    reference_rows: list[list[str]] = None,
+    columns: list[int] = None,
+    ignore_order: bool = False,
+    allow_extra_rows: bool = False,
+    allow_missing_rows: bool = False,
+):
     """Pass when the rows of CSV file ``dst`` match the embedded ``reference_rows``.
 
     Use for: asserting a whole (small) CSV export. To compare against a second CSV file use
@@ -474,11 +498,19 @@ def compare_rows(ctx: TestContext, dst: str, reference_rows: list[list[str]] = N
             try:
                 search_path = Path(dst).parent if '/' in dst or '\\' in dst else Path('.')
                 available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-                files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
+                files_info = (
+                    f"Available files in directory: {available_files}"
+                    if available_files
+                    else "No files found in directory"
+                )
             except (OSError, PermissionError, FileNotFoundError) as e:
                 files_info = f"Could not list directory contents: {e}"
 
-            return TestResult.failed([f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'])
+            return TestResult.failed(
+                [
+                    f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'
+                ]
+            )
 
         log.debug(f'dst file {dst_resolved} will be used for test compare_rows')
 
@@ -517,7 +549,7 @@ def compare_rows(ctx: TestContext, dst: str, reference_rows: list[list[str]] = N
                     reference_rows=reference_rows,
                     columns=columns,
                     allow_extra=allow_extra_rows,
-                    allow_missing=allow_missing_rows
+                    allow_missing=allow_missing_rows,
                 )
             return _compare_row_sequences(
                 test_instance=ctx,
@@ -525,7 +557,7 @@ def compare_rows(ctx: TestContext, dst: str, reference_rows: list[list[str]] = N
                 reference_rows=reference_rows,
                 columns=columns,
                 allow_extra=allow_extra_rows,
-                allow_missing=allow_missing_rows
+                allow_missing=allow_missing_rows,
             )
 
         except FileNotFoundError:
@@ -545,7 +577,15 @@ def compare_rows(ctx: TestContext, dst: str, reference_rows: list[list[str]] = N
     description='compares two CSV files with full diff reporting',
     category=HostModeCategory.FILE_CONTENT,
 )
-def compare_files(ctx: TestContext, actual: str = '', reference: str = '', columns: list[int] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False):
+def compare_files(
+    ctx: TestContext,
+    actual: str = '',
+    reference: str = '',
+    columns: list[int] = None,
+    ignore_order: bool = False,
+    allow_extra_rows: bool = False,
+    allow_missing_rows: bool = False,
+):
     """Pass when CSV file ``actual`` matches CSV file ``reference`` row by row.
 
     Use for: diffing a produced CSV against a reference CSV available on the same machine.
@@ -575,11 +615,19 @@ def compare_files(ctx: TestContext, actual: str = '', reference: str = '', colum
             try:
                 search_path = Path(actual).parent if '/' in actual or '\\' in actual else Path('.')
                 available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-                files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
+                files_info = (
+                    f"Available files in directory: {available_files}"
+                    if available_files
+                    else "No files found in directory"
+                )
             except (OSError, PermissionError, FileNotFoundError) as e:
                 files_info = f"Could not list directory contents: {e}"
 
-            return TestResult.failed([f'actual file with path {actual} can\'t be used, because no unambiguous file could be identified (because {actual_status}). {files_info}'])
+            return TestResult.failed(
+                [
+                    f'actual file with path {actual} can\'t be used, because no unambiguous file could be identified (because {actual_status}). {files_info}'
+                ]
+            )
 
         # Resolve reference file path
         reference_path, reference_status = ctx.resolve_globfilepath(reference)
@@ -587,13 +635,23 @@ def compare_files(ctx: TestContext, actual: str = '', reference: str = '', colum
             try:
                 search_path = Path(reference).parent if '/' in reference or '\\' in reference else Path('.')
                 available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-                files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
+                files_info = (
+                    f"Available files in directory: {available_files}"
+                    if available_files
+                    else "No files found in directory"
+                )
             except (OSError, PermissionError, FileNotFoundError) as e:
                 files_info = f"Could not list directory contents: {e}"
 
-            return TestResult.failed([f'reference file with path {reference} can\'t be used, because no unambiguous file could be identified (because {reference_status}). {files_info}'])
+            return TestResult.failed(
+                [
+                    f'reference file with path {reference} can\'t be used, because no unambiguous file could be identified (because {reference_status}). {files_info}'
+                ]
+            )
 
-        log.debug(f'actual file {actual_path} will be compared against reference file {reference_path} for test compare_files')
+        log.debug(
+            f'actual file {actual_path} will be compared against reference file {reference_path} for test compare_files'
+        )
 
         try:
             # Increase CSV field size limit to handle large fields
@@ -624,7 +682,7 @@ def compare_files(ctx: TestContext, actual: str = '', reference: str = '', colum
                     reference_rows=reference_rows,
                     columns=columns,
                     allow_extra=allow_extra_rows,
-                    allow_missing=allow_missing_rows
+                    allow_missing=allow_missing_rows,
                 )
             return _compare_row_sequences(
                 test_instance=ctx,
@@ -632,7 +690,7 @@ def compare_files(ctx: TestContext, actual: str = '', reference: str = '', colum
                 reference_rows=reference_rows,
                 columns=columns,
                 allow_extra=allow_extra_rows,
-                allow_missing=allow_missing_rows
+                allow_missing=allow_missing_rows,
             )
 
         except FileNotFoundError as e:

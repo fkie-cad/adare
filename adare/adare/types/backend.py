@@ -24,6 +24,7 @@ class UsbDevice:
     """
     Class to store information about a USB device.
     """
+
     name: str
     VendorId: str | None = None
     ProductId: str | None = None
@@ -41,6 +42,7 @@ class CopyData:
     """
     Configuration for copying data to VM.
     """
+
     source: str
     destination: str
 
@@ -50,6 +52,7 @@ class DownloadData:
     """
     Configuration for downloading data to VM.
     """
+
     url: str
     destination: str
 
@@ -59,6 +62,7 @@ class Disk:
     """
     Disk configuration for VM.
     """
+
     name: str
     size: int
     mountpoint: str
@@ -70,6 +74,7 @@ class Share:
     """
     Base class for network shares used by the network drive VM.
     """
+
     name: str
 
     @abstractmethod
@@ -86,6 +91,7 @@ class NetworkdriveVMConfiguration:
     """
     Configuration of the network drive VM (such as used CPU's, memory and the IP in the internal VM network, where the VM can be found).
     """
+
     cpu: int = config.DEFAULT_NETWORKSHARES_VM['cpu']
     memory: int = config.DEFAULT_NETWORKSHARES_VM['memory']
     ip: str = config.DEFAULT_NETWORKSHARES_VM['ip']
@@ -100,6 +106,7 @@ class NFSShare(Share):
     local_path: local path where the NFS share will be mounted
     allowed_hosts: allowed hosts to connect to the NFS share
     """
+
     name: str = config.DEFAULT_NFS_CONF['share']['name']
     # used for server setup and client mount
     remote_path: str = config.DEFAULT_NFS_CONF['share']['remote_path']
@@ -135,7 +142,7 @@ class NFSShare(Share):
         mount_info = {
             'local_path': self.local_path,
             'remote_path': f'\\\\{ip}{remote_path_windows_style}',
-            'options': ['-u:vagrant', '-p:vagrant']
+            'options': ['-u:vagrant', '-p:vagrant'],
         }
         options = ''
         if mount_info['options']:
@@ -148,6 +155,7 @@ class NFSConfiguration:
     """
     Configuration of an NFS server.
     """
+
     name: str = config.DEFAULT_NFS_CONF['name']
     shares: list[NFSShare] = attrs.Factory(list)
 
@@ -179,6 +187,7 @@ class SMBUser:
     """
     Configuration of an SMB user.
     """
+
     name: str = config.DEFAULT_SMB_CONF['user']['name']
     password: str = config.DEFAULT_SMB_CONF['user']['password']
 
@@ -188,6 +197,7 @@ class SMBShare(Share):
     """
     Configuration of an SMB share.
     """
+
     name: str = config.DEFAULT_SMB_CONF['share']['name']
     # used for server setup and client mount
     remote_path: str = config.DEFAULT_SMB_CONF['share']['remote_path']
@@ -222,7 +232,7 @@ class SMBShare(Share):
         mount_info = {
             'local_path': self.local_path,
             'remote_path': f'\\\\{ip}\\{self.name}',
-            'options': [f'/u:{self.user.name} {self.user.password}']
+            'options': [f'/u:{self.user.name} {self.user.password}'],
         }
         options = ' '
         if mount_info['options']:
@@ -236,6 +246,7 @@ class SMBConfiguration:
     """
     Configuration of an SMB server.
     """
+
     name: str = config.DEFAULT_SMB_CONF['name']
     shares: list[SMBShare] = attrs.Factory(list)
     users: list[SMBUser] = attrs.Factory(list)
@@ -282,7 +293,8 @@ class SMBConfiguration:
             self.users.append(user)
         else:
             log.error(
-                f'user {user.name} does already exist in the SMB configuration and could therefore not be added to the SMB configuration')
+                f'user {user.name} does already exist in the SMB configuration and could therefore not be added to the SMB configuration'
+            )
 
     def get_user_by_name(self, name: str) -> SMBUser | None:
         for u in self.users:
@@ -297,6 +309,7 @@ class NetworkdriveMountData:
     """
     Configuration for mounting network drives.
     """
+
     nfs: list[NFSShare] = attrs.Factory(list)
     smb: list[SMBShare] = attrs.Factory(list)
 

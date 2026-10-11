@@ -33,6 +33,7 @@ def project_create(path: Path, name: str, description: str = ''):
     # Initialize project database
     try:
         from adare.database.init import ensure_project_database_exists
+
         ensure_project_database_exists(path)
         log.info(f'project database initialized for {path}')
     except (OSError, ValueError) as e:
@@ -44,6 +45,7 @@ def project_create(path: Path, name: str, description: str = ''):
     # Load stage and status fixtures for the project
     try:
         from adare.database.api.base import ProjectDatabaseApi
+
         with ProjectDatabaseApi(path) as project_api:
             fixture_status(project_api._session)
             fixture_stages(project_api._session)
@@ -75,14 +77,14 @@ def project_create(path: Path, name: str, description: str = ''):
         'Create an environment with: adare environment create <environment_name>',
         'Create an experiment with: adare experiment create <experiment_name>',
         'Use all available testfunction sets: files, json, csv, sqlite, linux, windows',
-        'Run your first experiment with: adare experiment run <experiment> -e <environment>'
+        'Run your first experiment with: adare experiment run <experiment> -e <environment>',
     ]
 
     print_success_message(
         title=f'Project "{name}" created successfully!',
         location=str(path),
         next_steps=next_steps,
-        tip='All testfunction sets loaded with file operations, data validation (JSON, CSV, SQLite), system analysis (Linux, Windows), and forensic capabilities'
+        tip='All testfunction sets loaded with file operations, data validation (JSON, CSV, SQLite), system analysis (Linux, Windows), and forensic capabilities',
     )
 
 
@@ -108,6 +110,5 @@ def project_list():
         raise NoProjectsFoundMessage(log, message='no projects found')
 
     from adare.frontend.terminal.project_list import print_project_list
+
     print_project_list()
-
-

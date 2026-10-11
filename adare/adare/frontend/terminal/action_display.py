@@ -46,7 +46,7 @@ def _display_command(action_data: dict, _is_complete: bool) -> str:
     if command:
         heredoc_pos = command.find('<<')
         if heredoc_pos != -1:
-            command = command[:heredoc_pos + 2] + " ..."
+            command = command[: heredoc_pos + 2] + " ..."
         elif len(command) > 50:
             command = command[:47] + "..."
         return f"execute '{command}'"

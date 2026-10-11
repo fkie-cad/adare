@@ -119,6 +119,7 @@ class VirtualBoxIdentifierStrategy(HypervisorIdentifierStrategy):
 
         try:
             from adare.hypervisor.virtualbox.vm import VirtualBoxVM
+
             vm_name = VirtualBoxVM.get_vm_name_by_uuid(identifier)
             return vm_name is not None
         except ImportError:
@@ -153,6 +154,7 @@ class VirtualBoxIdentifierStrategy(HypervisorIdentifierStrategy):
 
         try:
             from adare.hypervisor.virtualbox.vm import VirtualBoxVM
+
             return VirtualBoxVM.get_vm_name_by_uuid(identifier)
         except ImportError:
             log.warning("VirtualBox hypervisor module not available")
@@ -178,6 +180,7 @@ class QEMUIdentifierStrategy(HypervisorIdentifierStrategy):
         try:
             from adare.hypervisor.exceptions import VMNotFoundException
             from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
+
             try:
                 vm = QEMUVMRegistry.get_vm_by_name(identifier)
             except VMNotFoundException:
@@ -195,6 +198,7 @@ class QEMUIdentifierStrategy(HypervisorIdentifierStrategy):
         try:
             from adare.hypervisor.exceptions import VMNotFoundException
             from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
+
             try:
                 vm = QEMUVMRegistry.get_vm_by_name(identifier)
             except VMNotFoundException:

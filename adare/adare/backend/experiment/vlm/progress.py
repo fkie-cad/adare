@@ -30,9 +30,16 @@ log = logging.getLogger(__name__)
 
 # Action statuses the executor reports that count as a clean step (green tick);
 # 'skipped' is the user's skip (yellow); anything else is treated as a failure.
-_OK_STATUSES = frozenset({
-    'success', 'waited', 'noted', 'done', 'step_done', 'unknown',
-})
+_OK_STATUSES = frozenset(
+    {
+        'success',
+        'waited',
+        'noted',
+        'done',
+        'step_done',
+        'unknown',
+    }
+)
 
 
 @dataclass
@@ -57,7 +64,10 @@ class AgentProgressReporter:
     """
 
     def __init__(
-        self, goal: str, console: Console | None = None, *,
+        self,
+        goal: str,
+        console: Console | None = None,
+        *,
         show_reasoning: bool = True,
     ):
         self.goal = goal
@@ -72,8 +82,10 @@ class AgentProgressReporter:
 
     def __enter__(self) -> AgentProgressReporter:
         self._live = Live(
-            self._render(), console=self._console,
-            refresh_per_second=8, transient=False,
+            self._render(),
+            console=self._console,
+            refresh_per_second=8,
+            transient=False,
         )
         self._live.start()
         return self
@@ -158,7 +170,8 @@ class AgentProgressReporter:
     def _render(self) -> RenderableType:
         table = Table(
             title=f'GUI agent — {_trim(self.goal, 80)}',
-            title_justify='left', expand=True,
+            title_justify='left',
+            expand=True,
         )
         table.add_column('#', justify='right', style='dim', no_wrap=True)
         table.add_column('action', no_wrap=True)
@@ -168,7 +181,10 @@ class AgentProgressReporter:
         for index in sorted(self._rows):
             row = self._rows[index]
             table.add_row(
-                str(row.index), row.kind, row.describe, row.coords,
+                str(row.index),
+                row.kind,
+                row.describe,
+                row.coords,
                 _status_cell(row.status),
             )
         if not self._show_reasoning:
@@ -186,8 +202,7 @@ class AgentProgressReporter:
             body = '[dim]waiting for the first model decision…[/dim]'
             title = 'reasoning'
         else:
-            body = (escape(row.reasoning.strip())
-                    or '[dim](no reasoning provided for this step)[/dim]')
+            body = escape(row.reasoning.strip()) or '[dim](no reasoning provided for this step)[/dim]'
             title = f'reasoning — step {row.index} ({row.kind})'
         return Panel(body, title=title, title_align='left', border_style='cyan')
 

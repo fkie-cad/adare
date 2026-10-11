@@ -33,13 +33,15 @@ def _set_tmpdir(monkeypatch, directory: Path) -> None:
 
 
 class TestInstallQmpSocketPath:
-
-    @pytest.mark.parametrize('stem', [
-        'win11arm',
-        RECIPE_BASE_STEM,
-        'windows11arm64-recipebase-' + 'f' * 12 + '.partial',
-        'x' * 200,
-    ])
+    @pytest.mark.parametrize(
+        'stem',
+        [
+            'win11arm',
+            RECIPE_BASE_STEM,
+            'windows11arm64-recipebase-' + 'f' * 12 + '.partial',
+            'x' * 200,
+        ],
+    )
     def test_always_within_the_af_unix_limit(self, stem):
         assert len(str(install_qmp_socket_path(stem))) <= AF_UNIX_PATH_MAX
 

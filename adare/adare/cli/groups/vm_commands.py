@@ -21,6 +21,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def vm_list():
         """List all VMs in the system."""
         from adare.cli.vm import exec_vm_list
+
         args = SimpleNamespace()
         exec_with_error_printing(exec_vm_list, args)
 
@@ -30,6 +31,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def info(vm_id):
         """Get detailed information about a VM."""
         from adare.cli.vm import exec_vm_info
+
         args = SimpleNamespace(vm_id=vm_id)
         exec_with_error_printing(exec_vm_info, args)
 
@@ -51,13 +53,14 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             adare vm remove --env <ulid> --force      # all VMs for environment
         """
         from adare.cli.vm import exec_vm_instance_remove
+
         args = SimpleNamespace(
             instance_id=instance_id,
             stopped=stopped,
             experiment_id=experiment_id,
             all=all,
             environment_ulid=environment_ulid,
-            force=force
+            force=force,
         )
         exec_with_error_printing(exec_vm_instance_remove, args)
 
@@ -66,14 +69,17 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def usage():
         """Show VM instance usage statistics."""
         from adare.cli.vm import exec_vm_instance_usage
+
         args = SimpleNamespace()
         exec_with_error_printing(exec_vm_instance_usage, args)
 
     @vm.command(name='prune')
-    @click.option('--dry-run/--force', 'dry_run', default=True,
-                  help='Dry-run (default) previews only; --force actually deletes.')
-    @click.option('--sockets', is_flag=True, default=False,
-                  help='Also reap crash-orphaned dead QMP/QGA sockets in run/.')
+    @click.option(
+        '--dry-run/--force', 'dry_run', default=True, help='Dry-run (default) previews only; --force actually deletes.'
+    )
+    @click.option(
+        '--sockets', is_flag=True, default=False, help='Also reap crash-orphaned dead QMP/QGA sockets in run/.'
+    )
     def vm_prune(dry_run, sockets):
         """Reclaim orphaned QEMU base disks (and, with --sockets, dead sockets).
 
@@ -88,14 +94,18 @@ def register(cli, AliasedGroup, exec_with_error_printing):
           adare vm prune --force --sockets  # also reap dead QMP/QGA sockets
         """
         from adare.cli.vm import exec_vm_prune
+
         args = SimpleNamespace(dry_run=dry_run, sockets=sockets)
         exec_with_error_printing(exec_vm_prune, args)
 
     @vm.command(name='watch')
     @click.argument('name')
-    @click.option('--view-only/--interactive', 'view_only', default=True,
-                  help='Read-only view (default) or allow input. Toggle live from '
-                       "VirtualSpice's own toolbar either way.")
+    @click.option(
+        '--view-only/--interactive',
+        'view_only',
+        default=True,
+        help='Read-only view (default) or allow input. Toggle live from VirtualSpice\'s own toolbar either way.',
+    )
     def vm_watch(name, view_only):
         """Watch a running VM's live screen in the browser (via VirtualSpice).
 
@@ -109,12 +119,19 @@ def register(cli, AliasedGroup, exec_with_error_printing):
           adare vm watch my-vm --interactive   # allow input
         """
         from adare.cli.vm import exec_vm_watch
+
         args = SimpleNamespace(name=name, view_only=view_only)
         exec_with_error_printing(exec_vm_watch, args)
 
     @vm.command()
     @click.argument('target')
-    @click.option('--platform', '-p', required=False, type=click.Choice(['linux', 'windows']), help='VM platform (required for OVA files; auto-derived for registered VMs)')
+    @click.option(
+        '--platform',
+        '-p',
+        required=False,
+        type=click.Choice(['linux', 'windows']),
+        help='VM platform (required for OVA files; auto-derived for registered VMs)',
+    )
     @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output with detailed error information')
     @click.option('--keep-vm', is_flag=True, help='Keep the test VM after completion (for further testing)')
     @click.option('--remove-vm', is_flag=True, help='Automatically remove the test VM after completion')
@@ -155,12 +172,8 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             vm_cleanup_mode = 'remove'
 
         from adare.cli.vm import exec_vm_test
-        args = SimpleNamespace(
-            target=target,
-            platform=platform,
-            verbose=verbose,
-            vm_cleanup_mode=vm_cleanup_mode
-        )
+
+        args = SimpleNamespace(target=target, platform=platform, verbose=verbose, vm_cleanup_mode=vm_cleanup_mode)
         exec_with_error_printing(exec_vm_test, args)
 
     # Nested group for snapshot management
@@ -175,6 +188,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def snapshot_list(instance_id):
         """List all snapshots. Use --instance to filter by specific VM instance."""
         from adare.cli.vm import exec_vm_list_snapshots
+
         args = SimpleNamespace(instance_id=instance_id)
         exec_with_error_printing(exec_vm_list_snapshots, args)
 
@@ -184,6 +198,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def snapshot_remove(instance_id, snapshot_name):
         """Delete a single snapshot from a specific VM instance."""
         from adare.cli.vm import exec_vm_delete_snapshot
+
         args = SimpleNamespace(instance_id=instance_id, snapshot_name=snapshot_name)
         exec_with_error_printing(exec_vm_delete_snapshot, args)
 
@@ -195,27 +210,103 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--ram', type=int, default=None, help='RAM in MB')
     @click.option('--cpus', type=int, default=None, help='CPU count')
     @click.option('--force', is_flag=True, default=False, help='Overwrite existing VM disk image')
-    @click.option('--vm-dir', type=click.Path(), default=None, help='Directory for VM disk image (default: ~/.adare/state/vms/)')
-    @click.option('--setup', 'setup_level', type=click.Choice(['bare', 'base', 'full', 'agent']),
-                  default=None,
-                  help='What to install during creation: bare (OS only), base (+ guest tools), '
-                       'full (+ Python env, default), agent (+ pre-installed adarevm, '
-                       'not implemented).')
-    @click.option('--bare', is_flag=True, default=False,
-                  help='Deprecated alias for --setup bare.')
+    @click.option(
+        '--vm-dir', type=click.Path(), default=None, help='Directory for VM disk image (default: ~/.adare/state/vms/)'
+    )
+    @click.option(
+        '--setup',
+        'setup_level',
+        type=click.Choice(['bare', 'base', 'full', 'agent']),
+        default=None,
+        help='What to install during creation: bare (OS only), base (+ guest tools), '
+        'full (+ Python env, default), agent (+ pre-installed adarevm, '
+        'not implemented).',
+    )
+    @click.option('--bare', is_flag=True, default=False, help='Deprecated alias for --setup bare.')
     @click.option('--env-name', default=None, help='Environment file name (defaults to VM name)')
-    @click.option('--interactive', is_flag=True, default=False, help='Boot VM after install for manual software installation')
-    @click.option('--arch', type=click.Choice(['x86_64', 'aarch64']), default=None, help='Override CPU architecture (default: from OS profile)')
-    @click.option('--allow-emulation', is_flag=True, default=False, help='Allow QEMU TCG software emulation when --arch does not match the host CPU (slow; hardware acceleration is used otherwise).')
-    @click.option('--recipe/--no-recipe', 'recipe', default=None, help='Emit a declarative recipe environment (build on load) instead of a baked disk. Default: recipe for Windows, baked for Linux.')
-    @click.option('--byo-iso', is_flag=True, default=False, help='[recipe, Windows only] Emit "iso_name" instead of the local "iso" path, so consumers supply the ISO themselves. Makes the environment publishable without rehosting a Windows ISO you are not licensed to redistribute.')
-    @click.option('--iso-notes', default=None, help='[--byo-iso] Plain-text download pointer for the consumer (defaults to the OS profile\'s iso_notes).')
-    @click.option('--record', is_flag=True, default=False, help='GUI-auto: record a fresh playbook with the vision agent even if a cached one exists.')
-    @click.option('--relearn', is_flag=True, default=False, help='GUI-auto: discard the cached playbook and re-record from scratch.')
-    @click.option('--display', is_flag=True, default=False, help='GUI-auto: show the VM window while the agent drives the installer.')
-    @click.option('--template', default=None, help='GUI-auto: explicit goal/spec template name (default: gui_<distribution>).')
-    @click.option('--compress/--no-compress', 'compress', default=True, help='Zstd-compress the finished base disk (~30-50% smaller, transparent to readers). Default: on.')
-    def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, setup_level, bare, env_name, interactive, arch, allow_emulation, recipe, byo_iso, iso_notes, record, relearn, display, template, compress):
+    @click.option(
+        '--interactive', is_flag=True, default=False, help='Boot VM after install for manual software installation'
+    )
+    @click.option(
+        '--arch',
+        type=click.Choice(['x86_64', 'aarch64']),
+        default=None,
+        help='Override CPU architecture (default: from OS profile)',
+    )
+    @click.option(
+        '--allow-emulation',
+        is_flag=True,
+        default=False,
+        help='Allow QEMU TCG software emulation when --arch does not match the host CPU (slow; hardware acceleration is used otherwise).',
+    )
+    @click.option(
+        '--recipe/--no-recipe',
+        'recipe',
+        default=None,
+        help='Emit a declarative recipe environment (build on load) instead of a baked disk. Default: recipe for Windows, baked for Linux.',
+    )
+    @click.option(
+        '--byo-iso',
+        is_flag=True,
+        default=False,
+        help='[recipe, Windows only] Emit "iso_name" instead of the local "iso" path, so consumers supply the ISO themselves. Makes the environment publishable without rehosting a Windows ISO you are not licensed to redistribute.',
+    )
+    @click.option(
+        '--iso-notes',
+        default=None,
+        help='[--byo-iso] Plain-text download pointer for the consumer (defaults to the OS profile\'s iso_notes).',
+    )
+    @click.option(
+        '--record',
+        is_flag=True,
+        default=False,
+        help='GUI-auto: record a fresh playbook with the vision agent even if a cached one exists.',
+    )
+    @click.option(
+        '--relearn',
+        is_flag=True,
+        default=False,
+        help='GUI-auto: discard the cached playbook and re-record from scratch.',
+    )
+    @click.option(
+        '--display',
+        is_flag=True,
+        default=False,
+        help='GUI-auto: show the VM window while the agent drives the installer.',
+    )
+    @click.option(
+        '--template', default=None, help='GUI-auto: explicit goal/spec template name (default: gui_<distribution>).'
+    )
+    @click.option(
+        '--compress/--no-compress',
+        'compress',
+        default=True,
+        help='Zstd-compress the finished base disk (~30-50% smaller, transparent to readers). Default: on.',
+    )
+    def vm_create(
+        os_name,
+        iso,
+        name,
+        disk_size,
+        ram,
+        cpus,
+        force,
+        vm_dir,
+        setup_level,
+        bare,
+        env_name,
+        interactive,
+        arch,
+        allow_emulation,
+        recipe,
+        byo_iso,
+        iso_notes,
+        record,
+        relearn,
+        display,
+        template,
+        compress,
+    ):
         """Create a new ADARE-ready VM from scratch.
 
         OS_NAME is the target OS. Run `adare os-profile list` to see all entries.
@@ -261,7 +352,31 @@ def register(cli, AliasedGroup, exec_with_error_printing):
           adare vm create ubuntu2204 --name my-ubuntu --disk-size 100G --ram 8192
         """
         from adare.cli.vm_create import exec_vm_create
-        args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, setup_level=setup_level, bare=bare, env_name=env_name, interactive=interactive, arch=arch, allow_emulation=allow_emulation, recipe=recipe, byo_iso=byo_iso, iso_notes=iso_notes, record=record, relearn=relearn, display=display, template=template, compress=compress)
+
+        args = SimpleNamespace(
+            os_name=os_name,
+            iso=iso,
+            name=name,
+            disk_size=disk_size,
+            ram=ram,
+            cpus=cpus,
+            force=force,
+            vm_dir=vm_dir,
+            setup_level=setup_level,
+            bare=bare,
+            env_name=env_name,
+            interactive=interactive,
+            arch=arch,
+            allow_emulation=allow_emulation,
+            recipe=recipe,
+            byo_iso=byo_iso,
+            iso_notes=iso_notes,
+            record=record,
+            relearn=relearn,
+            display=display,
+            template=template,
+            compress=compress,
+        )
         exec_with_error_printing(exec_vm_create, args)
 
     @vm.command(name='gui-doctor')
@@ -273,6 +388,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         coordinate convention the model returns, recommending ADARE_VLLM_COORD_SPACE.
         """
         from adare.cli.vm_gui_doctor import exec_vm_gui_doctor
+
         args = SimpleNamespace()
         exec_with_error_printing(exec_vm_gui_doctor, args)
 
@@ -287,6 +403,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         installs anything and always exits 0.
         """
         from adare.cli.vm_doctor import exec_vm_doctor
+
         args = SimpleNamespace()
         exec_with_error_printing(exec_vm_doctor, args)
 
@@ -295,6 +412,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def vm_reset(force):
         """Reset all VMs in the system (use with caution)."""
         from adare.cli.manage import exec_manage_reset_vm
+
         args = SimpleNamespace(force=force)
         exec_with_error_printing(exec_manage_reset_vm, args)
 

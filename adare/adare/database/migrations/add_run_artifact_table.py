@@ -27,8 +27,9 @@ log = logging.getLogger(__name__)
 
 def upgrade(conn) -> None:
     """Create run_artifact on ``conn`` if it does not already exist (idempotent)."""
-    conn.execute(text(
-        """
+    conn.execute(
+        text(
+            """
         CREATE TABLE IF NOT EXISTS run_artifact (
             id CHAR(26) NOT NULL PRIMARY KEY,
             experiment_run_id CHAR(26) NOT NULL REFERENCES experiment_run(id) ON DELETE CASCADE,
@@ -39,10 +40,11 @@ def upgrade(conn) -> None:
             created_at DATETIME NULL
         )
         """
-    ))
-    conn.execute(text(
-        "CREATE INDEX IF NOT EXISTS ix_run_artifact_experiment_run_id ON run_artifact (experiment_run_id)"
-    ))
+        )
+    )
+    conn.execute(
+        text("CREATE INDEX IF NOT EXISTS ix_run_artifact_experiment_run_id ON run_artifact (experiment_run_id)")
+    )
     print("✓ Table 'run_artifact' present.")
 
 

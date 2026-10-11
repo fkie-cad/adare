@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 @attrs.define
 class ModuleLoadFailure:
     """Track failed testfunction module loads with context."""
+
     module_name: str
     file_path: str
     exception_type: str
@@ -28,6 +29,7 @@ class ModuleLoadFailure:
         if self.exception_type == 'ModuleNotFoundError':
             # Extract dependency name from exception message
             import re
+
             match = re.search(r"No module named '([^']+)'", self.exception_message)
             if match:
                 dep_name = match.group(1)
@@ -126,34 +128,25 @@ class TestfunctionLoader:
                 module_name=name,
                 file_path=str(file_path),
                 exception_type='ModuleNotFoundError',
-                exception_message=str(e)
+                exception_message=str(e),
             )
 
         except ImportError as e:
             log.error(f"Import error loading testfunction '{name}' from {file_path}: {e}")
             self._load_failures[name] = ModuleLoadFailure(
-                module_name=name,
-                file_path=str(file_path),
-                exception_type='ImportError',
-                exception_message=str(e)
+                module_name=name, file_path=str(file_path), exception_type='ImportError', exception_message=str(e)
             )
 
         except SyntaxError as e:
             log.error(f"Syntax error in testfunction '{name}' at {file_path}: {e}")
             self._load_failures[name] = ModuleLoadFailure(
-                module_name=name,
-                file_path=str(file_path),
-                exception_type='SyntaxError',
-                exception_message=str(e)
+                module_name=name, file_path=str(file_path), exception_type='SyntaxError', exception_message=str(e)
             )
 
         except (AttributeError, TypeError) as e:
             log.error(f"Attribute/Type error loading testfunction '{name}' from {file_path}: {e}")
             self._load_failures[name] = ModuleLoadFailure(
-                module_name=name,
-                file_path=str(file_path),
-                exception_type=type(e).__name__,
-                exception_message=str(e)
+                module_name=name, file_path=str(file_path), exception_type=type(e).__name__, exception_message=str(e)
             )
 
         except ValueError as e:
@@ -162,10 +155,7 @@ class TestfunctionLoader:
             # of letting it abort the whole collection load.
             log.error(f"Contract violation loading testfunction '{name}' from {file_path}: {e}")
             self._load_failures[name] = ModuleLoadFailure(
-                module_name=name,
-                file_path=str(file_path),
-                exception_type='ContractViolation',
-                exception_message=str(e)
+                module_name=name, file_path=str(file_path), exception_type='ContractViolation', exception_message=str(e)
             )
 
     def _do_import(self, source=None, directory=None) -> dict:
@@ -263,9 +253,13 @@ def get_testclass_from_testfunction(testfunction: str, testfunction_collection: 
         load_failures = get_module_load_failures()
         if testfunction_list in load_failures:
             failure = load_failures[testfunction_list]
-            log.error(f"Testfunction collection '{testfunction_list}' is unavailable: {failure.get_user_friendly_message()}")
+            log.error(
+                f"Testfunction collection '{testfunction_list}' is unavailable: {failure.get_user_friendly_message()}"
+            )
         else:
-            log.error(f"Testfunction collection '{testfunction_list}' not found in available collections: {list(testfunction_collection.keys())}")
+            log.error(
+                f"Testfunction collection '{testfunction_list}' not found in available collections: {list(testfunction_collection.keys())}"
+            )
         return None
 
     return collection.get(testfunction_name)
@@ -316,4 +310,3 @@ def structure_tests(testset: TestsetFile, testfunction_collection: dict) -> tupl
         tests[test.name] = testclass_instance
 
     return tests, structure_error_dict
-

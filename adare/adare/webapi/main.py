@@ -166,16 +166,12 @@ async def stop_session(session_id: str, request: SessionStopRequest | None = Non
     logger.info(f"Stopping session {session_id}")
     request = request or SessionStopRequest()
 
-    dto = DevSessionStopRequest(
-        session_id=session_id, remove_resources=request.remove_resources
-    )
+    dto = DevSessionStopRequest(session_id=session_id, remove_resources=request.remove_resources)
 
     result = api.devmode.stop_session(dto)
 
     if result.is_success():
-        await ws_manager.send_session_state(
-            session_id, {"status": "stopped"}
-        )
+        await ws_manager.send_session_state(session_id, {"status": "stopped"})
 
     return result_to_response(result)
 
@@ -191,9 +187,7 @@ async def list_sessions(project_path: str | None = None):
     Returns:
         List of session items
     """
-    dto = DevSessionListRequest(
-        project_path=Path(project_path) if project_path else None
-    )
+    dto = DevSessionListRequest(project_path=Path(project_path) if project_path else None)
 
     result = api.devmode.list_sessions(dto)
     return result_to_response(result)
@@ -226,9 +220,7 @@ async def cleanup_sessions(project_path: str | None = None):
     Returns:
         Cleanup statistics
     """
-    dto = DevSessionCleanupRequest(
-        project_path=Path(project_path) if project_path else None
-    )
+    dto = DevSessionCleanupRequest(project_path=Path(project_path) if project_path else None)
 
     result = api.devmode.cleanup_stale_sessions(dto)
     return result_to_response(result)
@@ -254,9 +246,7 @@ async def execute_action(session_id: str, request: ActionExecuteRequest):
     logger.info(f"Executing action for session {session_id}")
 
     # Send action start event
-    await ws_manager.send_action_start(
-        session_id, action_type="action", description="Executing action"
-    )
+    await ws_manager.send_action_start(session_id, action_type="action", description="Executing action")
 
     dto = DevActionExecuteRequest(
         session_id=session_id,
@@ -310,9 +300,7 @@ async def execute_playbook(session_id: str, request: PlaybookExecuteRequest):
         temp_path = f.name
 
     try:
-        dto = DevPlaybookExecuteRequest(
-            session_id=session_id, playbook_source="file", playbook_content=temp_path
-        )
+        dto = DevPlaybookExecuteRequest(session_id=session_id, playbook_source="file", playbook_content=temp_path)
 
         result = api.devmode.execute_playbook(dto)
         return result_to_response(result)
@@ -327,9 +315,7 @@ async def execute_playbook(session_id: str, request: PlaybookExecuteRequest):
 
 
 @app.post("/api/sessions/{session_id}/reset")
-async def reset_session(
-    session_id: str, reset_type: Literal["soft", "hard"] = Query("soft")
-):
+async def reset_session(session_id: str, reset_type: Literal["soft", "hard"] = Query("soft")):
     """
     Reset session state.
 
@@ -368,9 +354,7 @@ async def create_checkpoint(session_id: str, request: CheckpointCreateRequest):
     """
     logger.info(f"Creating checkpoint '{request.name}' for session {session_id}")
 
-    dto = DevCheckpointCreateRequest(
-        session_id=session_id, name=request.name, description=request.description
-    )
+    dto = DevCheckpointCreateRequest(session_id=session_id, name=request.name, description=request.description)
 
     result = api.devmode.create_checkpoint(dto)
 
@@ -621,9 +605,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
     try:
         # Send initial connection confirmation
-        await websocket.send_json(
-            {"type": "connected", "session_id": session_id, "message": "WebSocket connected"}
-        )
+        await websocket.send_json({"type": "connected", "session_id": session_id, "message": "WebSocket connected"})
 
         # Keep connection alive and handle incoming messages
         while True:
@@ -694,8 +676,8 @@ app.include_router(spice_proxy_router)
 _this_file = Path(__file__).resolve()
 _project_dir = _this_file.parent.parent.parent.parent  # adare repo root
 _frontend_dist_candidates = [
-    _project_dir / "adare-web" / "dist",            # in-repo (preferred)
-    _project_dir.parent / "adare-web" / "dist",     # sibling fallback (legacy)
+    _project_dir / "adare-web" / "dist",  # in-repo (preferred)
+    _project_dir.parent / "adare-web" / "dist",  # sibling fallback (legacy)
 ]
 _frontend_dist = next((p for p in _frontend_dist_candidates if p.is_dir()), _frontend_dist_candidates[0])
 

@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,13 +12,10 @@ from adare.backend.experiment.runctx import ExperimentRunCtx
 
 @pytest.fixture
 def mock_session():
-    session = DevModeSession(
-        session_id="test_session",
-        project_path=Path("/tmp/project"),
-        environment_name="test_env"
-    )
+    session = DevModeSession(session_id="test_session", project_path=Path("/tmp/project"), environment_name="test_env")
     session.experiment_ctx = MagicMock(spec=ExperimentRunCtx)
     return session
+
 
 @pytest.mark.asyncio
 async def test_restart_mcp_server_success(mock_session):
@@ -55,9 +51,9 @@ async def test_restart_mcp_server_success(mock_session):
         # 2. New manager created with correct args, on the SAME port
         MockManager.assert_called_once_with(
             server_port=13117,  # re-bound, not re-allocated
-            log_file=Path("/tmp/old_log.log"), # Should reuse log file
+            log_file=Path("/tmp/old_log.log"),  # Should reuse log file
             debug=True,
-            debug_output_dir=Path("/tmp/debug")
+            debug_output_dir=Path("/tmp/debug"),
         )
 
         # 3. Start called on new manager
@@ -65,6 +61,7 @@ async def test_restart_mcp_server_success(mock_session):
 
         # 4. Context updated
         assert mock_session.experiment_ctx.mcp_server == mock_new_manager
+
 
 @pytest.mark.asyncio
 async def test_restart_mcp_server_defaults(mock_session):
@@ -93,8 +90,8 @@ async def test_restart_mcp_server_defaults(mock_session):
         MockManager.assert_called_once_with(
             server_port=13120,  # Inherited: the session's own port
             log_file=Path("/tmp/old_log.log"),
-            debug=True, # Inherited
-            debug_output_dir=Path("/tmp/existing_debug") # Inherited
+            debug=True,  # Inherited
+            debug_output_dir=Path("/tmp/existing_debug"),  # Inherited
         )
 
 
@@ -103,8 +100,10 @@ async def test_restart_mcp_server_allocates_when_session_has_none(mock_session):
     """A session with no server yet has no port to re-bind, so it must allocate one."""
     mock_session.experiment_ctx.mcp_server = None
 
-    with patch('adare.backend.devmode.session.action_execution.MCPServerManager') as MockManager, \
-         patch('adare.backend.devmode.session.action_execution.find_free_cv_port', return_value=13131) as mock_find:
+    with (
+        patch('adare.backend.devmode.session.action_execution.MCPServerManager') as MockManager,
+        patch('adare.backend.devmode.session.action_execution.find_free_cv_port', return_value=13131) as mock_find,
+    ):
         mock_new_manager = AsyncMock(spec=MCPServerManager)
         mock_new_manager.start.return_value = True
         # Set by start(); read when recording this session's CV ownership.
@@ -117,18 +116,20 @@ async def test_restart_mcp_server_allocates_when_session_has_none(mock_session):
         mock_find.assert_called_once()
         assert MockManager.call_args.kwargs['server_port'] == 13131
 
+
 @pytest.mark.asyncio
 async def test_restart_mcp_server_failure(mock_session):
     mock_session.experiment_ctx.mcp_server = AsyncMock()
 
     with patch('adare.backend.devmode.session.action_execution.MCPServerManager') as MockManager:
         mock_new_manager = AsyncMock()
-        mock_new_manager.start.return_value = False # fail
+        mock_new_manager.start.return_value = False  # fail
         MockManager.return_value = mock_new_manager
 
         result = await mock_session.restart_mcp_server(debug=True)
 
         assert result.success is False
+
 
 @pytest.mark.asyncio
 async def test_stop_mcp_server_success(mock_session):
@@ -140,6 +141,7 @@ async def test_stop_mcp_server_success(mock_session):
 
     assert result.success is True
     mock_server.stop.assert_called_once_with(force_external=True)
+
 
 @pytest.mark.asyncio
 async def test_stop_mcp_server_not_running(mock_session):

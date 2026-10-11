@@ -15,12 +15,14 @@ from adarelib.event.event import TestResult
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
 # =============================================================================
 # Module-level helper functions (deduplicated)
 # =============================================================================
+
 
 def _detect_encoding_from_bom(file_path):
     """Detect encoding from BOM, return (encoding, bom_length)"""
@@ -42,19 +44,21 @@ def _detect_encoding_from_bom(file_path):
 
 def _strip_bom_from_text(text, encoding):
     """Strip BOM from text content"""
-    if encoding.lower() == 'utf-8' and text.startswith('\ufeff') or encoding.lower().startswith('utf-16') and text.startswith('\ufeff') or encoding.lower().startswith('utf-32') and text.startswith('\ufeff'):
+    if (
+        encoding.lower() == 'utf-8'
+        and text.startswith('\ufeff')
+        or encoding.lower().startswith('utf-16')
+        and text.startswith('\ufeff')
+        or encoding.lower().startswith('utf-32')
+        and text.startswith('\ufeff')
+    ):
         return text[1:]
     return text
 
 
 def _calculate_hash(filepath, hash_type):
     """Calculate file hash"""
-    hash_algos = {
-        'md5': hashlib.md5,
-        'sha1': hashlib.sha1,
-        'sha256': hashlib.sha256,
-        'sha512': hashlib.sha512
-    }
+    hash_algos = {'md5': hashlib.md5, 'sha1': hashlib.sha1, 'sha256': hashlib.sha256, 'sha512': hashlib.sha512}
 
     if hash_type.lower() not in hash_algos:
         raise ValueError(f"Unsupported hash type: {hash_type}")
@@ -111,7 +115,7 @@ def _parse_timestamp(timestamp, time_format=None):
         '%Y-%m-%dT%H:%M:%SZ',
         '%Y-%m-%d',
         '%m/%d/%Y %H:%M:%S',
-        '%m/%d/%Y'
+        '%m/%d/%Y',
     ]
 
     for fmt in common_formats:
@@ -157,17 +161,26 @@ def _parse_permissions(perm_str):
     if len(perm_str) == 9:
         perms = 0
         # Owner permissions
-        if perm_str[0] == 'r': perms |= stat.S_IRUSR
-        if perm_str[1] == 'w': perms |= stat.S_IWUSR
-        if perm_str[2] == 'x': perms |= stat.S_IXUSR
+        if perm_str[0] == 'r':
+            perms |= stat.S_IRUSR
+        if perm_str[1] == 'w':
+            perms |= stat.S_IWUSR
+        if perm_str[2] == 'x':
+            perms |= stat.S_IXUSR
         # Group permissions
-        if perm_str[3] == 'r': perms |= stat.S_IRGRP
-        if perm_str[4] == 'w': perms |= stat.S_IWGRP
-        if perm_str[5] == 'x': perms |= stat.S_IXGRP
+        if perm_str[3] == 'r':
+            perms |= stat.S_IRGRP
+        if perm_str[4] == 'w':
+            perms |= stat.S_IWGRP
+        if perm_str[5] == 'x':
+            perms |= stat.S_IXGRP
         # Other permissions
-        if perm_str[6] == 'r': perms |= stat.S_IROTH
-        if perm_str[7] == 'w': perms |= stat.S_IWOTH
-        if perm_str[8] == 'x': perms |= stat.S_IXOTH
+        if perm_str[6] == 'r':
+            perms |= stat.S_IROTH
+        if perm_str[7] == 'w':
+            perms |= stat.S_IWOTH
+        if perm_str[8] == 'x':
+            perms |= stat.S_IXOTH
         return perms
 
     raise ValueError(f"Invalid permission format: {perm_str}")
@@ -178,6 +191,7 @@ def _get_owner_group(filepath):
     try:
         import pwd
         import grp
+
         stat_info = os.stat(filepath)
         owner = pwd.getpwuid(stat_info.st_uid).pw_name
         group = grp.getgrgid(stat_info.st_gid).gr_name
@@ -194,6 +208,7 @@ def _parse_escape_sequences(text):
     try:
         # Use codecs to decode escape sequences like \x41, \n, \t, etc.
         import codecs
+
         return codecs.decode(text, 'unicode_escape').encode('latin1')
     except (UnicodeDecodeError, UnicodeEncodeError):
         # If parsing fails, fall back to UTF-8 encoding
@@ -204,10 +219,11 @@ def _parse_escape_sequences(text):
 # Test functions
 # =============================================================================
 
+
 @testfunction(
     name='file_exists',
     description='tests if file(s) with path destination(dst) exist (supports glob patterns with match_mode)',
-    category=HostModeCategory.FILE_BASED
+    category=HostModeCategory.FILE_BASED,
 )
 def file_exists(ctx, dst: str = '', match_mode: str = "any"):
     """Pass when a regular file exists at ``dst`` (for globs: at least one match is a file).
@@ -229,14 +245,11 @@ def file_exists(ctx, dst: str = '', match_mode: str = "any"):
           dst: /home/user/Documents/report.odt
     """
     try:
-        paths, status = ctx.resolve_globfilepath(
-            dst,
-            match_mode=match_mode,
-            return_list=True
-        )
+        paths, status = ctx.resolve_globfilepath(dst, match_mode=match_mode, return_list=True)
         if status:
-            return TestResult.error([f'path {dst} cannot be used, '
-                                    f'because no unambiguous file could be identified (because {status})'])
+            return TestResult.error(
+                [f'path {dst} cannot be used, because no unambiguous file could be identified (because {status})']
+            )
 
         # Plain paths come back from resolve_globfilepath unchecked; drop missing
         # ones so a nonexistent path is reported as missing, not as the wrong type.
@@ -262,7 +275,7 @@ def file_exists(ctx, dst: str = '', match_mode: str = "any"):
 @testfunction(
     name='file_does_not_exist',
     description='tests if file(s) with path destination(dst) do NOT exist (supports glob patterns with match_mode)',
-    category=HostModeCategory.FILE_BASED
+    category=HostModeCategory.FILE_BASED,
 )
 def file_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
     """Pass when no regular file exists at ``dst`` (for globs: no match is a file).
@@ -283,14 +296,11 @@ def file_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
           dst: C:/Users/*/AppData/Local/Temp/secret.tmp
     """
     try:
-        paths, status = ctx.resolve_globfilepath(
-            dst,
-            match_mode=match_mode,
-            return_list=True
-        )
+        paths, status = ctx.resolve_globfilepath(dst, match_mode=match_mode, return_list=True)
         if status:
-            return TestResult.error([f'path {dst} cannot be used, '
-                                    f'because no unambiguous file could be identified (because {status})'])
+            return TestResult.error(
+                [f'path {dst} cannot be used, because no unambiguous file could be identified (because {status})']
+            )
 
         # Plain paths come back from resolve_globfilepath unchecked; drop missing
         # ones so a nonexistent path is reported as missing, not as the wrong type.
@@ -315,7 +325,7 @@ def file_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
 @testfunction(
     name='dir_exists',
     description='tests if directory(ies) with path destination(dst) exist (supports glob patterns with match_mode)',
-    category=HostModeCategory.FILE_BASED
+    category=HostModeCategory.FILE_BASED,
 )
 def dir_exists(ctx, dst: str = '', match_mode: str = "any"):
     """Pass when a directory exists at ``dst`` (for globs: at least one match is a directory).
@@ -334,14 +344,11 @@ def dir_exists(ctx, dst: str = '', match_mode: str = "any"):
           dst: /home/user/.config/libreoffice
     """
     try:
-        paths, status = ctx.resolve_globfilepath(
-            dst,
-            match_mode=match_mode,
-            return_list=True
-        )
+        paths, status = ctx.resolve_globfilepath(dst, match_mode=match_mode, return_list=True)
         if status:
-            return TestResult.error([f'path {dst} cannot be used, '
-                                    f'because no unambiguous directory could be identified (because {status})'])
+            return TestResult.error(
+                [f'path {dst} cannot be used, because no unambiguous directory could be identified (because {status})']
+            )
 
         # Plain paths come back from resolve_globfilepath unchecked; drop missing
         # ones so a nonexistent path is reported as missing, not as the wrong type.
@@ -367,7 +374,7 @@ def dir_exists(ctx, dst: str = '', match_mode: str = "any"):
 @testfunction(
     name='dir_does_not_exist',
     description='tests if directory(ies) with path destination(dst) do NOT exist (supports glob patterns with match_mode)',
-    category=HostModeCategory.FILE_BASED
+    category=HostModeCategory.FILE_BASED,
 )
 def dir_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
     """Pass when no directory exists at ``dst`` (for globs: no match is a directory).
@@ -387,14 +394,11 @@ def dir_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
           dst: C:/Users/user/AppData/Roaming/OldApp
     """
     try:
-        paths, status = ctx.resolve_globfilepath(
-            dst,
-            match_mode=match_mode,
-            return_list=True
-        )
+        paths, status = ctx.resolve_globfilepath(dst, match_mode=match_mode, return_list=True)
         if status:
-            return TestResult.error([f'path {dst} cannot be used, '
-                                    f'because no unambiguous directory could be identified (because {status})'])
+            return TestResult.error(
+                [f'path {dst} cannot be used, because no unambiguous directory could be identified (because {status})']
+            )
 
         # Plain paths come back from resolve_globfilepath unchecked; drop missing
         # ones so a nonexistent path is reported as missing, not as the wrong type.
@@ -419,7 +423,7 @@ def dir_does_not_exist(ctx, dst: str = '', match_mode: str = "any"):
 @testfunction(
     name='dir_content',
     description='tests if a directory has the expected files/folders',
-    category=HostModeCategory.FILE_BASED
+    category=HostModeCategory.FILE_BASED,
 )
 def dir_content(ctx, dst: str = '', files: list = None):
     """Pass when every name in ``files`` is a direct entry of directory ``dst``.
@@ -442,18 +446,18 @@ def dir_content(ctx, dst: str = '', files: list = None):
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
-            return TestResult.error([f'directory with path {dst} can\'t be used, because no unambiguous directory could be identified (because {status})'])
+            return TestResult.error(
+                [
+                    f'directory with path {dst} can\'t be used, because no unambiguous directory could be identified (because {status})'
+                ]
+            )
 
         log.debug(f'dst directory {dst} will be used for test')
 
         dir_content_list = [p.name for p in Path(dst).iterdir()]
         expected_files = files if files is not None else []
-        expected_missing_files = [
-            file for file in expected_files if file not in dir_content_list
-        ]
-        additional_files = [
-            file for file in dir_content_list if file not in expected_files
-        ]
+        expected_missing_files = [file for file in expected_files if file not in dir_content_list]
+        additional_files = [file for file in dir_content_list if file not in expected_files]
         if expected_missing_files:
             details = [f'expected missing files: {expected_missing_files}']
             if additional_files:
@@ -468,7 +472,7 @@ def dir_content(ctx, dst: str = '', files: list = None):
 @testfunction(
     name='file_content_matches_regex',
     description='tests if file content matches a given regex expression',
-    category=HostModeCategory.FILE_BASED
+    category=HostModeCategory.FILE_BASED,
 )
 def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: str = 'utf-8', strip_bom: bool = False):
     """Pass when the regex ``regex`` is found anywhere in the text of file ``dst``.
@@ -495,7 +499,11 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
-            return TestResult.error([f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+            return TestResult.error(
+                [
+                    f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status})'
+                ]
+            )
 
         log.debug(f'dst file {dst} will be used for test')
 
@@ -538,7 +546,7 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
 @testfunction(
     name='file_content_equals',
     description='tests if file content equals the given content',
-    category=HostModeCategory.FILE_BASED
+    category=HostModeCategory.FILE_BASED,
 )
 def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = 'utf-8', strip_bom: bool = False):
     r"""Pass when the text of file ``dst`` equals ``content`` (leading/trailing whitespace ignored).
@@ -565,7 +573,11 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
-            return TestResult.error([f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+            return TestResult.error(
+                [
+                    f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status})'
+                ]
+            )
 
         log.debug(f'dst file {dst} will be used for test')
 
@@ -610,20 +622,20 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
         # Show diff for debugging
         try:
             import difflib
+
             expected_for_diff = expected_content
-            diff_lines = list(difflib.unified_diff(
-                expected_for_diff.splitlines(keepends=True),
-                data.splitlines(keepends=True),
-                fromfile='expected',
-                tofile='actual',
-                lineterm=''
-            ))
+            diff_lines = list(
+                difflib.unified_diff(
+                    expected_for_diff.splitlines(keepends=True),
+                    data.splitlines(keepends=True),
+                    fromfile='expected',
+                    tofile='actual',
+                    lineterm='',
+                )
+            )
             diff_output = ''.join(diff_lines) if diff_lines else 'Content differs but no line-by-line diff available'
 
-            return TestResult.failed([
-                message,
-                f'Diff:\n{diff_output}'
-            ])
+            return TestResult.failed([message, f'Diff:\n{diff_output}'])
         except Exception as e:
             log.error(f"Error generating diff output: {e}", exc_info=True)
             return TestResult.execution_error(e, "Error generating diff output")
@@ -636,7 +648,7 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
 @testfunction(
     name='file_hash_matches',
     description='tests if file hash matches expected value',
-    category=HostModeCategory.FILE_BASED
+    category=HostModeCategory.FILE_BASED,
 )
 def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: str = 'sha256'):
     """Pass when the ``hash_type`` digest of file ``dst`` equals ``expected_hash``.
@@ -660,7 +672,9 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
-            return TestResult.error([f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+            return TestResult.error(
+                [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            )
 
         log.debug(f'dst file {dst} will be used for test')
 
@@ -671,7 +685,9 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
 
             if actual_hash == expected_hash:
                 return TestResult.success([f'{hash_type.upper()} hash matches: {actual_hash}'])
-            return TestResult.failed([f'{hash_type.upper()} hash mismatch. Expected: {expected_hash}, Got: {actual_hash}'])
+            return TestResult.failed(
+                [f'{hash_type.upper()} hash mismatch. Expected: {expected_hash}, Got: {actual_hash}']
+            )
 
         except FileNotFoundError:
             return TestResult.failed([f'file {dst} does not exist'])
@@ -688,12 +704,20 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
 @testfunction(
     name='file_timestamps',
     description='tests file timestamps with various comparison types and formats',
-    category=HostModeCategory.QGA_PROBE
+    category=HostModeCategory.QGA_PROBE,
 )
-def file_timestamps(ctx, dst: str = '', timestamp_type: str = 'modified', comparison_type: str = 'equals',
-                    expected_time: str | int | float = None, time_format: str = None,
-                    tolerance_seconds: int = None, start_time: str | int | float = None,
-                    end_time: str | int | float = None, within_duration: str = None):
+def file_timestamps(
+    ctx,
+    dst: str = '',
+    timestamp_type: str = 'modified',
+    comparison_type: str = 'equals',
+    expected_time: str | int | float = None,
+    time_format: str = None,
+    tolerance_seconds: int = None,
+    start_time: str | int | float = None,
+    end_time: str | int | float = None,
+    within_duration: str = None,
+):
     """Pass when the chosen timestamp of file ``dst`` satisfies ``comparison_type``.
 
     Use for: MACB timestamp assertions (modified recently, accessed after an action, ...).
@@ -728,7 +752,9 @@ def file_timestamps(ctx, dst: str = '', timestamp_type: str = 'modified', compar
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
-            return TestResult.error([f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+            return TestResult.error(
+                [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            )
 
         log.debug(f'dst file {dst} will be used for test')
 
@@ -740,27 +766,49 @@ def file_timestamps(ctx, dst: str = '', timestamp_type: str = 'modified', compar
 
                 tolerance = tolerance_seconds or 0
                 if abs(actual_time - expected) <= tolerance:
-                    return TestResult.success([f'{timestamp_type} timestamp matches (±{tolerance}s): {datetime.fromtimestamp(actual_time)}'])
-                return TestResult.failed([f'{timestamp_type} timestamp mismatch. Expected: {datetime.fromtimestamp(expected)}, Got: {datetime.fromtimestamp(actual_time)}'])
+                    return TestResult.success(
+                        [f'{timestamp_type} timestamp matches (±{tolerance}s): {datetime.fromtimestamp(actual_time)}']
+                    )
+                return TestResult.failed(
+                    [
+                        f'{timestamp_type} timestamp mismatch. Expected: {datetime.fromtimestamp(expected)}, Got: {datetime.fromtimestamp(actual_time)}'
+                    ]
+                )
 
             if comparison_type == 'before':
                 expected = _parse_timestamp(expected_time, time_format)
                 if actual_time < expected:
-                    return TestResult.success([f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected)}'])
-                return TestResult.failed([f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected)}'])
+                    return TestResult.success(
+                        [f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected)}']
+                    )
+                return TestResult.failed(
+                    [f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected)}']
+                )
 
             if comparison_type == 'after':
                 expected = _parse_timestamp(expected_time, time_format)
                 if actual_time > expected:
-                    return TestResult.success([f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected)}'])
-                return TestResult.failed([f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected)}'])
+                    return TestResult.success(
+                        [f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected)}']
+                    )
+                return TestResult.failed(
+                    [f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected)}']
+                )
 
             if comparison_type == 'between':
                 start = _parse_timestamp(start_time, time_format)
                 end = _parse_timestamp(end_time, time_format)
                 if start <= actual_time <= end:
-                    return TestResult.success([f'{timestamp_type} timestamp is between {datetime.fromtimestamp(start)} and {datetime.fromtimestamp(end)}'])
-                return TestResult.failed([f'{timestamp_type} timestamp is not between {datetime.fromtimestamp(start)} and {datetime.fromtimestamp(end)}'])
+                    return TestResult.success(
+                        [
+                            f'{timestamp_type} timestamp is between {datetime.fromtimestamp(start)} and {datetime.fromtimestamp(end)}'
+                        ]
+                    )
+                return TestResult.failed(
+                    [
+                        f'{timestamp_type} timestamp is not between {datetime.fromtimestamp(start)} and {datetime.fromtimestamp(end)}'
+                    ]
+                )
 
             if comparison_type == 'within_last':
                 duration_seconds = _parse_duration(within_duration)
@@ -786,11 +834,11 @@ def file_timestamps(ctx, dst: str = '', timestamp_type: str = 'modified', compar
 
 
 @testfunction(
-    name='file_permissions',
-    description='tests file permissions, owner, and group',
-    category=HostModeCategory.QGA_PROBE
+    name='file_permissions', description='tests file permissions, owner, and group', category=HostModeCategory.QGA_PROBE
 )
-def file_permissions(ctx, dst: str = '', expected_permissions: str = '', check_owner: str = None, check_group: str = None):
+def file_permissions(
+    ctx, dst: str = '', expected_permissions: str = '', check_owner: str = None, check_group: str = None
+):
     """Pass when the permission bits (and optional owner/group) of ``dst`` match exactly.
 
     Use for: Unix mode/ownership checks after chmod/chown or a file save. Only meaningful on
@@ -815,7 +863,9 @@ def file_permissions(ctx, dst: str = '', expected_permissions: str = '', check_o
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
-            return TestResult.error([f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+            return TestResult.error(
+                [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            )
 
         log.debug(f'dst file {dst} will be used for test')
 
@@ -831,7 +881,9 @@ def file_permissions(ctx, dst: str = '', expected_permissions: str = '', check_o
             if actual_perms == expected_perms:
                 results.append(f'permissions match: {oct(actual_perms)[-3:]}')
             else:
-                results.append(f'permission mismatch. Expected: {oct(expected_perms)[-3:]}, Got: {oct(actual_perms)[-3:]}')
+                results.append(
+                    f'permission mismatch. Expected: {oct(expected_perms)[-3:]}, Got: {oct(actual_perms)[-3:]}'
+                )
                 success = False
 
             # Check owner and group if specified
@@ -871,9 +923,16 @@ def file_permissions(ctx, dst: str = '', expected_permissions: str = '', check_o
 @testfunction(
     name='file_content_contains',
     description='tests if file content contains specified string or byte pattern',
-    category=HostModeCategory.FILE_BASED
+    category=HostModeCategory.FILE_BASED,
 )
-def file_content_contains(ctx, dst: str = '', content: str = '', content_type: str = 'string', encoding: str = 'utf-8', strip_bom: bool = False):
+def file_content_contains(
+    ctx,
+    dst: str = '',
+    content: str = '',
+    content_type: str = 'string',
+    encoding: str = 'utf-8',
+    strip_bom: bool = False,
+):
     r"""Pass when file ``dst`` contains ``content`` as a substring (text) or byte sequence.
 
     Use for: checking a value/marker was written into a file. For patterns use
@@ -899,7 +958,9 @@ def file_content_contains(ctx, dst: str = '', content: str = '', content_type: s
     try:
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
-            return TestResult.error([f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+            return TestResult.error(
+                [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            )
 
         log.debug(f'dst file {dst} will be used for test')
 

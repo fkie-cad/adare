@@ -87,7 +87,7 @@ class DatabaseApi:
         if instance := self._session.query(model).filter_by(**kwargs).first():
             return instance, False
         params = {k: v for k, v in kwargs.items() if not callable(v)}
-        params |= (defaults or {})
+        params |= defaults or {}
         instance = model(**params)
         self._session.add(instance)
         return instance, True

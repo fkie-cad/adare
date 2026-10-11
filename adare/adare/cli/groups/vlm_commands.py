@@ -15,15 +15,15 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @vlm.command()
     @click.argument('target', required=False)
-    @click.option('--api-key', default=None,
-                  help='Ollama Cloud API key (from ollama.com/settings/keys), when '
-                       'creating from the ollama-cloud preset.')
+    @click.option(
+        '--api-key',
+        default=None,
+        help='Ollama Cloud API key (from ollama.com/settings/keys), when creating from the ollama-cloud preset.',
+    )
     @click.option('--base-url', default=None, help='Override the preset endpoint URL.')
     @click.option('--model', default=None, help='Override the preset model id.')
-    @click.option('--name', default=None,
-                  help='Name for the profile created from a preset (default: cloud/local).')
-    @click.option('--no-verify', is_flag=True,
-                  help='Skip the live endpoint/token check when creating a keyed profile.')
+    @click.option('--name', default=None, help='Name for the profile created from a preset (default: cloud/local).')
+    @click.option('--no-verify', is_flag=True, help='Skip the live endpoint/token check when creating a keyed profile.')
     def use(target, api_key, base_url, model, name, no_verify):
         """Switch VLM profile — interactively, by name, or from a preset.
 
@@ -43,13 +43,14 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             adare vlm use ollama-cloud --name cloud-alt --model gemma4:31b --api-key <key>
         """
         from adare.cli.vlm import exec_vlm_use
-        args = SimpleNamespace(target=target, api_key=api_key or None,
-                               base_url=base_url, model=model, name=name, no_verify=no_verify)
+
+        args = SimpleNamespace(
+            target=target, api_key=api_key or None, base_url=base_url, model=model, name=name, no_verify=no_verify
+        )
         exec_with_error_printing(exec_vlm_use, args)
 
     @vlm.command()
-    @click.option('--no-verify', is_flag=True,
-                  help='Skip the live endpoint/token check for a keyed profile.')
+    @click.option('--no-verify', is_flag=True, help='Skip the live endpoint/token check for a keyed profile.')
     def create(no_verify):
         """Create a profile with a guided menu (provider, model, key, ...).
 
@@ -59,6 +60,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         live-checks the endpoint + token for keyed providers (--no-verify skips).
         """
         from adare.cli.vlm import exec_vlm_create
+
         exec_with_error_printing(exec_vlm_create, SimpleNamespace(no_verify=no_verify))
 
     @vlm.command(name='list')
@@ -66,15 +68,16 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def list_():
         """List saved VLM profiles (active one marked)."""
         from adare.cli.vlm import exec_vlm_list
+
         exec_with_error_printing(exec_vlm_list, SimpleNamespace())
 
     @vlm.command()
     @click.argument('name')
-    @click.option('--no-activate', is_flag=True,
-                  help='Save the profile without making it active.')
+    @click.option('--no-activate', is_flag=True, help='Save the profile without making it active.')
     def save(name, no_activate):
         """Snapshot the currently-effective config as profile NAME."""
         from adare.cli.vlm import exec_vlm_save
+
         exec_with_error_printing(exec_vlm_save, SimpleNamespace(name=name, no_activate=no_activate))
 
     @vlm.command(name='rm')
@@ -82,6 +85,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def rm(name):
         """Delete the profile NAME."""
         from adare.cli.vlm import exec_vlm_remove
+
         exec_with_error_printing(exec_vlm_remove, SimpleNamespace(name=name))
 
     @vlm.command()
@@ -89,6 +93,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def show():
         """Show the resolved VLM config and where each value comes from."""
         from adare.cli.vlm import exec_vlm_show
+
         exec_with_error_printing(exec_vlm_show, SimpleNamespace())
 
     # Convenience aliases.

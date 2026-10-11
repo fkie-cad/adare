@@ -47,14 +47,10 @@ class SessionManagementMixin:
         the environment/hypervisor cannot be resolved.
         """
         try:
-            environment_ulid = environment_database.resolve_environment_identifier(
-                db_session.environment_name
-            )
+            environment_ulid = environment_database.resolve_environment_identifier(db_session.environment_name)
             hypervisor_type = environment_database.get_environment_hypervisor(environment_ulid)
         except (EnvironmentDoesNotExistInDatabase, DatabaseError, OSError) as e:
-            log.warning(
-                f"Could not resolve hypervisor for session {db_session.session_id}: {e}"
-            )
+            log.warning(f"Could not resolve hypervisor for session {db_session.session_id}: {e}")
             return False
         return is_vm_running(db_session.vm_name, hypervisor_type)
 
@@ -75,38 +71,37 @@ class SessionManagementMixin:
         try:
             # Validate environment exists
             try:
-                environment_ulid = environment_database.resolve_environment_identifier(
-                    request.environment_name
-                )
+                environment_ulid = environment_database.resolve_environment_identifier(request.environment_name)
             except EnvironmentDoesNotExistInDatabase:
                 return Result.fail(
                     "ENVIRONMENT_NOT_FOUND",
                     f"Environment '{request.environment_name}' not found",
                     [
                         "Check available environments with: adare environment list",
-                        "Load environment with: adare environment load <environment.yml>"
-                    ]
+                        "Load environment with: adare environment load <environment.yml>",
+                    ],
                 )
 
             # Check hypervisor type
             hypervisor = environment_database.get_environment_hypervisor(environment_ulid)
             if hypervisor == 'virtualbox':
                 raise NotImplementedError(
-                    "Dev mode start is not yet implemented for VirtualBox environments. "
-                    "Please use QEMU/KVM for now."
+                    "Dev mode start is not yet implemented for VirtualBox environments. Please use QEMU/KVM for now."
                 )
 
             # Create session via manager (async)
-            session_id = asyncio.run(self._manager.create_session(
-                request.project_path,
-                request.environment_name,
-                gui_mode=request.gui_mode,
-                vm_memory=request.vm_memory,
-                vm_cpus=request.vm_cpus,
-                debug_screenshots=request.debug_screenshots,
-                console_ulid=request.console_ulid,
-                shared_directories=request.shared_directories
-            ))
+            session_id = asyncio.run(
+                self._manager.create_session(
+                    request.project_path,
+                    request.environment_name,
+                    gui_mode=request.gui_mode,
+                    vm_memory=request.vm_memory,
+                    vm_cpus=request.vm_cpus,
+                    debug_screenshots=request.debug_screenshots,
+                    console_ulid=request.console_ulid,
+                    shared_directories=request.shared_directories,
+                )
+            )
 
             # Get session to retrieve VM name
             session = self._manager.get_session(session_id)
@@ -114,7 +109,7 @@ class SessionManagementMixin:
                 return Result.fail(
                     "SESSION_START_FAILED",
                     "Session created but context not initialized",
-                    ["Try starting the session again"]
+                    ["Try starting the session again"],
                 )
 
             vm_name = session.experiment_ctx.vm_name
@@ -129,7 +124,7 @@ class SessionManagementMixin:
                 experiment_name=experiment_name,
                 environment_name=request.environment_name,
                 vm_name=vm_name,
-                name=request.name
+                name=request.name,
             )
 
             # Store run directory path (prevents "None" directories on restoration)
@@ -151,25 +146,27 @@ class SessionManagementMixin:
                 f"Execute playbook: adare dev playbook {session_id} -f <playbook.yml>",
                 f"View session state: adare dev state {session_id}",
                 f"Reset session: adare dev reset soft -s {session_id}  (or reset hard)",
-                f"Stop session: adare dev stop {session_id}"
+                f"Stop session: adare dev stop {session_id}",
             ]
 
             tip = "Use 'adare dev checkpoint create' to save snapshots before risky operations"
 
-            return Result.ok(DevSessionInfo(
-                session_id=state.session_id,
-                project_path=request.project_path,
-                environment_name=state.environment_name,
-                vm_running=state.vm_running,
-                actions_executed=state.actions_executed,
-                created_at=self._db_api.get_session(session_id).created_at,
-                current_variables=state.current_variables,
-                available_snapshots=state.available_snapshots,
-                experiment_name=None,
-                name=request.name,
-                next_steps=next_steps,
-                tip=tip
-            ))
+            return Result.ok(
+                DevSessionInfo(
+                    session_id=state.session_id,
+                    project_path=request.project_path,
+                    environment_name=state.environment_name,
+                    vm_running=state.vm_running,
+                    actions_executed=state.actions_executed,
+                    created_at=self._db_api.get_session(session_id).created_at,
+                    current_variables=state.current_variables,
+                    available_snapshots=state.available_snapshots,
+                    experiment_name=None,
+                    name=request.name,
+                    next_steps=next_steps,
+                    tip=tip,
+                )
+            )
 
         except RuntimeError as e:
             msg = str(e)
@@ -184,8 +181,7 @@ class SessionManagementMixin:
                 next_steps = [
                     f"VM never became ready (guest agent never responded) at "
                     f"{ram} MB / {cpus} vCPU — the VM is likely under-resourced",
-                    f"Retry with more memory: adare dev agent -e {env} "
-                    f"--vm-memory {ram * 2} ...",
+                    f"Retry with more memory: adare dev agent -e {env} --vm-memory {ram * 2} ...",
                     f"Or set 'settings.vm_memory: {ram * 2}' in the playbook so "
                     f"it is remembered for future runs/replays",
                 ]
@@ -200,16 +196,12 @@ class SessionManagementMixin:
                 [
                     "Check VM exists: adare vm list",
                     "Check hypervisor (VirtualBox/QEMU) is running",
-                    "Check experiment and environment configuration"
-                ]
+                    "Check experiment and environment configuration",
+                ],
             )
         except (SQLAlchemyError, OSError, NotImplementedError, asyncio.CancelledError) as e:
             log.error(f"Unexpected error starting dev session: {e}", exc_info=True)
-            return Result.fail(
-                "INTERNAL_ERROR",
-                f"Unexpected error: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("INTERNAL_ERROR", f"Unexpected error: {str(e)}", ["Check logs for details"])
 
     def resume_session(self, session_id: str, console_ulid: str | None = None) -> Result[DevSessionInfo]:
         """
@@ -236,7 +228,7 @@ class SessionManagementMixin:
                 return Result.fail(
                     "SESSION_NOT_FOUND",
                     f"Session '{session_id}' not found in database",
-                    ["Check available sessions with: adare dev list"]
+                    ["Check available sessions with: adare dev list"],
                 )
 
             # Check if already running
@@ -246,18 +238,15 @@ class SessionManagementMixin:
                     f"Session '{session_id}' is already running",
                     [
                         f"Use existing session: adare dev action {session_id} -y '<action>'",
-                        f"Or stop and restart: adare dev stop {session_id}"
-                    ]
+                        f"Or stop and restart: adare dev stop {session_id}",
+                    ],
                 )
 
             if db_session.status != 'stopped':
                 return Result.fail(
                     "SESSION_NOT_STOPPED",
                     f"Session '{session_id}' has status '{db_session.status}', expected 'stopped'",
-                    [
-                        "Only stopped sessions can be resumed",
-                        f"Current status: {db_session.status}"
-                    ]
+                    ["Only stopped sessions can be resumed", f"Current status: {db_session.status}"],
                 )
 
             # Validate VM resources exist
@@ -267,9 +256,7 @@ class SessionManagementMixin:
 
             # Resume session via manager (async)
             log.info(f"Resuming stopped session {session_id}...")
-            session = asyncio.run(
-                self._manager.restore_and_restart_session(session_id, console_ulid)
-            )
+            session = asyncio.run(self._manager.restore_and_restart_session(session_id, console_ulid))
 
             if not session:
                 return Result.fail(
@@ -278,8 +265,8 @@ class SessionManagementMixin:
                     [
                         "Check VM exists and can be started",
                         "Check hypervisor (VirtualBox/QEMU) is running",
-                        "Check logs for details"
-                    ]
+                        "Check logs for details",
+                    ],
                 )
 
             # Get session state for response
@@ -293,33 +280,31 @@ class SessionManagementMixin:
                 f"Execute playbook: adare dev playbook {session_id} -f <playbook.yml>",
                 f"View session state: adare dev state {session_id}",
                 f"Reset session: adare dev reset soft -s {session_id}  (or reset hard)",
-                f"Stop session: adare dev stop {session_id}"
+                f"Stop session: adare dev stop {session_id}",
             ]
 
             tip = f"Session resumed with {len(state.current_variables)} variables and {len(checkpoints)} checkpoints preserved"
 
-            return Result.ok(DevSessionInfo(
-                session_id=state.session_id,
-                project_path=Path(db_session.project_path),
-                experiment_name=state.experiment_name,
-                environment_name=state.environment_name,
-                vm_running=state.vm_running,
-                actions_executed=state.actions_executed,
-                created_at=db_session.created_at,
-                current_variables=state.current_variables,
-                available_snapshots=state.available_snapshots,
-                name=db_session.name,
-                next_steps=next_steps,
-                tip=tip
-            ))
+            return Result.ok(
+                DevSessionInfo(
+                    session_id=state.session_id,
+                    project_path=Path(db_session.project_path),
+                    experiment_name=state.experiment_name,
+                    environment_name=state.environment_name,
+                    vm_running=state.vm_running,
+                    actions_executed=state.actions_executed,
+                    created_at=db_session.created_at,
+                    current_variables=state.current_variables,
+                    available_snapshots=state.available_snapshots,
+                    name=db_session.name,
+                    next_steps=next_steps,
+                    tip=tip,
+                )
+            )
 
         except (RuntimeError, SQLAlchemyError, OSError, asyncio.CancelledError) as e:
             log.error(f"Unexpected error resuming session: {e}", exc_info=True)
-            return Result.fail(
-                "INTERNAL_ERROR",
-                f"Unexpected error: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("INTERNAL_ERROR", f"Unexpected error: {str(e)}", ["Check logs for details"])
 
     def resume_most_recent(self, project_path: Path, console_ulid: str | None = None) -> Result[DevSessionInfo]:
         """
@@ -347,8 +332,8 @@ class SessionManagementMixin:
                     "No stopped sessions found in project",
                     [
                         "Check available sessions: adare dev list",
-                        "Create new session: adare dev start <experiment> -e <environment>"
-                    ]
+                        "Create new session: adare dev start <experiment> -e <environment>",
+                    ],
                 )
 
             # Get most recent (list is already ordered by updated_at desc from list_sessions)
@@ -361,11 +346,7 @@ class SessionManagementMixin:
 
         except (RuntimeError, SQLAlchemyError, OSError) as e:
             log.error(f"Unexpected error resuming most recent session: {e}", exc_info=True)
-            return Result.fail(
-                "INTERNAL_ERROR",
-                f"Unexpected error: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("INTERNAL_ERROR", f"Unexpected error: {str(e)}", ["Check logs for details"])
 
     async def _stop_session_async(self, request: DevSessionStopRequest):
         """Async helper for stopping session - keeps everything in same event loop."""
@@ -392,8 +373,7 @@ class SessionManagementMixin:
             # Could not load infrastructure - DB state might be corrupted
             # or environment invalid. Fallback to DB-only cleanup.
             log.warning(
-                f"Could not load infrastructure for session {request.session_id}. "
-                f"Performing database-only cleanup."
+                f"Could not load infrastructure for session {request.session_id}. Performing database-only cleanup."
             )
             return 'removed_from_db_only'
         # For stop without removal: we need the session object for graceful shutdown
@@ -421,7 +401,7 @@ class SessionManagementMixin:
                 return Result.fail(
                     "SESSION_NOT_FOUND",
                     f"Dev session '{request.session_id}' not found",
-                    ["Check active sessions with: adare dev list"]
+                    ["Check active sessions with: adare dev list"],
                 )
 
             # Single asyncio.run() for entire flow
@@ -447,11 +427,7 @@ class SessionManagementMixin:
 
         except (RuntimeError, SQLAlchemyError, OSError, asyncio.CancelledError) as e:
             log.error(f"Error stopping dev session: {e}", exc_info=True)
-            return Result.fail(
-                "INTERNAL_ERROR",
-                f"Unexpected error: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("INTERNAL_ERROR", f"Unexpected error: {str(e)}", ["Check logs for details"])
 
     def record_session(self, request: DevSessionRecordRequest) -> Result[bool]:
         """
@@ -479,10 +455,10 @@ class SessionManagementMixin:
             # Start recording
             result = asyncio.run(session.start_recording(request.output_file))
             if not result.success:
-               return Result.fail(
-                   result.error.code if result.error else "RECORD_START_FAILED",
-                   result.error.message if result.error else "Failed to start recording (check logs)"
-               )
+                return Result.fail(
+                    result.error.code if result.error else "RECORD_START_FAILED",
+                    result.error.message if result.error else "Failed to start recording (check logs)",
+                )
 
             return Result.ok(True)
 
@@ -501,7 +477,7 @@ class SessionManagementMixin:
             Result[bool]
         """
         try:
-             # Get or restore session (should be in memory if we are same process)
+            # Get or restore session (should be in memory if we are same process)
             session = asyncio.run(self._manager.get_or_restore_session(session_id))
             if not session:
                 return Result.fail("SESSION_NOT_FOUND", "Session not found")
@@ -510,7 +486,7 @@ class SessionManagementMixin:
             if not result.success:
                 return Result.fail(
                     result.error.code if result.error else "RECORD_STOP_FAILED",
-                    result.error.message if result.error else "Failed to stop recording"
+                    result.error.message if result.error else "Failed to stop recording",
                 )
 
             return Result.ok(True)
@@ -555,28 +531,26 @@ class SessionManagementMixin:
                         f"VM '{db_session.vm_name}' not running -> status 'stopped'"
                     )
 
-                items.append(DevSessionListItem(
-                    session_id=db_session.session_id,
-                    experiment_name=db_session.experiment_name,
-                    environment_name=db_session.environment_name,
-                    vm_running=vm_running,
-                    actions_executed=actions_executed,
-                    created_at=db_session.created_at,
-                    project_path=Path(db_session.project_path),
-                    status=status,
-                    name=db_session.name,
-                    vm_name=db_session.vm_name
-                ))
+                items.append(
+                    DevSessionListItem(
+                        session_id=db_session.session_id,
+                        experiment_name=db_session.experiment_name,
+                        environment_name=db_session.environment_name,
+                        vm_running=vm_running,
+                        actions_executed=actions_executed,
+                        created_at=db_session.created_at,
+                        project_path=Path(db_session.project_path),
+                        status=status,
+                        name=db_session.name,
+                        vm_name=db_session.vm_name,
+                    )
+                )
 
             return Result.ok(items)
 
         except (SQLAlchemyError, OSError) as e:
             log.error(f"Error listing dev sessions: {e}", exc_info=True)
-            return Result.fail(
-                "INTERNAL_ERROR",
-                f"Unexpected error: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("INTERNAL_ERROR", f"Unexpected error: {str(e)}", ["Check logs for details"])
 
     def get_state(self, request: DevSessionStateRequest) -> Result[DevSessionInfo]:
         """
@@ -595,7 +569,7 @@ class SessionManagementMixin:
                 return Result.fail(
                     "SESSION_NOT_FOUND",
                     f"Dev session '{request.session_id}' not found",
-                    ["Check active sessions with: adare dev list"]
+                    ["Check active sessions with: adare dev list"],
                 )
 
             # Get or restore session from manager
@@ -607,35 +581,33 @@ class SessionManagementMixin:
                     [
                         "VM may not be running - check with virsh list (QEMU) or VBoxManage list runningvms (VirtualBox)",
                         "Session may have crashed - try cleaning up with: adare dev cleanup",
-                        f"Or start a new session with: adare dev start {db_session.experiment_name} -e {db_session.environment_name}"
-                    ]
+                        f"Or start a new session with: adare dev start {db_session.experiment_name} -e {db_session.environment_name}",
+                    ],
                 )
 
             # Get current state
             state = session.get_state()
 
-            return Result.ok(DevSessionInfo(
-                session_id=state.session_id,
-                project_path=Path(db_session.project_path),
-                experiment_name=state.experiment_name,
-                environment_name=state.environment_name,
-                vm_running=state.vm_running,
-                actions_executed=state.actions_executed,
-                created_at=db_session.created_at,
-                current_variables=state.current_variables,
-                available_snapshots=state.available_snapshots,
-                name=db_session.name,
-                next_steps=[],
-                tip=None
-            ))
+            return Result.ok(
+                DevSessionInfo(
+                    session_id=state.session_id,
+                    project_path=Path(db_session.project_path),
+                    experiment_name=state.experiment_name,
+                    environment_name=state.environment_name,
+                    vm_running=state.vm_running,
+                    actions_executed=state.actions_executed,
+                    created_at=db_session.created_at,
+                    current_variables=state.current_variables,
+                    available_snapshots=state.available_snapshots,
+                    name=db_session.name,
+                    next_steps=[],
+                    tip=None,
+                )
+            )
 
         except (RuntimeError, SQLAlchemyError, OSError) as e:
             log.error(f"Error getting session state: {e}", exc_info=True)
-            return Result.fail(
-                "INTERNAL_ERROR",
-                f"Unexpected error: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("INTERNAL_ERROR", f"Unexpected error: {str(e)}", ["Check logs for details"])
 
     def update_testfunctions(self, request: DevUpdateTestfunctionsRequest) -> Result[DevUpdateTestfunctionsResult]:
         """
@@ -656,24 +628,20 @@ class SessionManagementMixin:
             execution_time = time.time() - start_time
 
             if success:
-                return Result.ok(DevUpdateTestfunctionsResult(
-                    success=True,
-                    message="Testfunctions updated successfully",
-                    execution_time=execution_time
-                ))
+                return Result.ok(
+                    DevUpdateTestfunctionsResult(
+                        success=True, message="Testfunctions updated successfully", execution_time=execution_time
+                    )
+                )
             return Result.fail(
                 "UPDATE_FAILED",
                 "Failed to update testfunctions",
-                ["Check if session is active and running", "Check logs for details"]
+                ["Check if session is active and running", "Check logs for details"],
             )
 
         except (RuntimeError, SQLAlchemyError, OSError) as e:
             log.error(f"Error updating testfunctions: {e}", exc_info=True)
-            return Result.fail(
-                "INTERNAL_ERROR",
-                f"Unexpected error: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("INTERNAL_ERROR", f"Unexpected error: {str(e)}", ["Check logs for details"])
 
     def restart_cv_server(self, request: DevCVRestartRequest) -> Result[bool]:
         """
@@ -687,27 +655,23 @@ class SessionManagementMixin:
         """
         try:
             # Use manager to process update
-            success = asyncio.run(self._manager.restart_mcp_server(
-                request.session_id,
-                debug=request.debug,
-                debug_output_dir=request.debug_output_dir
-            ))
+            success = asyncio.run(
+                self._manager.restart_mcp_server(
+                    request.session_id, debug=request.debug, debug_output_dir=request.debug_output_dir
+                )
+            )
 
             if success:
                 return Result.ok(True)
             return Result.fail(
                 "RESTART_FAILED",
                 "Failed to restart CV server",
-                ["Check if session is active and running", "Check logs for details"]
+                ["Check if session is active and running", "Check logs for details"],
             )
 
         except (RuntimeError, OSError, asyncio.CancelledError) as e:
             log.error(f"Error restarting CV server: {e}", exc_info=True)
-            return Result.fail(
-                "INTERNAL_ERROR",
-                f"Unexpected error: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("INTERNAL_ERROR", f"Unexpected error: {str(e)}", ["Check logs for details"])
 
     def stop_cv_server(self, request: DevCVStopRequest) -> Result[bool]:
         """
@@ -720,25 +684,19 @@ class SessionManagementMixin:
             Result[bool]
         """
         try:
-            success = asyncio.run(self._manager.stop_mcp_server(
-                request.session_id
-            ))
+            success = asyncio.run(self._manager.stop_mcp_server(request.session_id))
 
             if success:
                 return Result.ok(True)
             return Result.fail(
                 "STOP_FAILED",
                 "Failed to stop CV server",
-                ["Check if session is active and running", "Check logs for details"]
+                ["Check if session is active and running", "Check logs for details"],
             )
 
         except (RuntimeError, OSError, asyncio.CancelledError) as e:
             log.error(f"Error stopping CV server: {e}", exc_info=True)
-            return Result.fail(
-                "INTERNAL_ERROR",
-                f"Unexpected error: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("INTERNAL_ERROR", f"Unexpected error: {str(e)}", ["Check logs for details"])
 
     def cleanup_stale_sessions(self, request: DevSessionCleanupRequest) -> Result[DevCleanupResult]:
         """
@@ -782,16 +740,14 @@ class SessionManagementMixin:
                     f"VM '{db_session.vm_name}' not running -> status 'stopped'"
                 )
 
-            return Result.ok(DevCleanupResult(
-                sessions_reconciled=len(reconciled_ids),
-                reconciled_session_ids=reconciled_ids,
-                sessions_left_running=left_running
-            ))
+            return Result.ok(
+                DevCleanupResult(
+                    sessions_reconciled=len(reconciled_ids),
+                    reconciled_session_ids=reconciled_ids,
+                    sessions_left_running=left_running,
+                )
+            )
 
         except (SQLAlchemyError, OSError) as e:
             log.error(f"Error cleaning up sessions: {e}", exc_info=True)
-            return Result.fail(
-                "INTERNAL_ERROR",
-                f"Unexpected error: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("INTERNAL_ERROR", f"Unexpected error: {str(e)}", ["Check logs for details"])

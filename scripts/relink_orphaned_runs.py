@@ -64,6 +64,7 @@ def main(argv=None) -> int:
         prefix = '[dry-run] would relink'
     else:
         from adare.backend.experiment import database as experiment_database
+
         summary = experiment_database.relink_unlinked_runs(project_path)
         prefix = 'relinked'
 

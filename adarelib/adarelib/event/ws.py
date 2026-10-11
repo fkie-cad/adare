@@ -48,6 +48,7 @@ class WsCommand:
             return subclass.custom_decode(data)
         raise ValueError(f"Unknown command_type '{command_type}'")
 
+
 @attrs.define
 class EXEC(WsCommand):
     command: str
@@ -56,11 +57,13 @@ class EXEC(WsCommand):
     command_type: ClassVar[str] = 'EXEC'
 
     def encode(self) -> str:
-        return self._encode_as_base64_yaml({
-            'command': self.command,
-            'shell': self.shell,
-            'cwd': self.cwd,
-        })
+        return self._encode_as_base64_yaml(
+            {
+                'command': self.command,
+                'shell': self.shell,
+                'cwd': self.cwd,
+            }
+        )
 
     @classmethod
     def custom_decode(cls, data: str) -> 'EXEC | None':
@@ -68,6 +71,7 @@ class EXEC(WsCommand):
         if data_dict is None:
             return None
         return cls(**data_dict)
+
 
 @attrs.define
 class StatusMessage(WsCommand):
@@ -77,27 +81,34 @@ class StatusMessage(WsCommand):
     error: bool = False
 
     def encode(self) -> str:
-        return self._encode_as_base64_yaml({
-            'name': self.name,
-            'out_msg': self.out_msg,
-            'err_msg': self.err_msg,
-            'error': self.error,
-        })
+        return self._encode_as_base64_yaml(
+            {
+                'name': self.name,
+                'out_msg': self.out_msg,
+                'err_msg': self.err_msg,
+                'error': self.error,
+            }
+        )
 
     @classmethod
     def custom_decode(cls, data: str) -> 'StatusMessage | None':
         data_dict = cls._decode_base64_yaml(data)
         if data_dict is None:
             return None
-        return cls(name=data_dict['name'], out_msg=data_dict['out_msg'], err_msg=data_dict['err_msg'], error=data_dict['error'])
+        return cls(
+            name=data_dict['name'], out_msg=data_dict['out_msg'], err_msg=data_dict['err_msg'], error=data_dict['error']
+        )
+
 
 @attrs.define
 class DONE(StatusMessage):
     command_type: ClassVar[str] = 'DONE'
 
+
 @attrs.define
 class LOG(StatusMessage):
     command_type: ClassVar[str] = 'LOG'
+
 
 @attrs.define
 class EVENT(WsCommand):
@@ -123,6 +134,7 @@ class EVENT(WsCommand):
         except (ValueError, yaml.YAMLError) as e:
             raise ValueError(f"Failed to decode EVENT: {e}") from e
 
+
 @attrs.define
 class EXPERIMENT(WsCommand):
     name: str
@@ -138,6 +150,7 @@ class EXPERIMENT(WsCommand):
         _, name = data.split(':', 1)
         return cls(name=name.strip())
 
+
 @attrs.define
 class SimpleStringMessage(WsCommand):
     data: str
@@ -152,13 +165,16 @@ class SimpleStringMessage(WsCommand):
         _, data_str = data.split(':', 1)
         return cls(data=data_str.strip())
 
+
 @attrs.define
 class ECHO(SimpleStringMessage):
     command_type: ClassVar[str] = 'ECHO'
 
+
 @attrs.define
 class ECHOREPLY(SimpleStringMessage):
     command_type: ClassVar[str] = 'ECHOREPLY'
+
 
 @attrs.define
 class BREAKPOINT(WsCommand):
@@ -167,6 +183,7 @@ class BREAKPOINT(WsCommand):
     @classmethod
     def custom_decode(cls, data: str) -> 'BREAKPOINT':
         return cls()
+
 
 @attrs.define
 class BREAKPOINTRESOLVE(WsCommand):

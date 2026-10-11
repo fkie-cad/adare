@@ -51,8 +51,9 @@ def _add_column(conn, table: str, column: str, ddl: str) -> None:
 
 
 def _create_history_tables(conn) -> None:
-    conn.execute(text(
-        """
+    conn.execute(
+        text(
+            """
         CREATE TABLE IF NOT EXISTS test_function_file_version (
             id CHAR(26) PRIMARY KEY,
             file_id CHAR(26) NOT NULL REFERENCES test_function_file(id) ON DELETE CASCADE,
@@ -63,9 +64,11 @@ def _create_history_tables(conn) -> None:
             CONSTRAINT uq_test_function_file_version UNIQUE (file_id, version)
         )
         """
-    ))
-    conn.execute(text(
-        """
+        )
+    )
+    conn.execute(
+        text(
+            """
         CREATE TABLE IF NOT EXISTS test_function_version (
             id CHAR(26) PRIMARY KEY,
             test_function_id CHAR(26) NOT NULL REFERENCES test_function(id) ON DELETE CASCADE,
@@ -76,7 +79,8 @@ def _create_history_tables(conn) -> None:
             CONSTRAINT uq_test_function_version UNIQUE (test_function_id, version)
         )
         """
-    ))
+        )
+    )
 
 
 def _backfill(conn) -> None:
@@ -90,19 +94,22 @@ def _backfill(conn) -> None:
     conn.execute(text("UPDATE test_function SET is_current = 1 WHERE is_current IS NULL"))
 
     # One v1 file-version row per file that has no history yet.
-    file_rows = conn.execute(text(
-        """
+    file_rows = conn.execute(
+        text(
+            """
         SELECT f.id, f.sha256hash, f.path
         FROM test_function_file f
         WHERE NOT EXISTS (
             SELECT 1 FROM test_function_file_version v WHERE v.file_id = f.id
         )
         """
-    )).fetchall()
+        )
+    ).fetchall()
     for file_id, sha256hash, path in file_rows:
         snapshot_dir = None
         if path:
             from pathlib import Path
+
             snapshot_dir = (Path(path).parent / 'versions' / 'v1').as_posix()
         conn.execute(
             text(
@@ -114,15 +121,17 @@ def _backfill(conn) -> None:
         )
 
     # One v1 method-version row per method that has no history yet.
-    method_rows = conn.execute(text(
-        """
+    method_rows = conn.execute(
+        text(
+            """
         SELECT t.id, t.sha256hash
         FROM test_function t
         WHERE NOT EXISTS (
             SELECT 1 FROM test_function_version v WHERE v.test_function_id = t.id
         )
         """
-    )).fetchall()
+        )
+    ).fetchall()
     for tf_id, sha256hash in method_rows:
         conn.execute(
             text(

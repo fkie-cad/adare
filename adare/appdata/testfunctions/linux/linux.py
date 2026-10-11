@@ -7,6 +7,7 @@ from pathlib import Path
 try:
     import pwd
     import grp
+
     UNIX_MODULES_AVAILABLE = True
 except ImportError:
     UNIX_MODULES_AVAILABLE = False
@@ -20,6 +21,7 @@ from adarelib.event.event import TestResult
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -58,17 +60,16 @@ def system_service_status(ctx: TestContext, service_name: str, expected_status: 
         # Check service status using systemctl
         try:
             result = subprocess.run(
-                ['systemctl', 'is-active', service_name],
-                capture_output=True,
-                text=True,
-                timeout=10
+                ['systemctl', 'is-active', service_name], capture_output=True, text=True, timeout=10
             )
 
             actual_status = result.stdout.strip()
 
             if actual_status == expected_status:
                 return TestResult.success([f'service {service_name} is {actual_status}'])
-            return TestResult.failed([f'service {service_name} status mismatch. Expected: {expected_status}, Got: {actual_status}'])
+            return TestResult.failed(
+                [f'service {service_name} status mismatch. Expected: {expected_status}, Got: {actual_status}']
+            )
 
         except subprocess.TimeoutExpired:
             return TestResult.execution_error(None, f"Timeout checking service status for {service_name}")
@@ -109,12 +110,7 @@ def process_running(ctx: TestContext, process_name: str, min_instances: int = 1)
 
         # Check running processes using pgrep
         try:
-            result = subprocess.run(
-                ['pgrep', '-f', process_name],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+            result = subprocess.run(['pgrep', '-f', process_name], capture_output=True, text=True, timeout=10)
 
             if result.returncode == 0:
                 # Count process instances
@@ -122,8 +118,12 @@ def process_running(ctx: TestContext, process_name: str, min_instances: int = 1)
                 instance_count = len(pids)
 
                 if instance_count >= min_instances:
-                    return TestResult.success([f'process {process_name} running with {instance_count} instances (PIDs: {", ".join(pids)})'])
-                return TestResult.failed([f'process {process_name} has {instance_count} instances, expected at least {min_instances}'])
+                    return TestResult.success(
+                        [f'process {process_name} running with {instance_count} instances (PIDs: {", ".join(pids)})']
+                    )
+                return TestResult.failed(
+                    [f'process {process_name} has {instance_count} instances, expected at least {min_instances}']
+                )
             return TestResult.failed([f'process {process_name} is not running'])
 
         except subprocess.TimeoutExpired:
@@ -181,11 +181,15 @@ def user_exists(ctx: TestContext, username: str, uid: int = None, home_dir: str 
 
             # Check UID if specified
             if expected_uid is not None and user_info.pw_uid != expected_uid:
-                return TestResult.failed([f'user {username} UID mismatch. Expected: {expected_uid}, Got: {user_info.pw_uid}'])
+                return TestResult.failed(
+                    [f'user {username} UID mismatch. Expected: {expected_uid}, Got: {user_info.pw_uid}']
+                )
 
             # Check home directory if specified
             if expected_home is not None and user_info.pw_dir != expected_home:
-                return TestResult.failed([f'user {username} home directory mismatch. Expected: {expected_home}, Got: {user_info.pw_dir}'])
+                return TestResult.failed(
+                    [f'user {username} home directory mismatch. Expected: {expected_home}, Got: {user_info.pw_dir}']
+                )
 
             return TestResult.success(details)
 
@@ -238,7 +242,7 @@ def log_entry_exists(ctx: TestContext, log_file: str, pattern: str, max_lines: i
                 ['bash', '-c', f'tail -n {max_lines} "{log_file}" | grep -E "{pattern}"'],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=30,
             )
 
             if result.returncode == 0:

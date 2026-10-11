@@ -26,6 +26,7 @@ class DevModeAPI:
     def __init__(self, service=None):
         if service is None:
             from adare.services.devmode import DevModeService
+
             service = DevModeService()
         self._service = service
 
@@ -128,6 +129,7 @@ class TestFunctionAPI:
     def __init__(self, service=None):
         if service is None:
             from adare.services import testfunction_service
+
             service = testfunction_service.TestfunctionService()
         self._service = service
 
@@ -162,6 +164,7 @@ class ExperimentAPI:
     def __init__(self, service=None):
         if service is None:
             from adare.services import experiment_service
+
             service = experiment_service.ExperimentService()
         self._service = service
 
@@ -248,6 +251,7 @@ class ManageAPI:
     def __init__(self, service=None):
         if service is None:
             from adare.services import manage_service
+
             service = manage_service.ManageService()
         self._service = service
 
@@ -294,6 +298,7 @@ class EnvironmentAPI:
     def __init__(self, service=None):
         if service is None:
             from adare.services import environment_service
+
             service = environment_service.EnvironmentService()
         self._service = service
 
@@ -310,19 +315,32 @@ class EnvironmentAPI:
         return self._service.create(request)
 
     def publish_prepare(
-        self, project_path, name, vm_url, vm_format=None, verify_url=False, compress=False,
-        source_profile=None, source_iso_sha256=None,
+        self,
+        project_path,
+        name,
+        vm_url,
+        vm_format=None,
+        verify_url=False,
+        compress=False,
+        source_profile=None,
+        source_iso_sha256=None,
     ):
         """Convert a local-path baked environment into a publish-ready URL one."""
         return self._service.publish_prepare(
-            project_path, name, vm_url, vm_format=vm_format,
-            verify_url=verify_url, compress=compress,
-            source_profile=source_profile, source_iso_sha256=source_iso_sha256,
+            project_path,
+            name,
+            vm_url,
+            vm_format=vm_format,
+            verify_url=verify_url,
+            compress=compress,
+            source_profile=source_profile,
+            source_iso_sha256=source_iso_sha256,
         )
 
     def recipe_byo(self, project_path, name, iso_name=None, iso_notes=None):
         """Convert a recipe environment's local ISO path into a consumer-supplied one."""
         from adare.services.environment_recipe_byo import recipe_byo
+
         return recipe_byo(project_path, name, iso_name=iso_name, iso_notes=iso_notes)
 
     def delete(self, identifier, force=False):
@@ -352,6 +370,7 @@ class ProjectAPI:
     def __init__(self, service=None):
         if service is None:
             from adare.services import project_service
+
             service = project_service.ProjectService()
         self._service = service
 
@@ -378,6 +397,7 @@ class ShowAPI:
     def __init__(self, service=None):
         if service is None:
             from adare.services import show_service
+
             service = show_service.ShowService()
         self._service = service
 
@@ -432,6 +452,7 @@ class VMAPI:
     def __init__(self, service=None):
         if service is None:
             from adare.services import vm_service
+
             service = vm_service.VMService()
         self._service = service
 
@@ -506,6 +527,7 @@ class WebAPI:
     def __init__(self, service=None):
         if service is None:
             from adare.services import web_service
+
             service = web_service.WebService()
         self._service = service
 
@@ -560,21 +582,25 @@ class WebAPI:
     def submit_experiment(self, request):
         """Submit experiment as PR."""
         from adare.services.submit_service import SubmitService
+
         return SubmitService().submit_experiment(request)
 
     def submit_testfunction(self, request):
         """Submit testfunction as PR."""
         from adare.services.submit_service import SubmitService
+
         return SubmitService().submit_testfunction(request)
 
     def submit_environment(self, request):
         """Submit environment as PR."""
         from adare.services.submit_service import SubmitService
+
         return SubmitService().submit_environment(request)
 
     def precheck_submission(self, entity_type, name):
         """Classify a create submission by name before opening a PR."""
         from adare.services.submit_service import SubmitService
+
         return SubmitService().precheck_submission(entity_type, name)
 
 

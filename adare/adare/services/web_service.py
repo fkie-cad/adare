@@ -59,17 +59,14 @@ class WebService:
         try:
             login()
             # If we get here, login was successful
-            return Result.ok(WebLoginResult(
-                logged_in=True,
-                message="Login successful"
-            ))
+            return Result.ok(WebLoginResult(logged_in=True, message="Login successful"))
 
         except (LoginFailedError, AlreadyLoggedIn, ConnectionError, OSError) as e:
             log.error(f"Login failed: {e}")
             return Result.fail(
                 code="LoginError",
                 message=f"Login failed: {e}",
-                solutions=['Check your internet connection', 'Verify your credentials']
+                solutions=['Check your internet connection', 'Verify your credentials'],
             )
 
     def logout(self) -> Result[WebLogoutResult]:
@@ -84,18 +81,11 @@ class WebService:
 
         try:
             logout()
-            return Result.ok(WebLogoutResult(
-                logged_out=True,
-                message="Logout successful"
-            ))
+            return Result.ok(WebLogoutResult(logged_out=True, message="Logout successful"))
 
         except (NoUserLoggedIn, SQLAlchemyError, OSError) as e:
             log.error(f"Logout failed: {e}")
-            return Result.fail(
-                code="LogoutError",
-                message=f"Logout failed: {e}",
-                solutions=['Try logging out again']
-            )
+            return Result.fail(code="LogoutError", message=f"Logout failed: {e}", solutions=['Try logging out again'])
 
     def get_status(self) -> Result[WebStatusResult]:
         """
@@ -113,17 +103,16 @@ class WebService:
                 db.remove_expired_user_sessions()
                 user_session = db.get_first_user_session()
 
-                return Result.ok(WebStatusResult(
-                    logged_in=bool(user_session),
-                    username=user_session.username if user_session else None
-                ))
+                return Result.ok(
+                    WebStatusResult(
+                        logged_in=bool(user_session), username=user_session.username if user_session else None
+                    )
+                )
 
         except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to get web status: {e}")
             return Result.fail(
-                code="StatusError",
-                message=f"Failed to get web status: {e}",
-                solutions=['Check database connection']
+                code="StatusError", message=f"Failed to get web status: {e}", solutions=['Check database connection']
             )
 
     # =========================================================================
@@ -144,17 +133,18 @@ class WebService:
 
         try:
             environment_download(request.project_path, request.environment_name)
-            return Result.ok(DownloadResult(
-                downloaded=True,
-                message=f"Environment '{request.environment_name}' downloaded successfully"
-            ))
+            return Result.ok(
+                DownloadResult(
+                    downloaded=True, message=f"Environment '{request.environment_name}' downloaded successfully"
+                )
+            )
 
         except (ConnectionError, OSError, ValueError) as e:
             log.error(f"Failed to download environment: {e}")
             return Result.fail(
                 code="DownloadError",
                 message=f"Failed to download environment: {e}",
-                solutions=['Check your internet connection', 'Verify the environment name']
+                solutions=['Check your internet connection', 'Verify the environment name'],
             )
 
     def download_experiment(self, request: DownloadExperimentRequest) -> Result[DownloadResult]:
@@ -177,18 +167,16 @@ class WebService:
 
         try:
             experiment_download(request.project_path, request.ulid)
-            return Result.ok(DownloadResult(
-                downloaded=True,
-                message=f"Experiment '{request.ulid}' downloaded successfully"
-            ))
+            return Result.ok(
+                DownloadResult(downloaded=True, message=f"Experiment '{request.ulid}' downloaded successfully")
+            )
 
-        except (NotLoggedInError, DownloadError, MissingDataError,
-                ExperimentWithNameAlreadyExistsError) as e:
+        except (NotLoggedInError, DownloadError, MissingDataError, ExperimentWithNameAlreadyExistsError) as e:
             log.error(f"Failed to download experiment: {e}")
             return Result.fail(
                 code="DownloadError",
                 message=f"Failed to download experiment: {e}",
-                solutions=['Check your internet connection', 'Verify the experiment ULID']
+                solutions=['Check your internet connection', 'Verify the experiment ULID'],
             )
 
     def download_testfunction(self, request: DownloadTestfunctionRequest) -> Result[DownloadResult]:
@@ -211,18 +199,18 @@ class WebService:
 
         try:
             testfunction_download(request.project_path, request.testfunction_name, version=request.version)
-            return Result.ok(DownloadResult(
-                downloaded=True,
-                message=f"Testfunction '{request.testfunction_name}' downloaded successfully"
-            ))
+            return Result.ok(
+                DownloadResult(
+                    downloaded=True, message=f"Testfunction '{request.testfunction_name}' downloaded successfully"
+                )
+            )
 
-        except (NotLoggedInError, DownloadError, MissingDataError,
-                TestfunctionMissingFileError) as e:
+        except (NotLoggedInError, DownloadError, MissingDataError, TestfunctionMissingFileError) as e:
             log.error(f"Failed to download testfunction: {e}")
             return Result.fail(
                 code="DownloadError",
                 message=f"Failed to download testfunction: {e}",
-                solutions=['Check your internet connection', 'Verify the testfunction name']
+                solutions=['Check your internet connection', 'Verify the testfunction name'],
             )
 
     def download_bundle(self, request: DownloadBundleRequest) -> Result[DownloadBundleResult]:
@@ -264,7 +252,7 @@ class WebService:
                 return Result.fail(
                     code="DownloadError",
                     message=f"Failed to fetch experiment descriptor: {response.status_code}",
-                    solutions=['Verify the experiment ULID']
+                    solutions=['Verify the experiment ULID'],
                 )
 
             experiment_data = response.json()
@@ -275,11 +263,13 @@ class WebService:
             log.info(f"Downloaded experiment {request.ulid}")
 
             # Download testfunction sets referenced by the experiment's abstract tests
-            testfunction_names = sorted({
-                at['testfunction']['set']
-                for at in experiment_data.get('abstract_tests', [])
-                if at.get('testfunction', {}).get('set')
-            })
+            testfunction_names = sorted(
+                {
+                    at['testfunction']['set']
+                    for at in experiment_data.get('abstract_tests', [])
+                    if at.get('testfunction', {}).get('set')
+                }
+            )
             for tf_name in testfunction_names:
                 tf_dir = project_directory.testfunctions / tf_name
                 if not tf_dir.exists():
@@ -294,20 +284,27 @@ class WebService:
                     download_environment(env_name, env_file)
                     log.info(f"Downloaded environment {env_name}")
 
-            return Result.ok(DownloadBundleResult(
-                experiment_name=experiment_name,
-                environment_names=environment_names,
-                testfunction_names=testfunction_names,
-                message=f"Bundle for experiment '{request.ulid}' downloaded successfully"
-            ))
+            return Result.ok(
+                DownloadBundleResult(
+                    experiment_name=experiment_name,
+                    environment_names=environment_names,
+                    testfunction_names=testfunction_names,
+                    message=f"Bundle for experiment '{request.ulid}' downloaded successfully",
+                )
+            )
 
-        except (NotLoggedInError, DownloadError, MissingDataError,
-                ExperimentWithNameAlreadyExistsError, requests.RequestException) as e:
+        except (
+            NotLoggedInError,
+            DownloadError,
+            MissingDataError,
+            ExperimentWithNameAlreadyExistsError,
+            requests.RequestException,
+        ) as e:
             log.error(f"Failed to download bundle: {e}")
             return Result.fail(
                 code="DownloadError",
                 message=f"Failed to download bundle: {e}",
-                solutions=['Check your internet connection', 'Verify the experiment ULID']
+                solutions=['Check your internet connection', 'Verify the experiment ULID'],
             )
 
     # =========================================================================
@@ -329,17 +326,14 @@ class WebService:
         try:
             project_path = request.project_path if request else None
             backend_sync(project_path)
-            return Result.ok(SyncResult(
-                synced=True,
-                message="Sync completed successfully"
-            ))
+            return Result.ok(SyncResult(synced=True, message="Sync completed successfully"))
 
         except (ConnectionError, OSError, SQLAlchemyError) as e:
             log.error(f"Sync failed: {e}")
             return Result.fail(
                 code="SyncError",
                 message=f"Sync failed: {e}",
-                solutions=['Check your internet connection', 'Verify you are logged in']
+                solutions=['Check your internet connection', 'Verify you are logged in'],
             )
 
     # =========================================================================
@@ -361,10 +355,7 @@ class WebService:
 
         try:
             publish_experiment_run(request.ulid, request.project_path)
-            return Result.ok(PublishResult(
-                published=True,
-                message=f"Run '{request.ulid}' uploaded successfully"
-            ))
+            return Result.ok(PublishResult(published=True, message=f"Run '{request.ulid}' uploaded successfully"))
 
         except RunSerializationError as e:
             # The run itself is the problem (unpublished experiment/environment,
@@ -374,14 +365,14 @@ class WebService:
             return Result.fail(
                 code="RunSerializationError",
                 message=f"Cannot upload run: {e}",
-                solutions=['adare web submit experiment <name>', 'adare web sync']
+                solutions=['adare web submit experiment <name>', 'adare web sync'],
             )
         except (ConnectionError, OSError, SQLAlchemyError) as e:
             log.error(f"Failed to upload run: {e}")
             return Result.fail(
                 code="UploadError",
                 message=f"Failed to upload run: {e}",
-                solutions=['Check your internet connection', 'Verify you are logged in']
+                solutions=['Check your internet connection', 'Verify you are logged in'],
             )
 
     def publish_run(self, request: PublishRunRequest) -> Result[PublishResult]:
@@ -399,10 +390,7 @@ class WebService:
 
         try:
             publish_run_command(request.project_path, request.ulid)
-            return Result.ok(PublishResult(
-                published=True,
-                message=f"Run '{request.ulid}' published successfully"
-            ))
+            return Result.ok(PublishResult(published=True, message=f"Run '{request.ulid}' published successfully"))
 
         except RunSerializationError as e:
             # A local shape problem, not a connectivity one — say so.
@@ -410,14 +398,14 @@ class WebService:
             return Result.fail(
                 code="RunSerializationError",
                 message=f"Cannot publish run: {e}",
-                solutions=['adare web submit experiment <name>', 'adare web sync']
+                solutions=['adare web submit experiment <name>', 'adare web sync'],
             )
         except (ConnectionError, OSError, SQLAlchemyError) as e:
             log.error(f"Failed to publish run: {e}")
             return Result.fail(
                 code="PublishError",
                 message=f"Failed to publish run: {e}",
-                solutions=['Check your internet connection', 'Verify you are logged in']
+                solutions=['Check your internet connection', 'Verify you are logged in'],
             )
 
     # =========================================================================
@@ -438,18 +426,18 @@ class WebService:
 
         try:
             exists = check_experiment_exists(request.ulid)
-            return Result.ok(CheckExperimentResult(
-                experiment_ulid=request.ulid,
-                exists=exists,
-                status='published' if exists else 'not_found'
-            ))
+            return Result.ok(
+                CheckExperimentResult(
+                    experiment_ulid=request.ulid, exists=exists, status='published' if exists else 'not_found'
+                )
+            )
 
         except (ConnectionError, OSError) as e:
             log.error(f"Failed to check experiment: {e}")
             return Result.fail(
                 code="CheckError",
                 message=f"Failed to check experiment: {e}",
-                solutions=['Check your internet connection', 'Verify you are logged in']
+                solutions=['Check your internet connection', 'Verify you are logged in'],
             )
 
     def check_run(self, request: CheckRunRequest) -> Result[CheckRunResult]:
@@ -466,16 +454,14 @@ class WebService:
 
         try:
             exists = check_run_exists(request.ulid)
-            return Result.ok(CheckRunResult(
-                run_ulid=request.ulid,
-                exists=exists,
-                status='published' if exists else 'not_found'
-            ))
+            return Result.ok(
+                CheckRunResult(run_ulid=request.ulid, exists=exists, status='published' if exists else 'not_found')
+            )
 
         except (ConnectionError, OSError) as e:
             log.error(f"Failed to check run: {e}")
             return Result.fail(
                 code="CheckError",
                 message=f"Failed to check run: {e}",
-                solutions=['Check your internet connection', 'Verify you are logged in']
+                solutions=['Check your internet connection', 'Verify you are logged in'],
             )

@@ -39,8 +39,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
         try:
             if region:
                 result = await self.client.screenshot(
-                    region.get('x'), region.get('y'),
-                    region.get('width'), region.get('height')
+                    region.get('x'), region.get('y'), region.get('width'), region.get('height')
                 )
             else:
                 result = await self.client.screenshot()

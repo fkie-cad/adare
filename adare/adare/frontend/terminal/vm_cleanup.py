@@ -21,9 +21,11 @@ class VMConfirmationPanel:
 
     def __rich__(self) -> Panel:
         if not self.vms:
-            return Panel("[yellow]No VMs found to delete[/yellow]",
-                        title=f"[b gold3]{self.title}[/b gold3]",
-                        border_style="yellow")
+            return Panel(
+                "[yellow]No VMs found to delete[/yellow]",
+                title=f"[b gold3]{self.title}[/b gold3]",
+                border_style="yellow",
+            )
 
         table = Table(expand=True)
         table.add_column("Name", style="red", no_wrap=True)
@@ -47,8 +49,7 @@ class VMConfirmationPanel:
 
         content = f"[red bold]{self.warning_text}[/red bold]\n\n{table}\n\n[yellow]Use --force to confirm this action[/yellow]"
 
-        return Panel(content, title=f"[b red]⚠️  {self.title}[/b red]",
-                    border_style="red", title_align="left")
+        return Panel(content, title=f"[b red]⚠️  {self.title}[/b red]", border_style="red", title_align="left")
 
 
 class VMCleanupResultsPanel:
@@ -64,11 +65,7 @@ class VMCleanupResultsPanel:
 
         # Success count
         if self.results['deleted_count'] > 0:
-            table.add_row(
-                Text("✅ Successfully Deleted:", style="green"),
-                str(self.results['deleted_count']),
-                ""
-            )
+            table.add_row(Text("✅ Successfully Deleted:", style="green"), str(self.results['deleted_count']), "")
             for vm_name in self.results['deleted_vms'][:5]:  # Show first 5
                 table.add_row("", "", f"• {vm_name}")
             if len(self.results['deleted_vms']) > 5:
@@ -76,11 +73,7 @@ class VMCleanupResultsPanel:
 
         # Failure count
         if self.results['failed_count'] > 0:
-            table.add_row(
-                Text("❌ Failed to Delete:", style="red"),
-                str(self.results['failed_count']),
-                ""
-            )
+            table.add_row(Text("❌ Failed to Delete:", style="red"), str(self.results['failed_count']), "")
             for error in self.results['failed_vms'][:3]:  # Show first 3 errors
                 table.add_row("", "", f"• {error}")
             if len(self.results['failed_vms']) > 3:
@@ -88,19 +81,11 @@ class VMCleanupResultsPanel:
 
         # Skipped count (if any)
         if self.results.get('skipped_count', 0) > 0:
-            table.add_row(
-                Text("⏭️  Skipped:", style="yellow"),
-                str(self.results['skipped_count']),
-                ""
-            )
+            table.add_row(Text("⏭️  Skipped:", style="yellow"), str(self.results['skipped_count']), "")
 
         # Summary
         if self.results['deleted_count'] == 0 and self.results['failed_count'] == 0:
-            table.add_row(
-                Text("ℹ️  No Action Needed", style="blue"),
-                "0",
-                "No VMs found to delete"
-            )
+            table.add_row(Text("ℹ️  No Action Needed", style="blue"), "0", "No VMs found to delete")
 
         title = f"[b gold3]{self.operation_name} Results[/b gold3]"
         return Panel(table, title=title, border_style="blue", title_align="left")
@@ -145,11 +130,11 @@ def print_vm_clear_environment_confirmation(environment_ulid: str):
         # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
         # the terminal height and silently drops the overflowing rows, which would
         # understate what this confirmation is about to delete.
-        console.print(VMConfirmationPanel(
-            vms,
-            "Clear Environment VMs",
-            f"This will delete {len(vms)} VMs for environment {environment_ulid}!"
-        ))
+        console.print(
+            VMConfirmationPanel(
+                vms, "Clear Environment VMs", f"This will delete {len(vms)} VMs for environment {environment_ulid}!"
+            )
+        )
 
     except Exception as e:
         log.error(f"Failed to show environment VM confirmation: {e}")

@@ -38,6 +38,7 @@ def exec_icons_list(args: SimpleNamespace) -> None:
         raise IconsCLIError(str(exc)) from exc
 
     from adare.cli.output import emit, is_structured_output
+
     if is_structured_output():
         emit({'icons': [{'term': term, 'spec': library.spec_for(term)} for term in terms]})
         return
@@ -123,9 +124,7 @@ def _write_contact_sheet(library: IconLibrary, results, os_key: str):
         "img{image-rendering:pixelated;background:#eee}</style>"
         f"<h1>ADARE icon library &mdash; {html.escape(os_key)}</h1>"
         f"<p>{len(results)} terms from {html.escape(str(library.registry_path))}</p>"
-        "<table><tr><th>icon</th><th>term</th><th>resolver spec</th><th>status</th></tr>"
-        + "".join(rows)
-        + "</table>"
+        "<table><tr><th>icon</th><th>term</th><th>resolver spec</th><th>status</th></tr>" + "".join(rows) + "</table>"
     )
     sheet_path.write_text(document, encoding="utf-8")
     return sheet_path

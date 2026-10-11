@@ -7,11 +7,19 @@ from adare.types.playbook_test_checks import check_playbook_tests
 
 pytestmark = pytest.mark.unit
 
-CATALOG = [CatalogEntry(
-    dotnotation='standard.file_exists', collection='standard', name='file_exists', summary='', category='',
-    os='any', installed=True, path='',
-    params=(ParamSpec('dst', 'str', True), ParamSpec('match_mode', 'str', False, 'any')),
-)]
+CATALOG = [
+    CatalogEntry(
+        dotnotation='standard.file_exists',
+        collection='standard',
+        name='file_exists',
+        summary='',
+        category='',
+        os='any',
+        installed=True,
+        path='',
+        params=(ParamSpec('dst', 'str', True), ParamSpec('match_mode', 'str', False, 'any')),
+    )
+]
 
 
 def _check(yaml_text):
@@ -40,8 +48,7 @@ tests:
 actions:
   - test: b
 ''')
-    assert errors == ['duplicate test name "a" in `tests:`',
-                      '`- test: b` refers to no entry in `tests:`']
+    assert errors == ['duplicate test name "a" in `tests:`', '`- test: b` refers to no entry in `tests:`']
 
 
 def test_catalog_findings_are_warnings_with_suggestions():

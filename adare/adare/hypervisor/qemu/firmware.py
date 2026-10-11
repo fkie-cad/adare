@@ -153,6 +153,7 @@ def create_nvram_for_vm(vm_name: str, vm_config_dir: Path, architecture: str = '
 
         # Copy VARS template to create VM-specific NVRAM
         import shutil
+
         shutil.copy2(vars_template, nvram_path)
 
         # aarch64: pre-populate NVRAM with Shell as default boot option.
@@ -171,28 +172,92 @@ def create_nvram_for_vm(vm_name: str, vm_config_dir: Path, architecture: str = '
 # ---------------------------------------------------------------------------
 
 # EFI Global Variable GUID: {8BE4DF61-93CA-11D2-AA0D-00E098032B8C}
-_EFI_GLOBAL_VARIABLE_GUID = bytes([
-    0x61, 0xDF, 0xE4, 0x8B, 0xCA, 0x93, 0xD2, 0x11,
-    0xAA, 0x0D, 0x00, 0xE0, 0x98, 0x03, 0x2B, 0x8C,
-])
+_EFI_GLOBAL_VARIABLE_GUID = bytes(
+    [
+        0x61,
+        0xDF,
+        0xE4,
+        0x8B,
+        0xCA,
+        0x93,
+        0xD2,
+        0x11,
+        0xAA,
+        0x0D,
+        0x00,
+        0xE0,
+        0x98,
+        0x03,
+        0x2B,
+        0x8C,
+    ]
+)
 
 # UEFI Shell FFS file GUID: {7C04A583-9E3E-4F1C-AD65-E05268D0B4D1}
-_SHELL_FFS_GUID = bytes([
-    0x83, 0xA5, 0x04, 0x7C, 0x3E, 0x9E, 0x1C, 0x4F,
-    0xAD, 0x65, 0xE0, 0x52, 0x68, 0xD0, 0xB4, 0xD1,
-])
+_SHELL_FFS_GUID = bytes(
+    [
+        0x83,
+        0xA5,
+        0x04,
+        0x7C,
+        0x3E,
+        0x9E,
+        0x1C,
+        0x4F,
+        0xAD,
+        0x65,
+        0xE0,
+        0x52,
+        0x68,
+        0xD0,
+        0xB4,
+        0xD1,
+    ]
+)
 
 # Authenticated variable store GUID (edk2 default for aarch64)
-_AUTH_VAR_STORE_GUID = bytes([
-    0x78, 0x2C, 0xF3, 0xAA, 0x7B, 0x94, 0x9A, 0x43,
-    0xA1, 0x80, 0x2E, 0x14, 0x4E, 0xC3, 0x77, 0x92,
-])
+_AUTH_VAR_STORE_GUID = bytes(
+    [
+        0x78,
+        0x2C,
+        0xF3,
+        0xAA,
+        0x7B,
+        0x94,
+        0x9A,
+        0x43,
+        0xA1,
+        0x80,
+        0x2E,
+        0x14,
+        0x4E,
+        0xC3,
+        0x77,
+        0x92,
+    ]
+)
 
 # Standard (non-authenticated) variable store GUID
-_STD_VAR_STORE_GUID = bytes([
-    0x16, 0x36, 0xCF, 0xDD, 0x75, 0x32, 0x64, 0x41,
-    0x98, 0xB6, 0xFE, 0x85, 0x70, 0x7F, 0xFE, 0x7D,
-])
+_STD_VAR_STORE_GUID = bytes(
+    [
+        0x16,
+        0x36,
+        0xCF,
+        0xDD,
+        0x75,
+        0x32,
+        0x64,
+        0x41,
+        0x98,
+        0xB6,
+        0xFE,
+        0x85,
+        0x70,
+        0x7F,
+        0xFE,
+        0x7D,
+    ]
+)
 
 _VAR_ADDED = 0x3F  # Variable fully written and valid
 _NV_BS_RT = 0x00000007  # NON_VOLATILE | BOOTSERVICE_ACCESS | RUNTIME_ACCESS
@@ -223,7 +288,7 @@ def _prepare_nvram_for_shell_boot(nvram_path: str) -> None:
 
     # FV header length tells us where the variable store starts
     hdr_len = struct.unpack_from('<H', data, 0x30)[0]
-    vs_guid = bytes(data[hdr_len:hdr_len + 16])
+    vs_guid = bytes(data[hdr_len : hdr_len + 16])
 
     if vs_guid == _AUTH_VAR_STORE_GUID:
         authenticated = True
@@ -250,7 +315,11 @@ def _prepare_nvram_for_shell_boot(nvram_path: str) -> None:
 
 
 def _write_efi_var(
-    data: bytearray, offset: int, name: str, value: bytes, authenticated: bool,
+    data: bytearray,
+    offset: int,
+    name: str,
+    value: bytes,
+    authenticated: bool,
 ) -> int:
     """Write one EFI variable into *data* at *offset*. Return next aligned offset."""
     name_bytes = (name + '\0').encode('utf-16-le')
@@ -259,13 +328,13 @@ def _write_efi_var(
     hdr = struct.pack('<HBxI', 0x55AA, _VAR_ADDED, _NV_BS_RT)
     if authenticated:
         hdr += struct.pack('<Q', 0)  # MonotonicCount
-        hdr += b'\x00' * 16          # TimeStamp (EFI_TIME, all zeros)
+        hdr += b'\x00' * 16  # TimeStamp (EFI_TIME, all zeros)
         hdr += struct.pack('<I', 0)  # PubKeyIndex
     hdr += struct.pack('<II', len(name_bytes), len(value))
     hdr += _EFI_GLOBAL_VARIABLE_GUID
 
     entry = hdr + name_bytes + value
-    data[offset:offset + len(entry)] = entry
+    data[offset : offset + len(entry)] = entry
 
     # Next variable must be 4-byte aligned
     return (offset + len(entry) + 3) & ~3
@@ -282,7 +351,7 @@ def _build_shell_load_option() -> bytes:
 
     # Device path: FvFile(Shell GUID) + End-of-path
     fv_file = struct.pack('<BBH', 0x04, 0x06, 20) + _SHELL_FFS_GUID  # 20 bytes
-    end = struct.pack('<BBH', 0x7F, 0xFF, 4)                          # 4 bytes
+    end = struct.pack('<BBH', 0x7F, 0xFF, 4)  # 4 bytes
     file_path = fv_file + end  # 24 bytes total
 
     # EFI_LOAD_OPTION: Attributes(4) + FilePathListLength(2) + Description + FilePath

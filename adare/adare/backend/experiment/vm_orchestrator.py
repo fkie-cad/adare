@@ -27,11 +27,22 @@ log = logging.getLogger(__name__)
 # The per-machine fields extracted onto MachineRunCtx (runctx.py). Anything not in
 # this set is shared experiment-run state and is forwarded straight to the parent
 # context untouched (config, playbook, experiment_run_directory, stop_event, ...).
-_MACHINE_SCOPED_ATTRS = frozenset({
-    'environment_file', 'environment_ulid', 'guest_platform', 'guest_architecture',
-    'hypervisor_type', 'vm', 'vm_file', 'vm_name', 'client', 'mcp_server',
-    'adarevm', 'adarevm_pid',
-})
+_MACHINE_SCOPED_ATTRS = frozenset(
+    {
+        'environment_file',
+        'environment_ulid',
+        'guest_platform',
+        'guest_architecture',
+        'hypervisor_type',
+        'vm',
+        'vm_file',
+        'vm_name',
+        'client',
+        'mcp_server',
+        'adarevm',
+        'adarevm_pid',
+    }
+)
 
 # Boot-pipeline methods that must run in dependency order rather than being fanned
 # out in a single indiscriminate parallel gather. Phase 1 MVP boots serially, in
@@ -148,6 +159,7 @@ class MultiVMOrchestrator:
                     view = _MachineContextView(context, key)
                     results[key] = await getattr(self._managers[key], name)(view, *args, **kwargs)
             else:
+
                 async def call_one(key):
                     view = _MachineContextView(context, key)
                     return await getattr(self._managers[key], name)(view, *args, **kwargs)
@@ -173,7 +185,9 @@ def get_vm_orchestrator(context: ExperimentRunCtx) -> VMLifecycleManager | Multi
     resolve to hypervisor_type == 'qemu' (enforced indirectly -- there is no
     libvirt `<network>` story for VirtualBox in this codebase).
     """
-    machines_spec: dict[str, MachineSpec] | None = getattr(context.playbook, 'machines', None) if context.playbook else None
+    machines_spec: dict[str, MachineSpec] | None = (
+        getattr(context.playbook, 'machines', None) if context.playbook else None
+    )
 
     if not machines_spec or len(machines_spec) <= 1:
         hypervisor = context.hypervisor_type or 'virtualbox'
@@ -185,7 +199,7 @@ def get_vm_orchestrator(context: ExperimentRunCtx) -> VMLifecycleManager | Multi
         raise LoggedException(
             log,
             "Multi-machine experiments require every machine's environment to use "
-            f"the QEMU hypervisor; got: {hypervisor_types}"
+            f"the QEMU hypervisor; got: {hypervisor_types}",
         )
 
     return MultiVMOrchestrator(hypervisor_type='qemu', machine_keys=machine_keys)
@@ -206,24 +220,15 @@ def _boot_waves(machines: dict[str, MachineSpec]) -> list[list[str]]:
     for key, deps in remaining_deps.items():
         unknown = deps - machines.keys()
         if unknown:
-            raise BootDependencyError(
-                log,
-                f"machine '{key}' depends_on unknown machine(s): {sorted(unknown)}"
-            )
+            raise BootDependencyError(log, f"machine '{key}' depends_on unknown machine(s): {sorted(unknown)}")
 
     waves: list[list[str]] = []
     scheduled: set[str] = set()
     while len(scheduled) < len(machines):
-        wave = sorted(
-            key for key, deps in remaining_deps.items()
-            if key not in scheduled and deps <= scheduled
-        )
+        wave = sorted(key for key, deps in remaining_deps.items() if key not in scheduled and deps <= scheduled)
         if not wave:
             unresolved = sorted(set(machines.keys()) - scheduled)
-            raise BootDependencyError(
-                log,
-                f"machines.depends_on has a cycle among: {unresolved}"
-            )
+            raise BootDependencyError(log, f"machines.depends_on has a cycle among: {unresolved}")
         waves.append(wave)
         scheduled.update(wave)
 

@@ -3,6 +3,7 @@ UUID Registry - VM discovery and lookup operations.
 
 Provides a registry pattern for VM discovery by UUID and name.
 """
+
 import glob
 import json
 from pathlib import Path
@@ -68,9 +69,8 @@ class QEMUVMRegistry:
             machine=data.get('machine', 'pc'),
             accel=data.get('accel', 'kvm'),
             drive_format=data.get('drive_format', 'qcow2'),
-            hypervisor_config=None  # No hypervisor config for UUID registry recovery
+            hypervisor_config=None,  # No hypervisor config for UUID registry recovery
         )
-
 
     @staticmethod
     def vm_exists(vm_name: str) -> bool:
@@ -124,7 +124,7 @@ class QEMUVMRegistry:
                         'cpus': data.get('cpus', 2),
                         'ram': data.get('ram', 2048),
                         'disk_path': data.get('disk_path'),
-                        'config_path': config_file
+                        'config_path': config_file,
                     }
             except (OSError, json.JSONDecodeError, KeyError):
                 # Skip invalid config files

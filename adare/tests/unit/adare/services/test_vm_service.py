@@ -10,6 +10,7 @@ pytestmark = pytest.mark.unit
 @pytest.fixture
 def service():
     from adare.services.vm_service import VMService
+
     return VMService()
 
 
@@ -18,6 +19,7 @@ def load_request():
     from pathlib import Path
 
     from adare.core.dto.vm import VmLoadRequest
+
     return VmLoadRequest(file_path=Path("/tmp/test.ova"), name="test-vm")
 
 
@@ -138,8 +140,10 @@ class TestVMServiceClearAll:
     @patch("adare.services.vm_service.backend_clear_all_vms")
     def test_clear_all_success(self, mock_clear, service):
         mock_clear.return_value = {
-            "deleted_count": 2, "deleted_vms": ["a", "b"],
-            "failed_count": 0, "failed_vms": [],
+            "deleted_count": 2,
+            "deleted_vms": ["a", "b"],
+            "failed_count": 0,
+            "failed_vms": [],
         }
 
         result = service.clear_all(force=True)
@@ -150,6 +154,7 @@ class TestVMServiceClearAll:
     @patch("adare.services.vm_service.backend_clear_all_vms")
     def test_clear_all_vm_error(self, mock_clear, service):
         from adare.backend.vm.exceptions import VMError
+
         mock_clear.side_effect = VMError(MagicMock(), message="clear failed")
 
         result = service.clear_all()
@@ -164,6 +169,7 @@ class TestVMServiceRemoveInstance:
     @patch("adare.services.vm_service.VMService.remove_instance")
     async def test_remove_instance_success(self, mock_remove):
         from adare.core.result import Result
+
         mock_remove.return_value = Result.ok(None)
 
         result = await mock_remove("inst-01")
@@ -174,8 +180,10 @@ class TestVMServiceRemoveInstance:
     async def test_remove_instance_not_found(self, service):
         from adare.database.api.vm import VMNotFoundError
 
-        with patch("adare.backend.vm.instance_manager.cleanup_vm_instance",
-                    side_effect=VMNotFoundError(MagicMock(), message="not found")):
+        with patch(
+            "adare.backend.vm.instance_manager.cleanup_vm_instance",
+            side_effect=VMNotFoundError(MagicMock(), message="not found"),
+        ):
             result = await service.remove_instance("inst-99")
 
         assert result.success is False

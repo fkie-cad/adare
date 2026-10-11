@@ -38,11 +38,11 @@ def exec_experiment_diff(arguments):
     # Run diff mode
     from adare.backend.experiment.diff_run import experiment_diff_run
 
-    result = asyncio.run(experiment_diff_run(
-        project_path=Path(project_directory),
-        experiment_name=experiment_name,
-        environment_name=environment_name
-    ))
+    result = asyncio.run(
+        experiment_diff_run(
+            project_path=Path(project_directory), experiment_name=experiment_name, environment_name=environment_name
+        )
+    )
 
     # Display results
     if result.success:
@@ -51,24 +51,23 @@ def exec_experiment_diff(arguments):
             f"  ✓ Successful: {result.successful_actions}",
             f"  ✗ Failed: {result.failed_actions}",
             f"Actions skipped (non-visual): {result.actions_skipped}",
-            f"Execution time: {result.execution_time:.2f}s"
+            f"Execution time: {result.execution_time:.2f}s",
         ]
 
         # Add diff artifact information if available
         if result.diff_run_directory:
             screenshots_dir = result.diff_run_directory / 'reporting' / 'screenshots'
             diff_dir = result.diff_run_directory / 'artifacts' / 'diff'
-            next_steps.extend([
-                f"Screenshots: {screenshots_dir}",
-                f"Filesystem diff: {diff_dir}",
-                "  - filesystem_diffs.json (machine-readable)",
-                "  - filesystem_diffs.csv (human-readable)"
-            ])
+            next_steps.extend(
+                [
+                    f"Screenshots: {screenshots_dir}",
+                    f"Filesystem diff: {diff_dir}",
+                    "  - filesystem_diffs.json (machine-readable)",
+                    "  - filesystem_diffs.csv (human-readable)",
+                ]
+            )
 
-        print_success_message(
-            title='Diff mode completed successfully',
-            next_steps=next_steps
-        )
+        print_success_message(title='Diff mode completed successfully', next_steps=next_steps)
     else:
         error_steps = [
             result.error if result.error else "Unknown error occurred",
@@ -79,10 +78,7 @@ def exec_experiment_diff(arguments):
             f"Actions skipped (non-visual): {result.actions_skipped}",
             f"Execution time: {result.execution_time:.2f}s",
             "",
-            "Check logs for details"
+            "Check logs for details",
         ]
-        print_error_message(
-            title='Diff mode failed',
-            next_steps=error_steps
-        )
+        print_error_message(title='Diff mode failed', next_steps=error_steps)
         exit(1)

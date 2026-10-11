@@ -47,9 +47,7 @@ class VMFileManager:
 
         # Validate OVA format with progress indication
         if not validate_tarfile_with_progress(
-            file_path=file_path,
-            description=f"Validating OVA format for {file_path.name}",
-            quiet=quiet
+            file_path=file_path, description=f"Validating OVA format for {file_path.name}", quiet=quiet
         ):
             raise VMValidationError(log, f"VM file {file_path} is not a valid OVA file")
 
@@ -58,10 +56,7 @@ class VMFileManager:
         file_hash = self.calculate_file_hash(file_path, quiet=quiet)
 
         log.info(f"VM file validation successful: {file_path}")
-        return {
-            'file_size': file_size,
-            'file_hash': file_hash
-        }
+        return {'file_size': file_size, 'file_hash': file_hash}
 
     def validate_vm_file_format_only(self, file_path: Path, quiet: bool = False) -> dict:
         """
@@ -85,9 +80,7 @@ class VMFileManager:
 
         # Validate OVA format with progress indication
         if not validate_tarfile_with_progress(
-            file_path=file_path,
-            description=f"Validating OVA format for {file_path.name}",
-            quiet=quiet
+            file_path=file_path, description=f"Validating OVA format for {file_path.name}", quiet=quiet
         ):
             raise VMValidationError(log, f"VM file {file_path} is not a valid OVA file")
 
@@ -95,11 +88,11 @@ class VMFileManager:
         file_size = file_path.stat().st_size
 
         log.info(f"VM file format validation successful: {file_path}")
-        return {
-            'file_size': file_size
-        }
+        return {'file_size': file_size}
 
-    def calculate_file_hash(self, file_path: Path, silent: bool = False, interrupt_event: threading.Event | None = None) -> str:
+    def calculate_file_hash(
+        self, file_path: Path, silent: bool = False, interrupt_event: threading.Event | None = None
+    ) -> str:
         """
         Calculate SHA256 hash of file with progress indication.
 
@@ -115,10 +108,12 @@ class VMFileManager:
             file_path=file_path,
             description=f"Calculating hash for {file_path.name}",
             silent=silent,
-            interrupt_event=interrupt_event
+            interrupt_event=interrupt_event,
         )
 
-    async def calculate_file_hash_async(self, file_path: Path, silent: bool = False, interrupt_event: threading.Event | None = None) -> str:
+    async def calculate_file_hash_async(
+        self, file_path: Path, silent: bool = False, interrupt_event: threading.Event | None = None
+    ) -> str:
         """
         Calculate SHA256 hash of file with progress indication (async version).
 
@@ -134,11 +129,12 @@ class VMFileManager:
             file_path=file_path,
             description=f"Calculating hash for {file_path.name}",
             silent=silent,
-            interrupt_event=interrupt_event
+            interrupt_event=interrupt_event,
         )
 
-    def copy_vm_file(self, source_path: Path, name: str, scope: str,
-                    project_path: Path = None, silent: bool = False) -> Path:
+    def copy_vm_file(
+        self, source_path: Path, name: str, scope: str, project_path: Path = None, silent: bool = False
+    ) -> Path:
         """
         Copy VM file to appropriate storage location.
 
@@ -170,6 +166,7 @@ class VMFileManager:
                 return target_path
 
             from adare.helperfunctions.file.copy import copy
+
             copy(
                 src=source_path,
                 dst=target_path,
@@ -187,8 +184,9 @@ class VMFileManager:
         except OSError as e:
             raise VMCopyError(log, f"Failed to copy VM file: {e}") from e
 
-    def ensure_vm_available(self, vm_path: Path, name: str, scope: str,
-                           project_path: Path = None, silent: bool = False) -> tuple[Path, dict]:
+    def ensure_vm_available(
+        self, vm_path: Path, name: str, scope: str, project_path: Path = None, silent: bool = False
+    ) -> tuple[Path, dict]:
         """
         Ensure VM file is available in proper storage location with validation.
 

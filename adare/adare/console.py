@@ -36,6 +36,7 @@ def print_success_message(title: str, location: str = '', next_steps: list[str] 
             console.print()
             console.print(f'💡 Tip: {tip}', style='italic cyan')
 
+
 def print_vm_config_panel(title: str, rows: list[tuple[str, str]]):
     """Render a bordered panel with key-value grid for VM configuration."""
     table = Table.grid(padding=(0, 2))
@@ -44,14 +45,16 @@ def print_vm_config_panel(title: str, rows: list[tuple[str, str]]):
     for key, value in rows:
         table.add_row(key, value)
     console.print()
-    console.print(Panel(
-        table,
-        title=f'[b gold3]{title}[/b gold3]',
-        border_style='blue',
-        title_align='left',
-        expand=False,
-        padding=(0, 2),
-    ))
+    console.print(
+        Panel(
+            table,
+            title=f'[b gold3]{title}[/b gold3]',
+            border_style='blue',
+            title_align='left',
+            expand=False,
+            padding=(0, 2),
+        )
+    )
 
 
 def print_step(message: str):

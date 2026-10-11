@@ -130,6 +130,10 @@ extend-exclude = ["paper", "docsrc/build"]
 "adare/appdata/testfunctions/**/*.py" = "py310"
 "examples/testfunctions/**/*.py" = "py310"
 
+[tool.ruff.format]
+# The codebase mixes quote styles; preserving them halves the reformat churn.
+quote-style = "preserve"
+
 [tool.ruff.lint]
 select = ["E", "W", "F", "B", "BLE", "S110", "S112", "C901", "I", "UP", "SIM", "RET"]
 

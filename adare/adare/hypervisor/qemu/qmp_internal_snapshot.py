@@ -21,6 +21,7 @@ Two host-side requirements make this work (see ``libvirt_xml_builder``):
 A small JSON marker is written next to the memory path so restore/delete — which
 receive only file paths, never the snapshot name — can recover the qcow2 tag.
 """
+
 import json
 import logging
 import os
@@ -52,9 +53,7 @@ class _QMPClient:
             self._stream = self._sock.makefile('rwb')
             greeting = json.loads(self._stream.readline())
         except (OSError, ValueError) as e:
-            raise HypervisorException(
-                f"Cannot connect to QMP socket {socket_path}: {e}"
-            ) from e
+            raise HypervisorException(f"Cannot connect to QMP socket {socket_path}: {e}") from e
         if 'QMP' not in greeting:
             raise HypervisorException(f"Unexpected QMP greeting: {greeting}")
         self.execute('qmp_capabilities')
@@ -77,8 +76,7 @@ class _QMPClient:
         except (OSError, ValueError) as e:
             raise HypervisorException(f"QMP command '{command}' failed: {e}") from e
 
-    def run_job(self, command: str, job_id: str, timeout: float = _JOB_TIMEOUT,
-                **arguments) -> tuple[bool, str | None]:
+    def run_job(self, command: str, job_id: str, timeout: float = _JOB_TIMEOUT, **arguments) -> tuple[bool, str | None]:
         """Submit an async block job and wait for it to conclude."""
         resp = self.execute(command, **{'job-id': job_id, **arguments})
         if 'error' in resp:
@@ -88,8 +86,7 @@ class _QMPClient:
         deadline = time.time() + timeout
         while time.time() < deadline:
             job = next(
-                (j for j in self.execute('query-jobs').get('return', [])
-                 if j.get('id') == job_id),
+                (j for j in self.execute('query-jobs').get('return', []) if j.get('id') == job_id),
                 None,
             )
             if job is None:
@@ -111,8 +108,7 @@ class _QMPClient:
 
     def _dismiss(self, job_id: str) -> None:
         try:
-            if any(j.get('id') == job_id
-                   for j in self.execute('query-jobs').get('return', [])):
+            if any(j.get('id') == job_id for j in self.execute('query-jobs').get('return', [])):
                 self.execute('job-dismiss', id=job_id)
         except HypervisorException:
             pass  # best-effort cleanup; not worth masking the real result
@@ -130,8 +126,7 @@ def _find_disk_node(client: _QMPClient) -> str:
     for blk in client.execute('query-block').get('return', []):
         inserted = blk.get('inserted', {})
         qdev = blk.get('qdev') or ''
-        if (inserted.get('drv') == 'qcow2' and not inserted.get('ro')
-                and 'flash' not in qdev):
+        if inserted.get('drv') == 'qcow2' and not inserted.get('ro') and 'flash' not in qdev:
             node = inserted.get('node-name')
             if node:
                 return node
@@ -162,8 +157,7 @@ def read_marker_tag(memory_path: str) -> str | None:
     return None
 
 
-def create(socket_path: str, tag: str, memory_path: str,
-           disk_path: str | None = None) -> bool:
+def create(socket_path: str, tag: str, memory_path: str, disk_path: str | None = None) -> bool:
     """Create a live RAM+disk internal snapshot; record markers for later lookup."""
     client = _QMPClient(socket_path)
     try:
@@ -171,8 +165,11 @@ def create(socket_path: str, tag: str, memory_path: str,
         # Idempotent: drop any stale snapshot with this tag first (ignore result).
         client.run_job('snapshot-delete', _job_id('del', tag), tag=tag, devices=[node])
         ok, err = client.run_job(
-            'snapshot-save', _job_id('save', tag),
-            tag=tag, vmstate=node, devices=[node],
+            'snapshot-save',
+            _job_id('save', tag),
+            tag=tag,
+            vmstate=node,
+            devices=[node],
         )
         if not ok:
             raise HypervisorException(f"snapshot-save failed: {err}")
@@ -193,8 +190,11 @@ def restore(socket_path: str, memory_path: str) -> bool:
     try:
         node = _find_disk_node(client)
         ok, err = client.run_job(
-            'snapshot-load', _job_id('load', tag),
-            tag=tag, vmstate=node, devices=[node],
+            'snapshot-load',
+            _job_id('load', tag),
+            tag=tag,
+            vmstate=node,
+            devices=[node],
         )
         if not ok:
             raise HypervisorException(f"snapshot-load failed: {err}")
@@ -218,7 +218,10 @@ def delete(socket_path: str, memory_path: str, disk_path: str | None = None) -> 
             try:
                 node = _find_disk_node(client)
                 ok, err = client.run_job(
-                    'snapshot-delete', _job_id('del', tag), tag=tag, devices=[node],
+                    'snapshot-delete',
+                    _job_id('del', tag),
+                    tag=tag,
+                    devices=[node],
                 )
                 if not ok:
                     log.warning(f"snapshot-delete for '{tag}' reported: {err}")

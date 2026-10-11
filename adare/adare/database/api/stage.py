@@ -41,7 +41,13 @@ class StageDbApi(ProjectDatabaseApi):
         if not (stage_db := self._session.query(StageModel).filter(StageModel.name == stage.name).first()):
             raise sqlalchemy.orm.exc.NoResultFound(f"Stage '{stage.name}' not found in database")
 
-        stage_in_run = self._session.query(StageInRunModel).filter(StageInRunModel.stage_id == stage_db.id).filter(StageInRunModel.run_id == run_id).filter(StageInRunModel.id == stage_id).first()
+        stage_in_run = (
+            self._session.query(StageInRunModel)
+            .filter(StageInRunModel.stage_id == stage_db.id)
+            .filter(StageInRunModel.run_id == run_id)
+            .filter(StageInRunModel.id == stage_id)
+            .first()
+        )
 
         if stage_in_run:
             if stage.start_time:
@@ -52,6 +58,7 @@ class StageDbApi(ProjectDatabaseApi):
                 # Get or create Status object for the status enum value
                 from adare.database.models.project_models import Status
                 from adarelib.constants import StatusEnum
+
                 # Convert integer to StatusEnum object to get the name
                 status_enum = StatusEnum(stage.status)
                 status_obj = self._session.query(Status).filter_by(name=status_enum.name).first()
@@ -66,6 +73,7 @@ class StageDbApi(ProjectDatabaseApi):
             if stage.status:
                 from adare.database.models.project_models import Status
                 from adarelib.constants import StatusEnum
+
                 # Convert integer to StatusEnum object to get the name
                 status_enum = StatusEnum(stage.status)
                 status_obj = self._session.query(Status).filter_by(name=status_enum.name).first()
@@ -92,4 +100,3 @@ class StageDbApi(ProjectDatabaseApi):
         stages = self._session.query(StageModel).all()
         self._expunge_multiple(stages)
         return stages
-

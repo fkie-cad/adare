@@ -32,5 +32,3 @@ def run_cmd(cmd: list, cwd: str, env: dict = None, quiet=False) -> int:
     except KeyboardInterrupt:
         proc.kill()
     return proc.returncode
-
-

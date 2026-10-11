@@ -32,7 +32,7 @@ extensions = [
     # 'sphinx.ext.autodoc',
     'sphinx.ext.autosectionlabel',
     'sphinx_design',
-    'simple_datatables'
+    'simple_datatables',
 ]
 
 autosectionlabel_prefix_document = True
@@ -64,8 +64,10 @@ html_theme_options = {
 }
 html_favicon = "favicon.ico"
 
+
 def setup(app):
     app.add_css_file('css/custom.css')
+
 
 rst_prolog = """
 .. role:: ul

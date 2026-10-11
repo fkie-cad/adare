@@ -48,7 +48,7 @@ def _resolve_session_id(session_id: str | None, project_directory: Path | None =
                 next_steps=[
                     'Specify the exact session with: adare dev <command> -s <session_id>',
                     'List all sessions with: adare dev list',
-                ]
+                ],
             )
             print("\nMatching sessions:")
             for s in e.matches:
@@ -69,8 +69,8 @@ def _resolve_session_id(session_id: str | None, project_directory: Path | None =
             title='No active dev sessions found',
             next_steps=[
                 'Start a new session with: adare dev start <experiment> -e <environment>',
-                'Check all sessions with: adare dev list'
-            ]
+                'Check all sessions with: adare dev list',
+            ],
         )
         exit(1)
     elif len(running_sessions) == 1:
@@ -84,8 +84,8 @@ def _resolve_session_id(session_id: str | None, project_directory: Path | None =
             title=f'Multiple dev sessions running ({len(running_sessions)})',
             next_steps=[
                 'Specify session with: adare dev <command> -s <session_id>',
-                'List all sessions with: adare dev list'
-            ]
+                'List all sessions with: adare dev list',
+            ],
         )
         print("\nActive sessions:")
         for session in running_sessions:
@@ -122,5 +122,6 @@ def _start_event_listeners(console_ulid: str) -> None:
 def _stop_event_listeners() -> None:
     """Stop event coordinator."""
     from adare.backend.events.coordinator import stop_stage_coordinator
+
     stop_stage_coordinator()
     log.debug("Event listeners stopped")

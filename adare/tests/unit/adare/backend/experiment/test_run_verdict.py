@@ -10,8 +10,9 @@ from adare.backend.experiment.run import _resolve_experiment_verdict
 from adarelib.constants import StatusEnum
 
 
-def _make_run(*, abstract_tests=None, tests=None, result_status=StatusEnum.SUCCESS,
-              experiment_present=True, experiment_name="exp"):
+def _make_run(
+    *, abstract_tests=None, tests=None, result_status=StatusEnum.SUCCESS, experiment_present=True, experiment_name="exp"
+):
     """Build a minimal duck-typed ExperimentRun row."""
     if experiment_present:
         experiment = SimpleNamespace(
@@ -63,6 +64,7 @@ class TestSmokeRun:
     def test_smoke_gate_when_experiment_relationship_unloaded(self):
         """If experiment can't be loaded across session boundary, abstract_tests
         defaults to 0 and the smoke gate still trips."""
+
         class _BadRel:
             @property
             def experiment(self):

@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 
 # --- Test helpers ---
 
+
 def create_screenshot_with_icon(
     screenshot_size=(1920, 1080),
     icon_img=None,
@@ -78,6 +79,7 @@ def encode_image(img):
 
 
 # --- Template matching tests ---
+
 
 def test_template_matching_finds_exact_icon():
     """Template matching should find an exactly placed icon."""
@@ -138,6 +140,7 @@ def test_template_matching_no_false_positive_on_noise():
 
 # --- SSIM validation tests ---
 
+
 def test_ssim_validates_correct_match():
     """SSIM should accept a match at the correct icon location."""
     _, _, expected_center, screenshot_img, icon_img = create_screenshot_with_icon()
@@ -151,9 +154,7 @@ def test_ssim_validates_correct_match():
 
 def test_ssim_rejects_wrong_location():
     """SSIM should reject a match at a random wrong location (wallpaper area)."""
-    _, _, _, screenshot_img, icon_img = create_screenshot_with_icon(
-        icon_position=(12, 50)
-    )
+    _, _, _, screenshot_img, icon_img = create_screenshot_with_icon(icon_position=(12, 50))
 
     # Check a location far from the icon (e.g., center of screenshot)
     wrong_center = (960, 540)
@@ -165,9 +166,7 @@ def test_ssim_rejects_wrong_location():
 
 def test_ssim_filter_matches():
     """RegionValidator.filter_matches should keep good matches and reject bad ones."""
-    _, _, expected_center, screenshot_img, icon_img = create_screenshot_with_icon(
-        icon_position=(12, 50)
-    )
+    _, _, expected_center, screenshot_img, icon_img = create_screenshot_with_icon(icon_position=(12, 50))
 
     # Create a result with one correct and one incorrect location
     fake_result = FeatureMatchingResult(
@@ -187,6 +186,7 @@ def test_ssim_filter_matches():
 
 
 # --- Spatial coherence tests ---
+
 
 def test_spatial_coherence_rejects_scattered_keypoints():
     """ORB should reject matches where keypoints are scattered across the screenshot."""
@@ -219,6 +219,7 @@ def test_spatial_coherence_rejects_scattered_keypoints():
 
 # --- Pipeline cascade order test ---
 
+
 def test_cascade_template_first():
     """Verify template matching is tried first and succeeds without feature matching."""
     screenshot_bytes, icon_bytes, expected_center, _, _ = create_screenshot_with_icon()
@@ -227,15 +228,20 @@ def test_cascade_template_first():
     template_result = TemplateMatcher.find_icon_locations(screenshot_bytes, icon_bytes, threshold=0.8)
     assert template_result.success, "Template matching should succeed"
 
-    log.info(f"PASS: Template matching found icon at {template_result.locations[0]} "
-             f"(expected {expected_center}) — no need for ORB/SIFT")
+    log.info(
+        f"PASS: Template matching found icon at {template_result.locations[0]} "
+        f"(expected {expected_center}) — no need for ORB/SIFT"
+    )
 
 
 # --- Test with real nautilus icon ---
 
+
 def test_with_nautilus_icon():
     """Test pipeline with the real nautilus_taskbar.png icon if available."""
-    icon_path = Path(__file__).parent.parent / "adare/appdata/examples/experiments/ubuntu_deletefile/img/nautilus_taskbar.png"
+    icon_path = (
+        Path(__file__).parent.parent / "adare/appdata/examples/experiments/ubuntu_deletefile/img/nautilus_taskbar.png"
+    )
 
     if not icon_path.exists():
         log.warning(f"Skipping nautilus test — icon not found at {icon_path}")
@@ -280,13 +286,16 @@ def test_with_nautilus_icon():
     if decoded:
         screenshot_img_dec, icon_img_dec, _ = decoded
         is_valid, score = RegionValidator.validate_match(
-            screenshot_img_dec, icon_img_dec, (1002, 619)  # The known false positive location
+            screenshot_img_dec,
+            icon_img_dec,
+            (1002, 619),  # The known false positive location
         )
         assert not is_valid, f"SSIM should reject false positive at (1002, 619), got score {score:.3f}"
         log.info(f"PASS: SSIM rejected false positive at (1002, 619) with score {score:.3f}")
 
 
 # --- Run all tests ---
+
 
 def run_all():
     """Run all tests and report results."""

@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 class TestActionsExecutor:
     """Handles execution of test actions with host/VM/host-mode routing."""
 
-    def __init__(self, experiment_run_directory: Path | None = None, playbook = None):
+    def __init__(self, experiment_run_directory: Path | None = None, playbook=None):
         """
         Initialize test actions executor.
 
@@ -46,10 +46,16 @@ class TestActionsExecutor:
         self.guest_to_host_test_executor = executor
         log.debug("Test Executor: GuestToHostTestExecutor set")
 
-    async def execute_test(self, action: ActionTestAction, websocket_client,
-                          target_resolver, parent_event_id: str = None,
-                          event_emitter = None, execution_context: dict = None,
-                          action_executor = None) -> ActionResult:
+    async def execute_test(
+        self,
+        action: ActionTestAction,
+        websocket_client,
+        target_resolver,
+        parent_event_id: str = None,
+        event_emitter=None,
+        execution_context: dict = None,
+        action_executor=None,
+    ) -> ActionResult:
         """Execute individual test action with host/VM/host-mode routing."""
         try:
             if not self.test_loader:
@@ -57,14 +63,10 @@ class TestActionsExecutor:
 
             # Resolve test with runtime context
             resolved_test = await self.test_loader.resolve_test_with_runtime_context(
-                action.name,
-                execution_context or {}
+                action.name, execution_context or {}
             )
             if not resolved_test:
-                return ActionResult(
-                    success=False,
-                    message=f"Test '{action.name}' not found in playbook tests"
-                )
+                return ActionResult(success=False, message=f"Test '{action.name}' not found in playbook tests")
 
             # Check if this is a host-side test (visual tests with execute_on_host=True)
             test_class = self.test_loader.get_test_class(action.name)
@@ -90,13 +92,14 @@ class TestActionsExecutor:
             if "No testset loaded" in error_msg or "testset" in error_msg.lower():
                 return ActionResult(
                     success=False,
-                    message="No tests loaded - ensure playbook.yml contains tests section and loads successfully before test actions"
+                    message="No tests loaded - ensure playbook.yml contains tests section and loads successfully before test actions",
                 )
             log.error(f"Test execution failed: {e}", exc_info=True)
             return ActionResult(success=False, message=error_msg)
 
-    async def _execute_host_side_test(self, action, resolved_test, test_class,
-                                      target_resolver, action_executor) -> ActionResult:
+    async def _execute_host_side_test(
+        self, action, resolved_test, test_class, target_resolver, action_executor
+    ) -> ActionResult:
         """Route test to existing HostTestExecutor (for visual tests with execute_on_host=True)."""
         log.debug(f"Test Executor: Routing test '{action.name}' to host executor (execute_on_host)")
 
@@ -109,7 +112,7 @@ class TestActionsExecutor:
                 action_executor=action_executor,
                 mcp_client=target_resolver.mcp_client,
                 playbook_dir=playbook_dir,
-                experiment_dir=self.experiment_run_directory
+                experiment_dir=self.experiment_run_directory,
             )
             log.debug("Test Executor: Created HostTestExecutor")
 
@@ -117,10 +120,11 @@ class TestActionsExecutor:
         test_result = await self.host_test_executor.execute_host_test(test_instance)
 
         from adare.backend.experiment.test_result_processor import TestResultProcessor
+
         expect_to_fail = resolved_test.get('expect_to_fail', False)
         result_dict = {
             'status': test_result.status,
-            'details': test_result.details if hasattr(test_result, 'details') else []
+            'details': test_result.details if hasattr(test_result, 'details') else [],
         }
         return TestResultProcessor.process_test_result(action.name, result_dict, expect_to_fail)
 
@@ -131,7 +135,7 @@ class TestActionsExecutor:
         if not self.guest_to_host_test_executor:
             return ActionResult(
                 success=False,
-                message="Host-mode test executor not available — ensure test_execution_mode=HOST is configured"
+                message="Host-mode test executor not available — ensure test_execution_mode=HOST is configured",
             )
 
         # Get the test function name from playbook
@@ -148,10 +152,11 @@ class TestActionsExecutor:
         )
 
         from adare.backend.experiment.test_result_processor import TestResultProcessor
+
         expect_to_fail = resolved_test.get('expect_to_fail', False)
         result_dict = {
             'status': test_result.status,
-            'details': test_result.details if hasattr(test_result, 'details') else []
+            'details': test_result.details if hasattr(test_result, 'details') else [],
         }
         return TestResultProcessor.process_test_result(action.name, result_dict, expect_to_fail)
 
@@ -169,4 +174,5 @@ class TestActionsExecutor:
         expect_to_fail = resolved_test.get('expect_to_fail', False)
 
         from adare.backend.experiment.test_result_processor import TestResultProcessor
+
         return TestResultProcessor.process_test_result(action.name, result, expect_to_fail)

@@ -40,13 +40,7 @@ def print_vm_instances_list():
         for instance in instances:
             last_used = instance.last_used_at.strftime("%Y-%m-%d %H:%M:%S") if instance.last_used_at else "Never"
             port = str(instance.websocket_port) if instance.websocket_port else "N/A"
-            table.add_row(
-                instance.id,
-                instance.instance_name,
-                instance.status,
-                port,
-                last_used
-            )
+            table.add_row(instance.id, instance.instance_name, instance.status, port, last_used)
 
         # Display using Rich console
         console = DefaultConsole()
@@ -66,6 +60,7 @@ def print_vm_instance_info(instance_id: str, formatter=None, output_file=None, d
     # Get formatter if not provided
     if formatter is None:
         from adare.run import get_formatter_from_context
+
         formatter, output_file, dual_output = get_formatter_from_context()
 
     try:
@@ -97,8 +92,10 @@ def print_vm_instance_info(instance_id: str, formatter=None, output_file=None, d
                     'source_vm': {
                         'name': source_vm.name if source_vm else None,
                         'description': source_vm.description if source_vm else None,
-                        'file': source_vm.file if source_vm else None
-                    } if source_vm else None
+                        'file': source_vm.file if source_vm else None,
+                    }
+                    if source_vm
+                    else None,
                 }
                 formatter.print_or_save(structured_data, output_file, dual_output)
 
@@ -115,7 +112,9 @@ def print_vm_instance_info(instance_id: str, formatter=None, output_file=None, d
             table.add_row("Status:", instance.status)
             table.add_row("Source VM ID:", instance.vm_id)
             table.add_row("VirtualBox UUID:", instance.vbox_uuid or 'Not assigned')
-            table.add_row("Websocket Port:", str(instance.websocket_port) if instance.websocket_port else 'Not assigned')
+            table.add_row(
+                "Websocket Port:", str(instance.websocket_port) if instance.websocket_port else 'Not assigned'
+            )
             table.add_row("Current Experiment:", instance.current_experiment_run_id or 'None')
             table.add_row("Base Snapshot:", instance.base_snapshot_name or 'Not set')
             table.add_row("Created:", instance.created_at.strftime('%Y-%m-%d %H:%M:%S'))
@@ -133,9 +132,9 @@ def print_vm_instance_info(instance_id: str, formatter=None, output_file=None, d
         # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
         # the terminal height and silently drops whatever overflows, so a short
         # window hid detail rows without any indication they were there.
-        DefaultConsole().print(Panel(
-            table, title="[b gold3]VM Instance Details[/b gold3]", border_style="blue", title_align="left"
-        ))
+        DefaultConsole().print(
+            Panel(table, title="[b gold3]VM Instance Details[/b gold3]", border_style="blue", title_align="left")
+        )
 
     except Exception as e:
         log.error(f"Error getting VM instance info: {e}")
@@ -147,6 +146,7 @@ def print_vm_instance_usage(formatter=None, output_file=None, dual_output=False)
     # Get formatter if not provided
     if formatter is None:
         from adare.run import get_formatter_from_context
+
         formatter, output_file, dual_output = get_formatter_from_context()
 
     try:
@@ -171,7 +171,12 @@ def print_vm_instance_usage(formatter=None, output_file=None, dual_output=False)
         summary_table.add_row("Stopped:", str(stats['stopped_instances']))
 
         # Display summary panel
-        summary_panel = Panel(summary_table, title="[b gold3]VM Instance Usage Statistics[/b gold3]", border_style="blue", title_align="left")
+        summary_panel = Panel(
+            summary_table,
+            title="[b gold3]VM Instance Usage Statistics[/b gold3]",
+            border_style="blue",
+            title_align="left",
+        )
         console.print(summary_panel)
 
         # Show top disk consumers if any exist
@@ -184,14 +189,12 @@ def print_vm_instance_usage(formatter=None, output_file=None, dual_output=False)
             for consumer in stats['top_disk_consumers']:
                 if consumer['disk_gb'] > 0:  # Only show instances with actual disk usage
                     status = "🟢 Running" if consumer['is_running'] else "⚫ Stopped"
-                    consumers_table.add_row(
-                        consumer['name'],
-                        f"{consumer['disk_gb']:.2f} GB",
-                        status
-                    )
+                    consumers_table.add_row(consumer['name'], f"{consumer['disk_gb']:.2f} GB", status)
 
             # Display consumers panel
-            consumers_panel = Panel(consumers_table, title="[b gold3]Top Disk Consumers[/b gold3]", border_style="blue", title_align="left")
+            consumers_panel = Panel(
+                consumers_table, title="[b gold3]Top Disk Consumers[/b gold3]", border_style="blue", title_align="left"
+            )
             console.print(consumers_panel)
 
     except Exception as e:
@@ -216,7 +219,12 @@ def print_port_usage_stats():
         summary_table.add_row("Available Ports:", str(stats['available_count']))
 
         # Display summary panel
-        summary_panel = Panel(summary_table, title="[b gold3]WebSocket Port Usage Statistics[/b gold3]", border_style="blue", title_align="left")
+        summary_panel = Panel(
+            summary_table,
+            title="[b gold3]WebSocket Port Usage Statistics[/b gold3]",
+            border_style="blue",
+            title_align="left",
+        )
         console.print(summary_panel)
 
         # Display allocated ports if any
@@ -226,13 +234,15 @@ def print_port_usage_stats():
             port_lines = []
 
             for i in range(0, len(allocated_ports), ports_per_line):
-                port_group = allocated_ports[i:i + ports_per_line]
+                port_group = allocated_ports[i : i + ports_per_line]
                 port_lines.append("  " + ", ".join(map(str, port_group)))
 
             port_display = "\n".join(port_lines)
 
             # Display allocated ports panel
-            ports_panel = Panel(port_display, title="[b gold3]Allocated Ports[/b gold3]", border_style="blue", title_align="left")
+            ports_panel = Panel(
+                port_display, title="[b gold3]Allocated Ports[/b gold3]", border_style="blue", title_align="left"
+            )
             console.print(ports_panel)
 
     except Exception as e:

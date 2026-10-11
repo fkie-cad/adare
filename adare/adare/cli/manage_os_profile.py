@@ -24,13 +24,20 @@ def exec_os_profile_list(arguments):
     from adare.cli.output import emit, is_structured_output
 
     if is_structured_output():
-        emit({'os_profiles': [{
-            'name': OS_CATALOG[name].name,
-            'display_name': OS_CATALOG[name].display_name,
-            'platform': OS_CATALOG[name].platform,
-            'version': OS_CATALOG[name].version,
-            'source': 'built-in' if name in _BUILTIN_CATALOG else 'custom',
-        } for name in sorted(OS_CATALOG)]})
+        emit(
+            {
+                'os_profiles': [
+                    {
+                        'name': OS_CATALOG[name].name,
+                        'display_name': OS_CATALOG[name].display_name,
+                        'platform': OS_CATALOG[name].platform,
+                        'version': OS_CATALOG[name].version,
+                        'source': 'built-in' if name in _BUILTIN_CATALOG else 'custom',
+                    }
+                    for name in sorted(OS_CATALOG)
+                ]
+            }
+        )
         return
 
     print(f'\n{"Name":<20} {"Display Name":<35} {"Platform":<10} {"Version":<10} {"Source"}')
@@ -50,10 +57,12 @@ def exec_os_profile_show(arguments):
     name = arguments.name
 
     if name not in OS_CATALOG:
-        fail('OS_PROFILE_NOT_FOUND', f"Unknown OS profile: '{name}'",
-             ['Run: adare os-profile list',
-              f'Available: {", ".join(sorted(OS_CATALOG.keys()))}'],
-             exit_code=EXIT_NOT_FOUND)
+        fail(
+            'OS_PROFILE_NOT_FOUND',
+            f"Unknown OS profile: '{name}'",
+            ['Run: adare os-profile list', f'Available: {", ".join(sorted(OS_CATALOG.keys()))}'],
+            exit_code=EXIT_NOT_FOUND,
+        )
 
     os_def = OS_CATALOG[name]
     source = 'built-in' if name in _BUILTIN_CATALOG else 'custom'
@@ -92,34 +101,36 @@ def exec_os_profile_show(arguments):
 
     if is_structured_output():
         # Real values for machines: booleans, null for "(none)", a list of packages.
-        emit({
-            'name': os_def.name,
-            'display_name': os_def.display_name,
-            'source': source,
-            'platform': os_def.platform,
-            'distribution': os_def.distribution,
-            'distribution_label': os_def.distribution_label or None,
-            'version': os_def.version,
-            'architecture': os_def.architecture,
-            'install_mode': os_def.install_mode,
-            'requires_uefi': bool(os_def.requires_uefi),
-            'requires_tpm': bool(os_def.requires_tpm),
-            'iso_url': os_def.iso_url or None,
-            'iso_sha256': os_def.iso_sha256 or None,
-            'iso_filename': os_def.iso_filename or None,
-            'kernel_path_in_iso': os_def.kernel_path_in_iso or None,
-            'initrd_path_in_iso': os_def.initrd_path_in_iso or None,
-            'default_disk_size': os_def.default_disk_size,
-            'default_ram_mb': os_def.default_ram_mb,
-            'default_cpus': os_def.default_cpus or None,
-            'extra_packages': list(os_def.extra_packages or []),
-            'template': os_def.template or None,
-            'resolved_template': resolved_template,
-            'template_source': template_source,
-            'template_id': template_meta.id if template_meta else None,
-            'template_description': template_meta.description if template_meta else None,
-            'template_revision': template_meta.revision if template_meta else None,
-        })
+        emit(
+            {
+                'name': os_def.name,
+                'display_name': os_def.display_name,
+                'source': source,
+                'platform': os_def.platform,
+                'distribution': os_def.distribution,
+                'distribution_label': os_def.distribution_label or None,
+                'version': os_def.version,
+                'architecture': os_def.architecture,
+                'install_mode': os_def.install_mode,
+                'requires_uefi': bool(os_def.requires_uefi),
+                'requires_tpm': bool(os_def.requires_tpm),
+                'iso_url': os_def.iso_url or None,
+                'iso_sha256': os_def.iso_sha256 or None,
+                'iso_filename': os_def.iso_filename or None,
+                'kernel_path_in_iso': os_def.kernel_path_in_iso or None,
+                'initrd_path_in_iso': os_def.initrd_path_in_iso or None,
+                'default_disk_size': os_def.default_disk_size,
+                'default_ram_mb': os_def.default_ram_mb,
+                'default_cpus': os_def.default_cpus or None,
+                'extra_packages': list(os_def.extra_packages or []),
+                'template': os_def.template or None,
+                'resolved_template': resolved_template,
+                'template_source': template_source,
+                'template_id': template_meta.id if template_meta else None,
+                'template_description': template_meta.description if template_meta else None,
+                'template_revision': template_meta.revision if template_meta else None,
+            }
+        )
         return
 
     max_label = max(len(label) for label, _ in fields)
@@ -158,11 +169,14 @@ def _resolve_template_path(os_def):
         from adare.hypervisor.qemu.vm_creator.gui_creator import (
             _template_stems,
         )
+
         prefix = 'gui_'
         stems = _template_stems(os_def, None)
         for stem in stems:
-            for root, label in ((VM_TEMPLATES_DIR, f'user ({VM_TEMPLATES_DIR})'),
-                                (GUI_TEMPLATES_DIR, f'built-in ({GUI_TEMPLATES_DIR})')):
+            for root, label in (
+                (VM_TEMPLATES_DIR, f'user ({VM_TEMPLATES_DIR})'),
+                (GUI_TEMPLATES_DIR, f'built-in ({GUI_TEMPLATES_DIR})'),
+            ):
                 candidate = Path(root) / f'{prefix}{stem}.yaml'
                 if candidate.is_file():
                     return str(candidate), None, label

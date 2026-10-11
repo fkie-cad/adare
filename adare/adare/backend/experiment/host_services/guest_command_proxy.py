@@ -34,8 +34,9 @@ class GuestCommandProxy(VMOperationProxy):
         """
         super().__init__(vm, guest_os)
 
-    async def run(self, command: str, silent: bool = False, admin: bool = False,
-                  cwd: str | None = None) -> CommandResult:
+    async def run(
+        self, command: str, silent: bool = False, admin: bool = False, cwd: str | None = None
+    ) -> CommandResult:
         """Execute a command on the guest via QGA.
 
         Args:
@@ -47,12 +48,7 @@ class GuestCommandProxy(VMOperationProxy):
         Returns:
             CommandResult with returncode, stdout, stderr
         """
-        return await self.vm.run_command(
-            command,
-            silent=silent,
-            admin=admin,
-            cwd=cwd
-        )
+        return await self.vm.run_command(command, silent=silent, admin=admin, cwd=cwd)
 
     async def is_process_running(self, process_name: str) -> bool:
         """Check if a process is running on the guest.
@@ -252,11 +248,7 @@ class GuestCommandProxy(VMOperationProxy):
             Dict with keys: permissions (octal str), owner, group
         """
         if self.is_windows:
-            cmd = (
-                f'$acl = Get-Acl -LiteralPath "{guest_path}"; '
-                f'"OWNER:" + $acl.Owner; '
-                f'"GROUP:" + $acl.Group'
-            )
+            cmd = f'$acl = Get-Acl -LiteralPath "{guest_path}"; "OWNER:" + $acl.Owner; "GROUP:" + $acl.Group'
         else:
             cmd = f"stat -c 'PERM:%a OWNER:%U GROUP:%G' '{guest_path}'"
 

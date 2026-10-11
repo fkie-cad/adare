@@ -3,6 +3,7 @@ Abstract command execution mixin for hypervisor VMs.
 
 All hypervisor implementations must provide command execution functionality.
 """
+
 import logging
 import threading
 from abc import ABC, abstractmethod
@@ -27,7 +28,7 @@ class AbstractCommandMixin(ABC):
         stop_event: threading.Event | None = None,
         silent: bool = False,
         ctx_manager=None,
-        operation_name: str = "command execution"
+        operation_name: str = "command execution",
     ):
         """
         Execute a hypervisor command asynchronously with streaming output.
@@ -57,7 +58,7 @@ class AbstractCommandMixin(ABC):
         silent: bool = False,
         ctx_manager=None,
         operation_name: str = "command execution",
-        timeout: int | None = None
+        timeout: int | None = None,
     ) -> int:
         """
         Execute a hypervisor command synchronously with streaming output.
@@ -132,12 +133,7 @@ class AbstractCommandMixin(ABC):
         pass
 
     @abstractmethod
-    async def copy_from_guest(
-        self,
-        guest_path: str,
-        host_path: str,
-        recursive: bool = True
-    ) -> bool:
+    async def copy_from_guest(self, guest_path: str, host_path: str, recursive: bool = True) -> bool:
         """
         Copy files/directories from guest to host.
 

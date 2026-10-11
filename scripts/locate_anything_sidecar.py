@@ -53,23 +53,31 @@ def _run_detect(image_path: str, prompt: str, mode: str) -> dict:
         out_json = tmp.name
     try:
         cmd = [
-            CLI_BIN, 'detect',
-            '--model', MODEL,
-            '--input', image_path,
-            '--prompt', prompt,
-            '--output', out_json,
-            '--mode', mode,
-            '--threads', THREADS,
+            CLI_BIN,
+            'detect',
+            '--model',
+            MODEL,
+            '--input',
+            image_path,
+            '--prompt',
+            prompt,
+            '--output',
+            out_json,
+            '--mode',
+            mode,
+            '--threads',
+            THREADS,
         ]
         log.info('detect prompt=%r mode=%s', prompt, mode)
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=TIMEOUT_S, check=False,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_S,
+            check=False,
         )
         if proc.returncode != 0:
-            raise RuntimeError(
-                f'locate-anything-cli exited {proc.returncode}: '
-                f'{proc.stderr.strip()[:500]}'
-            )
+            raise RuntimeError(f'locate-anything-cli exited {proc.returncode}: {proc.stderr.strip()[:500]}')
         raw = Path(out_json).read_text() or proc.stdout
         data = json.loads(raw)
     finally:
@@ -84,14 +92,18 @@ def _run_detect(image_path: str, prompt: str, mode: str) -> dict:
         if not box or len(box) != 4:
             continue
         x1, y1, x2, y2 = (float(v) for v in box)
-        detections.append({
-            'label': det.get('label', prompt),
-            'box': [x1, y1, x2, y2],
-            'center': [round((x1 + x2) / 2, 2), round((y1 + y2) / 2, 2)],
-        })
+        detections.append(
+            {
+                'label': det.get('label', prompt),
+                'box': [x1, y1, x2, y2],
+                'center': [round((x1 + x2) / 2, 2), round((y1 + y2) / 2, 2)],
+            }
+        )
     log.info(
         'detect prompt=%r mode=%s -> %d detections: %s',
-        prompt, mode, len(detections),
+        prompt,
+        mode,
+        len(detections),
         [(d['label'], d['box']) for d in detections],
     )
     return {'detections': detections}

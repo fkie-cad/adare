@@ -30,12 +30,22 @@ _MODULE = 'adare.hypervisor.qemu.vm_creator.provision_creator'
 
 # --- Helpers ---
 
+
 def _os_def(**overrides) -> OsDefinition:
     defaults = dict(
-        name='windows11arm64', display_name='Windows 11 (ARM64)', platform='windows',
-        distribution='windows', version='11', iso_url='', iso_sha256='',
-        iso_filename='', default_disk_size='160G', default_ram_mb=8192,
-        default_cpus=4, architecture='aarch64', requires_uefi=True,
+        name='windows11arm64',
+        display_name='Windows 11 (ARM64)',
+        platform='windows',
+        distribution='windows',
+        version='11',
+        iso_url='',
+        iso_sha256='',
+        iso_filename='',
+        default_disk_size='160G',
+        default_ram_mb=8192,
+        default_cpus=4,
+        architecture='aarch64',
+        requires_uefi=True,
     )
     defaults.update(overrides)
     return OsDefinition(**defaults)
@@ -43,8 +53,7 @@ def _os_def(**overrides) -> OsDefinition:
 
 def _commands(count: int = 3) -> list[ProvisionCommand]:
     return [
-        ProvisionCommand(name=f'step-{i}', command=f'do-thing-{i}', shell='powershell')
-        for i in range(1, count + 1)
+        ProvisionCommand(name=f'step-{i}', command=f'do-thing-{i}', shell='powershell') for i in range(1, count + 1)
     ]
 
 
@@ -66,8 +75,7 @@ class _FakeAgent:
     def wait_ready(self, sock, timeout=None):
         return self.ready
 
-    def exec(self, sock, command, cwd=None, shell=None, timeout=None,
-             progress_callback=None, **kwargs):
+    def exec(self, sock, command, cwd=None, shell=None, timeout=None, progress_callback=None, **kwargs):
         self.calls.append(command)
         outcome = self.results.get(command, (0, '', ''))
         if isinstance(outcome, Exception):
@@ -133,27 +141,38 @@ def harness(tmp_path):
         patch(f'{_MODULE}.subprocess', fake_subprocess),
         patch(f'{_MODULE}.create_work_overlay', side_effect=_overlay),
         patch(f'{_MODULE}.flatten_overlay', side_effect=_flatten) as flatten,
-        patch(f'{_MODULE}.create_nvram_for_vm',
-              side_effect=lambda name, d, arch: str(Path(d) / f'{name}-nvram.fd')),
+        patch(f'{_MODULE}.create_nvram_for_vm', side_effect=lambda name, d, arch: str(Path(d) / f'{name}-nvram.fd')),
         patch(f'{_MODULE}.build_post_install_qemu_cmd', return_value=['qemu-system-fake']),
         patch(f'{_MODULE}.time.sleep'),
     ):
         yield {
-            'agent': agent, 'base': base, 'dest': dest, 'build_log': build_log,
-            'process': process, 'flatten': flatten, 'shutdown': shutdown,
-            'flattened': flattened, 'overlays': overlays,
+            'agent': agent,
+            'base': base,
+            'dest': dest,
+            'build_log': build_log,
+            'process': process,
+            'flatten': flatten,
+            'shutdown': shutdown,
+            'flattened': flattened,
+            'overlays': overlays,
         }
 
 
 def _run(harness, commands, **kwargs):
     return run_provision(
-        base_disk=harness['base'], dest_disk=harness['dest'], commands=commands,
-        os_def=_os_def(), ram_mb=8192, cpus=4,
-        build_log_path=harness['build_log'], **kwargs,
+        base_disk=harness['base'],
+        dest_disk=harness['dest'],
+        commands=commands,
+        os_def=_os_def(),
+        ram_mb=8192,
+        cpus=4,
+        build_log_path=harness['build_log'],
+        **kwargs,
     )
 
 
 # --- T7: the happy path, end to end ---
+
 
 def test_runs_every_command_in_order(harness):
     commands = _commands(4)
@@ -182,7 +201,10 @@ def test_shuts_the_guest_down_before_flattening(harness):
     order = []
     harness['shutdown'].side_effect = lambda sock: order.append('shutdown') or True
     harness['flatten'].side_effect = lambda o, d, compress=True: (
-        order.append('flatten'), Path(d).write_text('x'), Path(d))[2]
+        order.append('flatten'),
+        Path(d).write_text('x'),
+        Path(d),
+    )[2]
     _run(harness, _commands(1))
     assert order == ['shutdown', 'flatten']
 
@@ -190,15 +212,16 @@ def test_shuts_the_guest_down_before_flattening(harness):
 def test_exit_code_3010_is_accepted_when_allowed(harness):
     """Windows installers use 3010 for "success, reboot required"."""
     harness['agent'].results = {'msiexec': (3010, '', '')}
-    command = ProvisionCommand(name='install', command='msiexec',
-                               shell='powershell', allow_exit_codes=[0, 3010])
+    command = ProvisionCommand(name='install', command='msiexec', shell='powershell', allow_exit_codes=[0, 3010])
     _run(harness, [command])
     assert harness['dest'].is_file()
 
 
 def test_verify_runs_after_the_command_and_only_on_success(harness):
     command = ProvisionCommand(
-        name='install', command='do-install', shell='powershell',
+        name='install',
+        command='do-install',
+        shell='powershell',
         verify='assert-installed',
     )
     _run(harness, [command])
@@ -206,8 +229,7 @@ def test_verify_runs_after_the_command_and_only_on_success(harness):
 
 
 def test_reboot_step_reboots_and_waits_for_the_agent_again(harness):
-    command = ProvisionCommand(name='patch', command='apply-patch',
-                               shell='powershell', reboot=True)
+    command = ProvisionCommand(name='patch', command='apply-patch', shell='powershell', reboot=True)
     _run(harness, [command])
     assert harness['agent'].reboots == 1
 
@@ -242,8 +264,7 @@ def test_host_log_records_each_command_with_its_exit_code_and_output(harness):
 
 
 def test_host_log_records_the_verify_separately_from_the_command(harness):
-    command = ProvisionCommand(name='install', command='do-install',
-                               shell='powershell', verify='assert-installed')
+    command = ProvisionCommand(name='install', command='do-install', shell='powershell', verify='assert-installed')
     _run(harness, [command])
     text = harness['build_log'].read_text()
     assert '(command)' in text
@@ -257,6 +278,7 @@ def test_empty_command_list_is_rejected(harness):
 
 
 # --- T8: abort semantics ---
+
 
 def test_disallowed_exit_code_aborts_naming_the_step(harness):
     commands = _commands(3)
@@ -289,7 +311,9 @@ def test_abort_never_flattens(harness):
 
 def test_abort_pulls_the_failed_step_log_files(harness):
     command = ProvisionCommand(
-        name='install', command='msiexec', shell='powershell',
+        name='install',
+        command='msiexec',
+        shell='powershell',
         log_files=['C:\\Windows\\Temp\\autopsy-4.12.0-msi.log'],
     )
     harness['agent'].results = {'msiexec': (1603, '', '')}
@@ -303,8 +327,7 @@ def test_abort_pulls_the_failed_step_log_files(harness):
 
 def test_a_failed_log_pull_does_not_replace_the_real_error(harness):
     """Losing an installer log must not mask why the step failed."""
-    command = ProvisionCommand(name='install', command='msiexec', shell='powershell',
-                               log_files=['C:\\gone.log'])
+    command = ProvisionCommand(name='install', command='msiexec', shell='powershell', log_files=['C:\\gone.log'])
     harness['agent'].results = {'msiexec': (1603, '', '')}
     with patch(f'{_MODULE}.qga_pull_file', side_effect=QgaError('no such file')):
         with pytest.raises(RecipeProvisionError, match='exit code 1603'):
@@ -314,7 +337,9 @@ def test_a_failed_log_pull_does_not_replace_the_real_error(harness):
 def test_failing_verify_aborts_even_though_the_command_succeeded(harness):
     """An installer's own exit code is not evidence it did anything."""
     command = ProvisionCommand(
-        name='install', command='do-install', shell='powershell',
+        name='install',
+        command='do-install',
+        shell='powershell',
         verify='assert-installed',
     )
     harness['agent'].results = {'assert-installed': (1, '', '')}
@@ -326,8 +351,11 @@ def test_failing_verify_aborts_even_though_the_command_succeeded(harness):
 
 def test_failing_verify_pulls_log_files_too(harness):
     command = ProvisionCommand(
-        name='install', command='do-install', shell='powershell',
-        verify='assert-installed', log_files=['C:\\Windows\\Temp\\x.log'],
+        name='install',
+        command='do-install',
+        shell='powershell',
+        verify='assert-installed',
+        log_files=['C:\\Windows\\Temp\\x.log'],
     )
     harness['agent'].results = {'assert-installed': (1, '', '')}
     with pytest.raises(RecipeProvisionError):

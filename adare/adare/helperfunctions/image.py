@@ -14,6 +14,7 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
+
 def calculate_pixel_change(img1_base64: str, img2_base64: str) -> float:
     """
     Calculate the percentage of pixels that changed between two base64 encoded images.
@@ -66,7 +67,6 @@ def calculate_pixel_change(img1_base64: str, img2_base64: str) -> float:
         changed_pixels = np.count_nonzero(thresh)
 
         return (changed_pixels / total_pixels) * 100
-
 
     except Exception as e:
         log.error(f"Error calculating pixel change: {e}")

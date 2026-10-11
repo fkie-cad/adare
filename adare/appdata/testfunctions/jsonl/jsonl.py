@@ -12,6 +12,7 @@ from adarelib.event.event import TestResult
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -68,6 +69,7 @@ def _compare_values(test_instance, actual_value, expected_value, regex_match=Fal
     # Check for YamlRegexString objects (!re syntax)
     try:
         from adarelib.testset.yaml.customtags import YamlRegexString
+
         if isinstance(expected_value, YamlRegexString):
             try:
                 pattern = re.compile(expected_value.string)
@@ -119,7 +121,14 @@ def _compare_values(test_instance, actual_value, expected_value, regex_match=Fal
     description='tests if lines in JSONL file match specified conditions (supports any/all modes)',
     category=HostModeCategory.FILE_CONTENT,
 )
-def line_matches(ctx: TestContext, dst: str = '', conditions: dict[str, str | int | float | bool | None] = None, match_mode: str = "any", regex_match: bool = False, skip_malformed: bool = True):
+def line_matches(
+    ctx: TestContext,
+    dst: str = '',
+    conditions: dict[str, str | int | float | bool | None] = None,
+    match_mode: str = "any",
+    regex_match: bool = False,
+    skip_malformed: bool = True,
+):
     """Pass when one line (``any``) or every valid line (``all``) of JSONL file ``dst`` meets all ``conditions``.
 
     Use for: event logs / NDJSON exports (e.g. "a line with type=login and user=alice exists").
@@ -185,10 +194,9 @@ def line_matches(ctx: TestContext, dst: str = '', conditions: dict[str, str | in
                     except json.JSONDecodeError as e:
                         malformed_lines.append((line_num, line[:100]))
                         if not skip_malformed:
-                            return TestResult.failed([
-                                f'Malformed JSON on line {line_num}: {e}',
-                                f'Line content: {line[:200]}'
-                            ])
+                            return TestResult.failed(
+                                [f'Malformed JSON on line {line_num}: {e}', f'Line content: {line[:200]}']
+                            )
                         continue
 
                     # Check all conditions for this line
@@ -236,7 +244,7 @@ def line_matches(ctx: TestContext, dst: str = '', conditions: dict[str, str | in
                 if matching_lines:
                     messages = [
                         f'Found {len(matching_lines)} matching line(s) out of {line_num} total lines (mode: any)',
-                        f'First matching line: {matching_lines[0][0]}'
+                        f'First matching line: {matching_lines[0][0]}',
                     ]
                     if len(matching_lines) > 1:
                         messages.append(f'Additional matches on lines: {[ln for ln, _ in matching_lines[1:4]]}')
@@ -244,7 +252,7 @@ def line_matches(ctx: TestContext, dst: str = '', conditions: dict[str, str | in
                 messages = [
                     'No lines matched all conditions (mode: any)',
                     f'Analyzed {line_num} lines',
-                    f'Conditions: {conditions}'
+                    f'Conditions: {conditions}',
                 ]
                 if non_matching_lines[:3]:
                     messages.append('Sample non-matching lines:')
@@ -257,13 +265,12 @@ def line_matches(ctx: TestContext, dst: str = '', conditions: dict[str, str | in
                 return TestResult.failed(['No valid JSON lines found in file'])
 
             if len(matching_lines) == total_valid_lines:
-                return TestResult.success([
-                    f'All {total_valid_lines} lines matched conditions (mode: all)',
-                    f'Conditions: {conditions}'
-                ])
+                return TestResult.success(
+                    [f'All {total_valid_lines} lines matched conditions (mode: all)', f'Conditions: {conditions}']
+                )
             messages = [
                 f'Only {len(matching_lines)}/{total_valid_lines} lines matched (mode: all)',
-                f'Conditions: {conditions}'
+                f'Conditions: {conditions}',
             ]
             if non_matching_lines[:3]:
                 messages.append('Sample non-matching lines:')
@@ -286,7 +293,14 @@ def line_matches(ctx: TestContext, dst: str = '', conditions: dict[str, str | in
     description='counts lines in JSONL file matching conditions and validates against expected count (if None, requires at least 1 match)',
     category=HostModeCategory.FILE_CONTENT,
 )
-def line_count(ctx: TestContext, dst: str = '', conditions: dict[str, str | int | float | bool | None] | None = None, expected_count: int | dict[str, int] | None = None, regex_match: bool = False, skip_malformed: bool = True):
+def line_count(
+    ctx: TestContext,
+    dst: str = '',
+    conditions: dict[str, str | int | float | bool | None] | None = None,
+    expected_count: int | dict[str, int] | None = None,
+    regex_match: bool = False,
+    skip_malformed: bool = True,
+):
     """Pass when the number of JSONL lines meeting all ``conditions`` is within ``expected_count``.
 
     Use for: asserting how many records/events were written (e.g. exactly 3 deletions).
@@ -333,7 +347,9 @@ def line_count(ctx: TestContext, dst: str = '', conditions: dict[str, str | int 
             min_count = expected_count.get('min', 0)
             max_count = expected_count.get('max', float('inf'))
         else:
-            return TestResult.execution_error(None, "expected_count must be int, dict with 'min'/'max', or None (at least 1)")
+            return TestResult.execution_error(
+                None, "expected_count must be int, dict with 'min'/'max', or None (at least 1)"
+            )
 
         try:
             # Check if file is empty (edge case handling)
@@ -359,10 +375,9 @@ def line_count(ctx: TestContext, dst: str = '', conditions: dict[str, str | int 
                     except json.JSONDecodeError as e:
                         malformed_count += 1
                         if not skip_malformed:
-                            return TestResult.failed([
-                                f'Malformed JSON on line {line_num}: {e}',
-                                f'Line content: {line[:200]}'
-                            ])
+                            return TestResult.failed(
+                                [f'Malformed JSON on line {line_num}: {e}', f'Line content: {line[:200]}']
+                            )
                         continue
 
                     # If no conditions, count all valid JSON lines
@@ -446,7 +461,14 @@ def line_count(ctx: TestContext, dst: str = '', conditions: dict[str, str | int 
     description='tests if specified key path with expected value exists in any line of JSONL file',
     category=HostModeCategory.FILE_CONTENT,
 )
-def value_in_any_line(ctx: TestContext, dst: str = '', key_path: str = '', expected_value: str | int | float | bool | None = None, regex_match: bool = False, skip_malformed: bool = True):
+def value_in_any_line(
+    ctx: TestContext,
+    dst: str = '',
+    key_path: str = '',
+    expected_value: str | int | float | bool | None = None,
+    regex_match: bool = False,
+    skip_malformed: bool = True,
+):
     """Pass when ``key_path`` has a value matching ``expected_value`` in at least one JSONL line.
 
     Use for: a single-field check across a log; for multi-field conditions use jsonl.line_matches.
@@ -507,10 +529,9 @@ def value_in_any_line(ctx: TestContext, dst: str = '', key_path: str = '', expec
                     except json.JSONDecodeError as e:
                         malformed_count += 1
                         if not skip_malformed:
-                            return TestResult.failed([
-                                f'Malformed JSON on line {line_num}: {e}',
-                                f'Line content: {line[:200]}'
-                            ])
+                            return TestResult.failed(
+                                [f'Malformed JSON on line {line_num}: {e}', f'Line content: {line[:200]}']
+                            )
                         continue
 
                     # Get value at key path
@@ -541,17 +562,19 @@ def value_in_any_line(ctx: TestContext, dst: str = '', key_path: str = '', expec
             if matching_lines:
                 messages = [
                     f'Found matching value in {len(matching_lines)} line(s)',
-                    f'First match: line {matching_lines[0][0]} with value "{matching_lines[0][1]}"'
+                    f'First match: line {matching_lines[0][0]} with value "{matching_lines[0][1]}"',
                 ]
                 if len(matching_lines) > 1:
                     messages.append(f'Additional matches on lines: {[ln for ln, _, _ in matching_lines[1:4]]}')
                 return TestResult.success(messages)
             messages = [
                 f'No lines found with key path "{key_path}" matching expected value "{expected_value}"',
-                f'Analyzed {total_lines - malformed_count} valid JSON lines'
+                f'Analyzed {total_lines - malformed_count} valid JSON lines',
             ]
             if lines_with_key > 0:
-                messages.append(f'Found {lines_with_key} lines with key "{key_path}" but none matched the expected value')
+                messages.append(
+                    f'Found {lines_with_key} lines with key "{key_path}" but none matched the expected value'
+                )
             else:
                 messages.append(f'Key path "{key_path}" not found in any line')
             return TestResult.failed(messages)

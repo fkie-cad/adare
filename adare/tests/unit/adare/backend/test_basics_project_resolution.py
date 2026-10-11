@@ -44,12 +44,12 @@ def registered(tmp_path, monkeypatch):
             return record if path.as_posix() == record.path else None
 
     import adare.database.api.project as project_module
+
     monkeypatch.setattr(project_module, 'ProjectDbApi', _Db)
     return SimpleNamespace(dir=project_dir, record=record, calls=calls)
 
 
 class TestLooksLikePath:
-
     @pytest.mark.parametrize('value', ['/abs/path', 'rel/path', '~/under-home', '~'])
     def test_path_shaped_values(self, value):
         assert _looks_like_path(value) is True
@@ -60,7 +60,6 @@ class TestLooksLikePath:
 
 
 class TestDetermineProjectDirectory:
-
     def test_resolves_by_name(self, registered):
         assert determine_projectdirectory(PROJECT_NAME) == registered.dir
 
@@ -108,6 +107,7 @@ class TestDetermineProjectDirectory:
                 return original
 
         import adare.database.api.project as project_module
+
         monkeypatch.setattr(project_module, 'ProjectDbApi', _Db)
 
         determine_projectdirectory('/some/path')
@@ -132,6 +132,7 @@ class TestDetermineProjectDirectory:
                 raise AssertionError('a bare name must not reach the path lookup')
 
         import adare.database.api.project as project_module
+
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(project_module, 'ProjectDbApi', _Db)
             assert determine_projectdirectory('NoSuchProject') is None
@@ -158,6 +159,7 @@ class TestDetermineProjectDirectory:
                 return
 
         import adare.database.api.project as project_module
+
         monkeypatch.setattr(project_module, 'ProjectDbApi', _Db)
 
         assert determine_projectdirectory(PROJECT_NAME) is None
@@ -179,6 +181,7 @@ def test_no_project_given_uses_the_cwd(monkeypatch):
             return SimpleNamespace(name='cwd-project', path=path.as_posix())
 
     import adare.database.api.project as project_module
+
     monkeypatch.setattr(project_module, 'ProjectDbApi', _Db)
     assert determine_projectdirectory(None) == Path.cwd()
     assert basics.determine_projectdirectory('') == Path.cwd()

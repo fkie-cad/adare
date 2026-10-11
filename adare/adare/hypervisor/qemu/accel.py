@@ -8,6 +8,7 @@ used to hardcode "only aarch64 guests work" -- normalizing arm64/aarch64
 identically regardless of host OS also makes the check correct on Linux ARM64
 hosts, which the old Darwin-only guards silently missed.
 """
+
 import logging
 import platform
 

@@ -4,6 +4,7 @@ Environment Service - Business logic for environment operations.
 This service handles all environment-related operations and returns Result[T] objects
 that can be consumed by any frontend (CLI, Web UI, REST API).
 """
+
 import logging
 from pathlib import Path
 
@@ -103,7 +104,7 @@ class EnvironmentService:
                     f'Verify the VM is ready: adare env verify {stored_name}',
                     f'Run experiments in this environment with: adare experiment run <experiment> -e {stored_name}',
                     'List available environments with: adare environment list',
-                    f'View environment details with: adare env info {stored_name}'
+                    f'View environment details with: adare env info {stored_name}',
                 ]
                 if reused_existing:
                     tip = (
@@ -113,32 +114,38 @@ class EnvironmentService:
                 else:
                     tip = f'Environment "{stored_name}" is now ready for experiments'
 
-                return Result.ok(EnvironmentInfo(
-                    id=env_data.get('id', ''),
-                    name=stored_name,
-                    description=env_data.get('description', ''),
-                    vm_name=env_data.get('vm_name'),
-                    hypervisor=env_data.get('hypervisor', 'virtualbox') if 'hypervisor' in env_data else 'virtualbox',
-                    os_platform=env_data.get('vm_os_type'),
-                    file_path=Path(env_data['file']) if env_data.get('file') else None,
-                    next_steps=next_steps,
-                    tip=tip,
-                    reused_existing=reused_existing,
-                ))
+                return Result.ok(
+                    EnvironmentInfo(
+                        id=env_data.get('id', ''),
+                        name=stored_name,
+                        description=env_data.get('description', ''),
+                        vm_name=env_data.get('vm_name'),
+                        hypervisor=env_data.get('hypervisor', 'virtualbox')
+                        if 'hypervisor' in env_data
+                        else 'virtualbox',
+                        os_platform=env_data.get('vm_os_type'),
+                        file_path=Path(env_data['file']) if env_data.get('file') else None,
+                        next_steps=next_steps,
+                        tip=tip,
+                        reused_existing=reused_existing,
+                    )
+                )
 
             # True error path: the load reported success but the row is missing.
             log.error(f'environment {environment_ulid} not found after load')
-            return Result.ok(EnvironmentInfo(
-                id=environment_ulid,
-                name=env_name,
-                description='',
-                vm_name=None,
-                hypervisor='virtualbox',
-                os_platform=None,
-                file_path=None,
-                next_steps=[f'Environment "{env_name}" loaded'],
-                reused_existing=reused_existing,
-            ))
+            return Result.ok(
+                EnvironmentInfo(
+                    id=environment_ulid,
+                    name=env_name,
+                    description='',
+                    vm_name=None,
+                    hypervisor='virtualbox',
+                    os_platform=None,
+                    file_path=None,
+                    next_steps=[f'Environment "{env_name}" loaded'],
+                    reused_existing=reused_existing,
+                )
+            )
 
         except EnvironmentLoadFailed as e:
             return Result.from_exception(e)
@@ -166,22 +173,24 @@ class EnvironmentService:
             # Interactive mode: the user discarded the session, so nothing was
             # flattened or registered. Report a neutral "discarded" result.
             if environment_ulid is None:
-                return Result.ok(EnvironmentInfo(
-                    id='',
-                    name=request.name,
-                    description='',
-                    vm_name=None,
-                    hypervisor='qemu',
-                    os_platform=None,
-                    file_path=None,
-                    discarded=True,
-                    next_steps=[
-                        'Nothing was created. Re-run the extend to try again: '
-                        f'adare env extend {request.source} {request.name} --interactive',
-                        'List available environments with: adare environment list',
-                    ],
-                    tip='Session discarded — no environment was created.',
-                ))
+                return Result.ok(
+                    EnvironmentInfo(
+                        id='',
+                        name=request.name,
+                        description='',
+                        vm_name=None,
+                        hypervisor='qemu',
+                        os_platform=None,
+                        file_path=None,
+                        discarded=True,
+                        next_steps=[
+                            'Nothing was created. Re-run the extend to try again: '
+                            f'adare env extend {request.source} {request.name} --interactive',
+                            'List available environments with: adare environment list',
+                        ],
+                        tip='Session discarded — no environment was created.',
+                    )
+                )
 
             reused_existing = not created
 
@@ -197,36 +206,40 @@ class EnvironmentService:
                 tip = (
                     f'No new environment was created — the generated file matches '
                     f'an existing environment "{stored_name}".'
-                    if reused_existing else
-                    f'Environment "{stored_name}" reuses the same base VM as "{request.source}"'
+                    if reused_existing
+                    else f'Environment "{stored_name}" reuses the same base VM as "{request.source}"'
                 )
 
-                return Result.ok(EnvironmentInfo(
-                    id=env_data.get('id', ''),
-                    name=stored_name,
-                    description=env_data.get('description', ''),
-                    vm_name=env_data.get('vm_name'),
-                    hypervisor=environment_database.get_environment_hypervisor(environment_ulid),
-                    os_platform=env_data.get('vm_os_type'),
-                    file_path=Path(env_data['file']) if env_data.get('file') else None,
-                    next_steps=next_steps,
-                    tip=tip,
-                    reused_existing=reused_existing,
-                ))
+                return Result.ok(
+                    EnvironmentInfo(
+                        id=env_data.get('id', ''),
+                        name=stored_name,
+                        description=env_data.get('description', ''),
+                        vm_name=env_data.get('vm_name'),
+                        hypervisor=environment_database.get_environment_hypervisor(environment_ulid),
+                        os_platform=env_data.get('vm_os_type'),
+                        file_path=Path(env_data['file']) if env_data.get('file') else None,
+                        next_steps=next_steps,
+                        tip=tip,
+                        reused_existing=reused_existing,
+                    )
+                )
 
             # True error path: the extend reported success but the row is missing.
             log.error(f'environment {environment_ulid} not found after extend')
-            return Result.ok(EnvironmentInfo(
-                id=environment_ulid,
-                name=request.name,
-                description='',
-                vm_name=None,
-                hypervisor='virtualbox',
-                os_platform=None,
-                file_path=None,
-                next_steps=[f'Environment "{request.name}" extended'],
-                reused_existing=reused_existing,
-            ))
+            return Result.ok(
+                EnvironmentInfo(
+                    id=environment_ulid,
+                    name=request.name,
+                    description='',
+                    vm_name=None,
+                    hypervisor='virtualbox',
+                    os_platform=None,
+                    file_path=None,
+                    next_steps=[f'Environment "{request.name}" extended'],
+                    reused_existing=reused_existing,
+                )
+            )
 
         except EnvironmentLoadFailed as e:
             return Result.from_exception(e)
@@ -260,11 +273,7 @@ class EnvironmentService:
 
         try:
             # Call existing backend command
-            backend_environment_create(
-                request.project_path,
-                request.name,
-                vm_path=request.vm_path
-            )
+            backend_environment_create(request.project_path, request.name, vm_path=request.vm_path)
 
             next_steps = [
                 'Edit the environment file to configure VM and OS settings',
@@ -272,17 +281,19 @@ class EnvironmentService:
                 f'Verify the VM is ready: adare env verify {request.name}',
             ]
 
-            return Result.ok(EnvironmentInfo(
-                id='',  # Not yet in database (just a template file)
-                name=request.name,
-                description='',
-                vm_name=None,
-                hypervisor='virtualbox',
-                os_platform=None,
-                file_path=request.project_path / 'environments' / f'{request.name}.yml',
-                next_steps=next_steps,
-                tip='Environment template created. Edit the file and load it to register.',
-            ))
+            return Result.ok(
+                EnvironmentInfo(
+                    id='',  # Not yet in database (just a template file)
+                    name=request.name,
+                    description='',
+                    vm_name=None,
+                    hypervisor='virtualbox',
+                    os_platform=None,
+                    file_path=request.project_path / 'environments' / f'{request.name}.yml',
+                    next_steps=next_steps,
+                    tip='Environment template created. Edit the file and load it to register.',
+                )
+            )
 
         except EnvironmentFileAlreadyExists as e:
             return Result.from_exception(e)
@@ -322,18 +333,20 @@ class EnvironmentService:
             f'Verify the VM is ready: adare env verify {request.name}',
         ]
 
-        return Result.ok(EnvironmentInfo(
-            id='',  # Not yet in database (just a descriptor file)
-            name=request.name,
-            description='',
-            vm_name=None,
-            hypervisor='qemu',
-            os_platform=None,
-            file_path=env_file_path,
-            next_steps=next_steps,
-            tip='Baked-URL environment created. The disk is downloaded and '
+        return Result.ok(
+            EnvironmentInfo(
+                id='',  # Not yet in database (just a descriptor file)
+                name=request.name,
+                description='',
+                vm_name=None,
+                hypervisor='qemu',
+                os_platform=None,
+                file_path=env_file_path,
+                next_steps=next_steps,
+                tip='Baked-URL environment created. The disk is downloaded and '
                 'verified against vm_sha256 on first load.',
-        ))
+            )
+        )
 
     def _create_recipe(self, request: EnvironmentCreateRequest) -> Result[EnvironmentInfo]:
         """
@@ -356,7 +369,7 @@ class EnvironmentService:
                 solutions=[
                     'Run: adare os-profile list',
                     'Check the os_profile value for typos',
-                ]
+                ],
             )
 
         if request.setup_level is not None:
@@ -462,17 +475,19 @@ class EnvironmentService:
             f'Verify the VM is ready: adare env verify {request.name}',
         ]
 
-        return Result.ok(EnvironmentInfo(
-            id='',  # Not yet in database (just a recipe descriptor file)
-            name=request.name,
-            description='',
-            vm_name=None,
-            hypervisor='qemu',
-            os_platform=os_def.platform,
-            file_path=env_file_path,
-            next_steps=next_steps,
-            tip='Recipe environment created. The disk is built once from the ISO on first load.',
-        ))
+        return Result.ok(
+            EnvironmentInfo(
+                id='',  # Not yet in database (just a recipe descriptor file)
+                name=request.name,
+                description='',
+                vm_name=None,
+                hypervisor='qemu',
+                os_platform=os_def.platform,
+                file_path=env_file_path,
+                next_steps=next_steps,
+                tip='Recipe environment created. The disk is built once from the ISO on first load.',
+            )
+        )
 
     def publish_prepare(
         self,
@@ -521,7 +536,9 @@ class EnvironmentService:
             upload_disk = compress_result.data
 
         vm_sha256 = file_sha256_with_progress(
-            upload_disk, description=f'Hashing {upload_disk.name}', silent=False,
+            upload_disk,
+            description=f'Hashing {upload_disk.name}',
+            silent=False,
         )
 
         if verify_url:
@@ -560,17 +577,19 @@ class EnvironmentService:
                 'Consumers re-verify this hash after downloading.'
             )
 
-        return Result.ok(EnvironmentInfo(
-            id='',
-            name=name,
-            description='',
-            vm_name=None,
-            hypervisor=metadata.hypervisor or 'qemu',
-            os_platform=metadata.os.platform if metadata.os else None,
-            file_path=descriptor,
-            next_steps=next_steps,
-            tip=tip,
-        ))
+        return Result.ok(
+            EnvironmentInfo(
+                id='',
+                name=name,
+                description='',
+                vm_name=None,
+                hypervisor=metadata.hypervisor or 'qemu',
+                os_platform=metadata.os.platform if metadata.os else None,
+                file_path=descriptor,
+                next_steps=next_steps,
+                tip=tip,
+            )
+        )
 
     def _compress_disk_for_publish(self, disk: Path, fmt: str) -> "Result[Path]":
         """Produce a zstd-compressed sibling copy of ``disk`` for upload.
@@ -613,7 +632,11 @@ class EnvironmentService:
         return Result.ok(compressed)
 
     def _resolve_publish_target(
-        self, project_path: Path, name: str, vm_url: str, vm_format: str | None,
+        self,
+        project_path: Path,
+        name: str,
+        vm_url: str,
+        vm_format: str | None,
     ) -> "Result[tuple]":
         """Validate inputs and resolve the descriptor, local disk, and format.
 
@@ -657,6 +680,7 @@ class EnvironmentService:
             # bare-name guess never matches an already-loaded environment. Fall
             # back to the database, which records the managed file path.
             from adare.database.api.environment import EnvironmentDbApi
+
             with EnvironmentDbApi() as db:
                 env_record = db.get_environment(name, project_name=None)
             if env_record and env_record.file and Path(env_record.file).is_file():
@@ -732,7 +756,9 @@ class EnvironmentService:
                     solutions=['Check the URL is a direct download link, not an HTML page'],
                 )
             hosted_sha256 = file_sha256_with_progress(
-                tmp, description='Hashing hosted object', silent=False,
+                tmp,
+                description='Hashing hosted object',
+                silent=False,
             )
             if hosted_sha256.lower() != expected_sha256.lower():
                 return Result.fail(
@@ -808,14 +834,16 @@ class EnvironmentService:
                         if hasattr(env.vm, 'osinfo') and env.vm.osinfo:
                             os_platform = env.vm.osinfo.platform
 
-                    items.append(EnvironmentListItem(
-                        id=env.id,
-                        name=env.name,
-                        description=env.description or "",
-                        vm_name=vm_name,
-                        hypervisor=env.hypervisor or "virtualbox",
-                        os_platform=os_platform,
-                    ))
+                    items.append(
+                        EnvironmentListItem(
+                            id=env.id,
+                            name=env.name,
+                            description=env.description or "",
+                            vm_name=vm_name,
+                            hypervisor=env.hypervisor or "virtualbox",
+                            os_platform=os_platform,
+                        )
+                    )
 
                 return Result.ok(items)
 
@@ -824,7 +852,7 @@ class EnvironmentService:
             return Result.fail(
                 code="EnvironmentListError",
                 message=f"Failed to list environments: {e}",
-                solutions=['Check database connectivity', 'Try again']
+                solutions=['Check database connectivity', 'Try again'],
             )
 
     def get_by_id(self, ulid: str) -> Result[EnvironmentInfo]:
@@ -847,18 +875,20 @@ class EnvironmentService:
                     solutions=[
                         'Use `adare environment list` to see available environments',
                         'Check if the environment ID is correct',
-                    ]
+                    ],
                 )
 
-            return Result.ok(EnvironmentInfo(
-                id=env_data.get('id', ''),
-                name=env_data.get('name', ''),
-                description=env_data.get('description', ''),
-                vm_name=env_data.get('vm_name'),
-                hypervisor=environment_database.get_environment_hypervisor(ulid),
-                os_platform=env_data.get('vm_os_type'),
-                file_path=Path(env_data['file']) if env_data.get('file') else None,
-            ))
+            return Result.ok(
+                EnvironmentInfo(
+                    id=env_data.get('id', ''),
+                    name=env_data.get('name', ''),
+                    description=env_data.get('description', ''),
+                    vm_name=env_data.get('vm_name'),
+                    hypervisor=environment_database.get_environment_hypervisor(ulid),
+                    os_platform=env_data.get('vm_os_type'),
+                    file_path=Path(env_data['file']) if env_data.get('file') else None,
+                )
+            )
 
         except EnvironmentDoesNotExistInDatabase as e:
             return Result.from_exception(e)

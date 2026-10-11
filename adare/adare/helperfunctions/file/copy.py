@@ -7,7 +7,8 @@ from tqdm import tqdm
 
 log = logging.getLogger(__name__)
 
-BUFFER_SIZE = 1024 * 1024 # 1MB
+BUFFER_SIZE = 1024 * 1024  # 1MB
+
 
 def __copy(src: str | Path, dst: str | Path, buffer_size: int = BUFFER_SIZE) -> None:
     """Copy a file from src to dst without a progress bar."""
@@ -26,9 +27,11 @@ def copy_with_progress(src: str | Path, dst: str | Path, buffer_size: int = BUFF
     src_path = Path(src)
     dst_path = Path(dst)
     total_size = src_path.stat().st_size
-    with src_path.open('rb') as fsrc, dst_path.open('wb') as fdst, tqdm(
-        total=total_size, unit='B', unit_scale=True, desc=f"Copying {src_path.name}"
-    ) as pbar:
+    with (
+        src_path.open('rb') as fsrc,
+        dst_path.open('wb') as fdst,
+        tqdm(total=total_size, unit='B', unit_scale=True, desc=f"Copying {src_path.name}") as pbar,
+    ):
         while True:
             buf = fsrc.read(buffer_size)
             if not buf:
@@ -66,7 +69,7 @@ def copytree_with_progress(
     preserve_metadata: bool = False,
     buffer_size: int = 1024 * 1024,
     dirs_exist_ok: bool = False,
-    ignore: Callable[[str, Iterable[str]], Iterable[str]] | None = None
+    ignore: Callable[[str, Iterable[str]], Iterable[str]] | None = None,
 ) -> None:
     """
     Recursively copy a directory from src to dst with a progress bar.
@@ -80,6 +83,7 @@ def copytree_with_progress(
         ignore (Callable): A function like shutil.ignore_patterns().
     """
     import os
+
     src_path = Path(src)
     dst_path = Path(dst)
 

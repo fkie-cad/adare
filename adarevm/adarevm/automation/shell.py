@@ -22,7 +22,18 @@ def is_admin_windows() -> bool:
         return False
 
 
-def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell: bool = True, env: dict = None, timeout: float = None, inherit_env: bool = True, admin: bool = False, background: bool = False, run_as_user: str = None) -> dict:
+def execute_on_shell(
+    command,
+    cwd: Path = None,
+    shell: bool = False,
+    powershell: bool = True,
+    env: dict = None,
+    timeout: float = None,
+    inherit_env: bool = True,
+    admin: bool = False,
+    background: bool = False,
+    run_as_user: str = None,
+) -> dict:
     """
     Executes a shell command.
     :param command: List of command and arguments, or string when shell=True.
@@ -161,22 +172,22 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
                         # Replace the first part of the original string?
                         # Or just switch to list mode? subprocess handles list better for shell=False
                         parts[0] = resolved_exe
-                        command = parts # Switch to list mode with full path
+                        command = parts  # Switch to list mode with full path
                     else:
-                         log.debug(f"Could not resolve executable '{exe_name}' in custom PATH")
+                        log.debug(f"Could not resolve executable '{exe_name}' in custom PATH")
             except Exception as e:
                 log.warning(f"Failed to parse command string for path resolution: {e}")
                 command = command_str
 
         elif isinstance(command, list) and command:
-             # List mode is easier
-             exe_name = command[0]
-             resolved_exe = shutil.which(exe_name, path=search_path)
-             if resolved_exe:
-                 log.info(f"Resolved executable '{exe_name}' to '{resolved_exe}'")
-                 command[0] = resolved_exe
-             else:
-                 log.debug(f"Could not resolve executable '{exe_name}' in custom PATH")
+            # List mode is easier
+            exe_name = command[0]
+            resolved_exe = shutil.which(exe_name, path=search_path)
+            if resolved_exe:
+                log.info(f"Resolved executable '{exe_name}' to '{resolved_exe}'")
+                command[0] = resolved_exe
+            else:
+                log.debug(f"Could not resolve executable '{exe_name}' in custom PATH")
     elif isinstance(command, list) and not shell:
         # Linux / shell=True fallback
         command = command
@@ -202,6 +213,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
 
     # Start process with detailed logging
     import time
+
     start_time = time.time()
     log.debug(f"Starting process at {start_time}")
 
@@ -271,7 +283,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
                 'stdout': stdout_str,
                 'stderr': stderr_str,
                 'pid': proc.pid,
-                'background': False  # Failed to start, not actually running in background
+                'background': False,  # Failed to start, not actually running in background
             }
 
         # Process still running after grace period - it started successfully
@@ -281,7 +293,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
             'stdout': '',
             'stderr': '',
             'pid': proc.pid,
-            'background': True
+            'background': True,
         }
 
     # Normal mode - wait for completion
@@ -300,7 +312,8 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
         return {
             'returncode': -1,
             'stdout': stdout.decode("utf-8").replace("\r", "") if stdout else "",
-            'stderr': f"Command timed out after {timeout} seconds (killed at {execution_time:.2f}s)\n" + (stderr.decode("utf-8").replace("\r", "") if stderr else "")
+            'stderr': f"Command timed out after {timeout} seconds (killed at {execution_time:.2f}s)\n"
+            + (stderr.decode("utf-8").replace("\r", "") if stderr else ""),
         }
 
     stdout = stdout.decode("utf-8").replace("\r", "")
@@ -312,11 +325,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
     # Always log stderr (even if empty)
     log.info(f"stderr: {stderr if stderr else ''}")
 
-    ret = {
-        'returncode': proc.returncode,
-        'stdout': stdout,
-        'stderr': stderr
-    }
+    ret = {'returncode': proc.returncode, 'stdout': stdout, 'stderr': stderr}
 
     execution_time = time.time() - start_time
     log.info(f"'{command_str}' exited with return code: {ret['returncode']} (execution time: {execution_time:.2f}s)")

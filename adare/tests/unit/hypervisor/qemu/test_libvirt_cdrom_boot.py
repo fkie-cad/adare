@@ -36,6 +36,7 @@ def _disks(xml: str) -> list[ET.Element]:
 # No ISO — behaviour must be unchanged
 # ---------------------------------------------------------------------------
 
+
 def test_no_iso_has_no_cdrom_and_global_boot_hd():
     xml = generate_domain_xml(_config())
     root = ET.fromstring(xml)
@@ -55,10 +56,9 @@ def test_no_iso_has_no_cdrom_and_global_boot_hd():
 # ISO attached + booting from CDROM
 # ---------------------------------------------------------------------------
 
+
 def test_boot_from_cdrom_adds_cdrom_with_boot_order():
-    xml = generate_domain_xml(
-        _config(machine='q35', iso_path='/isos/kubuntu.iso', boot_from_cdrom=True)
-    )
+    xml = generate_domain_xml(_config(machine='q35', iso_path='/isos/kubuntu.iso', boot_from_cdrom=True))
     root = ET.fromstring(xml)
     disks = _disks(xml)
 
@@ -83,17 +83,13 @@ def test_boot_from_cdrom_adds_cdrom_with_boot_order():
 
 
 def test_boot_from_cdrom_uses_ide_on_i440fx():
-    xml = generate_domain_xml(
-        _config(machine='pc', iso_path='/isos/kubuntu.iso', boot_from_cdrom=True)
-    )
+    xml = generate_domain_xml(_config(machine='pc', iso_path='/isos/kubuntu.iso', boot_from_cdrom=True))
     cdrom = next(d for d in _disks(xml) if d.get('device') == 'cdrom')
     assert cdrom.find('target').get('bus') == 'ide'
 
 
 def test_on_reboot_destroy_when_booting_installer():
-    xml = generate_domain_xml(
-        _config(iso_path='/isos/kubuntu.iso', boot_from_cdrom=True)
-    )
+    xml = generate_domain_xml(_config(iso_path='/isos/kubuntu.iso', boot_from_cdrom=True))
     root = ET.fromstring(xml)
     assert root.find('./on_reboot').text == 'destroy'
 
@@ -102,10 +98,9 @@ def test_on_reboot_destroy_when_booting_installer():
 # ISO attached but booting from disk (post-install verification boot)
 # ---------------------------------------------------------------------------
 
+
 def test_iso_attached_but_boot_from_disk():
-    xml = generate_domain_xml(
-        _config(iso_path='/isos/kubuntu.iso', boot_from_cdrom=False)
-    )
+    xml = generate_domain_xml(_config(iso_path='/isos/kubuntu.iso', boot_from_cdrom=False))
     root = ET.fromstring(xml)
     disks = _disks(xml)
 
@@ -122,6 +117,7 @@ def test_iso_attached_but_boot_from_disk():
 # ---------------------------------------------------------------------------
 # Config round-trips the new fields
 # ---------------------------------------------------------------------------
+
 
 def test_config_serializes_new_fields():
     cfg = _config(iso_path='/isos/kubuntu.iso', boot_from_cdrom=True)

@@ -4,6 +4,7 @@ OS detection utilities for QEMU VMs using guestfish inspection.
 This module provides automatic OS platform detection from disk images,
 enabling proper boot mode selection (UEFI for Windows, BIOS for Linux).
 """
+
 import logging
 import shutil
 import subprocess
@@ -51,13 +52,7 @@ def detect_os_from_disk(disk_path: Path) -> tuple[str, dict[str, str | None]]:
 
         # Run inspect-os to find OS root partition
         cmd = ['guestfish', '--ro', '-a', str(disk_path), 'run', ':', 'inspect-os']
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
 
         if result.returncode != 0:
             log.warning(f"OS detection failed (guestfish returned {result.returncode})")
@@ -112,7 +107,7 @@ def detect_os_from_disk(disk_path: Path) -> tuple[str, dict[str, str | None]]:
         return platform, {
             'distribution': distro if distro else os_type,
             'version': version,
-            'architecture': 'x86_64'  # Default, can be enhanced with inspect-get-arch
+            'architecture': 'x86_64',  # Default, can be enhanced with inspect-get-arch
         }
 
     except subprocess.TimeoutExpired:

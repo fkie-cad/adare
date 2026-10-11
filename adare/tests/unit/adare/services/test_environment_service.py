@@ -11,18 +11,21 @@ pytestmark = pytest.mark.unit
 @pytest.fixture
 def service():
     from adare.services.environment_service import EnvironmentService
+
     return EnvironmentService()
 
 
 @pytest.fixture
 def load_request():
     from adare.core.dto.environment import EnvironmentLoadRequest
+
     return EnvironmentLoadRequest(environment="test-env.yml", force=False, no_copy=False)
 
 
 @pytest.fixture
 def create_request():
     from adare.core.dto.environment import EnvironmentCreateRequest
+
     return EnvironmentCreateRequest(project_path=Path("/tmp/project"), name="test-env")
 
 
@@ -35,7 +38,6 @@ def _make_exception(exc_cls, message="test error"):
 # load()
 # ---------------------------------------------------------------------------
 class TestEnvironmentServiceLoad:
-
     @patch("adare.services.environment_service.environment_database")
     @patch("adare.services.environment_service.backend_environment_load")
     def test_load_success_with_db_data(self, mock_load, mock_db, service, load_request):
@@ -44,8 +46,12 @@ class TestEnvironmentServiceLoad:
         mock_load.return_value = ("01ULID", True)
         mock_db.resolve_environment_identifier.return_value = "01ULID"
         mock_db.get_environment_data.return_value = {
-            "id": "01ULID", "name": "test-env", "description": "desc",
-            "vm_name": "win10", "hypervisor": "virtualbox", "vm_os_type": "windows",
+            "id": "01ULID",
+            "name": "test-env",
+            "description": "desc",
+            "vm_name": "win10",
+            "hypervisor": "virtualbox",
+            "vm_os_type": "windows",
             "file": "/tmp/env.yml",
         }
 
@@ -61,9 +67,8 @@ class TestEnvironmentServiceLoad:
     def test_load_fallback_when_not_in_db(self, mock_load, mock_db, service, load_request):
         mock_load.return_value = ("01ULID", True)
         from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
-        mock_db.resolve_environment_identifier.side_effect = _make_exception(
-            EnvironmentDoesNotExistInDatabase
-        )
+
+        mock_db.resolve_environment_identifier.side_effect = _make_exception(EnvironmentDoesNotExistInDatabase)
         # The fallback branch is the one taken when the post-load row lookup comes
         # up empty; an unconfigured MagicMock is truthy and takes the happy path.
         mock_db.get_environment_data.return_value = None
@@ -78,6 +83,7 @@ class TestEnvironmentServiceLoad:
     @patch("adare.services.environment_service.backend_environment_load")
     def test_load_fails_on_load_error(self, mock_load, service, load_request):
         from adare.backend.environment.exceptions import EnvironmentLoadFailed
+
         mock_load.side_effect = _make_exception(EnvironmentLoadFailed)
 
         result = service.load(load_request)
@@ -88,6 +94,7 @@ class TestEnvironmentServiceLoad:
     @patch("adare.services.environment_service.backend_environment_load")
     def test_load_fails_on_already_exists(self, mock_load, service, load_request):
         from adare.backend.environment.exceptions import EnvironmentAlreadyExists
+
         mock_load.side_effect = _make_exception(EnvironmentAlreadyExists)
 
         result = service.load(load_request)
@@ -98,6 +105,7 @@ class TestEnvironmentServiceLoad:
     @patch("adare.services.environment_service.backend_environment_load")
     def test_load_fails_on_update_error(self, mock_load, service, load_request):
         from adare.backend.environment.exceptions import EnvironmentUpdateError
+
         mock_load.side_effect = _make_exception(EnvironmentUpdateError)
 
         result = service.load(load_request)
@@ -110,7 +118,6 @@ class TestEnvironmentServiceLoad:
 # create()
 # ---------------------------------------------------------------------------
 class TestEnvironmentServiceCreate:
-
     @patch("adare.services.environment_service.backend_environment_create")
     def test_create_success(self, mock_create, service, create_request):
         result = service.create(create_request)
@@ -123,6 +130,7 @@ class TestEnvironmentServiceCreate:
     @patch("adare.services.environment_service.backend_environment_create")
     def test_create_fails_file_exists(self, mock_create, service, create_request):
         from adare.backend.environment.exceptions import EnvironmentFileAlreadyExists
+
         mock_create.side_effect = _make_exception(EnvironmentFileAlreadyExists)
 
         result = service.create(create_request)
@@ -135,7 +143,6 @@ class TestEnvironmentServiceCreate:
 # delete()
 # ---------------------------------------------------------------------------
 class TestEnvironmentServiceDelete:
-
     @patch("adare.services.environment_service.backend_environment_delete")
     @patch("adare.services.environment_service.environment_database")
     def test_delete_success(self, mock_db, mock_delete, service):
@@ -149,9 +156,8 @@ class TestEnvironmentServiceDelete:
     @patch("adare.services.environment_service.environment_database")
     def test_delete_not_found(self, mock_db, service):
         from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
-        mock_db.resolve_environment_identifier.side_effect = _make_exception(
-            EnvironmentDoesNotExistInDatabase
-        )
+
+        mock_db.resolve_environment_identifier.side_effect = _make_exception(EnvironmentDoesNotExistInDatabase)
 
         result = service.delete("nonexistent")
 
@@ -162,6 +168,7 @@ class TestEnvironmentServiceDelete:
     @patch("adare.services.environment_service.environment_database")
     def test_delete_deletion_error(self, mock_db, mock_delete, service):
         from adare.backend.environment.exceptions import EnvironmentDeletionError
+
         mock_db.resolve_environment_identifier.return_value = "01ULID"
         mock_delete.side_effect = _make_exception(EnvironmentDeletionError)
 
@@ -175,7 +182,6 @@ class TestEnvironmentServiceDelete:
 # list_all()
 # ---------------------------------------------------------------------------
 class TestEnvironmentServiceListAll:
-
     @patch("adare.services.environment_service.EnvironmentDbApi")
     def test_list_all_returns_items(self, mock_api_cls, service):
         env = MagicMock()
@@ -213,6 +219,7 @@ class TestEnvironmentServiceListAll:
     @patch("adare.services.environment_service.EnvironmentDbApi")
     def test_list_all_db_error(self, mock_api_cls, service):
         from sqlalchemy.exc import SQLAlchemyError
+
         mock_api_cls.side_effect = SQLAlchemyError("db down")
 
         result = service.list_all()
@@ -225,12 +232,15 @@ class TestEnvironmentServiceListAll:
 # get_by_id()
 # ---------------------------------------------------------------------------
 class TestEnvironmentServiceGetById:
-
     @patch("adare.services.environment_service.environment_database")
     def test_get_by_id_found(self, mock_db, service):
         mock_db.get_environment_data.return_value = {
-            "id": "01A", "name": "env1", "description": "d",
-            "vm_name": "vm1", "vm_os_type": "linux", "file": "/tmp/env.yml",
+            "id": "01A",
+            "name": "env1",
+            "description": "d",
+            "vm_name": "vm1",
+            "vm_os_type": "linux",
+            "file": "/tmp/env.yml",
         }
         mock_db.get_environment_hypervisor.return_value = "virtualbox"
 
@@ -252,9 +262,8 @@ class TestEnvironmentServiceGetById:
     @patch("adare.services.environment_service.environment_database")
     def test_get_by_id_db_exception(self, mock_db, service):
         from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
-        mock_db.get_environment_data.side_effect = _make_exception(
-            EnvironmentDoesNotExistInDatabase
-        )
+
+        mock_db.get_environment_data.side_effect = _make_exception(EnvironmentDoesNotExistInDatabase)
 
         result = service.get_by_id("01BAD")
 
@@ -266,13 +275,15 @@ class TestEnvironmentServiceGetById:
 # get_by_name()
 # ---------------------------------------------------------------------------
 class TestEnvironmentServiceGetByName:
-
     @patch("adare.services.environment_service.environment_database")
     def test_get_by_name_found(self, mock_db, service):
         mock_db.resolve_environment_identifier.return_value = "01A"
         mock_db.get_environment_data.return_value = {
-            "id": "01A", "name": "env1", "description": "d",
-            "vm_name": "vm1", "vm_os_type": "linux",
+            "id": "01A",
+            "name": "env1",
+            "description": "d",
+            "vm_name": "vm1",
+            "vm_os_type": "linux",
         }
         mock_db.get_environment_hypervisor.return_value = "virtualbox"
 
@@ -284,9 +295,8 @@ class TestEnvironmentServiceGetByName:
     @patch("adare.services.environment_service.environment_database")
     def test_get_by_name_not_found(self, mock_db, service):
         from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
-        mock_db.resolve_environment_identifier.side_effect = _make_exception(
-            EnvironmentDoesNotExistInDatabase
-        )
+
+        mock_db.resolve_environment_identifier.side_effect = _make_exception(EnvironmentDoesNotExistInDatabase)
 
         result = service.get_by_name("nonexistent")
 

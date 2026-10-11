@@ -74,10 +74,9 @@ def exec_download_environment(arguments):
     environment_name = resolve_environment_path(arguments.name, project_directory)
 
     api = AdareAPI()
-    result = api.web.download_environment(DownloadEnvironmentRequest(
-        project_path=project_directory,
-        environment_name=environment_name
-    ))
+    result = api.web.download_environment(
+        DownloadEnvironmentRequest(project_path=project_directory, environment_name=environment_name)
+    )
 
     if not result.success:
         handle_api_error(result)
@@ -88,10 +87,7 @@ def exec_download_experiment(arguments):
     project_directory = get_project_path(arguments)
 
     api = AdareAPI()
-    result = api.web.download_experiment(DownloadExperimentRequest(
-        project_path=project_directory,
-        ulid=arguments.ulid
-    ))
+    result = api.web.download_experiment(DownloadExperimentRequest(project_path=project_directory, ulid=arguments.ulid))
 
     if not result.success:
         handle_api_error(result)
@@ -105,11 +101,13 @@ def exec_download_testfunction(arguments):
     testfunction_name = resolve_testfunction_path(arguments.name, project_directory)
 
     api = AdareAPI()
-    result = api.web.download_testfunction(DownloadTestfunctionRequest(
-        project_path=project_directory,
-        testfunction_name=testfunction_name,
-        version=getattr(arguments, 'version', None)
-    ))
+    result = api.web.download_testfunction(
+        DownloadTestfunctionRequest(
+            project_path=project_directory,
+            testfunction_name=testfunction_name,
+            version=getattr(arguments, 'version', None),
+        )
+    )
 
     if not result.success:
         handle_api_error(result)
@@ -120,10 +118,12 @@ def exec_download_bundle(arguments):
     project_directory = get_project_path(arguments)
 
     api = AdareAPI()
-    result = api.web.download_bundle(DownloadBundleRequest(
-        project_path=project_directory,
-        ulid=arguments.ulid,
-    ))
+    result = api.web.download_bundle(
+        DownloadBundleRequest(
+            project_path=project_directory,
+            ulid=arguments.ulid,
+        )
+    )
 
     if not result.success:
         handle_api_error(result)
@@ -150,10 +150,7 @@ def exec_web_upload_experiment_run(arguments):
     project_directory = get_project_path(arguments)
 
     api = AdareAPI()
-    result = api.web.upload_run(UploadRunRequest(
-        project_path=project_directory,
-        ulid=arguments.ulid
-    ))
+    result = api.web.upload_run(UploadRunRequest(project_path=project_directory, ulid=arguments.ulid))
 
     if not result.success:
         handle_api_error(result)
@@ -164,10 +161,7 @@ def exec_web_publish_run(arguments):
     project_directory = get_project_path(arguments)
 
     api = AdareAPI()
-    result = api.web.publish_run(PublishRunRequest(
-        project_path=project_directory,
-        ulid=arguments.ulid
-    ))
+    result = api.web.publish_run(PublishRunRequest(project_path=project_directory, ulid=arguments.ulid))
 
     if not result.success:
         handle_api_error(result)
@@ -190,7 +184,7 @@ def exec_web_check_experiment(arguments):
     result_data = {
         'experiment_ulid': check_result.experiment_ulid,
         'exists': check_result.exists,
-        'status': check_result.status
+        'status': check_result.status,
     }
 
     if dual_output or formatter.format_type.value != 'rich':
@@ -216,11 +210,7 @@ def exec_web_check_run(arguments):
         return
 
     check_result = result.data
-    result_data = {
-        'run_ulid': check_result.run_ulid,
-        'exists': check_result.exists,
-        'status': check_result.status
-    }
+    result_data = {'run_ulid': check_result.run_ulid, 'exists': check_result.exists, 'status': check_result.status}
 
     if dual_output or formatter.format_type.value != 'rich':
         formatter.print_or_save(result_data, output_file, dual_output)
@@ -234,6 +224,7 @@ def exec_web_check_run(arguments):
 # =========================================================================
 # Submit Operations
 # =========================================================================
+
 
 def _resolve_submit_action(api, entity_type, name):
     """Pre-check a create submission by name and decide the action to submit.
@@ -264,8 +255,7 @@ def _resolve_submit_action(api, entity_type, name):
         return 'modify'
     if code == 'OPEN_DUPLICATE':
         pr_number = info.get('pr_number')
-        print(info.get('message')
-              or f"'{name}' is already proposed in pull request #{pr_number}; updating that PR.")
+        print(info.get('message') or f"'{name}' is already proposed in pull request #{pr_number}; updating that PR.")
         return 'create'
     return 'create'
 
@@ -288,12 +278,15 @@ def exec_submit_experiment(arguments):
     action = _resolve_submit_action(api, 'experiment', arguments.name)
     if action is None:
         return
-    _run_submit(api.web.submit_experiment, SubmitRequest(
-        project_path=project_directory,
-        name=arguments.name,
-        action=action,
-        skip_dependency_check=getattr(arguments, 'skip_dependency_check', False),
-    ))
+    _run_submit(
+        api.web.submit_experiment,
+        SubmitRequest(
+            project_path=project_directory,
+            name=arguments.name,
+            action=action,
+            skip_dependency_check=getattr(arguments, 'skip_dependency_check', False),
+        ),
+    )
 
 
 def exec_submit_testfunction(arguments):
@@ -304,11 +297,14 @@ def exec_submit_testfunction(arguments):
     action = _resolve_submit_action(api, 'testfunction', arguments.name)
     if action is None:
         return
-    _run_submit(api.web.submit_testfunction, SubmitRequest(
-        project_path=project_directory,
-        name=arguments.name,
-        action=action,
-    ))
+    _run_submit(
+        api.web.submit_testfunction,
+        SubmitRequest(
+            project_path=project_directory,
+            name=arguments.name,
+            action=action,
+        ),
+    )
 
 
 def exec_submit_environment(arguments):
@@ -319,8 +315,11 @@ def exec_submit_environment(arguments):
     action = _resolve_submit_action(api, 'environment', arguments.name)
     if action is None:
         return
-    _run_submit(api.web.submit_environment, SubmitRequest(
-        project_path=project_directory,
-        name=arguments.name,
-        action=action,
-    ))
+    _run_submit(
+        api.web.submit_environment,
+        SubmitRequest(
+            project_path=project_directory,
+            name=arguments.name,
+            action=action,
+        ),
+    )
