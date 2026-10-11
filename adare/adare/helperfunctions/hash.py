@@ -5,11 +5,9 @@ import yaml
 
 
 def hash_file_sha256(filepath: Path):
-    h = hashlib.sha256()
-    with open(filepath.as_posix(), 'rb', buffering=0) as f:
-        for b in iter(lambda: f.read(4096), b''):
-            h.update(b)
-    return h.hexdigest()
+    # file_digest reads into one reusable buffer and releases the GIL while hashing.
+    with open(filepath, 'rb') as f:
+        return hashlib.file_digest(f, 'sha256').hexdigest()
 
 
 def hash_dict_sha256(data: dict):
