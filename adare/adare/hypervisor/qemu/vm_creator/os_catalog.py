@@ -21,6 +21,7 @@ class SetupLevel(IntEnum):
     FULL:  + Python environment (Miniforge x86_64 / native ARM64)
     AGENT: + pre-installed adarevm from wheels (deferred)
     """
+
     BARE = 0
     BASE = 1
     FULL = 2
@@ -39,22 +40,23 @@ def default_host_cpus() -> int:
 @dataclass(frozen=True)
 class OsDefinition:
     """Definition of an OS available for automated VM creation."""
+
     name: str
     display_name: str
-    platform: str           # 'linux' or 'windows'
-    distribution: str       # 'ubuntu', 'windows'
-    version: str            # '24.04', '22.04', '11', '10'
-    iso_url: str            # Direct download URL (empty for Windows - user must supply)
-    iso_sha256: str         # Expected SHA256 hash (empty for Windows)
-    iso_filename: str       # Cached filename
+    platform: str  # 'linux' or 'windows'
+    distribution: str  # 'ubuntu', 'windows'
+    version: str  # '24.04', '22.04', '11', '10'
+    iso_url: str  # Direct download URL (empty for Windows - user must supply)
+    iso_sha256: str  # Expected SHA256 hash (empty for Windows)
+    iso_filename: str  # Cached filename
     default_disk_size: str  # e.g. '60G'
     default_ram_mb: int
     default_cpus: int
     distribution_label: str = ''
     requires_uefi: bool = False
     requires_tpm: bool = False
-    kernel_path_in_iso: str = ''    # Path to vmlinuz inside ISO (Linux only)
-    initrd_path_in_iso: str = ''    # Path to initrd inside ISO (Linux only)
+    kernel_path_in_iso: str = ''  # Path to vmlinuz inside ISO (Linux only)
+    initrd_path_in_iso: str = ''  # Path to initrd inside ISO (Linux only)
     extra_packages: list[str] = field(default_factory=list)
     install_mode: str = 'auto'  # 'auto' (unattended seed file), 'manual'
     #   (interactive window), 'gui-auto' (vision-LLM drives the GUI installer),
@@ -333,9 +335,7 @@ KALI_ROLLING = OsDefinition(
 # when given inst.ks=hd:LABEL=OEMDRV:/ks.cfg. inst.text keeps the install
 # unattended; the *installed* system still has the chosen DE.
 
-_KICKSTART_CMDLINE = (
-    'inst.ks=hd:LABEL=OEMDRV:/ks.cfg inst.text console={console}'
-)
+_KICKSTART_CMDLINE = 'inst.ks=hd:LABEL=OEMDRV:/ks.cfg inst.text console={console}'
 
 
 def _fedora_archive_cmdline(release: str, arch: str = 'x86_64') -> str:
@@ -826,13 +826,17 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                 if install_mode not in _INSTALL_MODES:
                     log.warning(
                         'Skipping %s: install_mode must be one of %s, got "%s"',
-                        yml_file, ', '.join(sorted(_INSTALL_MODES)), install_mode,
+                        yml_file,
+                        ', '.join(sorted(_INSTALL_MODES)),
+                        install_mode,
                     )
                     continue
 
                 architecture = data.get('architecture', 'x86_64')
                 if architecture not in ('x86_64', 'aarch64'):
-                    log.warning('Skipping %s: architecture must be "x86_64" or "aarch64", got "%s"', yml_file, architecture)
+                    log.warning(
+                        'Skipping %s: architecture must be "x86_64" or "aarch64", got "%s"', yml_file, architecture
+                    )
                     continue
 
                 name = data['name']
@@ -861,9 +865,7 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     architecture=architecture,
                     template=data.get('template', ''),
                     installer=data.get('installer', 'subiquity'),
-                    kernel_cmdline=data.get(
-                        'kernel_cmdline', 'autoinstall console={console} ---'
-                    ),
+                    kernel_cmdline=data.get('kernel_cmdline', 'autoinstall console={console} ---'),
                     seed_label=data.get('seed_label', 'cidata'),
                     seed_transport=data.get('seed_transport', 'cdrom'),
                     install_steps=data.get('install_steps', []),
@@ -910,8 +912,7 @@ def get_os_definition(os_name: str) -> OsDefinition:
     if os_name not in OS_CATALOG:
         available = ', '.join(sorted(OS_CATALOG.keys()))
         raise KeyError(
-            f"Unknown OS '{os_name}'. Available: {available}\n"
-            f"Run 'adare os-profile list' to see all profiles."
+            f"Unknown OS '{os_name}'. Available: {available}\nRun 'adare os-profile list' to see all profiles."
         )
     return OS_CATALOG[os_name]
 

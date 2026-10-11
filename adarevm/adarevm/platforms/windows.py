@@ -20,6 +20,7 @@ def get_os_info():
         if result.returncode == 0:
             try:
                 import json
+
                 computer_info = json.loads(result.stdout)
                 if computer_info.get('WindowsProductName'):
                     info['name'] = computer_info['WindowsProductName']
@@ -52,6 +53,7 @@ def get_os_info():
     except Exception:
         # Basic fallback
         import platform
+
         info['name'] = platform.system()
         info['version'] = platform.release()
         info['architecture'] = platform.machine()
@@ -82,10 +84,14 @@ def get_installed_programs():
             if result.returncode == 0:
                 try:
                     import json
+
                     wmi_data = json.loads(result.stdout)
                     if isinstance(wmi_data, list):
-                        programs = [{'name': p.get('Name', ''), 'version': p.get('Version', '')}
-                                  for p in wmi_data if p.get('Name')]
+                        programs = [
+                            {'name': p.get('Name', ''), 'version': p.get('Version', '')}
+                            for p in wmi_data
+                            if p.get('Name')
+                        ]
                     elif isinstance(wmi_data, dict) and wmi_data.get('Name'):
                         programs = [{'name': wmi_data['Name'], 'version': wmi_data.get('Version', '')}]
                 except (json.JSONDecodeError, Exception):
@@ -110,6 +116,7 @@ def get_windows_features():
         if result.returncode == 0:
             try:
                 import json
+
                 features_data = json.loads(result.stdout)
                 if isinstance(features_data, list):
                     features = [f.get('FeatureName', '') for f in features_data if f.get('FeatureName')]
@@ -137,10 +144,14 @@ def get_installed_updates():
         if result.returncode == 0:
             try:
                 import json
+
                 updates_data = json.loads(result.stdout)
                 if isinstance(updates_data, list):
-                    updates = [{'id': u.get('HotFixID', ''), 'installed_on': u.get('InstalledOn', '')}
-                             for u in updates_data if u.get('HotFixID')]
+                    updates = [
+                        {'id': u.get('HotFixID', ''), 'installed_on': u.get('InstalledOn', '')}
+                        for u in updates_data
+                        if u.get('HotFixID')
+                    ]
                 elif isinstance(updates_data, dict) and updates_data.get('HotFixID'):
                     updates = [{'id': updates_data['HotFixID'], 'installed_on': updates_data.get('InstalledOn', '')}]
             except (json.JSONDecodeError, Exception):

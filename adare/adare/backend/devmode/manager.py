@@ -66,7 +66,7 @@ class DevModeSessionManager:
         vm_cpus: int | None = None,
         debug_screenshots: bool = False,
         console_ulid: str | None = None,
-        shared_directories: dict[str, dict[str, Path]] | None = None
+        shared_directories: dict[str, dict[str, Path]] | None = None,
     ) -> str:
         """
         Create and start a new dev mode session.
@@ -89,10 +89,7 @@ class DevModeSessionManager:
         """
         session_id = str(ulid.ULID())
 
-        log.info(
-            f"Creating dev mode session {session_id} for "
-            f"environment='{environment_name}'"
-        )
+        log.info(f"Creating dev mode session {session_id} for environment='{environment_name}'")
 
         session = DevModeSession(
             session_id=session_id,
@@ -103,15 +100,13 @@ class DevModeSessionManager:
             vm_cpus=vm_cpus,
             debug_screenshots=debug_screenshots,
             console_ulid=console_ulid,
-            shared_directories=shared_directories
+            shared_directories=shared_directories,
         )
 
         result = await session.start()
         if not result.success:
             error_msg = result.error.message if result.error else "Unknown error"
-            raise RuntimeError(
-                f"Failed to start dev mode session: {error_msg}"
-            )
+            raise RuntimeError(f"Failed to start dev mode session: {error_msg}")
 
         self._sessions[session_id] = session
         log.info(f"Dev mode session {session_id} created successfully")
@@ -215,10 +210,7 @@ class DevModeSessionManager:
         return len(self._sessions)
 
     async def restore_session(
-        self,
-        session_id: str,
-        console_ulid: str | None = None,
-        connect_websocket: bool = True
+        self, session_id: str, console_ulid: str | None = None, connect_websocket: bool = True
     ) -> DevModeSession | None:
         """
         Restore a session from database when not in memory but VM is running.
@@ -253,19 +245,14 @@ class DevModeSessionManager:
                 return None
 
             if db_session.status not in ['running', 'stopped']:
-                log.warning(
-                    f"Session {session_id} has status '{db_session.status}', "
-                    f"cannot restore"
-                )
+                log.warning(f"Session {session_id} has status '{db_session.status}', cannot restore")
                 return None
 
             # 2. Get hypervisor type from environment
             from adare.backend.environment import database as environment_database
 
             try:
-                environment_ulid = environment_database.resolve_environment_identifier(
-                    db_session.environment_name
-                )
+                environment_ulid = environment_database.resolve_environment_identifier(db_session.environment_name)
                 hypervisor_type = environment_database.get_environment_hypervisor(environment_ulid)
             except (EnvironmentDoesNotExistInDatabase, DatabaseError, OSError) as e:
                 log.error(f"Failed to resolve environment: {e}")
@@ -273,10 +260,7 @@ class DevModeSessionManager:
 
             # 3. Validate VM is actually running via hypervisor
             if not is_vm_running(db_session.vm_name, hypervisor_type):
-                log.warning(
-                    f"Session {session_id}: VM '{db_session.vm_name}' is not running. "
-                    f"Cannot restore session."
-                )
+                log.warning(f"Session {session_id}: VM '{db_session.vm_name}' is not running. Cannot restore session.")
                 # Update database status to 'stopped' for cleanup
                 db_api.update_session_status(session_id, 'stopped')
                 return None
@@ -293,7 +277,7 @@ class DevModeSessionManager:
                 vm_memory=None,  # Will use defaults
                 vm_cpus=None,  # Will use defaults
                 debug_screenshots=False,
-                console_ulid=console_ulid
+                console_ulid=console_ulid,
             )
 
             # 5. Restore context (directories, VM, playbook, etc.)
@@ -309,9 +293,11 @@ class DevModeSessionManager:
                 from adare.database.models.project_models import ExperimentRun
 
                 with ExperimentApi(session.project_path) as api:
-                    experiment_run = api._session.query(ExperimentRun).filter(
-                        ExperimentRun.id == session.experiment_ctx.experiment_run_ulid
-                    ).first()
+                    experiment_run = (
+                        api._session.query(ExperimentRun)
+                        .filter(ExperimentRun.id == session.experiment_ctx.experiment_run_ulid)
+                        .first()
+                    )
 
                     if experiment_run and experiment_run.vm_instance_id:
                         session.vm_instance_id = experiment_run.vm_instance_id
@@ -332,8 +318,13 @@ class DevModeSessionManager:
                     try:
                         if session.experiment_ctx.hypervisor_type == 'qemu':
                             # QEMU: Check if process is running
-                            if hasattr(session.experiment_ctx.vm, '_qemu_process') and session.experiment_ctx.vm._qemu_process:
-                                vm_state = 'running' if session.experiment_ctx.vm._qemu_process.poll() is None else 'stopped'
+                            if (
+                                hasattr(session.experiment_ctx.vm, '_qemu_process')
+                                and session.experiment_ctx.vm._qemu_process
+                            ):
+                                vm_state = (
+                                    'running' if session.experiment_ctx.vm._qemu_process.poll() is None else 'stopped'
+                                )
                             else:
                                 log.debug("QEMU process not available - cannot verify VM state")
 
@@ -373,7 +364,10 @@ class DevModeSessionManager:
                     except Exception as e:
                         log.error(f"Failed to query port forwarding rules: {e}")
                         # Try database fallback as last resort
-                        if hasattr(session.experiment_ctx.config, 'websocket_port') and session.experiment_ctx.config.websocket_port:
+                        if (
+                            hasattr(session.experiment_ctx.config, 'websocket_port')
+                            and session.experiment_ctx.config.websocket_port
+                        ):
                             websocket_port = session.experiment_ctx.config.websocket_port
                             log.warning(f"Using websocket_port from config as fallback: {websocket_port}")
                         else:
@@ -386,7 +380,7 @@ class DevModeSessionManager:
                     with StageCtxManager(
                         ConnectToVMStage(),
                         stage_ulid,
-                        event=None  # Dev mode doesn't have a dedicated interrupt event at this point
+                        event=None,  # Dev mode doesn't have a dedicated interrupt event at this point
                     ) as stage_ctx:
                         stage_ctx.stage.sub_msg = f"Reconnecting to localhost:{websocket_port}"
 
@@ -407,8 +401,7 @@ class DevModeSessionManager:
                             stage_ctx.stage.sub_msg = "Connected successfully"
                         else:
                             log.warning(
-                                "WebSocket reconnection failed. Some operations "
-                                "(playbook execution) will not work."
+                                "WebSocket reconnection failed. Some operations (playbook execution) will not work."
                             )
                             stage_ctx.stage.sub_msg = "Connection failed"
                             # Don't raise error - session can still be used for cleanup operations
@@ -441,9 +434,7 @@ class DevModeSessionManager:
             return None
 
     async def restore_and_restart_session(
-        self,
-        session_id: str,
-        console_ulid: str | None = None
+        self, session_id: str, console_ulid: str | None = None
     ) -> DevModeSession | None:
         """
         Restore a stopped session and restart its VM.
@@ -474,8 +465,7 @@ class DevModeSessionManager:
 
             if db_session.status != 'stopped':
                 log.warning(
-                    f"Session {session_id} has status '{db_session.status}', "
-                    f"expected 'stopped' for restart operation"
+                    f"Session {session_id} has status '{db_session.status}', expected 'stopped' for restart operation"
                 )
                 return None
 
@@ -483,9 +473,7 @@ class DevModeSessionManager:
             from adare.backend.environment import database as environment_database
 
             try:
-                environment_ulid = environment_database.resolve_environment_identifier(
-                    db_session.environment_name
-                )
+                environment_ulid = environment_database.resolve_environment_identifier(db_session.environment_name)
                 environment_database.get_environment_hypervisor(environment_ulid)
             except (EnvironmentDoesNotExistInDatabase, DatabaseError, OSError) as e:
                 log.error(f"Failed to resolve environment: {e}")
@@ -494,10 +482,7 @@ class DevModeSessionManager:
             # 3. Check if VM disk file exists
             vm_file = environment_database.get_environment_vm_file(environment_ulid)
             if vm_file and not vm_file.exists():
-                log.error(
-                    f"VM disk file not found: {vm_file}. "
-                    f"Cannot restart session {session_id}."
-                )
+                log.error(f"VM disk file not found: {vm_file}. Cannot restart session {session_id}.")
                 return None
 
             # 4. Create session object with metadata from database
@@ -510,16 +495,11 @@ class DevModeSessionManager:
                 vm_memory=None,  # Will use defaults
                 vm_cpus=None,  # Will use defaults
                 debug_screenshots=False,
-                console_ulid=console_ulid
+                console_ulid=console_ulid,
             )
 
             # 5. Restore context with VM startup
-            success = await restore_context(
-                session,
-                db_session,
-                console_ulid=console_ulid,
-                should_start_vm=True
-            )
+            success = await restore_context(session, db_session, console_ulid=console_ulid, should_start_vm=True)
 
             if not success:
                 log.error(f"Failed to restore context for session {session_id}")
@@ -537,10 +517,8 @@ class DevModeSessionManager:
 
         except Exception as e:  # Intentionally broad: top-level session restoration must not crash caller
             log.error(f"Failed to restore and restart session {session_id}: {e}", exc_info=True)
-    async def load_session_for_cleanup(
-        self,
-        session_id: str
-    ) -> DevModeSession | None:
+
+    async def load_session_for_cleanup(self, session_id: str) -> DevModeSession | None:
         """
         Load session infrastructure for cleanup operation.
 
@@ -577,7 +555,7 @@ class DevModeSessionManager:
                 gui_mode=None,
                 vm_memory=None,
                 vm_cpus=None,
-                debug_screenshots=False
+                debug_screenshots=False,
             )
 
             # 3. Restore ONLY infrastructure context
@@ -597,13 +575,13 @@ class DevModeSessionManager:
                 # Check if we can get the instance ID from fake experiment run (if it exists)
                 # But since we didn't fully restore, check DB directly again
                 if session.experiment_ctx:
-                     with ExperimentApi(session.project_path) as api:
+                    with ExperimentApi(session.project_path) as api:
                         # Construct fake experiment run ID
                         # In new model, the run ID is exactly the session ID
                         fake_run_id = session_id
-                        experiment_run = api._session.query(ExperimentRun).filter(
-                            ExperimentRun.id == fake_run_id
-                        ).first()
+                        experiment_run = (
+                            api._session.query(ExperimentRun).filter(ExperimentRun.id == fake_run_id).first()
+                        )
 
                         if experiment_run and experiment_run.vm_instance_id:
                             session.vm_instance_id = experiment_run.vm_instance_id
@@ -618,10 +596,7 @@ class DevModeSessionManager:
             return None
 
     async def get_or_restore_session(
-        self,
-        session_id: str,
-        console_ulid: str | None = None,
-        connect_websocket: bool = True
+        self, session_id: str, console_ulid: str | None = None, connect_websocket: bool = True
     ) -> DevModeSession | None:
         """
         Get session from memory or restore from database if not present.
@@ -655,6 +630,7 @@ class DevModeSessionManager:
         try:
             # Check database status first
             from adare.database.api.devmode import DevModeApi
+
             db_api = DevModeApi()
             db_session = db_api.get_session(session_id)
 
@@ -666,19 +642,12 @@ class DevModeSessionManager:
             # Stopped sessions must be explicitly resumed via restore_and_restart_session()
             if db_session.status == 'running':
                 return await self.restore_session(
-                    session_id,
-                    console_ulid=console_ulid,
-                    connect_websocket=connect_websocket
+                    session_id, console_ulid=console_ulid, connect_websocket=connect_websocket
                 )
             if db_session.status == 'stopped':
-                log.info(
-                    f"Session {session_id} is stopped. "
-                    f"Use 'adare dev start' to resume it."
-                )
+                log.info(f"Session {session_id} is stopped. Use 'adare dev start' to resume it.")
                 return None
-            log.warning(
-                f"Session {session_id} has unexpected status '{db_session.status}'"
-            )
+            log.warning(f"Session {session_id} has unexpected status '{db_session.status}'")
             return None
 
         except Exception as e:  # Intentionally broad: session lookup must not crash caller
@@ -708,10 +677,7 @@ class DevModeSessionManager:
         return result.success
 
     async def restart_mcp_server(
-        self,
-        session_id: str,
-        debug: bool | None = None,
-        debug_output_dir: Path | None = None
+        self, session_id: str, debug: bool | None = None, debug_output_dir: Path | None = None
     ) -> bool:
         """
         Restart MCP server for a session.
@@ -764,7 +730,7 @@ class DevModeSessionManager:
         playbook_patterns: list[str],
         checkpoint_name: str,
         timeout: int,
-        console_ulid: str | None
+        console_ulid: str | None,
     ) -> 'PlaybookBatchSummary':
         """
         Execute multiple playbooks with checkpoint restoration.
@@ -796,5 +762,5 @@ class DevModeSessionManager:
             playbook_patterns=playbook_patterns,
             checkpoint_name=checkpoint_name,
             timeout=timeout,
-            console_ulid=console_ulid
+            console_ulid=console_ulid,
         )

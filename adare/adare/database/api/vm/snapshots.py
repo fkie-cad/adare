@@ -16,8 +16,14 @@ log = logging.getLogger(__name__)
 class VmSnapshotMixin:
     """Mixin providing VM snapshot management operations."""
 
-    def create_snapshot_record(self, vm_instance_id: str, snapshot_name: str, snapshot_type: str,
-                              experiment_id: str = None, description: str = None) -> bool:
+    def create_snapshot_record(
+        self,
+        vm_instance_id: str,
+        snapshot_name: str,
+        snapshot_type: str,
+        experiment_id: str = None,
+        description: str = None,
+    ) -> bool:
         """
         DEPRECATED: Use create_instance_snapshot_record instead.
         This method is kept for backward compatibility but will be removed.
@@ -38,7 +44,7 @@ class VmSnapshotMixin:
             snapshot_name=snapshot_name,
             snapshot_type=snapshot_type,
             experiment_id=experiment_id,
-            description=description
+            description=description,
         )
 
     def get_snapshots_for_vm(self, vm_id: str, snapshot_type: str = None) -> list:
@@ -56,7 +62,7 @@ class VmSnapshotMixin:
         warnings.warn(
             "get_snapshots_for_vm is deprecated - use get_snapshots_for_instance instead",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         raise NotImplementedError(
             "get_snapshots_for_vm is deprecated - VMs (templates) don't have snapshots. "
@@ -80,8 +86,14 @@ class VmSnapshotMixin:
             "Snapshots are managed per-instance. Use delete_instance_snapshot_record instead."
         )
 
-    def create_instance_snapshot_record(self, vm_instance_id: str, snapshot_name: str, snapshot_type: str,
-                                      experiment_id: str = None, description: str = None) -> bool:
+    def create_instance_snapshot_record(
+        self,
+        vm_instance_id: str,
+        snapshot_name: str,
+        snapshot_type: str,
+        experiment_id: str = None,
+        description: str = None,
+    ) -> bool:
         """
         Create a snapshot record for a VM instance in the database.
 
@@ -97,15 +109,14 @@ class VmSnapshotMixin:
         """
         with self:
             snapshot_record = VmSnapshot(
-                vm_instance_id=vm_instance_id,
-                name=snapshot_name,
-                snapshot_type=snapshot_type,
-                description=description
+                vm_instance_id=vm_instance_id, name=snapshot_name, snapshot_type=snapshot_type, description=description
             )
 
             self._session.add(snapshot_record)
             self._session.commit()
-            log.debug(f"Created instance snapshot record '{snapshot_name}' (type: {snapshot_type}) for VM instance {vm_instance_id}")
+            log.debug(
+                f"Created instance snapshot record '{snapshot_name}' (type: {snapshot_type}) for VM instance {vm_instance_id}"
+            )
             return True
 
     def get_snapshots_for_instance(self, vm_instance_id: str, snapshot_type: str = None) -> list[VmSnapshot]:
@@ -141,16 +152,17 @@ class VmSnapshotMixin:
             True if deleted successfully (or didn't exist)
         """
         with self:
-            snapshot = self._session.query(VmSnapshot).filter_by(
-                vm_instance_id=vm_instance_id,
-                name=snapshot_name
-            ).first()
+            snapshot = (
+                self._session.query(VmSnapshot).filter_by(vm_instance_id=vm_instance_id, name=snapshot_name).first()
+            )
 
             if snapshot:
                 self._session.delete(snapshot)
                 self._session.commit()
                 log.debug(f"Deleted snapshot record '{snapshot_name}' for VM instance {vm_instance_id}")
             else:
-                log.debug(f"Snapshot record '{snapshot_name}' not found for VM instance {vm_instance_id} - nothing to delete")
+                log.debug(
+                    f"Snapshot record '{snapshot_name}' not found for VM instance {vm_instance_id} - nothing to delete"
+                )
 
             return True

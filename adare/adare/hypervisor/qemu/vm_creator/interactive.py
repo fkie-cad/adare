@@ -49,8 +49,7 @@ def _interactive_socket(disk_path: Path, kind: str) -> Path:
     fallback = run_dir / f'.interactive-{uuid.uuid4().hex[:8]}.{kind}'
     if len(str(fallback)) >= _QMP_SOCK_LIMIT:
         raise InteractiveSessionError(
-            f'{kind.upper()} socket path too long ({len(str(fallback))} >= '
-            f'{_QMP_SOCK_LIMIT} chars): {fallback}'
+            f'{kind.upper()} socket path too long ({len(str(fallback))} >= {_QMP_SOCK_LIMIT} chars): {fallback}'
         )
     return fallback
 
@@ -94,10 +93,14 @@ def build_post_install_qemu_cmd(
 
     cmd = [
         arch_params['exe'],
-        '-machine', arch_params['machine'],
-        '-cpu', arch_params['cpu'],
-        '-m', str(ram_mb),
-        '-smp', str(cpus),
+        '-machine',
+        arch_params['machine'],
+        '-cpu',
+        arch_params['cpu'],
+        '-m',
+        str(ram_mb),
+        '-smp',
+        str(cpus),
     ]
     # Boot from installed disk — per-arch controller matching installation
     # (aarch64 NVMe / x86_64 virtio-blk) so Windows finds its boot driver.
@@ -108,21 +111,30 @@ def build_post_install_qemu_cmd(
     # QEMU guest agent channel (virtio-serial) for the console / provisioning.
     if qga_sock_path is not None:
         cmd += [
-            '-chardev', f'socket,path={qga_sock_path},server=on,wait=off,id=qga0',
-            '-device', 'virtio-serial',
-            '-device', 'virtserialport,chardev=qga0,name=org.qemu.guest_agent.0',
+            '-chardev',
+            f'socket,path={qga_sock_path},server=on,wait=off,id=qga0',
+            '-device',
+            'virtio-serial',
+            '-device',
+            'virtserialport,chardev=qga0,name=org.qemu.guest_agent.0',
         ]
 
     cmd += [
         # Network
-        '-netdev', 'user,id=net0',
-        '-device', 'virtio-net-pci,netdev=net0',
+        '-netdev',
+        'user,id=net0',
+        '-device',
+        'virtio-net-pci,netdev=net0',
         # USB tablet/keyboard for native display
-        '-device', 'qemu-xhci',
-        '-device', 'usb-tablet',
-        '-device', 'usb-kbd',
+        '-device',
+        'qemu-xhci',
+        '-device',
+        'usb-tablet',
+        '-device',
+        'usb-kbd',
         # Virtio RNG
-        '-device', 'virtio-rng-pci',
+        '-device',
+        'virtio-rng-pci',
     ]
 
     # VGA / display device (architecture-specific)
@@ -141,8 +153,10 @@ def build_post_install_qemu_cmd(
     if needs_uefi and nvram_path is not None:
         ovmf_code, _ = find_ovmf_firmware(os_def.architecture)
         pflash_args = [
-            '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
-            '-drive', f'if=pflash,format=raw,file={nvram_path}',
+            '-drive',
+            f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
+            '-drive',
+            f'if=pflash,format=raw,file={nvram_path}',
         ]
         machine_idx = cmd.index('-machine') + 2
         cmd[machine_idx:machine_idx] = pflash_args
@@ -202,7 +216,11 @@ def run_post_install_session(
     qga_sock_path = _interactive_socket(disk_path, 'qga') if console_mode else None
 
     cmd = build_post_install_qemu_cmd(
-        disk_path, nvram_path, os_def, ram_mb, cpus,
+        disk_path,
+        nvram_path,
+        os_def,
+        ram_mb,
+        cpus,
         qmp_sock_path=qmp_sock_path,
         qga_sock_path=qga_sock_path,
         allow_emulation=allow_emulation,
@@ -235,9 +253,7 @@ def run_post_install_session(
     windows = 'windows' in (os_def.platform or '').lower()
     try:
         if console_mode:
-            store, recorded = run_extend_console(
-                qga_sock_path, qmp_sock_path, process, windows=windows
-            )
+            store, recorded = run_extend_console(qga_sock_path, qmp_sock_path, process, windows=windows)
         else:
             wait_for_input_or_exit(process, qmp_sock_path)
             if ask_store:
@@ -257,9 +273,7 @@ def run_post_install_session(
 
     if process.returncode and process.returncode != 0:
         stderr = process.stderr.read().decode() if process.stderr else ''
-        raise InteractiveSessionError(
-            f'QEMU exited with code {process.returncode}: {stderr.strip()}'
-        )
+        raise InteractiveSessionError(f'QEMU exited with code {process.returncode}: {stderr.strip()}')
 
     print_step('[green]Interactive session completed.[/green]')
     return store, recorded

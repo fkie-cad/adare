@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class VMSuggestion:
     """Represents a VM suggestion with metadata."""
+
     name: str
     score: float
     scope: str
@@ -29,10 +30,7 @@ class VMSuggestion:
 
 
 def suggest_similar_vm_names(
-    target_name: str,
-    available_names: list[str],
-    max_suggestions: int = 3,
-    cutoff: float = 0.4
+    target_name: str, available_names: list[str], max_suggestions: int = 3, cutoff: float = 0.4
 ) -> list[VMSuggestion]:
     """
     Find VM names similar to the target using fuzzy matching.
@@ -50,23 +48,20 @@ def suggest_similar_vm_names(
         return []
 
     # Use difflib for fuzzy matching
-    matches = difflib.get_close_matches(
-        target_name,
-        available_names,
-        n=max_suggestions,
-        cutoff=cutoff
-    )
+    matches = difflib.get_close_matches(target_name, available_names, n=max_suggestions, cutoff=cutoff)
 
     suggestions = []
     for match in matches:
         # Calculate similarity score
         similarity = difflib.SequenceMatcher(None, target_name.lower(), match.lower()).ratio()
-        suggestions.append(VMSuggestion(
-            name=match,
-            score=similarity,
-            scope='unknown',  # Will be filled by caller with actual VM data
-            reason=f"Similar to '{target_name}' (similarity: {similarity:.2f})"
-        ))
+        suggestions.append(
+            VMSuggestion(
+                name=match,
+                score=similarity,
+                scope='unknown',  # Will be filled by caller with actual VM data
+                reason=f"Similar to '{target_name}' (similarity: {similarity:.2f})",
+            )
+        )
 
     return suggestions
 
@@ -75,7 +70,7 @@ def suggest_vms_by_os_requirements(
     available_vms: list[dict[str, Any]],
     required_os: str | None = None,
     required_platform: str | None = None,
-    max_suggestions: int = 5
+    max_suggestions: int = 5,
 ) -> list[VMSuggestion]:
     """
     Suggest VMs based on OS requirements.
@@ -116,15 +111,17 @@ def suggest_vms_by_os_requirements(
 
         # Basic compatibility if any match
         if score > 0:
-            suggestions.append(VMSuggestion(
-                name=vm.get('name', 'Unknown'),
-                score=score,
-                scope=vm.get('scope', 'unknown'),
-                os_type=vm.get('os_type'),
-                architecture=vm.get('architecture'),
-                description=vm.get('description'),
-                reason='; '.join(reasons) if reasons else 'Available VM'
-            ))
+            suggestions.append(
+                VMSuggestion(
+                    name=vm.get('name', 'Unknown'),
+                    score=score,
+                    scope=vm.get('scope', 'unknown'),
+                    os_type=vm.get('os_type'),
+                    architecture=vm.get('architecture'),
+                    description=vm.get('description'),
+                    reason='; '.join(reasons) if reasons else 'Available VM',
+                )
+            )
 
     # Sort by score (descending) and limit results
     suggestions.sort(key=lambda x: x.score, reverse=True)
@@ -132,9 +129,7 @@ def suggest_vms_by_os_requirements(
 
 
 def generate_vm_not_found_message(
-    vm_name: str,
-    suggestions: list[VMSuggestion],
-    project_context: str | None = None
+    vm_name: str, suggestions: list[VMSuggestion], project_context: str | None = None
 ) -> tuple[str, list[str]]:
     """
     Generate enhanced error message with VM suggestions.
@@ -155,7 +150,7 @@ def generate_vm_not_found_message(
             "Check VM name spelling and try again",
             "Run 'adare vm list' to see all available VMs",
             "Create a VM with 'adare vm create' or load an environment with 'adare env load <env.yml>'",
-            "Check the host VM tooling with 'adare vm doctor'"
+            "Check the host VM tooling with 'adare vm doctor'",
         ]
     else:
         similar_vms = [f"'{s.name}' ({s.scope})" for s in suggestions[:3]]
@@ -164,25 +159,27 @@ def generate_vm_not_found_message(
         solutions = [
             f"Try one of these similar VMs: {', '.join([s.name for s in suggestions[:3]])}",
             "Check VM name spelling and try again",
-            "Run 'adare vm list' to see all available VMs"
+            "Run 'adare vm list' to see all available VMs",
         ]
 
         # Add project-specific solutions
         if project_context:
-            solutions.extend([
-                f"Load an environment for this project with 'adare env load <env.yml> --project {project_context}'",
-                "Use a global VM with 'adare vm list --scope global'"
-            ])
+            solutions.extend(
+                [
+                    f"Load an environment for this project with 'adare env load <env.yml> --project {project_context}'",
+                    "Use a global VM with 'adare vm list --scope global'",
+                ]
+            )
         else:
-            solutions.append("Create a VM with 'adare vm create' or load an environment with 'adare env load <env.yml>'")
+            solutions.append(
+                "Create a VM with 'adare vm create' or load an environment with 'adare env load <env.yml>'"
+            )
 
     return message, solutions
 
 
 def suggest_vms_for_environment(
-    environment_metadata: dict[str, Any],
-    available_vms: list[dict[str, Any]],
-    project_id: str | None = None
+    environment_metadata: dict[str, Any], available_vms: list[dict[str, Any]], project_id: str | None = None
 ) -> list[VMSuggestion]:
     """
     Suggest VMs specifically for environment requirements.
@@ -202,9 +199,7 @@ def suggest_vms_for_environment(
 
     # Get suggestions based on OS requirements
     suggestions = suggest_vms_by_os_requirements(
-        available_vms=available_vms,
-        required_os=required_os,
-        required_platform=required_platform
+        available_vms=available_vms, required_os=required_os, required_platform=required_platform
     )
 
     # Boost score for project-scoped VMs when in project context

@@ -28,6 +28,7 @@ A command that cannot produce structured data declares
 asking it for ``json``/``yaml`` exits with a usage error instead of printing a
 table that a JSON parser would choke on.
 """
+
 from __future__ import annotations
 
 import functools
@@ -155,20 +156,23 @@ def emit(data: Any, rich: Any = None) -> None:
         # No dedicated Rich view: fall back to the plain rendering, which is
         # still readable on a terminal.
         from adare.helperfunctions.output_formatter import get_formatter
+
         renderable = get_formatter('plain').format(data)
     Console().print(renderable)
 
 
 def _apply(func: Callable, structured: bool) -> Callable:
-    @click.option('--format', 'adare_command_format', default=None,
-                  type=click.Choice(FORMAT_CHOICES, case_sensitive=False),
-                  help='Output format for this command (overrides adare --format and '
-                       f'${FORMAT_ENV_VAR}; default: rich on a terminal, plain when piped).')
-    @click.option('--json', 'adare_command_json', is_flag=True, default=False,
-                  help='Shorthand for --format json.')
+    @click.option(
+        '--format',
+        'adare_command_format',
+        default=None,
+        type=click.Choice(FORMAT_CHOICES, case_sensitive=False),
+        help='Output format for this command (overrides adare --format and '
+        f'${FORMAT_ENV_VAR}; default: rich on a terminal, plain when piped).',
+    )
+    @click.option('--json', 'adare_command_json', is_flag=True, default=False, help='Shorthand for --format json.')
     @functools.wraps(func)
-    def wrapper(*args, adare_command_json: bool = False, adare_command_format: str | None = None,
-                **kwargs):
+    def wrapper(*args, adare_command_json: bool = False, adare_command_format: str | None = None, **kwargs):
         ctx = click.get_current_context()
         requested = adare_command_format.lower() if adare_command_format else None
         if adare_command_json:
@@ -184,7 +188,9 @@ def _apply(func: Callable, structured: bool) -> Callable:
         if not structured and resolve_output_format(ctx) in STRUCTURED_FORMATS:
             raise click.UsageError(
                 f"'{ctx.command_path}' does not support structured output "
-                f"({resolve_output_format(ctx)}); use --format rich or plain", ctx=ctx)
+                f"({resolve_output_format(ctx)}); use --format rich or plain",
+                ctx=ctx,
+            )
         return func(*args, **kwargs)
 
     setattr(wrapper, _MARKER, {'structured': structured})

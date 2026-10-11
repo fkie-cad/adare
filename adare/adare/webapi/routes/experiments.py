@@ -1,4 +1,5 @@
 """Experiment management endpoints."""
+
 import logging
 from pathlib import Path
 
@@ -14,14 +15,17 @@ router = APIRouter(prefix="/api/experiments", tags=["experiments"])
 
 # ---- Pydantic request models ----
 
+
 class ExperimentCreateBody(BaseModel):
     """Request body for creating an experiment."""
+
     project_path: str
     name: str
 
 
 class ExperimentCloneBody(BaseModel):
     """Request body for cloning an experiment."""
+
     project_path: str
     target_experiment: str
     environments: list[str] | None = None
@@ -29,6 +33,7 @@ class ExperimentCloneBody(BaseModel):
 
 class ExperimentRemoveBody(BaseModel):
     """Request body for removing an experiment."""
+
     project_path: str
     force: bool = False
     keep_files: bool = False
@@ -36,12 +41,14 @@ class ExperimentRemoveBody(BaseModel):
 
 class ExperimentValidateBody(BaseModel):
     """Request body for validating an experiment."""
+
     project_path: str
     environment: str | None = None
 
 
 class ExperimentEnvLinkBody(BaseModel):
     """Request body for adding/removing environments from an experiment."""
+
     project_path: str
     environments: list[str]
     force: bool = False
@@ -49,18 +56,22 @@ class ExperimentEnvLinkBody(BaseModel):
 
 class ExperimentRunBody(BaseModel):
     """Request body for running an experiment."""
+
     project_path: str
     environment_name: str
 
 
 # ---- Helpers ----
 
+
 def _api():
     from adare.api import AdareAPI
+
     return AdareAPI()
 
 
 # ---- Endpoints ----
+
 
 @router.get("")
 async def list_experiments(tags: str | None = Query(None, description="Comma-separated tags to filter by")):
@@ -94,9 +105,7 @@ async def create_experiment(body: ExperimentCreateBody):
 async def run_experiment(name: str, body: ExperimentRunBody):
     """Start an experiment run as a background task; returns immediately with
     the run's ULID so the caller can navigate to its detail page."""
-    result = await _api().experiment.run(
-        Path(body.project_path), name, body.environment_name
-    )
+    result = await _api().experiment.run(Path(body.project_path), name, body.environment_name)
     return result_to_response(result)
 
 

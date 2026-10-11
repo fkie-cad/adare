@@ -25,33 +25,78 @@ def _mock(defaults, **overrides):
     return m
 
 
-_RUN = dict(ulid="01RUN", experiment_name="exp1", experiment_ulid="01EXP",
-            environment_name="win10", environment_ulid="01ENV", project_name="proj1",
-            start_time=None, end_time=None, duration_seconds=0.0,
-            status="SUCCESS", overall_result="PASS", published=False, fake=False)
+_RUN = dict(
+    ulid="01RUN",
+    experiment_name="exp1",
+    experiment_ulid="01EXP",
+    environment_name="win10",
+    environment_ulid="01ENV",
+    project_name="proj1",
+    start_time=None,
+    end_time=None,
+    duration_seconds=0.0,
+    status="SUCCESS",
+    overall_result="PASS",
+    published=False,
+    fake=False,
+)
 
-_PROJECT = dict(name="proj1", description="A project", path="/tmp/proj1",
-                created_at=None, experiment_count=2, environment_count=1)
+_PROJECT = dict(
+    name="proj1", description="A project", path="/tmp/proj1", created_at=None, experiment_count=2, environment_count=1
+)
 
-_ENV = dict(ulid="01ENV", name="win10", display_name="Windows 10",
-            dotnotation="proj.win10", project="proj1", description="",
-            vm_box="win10box", vm_id="vm-1", os_info="Windows 10",
-            osinfo_os="Windows", osinfo_distribution="", osinfo_version="10",
-            osinfo_language="en", published=False, in_request=False,
-            created_at=None, file="env.yaml")
+_ENV = dict(
+    ulid="01ENV",
+    name="win10",
+    display_name="Windows 10",
+    dotnotation="proj.win10",
+    project="proj1",
+    description="",
+    vm_box="win10box",
+    vm_id="vm-1",
+    os_info="Windows 10",
+    osinfo_os="Windows",
+    osinfo_distribution="",
+    osinfo_version="10",
+    osinfo_language="en",
+    published=False,
+    in_request=False,
+    created_at=None,
+    file="env.yaml",
+)
 
-_EXP = dict(ulid="01EXP", name="exp1", display_name="Experiment 1",
-            dotnotation="proj.exp1", project="proj1", environment="win10",
-            environments=["win10"], description="", tags=[],
-            published=False, in_request=False, created_at=None,
-            run_count=0, last_run=None)
+_EXP = dict(
+    ulid="01EXP",
+    name="exp1",
+    display_name="Experiment 1",
+    dotnotation="proj.exp1",
+    project="proj1",
+    environment="win10",
+    environments=["win10"],
+    description="",
+    tags=[],
+    published=False,
+    in_request=False,
+    created_at=None,
+    run_count=0,
+    last_run=None,
+)
 
-_TF = dict(id="01TF", name="click_button", dotnotation="file.click_button",
-           display_name="Click Button", description="Clicks a button",
-           parameter_count=1, parameters=[{"name": "x"}],
-           file_id="01FILE", file_name="actions.py", file_path="tests/",
-           full_file_path="/tmp/tests/actions.py", file_sha256="abc",
-           file_description="Action file")
+_TF = dict(
+    id="01TF",
+    name="click_button",
+    dotnotation="file.click_button",
+    display_name="Click Button",
+    description="Clicks a button",
+    parameter_count=1,
+    parameters=[{"name": "x"}],
+    file_id="01FILE",
+    file_name="actions.py",
+    file_path="tests/",
+    full_file_path="/tmp/tests/actions.py",
+    file_sha256="abc",
+    file_description="Action file",
+)
 
 
 def _sda_ctx(mock_cls):
@@ -77,8 +122,8 @@ class TestShowServiceListRuns:
     @patch.object(ShowService, "_query_across_projects")
     def test_project_filter(self, mock_q, service):
         from adare.core.dto.show import RunListRequest
-        mock_q.return_value = [_mock(_RUN, project_name="proj1"),
-                               _mock(_RUN, ulid="02", project_name="proj2")]
+
+        mock_q.return_value = [_mock(_RUN, project_name="proj1"), _mock(_RUN, ulid="02", project_name="proj2")]
         result = service.list_runs(RunListRequest(project="proj1"))
         assert len(result.data) == 1 and result.data[0].project_name == "proj1"
 
@@ -108,6 +153,7 @@ class TestShowServiceListProjects:
     @patch(_SDA)
     def test_exception(self, mock_cls, service):
         from sqlalchemy.exc import SQLAlchemyError
+
         mock_cls.return_value.__enter__ = MagicMock(side_effect=SQLAlchemyError("err"))
         mock_cls.return_value.__exit__ = MagicMock(return_value=False)
         result = service.list_projects()

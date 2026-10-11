@@ -59,11 +59,13 @@ def print_experiment_list(formatter=None, output_file=None, dual_output=False):
     # Get formatter if not provided
     if formatter is None:
         from adare.run import get_formatter_from_context
+
         formatter, output_file, dual_output = get_formatter_from_context()
 
     if dual_output or formatter.format_type.value != 'rich':
         # Use StructuredDataApi for JSON/YAML output
         from adare.database.api.structured_data import StructuredDataApi
+
         with StructuredDataApi() as api:
             experiments_structured = api.get_experiments_structured()
             experiment_list = [exp.to_dict() for exp in experiments_structured]

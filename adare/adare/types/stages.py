@@ -12,14 +12,18 @@ from adarelib.constants import StatusEnum
 
 _stage_registry: dict[str, type["Stage"]] = {}
 
+
 def register_stage(cls: type["Stage"]) -> type["Stage"]:
     instance = cls()
     if not hasattr(instance, "name"):
         raise ValueError(f"Cannot register stage without 'name': {cls}")
     _stage_registry[instance.name] = cls
     return cls
+
+
 def get_stage_class(name: str) -> type["Stage"] | None:
     return _stage_registry.get(name)
+
 
 # -------------------------------
 # cattrs Converter Setup
@@ -39,6 +43,7 @@ converter.register_structure_hook(StatusEnum, lambda i, _: StatusEnum(i))
 # Stage Base Class
 # -------------------------------
 
+
 @attrs.define
 class Stage:
     # Class-level metadata
@@ -48,7 +53,9 @@ class Stage:
     parent: ClassVar[str | None] = None
     optional: ClassVar[bool] = False
     hidden: ClassVar[bool] = False  # Hide from console display (still recorded in database)
-    collapse: ClassVar[bool] = False  # Hide the spinner during a clean run; render only if the stage ends in a problem state
+    collapse: ClassVar[bool] = (
+        False  # Hide the spinner during a clean run; render only if the stage ends in a problem state
+    )
 
     # Runtime state (instance fields)
     start_time: datetime | None = None
@@ -80,15 +87,17 @@ class Stage:
     def to_dict(self) -> dict:
         data = converter.unstructure(self)
         # Inject class-level metadata into the dict
-        data.update({
-            'name': self.name,
-            'msg': self.msg,
-            'description': self.description,
-            'parent': self.parent,
-            'optional': self.optional,
-            'hidden': self.hidden,
-            'collapse': self.collapse,
-        })
+        data.update(
+            {
+                'name': self.name,
+                'msg': self.msg,
+                'description': self.description,
+                'parent': self.parent,
+                'optional': self.optional,
+                'hidden': self.hidden,
+                'collapse': self.collapse,
+            }
+        )
         return data
 
     @classmethod
@@ -102,16 +111,20 @@ class Stage:
     def get_subclasses(cls) -> list[type]:
         """Recursively get all subclasses of this Stage class."""
         subclasses = set()
+
         def recurse(sub):
             for sc in sub.__subclasses__():
                 subclasses.add(sc)
                 recurse(sc)
+
         recurse(cls)
         return list(subclasses)
+
 
 # ----------------------------------
 # Concrete Stages
 # ----------------------------------
+
 
 @register_stage
 @attrs.define
@@ -119,6 +132,7 @@ class VMRunStage(Stage):
     name: ClassVar[str] = 'vm_start'
     msg: ClassVar[str] = 'Starting Virtual Machine'
     parent: ClassVar[str] = 'vm_setup'
+
 
 @register_stage
 @attrs.define
@@ -128,6 +142,7 @@ class VMStopStage(Stage):
     parent: ClassVar[str] = 'cleanup_shutdown'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMDestroyStage(Stage):
@@ -135,6 +150,7 @@ class VMDestroyStage(Stage):
     msg: ClassVar[str] = 'Destroying Virtual Machine'
     parent: ClassVar[str] = 'cleanup_shutdown'
     collapse: ClassVar[bool] = True
+
 
 @register_stage
 @attrs.define
@@ -144,6 +160,7 @@ class VMWaitTillReadyStage(Stage):
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMStartStage(Stage):
@@ -151,6 +168,7 @@ class VMStartStage(Stage):
     msg: ClassVar[str] = 'Starting virtual machine'
     description: ClassVar[str] = 'Booting the VM via hypervisor'
     parent: ClassVar[str] = 'vm_setup'
+
 
 @register_stage
 @attrs.define
@@ -160,6 +178,7 @@ class VMGuestAgentWaitStage(Stage):
     description: ClassVar[str] = 'Waiting for guest agent and display server'
     parent: ClassVar[str] = 'vm_setup'
 
+
 @register_stage
 @attrs.define
 class VMCreateStage(Stage):
@@ -167,6 +186,7 @@ class VMCreateStage(Stage):
     msg: ClassVar[str] = 'Creating Virtual Machine'
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
+
 
 @register_stage
 @attrs.define
@@ -176,6 +196,7 @@ class VMDiskPreparationStage(Stage):
     description: ClassVar[str] = 'Converting disk format and creating experiment environment'
     parent: ClassVar[str] = 'vm_setup'
 
+
 @register_stage
 @attrs.define
 class VMIntegrityVerificationStage(Stage):
@@ -184,6 +205,7 @@ class VMIntegrityVerificationStage(Stage):
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMImportStage(Stage):
@@ -191,6 +213,7 @@ class VMImportStage(Stage):
     msg: ClassVar[str] = 'Importing VM'
     parent: ClassVar[str] = 'vm_disk_preparation'
     collapse: ClassVar[bool] = True
+
 
 @register_stage
 @attrs.define
@@ -201,6 +224,7 @@ class VMDiskOverlayCreationStage(Stage):
     parent: ClassVar[str] = 'vm_disk_preparation'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMDiskFormatDetectionStage(Stage):
@@ -209,6 +233,7 @@ class VMDiskFormatDetectionStage(Stage):
     description: ClassVar[str] = 'Determining source disk format (qcow2, vmdk, ova, etc.)'
     parent: ClassVar[str] = 'vm_disk_preparation'
     collapse: ClassVar[bool] = True
+
 
 @register_stage
 @attrs.define
@@ -219,6 +244,7 @@ class VMDiskConversionStage(Stage):
     parent: ClassVar[str] = 'vm_disk_preparation'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMNetworkingStage(Stage):
@@ -227,6 +253,7 @@ class VMNetworkingStage(Stage):
     description: ClassVar[str] = 'Setting up port forwarding for WebSocket communication'
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
+
 
 @register_stage
 @attrs.define
@@ -237,6 +264,7 @@ class VMFileTransferSetupStage(Stage):
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMPostBootTransferStage(Stage):
@@ -245,6 +273,7 @@ class VMPostBootTransferStage(Stage):
     description: ClassVar[str] = 'Post-boot file transfer (mount VirtioFS shares or upload files via QGA)'
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
+
 
 @register_stage
 @attrs.define
@@ -255,6 +284,7 @@ class VMRuntimePreparationStage(Stage):
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMInstanceAllocationStage(Stage):
@@ -263,6 +293,7 @@ class VMInstanceAllocationStage(Stage):
     description: ClassVar[str] = 'Finding or creating VM instance, synchronizing state, managing snapshots'
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
+
 
 @register_stage
 @attrs.define
@@ -273,6 +304,7 @@ class VMInstanceSyncStage(Stage):
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMInstanceVerificationStage(Stage):
@@ -281,6 +313,7 @@ class VMInstanceVerificationStage(Stage):
     description: ClassVar[str] = 'Checking VM exists in VirtualBox and recovering if missing'
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
+
 
 @register_stage
 @attrs.define
@@ -291,6 +324,7 @@ class VMMountSharedDirectoriesStage(Stage):
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMMountVirtioFSStage(Stage):
@@ -300,12 +334,14 @@ class VMMountVirtioFSStage(Stage):
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class ExperimentIntegrityCheckStage(Stage):
     name: ClassVar[str] = 'integrity_check_experiment'
     msg: ClassVar[str] = 'Checking experiment integrity'
     parent: ClassVar[str] = 'experiment_preparation'
+
 
 @register_stage
 @attrs.define
@@ -314,12 +350,14 @@ class ProjectIntegrityCheckStage(Stage):
     msg: ClassVar[str] = 'Checking project integrity'
     parent: ClassVar[str] = 'experiment_preparation'
 
+
 @register_stage
 @attrs.define
 class InstallAdareVMStage(Stage):
     name: ClassVar[str] = 'install_adare_vm'
     msg: ClassVar[str] = 'Installing Agent (AdareVM)'
     parent: ClassVar[str | None] = None
+
 
 @register_stage
 @attrs.define
@@ -328,12 +366,14 @@ class ConnectToVMStage(Stage):
     msg: ClassVar[str] = 'Connecting to Agent'
     parent: ClassVar[str | None] = None
 
+
 @register_stage
 @attrs.define
 class InstallationsStage(Stage):
     name: ClassVar[str] = 'environment_installations'
     msg: ClassVar[str] = 'Installing environment software'
     parent: ClassVar[str | None] = None
+
 
 @register_stage
 @attrs.define
@@ -343,12 +383,14 @@ class TestfunctionDependenciesStage(Stage):
     description: ClassVar[str] = 'Installing Python packages required by testfunctions via Poetry'
     parent: ClassVar[str | None] = None
 
+
 @register_stage
 @attrs.define
 class ExperimentRunStage(Stage):
     name: ClassVar[str] = 'experiment_run'
     msg: ClassVar[str] = 'Running the playbook'
     parent: ClassVar[str | None] = None
+
 
 @register_stage
 @attrs.define
@@ -359,12 +401,14 @@ class SystemInfoCollectionStage(Stage):
     parent: ClassVar[str | None] = None
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class ExperimentTestStage(Stage):
     name: ClassVar[str] = 'experiment_test'
     msg: ClassVar[str] = 'Running test'
     parent: ClassVar[str] = 'experiment_run'
+
 
 @register_stage
 @attrs.define
@@ -373,12 +417,14 @@ class ExperimentGuiClickStage(Stage):
     msg: ClassVar[str] = 'GUI click action'
     parent: ClassVar[str] = 'experiment_run'
 
+
 @register_stage
 @attrs.define
 class ExperimentGuiIdleStage(Stage):
     name: ClassVar[str] = 'gui_idle'
     msg: ClassVar[str] = 'GUI idle wait'
     parent: ClassVar[str] = 'experiment_run'
+
 
 @register_stage
 @attrs.define
@@ -387,12 +433,14 @@ class ExperimentGuiFindStage(Stage):
     msg: ClassVar[str] = 'GUI find element'
     parent: ClassVar[str] = 'experiment_run'
 
+
 @register_stage
 @attrs.define
 class ExperimentActionStage(Stage):
     name: ClassVar[str] = 'experiment_action'
     msg: ClassVar[str] = 'Executing action'
     parent: ClassVar[str] = 'experiment_run'
+
 
 @register_stage
 @attrs.define
@@ -401,12 +449,14 @@ class ExperimentActionFindStage(Stage):
     msg: ClassVar[str] = 'Finding target'
     parent: ClassVar[str] = 'experiment_action'
 
+
 @register_stage
 @attrs.define
 class ExperimentActionExecuteStage(Stage):
     name: ClassVar[str] = 'action_execute'
     msg: ClassVar[str] = 'Executing action'
     parent: ClassVar[str] = 'experiment_action'
+
 
 @register_stage
 @attrs.define
@@ -415,6 +465,7 @@ class ExperimentGuiKeypressStage(Stage):
     msg: ClassVar[str] = 'GUI keypress action'
     parent: ClassVar[str] = 'experiment_run'
 
+
 @register_stage
 @attrs.define
 class ExperimentCommandStage(Stage):
@@ -422,15 +473,18 @@ class ExperimentCommandStage(Stage):
     msg: ClassVar[str] = 'Executing command'
     parent: ClassVar[str] = 'experiment_run'
 
+
 @register_stage
 @attrs.define
 class VagrantBoxExistCheckStage(Stage):
     name: ClassVar[str] = 'vm_exist_check'
     msg: ClassVar[str] = 'Checking if Vagrant box exists'
 
+
 # ----------------------------------
 # Top-Level Parent Stages (Main Progress Phases)
 # ----------------------------------
+
 
 @register_stage
 @attrs.define
@@ -439,12 +493,14 @@ class ExperimentPreparationStage(Stage):
     msg: ClassVar[str] = 'Preparing experiment'
     description: ClassVar[str] = 'Setting up directories, validating configuration, and performing integrity checks'
 
+
 @register_stage
 @attrs.define
 class VirtualMachineSetupStage(Stage):
     name: ClassVar[str] = 'vm_setup'
     msg: ClassVar[str] = 'Setting up Virtual Machine'
     description: ClassVar[str] = 'Creating, starting, and configuring the virtual machine'
+
 
 @register_stage
 @attrs.define
@@ -454,6 +510,7 @@ class SoftwareInstallationStage(Stage):
     description: ClassVar[str] = 'Installing AdareVM, connecting services, and setting up environment'
     hidden: ClassVar[bool] = True  # Grouping wrapper only; children are now top-level rows
 
+
 @register_stage
 @attrs.define
 class ExperimentExecutionStage(Stage):
@@ -462,6 +519,7 @@ class ExperimentExecutionStage(Stage):
     description: ClassVar[str] = 'Running the experiment playbook and tests'
     hidden: ClassVar[bool] = True  # Grouping wrapper only; children are now top-level rows
 
+
 @register_stage
 @attrs.define
 class CleanupShutdownStage(Stage):
@@ -469,9 +527,11 @@ class CleanupShutdownStage(Stage):
     msg: ClassVar[str] = 'Shutdown & Cleanup'
     description: ClassVar[str] = 'Finalizing results and cleaning up resources'
 
+
 # ----------------------------------
 # Sub-Stages for Experiment Preparation (Consolidated)
 # ----------------------------------
+
 
 @register_stage
 @attrs.define
@@ -482,6 +542,7 @@ class SetupExperimentEnvironmentStage(Stage):
     parent: ClassVar[str] = 'experiment_preparation'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class ValidateIntegrityStage(Stage):
@@ -490,6 +551,7 @@ class ValidateIntegrityStage(Stage):
     description: ClassVar[str] = 'Checking experiment integrity and project integrity'
     parent: ClassVar[str] = 'experiment_preparation'
     collapse: ClassVar[bool] = True
+
 
 @register_stage
 @attrs.define
@@ -500,6 +562,7 @@ class PrepareRunEnvironmentStage(Stage):
     parent: ClassVar[str] = 'experiment_preparation'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class StartComputerVisionServerStage(Stage):
@@ -507,9 +570,11 @@ class StartComputerVisionServerStage(Stage):
     msg: ClassVar[str] = 'Starting computer vision server'
     parent: ClassVar[str | None] = None
 
+
 # ----------------------------------
 # Sub-Stages for Cleanup & Shutdown
 # ----------------------------------
+
 
 @register_stage
 @attrs.define
@@ -519,6 +584,7 @@ class FinalizeStage(Stage):
     parent: ClassVar[str] = 'cleanup_shutdown'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class ShutdownComputerVisionServerStage(Stage):
@@ -526,6 +592,7 @@ class ShutdownComputerVisionServerStage(Stage):
     msg: ClassVar[str] = 'Stopping computer vision server'
     parent: ClassVar[str] = 'cleanup_shutdown'
     collapse: ClassVar[bool] = True
+
 
 @register_stage
 @attrs.define
@@ -535,9 +602,11 @@ class ShutdownWebSocketStage(Stage):
     parent: ClassVar[str] = 'cleanup_shutdown'
     collapse: ClassVar[bool] = True
 
+
 # ----------------------------------
 # VM Snapshot Management Stages
 # ----------------------------------
+
 
 @register_stage
 @attrs.define
@@ -546,6 +615,7 @@ class VMSnapshotRestoreStage(Stage):
     msg: ClassVar[str] = 'Resetting VM to base snapshot'
     description: ClassVar[str] = 'Fast restore from base snapshot for quick setup'
     parent: ClassVar[str] = 'vm_setup'
+
 
 @register_stage
 @attrs.define
@@ -556,6 +626,7 @@ class VMSnapshotCreateStage(Stage):
     parent: ClassVar[str] = 'vm_setup'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMExperimentSnapshotStage(Stage):
@@ -565,6 +636,7 @@ class VMExperimentSnapshotStage(Stage):
     parent: ClassVar[str] = 'cleanup_shutdown'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMTestSetupStage(Stage):
@@ -572,6 +644,7 @@ class VMTestSetupStage(Stage):
     msg: ClassVar[str] = 'VM Compatibility Test Setup'
     description: ClassVar[str] = 'Setting up VM compatibility test environment'
     parent: ClassVar[str | None] = None
+
 
 @register_stage
 @attrs.define
@@ -581,6 +654,7 @@ class VMCompatibilityTestStage(Stage):
     description: ClassVar[str] = 'Running ADARE compatibility tests on the VM'
     parent: ClassVar[str | None] = None
 
+
 @register_stage
 @attrs.define
 class VMTestCleanupStage(Stage):
@@ -588,6 +662,7 @@ class VMTestCleanupStage(Stage):
     msg: ClassVar[str] = 'VM Test Cleanup'
     description: ClassVar[str] = 'Cleaning up VM test resources'
     parent: ClassVar[str | None] = None
+
 
 # VM Test Substages - Individual compatibility tests
 @register_stage
@@ -598,6 +673,7 @@ class VMResponseTestStage(Stage):
     description: ClassVar[str] = 'Verify VM can execute basic commands'
     parent: ClassVar[str] = 'vm_compatibility_test'
 
+
 @register_stage
 @attrs.define
 class VMSharedFoldersTestStage(Stage):
@@ -605,6 +681,7 @@ class VMSharedFoldersTestStage(Stage):
     msg: ClassVar[str] = 'Testing shared folder accessibility'
     description: ClassVar[str] = 'Verify VM can access mounted shared folders'
     parent: ClassVar[str] = 'vm_compatibility_test'
+
 
 @register_stage
 @attrs.define
@@ -614,6 +691,7 @@ class VMPythonTestStage(Stage):
     description: ClassVar[str] = 'Verify Python is available in VM'
     parent: ClassVar[str] = 'vm_compatibility_test'
 
+
 @register_stage
 @attrs.define
 class VMUvTestStage(Stage):
@@ -621,6 +699,7 @@ class VMUvTestStage(Stage):
     msg: ClassVar[str] = 'Testing uv installation'
     description: ClassVar[str] = 'Verify uv is available in VM'
     parent: ClassVar[str] = 'vm_compatibility_test'
+
 
 @register_stage
 @attrs.define
@@ -630,6 +709,7 @@ class VMAdareServerTestStage(Stage):
     description: ClassVar[str] = 'Install dependencies and start AdareVM WebSocket server'
     parent: ClassVar[str] = 'vm_compatibility_test'
 
+
 @register_stage
 @attrs.define
 class VMWebSocketTestStage(Stage):
@@ -637,6 +717,7 @@ class VMWebSocketTestStage(Stage):
     msg: ClassVar[str] = 'Testing WebSocket connection'
     description: ClassVar[str] = 'Establish WebSocket connection to AdareVM server'
     parent: ClassVar[str] = 'vm_compatibility_test'
+
 
 @register_stage
 @attrs.define
@@ -646,6 +727,7 @@ class VMScreenshotTestStage(Stage):
     description: ClassVar[str] = 'Verify screenshot functionality via WebSocket'
     parent: ClassVar[str] = 'vm_compatibility_test'
 
+
 @register_stage
 @attrs.define
 class VMClickTestStage(Stage):
@@ -653,6 +735,7 @@ class VMClickTestStage(Stage):
     msg: ClassVar[str] = 'Testing mouse click commands'
     description: ClassVar[str] = 'Verify mouse click functionality via WebSocket'
     parent: ClassVar[str] = 'vm_compatibility_test'
+
 
 @register_stage
 @attrs.define
@@ -662,6 +745,7 @@ class VMHostScreenshotTestStage(Stage):
     description: ClassVar[str] = 'Verify screenshot functionality via host-side QMP screendump'
     parent: ClassVar[str] = 'vm_compatibility_test'
 
+
 @register_stage
 @attrs.define
 class VMHostClickTestStage(Stage):
@@ -669,6 +753,7 @@ class VMHostClickTestStage(Stage):
     msg: ClassVar[str] = 'Testing mouse click (host/QMP)'
     description: ClassVar[str] = 'Verify mouse click functionality via host-side QMP input-send-event'
     parent: ClassVar[str] = 'vm_compatibility_test'
+
 
 @register_stage
 @attrs.define
@@ -679,6 +764,7 @@ class VMFileTransferRetrievalStage(Stage):
     parent: ClassVar[str] = 'cleanup_shutdown'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMHostDiffStage(Stage):
@@ -687,6 +773,7 @@ class VMHostDiffStage(Stage):
     description: ClassVar[str] = 'Comparing base and overlay disk images using virt-diff'
     parent: ClassVar[str] = 'cleanup_shutdown'
     collapse: ClassVar[bool] = True
+
 
 @register_stage
 @attrs.define
@@ -697,6 +784,7 @@ class VMDiskExportStage(Stage):
     parent: ClassVar[str] = 'cleanup_shutdown'
     collapse: ClassVar[bool] = True
 
+
 @register_stage
 @attrs.define
 class VMMemoryDumpStage(Stage):
@@ -705,6 +793,7 @@ class VMMemoryDumpStage(Stage):
     description: ClassVar[str] = "Capturing the VM's live RAM via QMP dump-guest-memory"
     parent: ClassVar[str] = 'cleanup_shutdown'
     collapse: ClassVar[bool] = True
+
 
 @register_stage
 @attrs.define

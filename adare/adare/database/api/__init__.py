@@ -26,7 +26,6 @@ __all__ = [
     'EnhancedDatabaseApi',
     'SyncMetadataApi',
     'TagApi',
-
     # Existing APIs
     'DatabaseApi',
     'ProjectDbApi',

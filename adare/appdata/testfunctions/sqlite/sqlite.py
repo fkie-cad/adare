@@ -13,6 +13,7 @@ from adarelib.event.event import TestResult
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 # SQLite keeps committed-but-uncheckpointed changes (WAL mode) or an interrupted
@@ -53,7 +54,7 @@ def _snapshot(db_path: str, workdir: str) -> tuple[str, list[str], bool]:
     db_copy = os.path.join(workdir, os.path.basename(db_path))
     hashes = []
     for src in sources:
-        dst = db_copy + src[len(db_path):]
+        dst = db_copy + src[len(db_path) :]
         try:
             shutil.copyfile(src, dst)
         except FileNotFoundError:
@@ -99,7 +100,9 @@ def query_result(ctx: TestContext, dst: str, query: str, expected_rows: int = No
     """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.error([f'database file {dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+        return TestResult.error(
+            [f'database file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+        )
     if not os.path.isfile(dst_resolved):
         return TestResult.failed([f'database file {dst_resolved} does not exist'])
 
@@ -109,7 +112,9 @@ def query_result(ctx: TestContext, dst: str, query: str, expected_rows: int = No
         db_copy, hashes, changed = _snapshot(dst_resolved, workdir)
         snapshot_details = [f'queried snapshot: {h}' for h in hashes]
         if changed:
-            snapshot_details.append('warning: database files changed while being copied; the snapshot may be inconsistent')
+            snapshot_details.append(
+                'warning: database files changed while being copied; the snapshot may be inconsistent'
+            )
 
         try:
             with contextlib.closing(sqlite3.connect(db_copy)) as conn:

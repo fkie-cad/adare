@@ -7,6 +7,7 @@ Implements AbstractVM for QEMU-specific VM management using:
 - QEMU Guest Agent for runtime command execution
 - qcow2 internal snapshots
 """
+
 import asyncio
 import json
 import logging
@@ -54,7 +55,15 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
+class QEMUVM(
+    RegistryMixin,
+    ConfigurationMixin,
+    DiskManagementMixin,
+    CommandExecutionMixin,
+    SnapshotMixin,
+    NetworkingMixin,
+    AbstractVM,
+):
     """
     QEMU VM management class with modular operations.
     Inherits from mixins for registry, configuration, disk management, command execution, snapshots, and networking.
@@ -124,7 +133,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         self._path_discovery_attempted = False  # Track if we've tried discovery to prevent retries
 
         # Screen resolution tracking for coordinate normalization (USB tablet uses 0-32767 range)
-        self._screen_width = None   # Current screen width in pixels
+        self._screen_width = None  # Current screen width in pixels
         self._screen_height = None  # Current screen height in pixels
         self._resolution_last_updated = None  # Timestamp of last resolution update
 
@@ -155,27 +164,19 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
         conn = self._get_libvirt_connection()
         if not conn:
-            raise HypervisorException(
-                f"Cannot look up domain '{self.vm_name}': libvirt connection not available"
-            )
+            raise HypervisorException(f"Cannot look up domain '{self.vm_name}': libvirt connection not available")
 
         log_file = get_experiment_log_file()
         try:
             with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
                 self._libvirt_domain = conn.lookupByName(self.vm_name)
         except libvirt.libvirtError as e:
-            raise HypervisorException(
-                f"Cannot look up domain '{self.vm_name}': {e}"
-            ) from e
+            raise HypervisorException(f"Cannot look up domain '{self.vm_name}': {e}") from e
 
         return self._libvirt_domain
 
     async def create(
-        self,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ) -> int:
         """
         Create a new QEMU VM disk.
@@ -189,10 +190,10 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Returns:
             Return code (0 for success, non-zero for failure)
         """
+
         async def _create_async():
             if not silent:
-                log.debug(f"Creating QEMU VM '{self.vm_name}' with "
-                        f"{self.cpus} CPUs, {self.ram}MB RAM")
+                log.debug(f"Creating QEMU VM '{self.vm_name}' with {self.cpus} CPUs, {self.ram}MB RAM")
 
             qemu_img_exe = self.executables.qemu_img
 
@@ -206,7 +207,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 stop_event=stop_event,
                 silent=silent,
                 ctx_manager=ctx_manager,
-                operation_name="disk creation"
+                operation_name="disk creation",
             )
 
             if returncode == 0:
@@ -243,6 +244,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 # Don't use self.manager.libvirt_conn to avoid shared connection issues
                 self._libvirt_conn = libvirt.open(libvirt_uri)
                 from adare.hypervisor.qemu.libvirt_errors import install_libvirt_error_logger
+
                 install_libvirt_error_logger()
                 log.debug(f"Created thread-local libvirt connection for {self.vm_name}")
             except libvirt.libvirtError as e:
@@ -276,15 +278,18 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
         # Check if virtiofs is supported (requires system mode, not session)
         from adare.config import HYPERVISOR_CONFIGS
+
         qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
         libvirt_uri = qemu_config.get('libvirt_uri', 'qemu:///session')
         is_session_mode = 'session' in libvirt_uri
 
         if self.config.virtiofs_enabled and self.config.virtiofs_shares:
             if is_session_mode:
-                log.warning(f"Disabling virtiofs shares for {self.vm_name} "
-                           f"(not supported in session mode: {libvirt_uri}). "
-                           f"Falling back to libguestfs file transfer.")
+                log.warning(
+                    f"Disabling virtiofs shares for {self.vm_name} "
+                    f"(not supported in session mode: {libvirt_uri}). "
+                    f"Falling back to libguestfs file transfer."
+                )
                 virtiofs_shares = None
             else:
                 virtiofs_shares = self.config.virtiofs_shares
@@ -294,7 +299,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             self.config,
             display_enabled=self.config.display_enabled,
             vnc_port=self.config.vnc_port,
-            virtiofs_shares=virtiofs_shares
+            virtiofs_shares=virtiofs_shares,
         )
 
         log.debug(f"Generated libvirt XML for {self.vm_name}")
@@ -356,9 +361,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             return domain
 
         except libvirt.libvirtError as e:
-            raise HypervisorException(
-                f"Failed to define libvirt domain '{self.vm_name}': {e}"
-            ) from e
+            raise HypervisorException(f"Failed to define libvirt domain '{self.vm_name}': {e}") from e
 
     def _build_qemu_command(self) -> list[str]:
         """
@@ -379,16 +382,22 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
         cmd = [
             qemu_system_exe,
-            '-name', self.vm_name,
-            '-machine', f"{machine_type},accel={self.accel}",
-            '-cpu', 'host',
-            '-smp', str(self.cpus),
-            '-m', str(self.ram),
+            '-name',
+            self.vm_name,
+            '-machine',
+            f"{machine_type},accel={self.accel}",
+            '-cpu',
+            'host',
+            '-smp',
+            str(self.cpus),
+            '-m',
+            str(self.ram),
         ]
 
         # Add UEFI firmware if boot mode is uefi
         if self.config.boot_mode == 'uefi':
             from adare.hypervisor.qemu.firmware import create_nvram_for_vm, find_ovmf_firmware
+
             ovmf_code, _ = find_ovmf_firmware(self.architecture)
 
             # Create/get NVRAM for this VM
@@ -396,56 +405,69 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             nvram_path = create_nvram_for_vm(self.vm_name, vm_config_dir, architecture=self.architecture)
 
             # Add OVMF firmware drives
-            cmd.extend([
-                '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
-                '-drive', f'if=pflash,format=raw,file={nvram_path}'
-            ])
+            cmd.extend(
+                [
+                    '-drive',
+                    f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
+                    '-drive',
+                    f'if=pflash,format=raw,file={nvram_path}',
+                ]
+            )
 
         # Add main disk — ARM64 uses NVMe (native Windows driver, matches install).
         # x86_64 uses virtio (viostor loaded by Windows).
         if self.architecture == 'aarch64':
-            cmd.extend([
-                '-drive', f"file={self.config.disk_path},format={self.drive_format},if=none,id=hd0",
-                '-device', 'nvme,drive=hd0,serial=disk0',
-            ])
+            cmd.extend(
+                [
+                    '-drive',
+                    f"file={self.config.disk_path},format={self.drive_format},if=none,id=hd0",
+                    '-device',
+                    'nvme,drive=hd0,serial=disk0',
+                ]
+            )
         else:
-            cmd.extend([
-                '-drive', f"file={self.config.disk_path},format={self.drive_format},if=virtio",
-            ])
-        cmd.extend([
-            # '-display', 'none',  # Headless
-            '-daemonize',  # Run as daemon
-            '-pidfile', self.config.pid_file_path
-        ])
-
+            cmd.extend(
+                [
+                    '-drive',
+                    f"file={self.config.disk_path},format={self.drive_format},if=virtio",
+                ]
+            )
+        cmd.extend(
+            [
+                # '-display', 'none',  # Headless
+                '-daemonize',  # Run as daemon
+                '-pidfile',
+                self.config.pid_file_path,
+            ]
+        )
 
         # Always redirect QEMU debug/serial logs to /tmp to avoid permission issues
         # (QEMU process user vs Experiment runner user)
         # This is safer than relying on config checks or permission inheritance
         if self.config.qemu_debug_log_path:
-             log_path = f"/tmp/adare_qemu_debug_{self.vm_name}.log"
-             cmd.extend(['-D', log_path])
-             cmd.extend(['-d', 'guest_errors,cpu_reset,unimp'])
+            log_path = f"/tmp/adare_qemu_debug_{self.vm_name}.log"
+            cmd.extend(['-D', log_path])
+            cmd.extend(['-d', 'guest_errors,cpu_reset,unimp'])
 
         # Add serial console redirect if configured
         if self.config.serial_console_log_path:
             serial_path = f"/tmp/adare_serial_{self.vm_name}.log"
-            cmd.extend([
-                '-chardev', f'file,id=serial0,path={serial_path}',
-                '-serial', 'chardev:serial0'
-            ])
+            cmd.extend(['-chardev', f'file,id=serial0,path={serial_path}', '-serial', 'chardev:serial0'])
 
         # Add QMP monitor socket
-        cmd.extend([
-            '-qmp', f"unix:{self.config.qmp_socket_path},server=on,wait=off"
-        ])
+        cmd.extend(['-qmp', f"unix:{self.config.qmp_socket_path},server=on,wait=off"])
 
         # Add QEMU Guest Agent socket
-        cmd.extend([
-            '-chardev', f"socket,path={self.config.guest_agent_socket_path},server=on,wait=off,id=qga0",
-            '-device', 'virtio-serial',
-            '-device', 'virtserialport,chardev=qga0,name=org.qemu.guest_agent.0'
-        ])
+        cmd.extend(
+            [
+                '-chardev',
+                f"socket,path={self.config.guest_agent_socket_path},server=on,wait=off,id=qga0",
+                '-device',
+                'virtio-serial',
+                '-device',
+                'virtserialport,chardev=qga0,name=org.qemu.guest_agent.0',
+            ]
+        )
 
         # Add network with port forwarding
         netdev_args = "user,id=net0"
@@ -458,7 +480,11 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             host_ip = rule.get('host_ip', '')
             guest_ip = rule.get('guest_ip', '')
 
-            hostfwd = f"{protocol}:{host_ip}:{host_port}-{guest_ip}:{guest_port}" if host_ip else f"{protocol}::{host_port}-:{guest_port}"
+            hostfwd = (
+                f"{protocol}:{host_ip}:{host_port}-{guest_ip}:{guest_port}"
+                if host_ip
+                else f"{protocol}::{host_port}-:{guest_port}"
+            )
             netdev_args += f",hostfwd={hostfwd}"
 
         cmd.extend(['-netdev', netdev_args])
@@ -474,7 +500,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         stop_event=None,
         log_file: Path | None = None,
         silent: bool = False,
-        stage_ctx=None
+        stage_ctx=None,
     ) -> int:
         """
         Start the QEMU VM via libvirt.
@@ -498,6 +524,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             VMAlreadyRunningException: If VM is already running and raise_if_running=True
             HypervisorException: If libvirt domain definition fails
         """
+
         async def _start_async():
             import libvirt
 
@@ -511,6 +538,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             # touches a socket with a live listener; keep our own sockets for the
             # explicit per-VM cleanup that follows.
             from adare.hypervisor.qemu.mixins.configuration import sweep_stale_sockets
+
             sweep_stale_sockets(keep={self.config.qmp_socket_path, self.config.guest_agent_socket_path})
 
             # Clean up any stale socket files before starting
@@ -612,13 +640,10 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                             self.vm_name,
                             f"VM '{self.vm_name}' failed to start. "
                             f"Domain state: {state}, Active: {is_active}. "
-                            f"Check experiment log for libvirt errors."
+                            f"Check experiment log for libvirt errors.",
                         )
                 except libvirt.libvirtError as e:
-                    raise VMStartException(
-                        self.vm_name,
-                        f"Cannot verify VM state after start attempt: {e}"
-                    ) from e
+                    raise VMStartException(self.vm_name, f"Cannot verify VM state after start attempt: {e}") from e
 
                 if not silent:
                     log.info(f"VM '{self.vm_name}' started successfully")
@@ -654,7 +679,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         log_file: Path | None = None,
         silent: bool = False,
         force: bool = False,
-        timeout: int = 60
+        timeout: int = 60,
     ) -> int:
         """
         Stop the QEMU VM gracefully via libvirt.
@@ -669,6 +694,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Returns:
             Return code (0 for success, non-zero for failure)
         """
+
         async def _stop_async():
             import libvirt
 
@@ -746,11 +772,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         return await self.manager.run_async(_stop_async)
 
     async def destroy(
-        self,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ) -> int:
         """
         Destroy the QEMU VM (undefine libvirt domain, delete disk and config).
@@ -764,6 +786,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Returns:
             Return code (0 for success, non-zero for failure)
         """
+
         async def _destroy_async():
             import libvirt
 
@@ -840,7 +863,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     except OSError as e:
                         if attempt < 2:
                             if not silent:
-                                log.debug(f"Disk deletion attempt {attempt+1} failed, retrying: {e}")
+                                log.debug(f"Disk deletion attempt {attempt + 1} failed, retrying: {e}")
                             await asyncio.sleep(0.5)
                         else:
                             log.error(f"Failed to delete disk after 3 attempts: {e}")
@@ -953,7 +976,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 libvirt.VIR_DOMAIN_SHUTDOWN: 'poweroff',
                 libvirt.VIR_DOMAIN_SHUTOFF: 'poweroff',
                 libvirt.VIR_DOMAIN_CRASHED: 'poweroff',
-                libvirt.VIR_DOMAIN_PMSUSPENDED: 'paused'
+                libvirt.VIR_DOMAIN_PMSUSPENDED: 'paused',
             }
 
             return state_map.get(state, 'unknown')
@@ -997,7 +1020,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         inject_user_path: bool = False,
         redirect_stdout: str = "",
         redirect_stderr: str = "",
-        **kwargs
+        **kwargs,
     ) -> CommandResult:
         """
         Run a command in the guest VM via QEMU Guest Agent.
@@ -1032,21 +1055,13 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             run_as_user=run_as_user,
             inject_user_path=inject_user_path,
             redirect_stdout=redirect_stdout,
-            redirect_stderr=redirect_stderr
+            redirect_stderr=redirect_stderr,
         )
 
-        return CommandResult(
-            returncode=returncode,
-            stdout=stdout,
-            stderr=stderr
-        )
+        return CommandResult(returncode=returncode, stdout=stdout, stderr=stderr)
 
     async def wait_until_fully_booted(
-        self,
-        timeout: int = 300,
-        ctx_manager=None,
-        stop_event=None,
-        skip_x11_discovery: bool = False
+        self, timeout: int = 300, ctx_manager=None, stop_event=None, skip_x11_discovery: bool = False
     ) -> bool:
         """
         Wait until VM is fully booted and guest agent is responsive.
@@ -1089,11 +1104,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
                 exec_cmd = {
                     "execute": "guest-exec",
-                    "arguments": {
-                        "path": test_path,
-                        "arg": test_args,
-                        "capture-output": True
-                    }
+                    "arguments": {"path": test_path, "arg": test_args, "capture-output": True},
                 }
 
                 exec_response = await self._send_qga_command_via_libvirt(exec_cmd)
@@ -1119,10 +1130,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 test_start = time.time()
 
                 while time.time() - test_start < test_timeout:
-                    status_cmd = {
-                        "execute": "guest-exec-status",
-                        "arguments": {"pid": pid}
-                    }
+                    status_cmd = {"execute": "guest-exec-status", "arguments": {"pid": pid}}
 
                     status_response = await self._send_qga_command_via_libvirt(status_cmd)
 
@@ -1225,10 +1233,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             log.warning("PATH discovery failed, will use hardcoded fallback")
 
     async def create_from_ovf_or_ova(
-        self,
-        file_path: Path,
-        silent: bool = False,
-        try_extract: bool = True
+        self, file_path: Path, silent: bool = False, try_extract: bool = True
     ) -> tuple[int, str]:
         """
         Create VM from OVF/OVA file by converting disk to qcow2.
@@ -1252,6 +1257,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         if str(file_path).endswith('.ova') and try_extract:
             # Extract OVA (it's a tar file)
             import tarfile
+
             extract_dir = file_path.parent / f"{file_path.stem}_extracted"
             extract_dir.mkdir(exist_ok=True)
 
@@ -1348,13 +1354,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         """Queue a command for later execution."""
         self._command_queue.append({'command': command, 'description': description})
 
-    async def execute_queued_commands(
-        self,
-        ctx_manager=None,
-        stop_event=None,
-        log_file=None,
-        silent=False
-    ):
+    async def execute_queued_commands(self, ctx_manager=None, stop_event=None, log_file=None, silent=False):
         """Execute all queued commands."""
         for cmd_info in self._command_queue:
             command = cmd_info['command']
@@ -1380,8 +1380,10 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Returns:
             Response dictionary
         """
+
         async def _qmp_async():
             import libvirt_qemu
+
             try:
                 # Ensure libvirt domain is available
                 try:
@@ -1398,7 +1400,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     result = libvirt_qemu.qemuMonitorCommand(
                         self._libvirt_domain,
                         cmd_json,
-                        0  # flags (0 = default QMP mode)
+                        0,  # flags (0 = default QMP mode)
                     )
 
                 response = json.loads(result)
@@ -1435,10 +1437,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Returns:
             Tuple of (success, error_message)
         """
-        command = {
-            "execute": "screendump",
-            "arguments": {"filename": output_path}
-        }
+        command = {"execute": "screendump", "arguments": {"filename": output_path}}
         response = await self._send_qmp_command(command)
 
         if 'return' in response:
@@ -1456,10 +1455,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         if self._tablet_activated:
             return
 
-        response = await self._send_qmp_command({
-            "execute": "human-monitor-command",
-            "arguments": {"command-line": "info mice"}
-        })
+        response = await self._send_qmp_command(
+            {"execute": "human-monitor-command", "arguments": {"command-line": "info mice"}}
+        )
         output = response.get('return', '')
 
         for line in output.strip().split('\n'):
@@ -1468,10 +1466,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     self._tablet_activated = True
                     return
                 idx = line.split('#')[1].split(':')[0].strip()
-                await self._send_qmp_command({
-                    "execute": "human-monitor-command",
-                    "arguments": {"command-line": f"mouse_set {idx}"}
-                })
+                await self._send_qmp_command(
+                    {"execute": "human-monitor-command", "arguments": {"command-line": f"mouse_set {idx}"}}
+                )
                 self._tablet_activated = True
                 log.debug(f"Activated USB tablet as primary mouse (index {idx})")
                 return
@@ -1512,9 +1509,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             "arguments": {
                 "events": [
                     {"type": "abs", "data": {"axis": "x", "value": norm_x}},
-                    {"type": "abs", "data": {"axis": "y", "value": norm_y}}
+                    {"type": "abs", "data": {"axis": "y", "value": norm_y}},
                 ]
-            }
+            },
         }
         move_response = await self._send_qmp_command(move_command)
 
@@ -1527,11 +1524,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         # Step 2: Press button
         press_command = {
             "execute": "input-send-event",
-            "arguments": {
-                "events": [
-                    {"type": "btn", "data": {"button": qmp_button, "down": True}}
-                ]
-            }
+            "arguments": {"events": [{"type": "btn", "data": {"button": qmp_button, "down": True}}]},
         }
         press_response = await self._send_qmp_command(press_command)
 
@@ -1544,11 +1537,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         # Step 3: Release button
         release_command = {
             "execute": "input-send-event",
-            "arguments": {
-                "events": [
-                    {"type": "btn", "data": {"button": qmp_button, "down": False}}
-                ]
-            }
+            "arguments": {"events": [{"type": "btn", "data": {"button": qmp_button, "down": False}}]},
         }
         release_response = await self._send_qmp_command(release_command)
 
@@ -1589,9 +1578,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             "arguments": {
                 "events": [
                     {"type": "abs", "data": {"axis": "x", "value": norm_x1}},
-                    {"type": "abs", "data": {"axis": "y", "value": norm_y1}}
+                    {"type": "abs", "data": {"axis": "y", "value": norm_y1}},
                 ]
-            }
+            },
         }
         response1 = await self._send_qmp_command(move_start_command)
         if 'error' in response1:
@@ -1603,11 +1592,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         # Step 2: Press left button
         press_command = {
             "execute": "input-send-event",
-            "arguments": {
-                "events": [
-                    {"type": "btn", "data": {"button": "left", "down": True}}
-                ]
-            }
+            "arguments": {"events": [{"type": "btn", "data": {"button": "left", "down": True}}]},
         }
         response2 = await self._send_qmp_command(press_command)
         if 'error' in response2:
@@ -1633,9 +1618,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 "arguments": {
                     "events": [
                         {"type": "abs", "data": {"axis": "x", "value": ix}},
-                        {"type": "abs", "data": {"axis": "y", "value": iy}}
+                        {"type": "abs", "data": {"axis": "y", "value": iy}},
                     ]
-                }
+                },
             }
             resp = await self._send_qmp_command(move_cmd)
             if 'error' in resp:
@@ -1651,11 +1636,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         # Step 4: Release button
         release_command = {
             "execute": "input-send-event",
-            "arguments": {
-                "events": [
-                    {"type": "btn", "data": {"button": "left", "down": False}}
-                ]
-            }
+            "arguments": {"events": [{"type": "btn", "data": {"button": "left", "down": False}}]},
         }
         response4 = await self._send_qmp_command(release_command)
         if 'error' in response4:
@@ -1681,17 +1662,14 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         success = True
 
         for i in range(0, len(events), BATCH_SIZE):
-            batch = events[i:i + BATCH_SIZE]
+            batch = events[i : i + BATCH_SIZE]
 
-            command = {
-                "execute": "input-send-event",
-                "arguments": {"events": batch}
-            }
+            command = {"execute": "input-send-event", "arguments": {"events": batch}}
 
             response = await self._send_qmp_command(command)
 
             if 'return' not in response:
-                log.error(f"QMP keyboard batch {i//BATCH_SIZE} failed: {response}")
+                log.error(f"QMP keyboard batch {i // BATCH_SIZE} failed: {response}")
                 success = False
                 # Continue trying to send remaining batches?
                 # Probably better to try to finish typing even if one chunk fails,
@@ -1725,10 +1703,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         for _ in range(clicks):
             events.append({"type": "btn", "data": {"button": button, "down": True}})
             events.append({"type": "btn", "data": {"button": button, "down": False}})
-        command = {
-            "execute": "input-send-event",
-            "arguments": {"events": events}
-        }
+        command = {"execute": "input-send-event", "arguments": {"events": events}}
         response = await self._send_qmp_command(command)
         return 'return' in response
 
@@ -1743,13 +1718,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Returns:
             True if successful
         """
-        command = {
-            "execute": "trace-event-set-state",
-            "arguments": {
-                "name": name,
-                "enable": enable
-            }
-        }
+        command = {"execute": "trace-event-set-state", "arguments": {"name": name, "enable": enable}}
         response = await self._send_qmp_command(command)
         return 'return' in response
 
@@ -1769,7 +1738,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             "input_event_btn",
             "input_event_abs",
             "input_event_rel",
-            "ps2_put_keycode" # Fallback/additional info
+            "ps2_put_keycode",  # Fallback/additional info
         ]
 
         success = True
@@ -1782,13 +1751,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
     async def disable_input_tracing(self) -> bool:
         """Disable QEMU tracing for input events."""
-        patterns = [
-            "input_event_key*",
-            "input_event_btn",
-            "input_event_abs",
-            "input_event_rel",
-            "ps2_put_keycode"
-        ]
+        patterns = ["input_event_key*", "input_event_btn", "input_event_abs", "input_event_rel", "ps2_put_keycode"]
 
         success = True
         for pattern in patterns:
@@ -1848,7 +1811,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         normalized_x = max(0, min(32767, normalized_x))
         normalized_y = max(0, min(32767, normalized_y))
 
-        log.debug(f"Normalized coordinates: ({x}, {y}) -> ({normalized_x}, {normalized_y}) "
-                  f"for resolution {self._screen_width}x{self._screen_height}")
+        log.debug(
+            f"Normalized coordinates: ({x}, {y}) -> ({normalized_x}, {normalized_y}) "
+            f"for resolution {self._screen_width}x{self._screen_height}"
+        )
 
         return normalized_x, normalized_y

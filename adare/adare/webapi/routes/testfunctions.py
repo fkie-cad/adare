@@ -1,4 +1,5 @@
 """Test function endpoints."""
+
 import logging
 
 from fastapi import APIRouter, Query
@@ -12,12 +13,15 @@ router = APIRouter(prefix="/api/testfunctions", tags=["testfunctions"])
 
 # ---- Helpers ----
 
+
 def _api():
     from adare.api import AdareAPI
+
     return AdareAPI()
 
 
 # ---- Endpoints ----
+
 
 @router.get("")
 async def list_testfunctions(file_name: str | None = Query(None)):

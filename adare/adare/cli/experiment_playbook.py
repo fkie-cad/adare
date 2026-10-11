@@ -3,6 +3,7 @@
 Split out of ``cli/experiment.py`` to keep that module under the project's
 1000-line ceiling.
 """
+
 import logging
 
 from adare.api import AdareAPI
@@ -23,10 +24,12 @@ def exec_playbook_show(arguments):
     experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
 
     api = AdareAPI()
-    result = api.experiment.read_playbook(PlaybookReadRequest(
-        project_path=project_directory,
-        experiment=experiment_name,
-    ))
+    result = api.experiment.read_playbook(
+        PlaybookReadRequest(
+            project_path=project_directory,
+            experiment=experiment_name,
+        )
+    )
 
     if not result.success:
         handle_api_error(result)
@@ -35,12 +38,14 @@ def exec_playbook_show(arguments):
     log.info('Playbook source: %s (%s)', result.data.path, result.data.source)
     if is_machine_output():
         # json/yaml: wrap the document so a parser gets the provenance too.
-        emit({
-            'experiment': experiment_name,
-            'path': result.data.path,
-            'source': result.data.source,
-            'yaml': RawText(result.data.yaml),  # verbatim, not markup-stripped
-        })
+        emit(
+            {
+                'experiment': experiment_name,
+                'path': result.data.path,
+                'source': result.data.source,
+                'yaml': RawText(result.data.yaml),  # verbatim, not markup-stripped
+            }
+        )
         return
     # rich/plain: the playbook YAML itself is the data.
     print(result.data.yaml)
@@ -70,8 +75,10 @@ def exec_playbook_validate(arguments):
     for warning in result.data.warnings:
         print(f'warning: {warning}', file=sys.stderr)
     if result.data.valid:
-        print_success_message(title=f'Playbook "{playbook_path}" is valid'
-                              + (f' ({len(result.data.warnings)} warning(s))' if result.data.warnings else ''))
+        print_success_message(
+            title=f'Playbook "{playbook_path}" is valid'
+            + (f' ({len(result.data.warnings)} warning(s))' if result.data.warnings else '')
+        )
     else:
         print_error_message(
             title=f'Playbook "{playbook_path}" is invalid',
@@ -98,12 +105,14 @@ def exec_playbook_set(arguments):
         sys.exit(1)
 
     api = AdareAPI()
-    result = api.experiment.write_playbook(PlaybookWriteRequest(
-        project_path=project_directory,
-        experiment=experiment_name,
-        yaml=yaml_content,
-        backup=arguments.backup,
-    ))
+    result = api.experiment.write_playbook(
+        PlaybookWriteRequest(
+            project_path=project_directory,
+            experiment=experiment_name,
+            yaml=yaml_content,
+            backup=arguments.backup,
+        )
+    )
 
     if not result.success:
         handle_api_error(result)
@@ -115,8 +124,9 @@ def exec_playbook_set(arguments):
     if result.data.db_ingested:
         next_steps.append(f'Database re-ingested (playbook version {result.data.version})')
     else:
-        next_steps.append('Experiment not loaded in DB — file written only; '
-                          f'run `adare experiment load {experiment_name}` to ingest')
+        next_steps.append(
+            f'Experiment not loaded in DB — file written only; run `adare experiment load {experiment_name}` to ingest'
+        )
     print_success_message(
         title=f'Playbook written to {result.data.path}',
         next_steps=next_steps,

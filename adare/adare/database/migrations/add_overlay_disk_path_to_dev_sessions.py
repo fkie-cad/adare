@@ -36,9 +36,7 @@ def upgrade(conn) -> None:
         return
 
     print("Adding column 'overlay_disk_path' to dev_sessions table...")
-    conn.execute(text(
-        "ALTER TABLE dev_sessions ADD COLUMN overlay_disk_path VARCHAR(1024) NULL"
-    ))
+    conn.execute(text("ALTER TABLE dev_sessions ADD COLUMN overlay_disk_path VARCHAR(1024) NULL"))
 
 
 def run_migration() -> bool:

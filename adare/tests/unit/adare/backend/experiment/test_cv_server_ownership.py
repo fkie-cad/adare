@@ -31,12 +31,14 @@ def _fake_ps(cmdlines: dict[int, str]):
     A PID absent from ``cmdlines`` behaves like a process that has already exited:
     ``ps`` exits non-zero, which is a ``CalledProcessError``.
     """
+
     def check_output(argv, **kwargs):
         assert argv[0] == 'ps', f"unexpected subprocess call: {argv}"
         pid = int(argv[-1])
         if pid not in cmdlines:
             raise subprocess.CalledProcessError(1, argv)
         return cmdlines[pid].encode()
+
     return check_output
 
 
@@ -50,7 +52,8 @@ class TestOwnershipRequiresARecordedPid:
         "an adare-cv-server on our port" — because it IS one, just not ours.
         """
         monkeypatch.setattr(
-            subprocess, 'check_output',
+            subprocess,
+            'check_output',
             _fake_ps({4242: 'adare-cv-server --port 13109'}),
         )
         assert manager.known_server_pid is None
@@ -65,11 +68,13 @@ class TestOwnershipRequiresARecordedPid:
         killed: list[int] = []
         monkeypatch.setattr(manager, '_pids_on_port', lambda port: [4242])
         monkeypatch.setattr(
-            subprocess, 'check_output',
+            subprocess,
+            'check_output',
             _fake_ps({4242: 'adare-cv-server --port 13109'}),
         )
         monkeypatch.setattr(
-            'os.kill', lambda pid, sig: killed.append(pid),
+            'os.kill',
+            lambda pid, sig: killed.append(pid),
         )
 
         assert manager._kill_process_on_port(13109) is False
@@ -81,7 +86,8 @@ class TestOwnershipRequiresARecordedPid:
         manager.known_server_pid = 4242
         monkeypatch.setattr(manager, '_pids_on_port', lambda port: [4242])
         monkeypatch.setattr(
-            subprocess, 'check_output',
+            subprocess,
+            'check_output',
             _fake_ps({4242: 'adare-cv-server --port 13109'}),
         )
         monkeypatch.setattr('os.kill', lambda pid, sig: killed.append(pid))
@@ -93,7 +99,8 @@ class TestOwnershipRequiresARecordedPid:
         """A recycled port held by an unrelated cv-server is not ours."""
         manager.known_server_pid = 4242
         monkeypatch.setattr(
-            subprocess, 'check_output',
+            subprocess,
+            'check_output',
             _fake_ps({9999: 'adare-cv-server --port 13109'}),
         )
         assert manager._is_our_cv_server(9999, 13109) is False
@@ -104,7 +111,8 @@ class TestCommandLineMatching:
         """Whatever else holds the port — a webserver, an editor — stays untouched."""
         manager.known_server_pid = 4242
         monkeypatch.setattr(
-            subprocess, 'check_output',
+            subprocess,
+            'check_output',
             _fake_ps({4242: 'python -m http.server 13109'}),
         )
         assert manager._is_our_cv_server(4242, 13109) is False
@@ -119,7 +127,8 @@ class TestCommandLineMatching:
         low = MCPServerManager(server_port=1310)
         low.known_server_pid = 4242
         monkeypatch.setattr(
-            subprocess, 'check_output',
+            subprocess,
+            'check_output',
             _fake_ps({4242: 'adare-cv-server --port 13109'}),
         )
         assert low._is_our_cv_server(4242, 1310) is False
@@ -127,7 +136,8 @@ class TestCommandLineMatching:
     def test_accepts_the_equals_form_of_the_port_flag(self, manager, monkeypatch):
         manager.known_server_pid = 4242
         monkeypatch.setattr(
-            subprocess, 'check_output',
+            subprocess,
+            'check_output',
             _fake_ps({4242: 'adare-cv-server --port=13109 --debug'}),
         )
         assert manager._is_our_cv_server(4242, 13109) is True
@@ -136,7 +146,8 @@ class TestCommandLineMatching:
         """Same recorded pid, wrong port in argv — argv is the authority, not lsof."""
         manager.known_server_pid = 4242
         monkeypatch.setattr(
-            subprocess, 'check_output',
+            subprocess,
+            'check_output',
             _fake_ps({4242: 'adare-cv-server --port 13110'}),
         )
         assert manager._is_our_cv_server(4242, 13109) is False
@@ -159,11 +170,14 @@ class TestKillProcessOnPort:
         manager.known_server_pid = 4242
         monkeypatch.setattr(manager, '_pids_on_port', lambda port: [7777, 4242])
         monkeypatch.setattr(
-            subprocess, 'check_output',
-            _fake_ps({
-                7777: 'adare-cv-server --port 13109',
-                4242: 'adare-cv-server --port 13109',
-            }),
+            subprocess,
+            'check_output',
+            _fake_ps(
+                {
+                    7777: 'adare-cv-server --port 13109',
+                    4242: 'adare-cv-server --port 13109',
+                }
+            ),
         )
         monkeypatch.setattr('os.kill', lambda pid, sig: killed.append(pid))
 
@@ -172,13 +186,15 @@ class TestKillProcessOnPort:
 
     def test_a_process_that_exits_between_lsof_and_kill_is_tolerated(self, manager, monkeypatch):
         """ProcessLookupError is a benign race, not a teardown failure."""
+
         def raising_kill(pid, sig):
             raise ProcessLookupError(pid)
 
         manager.known_server_pid = 4242
         monkeypatch.setattr(manager, '_pids_on_port', lambda port: [4242])
         monkeypatch.setattr(
-            subprocess, 'check_output',
+            subprocess,
+            'check_output',
             _fake_ps({4242: 'adare-cv-server --port 13109'}),
         )
         monkeypatch.setattr('os.kill', raising_kill)

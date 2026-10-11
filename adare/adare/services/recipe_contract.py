@@ -153,10 +153,7 @@ def linux_url_hint(profile: str) -> str:
         iso_url = ''
     if iso_url:
         return f"use the published ISO URL for this profile: {iso_url}"
-    return (
-        "host the ISO at an http(s) URL and set 'iso' to it (this profile's "
-        "catalog entry declares no download URL)"
-    )
+    return "host the ISO at an http(s) URL and set 'iso' to it (this profile's catalog entry declares no download URL)"
 
 
 def check_recipe_publish_contract(
@@ -219,8 +216,7 @@ def check_recipe_publish_contract(
     digest = normalized_iso_sha256(recipe.iso_sha256)
     if not digest:
         raise RecipeContractError(
-            "recipe 'iso_sha256' is required: it is the only integrity anchor a "
-            "consumer has for the ISO",
+            "recipe 'iso_sha256' is required: it is the only integrity anchor a consumer has for the ISO",
             possible_solutions=['Compute it with: shasum -a 256 <iso>'],
         )
     if not SHA256_HEX_RE.match(digest):
@@ -245,8 +241,7 @@ def check_recipe_publish_contract(
     actual_platform = profile_platform(recipe.profile)
     if actual_platform is None:
         raise RecipeContractError(
-            f"recipe 'profile' is not a known OS profile on this host: "
-            f"{recipe.profile!r}",
+            f"recipe 'profile' is not a known OS profile on this host: {recipe.profile!r}",
             possible_solutions=[
                 'Run: adare os-profile list',
                 'Fix the "profile" field in the recipe block',
@@ -287,8 +282,7 @@ def check_recipe_publish_contract(
             )
         if recipe.iso_notes and len(recipe.iso_notes) > 1000:
             raise RecipeContractError(
-                f"recipe 'iso_notes' exceeds 1000 characters "
-                f"(got {len(recipe.iso_notes)})",
+                f"recipe 'iso_notes' exceeds 1000 characters (got {len(recipe.iso_notes)})",
                 possible_solutions=['Shorten iso_notes to a download pointer'],
             )
         return
@@ -300,7 +294,6 @@ def check_recipe_publish_contract(
             f"and must never reach the shared repo",
             possible_solutions=[
                 'Host the ISO and reference its URL',
-                'Windows only: run "adare env recipe-byo <name>" to convert it to a '
-                'consumer-supplied ISO instead',
+                'Windows only: run "adare env recipe-byo <name>" to convert it to a consumer-supplied ISO instead',
             ],
         )

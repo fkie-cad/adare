@@ -57,11 +57,13 @@ def entries(tmp_path):
     (installed / 'demo.py').write_text(COLLECTION)
     bundled = tmp_path / 'bundled' / 'winreg'
     bundled.mkdir(parents=True)
-    (bundled / 'winreg.py').write_text(textwrap.dedent('''
+    (bundled / 'winreg.py').write_text(
+        textwrap.dedent('''
         @testfunction(name='key_exists', description='tests if registry key exists (Windows only)')
         def key_exists(ctx, key_path: str):
             pass
-    '''))
+    ''')
+    )
     (bundled / 'not_the_collection.py').write_text(COLLECTION)  # filename != dirname: ignored
     return load_catalog([(tmp_path / 'installed', True), (tmp_path / 'bundled', False)])
 
@@ -69,10 +71,15 @@ def entries(tmp_path):
 def test_parses_signatures_exactly(entries):
     entry = find(entries, 'demo.file_exists')
     assert [(p.name, p.type, p.required, p.default) for p in entry.params] == [
-        ('dst', 'str', False, ''), ('match_mode', 'str', False, 'any'), ('tags', 'list[str] | None', False, None)]
+        ('dst', 'str', False, ''),
+        ('match_mode', 'str', False, 'any'),
+        ('tags', 'list[str] | None', False, None),
+    ]
     assert entry.category == 'FILE_BASED' and entry.installed
     assert entry.params[0].doc == 'Guest path, globs allowed.'
-    assert entry.signature() == "demo.file_exists(dst: str = '', match_mode: str = 'any', tags: list[str] | None = None)"
+    assert (
+        entry.signature() == "demo.file_exists(dst: str = '', match_mode: str = 'any', tags: list[str] | None = None)"
+    )
 
 
 def test_async_and_dotted_host_native_names(entries):
@@ -82,7 +89,11 @@ def test_async_and_dotted_host_native_names(entries):
 
 def test_only_collection_files_and_os_inference(entries):
     assert {e.dotnotation for e in entries} == {
-        'demo.file_exists', 'demo.file_does_not_exist', 'visual.exists', 'winreg.key_exists'}
+        'demo.file_exists',
+        'demo.file_does_not_exist',
+        'visual.exists',
+        'winreg.key_exists',
+    }
     assert find(entries, 'winreg.key_exists').os == 'windows'
     assert not find(entries, 'winreg.key_exists').installed
 
@@ -109,8 +120,10 @@ def test_search_filters(entries):
 
 def test_example_marks_required_and_empty_defaults(entries):
     assert find(entries, 'demo.file_exists').example() == {
-        'name': 'check_file_exists', 'function': 'demo.file_exists',
-        'parameter': {'dst': '<str>'}}
+        'name': 'check_file_exists',
+        'function': 'demo.file_exists',
+        'parameter': {'dst': '<str>'},
+    }
     assert find(entries, 'visual.exists').example() == {'name': 'check_exists', 'function': 'visual.exists'}
 
 
@@ -136,7 +149,8 @@ def test_find_bare_name_means_standard_like_runtime(tmp_path):
     root = tmp_path / 'standard'
     root.mkdir()
     (root / 'standard.py').write_text(
-        "@testfunction(name='file_exists', description='tests if file exists')\ndef file_exists(ctx, dst: str):\n    pass\n")
+        "@testfunction(name='file_exists', description='tests if file exists')\ndef file_exists(ctx, dst: str):\n    pass\n"
+    )
     entries = load_catalog([(tmp_path, True)])
     assert find(entries, 'file_exists').dotnotation == 'standard.file_exists'
 
@@ -149,10 +163,13 @@ def test_undocumented_installed_copy_borrows_docs_only_when_code_is_identical(tm
         (tmp_path / root / 'same' / 'same.py').write_text("@testfunction(name='file_exists', description='d')\n" + body)
     changed = code.format(doc='').replace('return dst', 'return None')
     (tmp_path / 'installed' / 'diff').mkdir()
-    (tmp_path / 'installed' / 'diff' / 'diff.py').write_text("@testfunction(name='file_exists', description='d')\n" + changed)
+    (tmp_path / 'installed' / 'diff' / 'diff.py').write_text(
+        "@testfunction(name='file_exists', description='d')\n" + changed
+    )
     (tmp_path / 'bundled' / 'diff').mkdir()
     (tmp_path / 'bundled' / 'diff' / 'diff.py').write_text(
-        "@testfunction(name='file_exists', description='d')\n" + code.format(doc=doc))
+        "@testfunction(name='file_exists', description='d')\n" + code.format(doc=doc)
+    )
     entries = load_catalog([(tmp_path / 'installed', True), (tmp_path / 'bundled', False)])
     same, diff = find(entries, 'same.file_exists'), find(entries, 'diff.file_exists')
     assert same.installed and same.params[0].doc == 'Guest path.' and same.doc.startswith('Pass when')
@@ -170,5 +187,6 @@ def test_skill_catalog_reference_is_fresh():
     from adare.frontend.terminal.testfunction_catalog import catalog_markdown
 
     reference = Path(__file__).resolve().parents[5] / 'skills' / 'adare-testfunction' / 'references' / 'catalog.md'
-    assert reference.read_text(encoding='utf-8') == catalog_markdown(load_catalog(bundled_sources())), \
+    assert reference.read_text(encoding='utf-8') == catalog_markdown(load_catalog(bundled_sources())), (
         'stale catalog.md: run `adare test catalog --markdown > skills/adare-testfunction/references/catalog.md`'
+    )

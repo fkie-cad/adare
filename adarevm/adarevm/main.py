@@ -43,33 +43,41 @@ def __setup_logging(logfile: str = None, log_level: int = logging.INFO):
 def __parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='ADARE VM Agent')
-    parser.add_argument('--logfile', '-l', type=str, default=None,
-                        help='Path to log file')
+    parser.add_argument('--logfile', '-l', type=str, default=None, help='Path to log file')
 
     # Run directory as positional argument (optional)
     # If provided, it overrides defaults and is used to look for config.json
-    parser.add_argument('run_dir', nargs='?', default=str(DEFAULT_RUN_DIR),
-                        help='Path to run directory containing config.json')
+    parser.add_argument(
+        'run_dir', nargs='?', default=str(DEFAULT_RUN_DIR), help='Path to run directory containing config.json'
+    )
 
-    parser.add_argument('--tools-path', '-t', action='append', default=[],
-                        dest='tools_paths',
-                        help='Path to add to PATH for tools (can be specified multiple times)')
-    parser.add_argument('--data-path', '-d', action='append', default=[],
-                        dest='data_paths',
-                        help='Path to data directory (can be specified multiple times)')
+    parser.add_argument(
+        '--tools-path',
+        '-t',
+        action='append',
+        default=[],
+        dest='tools_paths',
+        help='Path to add to PATH for tools (can be specified multiple times)',
+    )
+    parser.add_argument(
+        '--data-path',
+        '-d',
+        action='append',
+        default=[],
+        dest='data_paths',
+        help='Path to data directory (can be specified multiple times)',
+    )
     # Support legacy positional argument for backwards compatibility
-    parser.add_argument('logfile_positional', nargs='?', default=None,
-                        help=argparse.SUPPRESS)  # Hidden, for backwards compat
+    parser.add_argument(
+        'logfile_positional', nargs='?', default=None, help=argparse.SUPPRESS
+    )  # Hidden, for backwards compat
     return parser.parse_args()
 
 
 async def main(tools_paths: list[str] = None, data_paths: list[str] = None, installation_mode: str = "wheel"):
     from adarevm.core.server import AdareVMServer
-    server_instance = AdareVMServer(
-        tools_paths=tools_paths,
-        data_paths=data_paths,
-        installation_mode=installation_mode
-    )
+
+    server_instance = AdareVMServer(tools_paths=tools_paths, data_paths=data_paths, installation_mode=installation_mode)
     log.info("Starting AdareVM server...")
     server = await server_instance.start_server()
     log.info("AdareVM server started successfully.")
@@ -96,6 +104,7 @@ def load_config(run_dir: str) -> dict:
     except Exception as e:
         log.warning(f"Failed to load config from {config_path}: {e}")
         return {}
+
 
 def _log_shared_paths(paths: list[str], file_transfer_mode: str):
     """Log how /adare was populated and what each tools/data path holds.
@@ -130,7 +139,7 @@ def run():
         'INFO': logging.INFO,
         'WARNING': logging.WARNING,
         'ERROR': logging.ERROR,
-        'CRITICAL': logging.CRITICAL
+        'CRITICAL': logging.CRITICAL,
     }
 
     # Resolve logfile
@@ -142,6 +151,7 @@ def run():
     # Log version information
     try:
         from importlib.metadata import PackageNotFoundError, version
+
         try:
             adarevm_version = version('adarevm')
         except PackageNotFoundError:
@@ -162,7 +172,9 @@ def run():
     data_paths = args.data_paths + config.get('data_paths', [])
     installation_mode = config.get('installation_mode', 'wheel')
 
-    log.info(f"adarevm started with tools_paths={tools_paths}, data_paths={data_paths}, installation_mode={installation_mode}")
+    log.info(
+        f"adarevm started with tools_paths={tools_paths}, data_paths={data_paths}, installation_mode={installation_mode}"
+    )
     # Hosts older than this key don't write it
     _log_shared_paths(tools_paths + data_paths, config.get('file_transfer_mode', 'unknown'))
     try:
@@ -174,6 +186,7 @@ def run():
         for handler in logging.root.handlers:
             handler.flush()
         raise
+
 
 if __name__ == "__main__":
     run()

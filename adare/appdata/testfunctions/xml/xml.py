@@ -36,12 +36,14 @@ from adarelib.event.event import TestResult
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
 # =============================================================================
 # Module-level helper functions (deduplicated)
 # =============================================================================
+
 
 def _parse_xml(filepath):
     """Parse XML file and return root element"""
@@ -151,7 +153,9 @@ def _compare_values(ctx, actual_text, expected_text, regex_match=False, case_sen
             return False, f"expected 1 placeholder for single value comparison, got {len(placeholder_names)}"
 
 
-def _handle_wildcard_matching(ctx, elements, expected_text, wildcard_mode, xpath, regex_match=False, case_sensitive=True):
+def _handle_wildcard_matching(
+    ctx, elements, expected_text, wildcard_mode, xpath, regex_match=False, case_sensitive=True
+):
     """Handle matching logic for multiple elements with 'any' or 'all' modes"""
     if not elements:
         return TestResult.failed([f'no elements found at XPath "{xpath}"'])
@@ -178,29 +182,37 @@ def _handle_wildcard_matching(ctx, elements, expected_text, wildcard_mode, xpath
             match_details = [f"element[{i}]: '{text}'" for i, text, _ in matches[:3]]
             if len(matches) > 3:
                 match_details.append(f"... and {len(matches) - 3} more matches")
-            return TestResult.success([
-                f'XPath "{xpath}" matched {len(matches)}/{len(elements)} elements (mode: any)',
-                f'matching text: {", ".join(match_details)}'
-            ])
-        return TestResult.failed([
-            f'XPath "{xpath}" matched 0/{len(elements)} elements (mode: any)',
-            f'expected: "{expected_text}"',
-            f'got texts: {[text for _, text, _ in non_matches[:5]]}'
-        ])
+            return TestResult.success(
+                [
+                    f'XPath "{xpath}" matched {len(matches)}/{len(elements)} elements (mode: any)',
+                    f'matching text: {", ".join(match_details)}',
+                ]
+            )
+        return TestResult.failed(
+            [
+                f'XPath "{xpath}" matched 0/{len(elements)} elements (mode: any)',
+                f'expected: "{expected_text}"',
+                f'got texts: {[text for _, text, _ in non_matches[:5]]}',
+            ]
+        )
     # wildcard_mode == 'all'
     if not non_matches:
-        return TestResult.success([
-            f'XPath "{xpath}" matched all {len(elements)} elements (mode: all)',
-            f'all elements have text: "{expected_text}"'
-        ])
+        return TestResult.success(
+            [
+                f'XPath "{xpath}" matched all {len(elements)} elements (mode: all)',
+                f'all elements have text: "{expected_text}"',
+            ]
+        )
     non_match_details = [f"element[{i}]: '{text}'" for i, text, _ in non_matches[:3]]
     if len(non_matches) > 3:
         non_match_details.append(f"... and {len(non_matches) - 3} more non-matches")
-    return TestResult.failed([
-        f'XPath "{xpath}" matched {len(matches)}/{len(elements)} elements (mode: all)',
-        f'expected: "{expected_text}"',
-        f'non-matching texts: {", ".join(non_match_details)}'
-    ])
+    return TestResult.failed(
+        [
+            f'XPath "{xpath}" matched {len(matches)}/{len(elements)} elements (mode: all)',
+            f'expected: "{expected_text}"',
+            f'non-matching texts: {", ".join(non_match_details)}',
+        ]
+    )
 
 
 def _compare_count(actual_count, expected_count, comparison_type):
@@ -255,7 +267,7 @@ def _parse_xml_with_namespaces(filepath):
 
         # Check for default namespace
         if root.tag.startswith('{'):
-            default_ns = root.tag[1:root.tag.find('}')]
+            default_ns = root.tag[1 : root.tag.find('}')]
             namespaces[''] = default_ns
 
         # Extract namespace prefixes from attributes
@@ -274,6 +286,7 @@ def _parse_xml_with_namespaces(filepath):
 # =============================================================================
 # Test functions
 # =============================================================================
+
 
 @testfunction(
     name='element_exists',
@@ -335,7 +348,16 @@ def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: dict[str,
     description='tests if XML element text content matches expected value with placeholder support for regex and timestamp tolerance',
     category=HostModeCategory.FILE_CONTENT,
 )
-def element_text_matches(ctx: TestContext, dst: str, xpath: str, expected_text: str = '', regex_match: bool = False, case_sensitive: bool = True, wildcard_mode: str = "any", namespaces: dict[str, str] = None):
+def element_text_matches(
+    ctx: TestContext,
+    dst: str,
+    xpath: str,
+    expected_text: str = '',
+    regex_match: bool = False,
+    case_sensitive: bool = True,
+    wildcard_mode: str = "any",
+    namespaces: dict[str, str] = None,
+):
     """Pass when the text of the element(s) selected by ``xpath`` equals/matches ``expected_text``.
 
     Use for: asserting an XML setting or record value. "Text" is ``element.text``: only the
@@ -381,7 +403,9 @@ def element_text_matches(ctx: TestContext, dst: str, xpath: str, expected_text: 
 
             # Handle multiple elements based on wildcard mode
             if len(elements) > 1:
-                return _handle_wildcard_matching(ctx, elements, expected_text, wildcard_mode, xpath, regex_match, case_sensitive)
+                return _handle_wildcard_matching(
+                    ctx, elements, expected_text, wildcard_mode, xpath, regex_match, case_sensitive
+                )
             # Single element matching
             element_text = elements[0].text or ""
             is_match, message = _compare_values(ctx, element_text, expected_text, regex_match, case_sensitive)
@@ -406,7 +430,16 @@ def element_text_matches(ctx: TestContext, dst: str, xpath: str, expected_text: 
     description='tests if XML element attribute matches expected value with regex and timestamp tolerance support',
     category=HostModeCategory.FILE_CONTENT,
 )
-def attribute_matches(ctx: TestContext, dst: str, xpath: str, attribute: str, expected_value: str, regex_match: bool = False, case_sensitive: bool = True, namespaces: dict[str, str] = None):
+def attribute_matches(
+    ctx: TestContext,
+    dst: str,
+    xpath: str,
+    attribute: str,
+    expected_value: str,
+    regex_match: bool = False,
+    case_sensitive: bool = True,
+    namespaces: dict[str, str] = None,
+):
     """Pass when ``attribute`` of the FIRST element selected by ``xpath`` equals/matches ``expected_value``.
 
     Use for: asserting attribute values (``visited``, ``modified``, ``href`` ...). No matching
@@ -469,9 +502,15 @@ def attribute_matches(ctx: TestContext, dst: str, xpath: str, attribute: str, ex
                         flags = 0 if case_sensitive else re.IGNORECASE
                         pattern = re.compile(expected_value, flags)
                         if pattern.search(actual_value):
-                            is_match, message = True, f'attribute value "{actual_value}" matches regex "{expected_value}"'
+                            is_match, message = (
+                                True,
+                                f'attribute value "{actual_value}" matches regex "{expected_value}"',
+                            )
                         else:
-                            is_match, message = False, f'attribute value "{actual_value}" does not match regex "{expected_value}"'
+                            is_match, message = (
+                                False,
+                                f'attribute value "{actual_value}" does not match regex "{expected_value}"',
+                            )
                     except re.error as e:
                         is_match, message = False, f'Invalid regex pattern: {expected_value} - {e}'
                 else:
@@ -495,7 +534,10 @@ def attribute_matches(ctx: TestContext, dst: str, xpath: str, attribute: str, ex
                     except Exception as e:
                         is_match, message = False, f"placeholder comparison error: {e}"
                 else:
-                    is_match, message = False, f"expected 1 placeholder for single value comparison, got {len(placeholder_names)}"
+                    is_match, message = (
+                        False,
+                        f"expected 1 placeholder for single value comparison, got {len(placeholder_names)}",
+                    )
 
             if is_match:
                 return TestResult.success([message])
@@ -517,7 +559,14 @@ def attribute_matches(ctx: TestContext, dst: str, xpath: str, attribute: str, ex
     description='tests the number of XML elements matching XPath expression',
     category=HostModeCategory.FILE_CONTENT,
 )
-def element_count(ctx: TestContext, dst: str, xpath: str, expected_count: int = 0, comparison_type: str = 'equals', namespaces: dict[str, str] = None):
+def element_count(
+    ctx: TestContext,
+    dst: str,
+    xpath: str,
+    expected_count: int = 0,
+    comparison_type: str = 'equals',
+    namespaces: dict[str, str] = None,
+):
     """Pass when the number of elements selected by ``xpath`` satisfies ``comparison_type`` vs ``expected_count``.
 
     Use for: counting entries (bookmarks, recent files); ``expected_count: 0`` asserts absence
@@ -579,7 +628,14 @@ def element_count(ctx: TestContext, dst: str, xpath: str, expected_count: int = 
     description='tests if XPath expression result matches expected value (text, number, or boolean)',
     category=HostModeCategory.FILE_CONTENT,
 )
-def xpath_result_matches(ctx: TestContext, dst: str, xpath: str, expected_result: str | int | float | bool = '', result_type: str = 'text', namespaces: dict[str, str] = None):
+def xpath_result_matches(
+    ctx: TestContext,
+    dst: str,
+    xpath: str,
+    expected_result: str | int | float | bool = '',
+    result_type: str = 'text',
+    namespaces: dict[str, str] = None,
+):
     """Pass when ``xpath`` evaluated as ``result_type`` equals ``expected_result``.
 
     Use for: typed checks on the first matched element. Prefer xml.element_text_matches for text.
@@ -647,7 +703,9 @@ def xpath_result_matches(ctx: TestContext, dst: str, xpath: str, expected_result
     description='tests if XML namespace declarations match expected namespaces',
     category=HostModeCategory.FILE_CONTENT,
 )
-def namespace_matches(ctx: TestContext, dst: str, expected_namespaces: dict[str, str] = None, check_mode: str = 'contains'):
+def namespace_matches(
+    ctx: TestContext, dst: str, expected_namespaces: dict[str, str] = None, check_mode: str = 'contains'
+):
     """Pass when the namespaces detected in ``dst`` contain (or equal) ``expected_namespaces``.
 
     Use for: checking which XML dialect/schema version a file uses. Only the root element's

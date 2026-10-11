@@ -3,6 +3,7 @@ Abstract networking operations mixin for hypervisor VMs.
 
 All hypervisor implementations must provide networking functionality.
 """
+
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -21,11 +22,7 @@ class AbstractNetworkingMixin(ABC):
 
     @abstractmethod
     async def list_port_forwarding_rules(
-        self,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ):
         """
         List all port forwarding rules for the VM.
@@ -53,7 +50,7 @@ class AbstractNetworkingMixin(ABC):
         ctx_manager=None,
         stop_event=None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ) -> int:
         """
         Add a port forwarding rule to the VM.
@@ -77,12 +74,7 @@ class AbstractNetworkingMixin(ABC):
 
     @abstractmethod
     async def remove_port_forwarding(
-        self,
-        name: str,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, name: str, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ) -> int:
         """
         Remove a port forwarding rule from the VM.
@@ -110,7 +102,7 @@ class AbstractNetworkingMixin(ABC):
         ctx_manager=None,
         stop_event=None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ):
         """
         Add a shared folder to the VM configuration.
@@ -137,7 +129,7 @@ class AbstractNetworkingMixin(ABC):
         ctx_manager=None,
         stop_event=None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ):
         """
         Mount a shared folder inside the guest VM.
@@ -157,11 +149,7 @@ class AbstractNetworkingMixin(ABC):
 
     @abstractmethod
     async def list_shared_folders(
-        self,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ):
         """
         List all shared folders configured for the VM.
@@ -185,7 +173,7 @@ class AbstractNetworkingMixin(ABC):
         ctx_manager=None,
         stop_event=None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ):
         """
         Remove a shared folder from the VM.
@@ -205,11 +193,7 @@ class AbstractNetworkingMixin(ABC):
 
     @abstractmethod
     async def remove_all_shared_folders(
-        self,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ):
         """
         Remove all shared folders from the VM.
@@ -238,12 +222,7 @@ class AbstractNetworkingMixin(ABC):
 
     @abstractmethod
     async def mount_multiple_shared_folders(
-        self,
-        folders: dict,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, folders: dict, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ):
         """
         Mount multiple shared folders in the guest VM.

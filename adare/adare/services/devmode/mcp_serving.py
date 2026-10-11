@@ -52,9 +52,12 @@ class McpServingMixin:
             return Result.ok(None)
         except RuntimeError as exc:  # session/VM not found
             return Result.fail(
-                'SESSION_NOT_FOUND', str(exc),
-                ['Check active sessions with: adare dev list',
-                 'Start one with: adare dev start <experiment> -e <environment>'],
+                'SESSION_NOT_FOUND',
+                str(exc),
+                [
+                    'Check active sessions with: adare dev list',
+                    'Start one with: adare dev start <experiment> -e <environment>',
+                ],
             )
 
     async def _serve_mcp_async(self, request: DevServeMcpRequest) -> None:
@@ -65,9 +68,7 @@ class McpServingMixin:
 
         session = await self._manager.get_or_restore_session(request.session_id)
         if not session:
-            raise RuntimeError(
-                f"Dev session '{request.session_id}' not found or could not be restored"
-            )
+            raise RuntimeError(f"Dev session '{request.session_id}' not found or could not be restored")
         ctx = session.experiment_ctx
         vm = getattr(ctx, 'vm', None) if ctx else None
         if vm is None:
@@ -78,8 +79,10 @@ class McpServingMixin:
         if mcp_server is not None and getattr(mcp_server, 'server_url', None):
             cv_url = mcp_server.server_url
 
-        output_dir = Path(request.output_dir) if request.output_dir else (
-            Path(request.project_path) if request.project_path else Path.cwd()
+        output_dir = (
+            Path(request.output_dir)
+            if request.output_dir
+            else (Path(request.project_path) if request.project_path else Path.cwd())
         )
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -87,19 +90,28 @@ class McpServingMixin:
 
         executor = QEMUHostGUIExecutor(vm=vm)
         resolver = MCPTargetResolver(
-            experiment_dir=output_dir, mcp_gui_url=cv_url,
-            vm_client=None, os_key='linux',
+            experiment_dir=output_dir,
+            mcp_gui_url=cv_url,
+            vm_client=None,
+            os_key='linux',
         )
         server = GuiMcpServer(
-            executor=executor, resolver=resolver, catalog=catalog,
-            base_dir=output_dir, cv_url=cv_url,
+            executor=executor,
+            resolver=resolver,
+            catalog=catalog,
+            base_dir=output_dir,
+            cv_url=cv_url,
         )
 
         host = request.host or GUI_MCP_HOST
         port = request.port or GUI_MCP_PORT
         log.info(
             'Serving session %s as GUI MCP server on %s:%d (%d testfunctions, recordings -> %s)',
-            request.session_id, host, port, len(catalog), output_dir,
+            request.session_id,
+            host,
+            port,
+            len(catalog),
+            output_dir,
         )
         await server.serve_async(host, port)
 

@@ -42,9 +42,7 @@ class ForensicReporter:
             # Use ExperimentApi for database access
             with ExperimentApi(project_path) as api:
                 # Query experiment run with relationships
-                experiment_run = api._session.query(ExperimentRun).filter(
-                    ExperimentRun.id == experiment_run_id
-                ).first()
+                experiment_run = api._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_id).first()
 
                 if not experiment_run:
                     log.error(f"Experiment run {experiment_run_id} not found")
@@ -71,9 +69,9 @@ class ForensicReporter:
         """Build the forensic data structure from database records."""
 
         # Query all events for this run, ordered by timestamp
-        events = session.query(Event).filter(
-            Event.experiment_run_id == experiment_run.id
-        ).order_by(Event.timestamp).all()
+        events = (
+            session.query(Event).filter(Event.experiment_run_id == experiment_run.id).order_by(Event.timestamp).all()
+        )
 
         # Build experiment metadata
         experiment_info = {
@@ -82,7 +80,7 @@ class ForensicReporter:
             'experiment_name': experiment_run.experiment.name if experiment_run.experiment else 'unknown',
             'environment_name': experiment_run.environment.name if experiment_run.environment else 'unknown',
             'start_time': experiment_run.start_time.isoformat() + 'Z' if experiment_run.start_time else None,
-            'end_time': experiment_run.end_time.isoformat() + 'Z' if experiment_run.end_time else None
+            'end_time': experiment_run.end_time.isoformat() + 'Z' if experiment_run.end_time else None,
         }
 
         # Process events into forensic actions
@@ -95,11 +93,7 @@ class ForensicReporter:
                 actions.append(action_entry)
                 sequence += 1
 
-        return {
-            'forensic_log_version': '1.0',
-            'experiment_info': experiment_info,
-            'actions': actions
-        }
+        return {'forensic_log_version': '1.0', 'experiment_info': experiment_info, 'actions': actions}
 
     def _process_event_to_action(self, event: Event, sequence: int) -> dict[str, Any] | None:
         """Convert a database event record to forensic action entry."""
@@ -111,7 +105,7 @@ class ForensicReporter:
                 'timestamp': event.timestamp.isoformat() + 'Z' if event.timestamp else None,
                 'action_type': self._determine_action_type(event),
                 'action_description': getattr(event, 'event_type_specific', '') or 'action',
-                'result': 'success' if event.success else 'failed' if event.success is not None else 'unknown'
+                'result': 'success' if event.success else 'failed' if event.success is not None else 'unknown',
             }
 
             # Add result details
@@ -186,7 +180,9 @@ class ForensicReporter:
         # Process TestEvent specific data
         if isinstance(event, TestEvent):
             if hasattr(event, 'result') and event.result:
-                result_details['status'] = self._get_status_name(event.result.status_id) if hasattr(event.result, 'status_id') else 'unknown'
+                result_details['status'] = (
+                    self._get_status_name(event.result.status_id) if hasattr(event.result, 'status_id') else 'unknown'
+                )
                 if hasattr(event.result, 'details') and event.result.details:
                     result_details['details'] = event.result.details
 

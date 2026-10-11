@@ -136,7 +136,9 @@ class GuestToHostTestExecutor:
             TestResult from test execution
         """
         category = self._get_test_category(test_function, test_instance)
-        log.info(f"GuestToHostTestExecutor: executing '{test_name}' (function={test_function}, category={category.value})")
+        log.info(
+            f"GuestToHostTestExecutor: executing '{test_name}' (function={test_function}, category={category.value})"
+        )
 
         try:
             if category == HostModeCategory.QGA_PROBE:
@@ -261,8 +263,9 @@ class GuestToHostTestExecutor:
 
     @staticmethod
     def _sidecar_error(missing: list[str]) -> TestResult:
-        return TestResult.error([f"could not pull {', '.join(missing)} from guest; "
-                                 f"testing without it would read stale data"])
+        return TestResult.error(
+            [f"could not pull {', '.join(missing)} from guest; testing without it would read stale data"]
+        )
 
     async def _execute_qga_probe_test(
         self,
@@ -323,9 +326,9 @@ class GuestToHostTestExecutor:
 
         if actual_status == expected_status:
             return TestResult.success([f'service {service_name} is {actual_status}'])
-        return TestResult.failed([
-            f'service {service_name} status mismatch. Expected: {expected_status}, Got: {actual_status}'
-        ])
+        return TestResult.failed(
+            [f'service {service_name} status mismatch. Expected: {expected_status}, Got: {actual_status}']
+        )
 
     async def _test_user_exists(self, test_instance: BasicTest) -> TestResult:
         """Check if user exists via QGA."""
@@ -394,22 +397,23 @@ class GuestToHostTestExecutor:
             expected_type_upper = expected_type.upper()
             # PowerShell type names: String, DWord, Binary, etc. Map to REG_ names
             ps_to_reg = {
-                'STRING': 'REG_SZ', 'EXPANDSTRING': 'REG_EXPAND_SZ',
-                'BINARY': 'REG_BINARY', 'DWORD': 'REG_DWORD',
-                'MULTISTRING': 'REG_MULTI_SZ', 'QWORD': 'REG_QWORD',
+                'STRING': 'REG_SZ',
+                'EXPANDSTRING': 'REG_EXPAND_SZ',
+                'BINARY': 'REG_BINARY',
+                'DWORD': 'REG_DWORD',
+                'MULTISTRING': 'REG_MULTI_SZ',
+                'QWORD': 'REG_QWORD',
             }
             actual_type_mapped = ps_to_reg.get(actual_type.upper(), actual_type.upper()) if actual_type else 'UNKNOWN'
             if expected_type_upper != actual_type_mapped:
-                return TestResult.failed([
-                    f'registry value type mismatch. Expected: {expected_type_upper}, Got: {actual_type_mapped}'
-                ])
+                return TestResult.failed(
+                    [f'registry value type mismatch. Expected: {expected_type_upper}, Got: {actual_type_mapped}']
+                )
 
         # Value comparison (compare as strings since QGA returns strings)
         if str(actual_value) == str(expected_value):
             return TestResult.success([f'registry value matches: {actual_value}'])
-        return TestResult.failed([
-            f'registry value mismatch. Expected: {expected_value}, Got: {actual_value}'
-        ])
+        return TestResult.failed([f'registry value mismatch. Expected: {expected_value}, Got: {actual_value}'])
 
     async def _test_file_permissions(self, test_instance: BasicTest) -> TestResult:
         """Check file permissions, owner, and group via QGA stat."""
@@ -484,18 +488,28 @@ class GuestToHostTestExecutor:
     def _parse_symbolic_permissions(perm_str: str) -> int:
         """Parse symbolic permission string like 'rwxr-xr-x' to integer."""
         import stat
+
         if len(perm_str) != 9:
             raise ValueError(f"Invalid symbolic permission format: {perm_str}")
         perms = 0
-        if perm_str[0] == 'r': perms |= stat.S_IRUSR
-        if perm_str[1] == 'w': perms |= stat.S_IWUSR
-        if perm_str[2] == 'x': perms |= stat.S_IXUSR
-        if perm_str[3] == 'r': perms |= stat.S_IRGRP
-        if perm_str[4] == 'w': perms |= stat.S_IWGRP
-        if perm_str[5] == 'x': perms |= stat.S_IXGRP
-        if perm_str[6] == 'r': perms |= stat.S_IROTH
-        if perm_str[7] == 'w': perms |= stat.S_IWOTH
-        if perm_str[8] == 'x': perms |= stat.S_IXOTH
+        if perm_str[0] == 'r':
+            perms |= stat.S_IRUSR
+        if perm_str[1] == 'w':
+            perms |= stat.S_IWUSR
+        if perm_str[2] == 'x':
+            perms |= stat.S_IXUSR
+        if perm_str[3] == 'r':
+            perms |= stat.S_IRGRP
+        if perm_str[4] == 'w':
+            perms |= stat.S_IWGRP
+        if perm_str[5] == 'x':
+            perms |= stat.S_IXGRP
+        if perm_str[6] == 'r':
+            perms |= stat.S_IROTH
+        if perm_str[7] == 'w':
+            perms |= stat.S_IWOTH
+        if perm_str[8] == 'x':
+            perms |= stat.S_IXOTH
         return perms
 
     async def _test_file_timestamps(self, test_instance: BasicTest) -> TestResult:
@@ -522,55 +536,64 @@ class GuestToHostTestExecutor:
 
         if comparison_type == 'equals':
             expected_time = self._parse_test_timestamp(
-                test_instance.parameter.expected_time,
-                getattr(test_instance.parameter, 'time_format', None)
+                test_instance.parameter.expected_time, getattr(test_instance.parameter, 'time_format', None)
             )
             tolerance = getattr(test_instance.parameter, 'tolerance_seconds', 0) or 0
             if abs(actual_time - expected_time) <= tolerance:
-                return TestResult.success([
-                    f'{timestamp_type} timestamp matches (±{tolerance}s): {datetime.fromtimestamp(actual_time)}'
-                ])
-            return TestResult.failed([
-                f'{timestamp_type} timestamp mismatch. '
-                f'Expected: {datetime.fromtimestamp(expected_time)}, Got: {datetime.fromtimestamp(actual_time)}'
-            ])
+                return TestResult.success(
+                    [f'{timestamp_type} timestamp matches (±{tolerance}s): {datetime.fromtimestamp(actual_time)}']
+                )
+            return TestResult.failed(
+                [
+                    f'{timestamp_type} timestamp mismatch. '
+                    f'Expected: {datetime.fromtimestamp(expected_time)}, Got: {datetime.fromtimestamp(actual_time)}'
+                ]
+            )
 
         if comparison_type == 'before':
             expected_time = self._parse_test_timestamp(
-                test_instance.parameter.expected_time,
-                getattr(test_instance.parameter, 'time_format', None)
+                test_instance.parameter.expected_time, getattr(test_instance.parameter, 'time_format', None)
             )
             if actual_time < expected_time:
-                return TestResult.success([f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected_time)}'])
-            return TestResult.failed([f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected_time)}'])
+                return TestResult.success(
+                    [f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected_time)}']
+                )
+            return TestResult.failed(
+                [f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected_time)}']
+            )
 
         if comparison_type == 'after':
             expected_time = self._parse_test_timestamp(
-                test_instance.parameter.expected_time,
-                getattr(test_instance.parameter, 'time_format', None)
+                test_instance.parameter.expected_time, getattr(test_instance.parameter, 'time_format', None)
             )
             if actual_time > expected_time:
-                return TestResult.success([f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected_time)}'])
-            return TestResult.failed([f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected_time)}'])
+                return TestResult.success(
+                    [f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected_time)}']
+                )
+            return TestResult.failed(
+                [f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected_time)}']
+            )
 
         if comparison_type == 'between':
             start_time = self._parse_test_timestamp(
-                test_instance.parameter.start_time,
-                getattr(test_instance.parameter, 'time_format', None)
+                test_instance.parameter.start_time, getattr(test_instance.parameter, 'time_format', None)
             )
             end_time = self._parse_test_timestamp(
-                test_instance.parameter.end_time,
-                getattr(test_instance.parameter, 'time_format', None)
+                test_instance.parameter.end_time, getattr(test_instance.parameter, 'time_format', None)
             )
             if start_time <= actual_time <= end_time:
-                return TestResult.success([
-                    f'{timestamp_type} timestamp is between '
+                return TestResult.success(
+                    [
+                        f'{timestamp_type} timestamp is between '
+                        f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
+                    ]
+                )
+            return TestResult.failed(
+                [
+                    f'{timestamp_type} timestamp is not between '
                     f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
-                ])
-            return TestResult.failed([
-                f'{timestamp_type} timestamp is not between '
-                f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
-            ])
+                ]
+            )
 
         if comparison_type == 'within_last':
             within_duration = test_instance.parameter.within_duration
@@ -602,8 +625,12 @@ class GuestToHostTestExecutor:
                 pass
 
         common_formats = [
-            '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%SZ',
-            '%Y-%m-%d', '%m/%d/%Y %H:%M:%S', '%m/%d/%Y',
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%dT%H:%M:%S',
+            '%Y-%m-%dT%H:%M:%SZ',
+            '%Y-%m-%d',
+            '%m/%d/%Y %H:%M:%S',
+            '%m/%d/%Y',
         ]
         for fmt in common_formats:
             try:

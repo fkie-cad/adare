@@ -38,10 +38,7 @@ def exec_dev_record(arguments):
 
     try:
         # Start recording
-        result = api.devmode.record_session(DevSessionRecordRequest(
-            session_id=session_id,
-            output_file=output_file
-        ))
+        result = api.devmode.record_session(DevSessionRecordRequest(session_id=session_id, output_file=output_file))
 
         if not result.success:
             handle_api_error(result)
@@ -59,7 +56,7 @@ def exec_dev_record(arguments):
                 print_success_message(
                     title="Recording stopped",
                     next_steps=[f"View playbook: {output_file}"],
-                    tip=f"Run with: adare dev playbook {session_id} -f {output_file}"
+                    tip=f"Run with: adare dev playbook {session_id} -f {output_file}",
                 )
             else:
                 handle_api_error(stop_result)

@@ -10,6 +10,7 @@ those rules in `giteaeventmanager/action/environment_contract.py`.
 The shared *validator* for the recipe ISO contract lives alongside this shared
 *builder*, in :mod:`adare.services.recipe_contract`.
 """
+
 import logging
 from pathlib import Path
 

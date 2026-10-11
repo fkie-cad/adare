@@ -72,6 +72,7 @@ class GuiMcpServer:
         self._server_name = server_name
         if recorder_factory is None:
             from adare.backend.experiment.vlm.recorder import PlaybookRecorder
+
             recorder_factory = PlaybookRecorder
         self._recorder_factory = recorder_factory
 
@@ -175,7 +176,9 @@ class GuiMcpServer:
 
         @mcp.tool()
         async def add_test(
-            name: str, function: str, parameters: dict[str, Any] | None = None,
+            name: str,
+            function: str,
+            parameters: dict[str, Any] | None = None,
             description: str = '',
         ) -> dict[str, Any]:
             """Add an assertion to the recording, validated against the catalog.
@@ -236,7 +239,10 @@ class GuiMcpServer:
         if self._recording:
             png = self._last_png or await self._capture()
             self._recorder.record_click(
-                png, int(x), int(y), describe or f'click ({x}, {y})',
+                png,
+                int(x),
+                int(y),
+                describe or f'click ({x}, {y})',
                 button='left' if button == 'double' else button,
                 double=(button == 'double'),
             )
@@ -263,6 +269,7 @@ class GuiMcpServer:
 
     async def wait(self, seconds: float) -> dict[str, Any]:
         import asyncio
+
         await asyncio.sleep(float(seconds))
         if self._recording:
             self._recorder.record_idle(float(seconds), f'wait {seconds}s')
@@ -287,10 +294,12 @@ class GuiMcpServer:
 
     async def find_text(self, text: str) -> dict[str, Any]:
         from adare.types.playbook import Target
+
         return await self._resolve(Target(text=text))
 
     async def find_icon(self, image_name: str) -> dict[str, Any]:
         from adare.types.playbook import Target
+
         return await self._resolve(Target(image=image_name))
 
     # -- discovery ----------------------------------------------------------
@@ -327,16 +336,21 @@ class GuiMcpServer:
         return {'status': 'success', 'action_count': count}
 
     def add_test(
-        self, name: str, function: str,
-        *, parameters: dict[str, Any] | None = None, description: str = '',
+        self,
+        name: str,
+        function: str,
+        *,
+        parameters: dict[str, Any] | None = None,
+        description: str = '',
     ) -> dict[str, Any]:
         if self._recorder is None:
             return {'status': 'error', 'message': 'Not recording — call start_recording first'}
         if function not in self._known_functions:
             return {
                 'status': 'error',
-                'message': (f"Unknown testfunction '{function}'. "
-                            'Call list_testfunctions for valid names/dotnotations.'),
+                'message': (
+                    f"Unknown testfunction '{function}'. Call list_testfunctions for valid names/dotnotations."
+                ),
             }
         self._recorder.add_test(name, function, parameter=parameters, description=description)
         return {'status': 'success', 'name': name, 'function': function}

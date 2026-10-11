@@ -36,6 +36,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class ValidationError:
     """Represents a validation error with context."""
+
     message: str
     action_index: int | None = None
     action_type: str | None = None
@@ -56,6 +57,7 @@ class ValidationError:
 @dataclass
 class ValidationResult:
     """Result of playbook validation."""
+
     errors: list[ValidationError] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -64,17 +66,24 @@ class ValidationResult:
         """Check if validation passed (no errors)."""
         return len(self.errors) == 0
 
-    def add_error(self, message: str, action_index: int | None = None,
-                  action_type: str | None = None, field_name: str | None = None,
-                  variable_name: str | None = None):
+    def add_error(
+        self,
+        message: str,
+        action_index: int | None = None,
+        action_type: str | None = None,
+        field_name: str | None = None,
+        variable_name: str | None = None,
+    ):
         """Add a validation error."""
-        self.errors.append(ValidationError(
-            message=message,
-            action_index=action_index,
-            action_type=action_type,
-            field_name=field_name,
-            variable_name=variable_name
-        ))
+        self.errors.append(
+            ValidationError(
+                message=message,
+                action_index=action_index,
+                action_type=action_type,
+                field_name=field_name,
+                variable_name=variable_name,
+            )
+        )
 
     def add_warning(self, message: str):
         """Add a validation warning."""
@@ -117,8 +126,7 @@ class SettingsValidator(PlaybookValidator):
         resolution = getattr(settings, 'resolution', None)
         if resolution is not None and not self._RESOLUTION_RE.match(str(resolution)):
             result.add_error(
-                f"settings.resolution must be in 'WxH' format (e.g. '1280x1024'), "
-                f"got '{resolution}'",
+                f"settings.resolution must be in 'WxH' format (e.g. '1280x1024'), got '{resolution}'",
                 field_name='settings.resolution',
             )
         return result
@@ -162,20 +170,17 @@ class VariableUsageValidator(PlaybookValidator):
 
         return references
 
-    def _extract_from_action(self, action: ActionType, action_index: int,
-                            action_type: str) -> dict[str, list[tuple]]:
+    def _extract_from_action(self, action: ActionType, action_index: int, action_type: str) -> dict[str, list[tuple]]:
         """Extract variable references from a single action."""
         references: dict[str, list[tuple]] = {}
 
         # Check description (common to all actions)
         if hasattr(action, 'description') and action.description:
-            self._extract_from_string(action.description, 'description',
-                                     action_index, action_type, references)
+            self._extract_from_string(action.description, 'description', action_index, action_type, references)
 
         # Check target fields (ClickAction, GotoAction, etc.)
         if hasattr(action, 'target') and action.target:
-            self._extract_from_target(action.target, 'target',
-                                     action_index, action_type, references)
+            self._extract_from_target(action.target, 'target', action_index, action_type, references)
 
         # Dispatch to type-specific extractors
         for action_cls, extractor in self._action_extractors():
@@ -198,57 +203,45 @@ class VariableUsageValidator(PlaybookValidator):
     def _extract_from_drag(self, action, action_index, action_type, references):
         """Extract variable references from DragAction src/dst targets."""
         if action.src:
-            self._extract_from_target(action.src, 'src',
-                                     action_index, action_type, references)
+            self._extract_from_target(action.src, 'src', action_index, action_type, references)
         if action.dst:
-            self._extract_from_target(action.dst, 'dst',
-                                     action_index, action_type, references)
+            self._extract_from_target(action.dst, 'dst', action_index, action_type, references)
 
     def _extract_from_keyboard(self, action, action_index, action_type, references):
         """Extract variable references from KeyboardAction text."""
         if action.text:
-            self._extract_from_string(action.text, 'text',
-                                     action_index, action_type, references)
+            self._extract_from_string(action.text, 'text', action_index, action_type, references)
 
     def _extract_from_command(self, action, action_index, action_type, references):
         """Extract variable references from CommandAction fields."""
         if action.command:
-            self._extract_from_string(action.command, 'command',
-                                     action_index, action_type, references)
+            self._extract_from_string(action.command, 'command', action_index, action_type, references)
         if action.cwd:
-            self._extract_from_string(action.cwd, 'cwd',
-                                     action_index, action_type, references)
+            self._extract_from_string(action.cwd, 'cwd', action_index, action_type, references)
         if action.env:
             for key, value in action.env.items():
-                self._extract_from_string(str(value), f'env.{key}',
-                                         action_index, action_type, references)
+                self._extract_from_string(str(value), f'env.{key}', action_index, action_type, references)
 
     def _extract_from_pull(self, action, action_index, action_type, references):
         """Extract variable references from PullAction paths."""
         if action.src:
             if isinstance(action.src, list):
                 for src_item in action.src:
-                    self._extract_from_string(src_item, 'src',
-                                             action_index, action_type, references)
+                    self._extract_from_string(src_item, 'src', action_index, action_type, references)
             else:
-                self._extract_from_string(action.src, 'src',
-                                         action_index, action_type, references)
+                self._extract_from_string(action.src, 'src', action_index, action_type, references)
         if action.dst:
-            self._extract_from_string(action.dst, 'dst',
-                                     action_index, action_type, references)
+            self._extract_from_string(action.dst, 'dst', action_index, action_type, references)
 
     def _extract_from_test(self, action, action_index, action_type, references):
         """Extract variable references from ActionTestAction name."""
         if action.name:
-            self._extract_from_string(action.name, 'name',
-                                     action_index, action_type, references)
+            self._extract_from_string(action.name, 'name', action_index, action_type, references)
 
     def _extract_from_block_refs(self, action, action_index, action_type, references):
         """Extract variable references from BlockAction nested actions."""
         for nested_idx, nested_action in enumerate(action.actions):
-            nested_refs = self._extract_from_action(
-                nested_action, action_index, f"{action_type}.block[{nested_idx}]"
-            )
+            nested_refs = self._extract_from_action(nested_action, action_index, f"{action_type}.block[{nested_idx}]")
             for var_name, locations in nested_refs.items():
                 if var_name not in references:
                     references[var_name] = []
@@ -256,8 +249,7 @@ class VariableUsageValidator(PlaybookValidator):
 
     def _extract_from_wait_until_refs(self, action, action_index, action_type, references):
         """Extract variable references from WaitUntilAction condition targets."""
-        self._extract_from_wait_condition(action.condition, 'condition',
-                                         action_index, action_type, references)
+        self._extract_from_wait_condition(action.condition, 'condition', action_index, action_type, references)
 
     def _extract_from_stop_continue(self, action, action_index, action_type, references):
         """Extract variable references from StopAction/ContinueAction conditions."""
@@ -267,45 +259,45 @@ class VariableUsageValidator(PlaybookValidator):
                 references[var_name] = []
             references[var_name].append((action_index, action_type, 'condition.variable'))
 
-    def _extract_from_target(self, target: Target, field_prefix: str,
-                            action_index: int, action_type: str,
-                            references: dict[str, list[tuple]]):
+    def _extract_from_target(
+        self, target: Target, field_prefix: str, action_index: int, action_type: str, references: dict[str, list[tuple]]
+    ):
         """Extract variables from Target object."""
         if target.text:
-            self._extract_from_string(target.text, f'{field_prefix}.text',
-                                     action_index, action_type, references)
+            self._extract_from_string(target.text, f'{field_prefix}.text', action_index, action_type, references)
         if target.image:
-            self._extract_from_string(target.image, f'{field_prefix}.image',
-                                     action_index, action_type, references)
+            self._extract_from_string(target.image, f'{field_prefix}.image', action_index, action_type, references)
         if target.icon:
-            self._extract_from_string(target.icon, f'{field_prefix}.icon',
-                                     action_index, action_type, references)
+            self._extract_from_string(target.icon, f'{field_prefix}.icon', action_index, action_type, references)
 
-    def _extract_from_wait_condition(self, condition, field_prefix: str,
-                                    action_index: int, action_type: str,
-                                    references: dict[str, list[tuple]]):
+    def _extract_from_wait_condition(
+        self, condition, field_prefix: str, action_index: int, action_type: str, references: dict[str, list[tuple]]
+    ):
         """Extract variables from WaitCondition recursively."""
         if condition.exists:
-            self._extract_from_target(condition.exists, f'{field_prefix}.exists',
-                                     action_index, action_type, references)
+            self._extract_from_target(condition.exists, f'{field_prefix}.exists', action_index, action_type, references)
         elif condition.not_exists:
-            self._extract_from_target(condition.not_exists, f'{field_prefix}.not_exists',
-                                     action_index, action_type, references)
+            self._extract_from_target(
+                condition.not_exists, f'{field_prefix}.not_exists', action_index, action_type, references
+            )
         elif condition.all:
             for idx, subcond in enumerate(condition.all):
-                self._extract_from_wait_condition(subcond, f'{field_prefix}.all[{idx}]',
-                                                 action_index, action_type, references)
+                self._extract_from_wait_condition(
+                    subcond, f'{field_prefix}.all[{idx}]', action_index, action_type, references
+                )
         elif condition.any:
             for idx, subcond in enumerate(condition.any):
-                self._extract_from_wait_condition(subcond, f'{field_prefix}.any[{idx}]',
-                                                 action_index, action_type, references)
+                self._extract_from_wait_condition(
+                    subcond, f'{field_prefix}.any[{idx}]', action_index, action_type, references
+                )
         elif condition.negate:
-            self._extract_from_wait_condition(condition.negate, f'{field_prefix}.negate',
-                                             action_index, action_type, references)
+            self._extract_from_wait_condition(
+                condition.negate, f'{field_prefix}.negate', action_index, action_type, references
+            )
 
-    def _extract_from_string(self, text: str, field_name: str,
-                           action_index: int, action_type: str,
-                           references: dict[str, list[tuple]]):
+    def _extract_from_string(
+        self, text: str, field_name: str, action_index: int, action_type: str, references: dict[str, list[tuple]]
+    ):
         """Extract variable names from string using regex pattern."""
         matches = self.VARIABLE_PATTERN.findall(text)
         for var_name in matches:
@@ -365,9 +357,7 @@ class FilterValidator(PlaybookValidator):
 
             # Extract and validate filters for this variable
             for action_index, action_type, field_name in locations:
-                filters = self._extract_filters_from_action(
-                    playbook, action_index, field_name, var_name
-                )
+                filters = self._extract_filters_from_action(playbook, action_index, field_name, var_name)
 
                 for filter_name in filters:
                     # Check if filter is valid for this variable type
@@ -385,16 +375,16 @@ class FilterValidator(PlaybookValidator):
                                 action_index=action_index,
                                 action_type=action_type,
                                 field_name=field_name,
-                                variable_name=var_name
+                                variable_name=var_name,
                             )
                         else:
                             result.add_error(
                                 message=f"Filter '{filter_name}' cannot be used on {var_type} variable '{var_name}'. "
-                                       f"Valid filters for {var_type}: {', '.join(sorted(allowed_filters)) if allowed_filters else 'none'}",
+                                f"Valid filters for {var_type}: {', '.join(sorted(allowed_filters)) if allowed_filters else 'none'}",
                                 action_index=action_index,
                                 action_type=action_type,
                                 field_name=field_name,
-                                variable_name=var_name
+                                variable_name=var_name,
                             )
 
         return result
@@ -482,8 +472,9 @@ class FilterValidator(PlaybookValidator):
             return None
         return variable_field
 
-    def _extract_filters_from_action(self, playbook: Playbook, action_index: int,
-                                     field_name: str, var_name: str) -> list[str]:
+    def _extract_filters_from_action(
+        self, playbook: Playbook, action_index: int, field_name: str, var_name: str
+    ) -> list[str]:
         """
         Extract filter names used on a specific variable in a specific action field.
 
@@ -499,9 +490,7 @@ class FilterValidator(PlaybookValidator):
 
         # Find variable references with this name in the field value
         # Pattern: {{var_name | filter1 | filter2(...)}}
-        var_pattern = re.compile(
-            r'\{\{\s*' + re.escape(var_name) + r'\s*(\|[^}]*)?\s*\}\}'
-        )
+        var_pattern = re.compile(r'\{\{\s*' + re.escape(var_name) + r'\s*(\|[^}]*)?\s*\}\}')
 
         filters = []
         for match in var_pattern.finditer(field_value):
@@ -559,9 +548,7 @@ class DuplicateVariableValidator(PlaybookValidator):
                 variable_sources[var_name].append(('variables_section', None, None))
 
         # Check save_timestamp actions
-        self._collect_save_timestamp_variables(
-            playbook.actions, variable_sources
-        )
+        self._collect_save_timestamp_variables(playbook.actions, variable_sources)
 
         # Find duplicates - warn but don't error (later definition wins)
         for var_name, sources in variable_sources.items():
@@ -572,13 +559,9 @@ class DuplicateVariableValidator(PlaybookValidator):
                     if source_type == 'variables_section':
                         source_descriptions.append("variables section")
                     elif source_type == 'save_timestamp':
-                        source_descriptions.append(
-                            f"save_timestamp at action index {action_idx} ({action_type})"
-                        )
+                        source_descriptions.append(f"save_timestamp at action index {action_idx} ({action_type})")
                     elif source_type == 'command_capture':
-                        source_descriptions.append(
-                            f"command capture at action index {action_idx} ({action_type})"
-                        )
+                        source_descriptions.append(f"command capture at action index {action_idx} ({action_type})")
 
                 # Check if it's an automatic variable being overridden
                 if self._is_automatic_variable(var_name):
@@ -597,10 +580,7 @@ class DuplicateVariableValidator(PlaybookValidator):
         return result
 
     def _collect_save_timestamp_variables(
-        self,
-        actions: list[ActionType],
-        variable_sources: dict[str, list[tuple]],
-        action_offset: int = 0
+        self, actions: list[ActionType], variable_sources: dict[str, list[tuple]], action_offset: int = 0
     ) -> None:
         """
         Collect variable names from save_timestamp and command capture actions recursively.
@@ -618,11 +598,7 @@ class DuplicateVariableValidator(PlaybookValidator):
                 if var_name:
                     if var_name not in variable_sources:
                         variable_sources[var_name] = []
-                    variable_sources[var_name].append((
-                        'save_timestamp',
-                        action_index,
-                        action.__class__.__name__
-                    ))
+                    variable_sources[var_name].append(('save_timestamp', action_index, action.__class__.__name__))
 
             # Check command capture actions
             if isinstance(action, CommandAction) and action.capture:
@@ -630,19 +606,11 @@ class DuplicateVariableValidator(PlaybookValidator):
                 if var_name:
                     if var_name not in variable_sources:
                         variable_sources[var_name] = []
-                    variable_sources[var_name].append((
-                        'command_capture',
-                        action_index,
-                        action.__class__.__name__
-                    ))
+                    variable_sources[var_name].append(('command_capture', action_index, action.__class__.__name__))
 
             # Recursively check block actions
             if isinstance(action, BlockAction):
-                self._collect_save_timestamp_variables(
-                    action.actions,
-                    variable_sources,
-                    action_offset=action_index
-                )
+                self._collect_save_timestamp_variables(action.actions, variable_sources, action_offset=action_index)
 
     def _extract_variable_name(self, variable_field: str) -> str | None:
         """Extract variable name from save_timestamp variable field."""
@@ -712,7 +680,7 @@ class VariableDefinitionValidator(PlaybookValidator):
                         action_index=action_index,
                         action_type=action_type,
                         field_name=field_name,
-                        variable_name=var_name
+                        variable_name=var_name,
                     )
 
         return result
@@ -773,7 +741,7 @@ class VariableDefinitionValidator(PlaybookValidator):
             'adare_os',
             'adare_temp_dir',
             'adare_system_drive',  # Windows only
-            'adare_root_dir',      # Linux only
+            'adare_root_dir',  # Linux only
             # Experiment-level shared mount variables
             'adare_shared',
             'adare_shared_tools',
@@ -842,8 +810,9 @@ class MachineRoutingValidator(PlaybookValidator):
         self._check_actions(playbook.actions, valid_keys, result)
         return result
 
-    def _check_actions(self, actions: list[ActionType], valid_keys: set[str],
-                        result: ValidationResult, action_offset: int = 0) -> None:
+    def _check_actions(
+        self, actions: list[ActionType], valid_keys: set[str], result: ValidationResult, action_offset: int = 0
+    ) -> None:
         for idx, action in enumerate(actions):
             action_index = action_offset + idx
             action_type = action.__class__.__name__

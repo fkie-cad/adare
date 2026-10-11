@@ -46,7 +46,6 @@ IGNORE_PATTERNS = [
 
 
 if __name__ == '__main__':
-
     adare = Path('.')
 
     # copy all files and folders from appdata_local to appdata_dir with progress bar and actual file that is copied
@@ -58,7 +57,8 @@ if __name__ == '__main__':
         if file.name == 'testfunctions':  # Skip testfunctions - we'll load directly from source
             continue
         if file.is_dir():
-            shutil.copytree(file, APPDATA_DIR / file.name, dirs_exist_ok=True,
-                            ignore=shutil.ignore_patterns(*IGNORE_PATTERNS))
+            shutil.copytree(
+                file, APPDATA_DIR / file.name, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*IGNORE_PATTERNS)
+            )
         else:
             shutil.copy2(file, APPDATA_DIR / file.name)

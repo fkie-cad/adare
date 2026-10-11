@@ -56,9 +56,7 @@ class DiskDiffComparator:
         log.debug(f"Base: {base_disk_path}")
         log.debug(f"Overlay: {overlay_disk_path}")
 
-        return self._compare_disks_manual(
-            base_disk_path, overlay_disk_path, extract_dir
-        )
+        return self._compare_disks_manual(base_disk_path, overlay_disk_path, extract_dir)
 
     def _compare_disks_manual(
         self,
@@ -76,9 +74,7 @@ class DiskDiffComparator:
         Returns:
             Diff dict or None on failure
         """
-        log.info(
-            "Starting manual disk comparison using optimized guestfish scan"
-        )
+        log.info("Starting manual disk comparison using optimized guestfish scan")
 
         # Detect root partition on the overlay
         # We assume the layout is identical on base.
@@ -100,9 +96,7 @@ class DiskDiffComparator:
             part_suffix = part_match.group(1)
 
         # Scan both disks
-        base_files, overlay_files = self._scan_disks_via_guestfish(
-            base_disk_path, overlay_disk_path, part_suffix
-        )
+        base_files, overlay_files = self._scan_disks_via_guestfish(base_disk_path, overlay_disk_path, part_suffix)
 
         if base_files is None or overlay_files is None:
             log.error("Failed to scan disks")
@@ -118,37 +112,40 @@ class DiskDiffComparator:
         # Check for additions and modifications
         for path, meta in overlay_files.items():
             if path not in base_files:
-                diff['added'].append({
-                    'path': path,
-                    'size': meta['size'],
-                    'mtime': meta['mtime'],
-                    'mtime_readable': meta['mtime_readable'],
-                })
+                diff['added'].append(
+                    {
+                        'path': path,
+                        'size': meta['size'],
+                        'mtime': meta['mtime'],
+                        'mtime_readable': meta['mtime_readable'],
+                    }
+                )
             else:
                 base_meta = base_files[path]
-                if (
-                    meta['size'] != base_meta['size']
-                    or meta['mtime'] != base_meta['mtime']
-                ):
-                    diff['modified'].append({
-                        'path': path,
-                        'size_before': base_meta['size'],
-                        'size_after': meta['size'],
-                        'mtime_before': base_meta['mtime'],
-                        'mtime_after': meta['mtime'],
-                        'mtime_before_readable': base_meta['mtime_readable'],
-                        'mtime_after_readable': meta['mtime_readable'],
-                    })
+                if meta['size'] != base_meta['size'] or meta['mtime'] != base_meta['mtime']:
+                    diff['modified'].append(
+                        {
+                            'path': path,
+                            'size_before': base_meta['size'],
+                            'size_after': meta['size'],
+                            'mtime_before': base_meta['mtime'],
+                            'mtime_after': meta['mtime'],
+                            'mtime_before_readable': base_meta['mtime_readable'],
+                            'mtime_after_readable': meta['mtime_readable'],
+                        }
+                    )
 
         # Check for removals
         for path, meta in base_files.items():
             if path not in overlay_files:
-                diff['removed'].append({
-                    'path': path,
-                    'size': meta['size'],
-                    'mtime': meta['mtime'],
-                    'mtime_readable': meta['mtime_readable'],
-                })
+                diff['removed'].append(
+                    {
+                        'path': path,
+                        'size': meta['size'],
+                        'mtime': meta['mtime'],
+                        'mtime_readable': meta['mtime_readable'],
+                    }
+                )
 
         log.info(
             f"Manual Diff complete: {len(diff['added'])} added, "
@@ -159,10 +156,7 @@ class DiskDiffComparator:
         # Extract file content if requested
         # This starts a NEW guestfish session (2nd boot), acceptable for stability.
         if extract_dir:
-            self._extract_diff_files(
-                base_disk_path, overlay_disk_path,
-                root_device, diff, extract_dir
-            )
+            self._extract_diff_files(base_disk_path, overlay_disk_path, root_device, diff, extract_dir)
 
         return diff
 
@@ -194,15 +188,10 @@ class DiskDiffComparator:
         if base_files is None or overlay_files is None:
             return None, None
 
-        log.info(
-            f"Scanned {len(base_files)} base files, "
-            f"{len(overlay_files)} overlay files"
-        )
+        log.info(f"Scanned {len(base_files)} base files, {len(overlay_files)} overlay files")
         return base_files, overlay_files
 
-    def _scan_single_disk(
-        self, disk_path: str, part_suffix: str
-    ) -> dict | None:
+    def _scan_single_disk(self, disk_path: str, part_suffix: str) -> dict | None:
         """Scan a single disk using virt-ls.
 
         Args:
@@ -218,8 +207,10 @@ class DiskDiffComparator:
 
         cmd = [
             'virt-ls',
-            '-a', disk_path,
-            '-m', mount_dev,
+            '-a',
+            disk_path,
+            '-m',
+            mount_dev,
             '--csv',
             '--time-t',
             '-l',
@@ -227,18 +218,12 @@ class DiskDiffComparator:
             '/',
         ]
 
-        log.debug(
-            f"Running virt-ls on {disk_path} (mount: {mount_dev})"
-        )
+        log.debug(f"Running virt-ls on {disk_path} (mount: {mount_dev})")
 
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, check=False
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
         if result.returncode != 0:
-            log.error(
-                f"virt-ls failed for {disk_path}: {result.stderr}"
-            )
+            log.error(f"virt-ls failed for {disk_path}: {result.stderr}")
             return None
 
         files: dict = {}
@@ -330,10 +315,7 @@ class DiskDiffComparator:
             if not current_specs:
                 continue
 
-            log.info(
-                f"Extracting {len(current_specs)} files from "
-                f"{name} disk"
-            )
+            log.info(f"Extracting {len(current_specs)} files from {name} disk")
 
             # Create parent directories for all targets
             for _, _, target_path in current_specs:
@@ -392,9 +374,7 @@ class DiskDiffComparator:
         except ValueError:
             pass  # Skip malformed records
 
-    def parse_virt_diff_output(
-        self, csv_output: str
-    ) -> dict[str, list[dict]]:
+    def parse_virt_diff_output(self, csv_output: str) -> dict[str, list[dict]]:
         """Parse virt-diff CSV output into standard diff format.
 
         virt-diff CSV columns: Change,Path,Old Size,New Size,Old Time,New Time
@@ -420,39 +400,37 @@ class DiskDiffComparator:
             path = row.get('Path', '').strip()
 
             if change_type == 'added':
-                diff['added'].append({
-                    'path': path,
-                    'size': int(row.get('New Size', 0) or 0),
-                    'mtime': self._parse_virt_diff_time(
-                        row.get('New Time', '')
-                    ),
-                    'mtime_readable': row.get('New Time', ''),
-                })
+                diff['added'].append(
+                    {
+                        'path': path,
+                        'size': int(row.get('New Size', 0) or 0),
+                        'mtime': self._parse_virt_diff_time(row.get('New Time', '')),
+                        'mtime_readable': row.get('New Time', ''),
+                    }
+                )
 
             elif change_type == 'removed':
-                diff['removed'].append({
-                    'path': path,
-                    'size': int(row.get('Old Size', 0) or 0),
-                    'mtime': self._parse_virt_diff_time(
-                        row.get('Old Time', '')
-                    ),
-                    'mtime_readable': row.get('Old Time', ''),
-                })
+                diff['removed'].append(
+                    {
+                        'path': path,
+                        'size': int(row.get('Old Size', 0) or 0),
+                        'mtime': self._parse_virt_diff_time(row.get('Old Time', '')),
+                        'mtime_readable': row.get('Old Time', ''),
+                    }
+                )
 
             elif change_type == 'changed':
-                diff['modified'].append({
-                    'path': path,
-                    'size_before': int(row.get('Old Size', 0) or 0),
-                    'size_after': int(row.get('New Size', 0) or 0),
-                    'mtime_before': self._parse_virt_diff_time(
-                        row.get('Old Time', '')
-                    ),
-                    'mtime_after': self._parse_virt_diff_time(
-                        row.get('New Time', '')
-                    ),
-                    'mtime_before_readable': row.get('Old Time', ''),
-                    'mtime_after_readable': row.get('New Time', ''),
-                })
+                diff['modified'].append(
+                    {
+                        'path': path,
+                        'size_before': int(row.get('Old Size', 0) or 0),
+                        'size_after': int(row.get('New Size', 0) or 0),
+                        'mtime_before': self._parse_virt_diff_time(row.get('Old Time', '')),
+                        'mtime_after': self._parse_virt_diff_time(row.get('New Time', '')),
+                        'mtime_before_readable': row.get('Old Time', ''),
+                        'mtime_after_readable': row.get('New Time', ''),
+                    }
+                )
 
         return diff
 
@@ -471,9 +449,7 @@ class DiskDiffComparator:
             return 0.0
 
         try:
-            dt = datetime.strptime(
-                time_str.split('.')[0], '%Y-%m-%d %H:%M:%S'
-            )
+            dt = datetime.strptime(time_str.split('.')[0], '%Y-%m-%d %H:%M:%S')
             return dt.timestamp()
         except (ValueError, AttributeError):
             try:

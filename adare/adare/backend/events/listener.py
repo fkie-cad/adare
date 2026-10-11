@@ -14,13 +14,15 @@ log = logging.getLogger(__name__)
 
 # Terminal states that reveal an otherwise-collapsed stage as a top-level row.
 # INTERRUPTED is intentionally omitted (Ctrl-C shows on the visible parent phase).
-_COLLAPSE_REVEAL_STATUSES = frozenset({
-    StatusEnum.FAILED,
-    StatusEnum.WARNING,
-    StatusEnum.ERROR,
-    StatusEnum.TEST_MISSING,
-    StatusEnum.TEST_FAILED,
-})
+_COLLAPSE_REVEAL_STATUSES = frozenset(
+    {
+        StatusEnum.FAILED,
+        StatusEnum.WARNING,
+        StatusEnum.ERROR,
+        StatusEnum.TEST_MISSING,
+        StatusEnum.TEST_FAILED,
+    }
+)
 
 # Cache for stage hierarchy levels to avoid repeated calculations
 _stage_level_cache = {}
@@ -61,6 +63,7 @@ def _schedule_delayed_completion(stage_id: str, console, completion_callback, de
         completion_callback: Function to call for completion
         delay_ms: Delay in milliseconds
     """
+
     def delayed_complete():
         time.sleep(delay_ms / 1000.0)
         try:
@@ -95,7 +98,7 @@ def _queue_db_operation(operation_type: str, **kwargs):
     operation = {
         'type': operation_type,
         'data': kwargs,
-        'timestamp': threading.current_thread().ident  # For debugging
+        'timestamp': threading.current_thread().ident,  # For debugging
     }
 
     try:
@@ -124,8 +127,7 @@ def drain_db_operations(timeout: float = 15.0) -> bool:
         time.sleep(0.02)
 
     log.warning(
-        f"Queued database operations did not drain within {timeout}s "
-        f"({_db_operation_queue.qsize()} still pending)"
+        f"Queued database operations did not drain within {timeout}s ({_db_operation_queue.qsize()} still pending)"
     )
     return False
 
@@ -195,30 +197,23 @@ def _execute_db_batch(batch):
 
             if operation_type == 'stage_update':
                 from adare.backend.experiment.database import update_stage_in_run
-                update_stage_in_run(
-                    stage=data['stage'],
-                    experimentrun_ulid=data['ulid'],
-                    stage_id=data['stage_id']
-                )
+
+                update_stage_in_run(stage=data['stage'], experimentrun_ulid=data['ulid'], stage_id=data['stage_id'])
 
             elif operation_type == 'action_event':
                 from adare.database.api.event import EventDbApi
+
                 with EventDbApi(experiment_run_ulid=data['ulid']) as api:
                     api.add_action_event(
-                        data['action_data'],
-                        data['action_id'],
-                        data['ulid'],
-                        data.get('parent_event_id')
+                        data['action_data'], data['action_id'], data['ulid'], data.get('parent_event_id')
                     )
 
             elif operation_type == 'test_event':
                 from adare.database.api.event import EventDbApi
+
                 with EventDbApi(experiment_run_ulid=data['ulid']) as api:
                     api.add_test_event(
-                        data['action_data'],
-                        data['action_id'],
-                        data['ulid'],
-                        data.get('parent_event_id')
+                        data['action_data'], data['action_id'], data['ulid'], data.get('parent_event_id')
                     )
 
             successful_operations += 1
@@ -231,8 +226,7 @@ def _execute_db_batch(batch):
             if str(e).startswith("Cannot find project for experiment run"):
                 ulid = operation.get('data', {}).get('ulid', 'unknown')
                 log.debug(
-                    f"Skipping stage update for run {ulid} with no project "
-                    f"row (verify-only or pre-init run): {e}"
+                    f"Skipping stage update for run {ulid} with no project row (verify-only or pre-init run): {e}"
                 )
                 successful_operations += 1
             else:
@@ -248,7 +242,9 @@ def _execute_db_batch(batch):
             log.error(f"Error executing {operation_type} operation for ULID {ulid}: {e}", exc_info=True)
 
     if failed_operations > 0:
-        log.warning(f"Database batch completed with {successful_operations} successful and {failed_operations} failed operations")
+        log.warning(
+            f"Database batch completed with {successful_operations} successful and {failed_operations} failed operations"
+        )
     else:
         log.debug(f"Database batch completed successfully with {successful_operations} operations")
 
@@ -319,6 +315,7 @@ def _compute_display_level(action_data):
     # This covers block sub-actions, find/execute substages, etc.
     return base_level + 1  # Sub-actions (level 2)
 
+
 def event_listener_cli(ulid):
     console = flowconsolemanager.get_handler(ulid)
     if not console:
@@ -366,10 +363,13 @@ def _handle_stage_event(event, console, ulid):
     collapse = getattr(stage, "collapse", False)
 
     # Debug logging for duplicate stage investigation
-    log.info(f"[EventListener CLI] Stage: {stage.name}, ID: {stage_id}, Start: {stage.start_time}, End: {stage.end_time}, Status: {stage.status}")
+    log.info(
+        f"[EventListener CLI] Stage: {stage.name}, ID: {stage_id}, Start: {stage.start_time}, End: {stage.end_time}, Status: {stage.status}"
+    )
 
     # Performance tracking: log event processing time for optimization
     import time
+
     event_start_time = time.time()
 
     # Check stage status first
@@ -384,8 +384,9 @@ def _handle_stage_event(event, console, ulid):
     if finished:
         # Collapsed stage that finished cleanly: no spinner was ever created and
         # the outcome isn't a problem state, so leave the row hidden entirely.
-        if collapse and (stage.status not in _COLLAPSE_REVEAL_STATUSES
-                         and stage.result_status not in _COLLAPSE_REVEAL_STATUSES):
+        if collapse and (
+            stage.status not in _COLLAPSE_REVEAL_STATUSES and stage.result_status not in _COLLAPSE_REVEAL_STATUSES
+        ):
             log.debug(f"[EventListener CLI] Skipping collapsed stage (clean finish): {stage.name}")
             return
 
@@ -403,9 +404,17 @@ def _handle_stage_event(event, console, ulid):
                     final_message = message
 
                 if stage.result_status and stage.result_status != StatusEnum.NONE:
-                    console.log_spinner_done(identifier=stage_id, status=StatusEnum.FINISHED, message=final_message, result_status=stage.result_status, duration=stage_duration)
+                    console.log_spinner_done(
+                        identifier=stage_id,
+                        status=StatusEnum.FINISHED,
+                        message=final_message,
+                        result_status=stage.result_status,
+                        duration=stage_duration,
+                    )
                 else:
-                    console.log_spinner_done(identifier=stage_id, status=stage.status, message=final_message, duration=stage_duration)
+                    console.log_spinner_done(
+                        identifier=stage_id, status=stage.status, message=final_message, duration=stage_duration
+                    )
                 log.debug(f"[EventListener CLI] Completed stage spinner for {ulid}: {stage.name}")
             else:
                 # Handle stages that completed without ever showing a spinner
@@ -417,7 +426,9 @@ def _handle_stage_event(event, console, ulid):
                     console.log_error(identifier=stage_id, message=message, level=level, duration=stage_duration)
                 elif stage.status == StatusEnum.INTERRUPTED:
                     interrupted_message = f"{message} (interrupted by user)"
-                    console.log_interrupted(identifier=stage_id, message=interrupted_message, level=level, duration=stage_duration)
+                    console.log_interrupted(
+                        identifier=stage_id, message=interrupted_message, level=level, duration=stage_duration
+                    )
                 elif stage.status == StatusEnum.FAILED:
                     console.log_failed(identifier=stage_id, message=message, level=level, duration=stage_duration)
                 elif stage.status == StatusEnum.FINISHED:
@@ -436,7 +447,9 @@ def _handle_stage_event(event, console, ulid):
 
         # Apply debouncing ONLY if spinner hasn't been visible long enough
         if min_display_time_needed > 0.001 and console.exists(stage_id):  # 1ms threshold (reduced from 10ms)
-            log.debug(f"[EventListener CLI] Delaying completion of {stage.name} by {min_display_time_needed*1000:.1f}ms for better UX")
+            log.debug(
+                f"[EventListener CLI] Delaying completion of {stage.name} by {min_display_time_needed * 1000:.1f}ms for better UX"
+            )
             _schedule_delayed_completion(stage_id, console, complete_stage, min_display_time_needed * 1000)
         else:
             complete_stage()  # Complete immediately if already visible long enough
@@ -448,7 +461,9 @@ def _handle_stage_event(event, console, ulid):
             return
         # Only add the stage if it doesn't already exist
         if not console.exists(stage_id):
-            log.info(f"[EventListener CLI] Creating new console spinner for stage: {stage.name}, ID: {stage_id}, Level: {level}")
+            log.info(
+                f"[EventListener CLI] Creating new console spinner for stage: {stage.name}, ID: {stage_id}, Level: {level}"
+            )
             console.log_spinner(identifier=stage_id, message=message, level=level, start_time=stage.start_time)
         else:
             log.info(f"[EventListener CLI] Stage already exists in console: {stage.name}, ID: {stage_id}")
@@ -456,7 +471,9 @@ def _handle_stage_event(event, console, ulid):
     # Performance tracking: log total event processing time
     event_end_time = time.time()
     processing_time_ms = (event_end_time - event_start_time) * 1000
-    log.debug(f"[EventListener CLI] Processed stage event for {ulid}: {stage.name if stage else 'None'} (processing: {processing_time_ms:.2f}ms)")
+    log.debug(
+        f"[EventListener CLI] Processed stage event for {ulid}: {stage.name if stage else 'None'} (processing: {processing_time_ms:.2f}ms)"
+    )
 
 
 def _handle_action_event(event, console, ulid):
@@ -474,7 +491,9 @@ def _handle_action_event(event, console, ulid):
         action_type = event_type_resolver.get_action_type(event_type, action_data)
 
         # Debug logging with proper type information
-        log.debug(f"[EventListener CLI] Processing action event: type={event_type.value}, action={action_type.value}, id={action_id}")
+        log.debug(
+            f"[EventListener CLI] Processing action event: type={event_type.value}, action={action_type.value}, id={action_id}"
+        )
 
         # Determine if this is a start or complete event
         is_start_event = event_type_resolver.is_start_event(event_type)
@@ -490,6 +509,7 @@ def _handle_action_event(event, console, ulid):
 
             # Extract start time from action data for live duration tracking
             from datetime import datetime
+
             start_time = None
             if action_data.get('timestamp'):
                 try:
@@ -499,8 +519,14 @@ def _handle_action_event(event, console, ulid):
             else:
                 start_time = datetime.now(UTC)
 
-            console.log_spinner(identifier=action_id, message=message, level=level,
-                              spinner='dots', spinner_style='bold blue', start_time=start_time)
+            console.log_spinner(
+                identifier=action_id,
+                message=message,
+                level=level,
+                spinner='dots',
+                spinner_style='bold blue',
+                start_time=start_time,
+            )
             log.info(f"[EventListener CLI] Action started: {action_type.value} with ID {action_id}")
 
         elif is_complete_event:
@@ -515,8 +541,13 @@ def _handle_action_event(event, console, ulid):
 
             # Update the console
             if console.exists(action_id):
-                console.log_spinner_done(identifier=action_id, status=status,
-                                       message=message, result_status=result_status, duration=execution_time)
+                console.log_spinner_done(
+                    identifier=action_id,
+                    status=status,
+                    message=message,
+                    result_status=result_status,
+                    duration=execution_time,
+                )
             else:
                 # Direct log if spinner doesn't exist
                 if status == StatusEnum.SUCCESS:
@@ -525,7 +556,9 @@ def _handle_action_event(event, console, ulid):
                     console.log_failed(identifier=action_id, message=message, level=level, duration=execution_time)
 
             success = action_data.get('success', False)
-            log.info(f"[EventListener CLI] Action completed: {action_type.value} with ID {action_id}, Success: {success}")
+            log.info(
+                f"[EventListener CLI] Action completed: {action_type.value} with ID {action_id}, Success: {success}"
+            )
 
         else:
             log.warning(f"[EventListener CLI] Unknown action event type: {event_type.value}")
@@ -548,12 +581,7 @@ def event_listener_db(ulid):
                 return
 
             # Queue database operation for async processing
-            _queue_db_operation(
-                'stage_update',
-                stage=stage,
-                ulid=ulid,
-                stage_id=stage_id
-            )
+            _queue_db_operation('stage_update', stage=stage, ulid=ulid, stage_id=stage_id)
             log.debug(f"[EventListener DB] Queued stage event for {ulid}: {stage.name if stage else 'None'}")
 
             # ALSO store action substages (find/execute) as action events for better integration
@@ -563,15 +591,10 @@ def event_listener_db(ulid):
                     'action_description': stage.description if hasattr(stage, 'description') else stage.msg,
                     'success': stage.status == 2,  # StatusEnum.SUCCESS = 2
                     'execution_time': None,  # Could calculate from start/end times if needed
-                    'timestamp': stage.start_time.isoformat() if stage.start_time else None
+                    'timestamp': stage.start_time.isoformat() if stage.start_time else None,
                 }
 
-                _queue_db_operation(
-                    'action_event',
-                    action_data=action_data,
-                    action_id=stage_id,
-                    ulid=ulid
-                )
+                _queue_db_operation('action_event', action_data=action_data, action_id=stage_id, ulid=ulid)
                 log.debug(f"[EventListener DB] Queued substage as action event: {stage.name}")
 
         elif event_type == "action":
@@ -600,7 +623,7 @@ def event_listener_db(ulid):
                         action_data=action_data,
                         action_id=action_id,
                         ulid=ulid,
-                        parent_event_id=parent_event_id
+                        parent_event_id=parent_event_id,
                     )
                     log.debug(f"[EventListener DB] Queued test event in database: {action_id}")
                 else:
@@ -610,7 +633,7 @@ def event_listener_db(ulid):
                         action_data=action_data,
                         action_id=action_id,
                         ulid=ulid,
-                        parent_event_id=parent_event_id
+                        parent_event_id=parent_event_id,
                     )
                     log.debug(f"[EventListener DB] Queued action event in database: {action_id}")
             except Exception as e:

@@ -55,6 +55,7 @@ log = logging.getLogger(__name__)
 def _flag(name: str) -> int:
     """Value of ``libvirt.VIR_DOMAIN_UNDEFINE_<name>``, or 0 if unsupported."""
     import libvirt
+
     return getattr(libvirt, f'VIR_DOMAIN_UNDEFINE_{name}', 0)
 
 
@@ -69,12 +70,7 @@ def delete_firmware_state_flags() -> int:
     Without ``TPM`` the swtpm state directory outlives the instance it belonged
     to, one orphan per removed Windows VM.
     """
-    return (
-        _flag('MANAGED_SAVE')
-        | _flag('SNAPSHOTS_METADATA')
-        | _flag('NVRAM')
-        | _flag('TPM')
-    )
+    return _flag('MANAGED_SAVE') | _flag('SNAPSHOTS_METADATA') | _flag('NVRAM') | _flag('TPM')
 
 
 def undefine(domain, flags: int) -> None:

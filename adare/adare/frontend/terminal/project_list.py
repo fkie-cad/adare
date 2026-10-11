@@ -37,17 +37,20 @@ def print_project_list(formatter=None, output_file=None, dual_output=False):
 
     from adare.database.api.base import GlobalDatabaseApi
     from adare.database.models.global_models import Project
+
     with GlobalDatabaseApi() as db:
         projects = pd.read_sql(db._session.query(Project).statement, db._session.bind).map(str)
 
     # Get formatter if not provided
     if formatter is None:
         from adare.run import get_formatter_from_context
+
         formatter, output_file, dual_output = get_formatter_from_context()
 
     if dual_output or formatter.format_type.value != 'rich':
         # Use StructuredDataApi for JSON/YAML output
         from adare.database.api.structured_data import StructuredDataApi
+
         with StructuredDataApi() as api:
             projects_structured = api.get_projects_structured()
             project_list = [proj.to_dict() for proj in projects_structured]

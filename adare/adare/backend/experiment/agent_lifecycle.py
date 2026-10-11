@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 # Windows-aarch64 guest display resolution
 # ---------------------------------------------------------------------------
 
+
 def _build_windows_set_resolution_command(width: int, height: int) -> str:
     """Build a PowerShell command that sets the console-session display resolution.
 
@@ -75,6 +76,7 @@ def _build_windows_set_resolution_command(width: int, height: int) -> str:
 # Shared retry helper  (deduplicates 3 identical patterns from run.py)
 # ---------------------------------------------------------------------------
 
+
 async def _run_command_with_retry(
     vm,
     command: str,
@@ -127,35 +129,40 @@ async def _run_command_with_retry(
                     await asyncio.sleep(retry_delay)
                     retry_delay *= 2
                 else:
-                    log.error(
-                        f"Guest agent connectivity error (returncode -1): {result.stderr}"
-                    )
+                    log.error(f"Guest agent connectivity error (returncode -1): {result.stderr}")
                     raise VMSetupError(
-                        log, vm.vm_name, command,
-                        result.returncode, result.stdout, result.stderr,
+                        log,
+                        vm.vm_name,
+                        command,
+                        result.returncode,
+                        result.stdout,
+                        result.stderr,
                     )
             else:
                 # Real command failure - fail fast
-                log.error(
-                    f"{label} failed with exit code {result.returncode}: {result.stderr}"
-                )
+                log.error(f"{label} failed with exit code {result.returncode}: {result.stderr}")
                 raise VMSetupError(
-                    log, vm.vm_name, command,
-                    result.returncode, result.stdout, result.stderr,
+                    log,
+                    vm.vm_name,
+                    command,
+                    result.returncode,
+                    result.stdout,
+                    result.stderr,
                 )
 
         except TimeoutError as e:
             if attempt < max_retries - 1:
-                log.warning(
-                    f"{label} attempt {attempt + 1}/{max_retries} timed out, "
-                    f"retrying in {retry_delay}s..."
-                )
+                log.warning(f"{label} attempt {attempt + 1}/{max_retries} timed out, retrying in {retry_delay}s...")
                 await asyncio.sleep(retry_delay)
                 retry_delay *= 2
             else:
                 raise VMSetupError(
-                    log, vm.vm_name, command,
-                    -1, "", f"Timeout after {max_retries} attempts: {e}",
+                    log,
+                    vm.vm_name,
+                    command,
+                    -1,
+                    "",
+                    f"Timeout after {max_retries} attempts: {e}",
                 ) from e
 
     # Should not be reachable, but satisfies the type checker
@@ -165,6 +172,7 @@ async def _run_command_with_retry(
 # ---------------------------------------------------------------------------
 # Guest agent readiness verification
 # ---------------------------------------------------------------------------
+
 
 async def verify_guest_agent_readiness(
     vm,
@@ -215,14 +223,15 @@ async def verify_guest_agent_readiness(
                     log.error("Guest agent not responsive after all retry attempts")
                     return False
             else:
-                error_msg = (
-                    f"Unexpected error during readiness check "
-                    f"(returncode {result.returncode}): {result.stderr}"
-                )
+                error_msg = f"Unexpected error during readiness check (returncode {result.returncode}): {result.stderr}"
                 log.error(error_msg)
                 raise VMSetupError(
-                    log, vm.vm_name, "guest agent readiness check",
-                    result.returncode, result.stdout, result.stderr,
+                    log,
+                    vm.vm_name,
+                    "guest agent readiness check",
+                    result.returncode,
+                    result.stdout,
+                    result.stderr,
                 )
 
         except TimeoutError:
@@ -243,6 +252,7 @@ async def verify_guest_agent_readiness(
 # ---------------------------------------------------------------------------
 # Agent installation & startup
 # ---------------------------------------------------------------------------
+
 
 async def install_and_run_adare_vm(context, stop_event: threading.Event):
     """Install and run the adarevm agent in the VM.
@@ -293,15 +303,16 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
         )
 
         env_info = EnvironmentInfo(
-            use_conda=False, conda_env_exists=False, miniforge_path=None, platform=platform,
+            use_conda=False,
+            conda_env_exists=False,
+            miniforge_path=None,
+            platform=platform,
         )
 
         # Shared folder mounting (needed after restore)
         if context.guest_platform == 'windows':
             shared_folders = {
-                name: paths['vm']
-                for name, paths in context.config.shared_directories.items()
-                if paths.get('vm')
+                name: paths['vm'] for name, paths in context.config.shared_directories.items() if paths.get('vm')
             }
             if shared_folders:
                 pass  # Agent readiness is verified below before any commands
@@ -314,16 +325,8 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
         from .execution.base import GUIExecutionMode
         from .execution.gui_executor_factory import resolve_gui_execution_mode
 
-        playbook_settings = (
-            context.playbook.settings
-            if hasattr(context, 'playbook') and context.playbook
-            else None
-        )
-        cli_override = (
-            context.config.gui_mode_override
-            if hasattr(context.config, 'gui_mode_override')
-            else None
-        )
+        playbook_settings = context.playbook.settings if hasattr(context, 'playbook') and context.playbook else None
+        cli_override = context.config.gui_mode_override if hasattr(context.config, 'gui_mode_override') else None
 
         gui_mode = resolve_gui_execution_mode(vm, playbook_settings, cli_override=cli_override)
         skip_xhost = gui_mode == GUIExecutionMode.HOST
@@ -359,8 +362,12 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
     log.info("Verifying guest agent readiness...")
     if not await verify_guest_agent_readiness(vm, stop_event, max_retries=8):
         raise VMSetupError(
-            log, vm.vm_name, "pre-flight guest agent check",
-            -1, "", "Guest agent not responsive after boot validation",
+            log,
+            vm.vm_name,
+            "pre-flight guest agent check",
+            -1,
+            "",
+            "Guest agent not responsive after boot validation",
         )
     log.info("Guest agent verification successful")
 
@@ -383,7 +390,10 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
         # THAT session's active power scheme, not SYSTEM's. Run before the idle
         # agent-install window so the display never blanks in the first place.
         await vm.run_command(
-            powercfg, stop_event=stop_event, admin=True, run_as_user=True,
+            powercfg,
+            stop_event=stop_event,
+            admin=True,
+            run_as_user=True,
         )
 
     # Guest display resolution (Windows-aarch64). The virtio-gpu EDID advertised at
@@ -403,12 +413,15 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
         try:
             result = await vm.run_command(
                 _build_windows_set_resolution_command(rx, ry),
-                stop_event=stop_event, admin=True, run_as_user=True,
+                stop_event=stop_event,
+                admin=True,
+                run_as_user=True,
             )
             if result.returncode != 0:
                 log.warning(
                     "Set-resolution command returned %s (non-fatal): %s",
-                    result.returncode, result.stderr,
+                    result.returncode,
+                    result.stderr,
                 )
         except (OSError, TimeoutError, RuntimeError) as e:
             log.warning(f"Failed to set guest resolution (non-fatal): {e}")
@@ -435,13 +448,16 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
         if result.returncode != 0:
             log.warning(
                 "GNOME power keep-awake command returned %s (non-fatal): %s",
-                result.returncode, result.stderr,
+                result.returncode,
+                result.stderr,
             )
 
     # Execute setup commands
     for idx, setup_cmd in enumerate(commands.setup_commands):
         await _run_command_with_retry(
-            vm, setup_cmd.command, stop_event,
+            vm,
+            setup_cmd.command,
+            stop_event,
             admin=setup_cmd.requires_admin,
             label=f"Setup command [{idx + 1}/{len(commands.setup_commands)}]",
         )
@@ -449,9 +465,7 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
     # Mount shared folders (Windows only)
     if context.guest_platform == 'windows':
         shared_folders = {
-            name: paths['vm']
-            for name, paths in context.config.shared_directories.items()
-            if paths.get('vm')
+            name: paths['vm'] for name, paths in context.config.shared_directories.items() if paths.get('vm')
         }
         if shared_folders:
             await vm.mount_multiple_shared_folders(
@@ -463,7 +477,9 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
     if not commands.skip_installation:
         log.info("Installing adarevm")
         await _run_command_with_retry(
-            vm, commands.install_command, stop_event,
+            vm,
+            commands.install_command,
+            stop_event,
             admin=False,
             label="Installation",
         )
@@ -490,8 +506,7 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
         # Steps: enable guest auth (blocked by default on Win10+), establish
         # the SMB connection, then create the log directory via the junction.
         run_cmd = commands.run_command
-        if (context.hypervisor_type == 'qemu'
-                and getattr(vm.config, 'smb_share_path', None)):
+        if context.hypervisor_type == 'qemu' and getattr(vm.config, 'smb_share_path', None):
             stderr_log = rf'{log_path}\adarevm_stderr.log'
             run_cmd = (
                 'reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services'
@@ -500,8 +515,7 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
                 'Set-SmbClientConfiguration -RequireSecuritySignature $false '
                 '-Force -ErrorAction SilentlyContinue; '
                 f'net use \\\\10.0.2.4\\qemu /persistent:no 2>>"{stderr_log}"; '
-                'cmd /c "mkdir C:\\adare\\run\\logs" 2>nul; '
-                + run_cmd
+                'cmd /c "mkdir C:\\adare\\run\\logs" 2>nul; ' + run_cmd
             )
 
         result = await vm.run_command(
@@ -517,8 +531,12 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
     if result.returncode != 0:
         log.error(f"Failed to start adarevm: {result.stderr}")
         raise VMSetupError(
-            log, vm.vm_name, commands.run_command,
-            result.returncode, result.stdout, result.stderr,
+            log,
+            vm.vm_name,
+            commands.run_command,
+            result.returncode,
+            result.stdout,
+            result.stderr,
         )
     if result.stderr:
         log.info(f"adarevm schtasks output: {result.stderr.strip()}")
@@ -527,16 +545,14 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
     if context.hypervisor_type == 'qemu' and result.returncode == 0:
         try:
             import re
+
             match = re.search(r'PID (\d+)', result.stdout)
             if match:
                 context.adarevm_pid = int(match.group(1))
                 log.info(f"Stored adarevm process PID: {context.adarevm_pid}")
             else:
                 if context.guest_platform == 'windows':
-                    log.debug(
-                        "Could not extract PID from background process start "
-                        "(expected on Windows/schtasks)"
-                    )
+                    log.debug("Could not extract PID from background process start (expected on Windows/schtasks)")
                 else:
                     log.warning("Could not extract PID from background process start")
                 context.adarevm_pid = None
@@ -566,6 +582,7 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
 # WebSocket connection diagnostics
 # ---------------------------------------------------------------------------
 
+
 async def _diagnose_websocket_connection(vm, guest_platform: str, stop_event, full: bool = False) -> bool:
     """Run guest-side diagnostics for WebSocket connection issues.
 
@@ -583,42 +600,58 @@ async def _diagnose_websocket_connection(vm, guest_platform: str, stop_event, fu
     """
     if 'windows' in guest_platform.lower():
         diagnostics = [
-            ("adarevm process",
-             'Get-Process python -ErrorAction SilentlyContinue | '
-             'Select-Object Id,ProcessName | Format-Table; '
-             'if (-not (Get-Process python -ErrorAction SilentlyContinue)) '
-             '{ Write-Output "python NOT running" }'),
-            ("port listening",
-             'netstat -ano | Select-String ":18765" ; '
-             'if (-not ($?)) { Write-Output "Port 18765 NOT listening" }'),
+            (
+                "adarevm process",
+                'Get-Process python -ErrorAction SilentlyContinue | '
+                'Select-Object Id,ProcessName | Format-Table; '
+                'if (-not (Get-Process python -ErrorAction SilentlyContinue)) '
+                '{ Write-Output "python NOT running" }',
+            ),
+            (
+                "port listening",
+                'netstat -ano | Select-String ":18765" ; if (-not ($?)) { Write-Output "Port 18765 NOT listening" }',
+            ),
         ]
         if full:
-            diagnostics.extend([
-                ("adarevm stdout log (temp)",
-                 'if (Test-Path "C:\\Windows\\Temp\\adarevm_stdout.log") '
-                 '{ Get-Content "C:\\Windows\\Temp\\adarevm_stdout.log" -Tail 30 } '
-                 'else { Write-Output "NOT FOUND" }'),
-                ("adarevm stderr log (temp)",
-                 'if (Test-Path "C:\\Windows\\Temp\\adarevm_stderr.log") '
-                 '{ Get-Content "C:\\Windows\\Temp\\adarevm_stderr.log" -Tail 30 } '
-                 'else { Write-Output "NOT FOUND" }'),
-                ("scheduled tasks",
-                 'schtasks /Query /FO LIST | Select-String "adare"'),
-                ("smb mount", 'net use'),
-                ("adare directory", 'Get-ChildItem C:\\adare -ErrorAction SilentlyContinue'),
-            ])
+            diagnostics.extend(
+                [
+                    (
+                        "adarevm stdout log (temp)",
+                        'if (Test-Path "C:\\Windows\\Temp\\adarevm_stdout.log") '
+                        '{ Get-Content "C:\\Windows\\Temp\\adarevm_stdout.log" -Tail 30 } '
+                        'else { Write-Output "NOT FOUND" }',
+                    ),
+                    (
+                        "adarevm stderr log (temp)",
+                        'if (Test-Path "C:\\Windows\\Temp\\adarevm_stderr.log") '
+                        '{ Get-Content "C:\\Windows\\Temp\\adarevm_stderr.log" -Tail 30 } '
+                        'else { Write-Output "NOT FOUND" }',
+                    ),
+                    ("scheduled tasks", 'schtasks /Query /FO LIST | Select-String "adare"'),
+                    ("smb mount", 'net use'),
+                    ("adare directory", 'Get-ChildItem C:\\adare -ErrorAction SilentlyContinue'),
+                ]
+            )
     elif guest_platform == 'linux':
         diagnostics = [
             ("adarevm process", "pgrep -af '[a]darevm' || echo 'agent NOT running'"),
-            ("port 18765", "ss -tlnp 2>/dev/null | grep 18765 || netstat -tlnp 2>/dev/null | grep 18765 || echo 'Port 18765 NOT listening'"),
+            (
+                "port 18765",
+                "ss -tlnp 2>/dev/null | grep 18765 || netstat -tlnp 2>/dev/null | grep 18765 || echo 'Port 18765 NOT listening'",
+            ),
         ]
         if full:
-            diagnostics.extend([
-                ("network interfaces", "ip addr show"),
-                ("config.json", "cat /adare/run/config.json 2>/dev/null || echo 'NOT FOUND'"),
-                ("adarevm log", "tail -30 /adare/run/logs/adarevm.log 2>/dev/null || echo 'No log file'"),
-                ("local connectivity", "timeout 2 bash -c 'echo > /dev/tcp/localhost/18765' 2>&1 && echo 'Port reachable' || echo 'Port NOT reachable from inside guest'"),
-            ])
+            diagnostics.extend(
+                [
+                    ("network interfaces", "ip addr show"),
+                    ("config.json", "cat /adare/run/config.json 2>/dev/null || echo 'NOT FOUND'"),
+                    ("adarevm log", "tail -30 /adare/run/logs/adarevm.log 2>/dev/null || echo 'No log file'"),
+                    (
+                        "local connectivity",
+                        "timeout 2 bash -c 'echo > /dev/tcp/localhost/18765' 2>&1 && echo 'Port reachable' || echo 'Port NOT reachable from inside guest'",
+                    ),
+                ]
+            )
     else:
         return True  # Unknown platform — assume alive
 
@@ -645,6 +678,7 @@ async def _diagnose_websocket_connection(vm, guest_platform: str, stop_event, fu
 # WebSocket connection
 # ---------------------------------------------------------------------------
 
+
 async def connect_websocket(context, stage_ctx):
     """Establish WebSocket connection to the adarevm agent with retries.
 
@@ -669,8 +703,7 @@ async def connect_websocket(context, stage_ctx):
 
         try:
             is_running, exit_code, error_msg = await context.vm._check_process_status_via_agent(
-                context.adarevm_pid,
-                timeout=5
+                context.adarevm_pid, timeout=5
             )
 
             if not is_running:
@@ -703,8 +736,7 @@ async def connect_websocket(context, stage_ctx):
             )
             raise LoggedException(
                 log,
-                "adarevm process exited immediately after startup. "
-                "Check diagnostics above for guest-side error logs."
+                "adarevm process exited immediately after startup. Check diagnostics above for guest-side error logs.",
             )
 
     # Create websocket client with host port forwarding
@@ -787,12 +819,15 @@ async def connect_websocket(context, stage_ctx):
     stage_ctx.stage.sub_msg = f"All {max_attempts} connection attempts failed"
     stage_ctx.set_status(stage_ctx.stage.status)
     log.error(last_error, exc_info=True)
-    raise LoggedException(log, f"Failed to connect to AdareVM server after {max_attempts} attempts: {last_error}") from last_error
+    raise LoggedException(
+        log, f"Failed to connect to AdareVM server after {max_attempts} attempts: {last_error}"
+    ) from last_error
 
 
 # ---------------------------------------------------------------------------
 # Installation execution helpers
 # ---------------------------------------------------------------------------
+
 
 async def execute_installations_via_websocket(context, stage_ctx):
     """Execute environment installations via WebSocket client.
@@ -828,7 +863,7 @@ async def execute_installations_via_websocket(context, stage_ctx):
             result = await context.client.execute_shell(
                 installation_cmd,
                 shell=True,
-                timeout=600  # 10 minute timeout for installations
+                timeout=600,  # 10 minute timeout for installations
             )
 
             if result.get('returncode') == 0:

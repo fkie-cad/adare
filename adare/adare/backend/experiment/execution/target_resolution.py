@@ -23,9 +23,15 @@ log = logging.getLogger(__name__)
 class TargetResolutionExecutor:
     """Handles target resolution and screenshot management."""
 
-    def __init__(self, websocket_client, target_resolver, experiment_run_id: str | None = None,
-                 debug_screenshots: bool = False, screenshots_dir: Path | None = None,
-                 gui_executor = None):
+    def __init__(
+        self,
+        websocket_client,
+        target_resolver,
+        experiment_run_id: str | None = None,
+        debug_screenshots: bool = False,
+        screenshots_dir: Path | None = None,
+        gui_executor=None,
+    ):
         """
         Initialize target resolution executor.
 
@@ -64,7 +70,9 @@ class TargetResolutionExecutor:
         """Generate a unique hash for a target definition."""
         # Create a hashable representation of the target criteria
         # We include strategy type but not memory address
-        strategy_repr = target.strategy.__class__.__name__ if hasattr(target, 'strategy') and target.strategy else "None"
+        strategy_repr = (
+            target.strategy.__class__.__name__ if hasattr(target, 'strategy') and target.strategy else "None"
+        )
 
         # Combine key target attributes
         key_parts = [
@@ -72,7 +80,7 @@ class TargetResolutionExecutor:
             str(target.text) if hasattr(target, 'text') else "None",
             str(target.position) if hasattr(target, 'position') else "None",
             strategy_repr,
-            str(target.offset) if hasattr(target, 'offset') else "None"
+            str(target.offset) if hasattr(target, 'offset') else "None",
         ]
         return ":".join(key_parts)
 
@@ -93,7 +101,7 @@ class TargetResolutionExecutor:
             'result': match_result,
             'timestamp': time.time(),
             'screenshot_path': screenshot_path,
-            'generation': self._resolution_generation
+            'generation': self._resolution_generation,
         }
         log.debug(f"Cached match for target {target_hash} at generation {self._resolution_generation}")
 
@@ -132,8 +140,9 @@ class TargetResolutionExecutor:
 
         return None, None, None
 
-    async def resolve_target_with_steps(self, target, parent_action_id: str = None,
-                                       event_emitter = None, action_context: str = None) -> tuple[int, int] | None:
+    async def resolve_target_with_steps(
+        self, target, parent_action_id: str = None, event_emitter=None, action_context: str = None
+    ) -> tuple[int, int] | None:
         """Resolve target with find step emitted as action event."""
         # This call is itself a target-resolution attempt, whether it ends up
         # served from cache or via fresh CV - advance the counter either way.
@@ -142,6 +151,7 @@ class TargetResolutionExecutor:
         # Apply smart defaults if no strategy specified
         if target.strategy is None:
             from adare.types.playbook import BestConfidenceStrategy, TopLeftStrategy
+
             if target.image:
                 target.strategy = BestConfidenceStrategy()
                 log.debug("Applied default BestConfidence strategy for image target")
@@ -153,7 +163,7 @@ class TargetResolutionExecutor:
                 log.debug("Applied fallback TopLeft strategy for position target")
 
         # Create and emit find step events
-        find_action_id = f"find_step_{int(time.time()*1000)}"
+        find_action_id = f"find_step_{int(time.time() * 1000)}"
         find_step = None
 
         # Create target description (used for logging, whether events are emitted or not)
@@ -169,13 +179,13 @@ class TargetResolutionExecutor:
                 except (TypeError, ValueError):
                     action_context = "find_img"
             elif target.text:
-                 # Truncate text for filename safety
-                 safe_text = target.text[:20].replace(" ", "_")
-                 action_context = f"find_text_{safe_text}"
+                # Truncate text for filename safety
+                safe_text = target.text[:20].replace(" ", "_")
+                action_context = f"find_text_{safe_text}"
             elif target.position:
-                 action_context = f"find_pos_{target.position[0]}_{target.position[1]}"
+                action_context = f"find_pos_{target.position[0]}_{target.position[1]}"
             else:
-                 action_context = "find_target"
+                action_context = "find_target"
 
         # Include strategy in description if available
         strategy_desc = ""
@@ -186,8 +196,7 @@ class TargetResolutionExecutor:
         if self.experiment_run_id and event_emitter:
             # Create find step action
             find_step = FindAction(
-                description=f"finding {target_desc}{strategy_desc}",
-                target_info=get_target_info(target)
+                description=f"finding {target_desc}{strategy_desc}", target_info=get_target_info(target)
             )
 
             # Emit find start event using existing unified pattern
@@ -215,25 +224,35 @@ class TargetResolutionExecutor:
 
             # Use cached result effectively skipping new screenshot and expensive resolution
             return self._process_match_result(
-                target, cached_match, cached_screenshot_path,
-                start_time=time.time(), # Fake start time for result structure
-                find_step=find_step, find_action_id=find_action_id,
-                parent_action_id=parent_action_id, event_emitter=event_emitter,
-                from_cache=True
+                target,
+                cached_match,
+                cached_screenshot_path,
+                start_time=time.time(),  # Fake start time for result structure
+                find_step=find_step,
+                find_action_id=find_action_id,
+                parent_action_id=parent_action_id,
+                event_emitter=event_emitter,
+                from_cache=True,
             )
 
         try:
             # Get screenshot for target resolution
             start_time = time.time()
-            screenshot_base64, screenshot_path = await self.get_current_screenshot_with_path(action_context=action_context)
+            screenshot_base64, screenshot_path = await self.get_current_screenshot_with_path(
+                action_context=action_context
+            )
             if not screenshot_base64:
                 log.error("Failed to get screenshot for target resolution")
 
                 # Emit find failure event
                 if self.experiment_run_id and event_emitter:
                     execution_time = time.time() - start_time
-                    find_result = ActionResult(success=False, message="Failed to get screenshot", execution_time=execution_time)
-                    complete_event = event_emitter.create_action_complete_event(find_step, -1, find_action_id, find_result, parent_action_id)
+                    find_result = ActionResult(
+                        success=False, message="Failed to get screenshot", execution_time=execution_time
+                    )
+                    complete_event = event_emitter.create_action_complete_event(
+                        find_step, -1, find_action_id, find_result, parent_action_id
+                    )
                     emit_action(self.experiment_run_id, complete_event, find_action_id)
 
                 return None
@@ -245,14 +264,10 @@ class TargetResolutionExecutor:
             match = await self.target_resolver.resolve_target(target, screenshot_base64)
             execution_time = time.time() - start_time
 
-
             # Process the match result (calculate offsets, emit events, etc.)
             return self._process_match_result(
-                target, match, screenshot_path, start_time,
-                find_step, find_action_id, parent_action_id, event_emitter
+                target, match, screenshot_path, start_time, find_step, find_action_id, parent_action_id, event_emitter
             )
-
-
 
         except Exception as e:
             execution_time = time.time() - start_time if 'start_time' in locals() else 0
@@ -261,14 +276,25 @@ class TargetResolutionExecutor:
             # Emit find failure event
             if self.experiment_run_id and event_emitter:
                 find_result = ActionResult(success=False, message=str(e), execution_time=execution_time)
-                complete_event = event_emitter.create_action_complete_event(find_step, -1, find_action_id, find_result, parent_action_id)
+                complete_event = event_emitter.create_action_complete_event(
+                    find_step, -1, find_action_id, find_result, parent_action_id
+                )
                 emit_action(self.experiment_run_id, complete_event, find_action_id)
 
             return None
 
-    def _process_match_result(self, target, match, screenshot_path, start_time,
-                             find_step, find_action_id, parent_action_id, event_emitter,
-                             from_cache=False):
+    def _process_match_result(
+        self,
+        target,
+        match,
+        screenshot_path,
+        start_time,
+        find_step,
+        find_action_id,
+        parent_action_id,
+        event_emitter,
+        from_cache=False,
+    ):
         """Helper to process match result, applying offsets and emitting events."""
         execution_time = time.time() - start_time
 
@@ -308,7 +334,9 @@ class TargetResolutionExecutor:
             final_x = anchor_x + offset.x
             final_y = anchor_y + offset.y
 
-            log.info(f"Applied offset {offset} to match at {coords}. Region: {match.region}. New coords: ({final_x}, {final_y})")
+            log.info(
+                f"Applied offset {offset} to match at {coords}. Region: {match.region}. New coords: ({final_x}, {final_y})"
+            )
             match.coordinates = (final_x, final_y)
 
         # Emit find complete event
@@ -340,39 +368,40 @@ class TargetResolutionExecutor:
                 message="Target found" if success else "Target not found",
                 execution_time=execution_time,
                 coordinates=coords,
-                data=data if data else None
+                data=data if data else None,
             )
-            complete_event = event_emitter.create_action_complete_event(find_step, -1, find_action_id, find_result, parent_action_id)
+            complete_event = event_emitter.create_action_complete_event(
+                find_step, -1, find_action_id, find_result, parent_action_id
+            )
             emit_action(self.experiment_run_id, complete_event, find_action_id)
 
         return match.coordinates if match else None
 
-    async def execute_action_with_steps(self, action, execute_func, parent_action_id: str = None,
-                                       event_emitter = None, action_context: str = None) -> ActionResult:
+    async def execute_action_with_steps(
+        self, action, execute_func, parent_action_id: str = None, event_emitter=None, action_context: str = None
+    ) -> ActionResult:
         """Execute an action with steps for target resolution and execution."""
         try:
             # Resolve target with find step (emitted as action event)
-            coords = await self.resolve_target_with_steps(action.target, parent_action_id, event_emitter, action_context=action_context)
+            coords = await self.resolve_target_with_steps(
+                action.target, parent_action_id, event_emitter, action_context=action_context
+            )
             if not coords:
-                return ActionResult(
-                    success=False,
-                    message=f"Could not resolve target: {action.target}"
-                )
+                return ActionResult(success=False, message=f"Could not resolve target: {action.target}")
 
             x, y = int(coords[0]), int(coords[1])
 
             # Create and emit execution step events
-            execute_action_id = f"execute_step_{int(time.time()*1000)}"
+            execute_action_id = f"execute_step_{int(time.time() * 1000)}"
 
             if self.experiment_run_id and event_emitter:
                 # Create execution step action
-                execute_step = ExecuteAction(
-                    description=f"executing at ({x}, {y})",
-                    coordinates=(x, y)
-                )
+                execute_step = ExecuteAction(description=f"executing at ({x}, {y})", coordinates=(x, y))
 
                 # Emit execution start event using existing unified pattern
-                start_event = event_emitter.create_action_start_event(execute_step, -1, execute_action_id, parent_action_id)
+                start_event = event_emitter.create_action_start_event(
+                    execute_step, -1, execute_action_id, parent_action_id
+                )
                 emit_action(self.experiment_run_id, start_event, execute_action_id)
 
             # Execute the action
@@ -393,25 +422,23 @@ class TargetResolutionExecutor:
                     success=execution_success,
                     message=result.get('message', ''),
                     execution_time=execution_time,
-                    coordinates=(x, y)
+                    coordinates=(x, y),
                 )
-                complete_event = event_emitter.create_action_complete_event(execute_step, -1, execute_action_id, execute_result, parent_action_id)
+                complete_event = event_emitter.create_action_complete_event(
+                    execute_step, -1, execute_action_id, execute_result, parent_action_id
+                )
                 emit_action(self.experiment_run_id, complete_event, execute_action_id)
 
             return ActionResult(
                 success=execution_success,
                 message=result.get('message', ''),
                 coordinates=(x, y),
-                data={'target': serialize_target(action.target)}
+                data={'target': serialize_target(action.target)},
             )
 
         except Exception as e:
             log.error(f"Error executing action with steps: {e}", exc_info=True)
-            return ActionResult(
-                success=False,
-                message=str(e),
-                data={'target': serialize_target(action.target)}
-            )
+            return ActionResult(success=False, message=str(e), data={'target': serialize_target(action.target)})
 
     async def get_current_screenshot(self) -> str | None:
         """
@@ -423,7 +450,9 @@ class TargetResolutionExecutor:
         screenshot_data, _ = await self.get_current_screenshot_with_path()
         return screenshot_data
 
-    async def get_current_screenshot_with_path(self, action_context: str | None = None) -> tuple[str | None, str | None]:
+    async def get_current_screenshot_with_path(
+        self, action_context: str | None = None
+    ) -> tuple[str | None, str | None]:
         """
         Get current screenshot from WebSocket client and save to disk.
 
@@ -442,7 +471,7 @@ class TargetResolutionExecutor:
                 # Check for error status
                 if result and result.get('status') == 'error':
                     log.warning(f"GUI executor screenshot failed: {result.get('message')}. Falling back to WebSocket.")
-                    result = None # forcing fallback
+                    result = None  # forcing fallback
 
             # Fallback to WebSocket if GUI executor didn't work (or wasn't available)
             if not result:
@@ -538,7 +567,9 @@ class TargetResolutionExecutor:
             if not self._manifest_initialized:
                 with open(manifest_path, 'w', newline='') as f:
                     writer = csv.writer(f)
-                    writer.writerow(["counter", "filename", "action_index", "action_type", "detail", "phase", "timestamp"])
+                    writer.writerow(
+                        ["counter", "filename", "action_index", "action_type", "detail", "phase", "timestamp"]
+                    )
                 self._manifest_initialized = True
 
             # Parse fields from action_context (e.g. "a03_click_L_img_button" or "a03_find_img_button")

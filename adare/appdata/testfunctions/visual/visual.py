@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 # Helper: find visual element (text or image) in a screenshot
 # =============================================================================
 
+
 async def _find_visual_element(ctx, text, image, window, icon=None):
     """
     Take a screenshot and search for a text, icon-library, or image element.
@@ -90,6 +91,7 @@ async def _resolve_icon_path(ctx, icon):
 # =============================================================================
 # Visual Test Functions
 # =============================================================================
+
 
 @testfunction(
     name='visual.exists',
@@ -194,7 +196,12 @@ async def visual_not_exists(ctx, text: str = None, image: str = None, icon: str 
     execute_on_host=True,
 )
 async def visual_count_equals(
-    ctx, text: str = None, image: str = None, icon: str = None, window: str = None, n: int = None,
+    ctx,
+    text: str = None,
+    image: str = None,
+    icon: str = None,
+    window: str = None,
+    n: int = None,
 ):
     """Pass when the text, icon or image is found exactly ``n`` times on the screenshot.
 
@@ -247,7 +254,12 @@ async def visual_count_equals(
     execute_on_host=True,
 )
 async def visual_count_min(
-    ctx, text: str = None, image: str = None, icon: str = None, window: str = None, min: int = None,
+    ctx,
+    text: str = None,
+    image: str = None,
+    icon: str = None,
+    window: str = None,
+    min: int = None,
 ):
     """Pass when the text, icon or image is found at least ``min`` times on the screenshot.
 
@@ -300,7 +312,12 @@ async def visual_count_min(
     execute_on_host=True,
 )
 async def visual_count_max(
-    ctx, text: str = None, image: str = None, icon: str = None, window: str = None, max: int = None,
+    ctx,
+    text: str = None,
+    image: str = None,
+    icon: str = None,
+    window: str = None,
+    max: int = None,
 ):
     """Pass when the text, icon or image is found at most ``max`` times on the screenshot.
 

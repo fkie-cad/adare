@@ -22,7 +22,9 @@ from adarelib.constants import StatusEnum
 log = logging.getLogger(__name__)
 
 
-def get_experiment_by_project_and_name(project_path: Path, experiment_name: str, trigger_error: bool = True) -> str | None:
+def get_experiment_by_project_and_name(
+    project_path: Path, experiment_name: str, trigger_error: bool = True
+) -> str | None:
     with ExperimentApi(project_path) as api:
         experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
         if experiment is None:
@@ -32,7 +34,9 @@ def get_experiment_by_project_and_name(project_path: Path, experiment_name: str,
         return experiment.id
 
 
-def get_experiment_by_ulid(project_path: Path, experiment_ulid: str, fields: list[str] = None) -> Experiment | dict | None:
+def get_experiment_by_ulid(
+    project_path: Path, experiment_ulid: str, fields: list[str] = None
+) -> Experiment | dict | None:
     """
     Get experiment by ULID with intelligent relationship loading from project database.
 
@@ -60,7 +64,7 @@ def get_experiment_by_ulid(project_path: Path, experiment_ulid: str, fields: lis
         'runs': 'runs',
         'tags': 'tags',
         'abstract_tests': 'abstract_tests',
-        'test_count': 'abstract_tests'
+        'test_count': 'abstract_tests',
     }
 
     with ExperimentApi(project_path) as api:
@@ -118,11 +122,21 @@ def get_experiment_by_ulid(project_path: Path, experiment_ulid: str, fields: lis
                     result['project_id'] = experiment.project_id
                 # Foreign key relationship fields
                 elif field == 'environments':
-                    result['environments'] = [env.name for env in experiment.environments if env] if hasattr(experiment, 'environments') else []
+                    result['environments'] = (
+                        [env.name for env in experiment.environments if env]
+                        if hasattr(experiment, 'environments')
+                        else []
+                    )
                 elif field == 'environment_names':
-                    result['environment_names'] = [env.name for env in experiment.environments if env] if hasattr(experiment, 'environments') else []
+                    result['environment_names'] = (
+                        [env.name for env in experiment.environments if env]
+                        if hasattr(experiment, 'environments')
+                        else []
+                    )
                 elif field == 'environment_count':
-                    result['environment_count'] = len(experiment.environments) if hasattr(experiment, 'environments') else 0
+                    result['environment_count'] = (
+                        len(experiment.environments) if hasattr(experiment, 'environments') else 0
+                    )
                 elif field == 'runs_count':
                     result['runs_count'] = len(experiment.runs) if hasattr(experiment, 'runs') else 0
                 elif field == 'runs':
@@ -130,11 +144,19 @@ def get_experiment_by_ulid(project_path: Path, experiment_ulid: str, fields: lis
                 elif field == 'tags':
                     result['tags'] = [tag.name for tag in experiment.tags] if hasattr(experiment, 'tags') else []
                 elif field == 'abstract_tests':
-                    result['abstract_tests'] = [test.name for test in experiment.abstract_tests] if hasattr(experiment, 'abstract_tests') else []
+                    result['abstract_tests'] = (
+                        [test.name for test in experiment.abstract_tests]
+                        if hasattr(experiment, 'abstract_tests')
+                        else []
+                    )
                 elif field == 'test_count':
-                    result['test_count'] = len(experiment.abstract_tests) if hasattr(experiment, 'abstract_tests') else 0
+                    result['test_count'] = (
+                        len(experiment.abstract_tests) if hasattr(experiment, 'abstract_tests') else 0
+                    )
                 else:
-                    log.warning(f'Unknown field requested: {field}. Available: id, name, description, sha256, sha256_playbook, sha256_metadata, ulid, project_id, environments, environment_names, runs_count, tags, test_count')
+                    log.warning(
+                        f'Unknown field requested: {field}. Available: id, name, description, sha256, sha256_playbook, sha256_metadata, ulid, project_id, environments, environment_names, runs_count, tags, test_count'
+                    )
             except AttributeError as e:
                 log.warning(f"Could not access field '{field}': {e}")
                 result[field] = None
@@ -144,22 +166,45 @@ def get_experiment_by_ulid(project_path: Path, experiment_ulid: str, fields: lis
 
 def get_experiment_data(project_path: Path, experiment_ulid: str) -> dict | None:
     """Get full experiment data with relationships - convenience function for common case."""
-    return get_experiment_by_ulid(project_path, experiment_ulid, fields=['id', 'name', 'description', 'sha256', 'sha256_playbook', 'sha256_metadata', 'ulid', 'environment_names', 'runs_count', 'test_count'])
+    return get_experiment_by_ulid(
+        project_path,
+        experiment_ulid,
+        fields=[
+            'id',
+            'name',
+            'description',
+            'sha256',
+            'sha256_playbook',
+            'sha256_metadata',
+            'ulid',
+            'environment_names',
+            'runs_count',
+            'test_count',
+        ],
+    )
 
 
 def get_experiment_summary(project_path: Path, experiment_ulid: str) -> dict | None:
     """Get basic experiment info with key relationships - lighter version."""
-    return get_experiment_by_ulid(project_path, experiment_ulid, fields=['id', 'name', 'description', 'ulid', 'environment_names'])
+    return get_experiment_by_ulid(
+        project_path, experiment_ulid, fields=['id', 'name', 'description', 'ulid', 'environment_names']
+    )
 
 
 def get_experiment_with_relationships(project_path: Path, experiment_ulid: str) -> dict | None:
     """Get experiment with all relationships loaded."""
-    return get_experiment_by_ulid(project_path, experiment_ulid, fields=['id', 'name', 'description', 'environments', 'runs_count', 'tags', 'test_count'])
+    return get_experiment_by_ulid(
+        project_path,
+        experiment_ulid,
+        fields=['id', 'name', 'description', 'environments', 'runs_count', 'tags', 'test_count'],
+    )
 
 
 def get_experiment_stats(project_path: Path, experiment_ulid: str) -> dict | None:
     """Get experiment statistics - counts only."""
-    return get_experiment_by_ulid(project_path, experiment_ulid, fields=['id', 'name', 'environment_count', 'runs_count', 'test_count'])
+    return get_experiment_by_ulid(
+        project_path, experiment_ulid, fields=['id', 'name', 'environment_count', 'runs_count', 'test_count']
+    )
 
 
 def get_experiment_hashes(project_path: Path, environment_name: str, experiment_name: str) -> dict:
@@ -186,7 +231,9 @@ def get_experiment_run_count(project_path: Path, experiment_ulid: str, exclude_f
         return len(experiment.runs)
 
 
-def create_experiment(name: str, experiment_directory: ExperimentDirectory, project_path: Path = None, auto_commit: bool = True) -> str:
+def create_experiment(
+    name: str, experiment_directory: ExperimentDirectory, project_path: Path = None, auto_commit: bool = True
+) -> str:
     # If project_path is not provided, derive it from the experiment directory path
     if project_path is None:
         # ExperimentDirectory path structure: <project>/experiments/<experiment_name>
@@ -219,7 +266,11 @@ def get_environment_platform(environment_ulid: str):
 
 def get_environment_ulid(project_path: Path, experiment_name: str):
     with EnvironmentDbApi() as api:
-        return api.get_environment(experiment_name, project_path.name).id if api.get_environment(experiment_name, project_path.name) else None
+        return (
+            api.get_environment(experiment_name, project_path.name).id
+            if api.get_environment(experiment_name, project_path.name)
+            else None
+        )
 
 
 def get_environment_vagrant_box(environment_ulid: str):
@@ -250,7 +301,10 @@ def initialize_experiment_run(project_path: Path, fake: bool = False, id: str = 
     with ExperimentApi(project_path) as api:
         return api.initialize_experiment_run(fake, id).id
 
-def set_experiment_run_base_info(experiment_run_ulid: str, experiment_name: str, environment_name: str, project_path: Path) -> str:
+
+def set_experiment_run_base_info(
+    experiment_run_ulid: str, experiment_name: str, environment_name: str, project_path: Path
+) -> str:
     """
     Set the basic experiment and environment information early in the process.
     This prevents orphaned experiment runs if the process is interrupted early.
@@ -275,9 +329,7 @@ def set_experiment_run_base_info(experiment_run_ulid: str, experiment_name: str,
         # of environment membership. Falls back to None only for untracked experiments.
         experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
         experiment_run = api.set_experiment_run_base_info(
-            run_ulid=experiment_run_ulid,
-            experiment=experiment,
-            environment_id=environment.id
+            run_ulid=experiment_run_ulid, experiment=experiment, environment_id=environment.id
         )
         return experiment_run.id
 
@@ -322,7 +374,9 @@ def register_experiment_environment(project_path: Path, experiment_name: str, en
                     api.update_experiment_metadata_hash(experiment.id, experiment_directory.sha256_metadata)
                     log.info(f'registered environment "{environment_name}" for experiment "{experiment_name}"')
             except (OSError, ExperimentFileCreationError) as e:
-                log.warning(f'registered environment "{environment_name}" in database but failed to update metadata.yml: {e}')
+                log.warning(
+                    f'registered environment "{environment_name}" in database but failed to update metadata.yml: {e}'
+                )
     except (SQLAlchemyError, OSError, ValueError) as e:
         log.warning(f'failed to register environment "{environment_name}" for experiment "{experiment_name}": {e}')
 
@@ -394,24 +448,28 @@ def _sync_experiment_metadata_environments(project_path: Path, experiment_ulid: 
     except (SQLAlchemyError, OSError, ExperimentFileCreationError) as e:
         log.warning(f'failed to sync metadata.yml environments for experiment {experiment_ulid}: {e}')
 
+
 def remove_fake_experiment_run(project_path: Path, experiment_run_ulid: str):
     with ExperimentApi(project_path) as api:
         api.remove_fake_experiment_run(experiment_run_ulid)
+
 
 def update_experiment_run_start(project_path: Path, experiment_run_ulid: str, timestamp: datetime):
     with ExperimentApi(project_path) as api:
         api.update_experiment_run_start(experiment_run_ulid, timestamp)
 
+
 def update_experiment_run_end(project_path: Path, experiment_run_ulid: str, timestamp: datetime):
     with ExperimentApi(project_path) as api:
         api.update_experiment_run_end(experiment_run_ulid, timestamp)
+
 
 def update_experiment_run_vm_instance(project_path: Path, experiment_run_ulid: str, vm_instance_id: str):
     with ExperimentApi(project_path) as api:
         api.update_experiment_run_vm_instance(experiment_run_ulid, vm_instance_id)
 
 
-def get_experiment_testfunction_files(project_path: Path, environment_name: str,  experiment_name: str):
+def get_experiment_testfunction_files(project_path: Path, environment_name: str, experiment_name: str):
     testfunction_files = []
     with ExperimentApi(project_path) as api:
         experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
@@ -426,10 +484,10 @@ def update_experiment_run_status(project_path: Path, experiment_run_ulid: str, s
         api.update_experiment_run_status(experiment_run_ulid, status)
 
 
-def get_experiment_environment(project_path: Path, environment_name: str,  experiment_name: str):
+def get_experiment_environment(project_path: Path, environment_name: str, experiment_name: str):
     with ExperimentApi(project_path) as api:
         # todo: fix
-        experiment = api.get_experiment_by_project_and_name(project_path,  experiment_name)
+        experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
         if experiment is None:
             log.error('experiment not found')
             raise ValueError('experiment not found')
@@ -443,9 +501,7 @@ def get_experiment_environment(project_path: Path, environment_name: str,  exper
             raise MultipleEnvironmentsError(
                 log,
                 f'experiment {experiment} has multiple environments',
-                possible_solutions=[
-                    'specify the environment with -e <environment>'
-                ]
+                possible_solutions=['specify the environment with -e <environment>'],
             )
         return Path(experiment.environments[0].file)
 
@@ -496,7 +552,9 @@ def update_stage_in_run(stage: Stage, experimentrun_ulid: str, stage_id: str, pr
         return db.update_stage_in_run(stage, experimentrun_ulid, stage_id)
 
 
-def sync_experiment(project_path: Path, ulid: str, remote_ulid: str, abstract_tests_ulids: dict, remote_url: str, is_published: bool):
+def sync_experiment(
+    project_path: Path, ulid: str, remote_ulid: str, abstract_tests_ulids: dict, remote_url: str, is_published: bool
+):
     with ExperimentApi(project_path) as api:
         api.sync_experiment(ulid, remote_ulid, abstract_tests_ulids, remote_url, is_published)
 
@@ -511,8 +569,4 @@ def get_experiment_hash(project_path: Path, ulid: str):
 
 def get_experiments_ulids(project_path: Path):
     with ExperimentApi(project_path) as api:
-        return [
-            experiment.id
-            for experiment in api.get_experiments(project_path)
-        ]
-
+        return [experiment.id for experiment in api.get_experiments(project_path)]

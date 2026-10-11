@@ -40,9 +40,11 @@ def find_available_port() -> int | None:
 
         for instance in active_instances:
             # Only consider active instances with allocated ports in our range
-            if (instance.status == 'active' and
-                instance.websocket_port is not None and
-                PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
+            if (
+                instance.status == 'active'
+                and instance.websocket_port is not None
+                and PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END
+            ):
                 used_ports.add(instance.websocket_port)
 
         # Find first available port
@@ -80,9 +82,11 @@ def reserve_port_atomically(api_session, vm_id: str, instance_name: str, experim
     used_ports = set()
 
     for instance in active_instances:
-        if (instance.status == 'active' and
-            instance.websocket_port is not None and
-            PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
+        if (
+            instance.status == 'active'
+            and instance.websocket_port is not None
+            and PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END
+        ):
             used_ports.add(instance.websocket_port)
 
     # Find first available port
@@ -97,7 +101,7 @@ def reserve_port_atomically(api_session, vm_id: str, instance_name: str, experim
                     instance_name=instance_name,
                     experiment_run_id=experiment_run_id,
                     websocket_port=port,
-                    status='active'
+                    status='active',
                 )
 
                 log.info(f"Successfully reserved port {port} for instance {instance_name}")
@@ -112,8 +116,7 @@ def reserve_port_atomically(api_session, vm_id: str, instance_name: str, experim
                 # Database operational error (connection, timeout, etc.)
                 log.error(f"Database operational error during port reservation: {db_error}")
                 raise PortAllocationException(
-                    f"Database error during port reservation: {db_error}",
-                    port_range=(PORT_RANGE_START, PORT_RANGE_END)
+                    f"Database error during port reservation: {db_error}", port_range=(PORT_RANGE_START, PORT_RANGE_END)
                 ) from db_error
 
     log.error(f"No available ports in range {PORT_RANGE_START}-{PORT_RANGE_END}")
@@ -142,8 +145,7 @@ def is_port_available(port: int) -> bool:
         active_instances = api.get_all_vm_instances()
 
         for instance in active_instances:
-            if (instance.status == 'active' and
-                instance.websocket_port == port):
+            if instance.status == 'active' and instance.websocket_port == port:
                 return False
 
         return True
@@ -166,9 +168,11 @@ def get_port_usage_stats() -> dict:
         allocated_ports = []
 
         for instance in active_instances:
-            if (instance.status == 'active' and
-                instance.websocket_port is not None and
-                PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
+            if (
+                instance.status == 'active'
+                and instance.websocket_port is not None
+                and PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END
+            ):
                 allocated_ports.append(instance.websocket_port)
 
         total_ports = PORT_RANGE_END - PORT_RANGE_START + 1
@@ -179,7 +183,7 @@ def get_port_usage_stats() -> dict:
             'allocated_ports': sorted(allocated_ports),
             'allocated_count': allocated_count,
             'available_count': total_ports - allocated_count,
-            'port_range': f"{PORT_RANGE_START}-{PORT_RANGE_END}"
+            'port_range': f"{PORT_RANGE_START}-{PORT_RANGE_END}",
         }
 
 
@@ -248,11 +252,14 @@ def cleanup_orphaned_ports() -> int:
 
         for instance in all_instances:
             # Clean up instances that have ports but are not active
-            if (instance.websocket_port is not None and
-                instance.status != 'active' and
-                PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
-
-                log.info(f"Cleaning up orphaned port {instance.websocket_port} from instance {instance.instance_name} (status: {instance.status})")
+            if (
+                instance.websocket_port is not None
+                and instance.status != 'active'
+                and PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END
+            ):
+                log.info(
+                    f"Cleaning up orphaned port {instance.websocket_port} from instance {instance.instance_name} (status: {instance.status})"
+                )
 
                 # Clear the port from non-active instances
                 instance.websocket_port = None
@@ -289,31 +296,40 @@ def detect_port_conflicts() -> dict:
         # Group by port for active instances
         port_instances = defaultdict(list)
         for instance in active_instances:
-            if (instance.status == 'active' and
-                instance.websocket_port is not None and
-                PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
+            if (
+                instance.status == 'active'
+                and instance.websocket_port is not None
+                and PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END
+            ):
                 port_instances[instance.websocket_port].append(instance)
 
         # Find conflicts (ports used by multiple active instances)
         for port, instances in port_instances.items():
             if len(instances) > 1:
-                conflicts[port] = [{
-                    'id': inst.id,
-                    'name': inst.instance_name,
-                    'experiment_id': inst.current_experiment_run_id,
-                    'created_at': inst.created_at.isoformat() if inst.created_at else None
-                } for inst in instances]
+                conflicts[port] = [
+                    {
+                        'id': inst.id,
+                        'name': inst.instance_name,
+                        'experiment_id': inst.current_experiment_run_id,
+                        'created_at': inst.created_at.isoformat() if inst.created_at else None,
+                    }
+                    for inst in instances
+                ]
 
         result = {
             'conflicts_found': len(conflicts) > 0,
             'conflict_count': len(conflicts),
-            'conflicted_ports': dict(conflicts)
+            'conflicted_ports': dict(conflicts),
         }
 
         if conflicts:
-            log.warning(f"Found {len(conflicts)} port conflicts involving {sum(len(instances) for instances in conflicts.values())} instances")
+            log.warning(
+                f"Found {len(conflicts)} port conflicts involving {sum(len(instances) for instances in conflicts.values())} instances"
+            )
             for port, instances in conflicts.items():
-                log.warning(f"Port {port} is used by {len(instances)} active instances: {[i['name'] for i in instances]}")
+                log.warning(
+                    f"Port {port} is used by {len(instances)} active instances: {[i['name'] for i in instances]}"
+                )
         else:
             log.debug("No port conflicts detected")
 
@@ -339,7 +355,4 @@ def reset_all_port_allocations():
     else:
         log.info("Port allocation cleanup completed successfully")
 
-    return {
-        'orphaned_cleaned': cleaned,
-        'conflicts': conflicts
-    }
+    return {'orphaned_cleaned': cleaned, 'conflicts': conflicts}

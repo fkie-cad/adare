@@ -77,6 +77,7 @@ _COORDS = [
 
 # ── use ──────────────────────────────────────────────────────────────────────
 
+
 def exec_vlm_use(arguments):
     """Activate a profile, or create one from a provider preset.
 
@@ -96,9 +97,11 @@ def exec_vlm_use(arguments):
         return
     print_error_message(
         title=f"No profile or provider named '{target}'",
-        next_steps=['Pick interactively: adare vlm use',
-                    'List profiles: adare vlm list',
-                    f'Create one: adare vlm use ollama-cloud|local --name {target}'],
+        next_steps=[
+            'Pick interactively: adare vlm use',
+            'List profiles: adare vlm list',
+            f'Create one: adare vlm use ollama-cloud|local --name {target}',
+        ],
     )
     exit(1)
 
@@ -116,9 +119,11 @@ def _create_from_preset(provider, arguments):
         if not api_key:
             print_error_message(
                 title=f'{provider} needs an API key',
-                next_steps=[f'Pass it: adare vlm use {provider} --api-key <key>',
-                            'Or run `adare vlm use` and pick "new" to be prompted',
-                            'Get one at https://ollama.com/settings/keys'],
+                next_steps=[
+                    f'Pass it: adare vlm use {provider} --api-key <key>',
+                    'Or run `adare vlm use` and pick "new" to be prompted',
+                    'Get one at https://ollama.com/settings/keys',
+                ],
             )
             exit(1)
         values[_API_KEY] = api_key
@@ -154,6 +159,7 @@ def _interactive_use():
 
 
 # ── create (guided wizard) ────────────────────────────────────────────────────
+
 
 def exec_vlm_create(arguments):
     """Guided wizard: provider -> endpoint -> model -> coords -> key -> name."""
@@ -207,27 +213,31 @@ def _prompt_coord(provider):
     """Step 4 — coordinate space (asked only for custom; preset otherwise)."""
     if provider != 'custom':
         return _PRESETS[provider][_COORD]
-    choice = _menu('Coordinate space the model returns clicks in:',
-                   [label for _, label in _COORDS])
+    choice = _menu('Coordinate space the model returns clicks in:', [label for _, label in _COORDS])
     return _COORDS[choice - 1][0]
 
 
 def _prompt_key(provider):
     """Step 5 — API key: required for cloud, optional for custom, none for local."""
     if provider == 'ollama-cloud':
-        key = click.prompt('Ollama Cloud API key (ollama.com/settings/keys)',
-                           hide_input=True, default='', show_default=False).strip()
+        key = click.prompt(
+            'Ollama Cloud API key (ollama.com/settings/keys)', hide_input=True, default='', show_default=False
+        ).strip()
         if not key:
             print_error_message(
                 title='No API key entered',
-                next_steps=['Run `adare vlm create` again and paste the key',
-                            'Get one at https://ollama.com/settings/keys'],
+                next_steps=[
+                    'Run `adare vlm create` again and paste the key',
+                    'Get one at https://ollama.com/settings/keys',
+                ],
             )
             exit(1)
         return key
     if provider == 'custom':
-        return click.prompt('API key (leave blank for none)', hide_input=True,
-                            default='', show_default=False).strip() or None
+        return (
+            click.prompt('API key (leave blank for none)', hide_input=True, default='', show_default=False).strip()
+            or None
+        )
     return None
 
 
@@ -241,6 +251,7 @@ def _menu(title, labels):
 
 # ── list / save / rm / show ──────────────────────────────────────────────────
 
+
 def exec_vlm_list(arguments):
     """List saved profiles, marking the active one."""
     from rich.table import Table
@@ -250,19 +261,28 @@ def exec_vlm_list(arguments):
     existing = userconfig.profiles()
     if is_structured_output():
         active = userconfig.active_name()
-        emit({'profiles': [{
-            'name': name,
-            'active': name == active,
-            'model': existing[name].get(_MODEL, _DEFAULTS[_MODEL]),
-            'base_url': existing[name].get(_BASE_URL, _DEFAULTS[_BASE_URL]),
-            'api_key': _mask(existing[name].get(_API_KEY)),  # never the raw key
-        } for name in sorted(existing)]})
+        emit(
+            {
+                'profiles': [
+                    {
+                        'name': name,
+                        'active': name == active,
+                        'model': existing[name].get(_MODEL, _DEFAULTS[_MODEL]),
+                        'base_url': existing[name].get(_BASE_URL, _DEFAULTS[_BASE_URL]),
+                        'api_key': _mask(existing[name].get(_API_KEY)),  # never the raw key
+                    }
+                    for name in sorted(existing)
+                ]
+            }
+        )
         return
     if not existing:
         print_success_message(
             title='No VLM profiles yet',
-            next_steps=['Create one with the guided wizard: adare vlm create',
-                        'Or quickly: adare vlm use ollama-cloud --api-key <key>'],
+            next_steps=[
+                'Create one with the guided wizard: adare vlm create',
+                'Or quickly: adare vlm use ollama-cloud --api-key <key>',
+            ],
         )
         return
     active = userconfig.active_name()
@@ -289,8 +309,7 @@ def exec_vlm_save(arguments):
     """Snapshot the currently-effective config as a named profile."""
     name = getattr(arguments, 'name', None)
     if not name:
-        print_error_message(title='A profile name is required',
-                            next_steps=['adare vlm save <name>'])
+        print_error_message(title='A profile name is required', next_steps=['adare vlm save <name>'])
         exit(1)
     values = {key: _resolved(key)[0] for key in (_BASE_URL, _MODEL, _COORD, _API_KEY)}
     # Do not persist the placeholder key.
@@ -299,8 +318,7 @@ def exec_vlm_save(arguments):
     activate = not getattr(arguments, 'no_activate', False)
     userconfig.set_profile(name, values, activate=activate)
     print_success_message(
-        title=f"Saved current config as profile '{name}'"
-              + ('' if activate else ' (not activated)'),
+        title=f"Saved current config as profile '{name}'" + ('' if activate else ' (not activated)'),
         location=str(userconfig.path()),
         next_steps=['See all: adare vlm list'],
     )
@@ -309,15 +327,13 @@ def exec_vlm_save(arguments):
 def exec_vlm_remove(arguments):
     """Delete a named profile."""
     name = getattr(arguments, 'name', None)
-    was_active = (name == userconfig.active_name())
+    was_active = name == userconfig.active_name()
     if not userconfig.remove_profile(name):
-        print_error_message(title=f"No such profile: '{name}'",
-                            next_steps=['List profiles: adare vlm list'])
+        print_error_message(title=f"No such profile: '{name}'", next_steps=['List profiles: adare vlm list'])
         exit(1)
     next_steps = ['See all: adare vlm list']
     if was_active:
-        next_steps.insert(0, 'No active profile now — VLM falls back to code defaults. '
-                             'Pick one: adare vlm use')
+        next_steps.insert(0, 'No active profile now — VLM falls back to code defaults. Pick one: adare vlm use')
     print_success_message(title=f"Removed profile '{name}'", next_steps=next_steps)
 
 
@@ -332,12 +348,10 @@ def exec_vlm_show(arguments):
         settings = []
         for name in (_BASE_URL, _MODEL, _COORD, _API_KEY):
             value, source = _resolved(name)
-            settings.append({'setting': name, 'value': _mask(value) if name == _API_KEY else value,
-                             'source': source})
+            settings.append({'setting': name, 'value': _mask(value) if name == _API_KEY else value, 'source': source})
         emit({'active_profile': active, 'config_file': str(userconfig.path()), 'settings': settings})
         return
-    table = Table(title=f'Resolved VLM configuration (active profile: {active or "none"})',
-                  title_style='bold')
+    table = Table(title=f'Resolved VLM configuration (active profile: {active or "none"})', title_style='bold')
     table.add_column('Setting', style='cyan', no_wrap=True)
     table.add_column('Value')
     table.add_column('Source', style='dim')
@@ -351,6 +365,7 @@ def exec_vlm_show(arguments):
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+
 def _resolved(name):
     """Return (value, source): env > active-profile > default.
 
@@ -358,6 +373,7 @@ def _resolved(name):
     to the next source — so the reported source matches what the app actually uses.
     """
     import os
+
     if os.environ.get(name):
         return os.environ[name], 'env'
     profile_value = userconfig.get(name)
@@ -392,9 +408,7 @@ def _activated_message(name, created=False):
     print_success_message(
         title=f"{verb} profile '{name}'",
         location=str(userconfig.path()),
-        next_steps=[_summary(values),
-                    'Verify the endpoint: adare vm gui-doctor',
-                    'See all: adare vlm list'],
+        next_steps=[_summary(values), 'Verify the endpoint: adare vm gui-doctor', 'See all: adare vlm list'],
     )
 
 
@@ -413,11 +427,12 @@ def _maybe_verify(values, skip):
         console.print(f'[green]✓ endpoint + token OK[/green] — replied {message!r}')
     elif ok is False:
         console.print(f'[yellow]⚠ could not reach the endpoint / token rejected[/yellow]: {message}')
-        console.print('[yellow]  The profile was saved anyway — fix the key/URL and re-run '
-                      '`adare vlm create`, or run `adare vm gui-doctor`.[/yellow]')
+        console.print(
+            '[yellow]  The profile was saved anyway — fix the key/URL and re-run '
+            '`adare vlm create`, or run `adare vm gui-doctor`.[/yellow]'
+        )
     else:  # None — could not run the check
-        console.print(f'[dim]token check skipped: {message} '
-                      '(verify later with `adare vm gui-doctor`)[/dim]')
+        console.print(f'[dim]token check skipped: {message} (verify later with `adare vm gui-doctor`)[/dim]')
 
 
 def _verify_profile(values):
@@ -442,10 +457,12 @@ def _verify_profile(values):
         timeout=20.0,
     )
     try:
-        reply = asyncio.run(client.chat(
-            [{'role': 'user', 'content': 'Reply with the single word: OK'}],
-            max_tokens=5,
-        ))
+        reply = asyncio.run(
+            client.chat(
+                [{'role': 'user', 'content': 'Reply with the single word: OK'}],
+                max_tokens=5,
+            )
+        )
     except VLMError as exc:
         return False, str(exc)
     return True, reply.strip()[:40]

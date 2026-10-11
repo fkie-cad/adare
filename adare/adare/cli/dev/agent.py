@@ -69,8 +69,10 @@ def exec_dev_agent(arguments):
     if as_experiment and output_file:
         print_error_message(
             title='--as-experiment cannot be combined with -o/--out',
-            next_steps=['Use --as-experiment NAME to record into experiments/NAME/',
-                        'Or use -o PATH to record a standalone playbook'],
+            next_steps=[
+                'Use --as-experiment NAME to record into experiments/NAME/',
+                'Or use -o PATH to record a standalone playbook',
+            ],
         )
         exit(1)
 
@@ -112,8 +114,19 @@ def exec_dev_agent(arguments):
     # Lay out the whole plan up front, then mark each phase as it starts — the
     # boot / checkpoint / grounding phases are long and log-noisy, so without
     # this the run looks stuck or broken.
-    _announce_agent_run(session_id, goal, planning, grounding, video, as_experiment,
-                        output_file, ephemeral, environment, keep, want_replay)
+    _announce_agent_run(
+        session_id,
+        goal,
+        planning,
+        grounding,
+        video,
+        as_experiment,
+        output_file,
+        ephemeral,
+        environment,
+        keep,
+        want_replay,
+    )
 
     baseline_created = False
     try:
@@ -132,33 +145,37 @@ def exec_dev_agent(arguments):
         environment_name = environment
         if as_experiment:
             exp, environment_name = _scaffold_experiment(
-                api, project_directory, session_id, as_experiment,
-                known_environment=environment)
+                api, project_directory, session_id, as_experiment, known_environment=environment
+            )
             output_file = exp.playbookfile
             print(f"→ Experiment files ready: {exp.path}")
 
         # Phase: drive. Grounding weights can be a slow first-run download, so
         # say so before the (otherwise silent) server startup.
         if grounding:
-            print("→ Starting the LocateAnything grounding server "
-                  "(first run downloads ~7.3 GB — this can take several minutes) ...")
+            print(
+                "→ Starting the LocateAnything grounding server "
+                "(first run downloads ~7.3 GB — this can take several minutes) ..."
+            )
         print("→ Driving the VM toward the goal (per-step progress follows) ...")
 
         try:
-            result = api.devmode.run_gui_agent(DevGuiAgentRequest(
-                session_id=session_id,
-                goal=goal,
-                output_file=output_file,
-                max_steps=getattr(arguments, 'max_steps', None),
-                stall_limit=getattr(arguments, 'stall_limit', None),
-                interactive=getattr(arguments, 'interactive', False),
-                planning=planning,
-                grounding=grounding,
-                progress=progress,
-                reasoning=getattr(arguments, 'reasoning', True),
-                video=video,
-                video_backend=video_backend,
-            ))
+            result = api.devmode.run_gui_agent(
+                DevGuiAgentRequest(
+                    session_id=session_id,
+                    goal=goal,
+                    output_file=output_file,
+                    max_steps=getattr(arguments, 'max_steps', None),
+                    stall_limit=getattr(arguments, 'stall_limit', None),
+                    interactive=getattr(arguments, 'interactive', False),
+                    planning=planning,
+                    grounding=grounding,
+                    progress=progress,
+                    reasoning=getattr(arguments, 'reasoning', True),
+                    video=video,
+                    video_backend=video_backend,
+                )
+            )
         except KeyboardInterrupt:
             # Fallback only: the service installs a cooperative SIGINT handler
             # that finalizes the run, so this rarely fires. The finally block
@@ -166,8 +183,10 @@ def exec_dev_agent(arguments):
             if ephemeral and not keep:
                 print("\n\nAgent run interrupted — tearing down the ephemeral VM ...")
             else:
-                print("\n\nAgent run interrupted — the VM is still running "
-                      f"(drive it with: adare dev agent -s {session_id} ...)")
+                print(
+                    "\n\nAgent run interrupted — the VM is still running "
+                    f"(drive it with: adare dev agent -s {session_id} ...)"
+                )
             exit(1)
 
         if not result.success:
@@ -181,8 +200,7 @@ def exec_dev_agent(arguments):
             # deleted. Strip that stale pointer, then print an authoritative one
             # naming the durable copy. handle_api_error() exits, so the pointer is
             # printed first (it still reads as belonging to the error above it).
-            if salvaged is not None and result.error and result.error.code in (
-                    'GROUNDING_ERROR', 'VIDEO_ERROR'):
+            if salvaged is not None and result.error and result.error.code in ('GROUNDING_ERROR', 'VIDEO_ERROR'):
                 result.error.message = _strip_log_hint(result.error.message)
                 print(f'Diagnostic log saved to: {salvaged / "locate_server.log"}')
             handle_api_error(result)  # exits (finally still tears down)
@@ -256,8 +274,7 @@ def _resolve_goal(arguments):
     if not goal:
         print_error_message(
             title='No goal provided',
-            next_steps=['Pass a goal: --goal "open the Files app"',
-                        'Or a file: --goal-file goal.txt'],
+            next_steps=['Pass a goal: --goal "open the Files app"', 'Or a file: --goal-file goal.txt'],
         )
         exit(1)
     return goal
@@ -270,11 +287,13 @@ def _boot_ephemeral_session(api, project_directory, environment):
     be booted — nothing has been scaffolded yet, so there is nothing to tear down.
     """
     print(f"Booting a fresh VM from environment '{environment}' ...")
-    result = api.devmode.start_session(DevSessionStartRequest(
-        project_path=project_directory,
-        environment_name=environment,
-        name=None,
-    ))
+    result = api.devmode.start_session(
+        DevSessionStartRequest(
+            project_path=project_directory,
+            environment_name=environment,
+            name=None,
+        )
+    )
     if not result.success:
         handle_api_error(result)  # exits
     session_id = result.data.session_id
@@ -285,8 +304,7 @@ def _boot_ephemeral_session(api, project_directory, environment):
 def _teardown_session(api, session_id):
     """Stop and remove an ephemeral session's VM and all resources (best-effort)."""
     print(f"\nTearing down ephemeral session {session_id} ...")
-    result = api.devmode.stop_session(DevSessionStopRequest(
-        session_id=session_id, remove_resources=True))
+    result = api.devmode.stop_session(DevSessionStopRequest(session_id=session_id, remove_resources=True))
     if result.success:
         print(f"Removed ephemeral VM and resources for session {session_id}")
     else:
@@ -316,16 +334,20 @@ def _create_verify_baseline(api, session_id):
     could not be created (caller degrades to parse-only validation).
     """
     print('→ Snapshotting the VM as a baseline for --verify (replay starts here) ...')
-    result = api.devmode.create_checkpoint(DevCheckpointCreateRequest(
-        session_id=session_id,
-        name=VERIFY_CHECKPOINT,
-        description='pre-agent baseline for --verify',
-    ))
+    result = api.devmode.create_checkpoint(
+        DevCheckpointCreateRequest(
+            session_id=session_id,
+            name=VERIFY_CHECKPOINT,
+            description='pre-agent baseline for --verify',
+        )
+    )
     if not result.success:
         msg = result.error.message if result.error else 'unknown error'
         log.warning('Could not create --verify baseline checkpoint: %s', msg)
-        print(f"⚠ Could not create the pre-verify checkpoint ({msg}); "
-              "replay validation disabled (playbook will still be parse-checked).")
+        print(
+            f"⚠ Could not create the pre-verify checkpoint ({msg}); "
+            "replay validation disabled (playbook will still be parse-checked)."
+        )
         return False
     print('  ✓ baseline checkpoint ready')
     return True
@@ -333,12 +355,10 @@ def _create_verify_baseline(api, session_id):
 
 def _delete_verify_baseline(api, session_id):
     """Drop the baseline checkpoint on an attached (-s) session (best-effort)."""
-    result = api.devmode.delete_checkpoint(DevCheckpointDeleteRequest(
-        session_id=session_id, name=VERIFY_CHECKPOINT))
+    result = api.devmode.delete_checkpoint(DevCheckpointDeleteRequest(session_id=session_id, name=VERIFY_CHECKPOINT))
     if not result.success:
         msg = result.error.message if result.error else 'unknown error'
-        log.warning("Could not delete --verify checkpoint '%s': %s",
-                    VERIFY_CHECKPOINT, msg)
+        log.warning("Could not delete --verify checkpoint '%s': %s", VERIFY_CHECKPOINT, msg)
 
 
 def _playbook_parse_error_types():
@@ -348,10 +368,11 @@ def _playbook_parse_error_types():
     report a bad recording instead of crashing the CLI.
     """
     import yaml
-    types = [ValueError, KeyError, TypeError, AttributeError, ImportError,
-             OSError, yaml.YAMLError]
+
+    types = [ValueError, KeyError, TypeError, AttributeError, ImportError, OSError, yaml.YAMLError]
     try:
         import cattrs.errors
+
         types.append(cattrs.errors.BaseValidationError)
     except ImportError:  # pragma: no cover - cattrs is a hard dep of the repo
         pass
@@ -378,21 +399,22 @@ def _verify_by_replay(api, session_id, playbook_path):
     restore or execution failed — reported as a warning, never fatal here).
     """
     print('→ Verifying: restoring the pre-agent baseline ...')
-    restore = api.devmode.restore_checkpoint(DevCheckpointRestoreRequest(
-        session_id=session_id, name=VERIFY_CHECKPOINT))
+    restore = api.devmode.restore_checkpoint(DevCheckpointRestoreRequest(session_id=session_id, name=VERIFY_CHECKPOINT))
     if not restore.success:
         msg = restore.error.message if restore.error else 'unknown error'
         print(f"⚠ Replay skipped: could not restore the pre-verify baseline ({msg}).")
         return None
 
     print('  replaying the recorded playbook against the VM ...')
-    result = api.devmode.execute_playbook(DevPlaybookExecuteRequest(
-        session_id=session_id,
-        playbook_source='file',
-        playbook_content=str(playbook_path),
-        restore_initial=False,
-        indices=None,
-    ))
+    result = api.devmode.execute_playbook(
+        DevPlaybookExecuteRequest(
+            session_id=session_id,
+            playbook_source='file',
+            playbook_content=str(playbook_path),
+            restore_initial=False,
+            indices=None,
+        )
+    )
     if not result.success:
         msg = result.error.message if result.error else 'unknown error'
         print(f"⚠ Replay could not run: {msg}")
@@ -410,8 +432,7 @@ def _replay_summary_line(replay):
     if _replay_ok(replay):
         return f'Replay: PASS ({replay.successful_actions}/{replay.total_actions} actions)'
     detail = replay.error_message or 'see the screenshot report'
-    return (f'Replay: FAIL ({replay.failed_actions}/{replay.total_actions} actions failed '
-            f'— {detail})')
+    return f'Replay: FAIL ({replay.failed_actions}/{replay.total_actions} actions failed — {detail})'
 
 
 def _resolve_project_directory(arguments, session_id):
@@ -424,6 +445,7 @@ def _resolve_project_directory(arguments, session_id):
     resolvable session yields a project.
     """
     from adare.backend.basics import determine_projectdirectory
+
     project = getattr(arguments, 'project', None)
     # Quiet the "project not found at cwd" log line only when we have a session
     # to fall back to (otherwise keep the helpful message).
@@ -432,6 +454,7 @@ def _resolve_project_directory(arguments, session_id):
         return project_directory
     if session_id:
         from adare.database.api.devmode import DevModeApi
+
         session = DevModeApi().get_session(session_id)
         if session:
             resolved = Path(session.project_path)
@@ -440,8 +463,9 @@ def _resolve_project_directory(arguments, session_id):
     raise NoProjectFoundError(log, specified_project=project)
 
 
-def _announce_agent_run(session_id, goal, planning, grounding, video, as_experiment,
-                        output_file, ephemeral, environment, keep, want_replay):
+def _announce_agent_run(
+    session_id, goal, planning, grounding, video, as_experiment, output_file, ephemeral, environment, keep, want_replay
+):
     """Print the goal + an ordered plan of the phases this run will go through.
 
     Printed once up front so the long, log-noisy boot/checkpoint/grounding phases
@@ -449,8 +473,7 @@ def _announce_agent_run(session_id, goal, planning, grounding, video, as_experim
     """
     print(f"\nDriving session {session_id} toward goal:\n  {goal}")
     if ephemeral:
-        fate = 'kept running afterwards (--keep)' if keep else \
-            'torn down afterwards (use --keep to keep it)'
+        fate = 'kept running afterwards (--keep)' if keep else 'torn down afterwards (use --keep to keep it)'
         print(f"VM: freshly booted from '{environment}', {fate}")
 
     steps = []
@@ -491,16 +514,14 @@ def _agent_next_steps(r, exp, as_experiment, session_id, ephemeral, keep):
     session_persists = keep or not ephemeral
 
     if exp is not None:
-        next_steps.append(
-            f'Files created — load it later with: adare experiment load {as_experiment}')
+        next_steps.append(f'Files created — load it later with: adare experiment load {as_experiment}')
         if session_persists:
             next_steps.append(f'Replay it now: adare dev playbook {session_id} -f {exp.playbookfile}')
     elif r.playbook_path and session_persists:
         next_steps.append(f'Replay it: adare dev playbook {session_id} -f {r.playbook_path}')
 
     if ephemeral and keep:
-        next_steps.append(
-            f'VM kept running — drive it again: adare dev agent -s {session_id} --goal "..."')
+        next_steps.append(f'VM kept running — drive it again: adare dev agent -s {session_id} --goal "..."')
         next_steps.append(f'Stop it when done: adare dev stop --rm -s {session_id}')
     return next_steps
 
@@ -540,8 +561,7 @@ def _ensure_experiment_available(project_directory, name):
     if exp.exists():
         print_error_message(
             title=f"Experiment '{name}' already exists at {exp.path}",
-            next_steps=['Pick another --as-experiment NAME',
-                        f'Or remove the existing one: rm -rf {exp.path}'],
+            next_steps=['Pick another --as-experiment NAME', f'Or remove the existing one: rm -rf {exp.path}'],
         )
         exit(1)
     return exp
@@ -620,16 +640,14 @@ def _write_experiment_metadata(exp, environment_name, goal):
 
     import adare
 
-    template = (Path(adare.__file__).parent.parent / 'appdata' / 'templates'
-                / 'experiment' / 'metadata.yml')
+    template = Path(adare.__file__).parent.parent / 'appdata' / 'templates' / 'experiment' / 'metadata.yml'
     rendered = jinja2.Template(template.read_text()).render(experiment=exp.experiment)
     data = yaml.safe_load(rendered) or {}
     if environment_name:
         data['environments'] = [environment_name]
     data['description'] = f'Recorded by the ADARE GUI agent. Goal: {goal}'
     data['tags'] = ['gui-agent']
-    exp.metadatafile.write_text(
-        yaml.safe_dump(data, sort_keys=False, default_flow_style=False))
+    exp.metadatafile.write_text(yaml.safe_dump(data, sort_keys=False, default_flow_style=False))
 
 
 def exec_dev_grounding_pull(arguments):
@@ -649,8 +667,10 @@ def exec_dev_grounding_pull(arguments):
     if local.exists():
         print_success_message(
             title=f'Model already present locally: {local}',
-            next_steps=[f'Use it offline: ADARE_LOCATE_MODEL_PATH={local} HF_HUB_OFFLINE=1 '
-                        'adare dev agent --ground --goal "..."'],
+            next_steps=[
+                f'Use it offline: ADARE_LOCATE_MODEL_PATH={local} HF_HUB_OFFLINE=1 '
+                'adare dev agent --ground --goal "..."'
+            ],
         )
         return
 
@@ -659,8 +679,10 @@ def exec_dev_grounding_pull(arguments):
     except ImportError:
         print_error_message(
             title='Grounding backend not installed',
-            next_steps=['Install it: uv sync --extra grounding',
-                        'Or point ADARE_LOCATE_PYTHON at a venv that already has it'],
+            next_steps=[
+                'Install it: uv sync --extra grounding',
+                'Or point ADARE_LOCATE_PYTHON at a venv that already has it',
+            ],
         )
         exit(1)
 
@@ -670,9 +692,11 @@ def exec_dev_grounding_pull(arguments):
     except (OSError, ValueError) as exc:  # gated/auth/HTTP errors subclass OSError
         print_error_message(
             title=f'Could not download {model}: {exc}',
-            next_steps=['Accept the license at https://huggingface.co/nvidia/LocateAnything-3B',
-                        'Export a token: export HF_TOKEN=hf_...',
-                        'Or set ADARE_LOCATE_MODEL_PATH to a local weights directory'],
+            next_steps=[
+                'Accept the license at https://huggingface.co/nvidia/LocateAnything-3B',
+                'Export a token: export HF_TOKEN=hf_...',
+                'Or set ADARE_LOCATE_MODEL_PATH to a local weights directory',
+            ],
         )
         exit(1)
 

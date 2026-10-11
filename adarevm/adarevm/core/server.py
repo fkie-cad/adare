@@ -41,6 +41,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             return self._split_windows_command_line(command)
 
         import shlex
+
         try:
             return shlex.split(command)
         except ValueError:
@@ -50,6 +51,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
     def _split_windows_command_line(self, command: str) -> list[str]:
         """Split a Windows command string using pure Python shlex."""
         import shlex
+
         try:
             # Use shlex with custom configuration for Windows-like parsing:
             # 1. posix=True: Enables quote stripping (removing " from "foo bar")
@@ -68,7 +70,14 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             # Fallback
             return command.split(" ")
 
-    def __init__(self, host="0.0.0.0", port=18765, tools_paths: list[str] = None, data_paths: list[str] = None, installation_mode: str = "wheel"):
+    def __init__(
+        self,
+        host="0.0.0.0",
+        port=18765,
+        tools_paths: list[str] = None,
+        data_paths: list[str] = None,
+        installation_mode: str = "wheel",
+    ):
         self.host = host
         self.port = port
         self.clients: set[websockets.WebSocketServerProtocol] = set()
@@ -127,8 +136,9 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
 
         # Check if we should skip PyAutoGUI (host-based GUI mode)
         import os
+
         gui_mode = os.environ.get('ADARE_GUI_MODE', 'agent')
-        skip_pyautogui = (gui_mode == 'host')
+        skip_pyautogui = gui_mode == 'host'
 
         if skip_pyautogui:
             log.info(
@@ -139,6 +149,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             # Log screen size and initialize mouse position
             try:
                 import pyautogui
+
                 screen_width, screen_height = pyautogui.size()
                 log.info(f"Screen size: {screen_width}x{screen_height}")
 
@@ -173,14 +184,14 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
 
         try:
             # Send welcome message
-            await self.send_event(websocket, EventType.LOG, {
-                "message": "Connected to AdareVM server",
-                "server_info": {
-                    "host": self.host,
-                    "port": self.port,
-                    "available_tools": list(self.tools.keys())
-                }
-            })
+            await self.send_event(
+                websocket,
+                EventType.LOG,
+                {
+                    "message": "Connected to AdareVM server",
+                    "server_info": {"host": self.host, "port": self.port, "available_tools": list(self.tools.keys())},
+                },
+            )
 
             async for message in websocket:
                 await self.handle_message(websocket, message)
@@ -253,19 +264,11 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
 
         except ValueError as e:
             log.error(f"Invalid tool or parameters: {tool_name}: {e}")
-            error_msg = ToolResultMessage(
-                id=call_id,
-                success=False,
-                error=f"Invalid tool call: {e}"
-            )
+            error_msg = ToolResultMessage(id=call_id, success=False, error=f"Invalid tool call: {e}")
             await websocket.send(error_msg.to_json())
         except Exception as e:
             log.error(f"Tool execution failed: {tool_name}: {e}", exc_info=True)
-            error_msg = ToolResultMessage(
-                id=call_id,
-                success=False,
-                error=f"Tool execution error: {e}"
-            )
+            error_msg = ToolResultMessage(id=call_id, success=False, error=f"Tool execution error: {e}")
             await websocket.send(error_msg.to_json())
 
     async def send_event(self, websocket, event_type: str, data: dict[str, Any]):
@@ -276,7 +279,6 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
     async def send_error(self, websocket, error: str):
         """Send an error event to the client."""
         await self.send_event(websocket, EventType.ERROR, {"error": error})
-
 
     async def _cleanup_client_tasks(self, websocket):
         """Cancel all running tasks for a disconnected client."""
@@ -311,11 +313,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             try:
                 result = await task
                 # Send successful result back to client
-                result_msg = ToolResultMessage(
-                    id=call_id,
-                    success=True,
-                    result=result
-                )
+                result_msg = ToolResultMessage(id=call_id, success=True, result=result)
                 if websocket in self.clients:  # Check if client still connected
                     await websocket.send(result_msg.to_json())
                     log.debug(f"[{call_id[:8]}] Background task completed successfully")
@@ -327,11 +325,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             except Exception as e:
                 log.error(f"[{call_id[:8]}] Background task failed: {e}", exc_info=True)
                 # Send error result back to client
-                error_msg = ToolResultMessage(
-                    id=call_id,
-                    success=False,
-                    error=f"Tool execution error: {e}"
-                )
+                error_msg = ToolResultMessage(id=call_id, success=False, error=f"Tool execution error: {e}")
                 if websocket in self.clients:  # Check if client still connected
                     await websocket.send(error_msg.to_json())
 
@@ -347,7 +341,4 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
         if self.clients:
             event_msg = EventMessage(event_type=event_type, data=data)
             message = event_msg.to_json()
-            await asyncio.gather(
-                *[client.send(message) for client in self.clients],
-                return_exceptions=True
-            )
+            await asyncio.gather(*[client.send(message) for client in self.clients], return_exceptions=True)

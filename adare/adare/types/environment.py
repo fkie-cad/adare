@@ -18,6 +18,7 @@ class PostsetupInstallations:
     """
     Class to store information about installations that should be done after boot but before the experiment.
     """
+
     name: str
     command: str
     description: str | None = ''
@@ -61,6 +62,7 @@ class ProvisionCommand:
         timeout_minutes: Per-step wall-clock budget.
         reboot: Reboot the guest and wait for the agent again after this step.
     """
+
     name: str
     command: str = ''
     description: str | None = ''
@@ -78,8 +80,7 @@ class ProvisionCommand:
             raise ValueError(f"provision command '{self.name}' requires a non-empty 'command'")
         if self.timeout_minutes <= 0:
             raise ValueError(
-                f"provision command '{self.name}': timeout_minutes must be > 0 "
-                f"(got {self.timeout_minutes})"
+                f"provision command '{self.name}': timeout_minutes must be > 0 (got {self.timeout_minutes})"
             )
 
 
@@ -105,6 +106,7 @@ class ProvisionStep(ProvisionCommand):
     :func:`adare.backend.vm.provision.expand_provision`, not here, so nothing
     mutates parsed input behind the caller's back.
     """
+
     for_each: list[str] = attrs.Factory(list)
     steps: list[ProvisionCommand] = attrs.Factory(list)
 
@@ -125,8 +127,7 @@ class ProvisionStep(ProvisionCommand):
             )
         if not has_command and not has_steps:
             raise ValueError(
-                f"provision entry '{self.name}' must set either 'command' "
-                "(single step) or 'steps' (a group)"
+                f"provision entry '{self.name}' must set either 'command' (single step) or 'steps' (a group)"
             )
         if self.for_each and not has_steps:
             raise ValueError(
@@ -134,10 +135,7 @@ class ProvisionStep(ProvisionCommand):
                 "for_each replays a group, so wrap the work in 'steps'"
             )
         if has_command and self.timeout_minutes <= 0:
-            raise ValueError(
-                f"provision entry '{self.name}': timeout_minutes must be > 0 "
-                f"(got {self.timeout_minutes})"
-            )
+            raise ValueError(f"provision entry '{self.name}': timeout_minutes must be > 0 (got {self.timeout_minutes})")
 
 
 @attrs.define
@@ -145,6 +143,7 @@ class OsInfo:
     """
     Operating system information for environments.
     """
+
     os: str
     platform: Literal['windows', 'linux']
     distribution: str
@@ -163,6 +162,7 @@ class RecipeParams:
     time. These values participate in the recipe integrity hash, so changing
     any of them yields a new environment identity (a fresh build).
     """
+
     disk_size: str | None = None
     ram_mb: int | None = None
     cpus: int | None = None
@@ -212,8 +212,9 @@ class Recipe:
     enforced instead at the publish / create / consume gates in
     :mod:`adare.services.recipe_contract`, which can produce rich messages.
     """
-    profile: str            # resolves via os_catalog.get_os_definition
-    iso_sha256: str         # expected SHA256 of the ISO (hard-checked at build)
+
+    profile: str  # resolves via os_catalog.get_os_definition
+    iso_sha256: str  # expected SHA256 of the ISO (hard-checked at build)
     # Publisher-hosted ISO: a local path, or an http(s) URL when published.
     # Mutually exclusive with `iso_name`.
     iso: str = ''
@@ -223,7 +224,7 @@ class Recipe:
     # Plain-text download pointer shown to a consumer who lacks the ISO. Plain
     # text ONLY: it is publisher-supplied and is rendered in web UIs.
     iso_notes: str = ''
-    template: str | None = None   # optional Autounattend/autoinstall override
+    template: str | None = None  # optional Autounattend/autoinstall override
     params: RecipeParams = attrs.Factory(RecipeParams)
     # Build-time provisioning, applied once to the built disk (see above).
     provision: list[ProvisionStep] = attrs.Factory(list)
@@ -253,6 +254,7 @@ class EnvironmentMetadata:
             hypervisor_config:
               boot_mode: bios  # Optional: override default UEFI to use BIOS
     """
+
     vm: str | None = None
     os: OsInfo | None = None
 
@@ -321,7 +323,7 @@ class EnvironmentMetadata:
         return self.vm is not None or self.recipe is not None
 
 
-def parse_environment_file(environment_file: Path) -> EnvironmentMetadata|None:
+def parse_environment_file(environment_file: Path) -> EnvironmentMetadata | None:
     environment_dict = yaml_to_dict(environment_file)
     try:
         environment = cattrs.structure(environment_dict, EnvironmentMetadata)
@@ -332,6 +334,6 @@ def parse_environment_file(environment_file: Path) -> EnvironmentMetadata|None:
             message=f'parsing errors while parsing environment file {environment_file}:{error_msg}',
             possible_solutions=[
                 'fix the structure of the environment file',
-            ]
+            ],
         ) from e
     return environment

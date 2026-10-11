@@ -14,6 +14,7 @@ from typing import Any
 
 class MessageType(str, Enum):
     """WebSocket message types."""
+
     # Tool calling (MCP-inspired)
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
@@ -31,6 +32,7 @@ class MessageType(str, Enum):
 
 class EventType(str, Enum):
     """Event types for real-time streaming."""
+
     # Test execution events
     TEST_START = "test_start"
     TEST_COMPLETE = "test_complete"
@@ -56,6 +58,7 @@ class EventType(str, Enum):
 @dataclass
 class BaseMessage:
     """Base class for all WebSocket messages."""
+
     type: MessageType
     id: str | None = None
     timestamp: float | None = None
@@ -74,6 +77,7 @@ class BaseMessage:
 @dataclass
 class ToolCallMessage(BaseMessage):
     """Message for calling a tool on the VM."""
+
     type: MessageType = MessageType.TOOL_CALL
     tool: str = ""
     params: dict[str, Any] = None
@@ -88,6 +92,7 @@ class ToolCallMessage(BaseMessage):
 @dataclass
 class ToolResultMessage(BaseMessage):
     """Message containing the result of a tool call."""
+
     type: MessageType = MessageType.TOOL_RESULT
     success: bool = True
     result: dict[str, Any] = None
@@ -101,6 +106,7 @@ class ToolResultMessage(BaseMessage):
 @dataclass
 class EventMessage(BaseMessage):
     """Message for streaming real-time events."""
+
     type: MessageType = MessageType.EVENT
     event_type: EventType = ""
     data: dict[str, Any] = None
@@ -113,6 +119,7 @@ class EventMessage(BaseMessage):
 @dataclass
 class StatusMessage(BaseMessage):
     """Message for status updates."""
+
     type: MessageType = MessageType.STATUS
     status: str = ""
     data: dict[str, Any] = None
@@ -125,6 +132,7 @@ class StatusMessage(BaseMessage):
 @dataclass
 class ConnectMessage(BaseMessage):
     """Message for connection establishment."""
+
     type: MessageType = MessageType.CONNECT
     client_info: dict[str, Any] = None
 
@@ -156,13 +164,15 @@ def parse_message(json_str: str) -> BaseMessage:
 
 # Convenience functions for creating common messages
 
+
 def create_tool_call(tool: str, params: dict[str, Any] = None) -> ToolCallMessage:
     """Create a tool call message."""
     return ToolCallMessage(tool=tool, params=params or {})
 
 
-def create_tool_result(call_id: str, success: bool = True,
-                      result: dict[str, Any] = None, error: str = None) -> ToolResultMessage:
+def create_tool_result(
+    call_id: str, success: bool = True, result: dict[str, Any] = None, error: str = None
+) -> ToolResultMessage:
     """Create a tool result message."""
     return ToolResultMessage(id=call_id, success=success, result=result or {}, error=error)
 
@@ -178,6 +188,7 @@ def create_status(status: str, data: dict[str, Any] = None) -> StatusMessage:
 
 
 # Tool definitions (similar to MCP tools but for WebSocket)
+
 
 class ToolRegistry:
     """Registry of available tools on the VM."""
@@ -218,9 +229,26 @@ class ToolRegistry:
     GET_TIMESTAMP = "get_timestamp"
 
     ALL_TOOLS = [
-        SCREENSHOT, CLICK, RIGHT_CLICK, DOUBLE_CLICK, DRAG,
-        KEYBOARD, SCROLL, GOTO, IDLE, UPLOAD_TESTFUNCTIONS,
-        UPLOAD_TESTSET, SET_VARIABLES, RUN_TEST, RUN_ALL_TESTS,
-        LIST_TESTS, EXECUTE_SHELL, GET_STATUS, COLLECT_SYSTEM_INFO, SCREENSHOT_WINDOW,
-        PULL_FILE_CHUNK, GET_FILESYSTEM_SNAPSHOT, GET_TIMESTAMP
+        SCREENSHOT,
+        CLICK,
+        RIGHT_CLICK,
+        DOUBLE_CLICK,
+        DRAG,
+        KEYBOARD,
+        SCROLL,
+        GOTO,
+        IDLE,
+        UPLOAD_TESTFUNCTIONS,
+        UPLOAD_TESTSET,
+        SET_VARIABLES,
+        RUN_TEST,
+        RUN_ALL_TESTS,
+        LIST_TESTS,
+        EXECUTE_SHELL,
+        GET_STATUS,
+        COLLECT_SYSTEM_INFO,
+        SCREENSHOT_WINDOW,
+        PULL_FILE_CHUNK,
+        GET_FILESYSTEM_SNAPSHOT,
+        GET_TIMESTAMP,
     ]

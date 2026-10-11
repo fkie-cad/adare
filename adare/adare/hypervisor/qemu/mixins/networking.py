@@ -20,6 +20,7 @@ The shared folder methods here are mostly no-ops since virtio-fs
 configuration is done through the libvirt XML, not VirtualBox-style
 shared folders.
 """
+
 import logging
 import os
 from pathlib import Path
@@ -43,11 +44,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
     # ==================== Port Forwarding ====================
 
     async def list_port_forwarding_rules(
-        self,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ) -> dict[str, PortForwardingRule]:
         """
         List all port forwarding rules for the VM.
@@ -75,7 +72,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
                 host_ip=rule_data.get('host_ip', ''),
                 host_port=rule_data.get('host_port', 0),
                 guest_ip=rule_data.get('guest_ip', ''),
-                guest_port=rule_data.get('guest_port', 0)
+                guest_port=rule_data.get('guest_port', 0),
             )
 
         if not silent:
@@ -94,7 +91,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         ctx_manager=None,
         stop_event=None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ) -> int:
         """
         Add a port forwarding rule to the VM configuration.
@@ -117,8 +114,9 @@ class NetworkingMixin(AbstractNetworkingMixin):
             Return code (0 for success, non-zero for failure)
         """
         if not silent:
-            log.info(f"Adding port forwarding rule '{name}': "
-                    f"{protocol} {host_ip}:{host_port} -> {guest_ip}:{guest_port}")
+            log.info(
+                f"Adding port forwarding rule '{name}': {protocol} {host_ip}:{host_port} -> {guest_ip}:{guest_port}"
+            )
 
         if not hasattr(self, 'config'):
             log.error("VM config not available")
@@ -131,12 +129,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
 
         # Create rule
         rule = PortForwardingRule(
-            name=name,
-            protocol=protocol,
-            host_ip=host_ip,
-            host_port=host_port,
-            guest_ip=guest_ip,
-            guest_port=guest_port
+            name=name, protocol=protocol, host_ip=host_ip, host_port=host_port, guest_ip=guest_ip, guest_port=guest_port
         )
 
         # Add to config
@@ -146,7 +139,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
             'host_ip': rule.host_ip,
             'host_port': rule.host_port,
             'guest_ip': rule.guest_ip,
-            'guest_port': rule.guest_port
+            'guest_port': rule.guest_port,
         }
 
         # Save config
@@ -160,12 +153,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         return 0
 
     async def remove_port_forwarding(
-        self,
-        name: str,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, name: str, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ) -> int:
         """
         Remove a port forwarding rule from the VM configuration.
@@ -218,7 +206,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         ctx_manager=None,
         stop_event=None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ) -> int:
         """
         Add a virtio-fs shared folder configuration.
@@ -248,8 +236,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         """
         if not _use_shared_folder_mode():
             raise UnsupportedFeatureException(
-                "Shared folders require virtio-fs mode. "
-                "Unset QEMU_LIBGUESTFS environment variable to enable virtio-fs."
+                "Shared folders require virtio-fs mode. Unset QEMU_LIBGUESTFS environment variable to enable virtio-fs."
             )
 
         if not silent:
@@ -272,7 +259,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
                 'tag': name,
                 'host_path': str(host_path),
                 'guest_mount': guest_mount or f'/adare/{name}',
-                'readonly': readonly
+                'readonly': readonly,
             }
 
             if existing_idx is not None:
@@ -291,7 +278,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         ctx_manager=None,
         stop_event=None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ) -> bool:
         """
         Mount shared folder in guest (handled by lifecycle.py for QEMU).
@@ -309,11 +296,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         return True
 
     async def list_shared_folders(
-        self,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ) -> dict[str, SharedFolderConfig]:
         """
         List shared folders configured for the VM.
@@ -327,9 +310,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
             shares = {}
             for share in self.config.virtiofs_shares:
                 shares[share['tag']] = SharedFolderConfig(
-                    name=share['tag'],
-                    host_path=Path(share['host_path']),
-                    readonly=share.get('readonly', False)
+                    name=share['tag'], host_path=Path(share['host_path']), readonly=share.get('readonly', False)
                 )
             return shares
         return {}
@@ -341,7 +322,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         ctx_manager=None,
         stop_event=None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ) -> int:
         """
         Remove a specific shared folder configuration by tag name.
@@ -353,9 +334,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         """
         if hasattr(self, 'config') and self.config.virtiofs_shares:
             original_len = len(self.config.virtiofs_shares)
-            self.config.virtiofs_shares = [
-                s for s in self.config.virtiofs_shares if s['tag'] != name
-            ]
+            self.config.virtiofs_shares = [s for s in self.config.virtiofs_shares if s['tag'] != name]
             if len(self.config.virtiofs_shares) < original_len:
                 self._save_vm_config()
                 if not silent:
@@ -367,11 +346,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         return 0
 
     async def remove_all_shared_folders(
-        self,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ) -> int:
         """
         Remove all shared folder configurations (clears all virtio-fs shares).
@@ -399,12 +374,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         log.debug(f"queue_mount_shared_folder for '{name}' - handled by lifecycle.py")
 
     async def mount_multiple_shared_folders(
-        self,
-        folders: dict,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, folders: dict, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ) -> int:
         """
         Mount multiple shared folders (handled by lifecycle.py for QEMU).

@@ -20,14 +20,16 @@ def exec_environment_load(arguments):
     no_copy = getattr(arguments, 'no_copy', False)
     iso_arg = getattr(arguments, 'iso', None)
 
-    result = api.environment.load(EnvironmentLoadRequest(
-        environment=arguments.environment,
-        force=arguments.force,
-        no_copy=no_copy,
-        iso=Path(iso_arg) if iso_arg else None,
-        reprovision=getattr(arguments, 'reprovision', False),
-        allow_emulation=getattr(arguments, 'allow_emulation', False),
-    ))
+    result = api.environment.load(
+        EnvironmentLoadRequest(
+            environment=arguments.environment,
+            force=arguments.force,
+            no_copy=no_copy,
+            iso=Path(iso_arg) if iso_arg else None,
+            reprovision=getattr(arguments, 'reprovision', False),
+            allow_emulation=getattr(arguments, 'allow_emulation', False),
+        )
+    )
 
     if result.success:
         if result.data.reused_existing:
@@ -41,7 +43,7 @@ def exec_environment_load(arguments):
             title=title,
             location=str(result.data.file_path) if result.data.file_path else None,
             next_steps=result.data.next_steps,
-            tip=result.data.tip
+            tip=result.data.tip,
         )
     else:
         handle_api_error(result)
@@ -64,18 +66,16 @@ def exec_environment_create(arguments):
         vm_path = Path(arguments.with_vm)
 
     api = AdareAPI()
-    result = api.environment.create(EnvironmentCreateRequest(
-        project_path=project_directory,
-        name=environment_name,
-        vm_path=vm_path
-    ))
+    result = api.environment.create(
+        EnvironmentCreateRequest(project_path=project_directory, name=environment_name, vm_path=vm_path)
+    )
 
     if result.success:
         print_success_message(
             title=f'Environment "{result.data.name}" created successfully!',
             location=str(result.data.file_path) if result.data.file_path else None,
             next_steps=result.data.next_steps,
-            tip=result.data.tip
+            tip=result.data.tip,
         )
     else:
         handle_api_error(result)
@@ -164,16 +164,19 @@ def exec_environment_verify(arguments):
 
     experiment_name = setup_result.data
 
-    was_interrupted, was_successful = asyncio.run(experiment_run(
-        project_directory,
-        experiment_name,
-        env_name,
-        test=False,
-        runlog=True,
-    ))
+    was_interrupted, was_successful = asyncio.run(
+        experiment_run(
+            project_directory,
+            experiment_name,
+            env_name,
+            test=False,
+            runlog=True,
+        )
+    )
 
     if not was_successful:
         from adare.console import print_error_message
+
         print_error_message(
             title=f'Environment "{env_name}" verification failed',
         )
@@ -189,10 +192,7 @@ def exec_environment_delete(arguments):
     Delete an environment using the AdareAPI.
     """
     api = AdareAPI()
-    result = api.environment.delete(
-        identifier=arguments.identifier,
-        force=arguments.force
-    )
+    result = api.environment.delete(identifier=arguments.identifier, force=arguments.force)
 
     if result.success:
         print_success_message(

@@ -14,6 +14,7 @@ in a GUI QEMU window, lets the user install software by hand, then flattens
 the overlay into a NEW standalone qcow2 (fresh hash) and registers it as a new
 base VM + environment via the same `environment_load` primitive. QEMU only.
 """
+
 import logging
 import tempfile
 from pathlib import Path
@@ -122,12 +123,13 @@ def _resolve_source(source: str) -> dict:
         possible_solutions=[
             'List available environments with: adare env list',
             'List available VMs with: adare vm list',
-        ]
+        ],
     )
 
 
-def _merged_installations(existing: list[dict], installs: list[tuple[str, str]],
-                          from_file: Path | None, shell: bool, cwd: str | None) -> list[dict]:
+def _merged_installations(
+    existing: list[dict], installs: list[tuple[str, str]], from_file: Path | None, shell: bool, cwd: str | None
+) -> list[dict]:
     """
     Merge the source's existing installs with new ones from --install and
     --from-file, deduped by name (later entries win). Existing installs are
@@ -152,8 +154,9 @@ def _merged_installations(existing: list[dict], installs: list[tuple[str, str]],
     return list(merged.values())
 
 
-def _finalize_environment(request, vm_file: str, source_view: dict,
-                          installations: list[dict], tags: list[str]) -> tuple[str, bool]:
+def _finalize_environment(
+    request, vm_file: str, source_view: dict, installations: list[dict], tags: list[str]
+) -> tuple[str, bool]:
     """
     Build the new environment YAML referencing `vm_file`, write it to a temp
     file, and hand off to `environment_load`. Shared by both modes; the only
@@ -189,6 +192,7 @@ def _warn_if_base_in_use(vm_id: str | None) -> None:
     if not vm_id:
         return
     from adare.database.api.vm import VmApi
+
     try:
         with VmApi() as api:
             active = api.get_vm_instances_for_vm(vm_id, status='active')
@@ -203,8 +207,9 @@ def _warn_if_base_in_use(vm_id: str | None) -> None:
         )
 
 
-def _interactive_extend(request, source_view: dict, installations: list[dict],
-                        tags: list[str]) -> tuple[str | None, bool]:
+def _interactive_extend(
+    request, source_view: dict, installations: list[dict], tags: list[str]
+) -> tuple[str | None, bool]:
     """
     Interactive/manual extend (Mode B), QEMU only.
 
@@ -224,8 +229,7 @@ def _interactive_extend(request, source_view: dict, installations: list[dict],
     """
     if source_view['hypervisor'] != 'qemu':
         raise HypervisorException(
-            f"Interactive extend is QEMU-only (source hypervisor is "
-            f"'{source_view['hypervisor']}')."
+            f"Interactive extend is QEMU-only (source hypervisor is '{source_view['hypervisor']}')."
         )
 
     # Imported lazily so the declarative path never pulls in the QEMU creator.
@@ -237,8 +241,13 @@ def _interactive_extend(request, source_view: dict, installations: list[dict],
     _warn_if_base_in_use(source_view.get('vm_id'))
 
     store, recorded = run_interactive_extend(
-        base_disk, dest, source_view['os'], request.ram, request.cpus,
-        console=request.console, compress=request.compress,
+        base_disk,
+        dest,
+        source_view['os'],
+        request.ram,
+        request.cpus,
+        console=request.console,
+        compress=request.compress,
         allow_emulation=getattr(request, 'allow_emulation', False),
     )
 
@@ -286,8 +295,7 @@ def environment_extend(request) -> tuple[str | None, bool]:
     source_view = _resolve_source(request.source)
 
     installations = _merged_installations(
-        source_view['installations'], request.installs, request.from_file,
-        request.shell, request.cwd
+        source_view['installations'], request.installs, request.from_file, request.shell, request.cwd
     )
     tags = list(dict.fromkeys([*source_view['tags'], *request.tags]))
 

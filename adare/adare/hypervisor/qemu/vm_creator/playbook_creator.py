@@ -16,6 +16,7 @@ A single self-contained profile is the whole recipe:
 The guest renders at a fixed 1024x768 (``-vga qxl``), so the profiles' pixel
 coordinates are stable across hosts.
 """
+
 from __future__ import annotations
 
 import json
@@ -35,17 +36,43 @@ log = logging.getLogger(__name__)
 
 # char -> (qcode, needs_shift) for type()
 _BASE = {
-    '\n': ('ret', False), ' ': ('spc', False), '\t': ('tab', False),
-    '-': ('minus', False), '=': ('equal', False), '.': ('dot', False),
-    ',': ('comma', False), '/': ('slash', False), ';': ('semicolon', False),
-    "'": ('apostrophe', False), '`': ('grave_accent', False),
-    '[': ('bracket_left', False), ']': ('bracket_right', False), '\\': ('backslash', False),
+    '\n': ('ret', False),
+    ' ': ('spc', False),
+    '\t': ('tab', False),
+    '-': ('minus', False),
+    '=': ('equal', False),
+    '.': ('dot', False),
+    ',': ('comma', False),
+    '/': ('slash', False),
+    ';': ('semicolon', False),
+    "'": ('apostrophe', False),
+    '`': ('grave_accent', False),
+    '[': ('bracket_left', False),
+    ']': ('bracket_right', False),
+    '\\': ('backslash', False),
 }
 _SHIFTED = {
-    '_': 'minus', '+': 'equal', ':': 'semicolon', '"': 'apostrophe', '?': 'slash',
-    '<': 'comma', '>': 'dot', '~': 'grave_accent', '{': 'bracket_left',
-    '}': 'bracket_right', '|': 'backslash', '!': '1', '@': '2', '#': '3', '$': '4',
-    '%': '5', '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
+    '_': 'minus',
+    '+': 'equal',
+    ':': 'semicolon',
+    '"': 'apostrophe',
+    '?': 'slash',
+    '<': 'comma',
+    '>': 'dot',
+    '~': 'grave_accent',
+    '{': 'bracket_left',
+    '}': 'bracket_right',
+    '|': 'backslash',
+    '!': '1',
+    '@': '2',
+    '#': '3',
+    '$': '4',
+    '%': '5',
+    '^': '6',
+    '&': '7',
+    '*': '8',
+    '(': '9',
+    ')': '0',
 }
 
 
@@ -118,10 +145,13 @@ class _QMP:
     def tap(self, x, y, w, h):
         ax = round(x / max(w - 1, 1) * 32767)
         ay = round(y / max(h - 1, 1) * 32767)
-        self.cmd('input-send-event', events=[
-            {'type': 'abs', 'data': {'axis': 'x', 'value': ax}},
-            {'type': 'abs', 'data': {'axis': 'y', 'value': ay}},
-        ])
+        self.cmd(
+            'input-send-event',
+            events=[
+                {'type': 'abs', 'data': {'axis': 'x', 'value': ax}},
+                {'type': 'abs', 'data': {'axis': 'y', 'value': ay}},
+            ],
+        )
         time.sleep(0.1)
         self.cmd('input-send-event', events=[{'type': 'btn', 'data': {'button': 'left', 'down': True}}])
         time.sleep(0.05)
@@ -166,18 +196,16 @@ class PlaybookVMCreator(BaseVMCreator):
             return
         if self.os_def.iso_url:
             from adare.hypervisor.qemu.vm_creator.linux_creator import _download_and_cache_iso
+
             self.iso_path = _download_and_cache_iso(self.os_def)
             return
         raise PlaybookVMCreationError(
-            f'No ISO for {self.os_def.display_name}. Set iso_url in the profile or '
-            f'pass --iso /path/to/installer.iso'
+            f'No ISO for {self.os_def.display_name}. Set iso_url in the profile or pass --iso /path/to/installer.iso'
         )
 
     def _run_installation(self, disk_path: Path, nvram_path: Path | None) -> None:
         if not self.os_def.install_steps:
-            raise PlaybookVMCreationError(
-                f'{self.os_def.name} has install_mode=playbook but no install_steps'
-            )
+            raise PlaybookVMCreationError(f'{self.os_def.name} has install_mode=playbook but no install_steps')
         run_dir = disk_path.parent / f'{self.vm_name}_playbook'
         run_dir.mkdir(parents=True, exist_ok=True)
         sock = run_dir / 'qmp.sock'
@@ -220,25 +248,41 @@ class PlaybookVMCreator(BaseVMCreator):
         needs_uefi = self.os_def.requires_uefi or self.os_def.architecture == 'aarch64'
         cmd = [
             arch['exe'],
-            '-machine', 'pc,accel=kvm:tcg',
-            '-cpu', 'host',
-            '-m', str(self.ram_mb),
-            '-smp', str(self.cpus),
-            '-drive', f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
-            '-vga', 'qxl',
-            '-usb', '-device', 'usb-tablet',
-            '-netdev', 'user,id=n0', '-device', 'virtio-net-pci,netdev=n0',
-            '-qmp', f'unix:{sock},server,nowait',
-            '-serial', f'file:{run_dir / "serial.log"}',
-            '-display', 'none',
+            '-machine',
+            'pc,accel=kvm:tcg',
+            '-cpu',
+            'host',
+            '-m',
+            str(self.ram_mb),
+            '-smp',
+            str(self.cpus),
+            '-drive',
+            f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
+            '-vga',
+            'qxl',
+            '-usb',
+            '-device',
+            'usb-tablet',
+            '-netdev',
+            'user,id=n0',
+            '-device',
+            'virtio-net-pci,netdev=n0',
+            '-qmp',
+            f'unix:{sock},server,nowait',
+            '-serial',
+            f'file:{run_dir / "serial.log"}',
+            '-display',
+            'none',
         ]
         if iso_path is not None:
             cmd += ['-cdrom', str(iso_path), '-boot', 'd']
         if needs_uefi and nvram_path is not None:
             ovmf_code, _ = find_ovmf_firmware(self.os_def.architecture)
             cmd[1:1] = [
-                '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
-                '-drive', f'if=pflash,format=raw,file={nvram_path}',
+                '-drive',
+                f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
+                '-drive',
+                f'if=pflash,format=raw,file={nvram_path}',
             ]
         if sock.exists():
             sock.unlink()
@@ -262,8 +306,9 @@ class PlaybookVMCreator(BaseVMCreator):
             action = step['action']
             note = step.get('note', '')
             repeat = int(step.get('repeat', 1))
-            print_step(f'[{phase} {i:02d}] {action}' + (f' x{repeat}' if repeat > 1 else '')
-                       + (f'  {note}' if note else ''))
+            print_step(
+                f'[{phase} {i:02d}] {action}' + (f' x{repeat}' if repeat > 1 else '') + (f'  {note}' if note else '')
+            )
             for _ in range(repeat):
                 if action == 'tap':
                     q.tap(*step['coords'])
@@ -276,10 +321,12 @@ class PlaybookVMCreator(BaseVMCreator):
                 elif action == 'wait':
                     time.sleep(float(step['seconds']))
                 elif action == 'wait_stable':
-                    q.wait_stable(settle=float(step.get('settle', 20)),
-                                  timeout=float(step.get('timeout', 600)),
-                                  poll=float(step.get('poll', 3)),
-                                  min_elapsed=float(step.get('min', 0)))
+                    q.wait_stable(
+                        settle=float(step.get('settle', 20)),
+                        timeout=float(step.get('timeout', 600)),
+                        poll=float(step.get('poll', 3)),
+                        min_elapsed=float(step.get('min', 0)),
+                    )
                 elif action == 'shot':
                     pass
                 else:
@@ -357,6 +404,7 @@ class PlaybookVMCreator(BaseVMCreator):
             import io
 
             from PIL import Image
+
             Image.open(io.BytesIO(data)).save(path)
         except (ImportError, OSError):
             # ImportError: no Pillow on this host. OSError: Pillow could not

@@ -22,8 +22,7 @@ pytestmark = pytest.mark.unit
 
 from adare.hypervisor.qemu.vm_creator.qga_utils import QgaError, _build_exec_args
 
-FAILING_CMD = ('bcdedit /set {default} bootstatuspolicy ignoreallfailures && '
-               'bcdedit /set {default} recoveryenabled No')
+FAILING_CMD = 'bcdedit /set {default} bootstatuspolicy ignoreallfailures && bcdedit /set {default} recoveryenabled No'
 
 
 def _decode_ps(args: list[str]) -> str:
@@ -34,6 +33,7 @@ def _decode_ps(args: list[str]) -> str:
 
 
 # --- powershell ---
+
 
 def test_powershell_uses_encoded_command():
     args = _build_exec_args('Write-Output hi', None, True, 'powershell')
@@ -47,6 +47,7 @@ def test_powershell_folds_in_cwd():
 
 
 # --- cmd, via PowerShell ---
+
 
 def test_cmd_is_spawned_as_powershell_not_cmd():
     """The agent must never be asked to spawn cmd.exe directly."""
@@ -79,15 +80,18 @@ def test_cmd_wrapper_invokes_cmd_and_propagates_its_exit_code():
     assert 'exit $LASTEXITCODE' in wrapper
 
 
-@pytest.mark.parametrize('script', [
-    FAILING_CMD,
-    'echo "he said ""hi"" & then left"',
-    'echo 100%% done',
-    'echo a^&b',
-    "echo it's fine",
-    'echo ' + 'a' * 1000,
-    'bcdedit /enum {default} /v | findstr /r /i /c:"recoveryenabled  *No"',
-])
+@pytest.mark.parametrize(
+    'script',
+    [
+        FAILING_CMD,
+        'echo "he said ""hi"" & then left"',
+        'echo 100%% done',
+        'echo a^&b',
+        "echo it's fine",
+        'echo ' + 'a' * 1000,
+        'bcdedit /enum {default} /v | findstr /r /i /c:"recoveryenabled  *No"',
+    ],
+)
 def test_any_cmd_script_round_trips_through_the_wrapper(script):
     """Decoding the wrapper's payload must yield the script byte for byte.
 
@@ -106,6 +110,7 @@ def test_cmd_folds_in_cwd_with_cd_slash_d():
 
 
 # --- bash / defaults ---
+
 
 def test_bash_uses_bin_bash_dash_c():
     args = _build_exec_args('jq --version', None, False, 'bash')

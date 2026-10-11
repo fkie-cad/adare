@@ -67,7 +67,7 @@ def result_to_response[T](result: Result[T]) -> dict[str, Any]:
         "error": {
             "code": result.error.code if result.error else "UNKNOWN",
             "message": result.error.message if result.error else "Unknown error",
-            "solutions": result.error.solutions if result.error and result.error.solutions else []
+            "solutions": result.error.solutions if result.error and result.error.solutions else [],
         },
     }
 

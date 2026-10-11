@@ -1,6 +1,7 @@
 """
 VirtualBox API utility functions.
 """
+
 import hashlib
 import logging
 import subprocess
@@ -16,7 +17,7 @@ def run_subprocess(cmd, *, check=True, capture_output=True, text=True, log_prefi
             stdout=subprocess.PIPE if capture_output else None,
             stderr=subprocess.PIPE if capture_output else None,
             text=text,
-            timeout=timeout
+            timeout=timeout,
         )
     except subprocess.CalledProcessError as e:
         log.error(f"{log_prefix}Subprocess failed: {e}")

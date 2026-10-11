@@ -20,6 +20,7 @@ from adarelib.testset.yaml.customtags import YamlString
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 @attrs.define
 class DummyParam(Parameter):
     pass
@@ -43,6 +44,7 @@ def _make_regex_match(text: str, variables_pattern: str = r'\{\{\s*(\w+)\s*\}\}'
 # ===========================================================================
 # resolve_var_in_match
 # ===========================================================================
+
 
 class TestResolveVarInMatch:
     """Tests for the module-level resolve_var_in_match function."""
@@ -87,6 +89,7 @@ class TestResolveVarInMatch:
 # resolve_yamlobj_in_dict
 # ===========================================================================
 
+
 class TestResolveYamlobjInDict:
     """Tests for the module-level resolve_yamlobj_in_dict function."""
 
@@ -125,6 +128,7 @@ class TestResolveYamlobjInDict:
 # ===========================================================================
 # BasicTest.has_placeholders / get_placeholders
 # ===========================================================================
+
 
 class TestHasPlaceholders:
     """Tests for BasicTest.has_placeholders."""
@@ -173,6 +177,7 @@ class TestGetPlaceholders:
 # BasicTest.resolve_variables
 # ===========================================================================
 
+
 class TestResolveVariables:
     """Tests for BasicTest.resolve_variables."""
 
@@ -213,6 +218,7 @@ class TestResolveVariables:
 # ===========================================================================
 # BasicTest.compare_with_placeholder
 # ===========================================================================
+
 
 class TestCompareWithPlaceholder:
     """Tests for BasicTest.compare_with_placeholder."""

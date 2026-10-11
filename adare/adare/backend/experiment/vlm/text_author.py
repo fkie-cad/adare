@@ -53,10 +53,13 @@ log = logging.getLogger(__name__)
 # Verbs the author may use -> the canonical action kind.
 _VERBS = {
     'click': A.CLICK,
-    'double_click': A.DOUBLE_CLICK, 'doubleclick': A.DOUBLE_CLICK,
-    'right_click': A.CLICK, 'rightclick': A.CLICK,  # button set to 'right' below
+    'double_click': A.DOUBLE_CLICK,
+    'doubleclick': A.DOUBLE_CLICK,
+    'right_click': A.CLICK,
+    'rightclick': A.CLICK,  # button set to 'right' below
     'type': A.TYPE,
-    'key': A.KEY, 'press': A.KEY,
+    'key': A.KEY,
+    'press': A.KEY,
     'scroll': A.SCROLL,
     'wait': A.WAIT,
     'note': A.NOTE,
@@ -120,7 +123,7 @@ def parse_authored_line(line: str) -> AgentAction | None:
         action.describe = f'press {combo}'
     elif kind == A.SCROLL:
         toks = rest.split()
-        action.direction = (toks[0].lower() if toks else 'down')
+        action.direction = toks[0].lower() if toks else 'down'
         action.amount = int(toks[1]) if len(toks) > 1 and toks[1].isdigit() else 3
         action.describe = f'scroll {action.direction} {action.amount}'
     elif kind == A.WAIT:
@@ -162,10 +165,16 @@ class TextAuthorDriver:
         # locate_click is irrelevant here (we ground explicitly), client is
         # never used because we never call _decide.
         self.agent = GuiAgent(
-            gui_executor, client=None, goal=goal,
-            recorder=recorder, run_dir=run_dir, coord_space=coord_space,
-            locate_client=locate_client, locate_click=True,
-            locate_crop_margin=locate_crop_margin, locate_crop_min=locate_crop_min,
+            gui_executor,
+            client=None,
+            goal=goal,
+            recorder=recorder,
+            run_dir=run_dir,
+            coord_space=coord_space,
+            locate_client=locate_client,
+            locate_click=True,
+            locate_crop_margin=locate_crop_margin,
+            locate_crop_min=locate_crop_min,
             step_settle_seconds=step_settle_seconds,
         )
 
@@ -208,8 +217,7 @@ class TextAuthorDriver:
                 draw.rectangle([x1, y1, x2, y2], outline=(0, 160, 255), width=3)
                 tag = f'[{i}]'
                 tb = draw.textbbox((0, 0), tag, font=font)
-                draw.rectangle([x1, max(0, y1 - (tb[3] - tb[1]) - 8), x1 + (tb[2] - tb[0]) + 8, y1],
-                               fill=(0, 160, 255))
+                draw.rectangle([x1, max(0, y1 - (tb[3] - tb[1]) - 8), x1 + (tb[2] - tb[0]) + 8, y1], fill=(0, 160, 255))
                 draw.text((x1 + 3, max(0, y1 - (tb[3] - tb[1]) - 6)), tag, fill=(0, 0, 0), font=font)
             path = steps_dir / f'candidates_{index:03d}.png'
             img.save(path)
@@ -221,8 +229,14 @@ class TextAuthorDriver:
     # -- one step -----------------------------------------------------------
 
     async def _ground_for_author(
-        self, action: AgentAction, png: bytes, b64_width: int, height: int, index: int,
-        *, interactive: bool,
+        self,
+        action: AgentAction,
+        png: bytes,
+        b64_width: int,
+        height: int,
+        index: int,
+        *,
+        interactive: bool,
     ) -> bool:
         """Resolve a click's coordinate from its description. Returns True if the
         click is ready to execute, False to skip it.
@@ -257,8 +271,9 @@ class TextAuthorDriver:
                     print(f'    [{i}] {d.label!r} centre ({cx},{cy}) box {[round(v) for v in d.box]}')
                 if overlay:
                     print(f'  (candidates drawn: {overlay})')
-                choice = (await asyncio.to_thread(
-                    input, '  pick number / [r]e-ground / xy X,Y / [s]kip > ')).strip().lower()
+                choice = (
+                    (await asyncio.to_thread(input, '  pick number / [r]e-ground / xy X,Y / [s]kip > ')).strip().lower()
+                )
                 if choice in ('s', 'skip'):
                     return False
                 if choice in ('r', 're', ''):
@@ -277,8 +292,7 @@ class TextAuthorDriver:
                 log.warning('No match for %r; skipping (author with @x,y to force)', action.describe)
                 return False
             print(f'  No match for "{action.describe}".')
-            choice = (await asyncio.to_thread(
-                input, '  [r]etype a new description / xy X,Y / [s]kip > ')).strip()
+            choice = (await asyncio.to_thread(input, '  [r]etype a new description / xy X,Y / [s]kip > ')).strip()
             low = choice.lower()
             if low in ('s', 'skip'):
                 return False
@@ -294,8 +308,7 @@ class TextAuthorDriver:
         """Interactive per-step gate after grounding. Returns approve/skip/quit."""
         where = f' @ ({action.x},{action.y})' if action.x is not None else ''
         print(f'  step {index}: {action.kind}{where}  "{action.describe}"')
-        choice = (await asyncio.to_thread(
-            input, '  [a]pprove / [s]kip / [q]uit > ')).strip().lower()
+        choice = (await asyncio.to_thread(input, '  [a]pprove / [s]kip / [q]uit > ')).strip().lower()
         if choice in ('', 'a', 'approve'):
             return 'approve'
         if choice in ('s', 'skip'):
@@ -311,29 +324,46 @@ class TextAuthorDriver:
         index = len(ag._records) + 1
 
         if action.kind in (A.CLICK, A.DOUBLE_CLICK):
-            ready = await self._ground_for_author(action, png, width, height, index,
-                                                   interactive=interactive)
+            ready = await self._ground_for_author(action, png, width, height, index, interactive=interactive)
             if not ready:
-                ag._records.append(StepRecord(
-                    index=index, action_kind=action.kind, describe=action.describe,
-                    reasoning='authored', result_status='skipped'))
+                ag._records.append(
+                    StepRecord(
+                        index=index,
+                        action_kind=action.kind,
+                        describe=action.describe,
+                        reasoning='authored',
+                        result_status='skipped',
+                    )
+                )
                 return 'skipped'
 
         if interactive:
             decision = await self._confirm(action, index)
             if decision == 'skip':
-                ag._records.append(StepRecord(
-                    index=index, action_kind=action.kind, describe=action.describe,
-                    reasoning='authored', result_status='skipped'))
+                ag._records.append(
+                    StepRecord(
+                        index=index,
+                        action_kind=action.kind,
+                        describe=action.describe,
+                        reasoning='authored',
+                        result_status='skipped',
+                    )
+                )
                 return 'skipped'
             if decision == 'quit':
                 return 'quit'
 
         status = await ag._execute(action, png)
         ag._persist_step(index, png, action, status)
-        ag._records.append(StepRecord(
-            index=index, action_kind=action.kind, describe=action.describe,
-            reasoning='authored', result_status=status))
+        ag._records.append(
+            StepRecord(
+                index=index,
+                action_kind=action.kind,
+                describe=action.describe,
+                reasoning='authored',
+                result_status=status,
+            )
+        )
         await asyncio.sleep(self.step_settle_seconds)
         return status
 
@@ -361,8 +391,7 @@ class TextAuthorDriver:
 
     async def run_interactive(self) -> AgentRunResult:
         """REPL: read one step at a time, ground+preview+confirm, record."""
-        print('Text playbook authoring. One action per line. '
-              ':help for commands, :done to finish, :quit to abort.')
+        print('Text playbook authoring. One action per line. :help for commands, :done to finish, :quit to abort.')
         while True:
             line = await asyncio.to_thread(input, 'step> ')
             cmd = line.strip().lower()
@@ -371,8 +400,7 @@ class TextAuthorDriver:
             if cmd in (':done', ':finish', ':d'):
                 return self.agent._finish(True, 'authored (done)')
             if cmd in (':help', ':h', '?'):
-                print('  verbs: click | double_click | right_click | type | key | '
-                      'scroll | wait | note | done')
+                print('  verbs: click | double_click | right_click | type | key | scroll | wait | note | done')
                 print('  clicks: `click the Save button`  or  `click @542,130 Save`')
                 print('  commands: :done  :quit  :help')
                 continue

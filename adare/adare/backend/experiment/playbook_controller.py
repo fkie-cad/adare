@@ -56,6 +56,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class PlaybookControllerConfig:
     """Groups configuration parameters for PlaybookController construction."""
+
     experiment_dir: Path | None = None
     project_dir: Path | None = None
     mcp_gui_url: str = "http://localhost:13109/mcp"
@@ -74,6 +75,7 @@ class PlaybookControllerConfig:
 @dataclass
 class PlaybookExecutionResult:
     """Result of complete playbook execution."""
+
     success: bool
     total_actions: int
     successful_actions: int
@@ -211,8 +213,9 @@ class PlaybookController:
         self._auto_pull_files: list[str] = []
         self._auto_pull_executed: bool = False
 
-    def _build_machine_handles(self, cfg: PlaybookControllerConfig, websocket_client: AdareVMClient,
-                                vm: Any) -> dict[str | None, MachineHandles]:
+    def _build_machine_handles(
+        self, cfg: PlaybookControllerConfig, websocket_client: AdareVMClient, vm: Any
+    ) -> dict[str | None, MachineHandles]:
         """Build (or complete) the per-machine dispatch handles for this controller.
 
         Multi-machine playbooks pass ``cfg.machines`` with ``vm``/``client``/
@@ -225,21 +228,31 @@ class PlaybookController:
             for key, handles in cfg.machines.items():
                 if handles.target_resolver is None:
                     handles.target_resolver = MCPTargetResolver(
-                        cfg.experiment_dir, handles.mcp_gui_url, cfg.experiment_run_id,
-                        vm_client=handles.client, os_key=handles.vm_os or "windows",
+                        cfg.experiment_dir,
+                        handles.mcp_gui_url,
+                        cfg.experiment_run_id,
+                        vm_client=handles.client,
+                        os_key=handles.vm_os or "windows",
                     )
                 if handles.condition_checker is None:
                     handles.condition_checker = MCPConditionChecker(handles.target_resolver)
             return cfg.machines
 
         target_resolver = MCPTargetResolver(
-            cfg.experiment_dir, cfg.mcp_gui_url, cfg.experiment_run_id,
-            vm_client=websocket_client, os_key=self.vm_os or "windows",
+            cfg.experiment_dir,
+            cfg.mcp_gui_url,
+            cfg.experiment_run_id,
+            vm_client=websocket_client,
+            os_key=self.vm_os or "windows",
         )
         return {
             None: MachineHandles(
-                vm=vm, client=websocket_client, vm_os=self.vm_os, vm_user=self.vm_user,
-                mcp_gui_url=cfg.mcp_gui_url, target_resolver=target_resolver,
+                vm=vm,
+                client=websocket_client,
+                vm_os=self.vm_os,
+                vm_user=self.vm_user,
+                mcp_gui_url=cfg.mcp_gui_url,
+                target_resolver=target_resolver,
                 condition_checker=MCPConditionChecker(target_resolver),
             )
         }
@@ -254,6 +267,7 @@ class PlaybookController:
             return variable_registry
 
         from adarelib.common.automatic_variables import AutomaticVariables
+
         automatic_vars = AutomaticVariables.get_automatic_variables(self.vm_os, self.vm_user)
         if variable_registry:
             return AutomaticVariables.merge_with_user_variables(automatic_vars, variable_registry)
@@ -273,14 +287,12 @@ class PlaybookController:
 
         # Variable resolver for template processing
         self.variable_resolver = VariableResolver(
-            variable_registry=variable_registry,
-            jinja_env=self._create_jinja_environment()
+            variable_registry=variable_registry, jinja_env=self._create_jinja_environment()
         )
 
         # Event manager for action event creation and emission
         self.event_manager = EventManager(
-            experiment_run_id=self.experiment_run_id,
-            playbook_items_map=self.playbook_items_map
+            experiment_run_id=self.experiment_run_id, playbook_items_map=self.playbook_items_map
         )
 
         # Action executor for individual action execution, seeded from every
@@ -294,7 +306,7 @@ class PlaybookController:
             debug_screenshots=self.debug_screenshots,
             screenshots_dir=self.screenshots_dir,
             experiment_run_directory=self.experiment_run_directory,
-            flow_console=self.flow_console
+            flow_console=self.flow_console,
         )
 
         # Test loader for test loading and resolution
@@ -302,7 +314,7 @@ class PlaybookController:
             experiment_dir=self.experiment_dir,
             project_dir=self.project_dir,
             playbook=self.playbook,
-            variable_resolver=self.variable_resolver
+            variable_resolver=self.variable_resolver,
         )
 
         # Connect test loader to action executor (use setter method to ensure proper initialization)
@@ -330,8 +342,7 @@ class PlaybookController:
         # Rebuild the resolver so its registry *and* its Jinja filters (which are bound
         # to a registry) refer to the new playbook.
         self.variable_resolver = VariableResolver(
-            variable_registry=merged_registry,
-            jinja_env=self._create_jinja_environment()
+            variable_registry=merged_registry, jinja_env=self._create_jinja_environment()
         )
 
         # Keep the components holding their own references in sync.
@@ -395,8 +406,9 @@ class PlaybookController:
         self.action_executor.flow_control.client = new_client
 
         # Update GUI executor if it exists
-        if hasattr(self.action_executor.simple_actions, 'gui_executor') and \
-           hasattr(self.action_executor.simple_actions.gui_executor, 'client'):
+        if hasattr(self.action_executor.simple_actions, 'gui_executor') and hasattr(
+            self.action_executor.simple_actions.gui_executor, 'client'
+        ):
             self.action_executor.simple_actions.gui_executor.client = new_client
 
         # Keep the icon library's extraction transport in sync after reconnect
@@ -410,6 +422,7 @@ class PlaybookController:
         filters = {}
         if hasattr(self.playbook, 'variables') and self.playbook.variables:
             from adarelib.common.variables import TimestampMetadata
+
             metadata = TimestampMetadata()  # Create temp metadata object
             filters.update(metadata.get_jinja_filters(self.playbook.variables))
 
@@ -490,9 +503,10 @@ class PlaybookController:
         # 1. Load testfunctions and testset (dependencies should already be installed)
         # In host test mode (no WebSocket), skip upload - testfunctions are loaded locally
         from adare.backend.experiment.execution.base import TestExecutionMode
+
         is_host_test_mode = (
-            hasattr(self.action_executor, 'test_actions') and
-            self.action_executor.test_actions.test_execution_mode == TestExecutionMode.HOST
+            hasattr(self.action_executor, 'test_actions')
+            and self.action_executor.test_actions.test_execution_mode == TestExecutionMode.HOST
         )
         if is_host_test_mode:
             log.info("Host test mode: skipping testfunction upload (tests run on host)")
@@ -541,7 +555,7 @@ class PlaybookController:
             action_results=self.action_results,
             total_tests=total_tests,
             successful_tests=successful_tests,
-            failed_tests=failed_tests
+            failed_tests=failed_tests,
         )
 
     async def execute_playbook(self, indices: list[int] | None = None) -> PlaybookExecutionResult:
@@ -574,7 +588,7 @@ class PlaybookController:
                 successful_tests=0,
                 failed_tests=0,
                 execution_time=0.0,
-                error_message=error_msg
+                error_message=error_msg,
             )
 
         # Set up experiment variables and playbook access
@@ -596,7 +610,9 @@ class PlaybookController:
         if hasattr(playbook, 'settings') and playbook.settings and playbook.settings.auto_pull_on_test_failure:
             self._auto_pull_files = collect_pull_action_files(playbook)
             if self._auto_pull_files:
-                log.info(f"Auto-pull on test failure enabled - collected {len(self._auto_pull_files)} files: {self._auto_pull_files}")
+                log.info(
+                    f"Auto-pull on test failure enabled - collected {len(self._auto_pull_files)} files: {self._auto_pull_files}"
+                )
             else:
                 log.debug("Auto-pull on test failure enabled but no pull actions found in playbook")
 
@@ -643,8 +659,8 @@ class PlaybookController:
                         'is_countable': self._is_countable_action(action),
                         'is_test_action': False,
                         'is_utility_action': self._is_utility_action(action),
-                        'skipped': True
-                    }
+                        'skipped': True,
+                    },
                 )
                 self.action_results.append(skipped_result)
                 continue
@@ -658,7 +674,7 @@ class PlaybookController:
             resolved_action = self.variable_resolver.resolve_action_variables(action, self.execution_context)
 
             # Create unique action ID for event tracking
-            action_id = f"action_{i}_{action_name.lower()}_{int(time.time()*1000)}"
+            action_id = f"action_{i}_{action_name.lower()}_{int(time.time() * 1000)}"
 
             # Emit action start event for flow console display using resolved action
             if self.experiment_run_id:
@@ -679,7 +695,7 @@ class PlaybookController:
                 parent_event_id=action_id,
                 event_emitter=self.event_manager,
                 variable_resolver=self.variable_resolver,
-                action_context=debug_context
+                action_context=debug_context,
             )
             execution_time = time.time() - start_time
 
@@ -693,14 +709,18 @@ class PlaybookController:
             result.data['is_utility_action'] = self._is_utility_action(action)
 
             self.action_results.append(result)
-            self.action_timings[f"action_{i+1}_{action_name}"] = execution_time
+            self.action_timings[f"action_{i + 1}_{action_name}"] = execution_time
 
             # Emit action complete event for flow console display using resolved action
             if self.experiment_run_id:
                 try:
-                    complete_event = self.event_manager.create_action_complete_event(resolved_action, i, action_id, result)
+                    complete_event = self.event_manager.create_action_complete_event(
+                        resolved_action, i, action_id, result
+                    )
                     emit_action(self.experiment_run_id, complete_event, action_id)
-                    log.info(f"Emitted complete event for action {i}: {action_name}, Success: {result.success}, ID: {action_id}")
+                    log.info(
+                        f"Emitted complete event for action {i}: {action_name}, Success: {result.success}, ID: {action_id}"
+                    )
                 except (ValueError, KeyError, TypeError) as e:
                     log.error(f"Failed to emit complete event for action {i}: {e}", exc_info=True)
 
@@ -714,7 +734,7 @@ class PlaybookController:
                 break
 
             if not result.success:
-                log.error(f"Action {i+1} failed: {result.message}")
+                log.error(f"Action {i + 1} failed: {result.message}")
 
                 # Check if we should continue on test failure
                 should_continue = False
@@ -722,7 +742,11 @@ class PlaybookController:
                     # This is a test action - check settings
                     if hasattr(playbook, 'settings') and playbook.settings:
                         # Auto-pull files on test failure if enabled
-                        if playbook.settings.auto_pull_on_test_failure and self._auto_pull_files and not self._auto_pull_executed:
+                        if (
+                            playbook.settings.auto_pull_on_test_failure
+                            and self._auto_pull_files
+                            and not self._auto_pull_executed
+                        ):
                             log.info(f"Test failed - triggering auto-pull of {len(self._auto_pull_files)} files")
                             await self._execute_auto_pull()
                             self._auto_pull_executed = True  # Only auto-pull once per execution
@@ -758,7 +782,7 @@ class PlaybookController:
             action_results=self.action_results,
             total_tests=total_tests,
             successful_tests=successful_tests,
-            failed_tests=failed_tests
+            failed_tests=failed_tests,
         )
 
     async def _create_database_execution_record(self, action_index: int) -> str | None:
@@ -770,7 +794,7 @@ class PlaybookController:
                 execution = playbook_api.create_action_execution(
                     playbook_item_id=self.playbook_items_map[action_index],
                     experiment_run_id=self.experiment_run_id,
-                    status='pending'
+                    status='pending',
                 )
                 playbook_api.update_action_execution_start(execution.id)
                 log.debug(f"Created execution record {execution.id} for action {action_index}")
@@ -791,9 +815,9 @@ class PlaybookController:
                     result_data={
                         'coordinates': getattr(result, 'coordinates', None),
                         'data': getattr(result, 'data', None),
-                        'execution_time': execution_time
+                        'execution_time': execution_time,
                     },
-                    error_message=result.message if not result.success else None
+                    error_message=result.message if not result.success else None,
                 )
                 log.debug(f"Updated execution record {execution_id}")
         except (ValueError, KeyError, OSError, TypeError) as e:
@@ -858,6 +882,7 @@ class PlaybookController:
     @staticmethod
     def _get_action_detail(action: ActionType) -> str:
         """Extract a short detail string from an action for screenshot filenames."""
+
         def _sanitize(text: str, max_len: int = 15) -> str:
             safe = re.sub(r'[^a-zA-Z0-9_\-]', '_', text[:max_len])
             return re.sub(r'_+', '_', safe).strip('_')
@@ -905,17 +930,13 @@ class PlaybookController:
                 resolved_path = self.variable_resolver.replace_variables(file_path, self.execution_context)
 
                 # Create a programmatic pull action
-                PullAction(
-                    src=resolved_path,
-                    description=f"Auto-pull on test failure: {resolved_path}"
-                )
+                PullAction(src=resolved_path, description=f"Auto-pull on test failure: {resolved_path}")
 
                 log.info(f"Auto-pulling file: {resolved_path}")
 
                 # Execute the pull using the action executor
                 result = await self.action_executor.execute_programmatic_pull(
-                    src_path=resolved_path,
-                    description=f"Auto-pull on test failure: {resolved_path}"
+                    src_path=resolved_path, description=f"Auto-pull on test failure: {resolved_path}"
                 )
 
                 if result.success:
@@ -925,5 +946,3 @@ class PlaybookController:
 
             except (OSError, ConnectionError, ValueError, TimeoutError) as e:
                 log.error(f"Error during auto-pull of {file_path}: {e}", exc_info=True)
-
-

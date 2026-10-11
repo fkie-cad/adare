@@ -3,6 +3,7 @@ Consistent error handling utilities for database operations.
 
 Provides standardized error handling patterns to improve code consistency.
 """
+
 # configure logging
 import logging
 from typing import Any, TypeVar
@@ -17,21 +18,25 @@ T = TypeVar('T')
 
 class DataRetrievalError(Exception):
     """Base exception for data retrieval errors."""
+
     pass
 
 
 class ObjectNotFoundError(DataRetrievalError):
     """Raised when a required object is not found."""
+
     pass
 
 
 class MultipleObjectsFoundError(DataRetrievalError):
     """Raised when multiple objects found where one was expected."""
+
     pass
 
 
-def safe_query_one(query: Query, error_class: type[Exception] = ObjectNotFoundError,
-                   error_message: str = "Object not found") -> Any:
+def safe_query_one(
+    query: Query, error_class: type[Exception] = ObjectNotFoundError, error_message: str = "Object not found"
+) -> Any:
     """
     Safely execute a query that should return exactly one result.
 
@@ -99,8 +104,7 @@ def safe_query_all(query: Query, default: list | None = None) -> list:
         return default
 
 
-def safe_get_attribute(obj: Any, attribute: str, default: Any = None,
-                      nested: str | None = None) -> Any:
+def safe_get_attribute(obj: Any, attribute: str, default: Any = None, nested: str | None = None) -> Any:
     """
     Safely get an attribute from an object with optional nested access.
 

@@ -20,7 +20,7 @@ class TestResultLogger:
     def log_test_result(test_name: str, result: TestResult) -> None:
         """
         Log test result details on the VM side.
-        
+
         Args:
             test_name: Name of the test that was executed
             result: TestResult object containing status and details
@@ -56,26 +56,23 @@ class TestResultLogger:
     def format_result_for_response(test_name: str, result: TestResult) -> dict:
         """
         Format test result for WebSocket response.
-        
+
         Args:
             test_name: Name of the test
             result: TestResult object
-            
+
         Returns:
             Dict containing formatted result data
         """
         if not result:
-            return {
-                'status': TestResultLogger._get_status_name(StatusEnum.NONE),
-                'details': ['No result returned']
-            }
+            return {'status': TestResultLogger._get_status_name(StatusEnum.NONE), 'details': ['No result returned']}
 
         status = getattr(result, 'status', StatusEnum.NONE)
         details = getattr(result, 'details', [])
 
         return {
             'status': TestResultLogger._get_status_name(status),
-            'details': details if isinstance(details, list) else [str(details)] if details else []
+            'details': details if isinstance(details, list) else [str(details)] if details else [],
         }
 
     @staticmethod

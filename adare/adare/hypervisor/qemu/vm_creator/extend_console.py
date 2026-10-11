@@ -38,8 +38,7 @@ def _print_banner(windows: bool) -> None:
     print_section('Interactive Extend Console')
     console.print('  Commands you type run [bold]inside the guest[/bold]; output is shown here.')
     console.print('  Successful commands are [bold]recorded[/bold] as the new environment\'s installs.')
-    console.print('  Type [cyan]:help[/cyan] for meta-commands, [cyan]:store[/cyan] to create the '
-                  'environment,')
+    console.print('  Type [cyan]:help[/cyan] for meta-commands, [cyan]:store[/cyan] to create the environment,')
     console.print('  [cyan]:discard[/cyan] to shut down and [bold]create nothing[/bold].')
     if windows:
         console.print('  [dim]Guest shell: PowerShell.[/dim]')
@@ -55,8 +54,12 @@ def _print_help(windows: bool) -> None:
     console.print('    [cyan]:push <local> <remote>[/cyan]  copy a host file into the guest')
     console.print('    [cyan]:pull <remote> <local>[/cyan]  copy a guest file out to the host')
     console.print('    [cyan]:record on|off[/cyan]        toggle recording (default: on)')
-    console.print('    [cyan]:store[/cyan]                shut the guest down and [bold]create[/bold] the new environment')
-    console.print('    [cyan]:discard[/cyan] / [cyan]:quit[/cyan]      shut down and exit WITHOUT creating an environment')
+    console.print(
+        '    [cyan]:store[/cyan]                shut the guest down and [bold]create[/bold] the new environment'
+    )
+    console.print(
+        '    [cyan]:discard[/cyan] / [cyan]:quit[/cyan]      shut down and exit WITHOUT creating an environment'
+    )
     console.print('    [cyan]:q[/cyan]                    quick exit -- choose store / discard / cancel')
     console.print()
     console.print(f'  Anything else runs in the guest via {shell}.')
@@ -219,10 +222,8 @@ def run_extend_console(
 
     print_step('Waiting for the guest agent to come up...')
     if not qga_wait_ready(qga_sock):
-        console.print('  [yellow]Guest agent did not respond in time; falling back to '
-                      'press-Enter shutdown.[/yellow]')
-        console.print('  [dim](The base may lack qemu-guest-agent, or the guest is still '
-                      'booting.)[/dim]')
+        console.print('  [yellow]Guest agent did not respond in time; falling back to press-Enter shutdown.[/yellow]')
+        console.print('  [dim](The base may lack qemu-guest-agent, or the guest is still booting.)[/dim]')
         wait_for_input_or_exit(process, qmp_sock)
         return False, []
 
@@ -237,16 +238,14 @@ def run_extend_console(
             # Guest was shut down from inside the QEMU window. Ask on a TTY
             # whether to keep the result; default to discard when we can't.
             console.print('  [dim]VM process exited (guest shut down).[/dim]')
-            if sys.stdin.isatty() and _confirm(
-                    'Create the new environment from this session?', default_yes=True):
+            if sys.stdin.isatty() and _confirm('Create the new environment from this session?', default_yes=True):
                 return True, recorded
             return False, []
 
         try:
             line = input(_prompt(cwd))
         except EOFError:
-            console.print('\n  [dim]EOF -- discarding session and shutting down '
-                          '(no environment created).[/dim]')
+            console.print('\n  [dim]EOF -- discarding session and shutting down (no environment created).[/dim]')
             _shutdown(qmp_sock, process)
             return False, []
         except KeyboardInterrupt:
@@ -267,21 +266,17 @@ def run_extend_console(
             _print_help(windows)
             continue
         if line == ':store':
-            if not _confirm('Shut down the VM and create the new environment?',
-                            default_yes=True):
+            if not _confirm('Shut down the VM and create the new environment?', default_yes=True):
                 continue
             if recorded:
-                print_step(f'Recorded [bold]{len(recorded)}[/bold] command(s) as '
-                           'post-setup installations.')
+                print_step(f'Recorded [bold]{len(recorded)}[/bold] command(s) as post-setup installations.')
             print_step('Storing: sending ACPI shutdown...')
             _shutdown(qmp_sock, process)
             return True, recorded
         if line in (':discard', ':quit'):
-            if not _confirm('Discard this session and shut down WITHOUT creating an '
-                            'environment?', default_yes=False):
+            if not _confirm('Discard this session and shut down WITHOUT creating an environment?', default_yes=False):
                 continue
-            console.print('  [yellow]Discarding session; shutting down. No environment '
-                          'will be created.[/yellow]')
+            console.print('  [yellow]Discarding session; shutting down. No environment will be created.[/yellow]')
             _shutdown(qmp_sock, process)
             return False, []
         if line == ':q':
@@ -293,7 +288,7 @@ def run_extend_console(
                 return True, recorded
             return False, []
         if line == ':record' or line.startswith(':record '):
-            arg = line[len(':record'):].strip().lower()
+            arg = line[len(':record') :].strip().lower()
             if arg == 'on':
                 recording = True
             elif arg == 'off':
@@ -328,10 +323,12 @@ def run_extend_console(
 
         if recording and rc == 0:
             step += 1
-            recorded.append({
-                'name': f'step-{step}',
-                'command': line,
-                'description': '',
-                'cwd': cwd,
-                'shell': True,
-            })
+            recorded.append(
+                {
+                    'name': f'step-{step}',
+                    'command': line,
+                    'description': '',
+                    'cwd': cwd,
+                    'shell': True,
+                }
+            )

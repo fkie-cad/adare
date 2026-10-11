@@ -45,9 +45,11 @@ def detect_potential_project_directories(search_path: Path = None, max_depth: in
             experiments_dir = current_path / 'experiments'
 
             # Check if this looks like an ADARE project
-            if (adare_dir.exists() and adare_dir.is_dir()) or \
-               (environments_dir.exists() and environments_dir.is_dir()) or \
-               (experiments_dir.exists() and experiments_dir.is_dir()):
+            if (
+                (adare_dir.exists() and adare_dir.is_dir())
+                or (environments_dir.exists() and environments_dir.is_dir())
+                or (experiments_dir.exists() and experiments_dir.is_dir())
+            ):
                 potential_projects.append(current_path)
                 dirs.clear()  # Don't search subdirectories of found projects
 
@@ -74,15 +76,12 @@ def suggest_project_creation_location(current_path: Path = None) -> Path:
 
     # If we're in a home directory or common project location, suggest current
     home_dir = Path.home()
-    common_project_dirs = [
-        home_dir / 'projects',
-        home_dir / 'Documents',
-        home_dir / 'workspace',
-        home_dir / 'dev'
-    ]
+    common_project_dirs = [home_dir / 'projects', home_dir / 'Documents', home_dir / 'workspace', home_dir / 'dev']
 
     # Check if current path is suitable for project creation
-    if current_path == home_dir or any(current_path.is_relative_to(pdir) for pdir in common_project_dirs if pdir.exists()):
+    if current_path == home_dir or any(
+        current_path.is_relative_to(pdir) for pdir in common_project_dirs if pdir.exists()
+    ):
         return current_path
 
     # Otherwise suggest a standard location
@@ -113,8 +112,7 @@ def check_project_database_status() -> tuple[bool, int]:
 
 
 def generate_no_project_error_message(
-    current_path: Path = None,
-    specified_project: str = None
+    current_path: Path = None, specified_project: str = None
 ) -> tuple[str, list[str]]:
     """
     Generate enhanced error message for NoProjectFoundError.
@@ -140,52 +138,57 @@ def generate_no_project_error_message(
             solutions = [
                 "Check database connection and try again",
                 "Initialize ADARE with database setup",
-                "Run 'adare db repair' (or, as a last resort, 'adare db reset') if the database is corrupted"
+                "Run 'adare db repair' (or, as a last resort, 'adare db reset') if the database is corrupted",
             ]
         elif project_count == 0:
             solutions = [
                 f"Create the project: 'adare project create {specified_project}'",
                 "List available projects: 'adare project list'",
-                "No projects exist yet - create your first project"
+                "No projects exist yet - create your first project",
             ]
         else:
             solutions = [
                 f"Create the project: 'adare project create {specified_project}'",
                 "List available projects: 'adare project list'",
                 "Check project name spelling",
-                "Use full path: 'adare -p /path/to/project <command>'"
+                "Use full path: 'adare -p /path/to/project <command>'",
             ]
     else:
         # No project specified and current directory is not a project
         message = f"No project directory found in current location: {current_path}"
 
         # Look for potential projects nearby
-        potential_projects = detect_potential_project_directories(current_path.parent if current_path.parent != current_path else current_path)
+        potential_projects = detect_potential_project_directories(
+            current_path.parent if current_path.parent != current_path else current_path
+        )
 
         solutions = []
 
         if potential_projects:
             project_paths = [str(p) for p in potential_projects[:3]]
-            solutions.extend([
-                f"Navigate to a project directory: 'cd {project_paths[0]}'",
-                f"Use -p flag: 'adare -p {project_paths[0]} <command>'",
-                f"Found potential projects: {', '.join(project_paths)}"
-            ])
+            solutions.extend(
+                [
+                    f"Navigate to a project directory: 'cd {project_paths[0]}'",
+                    f"Use -p flag: 'adare -p {project_paths[0]} <command>'",
+                    f"Found potential projects: {', '.join(project_paths)}",
+                ]
+            )
 
         # Add standard solutions
         if project_count > 0:
-            solutions.extend([
-                "Navigate to an existing project directory",
-                "List available projects: 'adare project list'",
-                "Use -p flag to specify project: 'adare -p <project_path> <command>'"
-            ])
+            solutions.extend(
+                [
+                    "Navigate to an existing project directory",
+                    "List available projects: 'adare project list'",
+                    "Use -p flag to specify project: 'adare -p <project_path> <command>'",
+                ]
+            )
 
         # Suggest creating a new project
         suggest_project_creation_location(current_path)
-        solutions.extend([
-            "Create a new project: 'adare project create <name>'",
-            "Initialize project in current directory"
-        ])
+        solutions.extend(
+            ["Create a new project: 'adare project create <name>'", "Initialize project in current directory"]
+        )
 
         if not db_accessible:
             solutions.insert(0, "Database not accessible - check ADARE installation")
@@ -212,27 +215,28 @@ def get_project_navigation_help(target_project: str = None) -> list[str]:
         projects = api.get_projects()
 
         if not projects:
-            help_commands.extend([
-                "No projects found in database",
-                "Create your first project: 'adare project create <name>'",
-                "Initialize project structure: 'adare project init'"
-            ])
+            help_commands.extend(
+                [
+                    "No projects found in database",
+                    "Create your first project: 'adare project create <name>'",
+                    "Initialize project structure: 'adare project init'",
+                ]
+            )
         else:
             if target_project:
                 # Find specific project
                 matching_projects = [p for p in projects if p.name == target_project]
                 if matching_projects:
                     project = matching_projects[0]
-                    help_commands.extend([
-                        f"Navigate to project: 'cd {project.directory}'",
-                        f"Use project flag: 'adare -p {project.directory} <command>'",
-                        f"Project path: {project.directory}"
-                    ])
+                    help_commands.extend(
+                        [
+                            f"Navigate to project: 'cd {project.directory}'",
+                            f"Use project flag: 'adare -p {project.directory} <command>'",
+                            f"Project path: {project.directory}",
+                        ]
+                    )
                 else:
-                    help_commands.extend([
-                        f"Project '{target_project}' not found",
-                        "Available projects:"
-                    ])
+                    help_commands.extend([f"Project '{target_project}' not found", "Available projects:"])
                     for project in projects[:5]:
                         help_commands.append(f"  • {project.name}: {project.directory}")
             else:
@@ -243,18 +247,13 @@ def get_project_navigation_help(target_project: str = None) -> list[str]:
                 if len(projects) > 5:
                     help_commands.append(f"  ... and {len(projects) - 5} more")
 
-                help_commands.extend([
-                    "",
-                    "Navigate: 'cd <project_directory>'",
-                    "Or use: 'adare -p <project_directory> <command>'"
-                ])
+                help_commands.extend(
+                    ["", "Navigate: 'cd <project_directory>'", "Or use: 'adare -p <project_directory> <command>'"]
+                )
 
     except Exception as e:
         log.debug(f"Error getting project navigation help: {e}")
-        help_commands.extend([
-            "Cannot access project database",
-            "Check ADARE installation and database connection"
-        ])
+        help_commands.extend(["Cannot access project database", "Check ADARE installation and database connection"])
 
     return help_commands
 

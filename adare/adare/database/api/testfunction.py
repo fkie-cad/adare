@@ -33,7 +33,6 @@ log = logging.getLogger(__name__)
 
 
 class TestfunctionDbApi(GlobalDatabaseApi):
-
     def __init__(self):
         super().__init__()
         self._start_session()
@@ -62,7 +61,7 @@ class TestfunctionDbApi(GlobalDatabaseApi):
                 'is_current': True,
             },
             name=test_name,
-            file_id=testfunction_file.id
+            file_id=testfunction_file.id,
         )
         if not created:
             raise DatabaseTestfunctionCreationError(
@@ -79,12 +78,14 @@ class TestfunctionDbApi(GlobalDatabaseApi):
 
     def _append_testfunction_version(self, testfunction_obj: TestFunction, file_version: int | None):
         """Append a per-method version history row mirroring the method's current state."""
-        self._session.add(TestFunctionVersion(
-            test_function=testfunction_obj,
-            version=testfunction_obj.version,
-            sha256hash=testfunction_obj.sha256hash,
-            file_version=file_version,
-        ))
+        self._session.add(
+            TestFunctionVersion(
+                test_function=testfunction_obj,
+                version=testfunction_obj.version,
+                sha256hash=testfunction_obj.sha256hash,
+                file_version=file_version,
+            )
+        )
 
     def _write_file_snapshot(self, testfunction_file: TestFunctionFile, version: int) -> Path:
         """Retain the on-disk copy of a file version under versions/v<N>/ (best effort)."""
@@ -105,24 +106,30 @@ class TestfunctionDbApi(GlobalDatabaseApi):
     def _append_file_version(self, testfunction_file: TestFunctionFile, version: int, sha256hash: str):
         """Retain a snapshot and append a file version history row."""
         snapshot_dir = self._write_file_snapshot(testfunction_file, version)
-        self._session.add(TestFunctionFileVersion(
-            file=testfunction_file,
-            version=version,
-            sha256hash=sha256hash,
-            snapshot_dir=snapshot_dir.as_posix(),
-        ))
+        self._session.add(
+            TestFunctionFileVersion(
+                file=testfunction_file,
+                version=version,
+                sha256hash=sha256hash,
+                snapshot_dir=snapshot_dir.as_posix(),
+            )
+        )
 
     def remove_testfunction(self, testfunction_file: Path, name: str):
         """Remove a single testfunction. Does NOT commit - caller must commit."""
-        testfunction_file_obj = self._session.query(TestFunctionFile).filter(
-            TestFunctionFile.path == testfunction_file.as_posix()).first()
+        testfunction_file_obj = (
+            self._session.query(TestFunctionFile).filter(TestFunctionFile.path == testfunction_file.as_posix()).first()
+        )
         if not testfunction_file_obj:
             raise DatabaseTestfunctionRemovalError(
                 log,
                 message=f'Testfunction file {testfunction_file} does not exist in database',
             )
-        testfunction_obj = self._session.query(TestFunction).filter(
-            TestFunction.file == testfunction_file_obj, TestFunction.name == name).first()
+        testfunction_obj = (
+            self._session.query(TestFunction)
+            .filter(TestFunction.file == testfunction_file_obj, TestFunction.name == name)
+            .first()
+        )
         if not testfunction_obj:
             raise DatabaseTestfunctionRemovalError(
                 log,
@@ -134,11 +141,11 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         self._session.delete(testfunction_obj)
         log.info(f'Marked testfunction {name} for removal from database')
 
-
     def remove_testfunction_file_obj(self, path: Path):
         """Remove a testfunction file and all its testfunctions (cascade delete)."""
-        testfunction_file_obj = self._session.query(TestFunctionFile).filter(
-            TestFunctionFile.path == path.as_posix()).first()
+        testfunction_file_obj = (
+            self._session.query(TestFunctionFile).filter(TestFunctionFile.path == path.as_posix()).first()
+        )
         if not testfunction_file_obj:
             raise DatabaseTestfunctionRemovalError(
                 log,
@@ -158,8 +165,7 @@ class TestfunctionDbApi(GlobalDatabaseApi):
 
     def remove_testfunction_file_obj_by_name(self, name: str):
         """Remove a testfunction file by name (e.g., 'xml', 'json', 'csv')."""
-        testfunction_file_obj = self._session.query(TestFunctionFile).filter(
-            TestFunctionFile.name == name).first()
+        testfunction_file_obj = self._session.query(TestFunctionFile).filter(TestFunctionFile.name == name).first()
         if not testfunction_file_obj:
             raise DatabaseTestfunctionRemovalError(
                 log,
@@ -197,24 +203,25 @@ class TestfunctionDbApi(GlobalDatabaseApi):
             db_parameter_objects[attr['name']] = param_obj
         return db_parameter_objects
 
-    def parse_and_create_testfunction(self, testfunction_class, module_analyzer: PyModuleAnalyzer,
-                                      testfunction_file: TestFunctionFile):
+    def parse_and_create_testfunction(
+        self, testfunction_class, module_analyzer: PyModuleAnalyzer, testfunction_file: TestFunctionFile
+    ):
         db_parameter_objects = self._resolve_parameters(testfunction_class, module_analyzer)
         sha256_testfunction = self.__get_testfunction_hash(testfunction_class)
-        testfunction_obj = self.create_testfunction(testfunction_file, testfunction_class, db_parameter_objects,
-                                                    sha256_testfunction)
+        testfunction_obj = self.create_testfunction(
+            testfunction_file, testfunction_class, db_parameter_objects, sha256_testfunction
+        )
         self._session.add(testfunction_obj)
 
     def create_testfunction_file_obj(self, project_path: Path, path: Path, requirements: Path):
         # Check if testfunction file already exists by name (testfunctions are global)
-        existing_file = self._session.query(TestFunctionFile).filter(
-            TestFunctionFile.name == path.stem).first()
+        existing_file = self._session.query(TestFunctionFile).filter(TestFunctionFile.name == path.stem).first()
         if existing_file:
             log.debug(f'Testfunction file {path.name} already exists in global database - using existing')
             return existing_file
         # Testfunctions are now global resources - no project relationship needed
         module_analyzer = PyModuleAnalyzer(path)
-        sha256hash = combine_hashes([hash_file_sha256(path),hash_file_sha256(requirements)])
+        sha256hash = combine_hashes([hash_file_sha256(path), hash_file_sha256(requirements)])
 
         # Use the actual paths provided (which should be the global paths from TestfunctionManager)
         testfunction_file = TestFunctionFile(
@@ -241,19 +248,18 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         return testfunction_file
 
     def testfunction_file_obj_exists(self, path: Path) -> bool:
-        return self._session.query(TestFunctionFile).filter(
-            TestFunctionFile.name == path.stem).first() is not None
+        return self._session.query(TestFunctionFile).filter(TestFunctionFile.name == path.stem).first() is not None
 
     def testfunction_file_obj_exists_by_name(self, name: str) -> bool:
         """Check if a testfunction file exists by name."""
-        return self._session.query(TestFunctionFile).filter(
-            TestFunctionFile.name == name).first() is not None
+        return self._session.query(TestFunctionFile).filter(TestFunctionFile.name == name).first() is not None
 
     def __get_testfunction_hash(self, test_class):
         return hash_string_sha256(testfunction_code_without_docstring(test_class.get_method('test')))
 
-    def __update_testfunction(self, testfunction_obj, t_func_class, sha256_testfunction, module_analyzer,
-                              testfunction_file, file_version: int):
+    def __update_testfunction(
+        self, testfunction_obj, t_func_class, sha256_testfunction, module_analyzer, testfunction_file, file_version: int
+    ):
         """Non-destructive per-method update.
 
         Keeps the same TestFunction row (stable ULID referenced by experiments).
@@ -292,8 +298,7 @@ class TestfunctionDbApi(GlobalDatabaseApi):
 
     def upsert_testfunction_file_obj(self, path: Path, requirements: Path) -> tuple[str, TestFunctionFile]:
         """Upsert by hash. Returns ('created' | 'updated' | 'unchanged', file_obj)."""
-        existing = self._session.query(TestFunctionFile).filter(
-            TestFunctionFile.name == path.stem).first()
+        existing = self._session.query(TestFunctionFile).filter(TestFunctionFile.name == path.stem).first()
         if not existing:
             return 'created', self.create_testfunction_file_obj(path.parent, path, requirements)
 
@@ -313,8 +318,9 @@ class TestfunctionDbApi(GlobalDatabaseApi):
                 message=f'Testfunction file {path} does not exist in database',
             )
         module_analyzer = PyModuleAnalyzer(path)
-        testfunction_file = self._session.query(TestFunctionFile).filter(
-            TestFunctionFile.path == path.as_posix()).first()
+        testfunction_file = (
+            self._session.query(TestFunctionFile).filter(TestFunctionFile.path == path.as_posix()).first()
+        )
 
         # Bump the file version first so brand-new / updated methods record the
         # file version that introduced them.
@@ -330,13 +336,21 @@ class TestfunctionDbApi(GlobalDatabaseApi):
             source_test_names.add(test_name)
             sha256_testfunction = self.__get_testfunction_hash(t_func_class)
             if (
-                    testfunction_obj := self._session.query(TestFunction).filter(
-                        TestFunction.file == testfunction_file,
-                        TestFunction.name == test_name,
-                    ).first()
+                testfunction_obj := self._session.query(TestFunction)
+                .filter(
+                    TestFunction.file == testfunction_file,
+                    TestFunction.name == test_name,
+                )
+                .first()
             ):
-                self.__update_testfunction(testfunction_obj, t_func_class, sha256_testfunction, module_analyzer,
-                                           testfunction_file, new_file_version)
+                self.__update_testfunction(
+                    testfunction_obj,
+                    t_func_class,
+                    sha256_testfunction,
+                    module_analyzer,
+                    testfunction_file,
+                    new_file_version,
+                )
             else:
                 self.parse_and_create_testfunction(t_func_class, module_analyzer, testfunction_file)
 
@@ -357,14 +371,13 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         return {
             'name': testfunction.dotnotation,
             'description': testfunction.description,
-            'parameters': ",".join([param.name for param in testfunction.parameters])
+            'parameters': ",".join([param.name for param in testfunction.parameters]),
         }
 
     def get_testfunctions_by_file(self):
         return {
             testfunction_file.name: [
-                self.__serialize_testfunction(testfunction)
-                for testfunction in testfunction_file.test_functions
+                self.__serialize_testfunction(testfunction) for testfunction in testfunction_file.test_functions
             ]
             for testfunction_file in self._session.query(TestFunctionFile).all()
         }
@@ -389,9 +402,12 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         """
         testfunction_obj = self.get_testfunction_file(testfunction_id)
         apply_remote_identity(
-            self._session, testfunction_obj, SyncMetadata,
+            self._session,
+            testfunction_obj,
+            SyncMetadata,
             remote_ulid=str(remote_id) if remote_id is not None else None,
-            remote_url=remote_url, is_published=is_published,
+            remote_url=remote_url,
+            is_published=is_published,
         )
         self._session.commit()
         return testfunction_obj
@@ -400,8 +416,7 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         """Return the version history for a testfunction file (and optionally a
         single method), as plain detached data. Returns None if the file is unknown.
         """
-        testfunction_file = self._session.query(TestFunctionFile).filter(
-            TestFunctionFile.name == file_name).first()
+        testfunction_file = self._session.query(TestFunctionFile).filter(TestFunctionFile.name == file_name).first()
         if not testfunction_file:
             return None
 
@@ -423,10 +438,14 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         }
 
         if func_name:
-            testfunction = self._session.query(TestFunction).filter(
-                TestFunction.file_id == testfunction_file.id,
-                TestFunction.name == func_name,
-            ).first()
+            testfunction = (
+                self._session.query(TestFunction)
+                .filter(
+                    TestFunction.file_id == testfunction_file.id,
+                    TestFunction.name == func_name,
+                )
+                .first()
+            )
             if testfunction:
                 method_versions = sorted(testfunction.versions, key=lambda v: v.version)
                 result['method'] = {

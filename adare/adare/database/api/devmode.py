@@ -68,7 +68,7 @@ class DevModeApi(EnhancedDatabaseApi):
         experiment_name: str,
         environment_name: str,
         vm_name: str,
-        name: str | None = None
+        name: str | None = None,
     ) -> DevSession:
         """
         Persist a new dev mode session to the database.
@@ -88,9 +88,7 @@ class DevModeApi(EnhancedDatabaseApi):
             ValidationError: If session_id already exists
         """
         # Check if session already exists
-        existing = self._session.query(DevSession).filter(
-            DevSession.session_id == session_id
-        ).first()
+        existing = self._session.query(DevSession).filter(DevSession.session_id == session_id).first()
 
         if existing:
             raise ValidationError(log, f"Dev session '{session_id}' already exists")
@@ -105,7 +103,7 @@ class DevModeApi(EnhancedDatabaseApi):
             vm_name=vm_name,
             status='running',
             created_at=datetime.now(),
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         self._session.add(session)
@@ -125,9 +123,7 @@ class DevModeApi(EnhancedDatabaseApi):
         Returns:
             DevSession instance or None if not found
         """
-        return self._session.query(DevSession).filter(
-            DevSession.session_id == session_id
-        ).first()
+        return self._session.query(DevSession).filter(DevSession.session_id == session_id).first()
 
     def get_session_or_404(self, session_id: str) -> DevSession:
         """
@@ -147,11 +143,7 @@ class DevModeApi(EnhancedDatabaseApi):
             raise EntityNotFoundError(log, f"Dev session '{session_id}' not found")
         return session
 
-    def list_sessions(
-        self,
-        project_path: Path | None = None,
-        status: str | None = None
-    ) -> list[DevSession]:
+    def list_sessions(self, project_path: Path | None = None, status: str | None = None) -> list[DevSession]:
         """
         List dev sessions with optional filtering.
 
@@ -204,10 +196,7 @@ class DevModeApi(EnhancedDatabaseApi):
         """
         valid_statuses = ['running', 'stopped', 'crashed']
         if status not in valid_statuses:
-            raise ValidationError(
-                log,
-                f"Invalid status '{status}'. Must be one of: {', '.join(valid_statuses)}"
-            )
+            raise ValidationError(log, f"Invalid status '{status}'. Must be one of: {', '.join(valid_statuses)}")
 
         session = self.get_session_or_404(session_id)
         session.status = status
@@ -336,15 +325,10 @@ class DevModeApi(EnhancedDatabaseApi):
             if check_vm_exists:
                 try:
                     if not check_vm_exists(session.vm_name):
-                        log.info(
-                            f"Cleaning up session {session.session_id} - "
-                            f"VM '{session.vm_name}' no longer exists"
-                        )
+                        log.info(f"Cleaning up session {session.session_id} - VM '{session.vm_name}' no longer exists")
                         should_cleanup = True
                 except (OSError, RuntimeError) as e:
-                    log.warning(
-                        f"Error checking VM existence for session {session.session_id}: {e}"
-                    )
+                    log.warning(f"Error checking VM existence for session {session.session_id}: {e}")
 
             if should_cleanup:
                 self.delete_session(session.session_id)
@@ -395,15 +379,15 @@ class DevModeApi(EnhancedDatabaseApi):
             ValidationError: If checkpoint with same name already exists for session
         """
         # Check if checkpoint with same name exists for this session
-        existing = self._session.query(DevCheckpoint).filter(
-            DevCheckpoint.session_id == checkpoint.session_id,
-            DevCheckpoint.name == checkpoint.name
-        ).first()
+        existing = (
+            self._session.query(DevCheckpoint)
+            .filter(DevCheckpoint.session_id == checkpoint.session_id, DevCheckpoint.name == checkpoint.name)
+            .first()
+        )
 
         if existing:
             raise ValidationError(
-                log,
-                f"Checkpoint '{checkpoint.name}' already exists for session {checkpoint.session_id}"
+                log, f"Checkpoint '{checkpoint.name}' already exists for session {checkpoint.session_id}"
             )
 
         self._session.add(checkpoint)
@@ -424,10 +408,11 @@ class DevModeApi(EnhancedDatabaseApi):
         Returns:
             DevCheckpoint instance or None if not found
         """
-        return self._session.query(DevCheckpoint).filter(
-            DevCheckpoint.session_id == session_id,
-            DevCheckpoint.name == name
-        ).first()
+        return (
+            self._session.query(DevCheckpoint)
+            .filter(DevCheckpoint.session_id == session_id, DevCheckpoint.name == name)
+            .first()
+        )
 
     def get_checkpoint_by_id(self, checkpoint_id: str) -> DevCheckpoint | None:
         """
@@ -439,9 +424,7 @@ class DevModeApi(EnhancedDatabaseApi):
         Returns:
             DevCheckpoint instance or None if not found
         """
-        return self._session.query(DevCheckpoint).filter(
-            DevCheckpoint.checkpoint_id == checkpoint_id
-        ).first()
+        return self._session.query(DevCheckpoint).filter(DevCheckpoint.checkpoint_id == checkpoint_id).first()
 
     def get_checkpoint_or_404(self, session_id: str, name: str) -> DevCheckpoint:
         """
@@ -459,10 +442,7 @@ class DevModeApi(EnhancedDatabaseApi):
         """
         checkpoint = self.get_checkpoint(session_id, name)
         if not checkpoint:
-            raise EntityNotFoundError(
-                log,
-                f"Checkpoint '{name}' not found for session {session_id}"
-            )
+            raise EntityNotFoundError(log, f"Checkpoint '{name}' not found for session {session_id}")
         return checkpoint
 
     def list_checkpoints(self, session_id: str) -> list[DevCheckpoint]:
@@ -475,9 +455,12 @@ class DevModeApi(EnhancedDatabaseApi):
         Returns:
             List of DevCheckpoint instances ordered by creation time
         """
-        return self._session.query(DevCheckpoint).filter(
-            DevCheckpoint.session_id == session_id
-        ).order_by(DevCheckpoint.created_at.asc()).all()
+        return (
+            self._session.query(DevCheckpoint)
+            .filter(DevCheckpoint.session_id == session_id)
+            .order_by(DevCheckpoint.created_at.asc())
+            .all()
+        )
 
     def delete_checkpoint(self, checkpoint_id: str) -> bool:
         """
@@ -539,10 +522,7 @@ class DevModeApi(EnhancedDatabaseApi):
         return self.get_checkpoint(session_id, name) is not None
 
     def get_stopped_session_by_experiment(
-        self,
-        project_path: Path,
-        experiment_name: str,
-        environment_name: str
+        self, project_path: Path, experiment_name: str, environment_name: str
     ) -> DevSession | None:
         """
         Get most recent stopped session matching experiment and environment.
@@ -557,18 +537,19 @@ class DevModeApi(EnhancedDatabaseApi):
         Returns:
             Most recent stopped DevSession matching criteria, or None if not found
         """
-        return self._session.query(DevSession).filter(
-            DevSession.project_path == str(project_path),
-            DevSession.experiment_name == experiment_name,
-            DevSession.environment_name == environment_name,
-            DevSession.status == 'stopped'
-        ).order_by(DevSession.updated_at.desc()).first()
+        return (
+            self._session.query(DevSession)
+            .filter(
+                DevSession.project_path == str(project_path),
+                DevSession.experiment_name == experiment_name,
+                DevSession.environment_name == environment_name,
+                DevSession.status == 'stopped',
+            )
+            .order_by(DevSession.updated_at.desc())
+            .first()
+        )
 
-    def resolve_session_ref(
-        self,
-        ref: str,
-        project_path: Path | None = None
-    ) -> str | None:
+    def resolve_session_ref(self, ref: str, project_path: Path | None = None) -> str | None:
         """
         Resolve a session reference (an id or a name) to a session id.
 

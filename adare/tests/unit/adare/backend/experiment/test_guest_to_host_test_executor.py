@@ -17,6 +17,7 @@ from adarelib.testset.basictest import BasicTest, HostModeCategory, Parameter
 # Test fixtures: minimal attrs-based test classes
 # ============================================================================
 
+
 @attrs.define
 class DummyParam(Parameter):
     dst: str = '/tmp/testfile'
@@ -25,6 +26,7 @@ class DummyParam(Parameter):
 @attrs.define
 class FileBasedTest(BasicTest):
     """A test that uses FILE_BASED category."""
+
     testname: ClassVar[str] = 'file_exists'
     testdescription: ClassVar[str] = 'dummy file_exists'
     host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_BASED
@@ -38,6 +40,7 @@ class FileBasedTest(BasicTest):
 @attrs.define
 class FileContentTest(BasicTest):
     """A test that uses FILE_CONTENT category."""
+
     testname: ClassVar[str] = 'contains_key'
     testdescription: ClassVar[str] = 'dummy contains_key'
     host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
@@ -56,6 +59,7 @@ class SidecarParam(Parameter):
 @attrs.define
 class SidecarTest(BasicTest):
     """A FILE_CONTENT test whose dst comes with companion files (like SQLite)."""
+
     testname: ClassVar[str] = 'query_result'
     testdescription: ClassVar[str] = 'dummy query_result'
     host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
@@ -75,6 +79,7 @@ class QGAProbeParam(Parameter):
 @attrs.define
 class QGAProbeTest(BasicTest):
     """A test that uses QGA_PROBE category."""
+
     testname: ClassVar[str] = 'process_running'
     testdescription: ClassVar[str] = 'dummy process_running'
     host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.QGA_PROBE
@@ -88,6 +93,7 @@ class QGAProbeTest(BasicTest):
 @attrs.define
 class HostNativeTest(BasicTest):
     """A test that uses HOST_NATIVE category."""
+
     testname: ClassVar[str] = 'visual.exists'
     testdescription: ClassVar[str] = 'dummy visual'
     execute_on_host: ClassVar[bool] = True
@@ -102,6 +108,7 @@ class HostNativeTest(BasicTest):
 @attrs.define
 class AgentOnlyTest(BasicTest):
     """A test with default AGENT_ONLY category."""
+
     testname: ClassVar[str] = 'custom_agent_test'
     testdescription: ClassVar[str] = 'requires agent'
 
@@ -114,6 +121,7 @@ class AgentOnlyTest(BasicTest):
 @attrs.define
 class NoCategoryTest(BasicTest):
     """A test that does NOT override host_mode_category (inherits AGENT_ONLY)."""
+
     testname: ClassVar[str] = 'no_category'
     testdescription: ClassVar[str] = 'no explicit category'
 
@@ -126,6 +134,7 @@ class NoCategoryTest(BasicTest):
 # ============================================================================
 # Test _get_test_category
 # ============================================================================
+
 
 class TestGetTestCategory:
     """Test _get_test_category reads ClassVar from test instance type."""
@@ -180,6 +189,7 @@ class TestGetTestCategory:
 # ============================================================================
 # Test execute_test dispatch
 # ============================================================================
+
 
 class TestExecuteTestDispatch:
     """Test dispatch to correct execution path based on category."""
@@ -251,6 +261,7 @@ class TestExecuteTestDispatch:
 # Test validate_playbook_tests
 # ============================================================================
 
+
 class TestValidatePlaybookTests:
     """Test validate_playbook_tests uses ClassVar instead of hard-coded sets."""
 
@@ -284,9 +295,7 @@ class TestValidatePlaybookTests:
             self._make_test_def('t3', 'linux.process_running'),
         ]
 
-        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(
-            playbook_tests, testfunction_collection
-        )
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
         assert ok is True
         assert issues == []
 
@@ -302,9 +311,7 @@ class TestValidatePlaybookTests:
             self._make_test_def('t_agent', 'custom.custom_agent_test'),
         ]
 
-        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(
-            playbook_tests, testfunction_collection
-        )
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
         assert ok is False
         assert len(issues) == 1
         assert 'agent_only' in issues[0]
@@ -318,9 +325,7 @@ class TestValidatePlaybookTests:
             self._make_test_def('t_unknown', 'custom.nonexistent_func'),
         ]
 
-        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(
-            playbook_tests, testfunction_collection
-        )
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
         assert ok is False
         assert len(issues) == 1
         assert 'unknown test type' in issues[0]
@@ -341,9 +346,7 @@ class TestValidatePlaybookTests:
             self._make_test_def('t_bad', 'custom.custom_agent_test'),
         ]
 
-        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(
-            playbook_tests, testfunction_collection
-        )
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
         assert ok is False
         assert len(issues) == 1
         assert 't_bad' in issues[0]
@@ -360,9 +363,7 @@ class TestValidatePlaybookTests:
             self._make_test_def('t_nocategory', 'misc.no_category'),
         ]
 
-        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(
-            playbook_tests, testfunction_collection
-        )
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
         assert ok is False
         assert len(issues) == 1
         assert 'agent_only' in issues[0]
@@ -377,6 +378,7 @@ class TestValidatePlaybookTests:
 # ============================================================================
 # Test sidecar pulling in _execute_file_based_test
 # ============================================================================
+
 
 class TestSidecarPulling:
     """dst companion files (host_mode_sidecars) are pulled fresh alongside dst."""
@@ -425,6 +427,7 @@ class TestSidecarPulling:
             if path.endswith('-wal'):
                 raise RuntimeError('transfer failed')
             return tmp_path / path.lstrip('/')
+
         guest_file.pull_file.side_effect = pull
 
         result = await executor._execute_file_based_test('t', 'sqlite.query_result', SidecarTest())

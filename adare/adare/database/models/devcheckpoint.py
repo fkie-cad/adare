@@ -38,6 +38,7 @@ class DevCheckpoint(SerializerMixin, GlobalBase):
         variable_state: JSON-serialized playbook variables at checkpoint time
         created_at: Timestamp when checkpoint was created
     """
+
     __tablename__ = 'dev_checkpoints'
     RELATIONSHIPS_TO_DICT = True
 
@@ -54,8 +55,8 @@ class DevCheckpoint(SerializerMixin, GlobalBase):
 
     # External snapshot file paths
     memory_file_path = Column(String(1024), nullable=False)  # RAM save file
-    disk_file_path = Column(String(1024), nullable=False)    # Disk overlay file
-    snapshot_name = Column(String(512), nullable=False)      # libvirt snapshot name
+    disk_file_path = Column(String(1024), nullable=False)  # Disk overlay file
+    snapshot_name = Column(String(512), nullable=False)  # libvirt snapshot name
 
     # Variable state (JSON serialized)
     variable_state = Column(JSON, nullable=True)  # Dict[str, Any] from playbook
@@ -73,8 +74,4 @@ class DevCheckpoint(SerializerMixin, GlobalBase):
         return f"DevCheckpoint({self.name})"
 
     def __repr__(self):
-        return (
-            f"<DevCheckpoint(id='{self.checkpoint_id}', "
-            f"session='{self.session_id}', "
-            f"name='{self.name}')>"
-        )
+        return f"<DevCheckpoint(id='{self.checkpoint_id}', session='{self.session_id}', name='{self.name}')>"

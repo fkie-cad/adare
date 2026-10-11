@@ -8,6 +8,7 @@ and mounted inside the guest after boot.
 Linux guests mount via `mount -t virtiofs {tag} /adare/{name}`.
 Windows guests mount via `virtiofs.exe -t {tag} -m C:\\adare\\{name}`.
 """
+
 import json
 import logging
 import shutil
@@ -169,10 +170,7 @@ class VirtioFSStrategy(FileTransferStrategy):
         Args:
             context: ExperimentRunCtx containing VM
         """
-        shares = (
-            getattr(context, 'virtiofs_shares', None)
-            or context.vm.config.virtiofs_shares
-        )
+        shares = getattr(context, 'virtiofs_shares', None) or context.vm.config.virtiofs_shares
         if not shares:
             log.warning("No virtiofs shares configured, skipping mount")
             return
@@ -216,9 +214,7 @@ class VirtioFSStrategy(FileTransferStrategy):
         if mounted_count >= len(shares):
             log.info(f"All {len(shares)} virtio-fs shares mounted successfully")
         else:
-            log.warning(
-                f"Only {mounted_count} of {len(shares)} virtio-fs shares mounted"
-            )
+            log.warning(f"Only {mounted_count} of {len(shares)} virtio-fs shares mounted")
 
     async def _mount_virtiofs_windows(self, context: Any) -> None:
         """Mount multiple virtio-fs shares on Windows guest using virtiofs.exe.
@@ -230,10 +226,7 @@ class VirtioFSStrategy(FileTransferStrategy):
         Args:
             context: ExperimentRunCtx containing VM
         """
-        shares = (
-            getattr(context, 'virtiofs_shares', None)
-            or context.vm.config.virtiofs_shares
-        )
+        shares = getattr(context, 'virtiofs_shares', None) or context.vm.config.virtiofs_shares
         if not shares:
             log.warning("No virtiofs shares configured, skipping Windows mount")
             return
@@ -251,9 +244,7 @@ class VirtioFSStrategy(FileTransferStrategy):
             virtiofs_exe = r"C:\Program Files\VirtIO-Win\VioFS\virtiofs.exe"
             mount_cmd = f'"{virtiofs_exe}" -t {tag} -m {mount_point}'
 
-            log.debug(
-                f"Mounting virtio-fs share '{tag}' using run_as_user strategy"
-            )
+            log.debug(f"Mounting virtio-fs share '{tag}' using run_as_user strategy")
 
             result = await context.vm.run_command(
                 mount_cmd,
@@ -263,7 +254,5 @@ class VirtioFSStrategy(FileTransferStrategy):
             )
 
             if result.returncode != 0:
-                raise HypervisorException(
-                    f"Failed to mount virtio-fs share '{tag}': {result.stderr}"
-                )
+                raise HypervisorException(f"Failed to mount virtio-fs share '{tag}': {result.stderr}")
             log.debug(f"Mounted virtio-fs share '{tag}' -> {mount_point}")

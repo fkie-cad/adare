@@ -52,8 +52,10 @@ def _check_against_catalog(test: dict, entries: list) -> list[str]:
     if isinstance(given, dict):
         for param in given:
             if param not in known:
-                warnings.append(f'test "{name}": {function} has no parameter "{param}"{_suggest(param, known)}'
-                                f' — signature: {entry.signature()}')
+                warnings.append(
+                    f'test "{name}": {function} has no parameter "{param}"{_suggest(param, known)}'
+                    f' — signature: {entry.signature()}'
+                )
         for p in entry.params:
             if p.required and p.name not in given:
                 warnings.append(f'test "{name}": missing required parameter "{p.name}" for {function}')
@@ -80,6 +82,7 @@ def check_playbook_tests(playbook_yaml: str, entries: list | None = None) -> tup
         return errors, []
     if entries is None:
         from adare.backend.testfunction.catalog import load_catalog
+
         entries = load_catalog()
     warnings = [w for t in tests for w in _check_against_catalog(t, entries)]
     return errors, warnings

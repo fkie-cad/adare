@@ -3,6 +3,7 @@ Output formatting system for ADARE CLI.
 
 Provides consistent JSON/YAML output generation with shared data preparation logic.
 """
+
 import json
 
 # setup logging
@@ -35,6 +36,7 @@ class OutputFormat(Enum):
     full untruncated values, no colour/box-drawing/emoji. It is what a command
     prints when stdout is not a terminal and no format was requested.
     """
+
     RICH = "rich"
     PLAIN = "plain"
     JSON = "json"
@@ -167,7 +169,7 @@ class StructuredOutputFormatter:
             "type": "table",
             "title": getattr(table, 'title', None),
             "columns": [col.header for col in table.columns] if table.columns else [],
-            "note": "Rich table content - use rich format for full display"
+            "note": "Rich table content - use rich format for full display",
         }
 
     def _panel_to_dict(self, panel: Panel) -> dict[str, Any]:
@@ -175,7 +177,7 @@ class StructuredOutputFormatter:
         return {
             "type": "panel",
             "title": getattr(panel, 'title', None),
-            "content": self._strip_rich_markup(str(panel.renderable)) if panel.renderable else None
+            "content": self._strip_rich_markup(str(panel.renderable)) if panel.renderable else None,
         }
 
     def serialize_json(self, data: Any, indent: int = 2) -> str:
@@ -202,13 +204,7 @@ class StructuredOutputFormatter:
         :return: YAML string
         """
         try:
-            return yaml.dump(
-                data,
-                default_flow_style=False,
-                allow_unicode=True,
-                sort_keys=False,
-                indent=2
-            )
+            return yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False, indent=2)
         except yaml.YAMLError as e:
             log.error(f"YAML serialization error: {e}")
             # Fallback: convert problematic objects to strings

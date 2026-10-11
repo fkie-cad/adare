@@ -3,6 +3,7 @@ VirtualBox Manager for handling VirtualBox operations in a thread-safe manner.
 
 Implements AbstractHypervisorManager for VirtualBox-specific operations.
 """
+
 import logging
 import queue
 from collections.abc import Callable
@@ -104,15 +105,12 @@ class VirtualBoxManager(AbstractHypervisorManager):
             manager=self,
             username=username,
             password=password,
-            executables=self.executables
+            executables=self.executables,
         )
 
         try:
             # Import the VM from OVF/OVA file
-            return_code, stdout = await vm.create_from_ovf_or_ova(
-                file_path=vm_file_path,
-                silent=False
-            )
+            return_code, stdout = await vm.create_from_ovf_or_ova(file_path=vm_file_path, silent=False)
 
             if return_code != 0:
                 error_msg = f"VM import failed with return code {return_code}"

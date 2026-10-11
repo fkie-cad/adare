@@ -7,9 +7,10 @@ import yaml
 def hash_file_sha256(filepath: Path):
     h = hashlib.sha256()
     with open(filepath.as_posix(), 'rb', buffering=0) as f:
-        for b in iter(lambda : f.read(4096), b''):
+        for b in iter(lambda: f.read(4096), b''):
             h.update(b)
     return h.hexdigest()
+
 
 def hash_dict_sha256(data: dict):
     # write dict to yaml byte array
@@ -57,8 +58,10 @@ def hash_recipe(iso_sha256: str, answer_file_hash: str, identity: dict) -> str:
     Returns:
         SHA256 hex digest anchoring the recipe's integrity.
     """
-    return combine_hashes([
-        iso_sha256,
-        answer_file_hash,
-        hash_dict_sha256(identity),
-    ])
+    return combine_hashes(
+        [
+            iso_sha256,
+            answer_file_hash,
+            hash_dict_sha256(identity),
+        ]
+    )

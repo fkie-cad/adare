@@ -19,7 +19,7 @@ def _plural(count: int, singular: str) -> str:
     return f"{count} {singular}" if count == 1 else f"{count} {singular}s"
 
 
-def format_nesting_detail(top_level: int, nested: int, loops = ()) -> str:
+def format_nesting_detail(top_level: int, nested: int, loops=()) -> str:
     """Describe how a tally splits between top-level and loop/block bodies.
 
     Returns markup like ``" (4 top-level + 130 in a loop of 10 iterations)"``, or an
@@ -58,8 +58,13 @@ class ExperimentFlowConsole:
     layout: Text
     transient: bool  # If True, the live display is erased on stop (final output printed separately)
 
-    def __init__(self, disable: bool = False, external_stop_event: threading.Event = None, indent_offset: int = 0,
-                 transient: bool = False):
+    def __init__(
+        self,
+        disable: bool = False,
+        external_stop_event: threading.Event = None,
+        indent_offset: int = 0,
+        transient: bool = False,
+    ):
         self.console = Console()
         self.stop_event = threading.Event()
         self.external_stop_event = external_stop_event
@@ -77,8 +82,13 @@ class ExperimentFlowConsole:
 
     def _start_live_in_thread(self):
         tick_count = 0
-        with Live(self.layout, console=self.console, refresh_per_second=self.ticks_per_second,
-                  auto_refresh=False, transient=self.transient) as live:
+        with Live(
+            self.layout,
+            console=self.console,
+            refresh_per_second=self.ticks_per_second,
+            auto_refresh=False,
+            transient=self.transient,
+        ) as live:
             while not self.stop_event.is_set():
                 try:
                     # Use snapshot to avoid holding lock during render
@@ -93,8 +103,9 @@ class ExperimentFlowConsole:
                     # Generate ALL messages (preserve full history)
                     prefixes = self._compute_tree_prefixes(message_identifiers, messages_snapshot)
                     generated_messages = [
-                        self._generate_message(identifier, messages_snapshot[identifier], tick_count,
-                                               prefix=prefixes[identifier])
+                        self._generate_message(
+                            identifier, messages_snapshot[identifier], tick_count, prefix=prefixes[identifier]
+                        )
                         for identifier in message_identifiers
                     ]
                     non_empty_messages = [msg for msg in generated_messages if msg.strip()]
@@ -158,8 +169,9 @@ class ExperimentFlowConsole:
             # Generate and print all messages
             prefixes = self._compute_tree_prefixes(message_identifiers, messages_snapshot)
             generated_messages = [
-                self._generate_message(identifier, messages_snapshot[identifier], spinner_position=0,
-                                       prefix=prefixes[identifier])
+                self._generate_message(
+                    identifier, messages_snapshot[identifier], spinner_position=0, prefix=prefixes[identifier]
+                )
                 for identifier in message_identifiers
             ]
             non_empty_messages = [msg for msg in generated_messages if msg.strip()]
@@ -184,6 +196,7 @@ class ExperimentFlowConsole:
         """Restore original console logging level."""
         if self._original_log_level is not None:
             from adare.setup_logging import set_console_log_level
+
             set_console_log_level(self._original_log_level)
 
     def _compute_tree_prefixes(self, ordered_ids, snapshot):
@@ -259,9 +272,7 @@ class ExperimentFlowConsole:
         elif message_object.get('start_time'):
             elapsed_seconds = (datetime.now(UTC) - message_object['start_time']).total_seconds()
             if message_object.get('is_experiment_timer'):
-                duration_text = self._format_experiment_timer_duration(
-                    elapsed_seconds, message_object['status']
-                )
+                duration_text = self._format_experiment_timer_duration(elapsed_seconds, message_object['status'])
             else:
                 duration_text = f"({elapsed_seconds:.2f}s)"
 
@@ -290,15 +301,17 @@ class ExperimentFlowConsole:
                     if is_multiline:
                         first_line = message.split('\n')[0].strip()
                         import re
+
                         clean_first_line = re.sub(r'\[/?[^\]]*\]', '', first_line)
                         if len(clean_first_line) > available_for_message:
-                            clean_first_line = clean_first_line[:available_for_message-3].strip()
+                            clean_first_line = clean_first_line[: available_for_message - 3].strip()
                         message = f"{clean_first_line}..."
                     else:
                         import re
+
                         clean_message = re.sub(r'\[/?[^\]]*\]', '', message)
                         if len(clean_message) > available_for_message:
-                            clean_message = clean_message[:available_for_message-3].strip()
+                            clean_message = clean_message[: available_for_message - 3].strip()
                         message = f"{clean_message}..."
 
                 current_width = self.console.measure(Text.from_markup(message)).maximum
@@ -308,7 +321,7 @@ class ExperimentFlowConsole:
                 else:
                     message = f"{message} {duration_text}"
             else:
-                message = f"{message[:terminal_width-10]}... {duration_text}"
+                message = f"{message[: terminal_width - 10]}... {duration_text}"
         else:
             duration_obj = Text.from_markup(duration_text)
             duration_width = self.console.measure(duration_obj).maximum
@@ -326,7 +339,9 @@ class ExperimentFlowConsole:
     def log_ulid(self, ulid: str, level: int = 0):
         self.state.log_ulid(ulid, level)
 
-    def log_multi_experiment_summary(self, experiment_name: str, environments: list, results: list, total_duration: float):
+    def log_multi_experiment_summary(
+        self, experiment_name: str, environments: list, results: list, total_duration: float
+    ):
         # We perform the formatting here specifically for Rich console, then store the result string in state.
         # This keeps ConsoleState mostly UI-agnostic (it stores a string).
 
@@ -353,25 +368,30 @@ class ExperimentFlowConsole:
         line_width = max(60, self.console.size.width - 10)
         separator = "[dim]" + "─" * line_width + "[/dim]"
 
-        summary_parts.extend([
-            "",
-            separator,
-            f"[bold {status_color}]EXPERIMENT SUMMARY: {experiment_name}[/bold {status_color}] {status_icon}"
-        ])
+        summary_parts.extend(
+            [
+                "",
+                separator,
+                f"[bold {status_color}]EXPERIMENT SUMMARY: {experiment_name}[/bold {status_color}] {status_icon}",
+            ]
+        )
 
         env_names = [env.name for env in environments]
-        summary_parts.extend([
-            f"  📊 Tested {len(environments)} environment(s): [dim]{', '.join(env_names)}[/dim]",
-            f"  ⏱️  Total duration: [bold cyan]{self.state._format_experiment_timer_duration(total_duration, StatusEnum.NONE)}[/bold cyan]" # Reusing/Adapting formatting
-            # Note: _format_duration_text was removed, using state's helper or local logic would be better.
-            # Let's fix this properly below.
-        ])
+        summary_parts.extend(
+            [
+                f"  📊 Tested {len(environments)} environment(s): [dim]{', '.join(env_names)}[/dim]",
+                f"  ⏱️  Total duration: [bold cyan]{self.state._format_experiment_timer_duration(total_duration, StatusEnum.NONE)}[/bold cyan]",  # Reusing/Adapting formatting
+                # Note: _format_duration_text was removed, using state's helper or local logic would be better.
+                # Let's fix this properly below.
+            ]
+        )
 
         # Formatting helper
         def format_dur(d):
-            if not d: return "0s"
+            if not d:
+                return "0s"
             if d >= 60:
-                return f"{int(d//60)}m {d%60:.1f}s"
+                return f"{int(d // 60)}m {d % 60:.1f}s"
             return f"{d:.1f}s"
 
         # Correct previous line
@@ -390,14 +410,18 @@ class ExperimentFlowConsole:
             for result in failed_runs:
                 duration_str = f"({result['duration']:.1f}s)"
                 error_str = f" - {result['error']}" if result.get('error') else ""
-                summary_parts.append(f"        • [dim]{result['environment']}[/dim] [red]{duration_str}[/red][dim]{error_str}[/dim]")
+                summary_parts.append(
+                    f"        • [dim]{result['environment']}[/dim] [red]{duration_str}[/red][dim]{error_str}[/dim]"
+                )
 
         if interrupted_runs:
             summary_parts.append(f"     [bold yellow]⏸️  Interrupted: {len(interrupted_runs)}[/bold yellow]")
             for result in interrupted_runs:
                 duration_str = f"({result['duration']:.1f}s)"
                 error_str = f" - {result['error']}" if result.get('error') else ""
-                summary_parts.append(f"        • [dim]{result['environment']}[/dim] [yellow]{duration_str}[/yellow][dim]{error_str}[/dim]")
+                summary_parts.append(
+                    f"        • [dim]{result['environment']}[/dim] [yellow]{duration_str}[/yellow][dim]{error_str}[/dim]"
+                )
 
         if skipped_runs:
             summary_parts.append(f"     [bold yellow]⏭️  Skipped: {len(skipped_runs)}[/bold yellow]")
@@ -413,8 +437,21 @@ class ExperimentFlowConsole:
             self.state.messages.clear()
             self.state.log_multi_experiment_summary(complete_message)
 
-
-    def log_experiment_summary(self, ulid: str, success: bool, total_actions: int = 0, successful_actions: int = 0, failed_actions: int = 0, total_tests: int = 0, successful_tests: int = 0, failed_tests: int = 0, duration: float = None, level: int = 0, was_interrupted: bool = False, breakdown = None):
+    def log_experiment_summary(
+        self,
+        ulid: str,
+        success: bool,
+        total_actions: int = 0,
+        successful_actions: int = 0,
+        failed_actions: int = 0,
+        total_tests: int = 0,
+        successful_tests: int = 0,
+        failed_tests: int = 0,
+        duration: float = None,
+        level: int = 0,
+        was_interrupted: bool = False,
+        breakdown=None,
+    ):
         """Render the closing run summary.
 
         ``breakdown`` is an optional :class:`~adare.backend.experiment.run_tally.ExperimentTally`.
@@ -426,24 +463,31 @@ class ExperimentFlowConsole:
 
         # Formatting Logic locally
         def get_status_header(success, interrupted):
-            if success: return "[bold green]EXPERIMENT COMPLETED SUCCESSFULLY[/bold green] ✅"
-            if interrupted: return "[bold yellow]EXPERIMENT INTERRUPTED[/bold yellow] ⚡"
+            if success:
+                return "[bold green]EXPERIMENT COMPLETED SUCCESSFULLY[/bold green] ✅"
+            if interrupted:
+                return "[bold yellow]EXPERIMENT INTERRUPTED[/bold yellow] ⚡"
             return "[bold red]EXPERIMENT FAILED[/bold red] ❌"
 
         def format_action_summary(successful, total, failed):
             summary = f"Actions: [bold cyan]{successful}[/bold cyan]/[dim]{total}[/dim] passed"
-            if failed > 0: summary += f", [bold red]{failed}[/bold red] failed"
+            if failed > 0:
+                summary += f", [bold red]{failed}[/bold red] failed"
             return summary
 
         def format_test_summary(successful, total, failed):
-            if total == 0: return ""
+            if total == 0:
+                return ""
             summary = f"Tests: [bold cyan]{successful}[/bold cyan]/[dim]{total}[/dim] passed"
-            if failed > 0: summary += f", [bold red]{failed}[/bold red] failed"
+            if failed > 0:
+                summary += f", [bold red]{failed}[/bold red] failed"
             return summary
 
         def format_dur(d):
-            if not d: return ""
-            if d >= 60: return f"[bold cyan]{int(d//60)}m {d%60:.1f}s[/bold cyan]"
+            if not d:
+                return ""
+            if d >= 60:
+                return f"[bold cyan]{int(d // 60)}m {d % 60:.1f}s[/bold cyan]"
             return f"[bold cyan]{d:.1f}s[/bold cyan]"
 
         summary_parts = []
@@ -460,28 +504,44 @@ class ExperimentFlowConsole:
         # Actions
         action_summary_txt = format_action_summary(successful_actions, total_actions, failed_actions)
         if total_actions > 0:
-            action_detail = format_nesting_detail(
-                getattr(breakdown, 'top_level_actions', 0),
-                getattr(breakdown, 'nested_actions', 0),
-                getattr(breakdown, 'loops', ()),
-            ) if breakdown is not None else ""
+            action_detail = (
+                format_nesting_detail(
+                    getattr(breakdown, 'top_level_actions', 0),
+                    getattr(breakdown, 'nested_actions', 0),
+                    getattr(breakdown, 'loops', ()),
+                )
+                if breakdown is not None
+                else ""
+            )
             summary_parts.append(f"{indent}📊 {action_summary_txt}{action_detail}")
         elif not success:
-            msg = "No actions executed (experiment was interrupted)" if was_interrupted else "No actions executed (experiment failed during setup)"
+            msg = (
+                "No actions executed (experiment was interrupted)"
+                if was_interrupted
+                else "No actions executed (experiment failed during setup)"
+            )
             summary_parts.append(f"{indent}📊 {msg}")
 
         # Tests
         test_summary_txt = format_test_summary(successful_tests, total_tests, failed_tests)
         if total_tests > 0:
-            test_detail = format_nesting_detail(
-                getattr(breakdown, 'top_level_tests', 0),
-                getattr(breakdown, 'nested_tests', 0),
-                getattr(breakdown, 'loops', ()),
-            ) if breakdown is not None else ""
+            test_detail = (
+                format_nesting_detail(
+                    getattr(breakdown, 'top_level_tests', 0),
+                    getattr(breakdown, 'nested_tests', 0),
+                    getattr(breakdown, 'loops', ()),
+                )
+                if breakdown is not None
+                else ""
+            )
             summary_parts.append(f"{indent}🧪 {test_summary_txt}{test_detail}")
 
         # Started but never reported completion: never let this hide behind a count.
-        incomplete = (getattr(breakdown, 'incomplete_actions', 0) + getattr(breakdown, 'incomplete_tests', 0)) if breakdown is not None else 0
+        incomplete = (
+            (getattr(breakdown, 'incomplete_actions', 0) + getattr(breakdown, 'incomplete_tests', 0))
+            if breakdown is not None
+            else 0
+        )
         if incomplete > 0:
             summary_parts.append(
                 f"{indent}⚠️  [bold yellow]{incomplete}[/bold yellow] step(s) started but never reported completion"
@@ -518,10 +578,20 @@ class ExperimentFlowConsole:
     def change_log_message(self, identifier: str, message: str):
         self.state.change_log_message(identifier, message)
 
-    def log_spinner(self, identifier: str, message: str, level: int = 0, spinner: str = 'dots', spinner_style: str = 'bold blue', start_time: datetime = None):
+    def log_spinner(
+        self,
+        identifier: str,
+        message: str,
+        level: int = 0,
+        spinner: str = 'dots',
+        spinner_style: str = 'bold blue',
+        start_time: datetime = None,
+    ):
         self.state.log_spinner(identifier, message, level, spinner, spinner_style, start_time)
 
-    def log_spinner_done(self, identifier: str, status: int, message: str = None, result_status: int = None, duration: float = None):
+    def log_spinner_done(
+        self, identifier: str, status: int, message: str = None, result_status: int = None, duration: float = None
+    ):
         self.state.log_spinner_done(identifier, status, message, result_status, duration)
 
     def exists(self, identifier: str):
@@ -532,9 +602,12 @@ class ExperimentFlowConsole:
         # It's simple enough to re-implement or call state's if we moved it.
         # I did not make it a public static method on state, but an instance method.
         # It is just a formatting helper.
-        if status == StatusEnum.SUCCESS: color = "green"
-        elif status == StatusEnum.FAILED: color = "red"
-        else: color = "cyan"
+        if status == StatusEnum.SUCCESS:
+            color = "green"
+        elif status == StatusEnum.FAILED:
+            color = "red"
+        else:
+            color = "cyan"
 
         if seconds >= 60:
             minutes = int(seconds // 60)
@@ -582,6 +655,7 @@ class ExperimentFlowConsole:
             try:
                 if os.name == 'nt':  # Windows
                     import msvcrt
+
                     while not input_thread_stop.is_set():
                         if msvcrt.kbhit():
                             char = msvcrt.getch().decode('utf-8', errors='ignore').lower()
@@ -654,11 +728,13 @@ class ExperimentFlowConsole:
     def print_debug_flow_messages(self):
         with self.state._lock:
             from rich import print
+
             print(self.state.messages)
 
 
 class FlowConsoleManager:
     """Manager for active ExperimentFlowConsole instances."""
+
     def __init__(self):
         self.handlers = {}
 

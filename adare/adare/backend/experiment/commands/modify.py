@@ -11,7 +11,9 @@ from adare.database.exceptions import EnvironmentMissingError
 log = logging.getLogger(__name__)
 
 
-def experiment_remove_environments(project_path: Path, experiment_pattern: str, environment_names: list[str], force: bool = False):
+def experiment_remove_environments(
+    project_path: Path, experiment_pattern: str, environment_names: list[str], force: bool = False
+):
     """Remove environments from experiments matching the pattern."""
     import glob
 
@@ -27,14 +29,15 @@ def experiment_remove_environments(project_path: Path, experiment_pattern: str, 
 
     if not matching_paths:
         from adare.exceptions import LoggedErrorException
+
         raise LoggedErrorException(
             log,
             f'No experiments found matching pattern: {experiment_pattern}',
             possible_solutions=[
                 f'Check if pattern "{experiment_pattern}" is correct',
                 'List experiments with: adare experiment list',
-                'Use exact experiment name if no pattern matching needed'
-            ]
+                'Use exact experiment name if no pattern matching needed',
+            ],
         )
 
     # Extract experiment names from paths
@@ -107,15 +110,17 @@ def experiment_remove_environments(project_path: Path, experiment_pattern: str, 
             next_steps=[
                 f"Removed environments: {', '.join(environment_names)}",
                 "Experiments have been reloaded automatically",
-                "Check remaining environments with: adare experiment info <name>"
-            ]
+                "Check remaining environments with: adare experiment info <name>",
+            ],
         )
 
     if failed_experiments:
         log.warning(f"Failed to update {len(failed_experiments)} experiment(s): {', '.join(failed_experiments)}")
 
 
-def experiment_add_environments(project_path: Path, experiment_pattern: str, environment_names: list[str], force: bool = False):
+def experiment_add_environments(
+    project_path: Path, experiment_pattern: str, environment_names: list[str], force: bool = False
+):
     """Add environments to experiments matching the pattern."""
     import glob
 
@@ -131,14 +136,15 @@ def experiment_add_environments(project_path: Path, experiment_pattern: str, env
 
     if not matching_paths:
         from adare.exceptions import LoggedErrorException
+
         raise LoggedErrorException(
             log,
             f'No experiments found matching pattern: {experiment_pattern}',
             possible_solutions=[
                 f'Check if pattern "{experiment_pattern}" is correct',
                 'List experiments with: adare experiment list',
-                'Use exact experiment name if no pattern matching needed'
-            ]
+                'Use exact experiment name if no pattern matching needed',
+            ],
         )
 
     # Extract experiment names from paths
@@ -146,20 +152,22 @@ def experiment_add_environments(project_path: Path, experiment_pattern: str, env
 
     # Validate all environments exist in project before proceeding
     from adare.database.api.environment import EnvironmentDbApi
+
     with EnvironmentDbApi() as env_db:
         project_environments = {env.name for env in env_db.get_environments(project_path)}
 
     missing_envs = [env for env in environment_names if env not in project_environments]
     if missing_envs:
         from adare.exceptions import LoggedErrorException
+
         raise LoggedErrorException(
             log,
             f'Environment(s) not found in project: {", ".join(missing_envs)}',
             possible_solutions=[
                 'Create missing environments with: adare environment create <name>',
                 'Load existing environments with: adare environment load <file>',
-                'List available environments with: adare environment list'
-            ]
+                'List available environments with: adare environment list',
+            ],
         )
 
     log.info(f"Found {len(experiment_names)} experiment(s) matching pattern '{experiment_pattern}':")
@@ -210,28 +218,38 @@ def experiment_add_environments(project_path: Path, experiment_pattern: str, env
             updated_experiments.append(exp_name)
 
         except EnvironmentMissingError:
-            log.error(f"Environment(s) not found in global database for experiment '{exp_name}': {', '.join(environment_names)}")
+            log.error(
+                f"Environment(s) not found in global database for experiment '{exp_name}': {', '.join(environment_names)}"
+            )
             environment_missing_experiments.append(exp_name)
         except (OSError, ValueError, KeyError) as e:
             log.error(f"Failed to update experiment '{exp_name}': {e}")
             failed_experiments.append(exp_name)
 
     # Print comprehensive summary
-    total_processed = len(updated_experiments) + len(skipped_experiments) + len(failed_experiments) + len(environment_missing_experiments)
+    total_processed = (
+        len(updated_experiments)
+        + len(skipped_experiments)
+        + len(failed_experiments)
+        + len(environment_missing_experiments)
+    )
 
     if updated_experiments:
         print_success_message(
             title=f"Successfully added environments to {len(updated_experiments)} experiment(s)",
             next_steps=[
                 "Run experiment in new environments with: adare experiment run <name> -e <environment>",
-            ]
+            ],
         )
 
     if skipped_experiments:
-        log.info(f"\n{len(skipped_experiments)} experiment(s) already had the specified environment(s): {', '.join(skipped_experiments)}")
+        log.info(
+            f"\n{len(skipped_experiments)} experiment(s) already had the specified environment(s): {', '.join(skipped_experiments)}"
+        )
 
     if environment_missing_experiments:
         from adare.console import print_error_message
+
         print_error_message(
             title=f"Environment(s) not found in global database for {len(environment_missing_experiments)} experiment(s)",
             details=f"Experiments: {', '.join(environment_missing_experiments)}\nEnvironment(s): {', '.join(environment_names)}",
@@ -239,26 +257,29 @@ def experiment_add_environments(project_path: Path, experiment_pattern: str, env
                 "Check if environment names are spelled correctly",
                 "Load environments to global database with: adare environment load <environment_file>",
                 "Create environments with: adare environment create <name>",
-                "List available environments with: adare environment list"
-            ]
+                "List available environments with: adare environment list",
+            ],
         )
 
     if failed_experiments:
         from adare.console import print_error_message
+
         print_error_message(
             title=f"Failed to update {len(failed_experiments)} experiment(s)",
             details=f"Experiments: {', '.join(failed_experiments)}",
             possible_solutions=[
                 "Check experiment metadata.yml files for syntax errors",
                 "Ensure experiment directories exist and are accessible",
-                "Check log output above for specific error details"
-            ]
+                "Check log output above for specific error details",
+            ],
         )
 
     # Final status summary
     if total_processed == 0:
         log.info("\nNo experiments were processed.")
     elif updated_experiments or skipped_experiments:
-        log.info(f"\nSummary: {len(updated_experiments)} updated, {len(skipped_experiments)} already had environments, {len(environment_missing_experiments)} missing environments, {len(failed_experiments)} failed.")
+        log.info(
+            f"\nSummary: {len(updated_experiments)} updated, {len(skipped_experiments)} already had environments, {len(environment_missing_experiments)} missing environments, {len(failed_experiments)} failed."
+        )
     else:
         log.info("\nNo experiments were successfully updated. See error details above.")

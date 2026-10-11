@@ -4,6 +4,7 @@ Project Service - Business logic for project operations.
 This service handles all project-related operations and returns Result[T] objects
 that can be consumed by any frontend (CLI, Web UI, REST API).
 """
+
 import logging
 from pathlib import Path
 
@@ -74,6 +75,7 @@ class ProjectService:
         # Step 4: Load fixtures
         try:
             from adare.database.api.base import ProjectDatabaseApi
+
             with ProjectDatabaseApi(request.path) as project_api:
                 fixture_status(project_api._session)
                 fixture_stages(project_api._session)
@@ -100,17 +102,19 @@ class ProjectService:
             'Create an environment with: adare environment create <environment_name>',
             'Create an experiment with: adare experiment create <experiment_name>',
             'Use all available testfunction sets: files, json, csv, sqlite, linux, windows',
-            'Run your first experiment with: adare experiment run <experiment> -e <environment>'
+            'Run your first experiment with: adare experiment run <experiment> -e <environment>',
         ]
 
-        return Result.ok(ProjectInfo(
-            id=project_id,
-            name=request.name,
-            path=request.path,
-            description=request.description,
-            next_steps=next_steps,
-            tip='All testfunction sets loaded with file operations, data validation (JSON, CSV, SQLite), system analysis (Linux, Windows), and forensic capabilities'
-        ))
+        return Result.ok(
+            ProjectInfo(
+                id=project_id,
+                name=request.name,
+                path=request.path,
+                description=request.description,
+                next_steps=next_steps,
+                tip='All testfunction sets loaded with file operations, data validation (JSON, CSV, SQLite), system analysis (Linux, Windows), and forensic capabilities',
+            )
+        )
 
     def _cleanup_failed_project(self, project_directory: ProjectDirectory, path: Path, reason: str) -> None:
         """Clean up a partially created project after a failure."""
@@ -136,7 +140,7 @@ class ProjectService:
                 solutions=[
                     'Use `adare project list` to see available projects',
                     'Check if the project path is correct',
-                ]
+                ],
             )
 
         project_directory = ProjectDirectory(request.path)
@@ -198,12 +202,14 @@ class ProjectService:
                 solutions=[
                     'Use `adare project list` to see available projects',
                     'Check if the project path is correct',
-                ]
+                ],
             )
 
-        return Result.ok(ProjectListItem(
-            id=project_data['id'],
-            name=project_data['name'],
-            path=Path(project_data['path']),
-            description=project_data.get('description', ''),
-        ))
+        return Result.ok(
+            ProjectListItem(
+                id=project_data['id'],
+                name=project_data['name'],
+                path=Path(project_data['path']),
+                description=project_data.get('description', ''),
+            )
+        )

@@ -1,6 +1,7 @@
 """
 Disk Management Mixin - Base disks, overlays, and cleanup operations.
 """
+
 import asyncio
 import logging
 import os
@@ -71,8 +72,7 @@ class DiskManagementMixin:
                 log.debug(f"True base disk (external): {external_path}")
                 return str(external_path)
             raise HypervisorException(
-                f"External disk not found: {external_path}\n"
-                f"The original qcow2 file may have been moved or deleted."
+                f"External disk not found: {external_path}\nThe original qcow2 file may have been moved or deleted."
             )
 
         # Priority 2: Managed VM with -base suffix
@@ -229,9 +229,7 @@ class DiskManagementMixin:
 
         # Validate filename length (ext4 limit: 255 characters)
         if len(overlay_name) > 255:
-            log.warning(
-                f"Fallback overlay name exceeds 255 chars ({len(overlay_name)}): {overlay_name}"
-            )
+            log.warning(f"Fallback overlay name exceeds 255 chars ({len(overlay_name)}): {overlay_name}")
             # Truncate base name to fit within limit
             # 255 - len("-overlay-{26-char-ULID}.qcow2") = 255 - 36 = 219
             max_base_length = 219  # 255 - 36
@@ -298,6 +296,7 @@ class DiskManagementMixin:
 
         # Check available disk space before creating overlay
         import shutil
+
         stat = shutil.disk_usage(overlay_dir)
         min_required_space = 10 * 1024 * 1024 * 1024  # 10GB minimum
         if stat.free < min_required_space:
@@ -315,10 +314,13 @@ class DiskManagementMixin:
         args = [
             qemu_img,
             'create',
-            '-f', 'qcow2',
-            '-F', 'qcow2',  # Backing file format
-            '-b', backing_file,  # Backing file (relative path for libguestfs compatibility)
-            overlay_path      # New overlay
+            '-f',
+            'qcow2',
+            '-F',
+            'qcow2',  # Backing file format
+            '-b',
+            backing_file,  # Backing file (relative path for libguestfs compatibility)
+            overlay_path,  # New overlay
         ]
 
         log.debug(f"Creating overlay disk backed by {backing_file}")
@@ -326,17 +328,13 @@ class DiskManagementMixin:
 
         # Execute qemu-img create
         process = await asyncio.create_subprocess_exec(
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
         stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
-            raise HypervisorException(
-                f"Failed to create overlay disk: {stderr.decode()}"
-            )
+            raise HypervisorException(f"Failed to create overlay disk: {stderr.decode()}")
 
         log.debug(f"Successfully created overlay: {overlay_path}")
         return overlay_path

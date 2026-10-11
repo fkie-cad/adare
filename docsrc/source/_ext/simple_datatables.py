@@ -3,8 +3,9 @@ import json
 
 from sphinx.application import Sphinx
 
-CDN_JS  = "https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"
+CDN_JS = "https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"
 CDN_CSS = "https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css"
+
 
 def _add_init_js(app: Sphinx):
     selector = app.config.simple_datatable_selector or "table.sdtable"
@@ -29,6 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {{
 }});
 """
     app.add_js_file(None, body=init_code)
+
 
 def setup(app: Sphinx):
     app.add_config_value("simple_datatable_selector", "table.sdtable", "html")

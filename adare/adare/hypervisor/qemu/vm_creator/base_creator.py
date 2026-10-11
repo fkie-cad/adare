@@ -131,13 +131,16 @@ class BaseVMCreator(ABC):
 
     def _print_config_panel(self) -> None:
         """Print a Rich panel summarising the VM configuration."""
-        print_vm_config_panel(f'VM Creation: {self.vm_name}', [
-            ('OS', self.os_def.display_name),
-            ('Architecture', self.os_def.architecture),
-            ('Disk', self.disk_size),
-            ('RAM', f'{self.ram_mb} MB'),
-            ('CPUs', str(self.cpus)),
-        ])
+        print_vm_config_panel(
+            f'VM Creation: {self.vm_name}',
+            [
+                ('OS', self.os_def.display_name),
+                ('Architecture', self.os_def.architecture),
+                ('Disk', self.disk_size),
+                ('RAM', f'{self.ram_mb} MB'),
+                ('CPUs', str(self.cpus)),
+            ],
+        )
 
     def _check_prerequisites(self) -> None:
         """Verify that the host has all required tools and resources."""
@@ -187,9 +190,13 @@ class BaseVMCreator(ABC):
         needs_uefi = self.os_def.requires_uefi or self.os_def.architecture == 'aarch64'
         nvram_path = None
         if needs_uefi:
-            nvram_path = Path(create_nvram_for_vm(
-                self.vm_name, target_dir, self.os_def.architecture,
-            ))
+            nvram_path = Path(
+                create_nvram_for_vm(
+                    self.vm_name,
+                    target_dir,
+                    self.os_def.architecture,
+                )
+            )
 
         return disk_path, nvram_path
 
@@ -235,10 +242,7 @@ class BaseVMCreator(ABC):
         compressed_size = tmp_path.stat().st_size
         os.replace(tmp_path, disk_path)
         saved_pct = 100 * (1 - compressed_size / original_size)
-        print_step(
-            f'Compressed disk image (zstd): [dim]{disk_path}[/dim] '
-            f'({saved_pct:.0f}% smaller)'
-        )
+        print_step(f'Compressed disk image (zstd): [dim]{disk_path}[/dim] ({saved_pct:.0f}% smaller)')
         return disk_path
 
     def _cleanup_on_failure(self, disk_path: Path, nvram_path: Path | None) -> None:

@@ -25,14 +25,7 @@ class HostTestExecutor:
     services for visual analysis, screenshots, and VM file access.
     """
 
-    def __init__(
-        self,
-        action_executor,
-        mcp_client,
-        playbook_dir: Path,
-        experiment_dir: Path,
-        os_key: str = "windows"
-    ):
+    def __init__(self, action_executor, mcp_client, playbook_dir: Path, experiment_dir: Path, os_key: str = "windows"):
         """
         Initialize host test executor.
 
@@ -66,7 +59,7 @@ class HostTestExecutor:
                 action_executor=self.action_executor,
                 playbook_dir=self.playbook_dir,
                 experiment_dir=self.experiment_dir,
-                os_key=self.os_key
+                os_key=self.os_key,
             )
             log.debug("Host Test Executor: Created HostTestContext")
 
@@ -102,10 +95,7 @@ class HostTestExecutor:
                     f"Expected: async def test(self, context: HostTestContext)"
                 )
                 log.error(f"Host Test Executor: {error_msg}")
-                return TestResult.execution_error(
-                    TypeError(error_msg),
-                    "Host test must be async"
-                )
+                return TestResult.execution_error(TypeError(error_msg), "Host test must be async")
 
             # Execute test with context
             log.debug(f"Host Test Executor: Calling test method for '{test_name}'")
@@ -113,15 +103,9 @@ class HostTestExecutor:
 
             # Validate result type
             if not isinstance(result, TestResult):
-                error_msg = (
-                    f"Host-side test {test_class} returned invalid type {type(result)}. "
-                    f"Expected: TestResult"
-                )
+                error_msg = f"Host-side test {test_class} returned invalid type {type(result)}. Expected: TestResult"
                 log.error(f"Host Test Executor: {error_msg}")
-                return TestResult.execution_error(
-                    TypeError(error_msg),
-                    "Invalid return type from test"
-                )
+                return TestResult.execution_error(TypeError(error_msg), "Invalid return type from test")
 
             log.debug(f"Host Test Executor: Test '{test_name}' completed with status {result.status}")
             return result

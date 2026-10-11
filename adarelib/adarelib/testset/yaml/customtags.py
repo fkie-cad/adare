@@ -84,7 +84,15 @@ class YamlPath(YamlCustomTag):
 class YamlTimestamp(YamlCustomTag):
     yaml_tag = '!timestamp'
 
-    def __init__(self, timestamp, timestamp_format_comparison=None, timestamp_format_in_entry=None, tolerance=None, timezone=None, format=None):
+    def __init__(
+        self,
+        timestamp,
+        timestamp_format_comparison=None,
+        timestamp_format_in_entry=None,
+        tolerance=None,
+        timezone=None,
+        format=None,
+    ):
         self.string = timestamp
         self.timestamp_format_comparison = timestamp_format_comparison
         self.timestamp_format_in_entry = timestamp_format_in_entry

@@ -8,6 +8,7 @@ from typing import Any
 
 class Window:
     """Represents a window with position and metadata."""
+
     def __init__(self, id: str, name: str, rect: tuple, pid: int = None):
         self.id = id
         self.name = name

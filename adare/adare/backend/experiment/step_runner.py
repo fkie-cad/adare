@@ -35,10 +35,7 @@ class ExperimentStepRunner:
 
             try:
                 # Use gather to let exceptions bubble up naturally
-                done, pending = await asyncio.wait(
-                    [step_task, stop_task],
-                    return_when=asyncio.FIRST_COMPLETED
-                )
+                done, pending = await asyncio.wait([step_task, stop_task], return_when=asyncio.FIRST_COMPLETED)
 
                 # Cancel pending tasks
                 for task in pending:
@@ -50,8 +47,7 @@ class ExperimentStepRunner:
                 for task in done:
                     if task.exception():
                         log.error(
-                            f"Step '{step_func.__name__}' failed with: "
-                            f"{task.exception()!r}",
+                            f"Step '{step_func.__name__}' failed with: {task.exception()!r}",
                             exc_info=task.exception(),
                         )
                         # Use result() to properly re-raise exception with chain

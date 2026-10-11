@@ -20,11 +20,12 @@ if TYPE_CHECKING:
 
 class HostModeCategory(str, Enum):
     """How a test should execute in host-mode (no in-guest agent)."""
-    FILE_BASED = "file_based"        # Pull file via QGA, rewrite dst, run test() locally
-    FILE_CONTENT = "file_content"    # Same as FILE_BASED for structured files (JSON, CSV, XML, SQLite)
-    QGA_PROBE = "qga_probe"          # Run probe command on guest via QGA, build TestResult on host
-    HOST_NATIVE = "host_native"      # Already runs on host (e.g., visual tests)
-    AGENT_ONLY = "agent_only"        # Requires in-guest agent; not supported in host mode
+
+    FILE_BASED = "file_based"  # Pull file via QGA, rewrite dst, run test() locally
+    FILE_CONTENT = "file_content"  # Same as FILE_BASED for structured files (JSON, CSV, XML, SQLite)
+    QGA_PROBE = "qga_probe"  # Run probe command on guest via QGA, build TestResult on host
+    HOST_NATIVE = "host_native"  # Already runs on host (e.g., visual tests)
+    AGENT_ONLY = "agent_only"  # Requires in-guest agent; not supported in host mode
 
 
 def resolve_var_in_match(regex_match, variables: dict, escape: bool = False) -> str:
@@ -75,6 +76,7 @@ class Parameter:
     """
     Parameter is the base class for all test parameters.
     """
+
     pass
 
 
@@ -83,6 +85,7 @@ class BasicTest:
     """
     BasicTest is the base class for all tests. It provides basic functionality like setting the result of a test.
     """
+
     testname: ClassVar[str] = ''
     testdescription: ClassVar[str] = ''
     execute_on_host: ClassVar[bool] = False  # If True, test executes on host instead of VM
@@ -96,8 +99,9 @@ class BasicTest:
     description: str | None
     variable_metadata: dict[str, Any] | None
 
-    def resolve_globfilepath(self, globfilepath: str, match_mode: str = "single",
-                            return_list: bool = False) -> tuple[str | list[str], str]:
+    def resolve_globfilepath(
+        self, globfilepath: str, match_mode: str = "single", return_list: bool = False
+    ) -> tuple[str | list[str], str]:
         """
         Find file(s) matching glob expression with flexible matching modes.
 
@@ -122,12 +126,13 @@ class BasicTest:
             if not found_files:
                 return ([] if return_list else ""), "no files match the given path (glob) expression"
             if len(found_files) > 1:
-                return ([] if return_list else ""), f"{len(found_files)} files found that match given path (glob) expression"
+                return (
+                    [] if return_list else ""
+                ), f"{len(found_files)} files found that match given path (glob) expression"
             return (found_files if return_list else found_files[0]), ""
         # match_mode == "any"
         # New behavior: 0+ matches allowed
         return found_files if return_list else (found_files[0] if found_files else ""), ""
-
 
     # === PLACEHOLDER HELPER METHODS ===
 
@@ -193,6 +198,7 @@ class BasicTest:
 
         if placeholder_type == 'regex':
             import re
+
             try:
                 regex_pattern = metadata.get('resolved_value', metadata.get('raw_value', '.*'))
                 compiled_regex = re.compile(regex_pattern)
@@ -224,7 +230,6 @@ class BasicTest:
 
         # Has tolerance - do timestamp comparison
         try:
-
             # Parse actual timestamp using format metadata if available
             actual_dt = self._parse_timestamp_with_format(actual_value, metadata)
             log.debug(f"Parsed VM timestamp: {actual_dt}")
@@ -236,9 +241,12 @@ class BasicTest:
             # Check if timestamp needs runtime resolution
             if metadata.get('needs_runtime_resolution', False) and '{{' in raw_value and '}}' in raw_value:
                 log.debug(f"Template '{raw_value}' marked for runtime resolution")
-                log.warning(f"Template '{raw_value}' requires runtime resolution but execution context not available in test function")
+                log.warning(
+                    f"Template '{raw_value}' requires runtime resolution but execution context not available in test function"
+                )
 
                 import re
+
                 template_match = re.search(r'\{\{\s*(\w+)\s*\}\}', raw_value)
                 if template_match:
                     var_name = template_match.group(1)
@@ -283,8 +291,14 @@ class BasicTest:
             log.debug(f"Within tolerance? {within_range} ({lower_tolerance} <= {diff_seconds} <= {upper_tolerance})")
 
             if within_range:
-                return True, f"Within tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)"
-            return False, f"Outside tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)"
+                return (
+                    True,
+                    f"Within tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)",
+                )
+            return (
+                False,
+                f"Outside tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)",
+            )
 
         except Exception as e:
             # Fallback to string comparison
@@ -292,7 +306,9 @@ class BasicTest:
             success = actual_value == expected
             return success, f"Tolerance comparison failed ({e}), used string comparison"
 
-    def _parse_timestamp_with_format(self, timestamp_str: str, metadata: dict, is_expected: bool = False) -> 'datetime.datetime':
+    def _parse_timestamp_with_format(
+        self, timestamp_str: str, metadata: dict, is_expected: bool = False
+    ) -> 'datetime.datetime':
         """
         Parse timestamp using format metadata.
 
@@ -413,10 +429,14 @@ class BasicTest:
         # Check if we got unconverted Jinja2 templates (client-side issue)
         for placeholder in placeholders:
             if '|' in placeholder:
-                return False, f"Received unconverted Jinja2 template '{{{{ {placeholder} }}}}'. This suggests client-side variable resolution failed. Expected placeholder format: '{{{{ VARIABLE_RESOLVED }}}}'."
+                return (
+                    False,
+                    f"Received unconverted Jinja2 template '{{{{ {placeholder} }}}}'. This suggests client-side variable resolution failed. Expected placeholder format: '{{{{ VARIABLE_RESOLVED }}}}'.",
+                )
 
         # Split template into text parts (before/between/after placeholders)
         import re
+
         text_parts = re.split(r'\{\{\s*[^}]+\s*\}\}', expected_template)
 
         # Extract values by finding delimiters step by step
@@ -456,14 +476,20 @@ class BasicTest:
                             placeholder_value = actual_content[current_pos:line_end]
                             current_pos = line_end
                     else:
-                        return False, f"Couldn't find delimiter '{repr(next_delimiter)}' after placeholder '{placeholders[i]}'"
+                        return (
+                            False,
+                            f"Couldn't find delimiter '{repr(next_delimiter)}' after placeholder '{placeholders[i]}'",
+                        )
                 else:
                     # Extract value between current position and delimiter
                     placeholder_value = actual_content[current_pos:delimiter_pos]
                     current_pos = delimiter_pos
             elif i + 1 < len(text_parts) and not text_parts[i + 1] and i + 1 < len(placeholders):
                 # Empty delimiter between placeholders (not at end) - this is an error
-                return False, f"Empty delimiter after '{placeholders[i]}' - cannot determine where placeholder ends. Please add text between placeholders."
+                return (
+                    False,
+                    f"Empty delimiter after '{placeholders[i]}' - cannot determine where placeholder ends. Please add text between placeholders.",
+                )
             else:
                 # Last placeholder or placeholder at end with empty suffix - take everything to the end
                 final_suffix = text_parts[-1] if len(text_parts) > len(placeholders) and text_parts[-1] else ""
@@ -471,7 +497,10 @@ class BasicTest:
                     # Find the final suffix to determine where placeholder ends
                     suffix_pos = actual_content.rfind(final_suffix)
                     if suffix_pos == -1 or suffix_pos < current_pos:
-                        return False, f"Couldn't find final text '{final_suffix}' after last placeholder '{placeholders[i]}'"
+                        return (
+                            False,
+                            f"Couldn't find final text '{final_suffix}' after last placeholder '{placeholders[i]}'",
+                        )
                     placeholder_value = actual_content[current_pos:suffix_pos]
                     current_pos = suffix_pos
                 else:

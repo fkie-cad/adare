@@ -37,24 +37,29 @@ class EnvironmentMissingError(LoggedErrorException):
 # New enhanced exception classes for improved database API
 class DatabaseError(LoggedErrorException):
     """Base class for database-related errors."""
+
     pass
 
 
 class DatabaseConnectionError(DatabaseError):
     """Error connecting to or initializing database."""
+
     pass
 
 
 class EntityNotFoundError(DatabaseError):
     """Entity not found in database."""
+
     pass
 
 
 class ValidationError(DatabaseError):
     """Input validation error."""
+
     pass
 
 
 class SyncError(DatabaseError):
     """Synchronization-related error."""
+
     pass

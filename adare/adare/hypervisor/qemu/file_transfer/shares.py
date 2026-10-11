@@ -5,6 +5,7 @@ Contains the share list builder (host→guest directory mappings) and
 config.json builder, used by all four strategies (VirtioFS, SMB,
 Libguestfs, QGA).
 """
+
 import logging
 import shutil
 from pathlib import Path
@@ -44,15 +45,9 @@ def check_shared_dir(host_path: Path, guest_name: str) -> bool:
         True if host_path exists and should be shared
     """
     if not host_path.exists():
-        log.warning(
-            f"Shared directory {host_path} not found -- "
-            f"the guest will have no '{guest_name}' directory"
-        )
+        log.warning(f"Shared directory {host_path} not found -- the guest will have no '{guest_name}' directory")
         return False
-    log.info(
-        f"Sharing {host_path} as guest '{guest_name}' "
-        f"({_count_files(host_path)} files)"
-    )
+    log.info(f"Sharing {host_path} as guest '{guest_name}' ({_count_files(host_path)} files)")
     return True
 
 
@@ -88,86 +83,79 @@ def build_share_list(
         )
         log.debug(f"Copied playbook to {run_dir / 'playbook.yml'}")
 
-    shares.append({
-        'tag': 'run',
-        'host_path': str(run_dir),
-        'guest_mount': f'{base_mount}\\run' if is_windows else f'{base_mount}/run',
-        'readonly': False,
-    })
+    shares.append(
+        {
+            'tag': 'run',
+            'host_path': str(run_dir),
+            'guest_mount': f'{base_mount}\\run' if is_windows else f'{base_mount}/run',
+            'readonly': False,
+        }
+    )
 
     # 2. VM runtime -- adarevm/adarelib wheels or source
     vm_runtime_dir = context.project_directory.vm_runtime
     if not vm_runtime_dir.exists():
         raise HypervisorException(
-            f"VM runtime directory not found at {vm_runtime_dir}. "
-            f"Run 'adare experiment load' first."
+            f"VM runtime directory not found at {vm_runtime_dir}. Run 'adare experiment load' first."
         )
-    shares.append({
-        'tag': 'vm',
-        'host_path': str(vm_runtime_dir),
-        'guest_mount': f'{base_mount}\\vm' if is_windows else f'{base_mount}/vm',
-        'readonly': True,
-    })
+    shares.append(
+        {
+            'tag': 'vm',
+            'host_path': str(vm_runtime_dir),
+            'guest_mount': f'{base_mount}\\vm' if is_windows else f'{base_mount}/vm',
+            'readonly': True,
+        }
+    )
 
     # 3. Experiment directory (optional)
     if context.experiment_directory:
         experiment_dir = context.experiment_directory.path
-        shares.append({
-            'tag': 'experiment',
-            'host_path': str(experiment_dir),
-            'guest_mount': (
-                f'{base_mount}\\experiment' if is_windows
-                else f'{base_mount}/experiment'
-            ),
-            'readonly': True,
-        })
+        shares.append(
+            {
+                'tag': 'experiment',
+                'host_path': str(experiment_dir),
+                'guest_mount': (f'{base_mount}\\experiment' if is_windows else f'{base_mount}/experiment'),
+                'readonly': True,
+            }
+        )
 
     # 4. Project shared directory (optional)
     if check_shared_dir(context.project_directory.shared, 'project_shared'):
-        shares.append({
-            'tag': 'project_shared',
-            'host_path': str(context.project_directory.shared),
-            'guest_mount': (
-                f'{base_mount}\\project_shared' if is_windows
-                else f'{base_mount}/project_shared'
-            ),
-            'readonly': True,
-        })
+        shares.append(
+            {
+                'tag': 'project_shared',
+                'host_path': str(context.project_directory.shared),
+                'guest_mount': (f'{base_mount}\\project_shared' if is_windows else f'{base_mount}/project_shared'),
+                'readonly': True,
+            }
+        )
 
     # 5. Experiment shared directory (optional)
-    if (
-        context.experiment_directory
-        and check_shared_dir(context.experiment_directory.shared, 'shared')
-    ):
-        shares.append({
-            'tag': 'shared',
-            'host_path': str(context.experiment_directory.shared),
-            'guest_mount': (
-                f'{base_mount}\\shared' if is_windows
-                else f'{base_mount}/shared'
-            ),
-            'readonly': True,
-        })
+    if context.experiment_directory and check_shared_dir(context.experiment_directory.shared, 'shared'):
+        shares.append(
+            {
+                'tag': 'shared',
+                'host_path': str(context.experiment_directory.shared),
+                'guest_mount': (f'{base_mount}\\shared' if is_windows else f'{base_mount}/shared'),
+                'readonly': True,
+            }
+        )
 
     # 6. User-defined shared directories
-    if (
-        hasattr(context.config, 'shared_directories')
-        and context.config.shared_directories
-    ):
-        log.info(
-            f"Configuring {len(context.config.shared_directories)} "
-            f"user-defined shared directories"
-        )
+    if hasattr(context.config, 'shared_directories') and context.config.shared_directories:
+        log.info(f"Configuring {len(context.config.shared_directories)} user-defined shared directories")
         for name, details in context.config.shared_directories.items():
             host_path = details.get('host')
             vm_path = details.get('vm')
             if host_path and vm_path:
-                shares.append({
-                    'tag': name,
-                    'host_path': str(host_path),
-                    'guest_mount': str(vm_path),
-                    'readonly': False,
-                })
+                shares.append(
+                    {
+                        'tag': name,
+                        'host_path': str(host_path),
+                        'guest_mount': str(vm_path),
+                        'readonly': False,
+                    }
+                )
 
     return shares
 

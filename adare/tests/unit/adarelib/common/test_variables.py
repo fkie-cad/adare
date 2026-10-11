@@ -16,8 +16,8 @@ from adarelib.common.variables import (
 # TimestampMetadata
 # ---------------------------------------------------------------------------
 
-class TestTimestampMetadata:
 
+class TestTimestampMetadata:
     def test_to_dict_all_fields(self):
         meta = TimestampMetadata(
             timezone="UTC",
@@ -60,8 +60,8 @@ class TestTimestampMetadata:
 # Variable.auto_infer -- type inference
 # ---------------------------------------------------------------------------
 
-class TestVariableAutoInfer:
 
+class TestVariableAutoInfer:
     def test_boolean(self):
         var = Variable.auto_infer(True)
         assert var.type == VariableType.BOOLEAN
@@ -102,8 +102,8 @@ class TestVariableAutoInfer:
 # Variable validation / coercion
 # ---------------------------------------------------------------------------
 
-class TestVariableValidation:
 
+class TestVariableValidation:
     def test_string_coerces_int(self):
         var = Variable(value=42, type=VariableType.STRING)
         assert var.value == "42"
@@ -130,8 +130,8 @@ class TestVariableValidation:
 # VariableRegistry
 # ---------------------------------------------------------------------------
 
-class TestVariableRegistry:
 
+class TestVariableRegistry:
     def test_add_and_get(self):
         registry = VariableRegistry()
         var = Variable(value="world", type=VariableType.STRING)

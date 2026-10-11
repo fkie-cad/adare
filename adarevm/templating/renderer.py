@@ -15,16 +15,16 @@ class TemplateRenderer:
         """Initialize basic Jinja2 environment."""
         self.env = Environment(
             loader=BaseLoader(),
-            autoescape=False  # Plain text templates
+            autoescape=False,  # Plain text templates
         )
 
     def render(self, template_str: str, variables: dict[str, Any]) -> str:
         """Render template with enriched variables.
-        
+
         Args:
             template_str: Template with simple {{ TIMESTAMP_VAR }} placeholders
             variables: Dict with enriched variable values
-            
+
         Returns:
             Rendered string
         """

@@ -25,6 +25,7 @@ pytestmark = pytest.mark.unit
 #    Pattern from: simple_actions.py:228, target_resolution.py:133
 # ---------------------------------------------------------------------------
 
+
 class TestPathStemExceptionSpecificity:
     """Path(value).stem catches (TypeError, ValueError), not BaseException."""
 
@@ -67,6 +68,7 @@ class TestPathStemExceptionSpecificity:
 #    Pattern from: mcp_server_manager.py:169-174
 # ---------------------------------------------------------------------------
 
+
 class TestSocketExceptionSpecificity:
     """socket operations catch OSError, not BaseException."""
 
@@ -106,6 +108,7 @@ class TestSocketExceptionSpecificity:
 # 3. os.remove exception specificity
 #    Pattern from: qemu/vm.py:425-428, :770-773, :780-782
 # ---------------------------------------------------------------------------
+
 
 class TestOsRemoveExceptionSpecificity:
     """os.remove catches OSError (covers FileNotFoundError, PermissionError)."""
@@ -148,6 +151,7 @@ class TestOsRemoveExceptionSpecificity:
 #    Pattern from: listener.py:419-422
 # ---------------------------------------------------------------------------
 
+
 class TestDatetimeParsingExceptionSpecificity:
     """datetime.fromisoformat catches (ValueError, TypeError)."""
 
@@ -188,6 +192,7 @@ class TestDatetimeParsingExceptionSpecificity:
 # 5. Dynamic import exception specificity
 #    Pattern from: vm/database.py:245-249
 # ---------------------------------------------------------------------------
+
 
 class TestDynamicImportExceptionSpecificity:
     """Dynamic import catches (ImportError, ValueError, KeyError)."""

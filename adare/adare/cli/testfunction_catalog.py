@@ -36,8 +36,9 @@ def resolve_entry(dotnotation: str, entries: list[CatalogEntry] | None = None) -
     by_name = [e for e in entries if e.name == dotnotation]
     if len(by_name) == 1:
         return by_name[0]
-    candidates = by_name or close_matches(entries, dotnotation) \
-        or search(entries, dotnotation.replace('.', ' '), limit=3)
+    candidates = (
+        by_name or close_matches(entries, dotnotation) or search(entries, dotnotation.replace('.', ' '), limit=3)
+    )
     solutions = [f'did you mean: {", ".join(e.dotnotation for e in candidates)}'] if candidates else []
     solutions.append(f'search by goal: adare test search "{dotnotation.split(".")[-1].replace("_", " ")}"')
     raise TestFunctionNotFoundError(log, f'Testfunction "{dotnotation}" not found', possible_solutions=solutions)
@@ -52,14 +53,26 @@ def exec_catalog_list(arguments) -> None:
 
 def exec_catalog_search(arguments) -> None:
     formatter, output_file = _formatter()
-    entries = search(load_catalog(), arguments.query, collection=arguments.collection, category=arguments.category,
-                     os=arguments.os, limit=arguments.limit)
+    entries = search(
+        load_catalog(),
+        arguments.query,
+        collection=arguments.collection,
+        category=arguments.category,
+        os=arguments.os,
+        limit=arguments.limit,
+    )
     if not entries:
-        raise TestFunctionNotFoundError(log, f'No testfunction matches "{arguments.query}"', possible_solutions=[
-            'use fewer or more general words (e.g. "file exists", "registry value")',
-            'browse everything: adare test list'])
-    render_entries(entries, formatter, output_file, title=f'testfunctions matching "{arguments.query}"',
-                   with_example=True)
+        raise TestFunctionNotFoundError(
+            log,
+            f'No testfunction matches "{arguments.query}"',
+            possible_solutions=[
+                'use fewer or more general words (e.g. "file exists", "registry value")',
+                'browse everything: adare test list',
+            ],
+        )
+    render_entries(
+        entries, formatter, output_file, title=f'testfunctions matching "{arguments.query}"', with_example=True
+    )
 
 
 def installed_version(entry: CatalogEntry) -> int | None:
@@ -71,11 +84,16 @@ def installed_version(entry: CatalogEntry) -> int | None:
 
     try:
         with GlobalDatabaseApi() as api:
-            row = api._session.query(TestFunction.version).join(TestFunctionFile).filter(
-                TestFunctionFile.name == entry.collection,
-                TestFunction.name == entry.name.split('.')[-1],
-                TestFunction.is_current.is_(True),
-            ).first()
+            row = (
+                api._session.query(TestFunction.version)
+                .join(TestFunctionFile)
+                .filter(
+                    TestFunctionFile.name == entry.collection,
+                    TestFunction.name == entry.name.split('.')[-1],
+                    TestFunction.is_current.is_(True),
+                )
+                .first()
+            )
     except (SQLAlchemyError, OSError) as e:
         log.debug(f'No version for {entry.dotnotation}: {e}')
         return None

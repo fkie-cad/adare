@@ -16,8 +16,9 @@ log = logging.getLogger(__name__)
 def load_testfunction_file(project_path: Path, testfunction_file: Path, requirements_file: Path) -> int:
     with TestfunctionDbApi() as api:
         # Check if testfunction file already exists globally by name
-        existing_file = api._session.query(TestFunctionFile).filter(
-            TestFunctionFile.name == testfunction_file.stem).first()
+        existing_file = (
+            api._session.query(TestFunctionFile).filter(TestFunctionFile.name == testfunction_file.stem).first()
+        )
         if existing_file:
             # Testfunctions are global - use existing file
             log.debug(f'Using existing global testfunction file: {testfunction_file.name}')
@@ -74,7 +75,9 @@ def list_testfunctions(fields: list[str] = None) -> list:
                 elif field == 'dotnotation':
                     tf_data['dotnotation'] = getattr(tf, 'dotnotation', None)
                 else:
-                    log.warning(f'Unknown field requested: {field}. Available: id, name, description, file_path, dotnotation')
+                    log.warning(
+                        f'Unknown field requested: {field}. Available: id, name, description, file_path, dotnotation'
+                    )
             result.append(tf_data)
 
         return result
@@ -110,9 +113,7 @@ def sync_testfunction_file(testfunction_id: int, remote_id: int, remote_url: str
 def get_testfunction_files_ids(project_path: Path = None):
     """Get list of testfunction file IDs - safe from DetachedInstanceError."""
     with TestfunctionDbApi() as api:
-        return [
-            testfunction.id for testfunction in api.get_testfunction_files(project_path)
-        ]
+        return [testfunction.id for testfunction in api.get_testfunction_files(project_path)]
 
 
 def get_testfunction_files_data(project_path: Path = None, fields: list[str] = None) -> list[dict]:
@@ -150,7 +151,9 @@ def get_testfunction_files_data(project_path: Path = None, fields: list[str] = N
                 elif field == 'requirements_path':
                     tf_data['requirements_path'] = getattr(tf_file, 'requirements_path', None)
                 else:
-                    log.warning(f'Unknown field requested: {field}. Available: id, name, path, description, sha256hash, requirements_path')
+                    log.warning(
+                        f'Unknown field requested: {field}. Available: id, name, path, description, sha256hash, requirements_path'
+                    )
             result.append(tf_data)
 
         return result
@@ -174,17 +177,12 @@ def get_testfunction_usage(testfunction_name: str) -> dict:
 
     with TestfunctionDbApi() as api:
         # Find the testfunction file in global database
-        testfunction_file = api._session.query(TestFunctionFile).filter(
-            TestFunctionFile.name == testfunction_name).first()
+        testfunction_file = (
+            api._session.query(TestFunctionFile).filter(TestFunctionFile.name == testfunction_name).first()
+        )
 
         if not testfunction_file:
-            return {
-                'exists': False,
-                'experiments': [],
-                'runs': [],
-                'can_safely_delete': True,
-                'projects_affected': []
-            }
+            return {'exists': False, 'experiments': [], 'runs': [], 'can_safely_delete': True, 'projects_affected': []}
 
         # Get all testfunctions in this file
         testfunction_ids = [tf.id for tf in testfunction_file.test_functions]
@@ -204,8 +202,11 @@ def get_testfunction_usage(testfunction_name: str) -> dict:
                 # Connect to project-specific database
                 with ProjectDatabaseApi(project_path) as project_api:
                     # Find abstract tests using any testfunction from this file
-                    abstract_tests = project_api._session.query(AbstractTest).filter(
-                        AbstractTest.testfunction_id.in_(testfunction_ids)).all()
+                    abstract_tests = (
+                        project_api._session.query(AbstractTest)
+                        .filter(AbstractTest.testfunction_id.in_(testfunction_ids))
+                        .all()
+                    )
 
                     if not abstract_tests:
                         continue  # No usage in this project
@@ -216,28 +217,28 @@ def get_testfunction_usage(testfunction_name: str) -> dict:
 
                     for abstract_test in abstract_tests:
                         # Find experiments using this abstract test
-                        test_experiments = project_api._session.query(Experiment).filter(
-                            Experiment.abstract_tests.contains(abstract_test)).all()
+                        test_experiments = (
+                            project_api._session.query(Experiment)
+                            .filter(Experiment.abstract_tests.contains(abstract_test))
+                            .all()
+                        )
 
                         for experiment in test_experiments:
-                            exp_info = {
-                                'id': experiment.id,
-                                'name': experiment.name,
-                                'project': project.name
-                            }
+                            exp_info = {'id': experiment.id, 'name': experiment.name, 'project': project.name}
                             if exp_info not in all_experiments:
                                 all_experiments.append(exp_info)
 
                             # Find runs for this experiment
-                            experiment_runs = project_api._session.query(ExperimentRun).filter(
-                                ExperimentRun.experiment_id == experiment.id).all()
+                            experiment_runs = (
+                                project_api._session.query(ExperimentRun)
+                                .filter(ExperimentRun.experiment_id == experiment.id)
+                                .all()
+                            )
 
                             for run in experiment_runs:
-                                all_runs.append({
-                                    'id': run.id,
-                                    'experiment_name': experiment.name,
-                                    'project': project.name
-                                })
+                                all_runs.append(
+                                    {'id': run.id, 'experiment_name': experiment.name, 'project': project.name}
+                                )
 
             except (OSError, DatabaseError) as e:
                 log.warning(f'Could not check project {project.name} at {project.path}: {e}')
@@ -249,7 +250,7 @@ def get_testfunction_usage(testfunction_name: str) -> dict:
             'experiments': all_experiments,
             'runs': all_runs,
             'can_safely_delete': len(all_runs) == 0,
-            'projects_affected': projects_affected
+            'projects_affected': projects_affected,
         }
 
 
@@ -273,8 +274,7 @@ def delete_experiment_runs_for_testfunction(testfunction_name: str) -> int:
 
         deleted_count = 0
         for run_info in usage['runs']:
-            run = api._session.query(ExperimentRun).filter(
-                ExperimentRun.id == run_info['id']).first()
+            run = api._session.query(ExperimentRun).filter(ExperimentRun.id == run_info['id']).first()
             if run:
                 api._session.delete(run)
                 deleted_count += 1

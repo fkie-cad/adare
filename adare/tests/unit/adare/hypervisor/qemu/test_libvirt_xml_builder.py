@@ -17,6 +17,7 @@ from adare.hypervisor.qemu.libvirt_xml_builder import (
 
 # --- Test fixtures ---
 
+
 @dataclass
 class MockVMConfig:
     """Minimal mock of QEMUVMConfig with fields accessed by DomainXMLBuilder."""
@@ -67,6 +68,7 @@ def make_windows_config(**overrides) -> MockVMConfig:
 
 
 # --- PCIBusAllocator tests ---
+
 
 class TestPCIBusAllocatorQ35:
     """Tests for PCIBusAllocator with Q35 machine type."""
@@ -200,6 +202,7 @@ class TestPCIBusAllocatorPC:
 
 # --- DomainXMLBuilder tests ---
 
+
 class TestDomainXMLBuilderBasic:
     """Tests for DomainXMLBuilder producing valid XML."""
 
@@ -267,7 +270,9 @@ class TestDomainXMLBuilderBasic:
 
         assert root.get('type') == 'kvm'
 
-    @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/opt/homebrew/bin/qemu-system-x86_64')
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/opt/homebrew/bin/qemu-system-x86_64'
+    )
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Darwin')
     def test_build_domain_type_hvf_on_darwin(self, mock_platform, mock_which):
         """build() uses the hvf domain type for an hvf-accelerated VM.
@@ -319,7 +324,10 @@ class TestDomainXMLBuilderUEFI:
     """Tests for UEFI boot configuration."""
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.create_nvram_for_vm', return_value='/tmp/nvram.fd')
-    @patch('adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware', return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'))
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware',
+        return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'),
+    )
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Linux')
     def test_uefi_boot_has_loader_and_nvram(self, mock_platform, mock_which, mock_firmware, mock_nvram):
@@ -334,7 +342,10 @@ class TestDomainXMLBuilderUEFI:
         assert root.find('os/nvram') is not None
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.create_nvram_for_vm', return_value='/tmp/nvram.fd')
-    @patch('adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware', return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'))
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware',
+        return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'),
+    )
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Linux')
     def test_uefi_pc_promotes_to_q35(self, mock_platform, mock_which, mock_firmware, mock_nvram):
@@ -367,7 +378,10 @@ class TestDomainXMLBuilderDevices:
         assert addr.get('slot') == '0x04'
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.create_nvram_for_vm', return_value='/tmp/nvram.fd')
-    @patch('adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware', return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'))
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware',
+        return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'),
+    )
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Linux')
     def test_q35_disk_uses_correct_pci_address(self, mock_platform, mock_which, mock_firmware, mock_nvram):
@@ -401,9 +415,7 @@ class TestDomainXMLBuilderDevices:
     def test_no_network_interface_with_port_forwarding(self, mock_platform, mock_which):
         """Port forwarding rules suppress libvirt network interface (configured via qemu:commandline)."""
         config = make_linux_pc_config(
-            port_forwarding_rules={
-                'ssh': {'protocol': 'tcp', 'host_port': 2222, 'guest_port': 22}
-            }
+            port_forwarding_rules={'ssh': {'protocol': 'tcp', 'host_port': 2222, 'guest_port': 22}}
         )
         builder = DomainXMLBuilder(config)
         xml_str = builder.build()
@@ -422,8 +434,11 @@ class TestDomainXMLBuilderDevices:
         root = ET.fromstring(xml_str)
 
         channels = root.findall('.//channel')
-        ga_channels = [c for c in channels if c.find('target') is not None
-                       and c.find('target').get('name') == 'org.qemu.guest_agent.0']
+        ga_channels = [
+            c
+            for c in channels
+            if c.find('target') is not None and c.find('target').get('name') == 'org.qemu.guest_agent.0'
+        ]
         assert len(ga_channels) == 1
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
@@ -457,7 +472,10 @@ class TestDomainXMLBuilderWindows:
     """Tests for Windows-specific configuration."""
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.create_nvram_for_vm', return_value='/tmp/nvram.fd')
-    @patch('adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware', return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'))
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware',
+        return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'),
+    )
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Linux')
     def test_windows_has_smm_enabled(self, mock_platform, mock_which, mock_firmware, mock_nvram):
@@ -472,7 +490,10 @@ class TestDomainXMLBuilderWindows:
         assert smm.get('state') == 'on'
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.create_nvram_for_vm', return_value='/tmp/nvram.fd')
-    @patch('adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware', return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'))
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware',
+        return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'),
+    )
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Linux')
     def test_windows_has_hyperv_enlightenments_on_linux(self, mock_platform, mock_which, mock_firmware, mock_nvram):
@@ -488,8 +509,13 @@ class TestDomainXMLBuilderWindows:
         assert hyperv.find('vapic') is not None
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.create_nvram_for_vm', return_value='/tmp/nvram.fd')
-    @patch('adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware', return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'))
-    @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/opt/homebrew/bin/qemu-system-x86_64')
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware',
+        return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'),
+    )
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/opt/homebrew/bin/qemu-system-x86_64'
+    )
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Darwin')
     def test_windows_no_hyperv_on_darwin(self, mock_platform, mock_which, mock_firmware, mock_nvram):
         """A Windows VM without KVM has no Hyper-V enlightenments.
@@ -506,7 +532,10 @@ class TestDomainXMLBuilderWindows:
         assert hyperv is None
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.create_nvram_for_vm', return_value='/tmp/nvram.fd')
-    @patch('adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware', return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'))
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware',
+        return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'),
+    )
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Linux')
     def test_windows_has_spice_channel(self, mock_platform, mock_which, mock_firmware, mock_nvram):
@@ -517,12 +546,16 @@ class TestDomainXMLBuilderWindows:
         root = ET.fromstring(xml_str)
 
         channels = root.findall('.//channel')
-        spice_channels = [c for c in channels if c.find('target') is not None
-                         and c.find('target').get('name') == 'com.redhat.spice.0']
+        spice_channels = [
+            c for c in channels if c.find('target') is not None and c.find('target').get('name') == 'com.redhat.spice.0'
+        ]
         assert len(spice_channels) == 1
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.create_nvram_for_vm', return_value='/tmp/nvram.fd')
-    @patch('adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware', return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'))
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware',
+        return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'),
+    )
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Linux')
     def test_windows_uses_bridge_networking(self, mock_platform, mock_which, mock_firmware, mock_nvram):
@@ -559,7 +592,9 @@ class TestDomainXMLBuilderQemuCommandline:
         qmp_idx = arg_values.index('-qmp')
         assert arg_values[qmp_idx + 1] == 'unix:/tmp/test-qmp.sock,server=on,wait=off'
 
-    @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/opt/homebrew/bin/qemu-system-x86_64')
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/opt/homebrew/bin/qemu-system-x86_64'
+    )
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Darwin')
     def test_hvf_domain_type_on_darwin(self, mock_platform, mock_which):
         """HVF acceleration is expressed as domain type='hvf', never an -accel arg.
@@ -579,9 +614,7 @@ class TestDomainXMLBuilderQemuCommandline:
     def test_port_forwarding_in_commandline(self, mock_platform, mock_which):
         """Port forwarding rules are added to qemu:commandline."""
         config = make_linux_pc_config(
-            port_forwarding_rules={
-                'ssh': {'protocol': 'tcp', 'host_port': 2222, 'guest_port': 22}
-            }
+            port_forwarding_rules={'ssh': {'protocol': 'tcp', 'host_port': 2222, 'guest_port': 22}}
         )
         builder = DomainXMLBuilder(config)
         xml_str = builder.build()
@@ -660,7 +693,10 @@ class TestDomainXMLBuilderClock:
         assert 'hpet' in timer_names
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.create_nvram_for_vm', return_value='/tmp/nvram.fd')
-    @patch('adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware', return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'))
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware',
+        return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'),
+    )
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Linux')
     def test_windows_has_hypervclock(self, mock_platform, mock_which, mock_firmware, mock_nvram):

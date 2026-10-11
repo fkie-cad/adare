@@ -25,8 +25,10 @@ class TestVmLoadRequest:
 
     def test_full_construction(self):
         req = VmLoadRequest(
-            file_path=Path("/vm.ova"), name="win10",
-            os_platform="windows", os_type="desktop",
+            file_path=Path("/vm.ova"),
+            name="win10",
+            os_platform="windows",
+            os_type="desktop",
             force=True,
         )
         assert req.name == "win10"
@@ -36,8 +38,13 @@ class TestVmLoadRequest:
 class TestVmInfo:
     def test_construction(self):
         info = VmInfo(
-            id="1", name="vm1", file_path="/f", file_hash="abc",
-            description="d", hypervisor="virtualbox", use_snapshots=True,
+            id="1",
+            name="vm1",
+            file_path="/f",
+            file_hash="abc",
+            description="d",
+            hypervisor="virtualbox",
+            use_snapshots=True,
         )
         assert info.instance_count == 0
         assert info.is_external is False
@@ -48,11 +55,17 @@ class TestVmInstanceInfo:
     def test_construction(self):
         now = datetime.now()
         info = VmInstanceInfo(
-            id="1", vm_id="v1", vm_name="vm",
-            instance_name="vm_inst_1", status="active",
-            websocket_port=5900, vbox_uuid="uuid",
-            base_snapshot_name="base", current_experiment_run_id=None,
-            created_at=now, last_used_at=now,
+            id="1",
+            vm_id="v1",
+            vm_name="vm",
+            instance_name="vm_inst_1",
+            status="active",
+            websocket_port=5900,
+            vbox_uuid="uuid",
+            base_snapshot_name="base",
+            current_experiment_run_id=None,
+            created_at=now,
+            last_used_at=now,
         )
         assert info.status == "active"
         assert info.hypervisor == "virtualbox"
@@ -61,8 +74,10 @@ class TestVmInstanceInfo:
 class TestVmInstanceUsage:
     def test_construction(self):
         usage = VmInstanceUsage(
-            total_instances=5, active_instances=2,
-            available_instances=2, stopped_instances=1,
+            total_instances=5,
+            active_instances=2,
+            available_instances=2,
+            stopped_instances=1,
             instances_by_vm={"vm1": 3, "vm2": 2},
         )
         assert usage.total_instances == 5
@@ -72,8 +87,10 @@ class TestVmInstanceUsage:
 class TestVmClearResult:
     def test_construction(self):
         r = VmClearResult(
-            deleted_count=1, deleted_vms=["vm1"],
-            failed_count=0, failed_vms=[],
+            deleted_count=1,
+            deleted_vms=["vm1"],
+            failed_count=0,
+            failed_vms=[],
         )
         assert r.deleted_count == 1
 

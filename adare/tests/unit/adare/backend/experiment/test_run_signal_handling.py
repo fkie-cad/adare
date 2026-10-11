@@ -30,6 +30,7 @@ pytestmark = pytest.mark.unit
 # destroy_domain_by_name
 # --------------------------------------------------------------------------- #
 
+
 class FakeLibvirtError(Exception):
     pass
 
@@ -94,6 +95,7 @@ def fake_libvirt(monkeypatch):
 @pytest.fixture
 def destroy_domain_by_name(fake_libvirt):
     from adare.backend.experiment.vm_lifecycle_manager import destroy_domain_by_name as fn
+
     return fn
 
 
@@ -165,12 +167,14 @@ class TestDestroyDomainByName:
         """No libvirt installed at all: still a no-op, never an ImportError traceback."""
         monkeypatch.setitem(sys.modules, 'libvirt', None)
         from adare.backend.experiment.vm_lifecycle_manager import destroy_domain_by_name as fn
+
         assert fn('run-vm-1') is False
 
 
 # --------------------------------------------------------------------------- #
 # Signal registration in experiment_run
 # --------------------------------------------------------------------------- #
+
 
 class FakeLoop:
     """Records add/remove_signal_handler traffic without touching real signals."""
@@ -209,6 +213,7 @@ def _install_handlers(loop, ctx, stop_event, user_interrupt_event):
             stop_event.set()
             return
         from adare.backend.experiment.vm_lifecycle_manager import destroy_domain_by_name
+
         destroy_domain_by_name(ctx.vm_name)
         loop.remove_signal_handler(signum)
 
@@ -240,6 +245,7 @@ class TestRegistrationMatchesTheSource:
         import inspect
 
         from adare.backend.experiment import run as run_module
+
         return inspect.getsource(run_module.experiment_run)
 
     def test_sigterm_is_registered(self):

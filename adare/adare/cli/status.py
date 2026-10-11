@@ -30,8 +30,7 @@ def _project_section() -> dict[str, Any]:
         return {'available': False, 'name': None, 'path': None, 'error': str(e)}
     if project_directory is None:
         return {'available': True, 'name': None, 'path': None, 'error': None}
-    return {'available': True, 'name': project_directory.name, 'path': str(project_directory),
-            'error': None}
+    return {'available': True, 'name': project_directory.name, 'path': str(project_directory), 'error': None}
 
 
 def _sessions_section(api, project_path: str | None) -> dict[str, Any]:
@@ -41,9 +40,11 @@ def _sessions_section(api, project_path: str | None) -> dict[str, Any]:
 
     empty = {'available': False, 'total': 0, 'running': 0, 'stopped': 0, 'other': 0}
     try:
-        result = api.devmode.list_sessions(DevSessionListRequest(
-            project_path=Path(project_path) if project_path else None,
-        ))
+        result = api.devmode.list_sessions(
+            DevSessionListRequest(
+                project_path=Path(project_path) if project_path else None,
+            )
+        )
     except _SECTION_ERRORS as e:
         log.debug(f'status: session lookup failed: {e}')
         return {**empty, 'error': str(e)}
@@ -52,8 +53,14 @@ def _sessions_section(api, project_path: str | None) -> dict[str, Any]:
     sessions = result.data or []
     running = sum(1 for s in sessions if s.status == 'running')
     stopped = sum(1 for s in sessions if s.status == 'stopped')
-    return {'available': True, 'total': len(sessions), 'running': running, 'stopped': stopped,
-            'other': len(sessions) - running - stopped, 'error': None}
+    return {
+        'available': True,
+        'total': len(sessions),
+        'running': running,
+        'stopped': stopped,
+        'other': len(sessions) - running - stopped,
+        'error': None,
+    }
 
 
 def _vms_section(api) -> dict[str, Any]:
@@ -68,8 +75,14 @@ def _vms_section(api) -> dict[str, Any]:
 
 
 def _database_section(api) -> dict[str, Any]:
-    empty = {'available': False, 'initialized': False, 'valid': False, 'location': None,
-             'pending_migrations': [], 'errors': []}
+    empty = {
+        'available': False,
+        'initialized': False,
+        'valid': False,
+        'location': None,
+        'pending_migrations': [],
+        'errors': [],
+    }
     try:
         result = api.manage.get_db_status()
     except _SECTION_ERRORS as e:
@@ -92,6 +105,7 @@ def collect_status(api=None) -> dict[str, Any]:
     """Gather the status overview as a structured dict (also used by ``--json``)."""
     if api is None:
         from adare.api import AdareAPI
+
         api = AdareAPI()
     project = _project_section()
     return {

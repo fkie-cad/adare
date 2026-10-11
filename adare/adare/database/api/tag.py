@@ -79,11 +79,7 @@ class TagApi(EnhancedDatabaseApi):
 
         name = name.strip().lower()
 
-        return self.get_or_create(
-            Tag,
-            defaults={'description': description},
-            name=name
-        )
+        return self.get_or_create(Tag, defaults={'description': description}, name=name)
 
     def get_or_create_tags(self, tag_names: list[str]) -> list[Tag]:
         """
@@ -116,10 +112,7 @@ class TagApi(EnhancedDatabaseApi):
 
         return self._session.query(Tag).filter(Tag.name == name.strip().lower()).first()
 
-    def list_tags(self,
-                  search: str | None = None,
-                  order_by: str = 'name',
-                  limit: int | None = None) -> list[Tag]:
+    def list_tags(self, search: str | None = None, order_by: str = 'name', limit: int | None = None) -> list[Tag]:
         """
         List tags with optional search and ordering.
 
@@ -136,10 +129,7 @@ class TagApi(EnhancedDatabaseApi):
         # Apply search filter
         if search:
             search_term = f"%{search.lower()}%"
-            query = query.filter(
-                Tag.name.like(search_term) |
-                Tag.description.like(search_term)
-            )
+            query = query.filter(Tag.name.like(search_term) | Tag.description.like(search_term))
 
         # Apply ordering
         if order_by == 'name':
@@ -153,9 +143,7 @@ class TagApi(EnhancedDatabaseApi):
 
         return query.all()
 
-    def update_tag(self, tag_id: str,
-                   name: str | None = None,
-                   description: str | None = None) -> Tag:
+    def update_tag(self, tag_id: str, name: str | None = None, description: str | None = None) -> Tag:
         """
         Update tag information.
 
@@ -208,19 +196,14 @@ class TagApi(EnhancedDatabaseApi):
 
         if not force:
             # Check if tag is associated with any experiments or environments
-            experiment_count = self._session.query(Experiment).filter(
-                Experiment.tags.contains(tag)
-            ).count()
+            experiment_count = self._session.query(Experiment).filter(Experiment.tags.contains(tag)).count()
 
-            environment_count = self._session.query(Environment).filter(
-                Environment.tags.contains(tag)
-            ).count()
+            environment_count = self._session.query(Environment).filter(Environment.tags.contains(tag)).count()
 
             total_usage = experiment_count + environment_count
             if total_usage > 0:
                 raise ValidationError(
-                    f"Tag '{tag.name}' is used by {total_usage} entities. "
-                    f"Use force=True to delete anyway."
+                    f"Tag '{tag.name}' is used by {total_usage} entities. Use force=True to delete anyway."
                 )
 
         self.delete_entity(tag)
@@ -244,20 +227,16 @@ class TagApi(EnhancedDatabaseApi):
         stats = {}
 
         for tag in tags:
-            experiment_count = self._session.query(Experiment).filter(
-                Experiment.tags.contains(tag)
-            ).count()
+            experiment_count = self._session.query(Experiment).filter(Experiment.tags.contains(tag)).count()
 
-            environment_count = self._session.query(Environment).filter(
-                Environment.tags.contains(tag)
-            ).count()
+            environment_count = self._session.query(Environment).filter(Environment.tags.contains(tag)).count()
 
             tag_stats = {
                 'name': tag.name,
                 'description': tag.description,
                 'experiment_count': experiment_count,
                 'environment_count': environment_count,
-                'total_usage': experiment_count + environment_count
+                'total_usage': experiment_count + environment_count,
             }
 
             if tag_id:
@@ -279,11 +258,7 @@ class TagApi(EnhancedDatabaseApi):
         stats = self.get_tag_usage_stats()
 
         # Sort by total usage
-        sorted_tags = sorted(
-            stats.values(),
-            key=lambda x: x['total_usage'],
-            reverse=True
-        )
+        sorted_tags = sorted(stats.values(), key=lambda x: x['total_usage'], reverse=True)
 
         return sorted_tags[:limit]
 
@@ -300,13 +275,9 @@ class TagApi(EnhancedDatabaseApi):
         unused_tags = []
 
         for tag in all_tags:
-            experiment_count = self._session.query(Experiment).filter(
-                Experiment.tags.contains(tag)
-            ).count()
+            experiment_count = self._session.query(Experiment).filter(Experiment.tags.contains(tag)).count()
 
-            environment_count = self._session.query(Environment).filter(
-                Environment.tags.contains(tag)
-            ).count()
+            environment_count = self._session.query(Environment).filter(Environment.tags.contains(tag)).count()
 
             if experiment_count == 0 and environment_count == 0:
                 unused_tags.append(tag)
@@ -365,10 +336,9 @@ class TagApi(EnhancedDatabaseApi):
         environment.tags = tags
         self._session.flush()
 
-    def get_entities_by_tags(self,
-                           tag_names: list[str],
-                           entity_type: str = 'both',
-                           match_all: bool = True) -> dict[str, list]:
+    def get_entities_by_tags(
+        self, tag_names: list[str], entity_type: str = 'both', match_all: bool = True
+    ) -> dict[str, list]:
         """
         Get entities associated with specific tags.
 

@@ -10,6 +10,7 @@ from adarelib.event.event import TestResult
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -66,6 +67,7 @@ def _compare_values(ctx, actual_value, expected_value, regex_match=False):
     # Check for YamlRegexString objects (!re syntax) - handle like placeholder system
     try:
         from adarelib.testset.yaml.customtags import YamlRegexString
+
         if isinstance(expected_value, YamlRegexString):
             try:
                 pattern = re.compile(expected_value.string)
@@ -134,29 +136,37 @@ def _handle_wildcard_matching(ctx, values, expected_value, wildcard_mode, key_pa
             match_details = [f"element[{i}]: {val}" for i, val, _ in matches[:3]]  # Show first 3 matches
             if len(matches) > 3:
                 match_details.append(f"... and {len(matches) - 3} more matches")
-            return TestResult.success([
-                f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: any)',
-                f'matching values: {", ".join(match_details)}'
-            ])
-        return TestResult.failed([
-            f'wildcard path "{key_path}" matched 0/{len(values)} values (mode: any)',
-            f'expected: "{expected_value}"',
-            f'got values: {[val for _, val, _ in non_matches[:5]]}'  # Show first 5 non-matches
-        ])
+            return TestResult.success(
+                [
+                    f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: any)',
+                    f'matching values: {", ".join(match_details)}',
+                ]
+            )
+        return TestResult.failed(
+            [
+                f'wildcard path "{key_path}" matched 0/{len(values)} values (mode: any)',
+                f'expected: "{expected_value}"',
+                f'got values: {[val for _, val, _ in non_matches[:5]]}',  # Show first 5 non-matches
+            ]
+        )
     # wildcard_mode == 'all'
     if not non_matches:
-        return TestResult.success([
-            f'wildcard path "{key_path}" matched all {len(values)} values (mode: all)',
-            f'all values equal: "{expected_value}"'
-        ])
+        return TestResult.success(
+            [
+                f'wildcard path "{key_path}" matched all {len(values)} values (mode: all)',
+                f'all values equal: "{expected_value}"',
+            ]
+        )
     non_match_details = [f"element[{i}]: {val}" for i, val, _ in non_matches[:3]]  # Show first 3 non-matches
     if len(non_matches) > 3:
         non_match_details.append(f"... and {len(non_matches) - 3} more non-matches")
-    return TestResult.failed([
-        f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: all)',
-        f'expected: "{expected_value}"',
-        f'non-matching values: {", ".join(non_match_details)}'
-    ])
+    return TestResult.failed(
+        [
+            f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: all)',
+            f'expected: "{expected_value}"',
+            f'non-matching values: {", ".join(non_match_details)}',
+        ]
+    )
 
 
 @testfunction(
@@ -218,7 +228,14 @@ def contains_key(ctx, dst: str, key_path: str):
     description='tests if JSON value at key path matches expected value using placeholders (supports wildcards [*] and * with any/all modes)',
     category=HostModeCategory.FILE_CONTENT,
 )
-def value_matches(ctx, dst: str, key_path: str, expected_value: str | int | float | bool | None = None, regex_match: bool = False, wildcard_mode: str = "any"):
+def value_matches(
+    ctx,
+    dst: str,
+    key_path: str,
+    expected_value: str | int | float | bool | None = None,
+    regex_match: bool = False,
+    wildcard_mode: str = "any",
+):
     """Pass when the JSON value at ``key_path`` in ``dst`` equals (or matches) ``expected_value``.
 
     Use for: asserting a setting/field value. If the path yields several values (a wildcard,
@@ -265,7 +282,9 @@ def value_matches(ctx, dst: str, key_path: str, expected_value: str | int | floa
             # Handle wildcard mode - check if we have multiple values
             if isinstance(value, list) and len(value) > 1:
                 # Multiple values from wildcard matching
-                return _handle_wildcard_matching(ctx, value, expected_value, wildcard_mode, key_path, regex_match=regex_match)
+                return _handle_wildcard_matching(
+                    ctx, value, expected_value, wildcard_mode, key_path, regex_match=regex_match
+                )
             if isinstance(value, list) and len(value) == 1:
                 # Single value from wildcard (treat as regular match)
                 value = value[0]

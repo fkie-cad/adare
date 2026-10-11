@@ -26,7 +26,9 @@ async def check_request(request_ulid: str):
 
     aiohttp_session = aiohttp.ClientSession()
     try:
-        async with aiohttp_session.get(config_server.CHECK_REQUEST_URL + f"?ulid={request_ulid}", timeout=config_server.TIMEOUT_SECONDS) as response:
+        async with aiohttp_session.get(
+            config_server.CHECK_REQUEST_URL + f"?ulid={request_ulid}", timeout=config_server.TIMEOUT_SECONDS
+        ) as response:
             if response.status == 200:
                 return await response.json()
             log.error(f'request error ({response.status}, {await response.text()})')
@@ -85,7 +87,8 @@ async def send_experiment_request(request_ulid: str):
             'tags': [
                 {
                     'name': tag.name,
-                } for tag in experiment.tags
+                }
+                for tag in experiment.tags
             ],
             'os_info': {
                 'os': experiment.os_info.os,
@@ -108,7 +111,8 @@ async def send_experiment_request(request_ulid: str):
                             {
                                 'name': parameter.name,
                                 'dtype': parameter.dtype,
-                            } for parameter in abstract_test.testfunction.possible_parameters
+                            }
+                            for parameter in abstract_test.testfunction.possible_parameters
                         ],
                     },
                     'parameters': [
@@ -118,14 +122,17 @@ async def send_experiment_request(request_ulid: str):
                                 'name': parameter.parameter.name,
                                 'dtype': parameter.parameter.dtype,
                             },
-                        } for parameter in abstract_test.parameters
+                        }
+                        for parameter in abstract_test.parameters
                     ],
                     'tool': {
                         'name': abstract_test.tool.name,
                         'command': abstract_test.tool.command,
-                    } if abstract_test.tool else None,
-
-                } for abstract_test in experiment.abstract_tests
+                    }
+                    if abstract_test.tool
+                    else None,
+                }
+                for abstract_test in experiment.abstract_tests
             ],
         }
         data['experiment'] = experiment_data
@@ -142,7 +149,6 @@ async def send_experiment_request(request_ulid: str):
             # add experiment data as json
             metadata_mp = mpwriter.append(json.dumps(data))
             metadata_mp.set_content_disposition('json', name='metadata')
-
 
         try:
             async with aiohttp_session.post(config_server.ADD_EXPERIMENT_REQUEST_URL, data=mpwriter) as resp:

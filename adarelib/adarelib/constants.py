@@ -3,6 +3,7 @@ from enum import IntEnum
 # timestamp format
 TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%f'
 
+
 class StatusEnum(IntEnum):
     NONE = 1
     SUCCESS = 2
@@ -69,6 +70,7 @@ class StatusEnum(IntEnum):
         elif value == StatusEnum.PAUSE:
             icon = ':pause_button:'
         from rich.text import Text
+
         return f'[{colorname}]{Text.from_markup(icon)}[/{colorname}]' if colorname else Text.from_markup(icon)
 
     @staticmethod
@@ -98,11 +100,12 @@ class StatusEnum(IntEnum):
 
 class VMStatus(IntEnum):
     """Status values for VM availability and readiness"""
-    IMPORTED = 1      # VM imported but not verified
-    READY = 2         # VM exists and base snapshot available
-    MISSING = 3       # VM should exist but not found in VirtualBox
+
+    IMPORTED = 1  # VM imported but not verified
+    READY = 2  # VM exists and base snapshot available
+    MISSING = 3  # VM should exist but not found in VirtualBox
     SNAPSHOT_MISSING = 4  # VM exists but base snapshot missing
-    CORRUPTED = 5     # VM or snapshot corrupted/invalid
+    CORRUPTED = 5  # VM or snapshot corrupted/invalid
 
 
 class VmInstanceStatus(IntEnum):
@@ -111,9 +114,10 @@ class VmInstanceStatus(IntEnum):
 
     Uses integer values with string conversion methods for database compatibility.
     """
-    ACTIVE = 1          # Instance is currently in use by an experiment
-    AVAILABLE = 2       # Instance is ready for reuse
-    CLEANUP_PENDING = 3 # Instance is marked for cleanup
+
+    ACTIVE = 1  # Instance is currently in use by an experiment
+    AVAILABLE = 2  # Instance is ready for reuse
+    CLEANUP_PENDING = 3  # Instance is marked for cleanup
 
     @property
     def string_value(self) -> str:

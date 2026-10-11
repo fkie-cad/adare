@@ -16,10 +16,7 @@ def exec_manage_reset_db(arguments):
 
     if result.success:
         if result.data.was_reset:
-            print_success_message(
-                title='Global database reset successfully!',
-                location=str(result.data.location)
-            )
+            print_success_message(title='Global database reset successfully!', location=str(result.data.location))
         else:
             print("No global database found to reset")
     else:
@@ -232,7 +229,7 @@ def exec_manage_vm_runtime_refresh(arguments):
     if result.success:
         print_success_message(
             title='VM runtime refreshed successfully!',
-            location=str(result.data.project_path) if result.data.project_path else None
+            location=str(result.data.project_path) if result.data.project_path else None,
         )
         print("VM runtime files are now up-to-date")
     else:
@@ -248,7 +245,7 @@ def exec_manage_vm_runtime_build(arguments):
     if result.success:
         print_success_message(
             title='VM runtime wheels built successfully!',
-            location=str(result.data.wheels_dir) if result.data.wheels_dir else None
+            location=str(result.data.wheels_dir) if result.data.wheels_dir else None,
         )
         if result.data.adarelib_wheel:
             print(f"  - {result.data.adarelib_wheel}")

@@ -10,6 +10,7 @@ External snapshot approach:
 - Metadata tracked in database (not libvirt)
 - Better reliability and persistence than internal snapshots
 """
+
 import json
 import logging
 import os
@@ -45,7 +46,10 @@ class SnapshotMixin(AbstractSnapshotMixin):
         try:
             result = subprocess.run(
                 ['virsh', 'domblklist', self.vm_name, '--details'],
-                capture_output=True, text=True, timeout=10, check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
             )
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
             log.warning(f"domblklist probe failed ({e}); assuming libvirt external snapshot")
@@ -126,7 +130,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 capture_output=True,
                 text=True,
                 timeout=2,
-                check=False
+                check=False,
             )
             return result.returncode == 0
         except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -195,9 +199,9 @@ class SnapshotMixin(AbstractSnapshotMixin):
             try:
                 # Detach device (live config)
                 domain.detachDevice(xml)
-                log.debug(f"Requested detach for virtiofs device {i+1}/{count}")
+                log.debug(f"Requested detach for virtiofs device {i + 1}/{count}")
             except libvirt.libvirtError as e:
-                log.error(f"Failed to detach virtiofs device {i+1}: {e}")
+                log.error(f"Failed to detach virtiofs device {i + 1}: {e}")
                 return False
 
         # 2. Poll until all virtiofs devices are gone
@@ -214,7 +218,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             # Log progress if waiting
             elapsed = time.time() - start_time
             if elapsed > 1.0:
-                 log.debug(f"Waiting for detachment... ({len(remaining)} remaining)")
+                log.debug(f"Waiting for detachment... ({len(remaining)} remaining)")
 
             time.sleep(0.5)
 
@@ -246,9 +250,9 @@ class SnapshotMixin(AbstractSnapshotMixin):
             try:
                 # Attach device (live config)
                 domain.attachDevice(xml)
-                log.debug(f"Attached virtiofs device {i+1}/{count}")
+                log.debug(f"Attached virtiofs device {i + 1}/{count}")
             except libvirt.libvirtError as e:
-                log.error(f"Failed to attach virtiofs device {i+1}: {e}")
+                log.error(f"Failed to attach virtiofs device {i + 1}: {e}")
                 success = False
 
         return success
@@ -305,6 +309,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
         try:
             # Wait for agent to come back (it should be running as we restored state)
             import time
+
             time.sleep(2)
             if not self._check_guest_agent():
                 log.warning("Guest agent not responsive after restore, cannot refresh mounts")
@@ -368,7 +373,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
         unique_id = str(uuid.uuid4())[:8]
         task_name = f"adare_snap_{unique_id}"
         script_path = f"C:\\Windows\\Temp\\adare_{unique_id}.ps1"
-        rl = "LIMITED" # or HIGHEST if admin needed, default to LIMITED for regular user
+        rl = "LIMITED"  # or HIGHEST if admin needed, default to LIMITED for regular user
 
         # Construct the complex PowerShell script
         # Note: We need to escape internal quotes carefully
@@ -404,33 +409,23 @@ class SnapshotMixin(AbstractSnapshotMixin):
     def _run_guest_agent_command_sync(self, cmd_str: str) -> None:
         """Helper to run QGA commands synchronously via libvirt qemu-agent-command."""
         import json
+
         try:
             # Construct QMP command for guest-exec
             # We use capture-output to avoid hanging if the command produces output
             if 'windows' in self.guest_os.lower():
                 qmp_cmd = {
                     "execute": "guest-exec",
-                    "arguments": {
-                        "path": "cmd.exe",
-                        "arg": ["/c", cmd_str],
-                        "capture-output": True
-                    }
+                    "arguments": {"path": "cmd.exe", "arg": ["/c", cmd_str], "capture-output": True},
                 }
             else:
                 qmp_cmd = {
                     "execute": "guest-exec",
-                    "arguments": {
-                        "path": "/bin/sh",
-                        "arg": ["-c", cmd_str],
-                        "capture-output": True
-                    }
+                    "arguments": {"path": "/bin/sh", "arg": ["-c", cmd_str], "capture-output": True},
                 }
 
             cmd_json = json.dumps(qmp_cmd)
-            subprocess.run(
-                ['virsh', 'qemu-agent-command', self.vm_name, cmd_json],
-                check=False, capture_output=True
-            )
+            subprocess.run(['virsh', 'qemu-agent-command', self.vm_name, cmd_json], check=False, capture_output=True)
 
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
             log.warning(f"Failed to run sync guest command: {e}")
@@ -454,17 +449,14 @@ class SnapshotMixin(AbstractSnapshotMixin):
 
             # Wait a bit to ensure flush completes
             import time
+
             time.sleep(2)
 
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
             log.warning(f"Failed to sync guest filesystem: {e}")
 
     def create_external_snapshot(
-        self,
-        snapshot_name: str,
-        memory_path: str,
-        disk_path: str,
-        use_quiesce: bool = True
+        self, snapshot_name: str, memory_path: str, disk_path: str, use_quiesce: bool = True
     ) -> bool:
         """
         Create a consistent live checkpoint using 'virsh snapshot-create'.
@@ -502,9 +494,8 @@ class SnapshotMixin(AbstractSnapshotMixin):
         # snapshots are impossible, so use a QMP internal (qcow2) snapshot.
         if self._use_qmp_internal_snapshot():
             from adare.hypervisor.qemu import qmp_internal_snapshot
-            return qmp_internal_snapshot.create(
-                self.config.qmp_socket_path, snapshot_name, memory_path, disk_path
-            )
+
+            return qmp_internal_snapshot.create(self.config.qmp_socket_path, snapshot_name, memory_path, disk_path)
 
         snapshot_success = False
         virtiofs_payloads = []
@@ -551,6 +542,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     domain.suspend()
                     vm_was_suspended = True
                     import time
+
                     time.sleep(1)  # Give it a moment
             except libvirt.libvirtError as e:
                 log.warning(f"Failed to suspend VM: {e}")
@@ -564,25 +556,25 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     tmp_xml.flush()
 
                     cmd = [
-                        'virsh', 'snapshot-create', self.vm_name, tmp_xml.name,
+                        'virsh',
+                        'snapshot-create',
+                        self.vm_name,
+                        tmp_xml.name,
                         '--live',
                         '--atomic',
-                        '--no-metadata' # Important: We manage snapshot files ourselves
+                        '--no-metadata',  # Important: We manage snapshot files ourselves
                     ]
 
                     # Quiesce logic:
                     # If we suspended, we don't need --quiesce (agent command).
                     # 'virsh snapshot-create --live' on a paused domain effectively snapshots the state.
                     if use_quiesce and not memory_path:
-                         # Disk-only snapshot usually needs quiesce if running
-                         if not vm_was_suspended:
+                        # Disk-only snapshot usually needs quiesce if running
+                        if not vm_was_suspended:
                             cmd.append('--quiesce')
 
                     log.info("Executing atomic snapshot creation...")
-                    subprocess.run(
-                        cmd,
-                        check=True, capture_output=True
-                    )
+                    subprocess.run(cmd, check=True, capture_output=True)
 
                 log.info("Checkpoint created successfully.")
                 snapshot_success = True
@@ -636,11 +628,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
 
         return snapshot_success
 
-    def restore_external_snapshot(
-        self,
-        memory_path: str,
-        disk_path: str
-    ) -> bool:
+    def restore_external_snapshot(self, memory_path: str, disk_path: str) -> bool:
         """
         Restore VM from external snapshot files.
 
@@ -663,6 +651,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
         # No libvirt-modelled disk: loadvm in place (no destroy/redefine).
         if self._use_qmp_internal_snapshot():
             from adare.hypervisor.qemu import qmp_internal_snapshot
+
             return qmp_internal_snapshot.restore(self.config.qmp_socket_path, memory_path)
 
         # Verify files exist
@@ -677,10 +666,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             # Step 1: Stop VM forcefully
             log.debug("Stopping VM")
             destroy_result = subprocess.run(
-                ['virsh', 'destroy', self.vm_name],
-                capture_output=True,
-                text=True,
-                check=False
+                ['virsh', 'destroy', self.vm_name], capture_output=True, text=True, check=False
             )
 
             # It's okay if destroy fails (VM might already be stopped)
@@ -715,13 +701,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 log.debug(f"Deleted dirty overlay: {disk_path}")
 
                 # Re-create fresh overlay
-                create_cmd = [
-                    'qemu-img', 'create',
-                    '-f', 'qcow2',
-                    '-b', backing_file,
-                    '-F', backing_fmt,
-                    disk_path
-                ]
+                create_cmd = ['qemu-img', 'create', '-f', 'qcow2', '-b', backing_file, '-F', backing_fmt, disk_path]
                 subprocess.run(create_cmd, check=True, capture_output=True)
                 log.info(f"Re-created fresh overlay: {disk_path}")
 
@@ -735,7 +715,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 ['virt-xml', self.vm_name, '--edit', '--disk', f'path={disk_path}'],
                 capture_output=True,
                 text=True,
-                check=False
+                check=False,
             )
 
             if virt_xml_result.returncode != 0:
@@ -743,10 +723,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 return False
 
             # Step 2b: Get the updated XML with new disk path
-            dump_result = subprocess.run(
-                ['virsh', 'dumpxml', self.vm_name],
-                check=True, capture_output=True, text=True
-            )
+            dump_result = subprocess.run(['virsh', 'dumpxml', self.vm_name], check=True, capture_output=True, text=True)
             updated_xml = dump_result.stdout
 
             # Step 2c: Strip virtiofs devices from XML to match saved state
@@ -771,6 +748,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             log.debug("Restoring memory state")
 
             import tempfile
+
             with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=True) as tmp_xml:
                 tmp_xml.write(updated_xml)
                 tmp_xml.flush()
@@ -779,7 +757,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     ['virsh', 'restore', memory_path, '--xml', tmp_xml.name],
                     capture_output=True,
                     text=True,
-                    check=False
+                    check=False,
                 )
 
             if restore_result.returncode == 0:
@@ -801,9 +779,9 @@ class SnapshotMixin(AbstractSnapshotMixin):
                         log.info("Resuming VM from paused state after restore...")
                         self._libvirt_domain.resume()
                     elif state != "running":
-                         # Just in case it's somehow "shutoff" or something unexpected, try to start/resume
-                         log.warning(f"VM state after restore is '{state}', attempting resume...")
-                         self._libvirt_domain.resume()
+                        # Just in case it's somehow "shutoff" or something unexpected, try to start/resume
+                        log.warning(f"VM state after restore is '{state}', attempting resume...")
+                        self._libvirt_domain.resume()
 
                 except (HypervisorException, libvirt.libvirtError) as e:
                     log.error(f"Failed to refresh/resume libvirt domain object: {e}")
@@ -851,12 +829,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             log.error(f"Error restoring external snapshot: {e}")
             return False
 
-    def delete_external_snapshot(
-        self,
-        snapshot_name: str,
-        memory_path: str,
-        disk_path: str
-    ) -> bool:
+    def delete_external_snapshot(self, snapshot_name: str, memory_path: str, disk_path: str) -> bool:
         """
         Delete an external snapshot by removing snapshot files.
 
@@ -876,9 +849,8 @@ class SnapshotMixin(AbstractSnapshotMixin):
         # No libvirt-modelled disk: snapshot lives in the overlay, tracked by markers.
         if self._use_qmp_internal_snapshot():
             from adare.hypervisor.qemu import qmp_internal_snapshot
-            return qmp_internal_snapshot.delete(
-                self.config.qmp_socket_path, memory_path, disk_path
-            )
+
+            return qmp_internal_snapshot.delete(self.config.qmp_socket_path, memory_path, disk_path)
 
         success = True
 
@@ -897,7 +869,8 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 except OSError as e:
                     if attempt < 2:
                         import time
-                        log.debug(f"Snapshot memory deletion attempt {attempt+1} failed, retrying: {e}")
+
+                        log.debug(f"Snapshot memory deletion attempt {attempt + 1} failed, retrying: {e}")
                         time.sleep(0.5)
                     else:
                         log.error(f"Failed to delete snapshot memory file after 3 attempts: {e}")
@@ -922,7 +895,8 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 except OSError as e:
                     if attempt < 2:
                         import time
-                        log.debug(f"Snapshot disk deletion attempt {attempt+1} failed, retrying: {e}")
+
+                        log.debug(f"Snapshot disk deletion attempt {attempt + 1} failed, retrying: {e}")
                         time.sleep(0.5)
                     else:
                         log.error(f"Failed to delete snapshot disk file after 3 attempts: {e}")
@@ -949,10 +923,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
         """
         try:
             result = subprocess.run(
-                ['virsh', 'snapshot-list', self.vm_name, '--name'],
-                capture_output=True,
-                text=True,
-                check=False
+                ['virsh', 'snapshot-list', self.vm_name, '--name'], capture_output=True, text=True, check=False
             )
 
             if result.returncode == 0:
@@ -968,30 +939,20 @@ class SnapshotMixin(AbstractSnapshotMixin):
     # Legacy methods kept for backward compatibility but deprecated
     def create_snapshot(self, *args, **kwargs):
         """Deprecated: Use create_external_snapshot instead."""
-        raise NotImplementedError(
-            "Internal snapshots are deprecated. Use create_external_snapshot instead."
-        )
+        raise NotImplementedError("Internal snapshots are deprecated. Use create_external_snapshot instead.")
 
     def snapshot_exists(self, *args, **kwargs):
         """Deprecated: Use database queries instead."""
-        raise NotImplementedError(
-            "Internal snapshot checking is deprecated. Query the database instead."
-        )
+        raise NotImplementedError("Internal snapshot checking is deprecated. Query the database instead.")
 
     def restore_snapshot(self, *args, **kwargs):
         """Deprecated: Use restore_external_snapshot instead."""
-        raise NotImplementedError(
-            "Internal snapshots are deprecated. Use restore_external_snapshot instead."
-        )
+        raise NotImplementedError("Internal snapshots are deprecated. Use restore_external_snapshot instead.")
 
     def delete_snapshot(self, *args, **kwargs):
         """Deprecated: Use delete_external_snapshot instead."""
-        raise NotImplementedError(
-            "Internal snapshots are deprecated. Use delete_external_snapshot instead."
-        )
+        raise NotImplementedError("Internal snapshots are deprecated. Use delete_external_snapshot instead.")
 
     async def ensure_initial_snapshot(self, *args, **kwargs):
         """Deprecated: Not applicable for external snapshots."""
-        raise NotImplementedError(
-            "ensure_initial_snapshot is deprecated for external snapshot workflow."
-        )
+        raise NotImplementedError("ensure_initial_snapshot is deprecated for external snapshot workflow.")

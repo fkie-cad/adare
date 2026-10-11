@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class FileMetadata:
     """Metadata collected from guest file via QGA stat."""
+
     permissions: str | None = None  # e.g. '0644'
     owner: str | None = None
     group: str | None = None
@@ -93,6 +94,7 @@ class GuestFileProxy(VMOperationProxy):
 
         try:
             from adare.hypervisor.qemu.qga_file_transfer import QGAFileTransfer
+
             transfer = QGAFileTransfer(self.vm)
             await transfer.download_file(guest_path, local_path)
         except Exception as e:
@@ -124,6 +126,7 @@ class GuestFileProxy(VMOperationProxy):
 
         try:
             from adare.hypervisor.qemu.qga_file_transfer import QGAFileTransfer
+
             transfer = QGAFileTransfer(self.vm)
             await transfer.download_directory(guest_path, local_path)
         except Exception as e:
@@ -143,10 +146,7 @@ class GuestFileProxy(VMOperationProxy):
             List of matching absolute paths on guest
         """
         if self.is_windows:
-            cmd = (
-                f'Get-ChildItem -Path "{pattern}" -ErrorAction SilentlyContinue '
-                f'| ForEach-Object {{ $_.FullName }}'
-            )
+            cmd = f'Get-ChildItem -Path "{pattern}" -ErrorAction SilentlyContinue | ForEach-Object {{ $_.FullName }}'
         else:
             # Use find with -path for glob-like behavior, or ls for simple globs
             cmd = f"ls -d {pattern} 2>/dev/null || true"
@@ -253,6 +253,7 @@ class GuestFileProxy(VMOperationProxy):
             True if file exists
         """
         from adare.hypervisor.qemu.qga_file_transfer import QGAFileTransfer
+
         transfer = QGAFileTransfer(self.vm)
         return await transfer.file_exists(guest_path)
 

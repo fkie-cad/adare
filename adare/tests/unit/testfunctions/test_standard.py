@@ -57,6 +57,7 @@ FileContentContainsParameter = standard_module.file_content_contains._parameter_
 # Import test helpers (use direct path import)
 helpers_path = Path(__file__).parent / "helpers.py"
 import importlib.util
+
 spec = importlib.util.spec_from_file_location("helpers", helpers_path)
 helpers = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helpers)
@@ -72,6 +73,7 @@ create_binary_file = helpers.create_binary_file
 # FileExists Tests
 # ============================================================================
 
+
 class TestFileExists:
     """Tests for FileExists testfunction."""
 
@@ -80,10 +82,7 @@ class TestFileExists:
         test_file = tmp_path / "test.txt"
         test_file.write_text("content")
 
-        test = FileExists(
-            name="test_exists",
-            parameter=FileExistsParameter(dst=str(test_file))
-        )
+        test = FileExists(name="test_exists", parameter=FileExistsParameter(dst=str(test_file)))
         result = test.test()
 
         assert_test_success(result)
@@ -93,10 +92,7 @@ class TestFileExists:
         """Test failure when file doesn't exist."""
         test_file = tmp_path / "nonexistent.txt"
 
-        test = FileExists(
-            name="test_exists",
-            parameter=FileExistsParameter(dst=str(test_file))
-        )
+        test = FileExists(name="test_exists", parameter=FileExistsParameter(dst=str(test_file)))
         result = test.test()
 
         assert_test_failed(result)
@@ -108,10 +104,7 @@ class TestFileExists:
         test_dir = tmp_path / "testdir"
         test_dir.mkdir()
 
-        test = FileExists(
-            name="test_exists",
-            parameter=FileExistsParameter(dst=str(test_dir))
-        )
+        test = FileExists(name="test_exists", parameter=FileExistsParameter(dst=str(test_dir)))
         result = test.test()
 
         assert_test_failed(result)
@@ -125,11 +118,7 @@ class TestFileExists:
         test_file.write_text("content")
 
         test = FileExists(
-            name="test_exists",
-            parameter=FileExistsParameter(
-                dst=str(tmp_path / "*.txt"),
-                match_mode=match_mode
-            )
+            name="test_exists", parameter=FileExistsParameter(dst=str(tmp_path / "*.txt"), match_mode=match_mode)
         )
         result = test.test()
 
@@ -141,11 +130,7 @@ class TestFileExists:
             (tmp_path / f"test{i}.txt").write_text(f"content{i}")
 
         test = FileExists(
-            name="test_exists",
-            parameter=FileExistsParameter(
-                dst=str(tmp_path / "*.txt"),
-                match_mode="any"
-            )
+            name="test_exists", parameter=FileExistsParameter(dst=str(tmp_path / "*.txt"), match_mode="any")
         )
         result = test.test()
 
@@ -158,11 +143,7 @@ class TestFileExists:
             (tmp_path / f"test{i}.txt").write_text(f"content{i}")
 
         test = FileExists(
-            name="test_exists",
-            parameter=FileExistsParameter(
-                dst=str(tmp_path / "*.txt"),
-                match_mode="single"
-            )
+            name="test_exists", parameter=FileExistsParameter(dst=str(tmp_path / "*.txt"), match_mode="single")
         )
         result = test.test()
 
@@ -172,11 +153,7 @@ class TestFileExists:
     def test_file_exists_glob_no_match_any_mode(self, tmp_path):
         """Test glob pattern with no matches in 'any' mode."""
         test = FileExists(
-            name="test_exists",
-            parameter=FileExistsParameter(
-                dst=str(tmp_path / "*.txt"),
-                match_mode="any"
-            )
+            name="test_exists", parameter=FileExistsParameter(dst=str(tmp_path / "*.txt"), match_mode="any")
         )
         result = test.test()
 
@@ -188,6 +165,7 @@ class TestFileExists:
 # FileDoesNotExist Tests
 # ============================================================================
 
+
 class TestFileDoesNotExist:
     """Tests for FileDoesNotExist testfunction."""
 
@@ -195,10 +173,7 @@ class TestFileDoesNotExist:
         """Test successful check that file doesn't exist."""
         test_file = tmp_path / "nonexistent.txt"
 
-        test = FileDoesNotExist(
-            name="test_not_exists",
-            parameter=FileDoesNotExistParameter(dst=str(test_file))
-        )
+        test = FileDoesNotExist(name="test_not_exists", parameter=FileDoesNotExistParameter(dst=str(test_file)))
         result = test.test()
 
         assert_test_success(result)
@@ -209,10 +184,7 @@ class TestFileDoesNotExist:
         test_file = tmp_path / "test.txt"
         test_file.write_text("content")
 
-        test = FileDoesNotExist(
-            name="test_not_exists",
-            parameter=FileDoesNotExistParameter(dst=str(test_file))
-        )
+        test = FileDoesNotExist(name="test_not_exists", parameter=FileDoesNotExistParameter(dst=str(test_file)))
         result = test.test()
 
         assert_test_failed(result)
@@ -224,10 +196,7 @@ class TestFileDoesNotExist:
         test_dir = tmp_path / "testdir"
         test_dir.mkdir()
 
-        test = FileDoesNotExist(
-            name="test_not_exists",
-            parameter=FileDoesNotExistParameter(dst=str(test_dir))
-        )
+        test = FileDoesNotExist(name="test_not_exists", parameter=FileDoesNotExistParameter(dst=str(test_dir)))
         result = test.test()
 
         assert_test_success(result)
@@ -235,11 +204,7 @@ class TestFileDoesNotExist:
     def test_file_does_not_exist_glob_any_mode_success(self, tmp_path):
         """Test glob pattern with no file matches in 'any' mode."""
         test = FileDoesNotExist(
-            name="test_not_exists",
-            parameter=FileDoesNotExistParameter(
-                dst=str(tmp_path / "*.txt"),
-                match_mode="any"
-            )
+            name="test_not_exists", parameter=FileDoesNotExistParameter(dst=str(tmp_path / "*.txt"), match_mode="any")
         )
         result = test.test()
 
@@ -252,11 +217,7 @@ class TestFileDoesNotExist:
             (tmp_path / f"test{i}.txt").write_text(f"content{i}")
 
         test = FileDoesNotExist(
-            name="test_not_exists",
-            parameter=FileDoesNotExistParameter(
-                dst=str(tmp_path / "*.txt"),
-                match_mode="any"
-            )
+            name="test_not_exists", parameter=FileDoesNotExistParameter(dst=str(tmp_path / "*.txt"), match_mode="any")
         )
         result = test.test()
 
@@ -268,6 +229,7 @@ class TestFileDoesNotExist:
 # DirExists Tests
 # ============================================================================
 
+
 class TestDirExists:
     """Tests for DirExists testfunction."""
 
@@ -276,10 +238,7 @@ class TestDirExists:
         test_dir = tmp_path / "testdir"
         test_dir.mkdir()
 
-        test = DirExists(
-            name="test_dir_exists",
-            parameter=DirExistsParameter(dst=str(test_dir))
-        )
+        test = DirExists(name="test_dir_exists", parameter=DirExistsParameter(dst=str(test_dir)))
         result = test.test()
 
         assert_test_success(result)
@@ -289,10 +248,7 @@ class TestDirExists:
         """Test failure when directory doesn't exist."""
         test_dir = tmp_path / "nonexistent"
 
-        test = DirExists(
-            name="test_dir_exists",
-            parameter=DirExistsParameter(dst=str(test_dir))
-        )
+        test = DirExists(name="test_dir_exists", parameter=DirExistsParameter(dst=str(test_dir)))
         result = test.test()
 
         assert_test_failed(result)
@@ -304,10 +260,7 @@ class TestDirExists:
         test_file = tmp_path / "test.txt"
         test_file.write_text("content")
 
-        test = DirExists(
-            name="test_dir_exists",
-            parameter=DirExistsParameter(dst=str(test_file))
-        )
+        test = DirExists(name="test_dir_exists", parameter=DirExistsParameter(dst=str(test_file)))
         result = test.test()
 
         assert_test_failed(result)
@@ -320,11 +273,7 @@ class TestDirExists:
             (tmp_path / f"dir{i}").mkdir()
 
         test = DirExists(
-            name="test_dir_exists",
-            parameter=DirExistsParameter(
-                dst=str(tmp_path / "dir*"),
-                match_mode="any"
-            )
+            name="test_dir_exists", parameter=DirExistsParameter(dst=str(tmp_path / "dir*"), match_mode="any")
         )
         result = test.test()
 
@@ -336,6 +285,7 @@ class TestDirExists:
 # DirDoesNotExist Tests
 # ============================================================================
 
+
 class TestDirDoesNotExist:
     """Tests for DirDoesNotExist testfunction."""
 
@@ -343,10 +293,7 @@ class TestDirDoesNotExist:
         """Test successful check that directory doesn't exist."""
         test_dir = tmp_path / "nonexistent"
 
-        test = DirDoesNotExist(
-            name="test_dir_not_exists",
-            parameter=DirDoesNotExistParameter(dst=str(test_dir))
-        )
+        test = DirDoesNotExist(name="test_dir_not_exists", parameter=DirDoesNotExistParameter(dst=str(test_dir)))
         result = test.test()
 
         assert_test_success(result)
@@ -357,10 +304,7 @@ class TestDirDoesNotExist:
         test_dir = tmp_path / "testdir"
         test_dir.mkdir()
 
-        test = DirDoesNotExist(
-            name="test_dir_not_exists",
-            parameter=DirDoesNotExistParameter(dst=str(test_dir))
-        )
+        test = DirDoesNotExist(name="test_dir_not_exists", parameter=DirDoesNotExistParameter(dst=str(test_dir)))
         result = test.test()
 
         assert_test_failed(result)
@@ -372,10 +316,7 @@ class TestDirDoesNotExist:
         test_file = tmp_path / "test.txt"
         test_file.write_text("content")
 
-        test = DirDoesNotExist(
-            name="test_dir_not_exists",
-            parameter=DirDoesNotExistParameter(dst=str(test_file))
-        )
+        test = DirDoesNotExist(name="test_dir_not_exists", parameter=DirDoesNotExistParameter(dst=str(test_file)))
         result = test.test()
 
         assert_test_success(result)
@@ -384,6 +325,7 @@ class TestDirDoesNotExist:
 # ============================================================================
 # DirContent Tests
 # ============================================================================
+
 
 class TestDirContent:
     """Tests for DirContent testfunction."""
@@ -396,10 +338,7 @@ class TestDirContent:
 
         test = DirContent(
             name="test_dir_content",
-            parameter=DirContentParameter(
-                dst=str(tmp_path),
-                files=["file1.txt", "file2.txt", "subdir"]
-            )
+            parameter=DirContentParameter(dst=str(tmp_path), files=["file1.txt", "file2.txt", "subdir"]),
         )
         result = test.test()
 
@@ -411,10 +350,7 @@ class TestDirContent:
 
         test = DirContent(
             name="test_dir_content",
-            parameter=DirContentParameter(
-                dst=str(tmp_path),
-                files=["file1.txt", "file2.txt", "file3.txt"]
-            )
+            parameter=DirContentParameter(dst=str(tmp_path), files=["file1.txt", "file2.txt", "file3.txt"]),
         )
         result = test.test()
 
@@ -433,11 +369,7 @@ class TestDirContent:
         (tmp_path / "extra.txt").write_text("extra")
 
         test = DirContent(
-            name="test_dir_content",
-            parameter=DirContentParameter(
-                dst=str(tmp_path),
-                files=["file1.txt"]
-            )
+            name="test_dir_content", parameter=DirContentParameter(dst=str(tmp_path), files=["file1.txt"])
         )
         result = test.test()
 
@@ -449,10 +381,7 @@ class TestDirContent:
         """Test error when directory doesn't exist."""
         test = DirContent(
             name="test_dir_content",
-            parameter=DirContentParameter(
-                dst=str(tmp_path / "nonexistent"),
-                files=["file1.txt"]
-            )
+            parameter=DirContentParameter(dst=str(tmp_path / "nonexistent"), files=["file1.txt"]),
         )
         result = test.test()
 
@@ -463,6 +392,7 @@ class TestDirContent:
 # FileContentMatchesRegex Tests
 # ============================================================================
 
+
 class TestFileContentMatchesRegex:
     """Tests for FileContentMatchesRegex testfunction."""
 
@@ -472,11 +402,7 @@ class TestFileContentMatchesRegex:
         test_file.write_text("Hello World 123")
 
         test = FileContentMatchesRegex(
-            name="test_regex",
-            parameter=FileContentMatchesRegexParameter(
-                dst=str(test_file),
-                regex=r"World \d+"
-            )
+            name="test_regex", parameter=FileContentMatchesRegexParameter(dst=str(test_file), regex=r"World \d+")
         )
         result = test.test()
 
@@ -488,11 +414,7 @@ class TestFileContentMatchesRegex:
         test_file.write_text("Hello World")
 
         test = FileContentMatchesRegex(
-            name="test_regex",
-            parameter=FileContentMatchesRegexParameter(
-                dst=str(test_file),
-                regex=r"\d{5}"
-            )
+            name="test_regex", parameter=FileContentMatchesRegexParameter(dst=str(test_file), regex=r"\d{5}")
         )
         result = test.test()
 
@@ -505,11 +427,7 @@ class TestFileContentMatchesRegex:
         test_file.write_text("content")
 
         test = FileContentMatchesRegex(
-            name="test_regex",
-            parameter=FileContentMatchesRegexParameter(
-                dst=str(test_file),
-                regex=r"[invalid("
-            )
+            name="test_regex", parameter=FileContentMatchesRegexParameter(dst=str(test_file), regex=r"[invalid(")
         )
         result = test.test()
 
@@ -520,10 +438,7 @@ class TestFileContentMatchesRegex:
         """Test failure when file doesn't exist."""
         test = FileContentMatchesRegex(
             name="test_regex",
-            parameter=FileContentMatchesRegexParameter(
-                dst=str(tmp_path / "nonexistent.txt"),
-                regex=r".*"
-            )
+            parameter=FileContentMatchesRegexParameter(dst=str(tmp_path / "nonexistent.txt"), regex=r".*"),
         )
         result = test.test()
 
@@ -537,11 +452,7 @@ class TestFileContentMatchesRegex:
 
         test = FileContentMatchesRegex(
             name="test_regex",
-            parameter=FileContentMatchesRegexParameter(
-                dst=str(test_file),
-                regex=r"Héllo",
-                encoding="utf-8"
-            )
+            parameter=FileContentMatchesRegexParameter(dst=str(test_file), regex=r"Héllo", encoding="utf-8"),
         )
         result = test.test()
 
@@ -556,11 +467,8 @@ class TestFileContentMatchesRegex:
         test = FileContentMatchesRegex(
             name="test_regex",
             parameter=FileContentMatchesRegexParameter(
-                dst=str(test_file),
-                regex=r"^Hello",
-                encoding="utf-8",
-                strip_bom=True
-            )
+                dst=str(test_file), regex=r"^Hello", encoding="utf-8", strip_bom=True
+            ),
         )
         result = test.test()
 
@@ -571,6 +479,7 @@ class TestFileContentMatchesRegex:
 # FileContentEquals Tests
 # ============================================================================
 
+
 class TestFileContentEquals:
     """Tests for FileContentEquals testfunction."""
 
@@ -580,11 +489,7 @@ class TestFileContentEquals:
         test_file.write_text("Hello World")
 
         test = FileContentEquals(
-            name="test_equals",
-            parameter=FileContentEqualsParameter(
-                dst=str(test_file),
-                content="Hello World"
-            )
+            name="test_equals", parameter=FileContentEqualsParameter(dst=str(test_file), content="Hello World")
         )
         result = test.test()
 
@@ -596,11 +501,7 @@ class TestFileContentEquals:
         test_file.write_text("Hello World")
 
         test = FileContentEquals(
-            name="test_equals",
-            parameter=FileContentEqualsParameter(
-                dst=str(test_file),
-                content="Different Content"
-            )
+            name="test_equals", parameter=FileContentEqualsParameter(dst=str(test_file), content="Different Content")
         )
         result = test.test()
 
@@ -611,10 +512,7 @@ class TestFileContentEquals:
         """Test failure when file doesn't exist."""
         test = FileContentEquals(
             name="test_equals",
-            parameter=FileContentEqualsParameter(
-                dst=str(tmp_path / "nonexistent.txt"),
-                content="content"
-            )
+            parameter=FileContentEqualsParameter(dst=str(tmp_path / "nonexistent.txt"), content="content"),
         )
         result = test.test()
 
@@ -628,11 +526,7 @@ class TestFileContentEquals:
 
         test = FileContentEquals(
             name="test_equals",
-            parameter=FileContentEqualsParameter(
-                dst=str(test_file),
-                content="Héllo Wörld",
-                encoding="utf-8"
-            )
+            parameter=FileContentEqualsParameter(dst=str(test_file), content="Héllo Wörld", encoding="utf-8"),
         )
         result = test.test()
 
@@ -647,11 +541,8 @@ class TestFileContentEquals:
         test = FileContentEquals(
             name="test_equals",
             parameter=FileContentEqualsParameter(
-                dst=str(test_file),
-                content="Hello World",
-                encoding="utf-8",
-                strip_bom=True
-            )
+                dst=str(test_file), content="Hello World", encoding="utf-8", strip_bom=True
+            ),
         )
         result = test.test()
 
@@ -663,11 +554,7 @@ class TestFileContentEquals:
         test_file.write_text("")
 
         test = FileContentEquals(
-            name="test_equals",
-            parameter=FileContentEqualsParameter(
-                dst=str(test_file),
-                content=""
-            )
+            name="test_equals", parameter=FileContentEqualsParameter(dst=str(test_file), content="")
         )
         result = test.test()
 
@@ -678,15 +565,22 @@ class TestFileContentEquals:
 # FileHashMatches Tests
 # ============================================================================
 
+
 class TestFileHashMatches:
     """Tests for FileHashMatches testfunction."""
 
-    @pytest.mark.parametrize("hash_type,expected_hash", [
-        ("md5", "b10a8db164e0754105b7a99be72e3fe5"),
-        ("sha1", "0a4d55a8d778e5022fab701977c5d840bbc486d0"),
-        ("sha256", "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e"),
-        ("sha512", "2c74fd17edafd80e8447b0d46741ee243b7eb74dd2149a0ab1b9246fb30382f27e853d8585719e0e67cbda0daa8f51671064615d645ae27acb15bfb1447f459b"),
-    ])
+    @pytest.mark.parametrize(
+        "hash_type,expected_hash",
+        [
+            ("md5", "b10a8db164e0754105b7a99be72e3fe5"),
+            ("sha1", "0a4d55a8d778e5022fab701977c5d840bbc486d0"),
+            ("sha256", "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e"),
+            (
+                "sha512",
+                "2c74fd17edafd80e8447b0d46741ee243b7eb74dd2149a0ab1b9246fb30382f27e853d8585719e0e67cbda0daa8f51671064615d645ae27acb15bfb1447f459b",
+            ),
+        ],
+    )
     def test_file_hash_matches_success(self, tmp_path, hash_type, expected_hash):
         """Test successful hash match for different algorithms."""
         test_file = tmp_path / "test.txt"
@@ -694,11 +588,7 @@ class TestFileHashMatches:
 
         test = FileHashMatches(
             name="test_hash",
-            parameter=FileHashMatchesParameter(
-                dst=str(test_file),
-                expected_hash=expected_hash,
-                hash_type=hash_type
-            )
+            parameter=FileHashMatchesParameter(dst=str(test_file), expected_hash=expected_hash, hash_type=hash_type),
         )
         result = test.test()
 
@@ -715,8 +605,8 @@ class TestFileHashMatches:
             parameter=FileHashMatchesParameter(
                 dst=str(test_file),
                 expected_hash="0000000000000000000000000000000000000000000000000000000000000000",
-                hash_type="sha256"
-            )
+                hash_type="sha256",
+            ),
         )
         result = test.test()
 
@@ -730,8 +620,8 @@ class TestFileHashMatches:
             parameter=FileHashMatchesParameter(
                 dst=str(tmp_path / "nonexistent.txt"),
                 expected_hash="0000000000000000000000000000000000000000000000000000000000000000",
-                hash_type="sha256"
-            )
+                hash_type="sha256",
+            ),
         )
         result = test.test()
 
@@ -745,11 +635,7 @@ class TestFileHashMatches:
 
         test = FileHashMatches(
             name="test_hash",
-            parameter=FileHashMatchesParameter(
-                dst=str(test_file),
-                expected_hash="abc123",
-                hash_type="invalid_hash"
-            )
+            parameter=FileHashMatchesParameter(dst=str(test_file), expected_hash="abc123", hash_type="invalid_hash"),
         )
         result = test.test()
 
@@ -766,8 +652,8 @@ class TestFileHashMatches:
             parameter=FileHashMatchesParameter(
                 dst=str(test_file),
                 expected_hash="B10A8DB164E0754105B7A99BE72E3FE5",  # uppercase
-                hash_type="md5"
-            )
+                hash_type="md5",
+            ),
         )
         result = test.test()
 
@@ -777,6 +663,7 @@ class TestFileHashMatches:
 # ============================================================================
 # FileTimestamps Tests
 # ============================================================================
+
 
 class TestFileTimestamps:
     """Tests for FileTimestamps testfunction."""
@@ -796,8 +683,8 @@ class TestFileTimestamps:
                 timestamp_type="modified",
                 comparison_type="equals",
                 expected_time=actual_mtime,
-                tolerance_seconds=2
-            )
+                tolerance_seconds=2,
+            ),
         )
         result = test.test()
 
@@ -818,8 +705,8 @@ class TestFileTimestamps:
                 timestamp_type="modified",
                 comparison_type="equals",
                 expected_time=past_time,
-                tolerance_seconds=1
-            )
+                tolerance_seconds=1,
+            ),
         )
         result = test.test()
 
@@ -837,11 +724,8 @@ class TestFileTimestamps:
         test = FileTimestamps(
             name="test_timestamps",
             parameter=FileTimestampsParameter(
-                dst=str(test_file),
-                timestamp_type="modified",
-                comparison_type="before",
-                expected_time=future_time
-            )
+                dst=str(test_file), timestamp_type="modified", comparison_type="before", expected_time=future_time
+            ),
         )
         result = test.test()
 
@@ -858,11 +742,8 @@ class TestFileTimestamps:
         test = FileTimestamps(
             name="test_timestamps",
             parameter=FileTimestampsParameter(
-                dst=str(test_file),
-                timestamp_type="modified",
-                comparison_type="after",
-                expected_time=past_time
-            )
+                dst=str(test_file), timestamp_type="modified", comparison_type="after", expected_time=past_time
+            ),
         )
         result = test.test()
 
@@ -885,8 +766,8 @@ class TestFileTimestamps:
                 timestamp_type="modified",
                 comparison_type="between",
                 start_time=start_time,
-                end_time=end_time
-            )
+                end_time=end_time,
+            ),
         )
         result = test.test()
 
@@ -901,22 +782,22 @@ class TestFileTimestamps:
         test = FileTimestamps(
             name="test_timestamps",
             parameter=FileTimestampsParameter(
-                dst=str(test_file),
-                timestamp_type="modified",
-                comparison_type="within_last",
-                within_duration="1h"
-            )
+                dst=str(test_file), timestamp_type="modified", comparison_type="within_last", within_duration="1h"
+            ),
         )
         result = test.test()
 
         assert_test_success(result)
 
-    @pytest.mark.parametrize("duration,unit", [
-        ("60s", "s"),
-        ("5m", "m"),
-        ("1h", "h"),
-        ("1d", "d"),
-    ])
+    @pytest.mark.parametrize(
+        "duration,unit",
+        [
+            ("60s", "s"),
+            ("5m", "m"),
+            ("1h", "h"),
+            ("1d", "d"),
+        ],
+    )
     def test_file_timestamps_within_last_various_durations(self, tmp_path, duration, unit):
         """Test 'within_last' with various duration formats."""
         test_file = tmp_path / "test.txt"
@@ -925,11 +806,8 @@ class TestFileTimestamps:
         test = FileTimestamps(
             name="test_timestamps",
             parameter=FileTimestampsParameter(
-                dst=str(test_file),
-                timestamp_type="modified",
-                comparison_type="within_last",
-                within_duration=duration
-            )
+                dst=str(test_file), timestamp_type="modified", comparison_type="within_last", within_duration=duration
+            ),
         )
         result = test.test()
 
@@ -952,8 +830,8 @@ class TestFileTimestamps:
                 comparison_type="equals",
                 expected_time=time_str,
                 time_format="%Y-%m-%d %H:%M:%S",
-                tolerance_seconds=10
-            )
+                tolerance_seconds=10,
+            ),
         )
         result = test.test()
 
@@ -968,8 +846,8 @@ class TestFileTimestamps:
                 dst=str(tmp_path / "nonexistent.txt"),
                 timestamp_type="modified",
                 comparison_type="equals",
-                expected_time=datetime.now().timestamp()
-            )
+                expected_time=datetime.now().timestamp(),
+            ),
         )
         result = test.test()
 
@@ -989,11 +867,8 @@ class TestFileTimestamps:
         test = FileTimestamps(
             name="test_timestamps",
             parameter=FileTimestampsParameter(
-                dst=str(test_file),
-                timestamp_type=timestamp_type,
-                comparison_type="within_last",
-                within_duration="1h"
-            )
+                dst=str(test_file), timestamp_type=timestamp_type, comparison_type="within_last", within_duration="1h"
+            ),
         )
         result = test.test()
 
@@ -1003,6 +878,7 @@ class TestFileTimestamps:
 # ============================================================================
 # FilePermissions Tests
 # ============================================================================
+
 
 class TestFilePermissions:
     """Tests for FilePermissions testfunction."""
@@ -1017,11 +893,7 @@ class TestFilePermissions:
         test_file.chmod(0o644)
 
         test = FilePermissions(
-            name="test_permissions",
-            parameter=FilePermissionsParameter(
-                dst=str(test_file),
-                expected_permissions="644"
-            )
+            name="test_permissions", parameter=FilePermissionsParameter(dst=str(test_file), expected_permissions="644")
         )
         result = test.test()
 
@@ -1039,10 +911,7 @@ class TestFilePermissions:
 
         test = FilePermissions(
             name="test_permissions",
-            parameter=FilePermissionsParameter(
-                dst=str(test_file),
-                expected_permissions="rwxr-xr-x"
-            )
+            parameter=FilePermissionsParameter(dst=str(test_file), expected_permissions="rwxr-xr-x"),
         )
         result = test.test()
 
@@ -1058,11 +927,7 @@ class TestFilePermissions:
         test_file.chmod(0o644)
 
         test = FilePermissions(
-            name="test_permissions",
-            parameter=FilePermissionsParameter(
-                dst=str(test_file),
-                expected_permissions="755"
-            )
+            name="test_permissions", parameter=FilePermissionsParameter(dst=str(test_file), expected_permissions="755")
         )
         result = test.test()
 
@@ -1078,15 +943,14 @@ class TestFilePermissions:
 
         # Get current user
         import pwd
+
         current_user = pwd.getpwuid(os.getuid()).pw_name
 
         test = FilePermissions(
             name="test_permissions",
             parameter=FilePermissionsParameter(
-                dst=str(test_file),
-                expected_permissions="644",
-                check_owner=current_user
-            )
+                dst=str(test_file), expected_permissions="644", check_owner=current_user
+            ),
         )
         result = test.test()
 
@@ -1102,15 +966,14 @@ class TestFilePermissions:
 
         # Get current group
         import grp
+
         current_group = grp.getgrgid(os.getgid()).gr_name
 
         test = FilePermissions(
             name="test_permissions",
             parameter=FilePermissionsParameter(
-                dst=str(test_file),
-                expected_permissions="644",
-                check_group=current_group
-            )
+                dst=str(test_file), expected_permissions="644", check_group=current_group
+            ),
         )
         result = test.test()
 
@@ -1121,10 +984,7 @@ class TestFilePermissions:
         """Test failure when file doesn't exist."""
         test = FilePermissions(
             name="test_permissions",
-            parameter=FilePermissionsParameter(
-                dst=str(tmp_path / "nonexistent.txt"),
-                expected_permissions="644"
-            )
+            parameter=FilePermissionsParameter(dst=str(tmp_path / "nonexistent.txt"), expected_permissions="644"),
         )
         result = test.test()
 
@@ -1136,6 +996,7 @@ class TestFilePermissions:
 # FileContentContains Tests
 # ============================================================================
 
+
 class TestFileContentContains:
     """Tests for FileContentContains testfunction."""
 
@@ -1146,11 +1007,7 @@ class TestFileContentContains:
 
         test = FileContentContains(
             name="test_contains",
-            parameter=FileContentContainsParameter(
-                dst=str(test_file),
-                content="World",
-                content_type="string"
-            )
+            parameter=FileContentContainsParameter(dst=str(test_file), content="World", content_type="string"),
         )
         result = test.test()
 
@@ -1164,11 +1021,7 @@ class TestFileContentContains:
 
         test = FileContentContains(
             name="test_contains",
-            parameter=FileContentContainsParameter(
-                dst=str(test_file),
-                content="NotFound",
-                content_type="string"
-            )
+            parameter=FileContentContainsParameter(dst=str(test_file), content="NotFound", content_type="string"),
         )
         result = test.test()
 
@@ -1178,15 +1031,11 @@ class TestFileContentContains:
     def test_file_content_contains_bytes_success(self, tmp_path):
         """Test successful byte pattern search."""
         test_file = tmp_path / "test.bin"
-        test_file.write_bytes(b"Hello\x00World\xFF")
+        test_file.write_bytes(b"Hello\x00World\xff")
 
         test = FileContentContains(
             name="test_contains",
-            parameter=FileContentContainsParameter(
-                dst=str(test_file),
-                content=r"\x00World",
-                content_type="bytes"
-            )
+            parameter=FileContentContainsParameter(dst=str(test_file), content=r"\x00World", content_type="bytes"),
         )
         result = test.test()
 
@@ -1200,11 +1049,7 @@ class TestFileContentContains:
 
         test = FileContentContains(
             name="test_contains",
-            parameter=FileContentContainsParameter(
-                dst=str(test_file),
-                content=r"\xFF\xFF",
-                content_type="bytes"
-            )
+            parameter=FileContentContainsParameter(dst=str(test_file), content=r"\xFF\xFF", content_type="bytes"),
         )
         result = test.test()
 
@@ -1219,11 +1064,8 @@ class TestFileContentContains:
         test = FileContentContains(
             name="test_contains",
             parameter=FileContentContainsParameter(
-                dst=str(test_file),
-                content="Wörld",
-                content_type="string",
-                encoding="utf-8"
-            )
+                dst=str(test_file), content="Wörld", content_type="string", encoding="utf-8"
+            ),
         )
         result = test.test()
 
@@ -1238,12 +1080,8 @@ class TestFileContentContains:
         test = FileContentContains(
             name="test_contains",
             parameter=FileContentContainsParameter(
-                dst=str(test_file),
-                content="Hello",
-                content_type="string",
-                encoding="utf-8",
-                strip_bom=True
-            )
+                dst=str(test_file), content="Hello", content_type="string", encoding="utf-8", strip_bom=True
+            ),
         )
         result = test.test()
 
@@ -1253,10 +1091,7 @@ class TestFileContentContains:
         """Test failure when file doesn't exist."""
         test = FileContentContains(
             name="test_contains",
-            parameter=FileContentContainsParameter(
-                dst=str(tmp_path / "nonexistent.txt"),
-                content="test"
-            )
+            parameter=FileContentContainsParameter(dst=str(tmp_path / "nonexistent.txt"), content="test"),
         )
         result = test.test()
 
@@ -1269,11 +1104,7 @@ class TestFileContentContains:
         test_file.write_text("")
 
         test = FileContentContains(
-            name="test_contains",
-            parameter=FileContentContainsParameter(
-                dst=str(test_file),
-                content="anything"
-            )
+            name="test_contains", parameter=FileContentContainsParameter(dst=str(test_file), content="anything")
         )
         result = test.test()
 
@@ -1285,11 +1116,7 @@ class TestFileContentContains:
         test_file.write_text("Line1\nLine2\tTabbed\r\nWindows")
 
         test = FileContentContains(
-            name="test_contains",
-            parameter=FileContentContainsParameter(
-                dst=str(test_file),
-                content="\n"
-            )
+            name="test_contains", parameter=FileContentContainsParameter(dst=str(test_file), content="\n")
         )
         result = test.test()
 

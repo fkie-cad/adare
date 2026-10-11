@@ -32,8 +32,12 @@ _ENV = {
         'provision': [{'name': 'hardening', 'shell': 'cmd', 'command': 'bcdedit /x'}],
     },
     'os': {
-        'os': 'Windows 11 (ARM64)', 'platform': 'windows', 'distribution': 'Home',
-        'version': '11', 'language': 'English', 'architecture': 'aarch64',
+        'os': 'Windows 11 (ARM64)',
+        'platform': 'windows',
+        'distribution': 'Home',
+        'version': '11',
+        'language': 'English',
+        'architecture': 'aarch64',
     },
 }
 
@@ -63,8 +67,7 @@ def recipe_env(tmp_path, monkeypatch):
     monkeypatch.setattr(recipe_module, 'VMS_DIR', vms)
     monkeypatch.setattr(recipe_module, 'RECIPE_BUILD_LOG_DIR', logs)
     # Free-space preflight must not depend on the developer's actual disk.
-    monkeypatch.setattr(recipe_module.shutil, 'disk_usage',
-                        lambda p: type('U', (), {'free': 500 * 1024 ** 3})())
+    monkeypatch.setattr(recipe_module.shutil, 'disk_usage', lambda p: type('U', (), {'free': 500 * 1024**3})())
 
     return {
         'metadata': parse_environment_file(env_file),
@@ -77,6 +80,7 @@ def recipe_env(tmp_path, monkeypatch):
 
 def _base_path(recipe_env) -> Path:
     from adare.backend.vm.recipe import compute_base_hash
+
     base_hash = compute_base_hash(recipe_env['metadata'])
     return recipe_env['base_cache'] / f'windows11arm64-recipebase-{base_hash[:12]}.qcow2'
 
@@ -94,6 +98,7 @@ def _write_cached_base(recipe_env, marker: bytes = b'cached') -> Path:
 
 def _run(recipe_env, **kwargs):
     from adare.backend.vm.recipe import build_or_reuse_recipe_vm
+
     return build_or_reuse_recipe_vm(
         recipe_env['metadata'],
         base_dir=recipe_env['env_file'].parent,
@@ -104,6 +109,7 @@ def _run(recipe_env, **kwargs):
 
 # --- T9: the base cache ---
 
+
 def test_a_present_base_disk_is_reused_without_invoking_the_installer(recipe_env):
     """Patch the creators to raise: a cache hit must never reach them."""
     _write_cached_base(recipe_env)
@@ -112,14 +118,13 @@ def test_a_present_base_disk_is_reused_without_invoking_the_installer(recipe_env
         raise AssertionError('the OS installer was invoked despite a base cache hit')
 
     with (
-        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-              side_effect=_must_not_run),
-        patch('adare.hypervisor.qemu.vm_creator.linux_creator.create_linux_vm',
-              side_effect=_must_not_run),
-        patch(f'{_RECIPE_MODULE}._provision_disk',
-              return_value=recipe_env['vms'] / 'out.qcow2') as provision,
-        patch('adare.backend.vm.commands.load_vm_file_for_environment',
-              return_value={'vm_id': 'VM1', 'was_existing': False}),
+        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_must_not_run),
+        patch('adare.hypervisor.qemu.vm_creator.linux_creator.create_linux_vm', side_effect=_must_not_run),
+        patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2') as provision,
+        patch(
+            'adare.backend.vm.commands.load_vm_file_for_environment',
+            return_value={'vm_id': 'VM1', 'was_existing': False},
+        ),
     ):
         result = _run(recipe_env)
 
@@ -145,8 +150,10 @@ def test_an_interrupted_build_does_not_poison_the_cache(recipe_env):
         Path(kwargs['vm_dir'] / f"{kwargs['vm_name']}.qcow2").write_bytes(b'x' * 196_928)
         raise KeyboardInterrupt('simulated SIGINT during the OS install')
 
-    with patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-               side_effect=_killed_mid_install), pytest.raises(KeyboardInterrupt):
+    with (
+        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_killed_mid_install),
+        pytest.raises(KeyboardInterrupt),
+    ):
         _run(recipe_env)
 
     assert not base.exists(), 'an interrupted build published a cache entry'
@@ -166,12 +173,12 @@ def test_the_installer_writes_to_a_partial_path_not_the_cache_name(recipe_env):
         return built
 
     with (
-        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-              side_effect=_record),
-        patch(f'{_RECIPE_MODULE}._provision_disk',
-              return_value=recipe_env['vms'] / 'out.qcow2'),
-        patch('adare.backend.vm.commands.load_vm_file_for_environment',
-              return_value={'vm_id': 'VM1', 'was_existing': False}),
+        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_record),
+        patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2'),
+        patch(
+            'adare.backend.vm.commands.load_vm_file_for_environment',
+            return_value={'vm_id': 'VM1', 'was_existing': False},
+        ),
     ):
         _run(recipe_env)
 
@@ -192,12 +199,12 @@ def test_a_truncated_cached_base_is_discarded_and_rebuilt(recipe_env):
         return built
 
     with (
-        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-              side_effect=_rebuild) as creator,
-        patch(f'{_RECIPE_MODULE}._provision_disk',
-              return_value=recipe_env['vms'] / 'out.qcow2'),
-        patch('adare.backend.vm.commands.load_vm_file_for_environment',
-              return_value={'vm_id': 'VM1', 'was_existing': False}),
+        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_rebuild) as creator,
+        patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2'),
+        patch(
+            'adare.backend.vm.commands.load_vm_file_for_environment',
+            return_value={'vm_id': 'VM1', 'was_existing': False},
+        ),
     ):
         _run(recipe_env)
 
@@ -213,12 +220,12 @@ def test_a_plausibly_sized_cached_base_is_still_reused(recipe_env):
         raise AssertionError('a valid cached base was discarded')
 
     with (
-        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-              side_effect=_must_not_run),
-        patch(f'{_RECIPE_MODULE}._provision_disk',
-              return_value=recipe_env['vms'] / 'out.qcow2'),
-        patch('adare.backend.vm.commands.load_vm_file_for_environment',
-              return_value={'vm_id': 'VM1', 'was_existing': False}),
+        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_must_not_run),
+        patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2'),
+        patch(
+            'adare.backend.vm.commands.load_vm_file_for_environment',
+            return_value={'vm_id': 'VM1', 'was_existing': False},
+        ),
     ):
         _run(recipe_env)
 
@@ -231,12 +238,12 @@ def test_an_absent_base_disk_triggers_the_installer(recipe_env):
         return built
 
     with (
-        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-              side_effect=_fake_build) as creator,
-        patch(f'{_RECIPE_MODULE}._provision_disk',
-              return_value=recipe_env['vms'] / 'out.qcow2'),
-        patch('adare.backend.vm.commands.load_vm_file_for_environment',
-              return_value={'vm_id': 'VM1', 'was_existing': False}),
+        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_fake_build) as creator,
+        patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2'),
+        patch(
+            'adare.backend.vm.commands.load_vm_file_for_environment',
+            return_value={'vm_id': 'VM1', 'was_existing': False},
+        ),
     ):
         _run(recipe_env)
 
@@ -253,12 +260,12 @@ def test_reprovision_keeps_the_cached_base(recipe_env):
         raise AssertionError('--reprovision rebuilt the base disk')
 
     with (
-        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-              side_effect=_must_not_run),
-        patch(f'{_RECIPE_MODULE}._provision_disk',
-              return_value=recipe_env['vms'] / 'out.qcow2') as provision,
-        patch('adare.backend.vm.commands.load_vm_file_for_environment',
-              return_value={'vm_id': 'VM2', 'was_existing': False}),
+        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_must_not_run),
+        patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2') as provision,
+        patch(
+            'adare.backend.vm.commands.load_vm_file_for_environment',
+            return_value={'vm_id': 'VM2', 'was_existing': False},
+        ),
     ):
         _run(recipe_env, reprovision=True)
 
@@ -270,12 +277,12 @@ def test_force_rebuilds_the_base_too(recipe_env):
     built = _base_path(recipe_env)
 
     with (
-        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-              return_value=built) as creator,
-        patch(f'{_RECIPE_MODULE}._provision_disk',
-              return_value=recipe_env['vms'] / 'out.qcow2'),
-        patch('adare.backend.vm.commands.load_vm_file_for_environment',
-              return_value={'vm_id': 'VM3', 'was_existing': False}),
+        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', return_value=built) as creator,
+        patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2'),
+        patch(
+            'adare.backend.vm.commands.load_vm_file_for_environment',
+            return_value={'vm_id': 'VM3', 'was_existing': False},
+        ),
     ):
         _run(recipe_env, force=True)
 
@@ -286,17 +293,24 @@ def test_force_rebuilds_the_base_too(recipe_env):
 def test_reprovision_bypasses_the_registered_vm_cache(recipe_env):
     """A recipe-hash cache hit would otherwise short-circuit the whole build."""
     _write_cached_base(recipe_env)
-    existing = type('Vm', (), {
-        'id': 'OLD', 'name': 'old-vm', 'file': str(recipe_env['vms'] / 'old.qcow2'),
-    })()
+    existing = type(
+        'Vm',
+        (),
+        {
+            'id': 'OLD',
+            'name': 'old-vm',
+            'file': str(recipe_env['vms'] / 'old.qcow2'),
+        },
+    )()
     (recipe_env['vms'] / 'old.qcow2').write_bytes(b'previously built')
 
     with (
         patch(f'{_RECIPE_MODULE}.vm_database.get_vm_by_recipe_hash', return_value=existing),
-        patch(f'{_RECIPE_MODULE}._provision_disk',
-              return_value=recipe_env['vms'] / 'out.qcow2') as provision,
-        patch('adare.backend.vm.commands.load_vm_file_for_environment',
-              return_value={'vm_id': 'NEW', 'was_existing': False}),
+        patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2') as provision,
+        patch(
+            'adare.backend.vm.commands.load_vm_file_for_environment',
+            return_value={'vm_id': 'NEW', 'was_existing': False},
+        ),
     ):
         result = _run(recipe_env, reprovision=True)
 
@@ -305,9 +319,15 @@ def test_reprovision_bypasses_the_registered_vm_cache(recipe_env):
 
 
 def test_a_registered_vm_with_a_present_disk_short_circuits_everything(recipe_env):
-    existing = type('Vm', (), {
-        'id': 'OLD', 'name': 'old-vm', 'file': str(recipe_env['vms'] / 'old.qcow2'),
-    })()
+    existing = type(
+        'Vm',
+        (),
+        {
+            'id': 'OLD',
+            'name': 'old-vm',
+            'file': str(recipe_env['vms'] / 'old.qcow2'),
+        },
+    )()
     (recipe_env['vms'] / 'old.qcow2').write_bytes(b'previously built')
 
     def _must_not_run(*args, **kwargs):  # pragma: no cover
@@ -325,6 +345,7 @@ def test_a_registered_vm_with_a_present_disk_short_circuits_everything(recipe_en
 
 # --- preflight: fail before any build starts ---
 
+
 def test_setup_level_bare_with_provision_is_rejected_before_building(recipe_env, tmp_path):
     """The guest agent ships from setup_level 1; level 0 has nothing to talk to."""
     import hashlib
@@ -338,24 +359,29 @@ def test_setup_level_bare_with_provision_is_rejected_before_building(recipe_env,
         raise AssertionError('a build started despite an impossible setup level')
 
     from adare.backend.vm.recipe import build_or_reuse_recipe_vm
-    with patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-               side_effect=_must_not_run), pytest.raises(EnvironmentLoadFailed, match='setup_level'):
+
+    with (
+        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_must_not_run),
+        pytest.raises(EnvironmentLoadFailed, match='setup_level'),
+    ):
         build_or_reuse_recipe_vm(
-            parse_environment_file(env_file), base_dir=env_file.parent,
+            parse_environment_file(env_file),
+            base_dir=env_file.parent,
             iso_override=recipe_env['iso_dir'],
         )
     assert hashlib  # keep the import meaningful for readers
 
 
 def test_insufficient_free_disk_is_rejected_before_building(recipe_env, monkeypatch):
-    monkeypatch.setattr(recipe_module.shutil, 'disk_usage',
-                        lambda p: type('U', (), {'free': 5 * 1024 ** 3})())
+    monkeypatch.setattr(recipe_module.shutil, 'disk_usage', lambda p: type('U', (), {'free': 5 * 1024**3})())
 
     def _must_not_run(**kwargs):  # pragma: no cover
         raise AssertionError('a build started without enough free disk')
 
-    with patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-               side_effect=_must_not_run), pytest.raises(EnvironmentLoadFailed, match='free disk space'):
+    with (
+        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_must_not_run),
+        pytest.raises(EnvironmentLoadFailed, match='free disk space'),
+    ):
         _run(recipe_env)
 
 
@@ -364,13 +390,13 @@ def test_free_disk_requirement_is_lower_when_the_base_is_already_cached(recipe_e
     _write_cached_base(recipe_env)
     # 200 GB: enough for base+overlay+output (1.0x of 160G) but not for a fresh
     # build's 1.5x headroom.
-    monkeypatch.setattr(recipe_module.shutil, 'disk_usage',
-                        lambda p: type('U', (), {'free': 200 * 1024 ** 3})())
+    monkeypatch.setattr(recipe_module.shutil, 'disk_usage', lambda p: type('U', (), {'free': 200 * 1024**3})())
     with (
-        patch(f'{_RECIPE_MODULE}._provision_disk',
-              return_value=recipe_env['vms'] / 'out.qcow2'),
-        patch('adare.backend.vm.commands.load_vm_file_for_environment',
-              return_value={'vm_id': 'VM1', 'was_existing': False}),
+        patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2'),
+        patch(
+            'adare.backend.vm.commands.load_vm_file_for_environment',
+            return_value={'vm_id': 'VM1', 'was_existing': False},
+        ),
     ):
         _run(recipe_env)
 
@@ -379,19 +405,24 @@ def test_a_bad_provision_block_is_rejected_before_the_iso_is_even_hashed(tmp_pat
     """A `{{ version }}` typo must cost seconds, not a multi-hour install."""
     env = yaml.safe_load(yaml.dump(_ENV))
     env['recipe']['iso_sha256'] = 'f' * 64
-    env['recipe']['provision'] = [{
-        'name': 'g', 'for_each': ['1.0'],
-        'steps': [{'name': 's-{{ item }}', 'command': 'get {{ version }}'}],
-    }]
+    env['recipe']['provision'] = [
+        {
+            'name': 'g',
+            'for_each': ['1.0'],
+            'steps': [{'name': 's-{{ item }}', 'command': 'get {{ version }}'}],
+        }
+    ]
     env_file = tmp_path / 'bad.yml'
     env_file.write_text(yaml.dump(env))
 
     from adare.backend.vm.recipe import build_or_reuse_recipe_vm
+
     with pytest.raises(EnvironmentLoadFailed, match="'version' is undefined"):
         build_or_reuse_recipe_vm(parse_environment_file(env_file), base_dir=tmp_path)
 
 
 # --- no-provision path stays byte-identical to the old behaviour ---
+
 
 def test_a_provisionless_recipe_never_enters_stage_two(tmp_path, monkeypatch):
     import hashlib
@@ -415,16 +446,19 @@ def test_a_provisionless_recipe_never_enters_stage_two(tmp_path, monkeypatch):
         raise AssertionError('Stage 2 ran for a recipe with no provision steps')
 
     from adare.backend.vm.recipe import build_or_reuse_recipe_vm
+
     with (
-        patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-              return_value=vms / 'built.qcow2') as creator,
+        patch(
+            'adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', return_value=vms / 'built.qcow2'
+        ) as creator,
         patch(f'{_RECIPE_MODULE}._provision_disk', side_effect=_must_not_run),
         patch(f'{_RECIPE_MODULE}._build_base_disk', side_effect=_must_not_run),
-        patch('adare.backend.vm.commands.load_vm_file_for_environment',
-              return_value={'vm_id': 'VM1', 'was_existing': False}),
+        patch(
+            'adare.backend.vm.commands.load_vm_file_for_environment',
+            return_value={'vm_id': 'VM1', 'was_existing': False},
+        ),
     ):
-        build_or_reuse_recipe_vm(parse_environment_file(env_file), base_dir=tmp_path,
-                                 iso_override=iso_dir)
+        build_or_reuse_recipe_vm(parse_environment_file(env_file), base_dir=tmp_path, iso_override=iso_dir)
 
     # Built straight into managed VM storage under the old naming, not the cache.
     assert creator.call_args.kwargs['vm_dir'] is None

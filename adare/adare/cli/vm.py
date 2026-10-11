@@ -50,8 +50,12 @@ def exec_vm_list_snapshots(arguments):
 
     def _panel():
         if not snapshots:
-            return Panel('[yellow]No snapshots found[/yellow]', title='[b gold3]snapshots[/b gold3]',
-                         border_style='blue', title_align='left')
+            return Panel(
+                '[yellow]No snapshots found[/yellow]',
+                title='[b gold3]snapshots[/b gold3]',
+                border_style='blue',
+                title_align='left',
+            )
         table = Table(expand=True)
         table.add_column('name', style='yellow', no_wrap=True)
         table.add_column('type', style='cyan', no_wrap=True)
@@ -59,11 +63,19 @@ def exec_vm_list_snapshots(arguments):
         table.add_column('created', style='dim', no_wrap=True)
         table.add_column('description', style='dim')
         for snap in snapshots:
-            table.add_row(snap.name, snap.snapshot_type, snap.vm_instance_id or '-',
-                          snap.created_at.strftime('%Y-%m-%d %H:%M:%S') if snap.created_at else '-',
-                          snap.description or '')
-        return Panel(table, title=f'[b gold3]snapshots ({len(snapshots)} total)[/b gold3]',
-                     border_style='blue', title_align='left')
+            table.add_row(
+                snap.name,
+                snap.snapshot_type,
+                snap.vm_instance_id or '-',
+                snap.created_at.strftime('%Y-%m-%d %H:%M:%S') if snap.created_at else '-',
+                snap.description or '',
+            )
+        return Panel(
+            table,
+            title=f'[b gold3]snapshots ({len(snapshots)} total)[/b gold3]',
+            border_style='blue',
+            title_align='left',
+        )
 
     emit({'snapshots': snapshots}, rich=_panel)
 
@@ -74,9 +86,7 @@ def exec_vm_delete_snapshot(arguments):
     result = api.vm.delete_snapshot(arguments.instance_id, arguments.snapshot_name)
 
     if result.success:
-        print_success_message(
-            title=f'Snapshot "{arguments.snapshot_name}" deleted successfully!'
-        )
+        print_success_message(title=f'Snapshot "{arguments.snapshot_name}" deleted successfully!')
     else:
         handle_api_error(result)
 
@@ -162,14 +172,10 @@ def exec_vm_watch(arguments):
         )
         return
 
-    url = (
-        f"http://127.0.0.1:{ADARE_WEB_PORT}/vm/watch"
-        f"?name={quote(name)}&view_only={'true' if view_only else 'false'}"
-    )
+    url = f"http://127.0.0.1:{ADARE_WEB_PORT}/vm/watch?name={quote(name)}&view_only={'true' if view_only else 'false'}"
     webbrowser.open(url)
     print_success_message(
-        title=f"Opening live view for '{name}'"
-        + (" (view-only)" if view_only else " (interactive)"),
+        title=f"Opening live view for '{name}'" + (" (view-only)" if view_only else " (interactive)"),
         next_steps=[f"If no tab opened, visit:  {url}"],
     )
 
@@ -198,12 +204,14 @@ async def exec_vm_test(arguments):
             print("Error: --platform is required when testing an OVA file", file=sys.stderr)
             sys.exit(1)
 
-        result = await api.vm.test_ova(VmTestRequest(
-            ova_file_path=target_path.resolve(),
-            guest_platform=arguments.platform,
-            verbose=arguments.verbose,
-            vm_cleanup_mode=vm_cleanup_mode
-        ))
+        result = await api.vm.test_ova(
+            VmTestRequest(
+                ova_file_path=target_path.resolve(),
+                guest_platform=arguments.platform,
+                verbose=arguments.verbose,
+                vm_cleanup_mode=vm_cleanup_mode,
+            )
+        )
     else:
         # Registered-VM flow - resolve by name
         from adare.database.api.vm import VmApi
@@ -211,33 +219,33 @@ async def exec_vm_test(arguments):
         vm = VmApi().get_vm_by_name(arguments.target)
         if vm is None:
             print(
-                f"Error: '{arguments.target}' is neither an existing file nor a registered VM. "
-                "Run 'adare vm list'.",
-                file=sys.stderr
+                f"Error: '{arguments.target}' is neither an existing file nor a registered VM. Run 'adare vm list'.",
+                file=sys.stderr,
             )
             sys.exit(1)
 
         # Derive platform from osinfo unless overridden on the command line
         if vm.osinfo is None and not arguments.platform:
             print(
-                f"Error: cannot determine platform for VM '{vm.name}' - it has no OS info; "
-                "pass --platform",
-                file=sys.stderr
+                f"Error: cannot determine platform for VM '{vm.name}' - it has no OS info; pass --platform",
+                file=sys.stderr,
             )
             sys.exit(1)
 
         platform = arguments.platform or vm.osinfo.platform
         architecture = (vm.osinfo.architecture or 'x86_64') if vm.osinfo is not None else 'x86_64'
 
-        result = await api.vm.test_registered_vm(VmRegisteredTestRequest(
-            vm_name=vm.name,
-            disk_path=vm.file,
-            guest_platform=platform,
-            hypervisor=vm.hypervisor,
-            architecture=architecture,
-            verbose=arguments.verbose,
-            vm_cleanup_mode=vm_cleanup_mode
-        ))
+        result = await api.vm.test_registered_vm(
+            VmRegisteredTestRequest(
+                vm_name=vm.name,
+                disk_path=vm.file,
+                guest_platform=platform,
+                hypervisor=vm.hypervisor,
+                architecture=architecture,
+                verbose=arguments.verbose,
+                vm_cleanup_mode=vm_cleanup_mode,
+            )
+        )
 
     if result.success:
         if result.data.success:
@@ -254,15 +262,18 @@ async def exec_vm_test(arguments):
 # VM INSTANCE MANAGEMENT COMMANDS
 # ==========================================
 
+
 def exec_vm_list_instances(arguments):
     """List all VM instances in the system."""
     from adare.frontend.terminal.vm_instances import print_vm_instances_list
+
     print_vm_instances_list()
 
 
 def exec_vm_instance_info(arguments):
     """Get detailed information about a specific VM instance."""
     from adare.frontend.terminal.vm_instances import print_vm_instance_info
+
     print_vm_instance_info(arguments.instance_id)
 
 
@@ -277,7 +288,7 @@ async def exec_vm_instance_remove(arguments):
         if not _is_valid_ulid(arguments.instance_id):
             print_error_message(
                 title="Invalid instance ID format",
-                next_steps=[f"Instance ID '{arguments.instance_id}' is not a valid ULID format"]
+                next_steps=[f"Instance ID '{arguments.instance_id}' is not a valid ULID format"],
             )
             return
 
@@ -292,6 +303,7 @@ async def exec_vm_instance_remove(arguments):
         result = api.vm.clear_all(force=True)
         if result.success:
             from adare.frontend.terminal.vm_cleanup import print_vm_clear_all_results
+
             results = {
                 'deleted_count': result.data.deleted_count,
                 'deleted_vms': result.data.deleted_vms,
@@ -305,20 +317,24 @@ async def exec_vm_instance_remove(arguments):
     elif arguments.all and not arguments.force:
         print_error_message(
             title="--all requires --force",
-            next_steps=["Use --all --force to remove ALL instances (including running ones)",
-                        "Use --stopped to remove only stopped instances"]
+            next_steps=[
+                "Use --all --force to remove ALL instances (including running ones)",
+                "Use --stopped to remove only stopped instances",
+            ],
         )
 
     elif getattr(arguments, 'environment_ulid', None):
         # Remove all VMs for environment — replaces 'vm clear environment'
         if not arguments.force:
             from adare.frontend.terminal.vm_cleanup import print_vm_clear_environment_confirmation
+
             print_vm_clear_environment_confirmation(arguments.environment_ulid)
             return
 
         result = api.vm.clear_by_environment(arguments.environment_ulid, force=True)
         if result.success:
             from adare.frontend.terminal.vm_cleanup import print_vm_clear_environment_results
+
             results = {
                 'deleted_count': result.data.deleted_count,
                 'deleted_vms': result.data.deleted_vms,
@@ -343,19 +359,21 @@ async def exec_vm_instance_remove(arguments):
 
     elif arguments.experiment_id:
         from adare.backend.vm.commands import cleanup_vm_instances_for_experiment
+
         await cleanup_vm_instances_for_experiment(arguments.experiment_id)
         print_vm_instance_cleanup_results([arguments.experiment_id], "experiment instances")
 
     else:
         print_error_message(
             title="No removal criteria specified",
-            next_steps=["Use --id, --stopped, --experiment, --all --force, or --env --force"]
+            next_steps=["Use --id, --stopped, --experiment, --all --force, or --env --force"],
         )
 
 
 def _is_valid_ulid(ulid_string):
     """Validate ULID format."""
     import re
+
     # ULID format: 26 characters, base32 encoded (0-9, A-Z excluding I, L, O, U)
     ulid_pattern = r'^[0-9A-HJKMNP-TV-Z]{26}$'
     return bool(re.match(ulid_pattern, ulid_string))
@@ -492,7 +510,7 @@ def exec_vm_prune(arguments):
         # Final backstop: never touch overlay/dev artifacts.
         if '-overlay-' in name or '-dev-' in name:
             continue
-        stem = name[:-len('-base.qcow2')]
+        stem = name[: -len('-base.qcow2')]
         if stem in referenced:
             continue  # still referenced — keep
         _add(base_file)
@@ -503,7 +521,7 @@ def exec_vm_prune(arguments):
         name = nvram_file.name
         if '-overlay-' in name or '-dev-' in name:
             continue
-        stem = name[:-len('-nvram.fd')]
+        stem = name[: -len('-nvram.fd')]
         if stem in referenced:
             continue
         _add(nvram_file)
@@ -547,8 +565,7 @@ def exec_vm_prune(arguments):
 
     total_bytes = 0
     if orphan_files:
-        click.echo("\nOrphaned base disks / NVRAM"
-                   + (" + stale recipe base cache" if stale_bases else "") + ":")
+        click.echo("\nOrphaned base disks / NVRAM" + (" + stale recipe base cache" if stale_bases else "") + ":")
         click.echo(f"  {'SIZE':>12}  FILE")
         for path in orphan_files:
             size = _physical_size(path)

@@ -12,6 +12,7 @@ from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 
 # --- Helpers ---
 
+
 def _make_os_def(**overrides) -> OsDefinition:
     """Create a minimal OsDefinition for testing."""
     defaults = dict(
@@ -58,8 +59,8 @@ class FailingInstallCreator(BaseVMCreator):
 
 # --- Tests: Abstract nature ---
 
-class TestBaseVMCreatorAbstract:
 
+class TestBaseVMCreatorAbstract:
     def test_cannot_instantiate_base_class(self):
         """BaseVMCreator is abstract and cannot be instantiated directly."""
         os_def = _make_os_def()
@@ -91,8 +92,8 @@ class TestBaseVMCreatorAbstract:
 
 # --- Tests: Default values ---
 
-class TestDefaultValues:
 
+class TestDefaultValues:
     def test_default_vm_name_uses_os_name_and_date(self):
         """_default_vm_name generates '{os_def.name}-YYYYMMDD'."""
         os_def = _make_os_def(name='mylinux')
@@ -140,8 +141,8 @@ class TestDefaultValues:
 
 # --- Tests: Template method order ---
 
-class TestCreateTemplateMethod:
 
+class TestCreateTemplateMethod:
     @patch('adare.hypervisor.qemu.vm_creator.base_creator.console')
     @patch('adare.hypervisor.qemu.vm_creator.base_creator.check_prerequisites')
     @patch('adare.hypervisor.qemu.vm_creator.base_creator.print_vm_config_panel')
@@ -220,8 +221,8 @@ class TestCreateTemplateMethod:
 
 # --- Tests: Cleanup on failure ---
 
-class TestCleanupOnFailure:
 
+class TestCleanupOnFailure:
     def test_cleanup_removes_existing_disk(self, tmp_path):
         """_cleanup_on_failure removes the disk file if it exists."""
         os_def = _make_os_def()
@@ -303,8 +304,8 @@ class TestCleanupOnFailure:
 
 # --- Tests: Disk creation ---
 
-class TestCreateDisk:
 
+class TestCreateDisk:
     @patch('adare.hypervisor.qemu.vm_creator.base_creator.print_section')
     @patch('adare.hypervisor.qemu.vm_creator.base_creator.print_step')
     @patch('adare.hypervisor.qemu.vm_creator.base_creator.create_qcow2_disk')
@@ -418,10 +419,11 @@ class TestCreateDisk:
 
 # --- Tests: VMCreationError hierarchy ---
 
-class TestVMCreationError:
 
+class TestVMCreationError:
     def test_is_hypervisor_exception(self):
         """VMCreationError inherits from HypervisorException."""
         from adare.hypervisor.exceptions import HypervisorException
+
         err = VMCreationError('something broke')
         assert isinstance(err, HypervisorException)

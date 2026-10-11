@@ -7,8 +7,10 @@ from adare.exceptions import LoggedErrorException, LoggedException
 # Root exception for all experiment errors
 # ---------------------------------------------------------------------------
 
+
 class ExperimentException(LoggedErrorException):
     """Base class for all experiment-related errors."""
+
     pass
 
 
@@ -16,8 +18,10 @@ class ExperimentException(LoggedErrorException):
 # File system group
 # ---------------------------------------------------------------------------
 
+
 class ExperimentFileSystemError(ExperimentException):
     """Group base for file/directory errors within experiments."""
+
     pass
 
 
@@ -49,12 +53,12 @@ class ExperimentFileMissingError(ExperimentFileSystemError):
 # Integrity group
 # ---------------------------------------------------------------------------
 
+
 class ExperimentIntegrityError(ExperimentException):
     """Integrity check failures (hash mismatches, modified files, etc.)."""
 
     @classmethod
-    def file_modified(cls, log: logging.Logger, file_type: str, file_name: str,
-                      reload_command: str):
+    def file_modified(cls, log: logging.Logger, file_type: str, file_name: str, reload_command: str):
         """For 'file was modified after loading' errors."""
         return cls(
             log,
@@ -66,23 +70,19 @@ class ExperimentIntegrityError(ExperimentException):
         )
 
     @classmethod
-    def file_not_found(cls, log: logging.Logger, file_type: str, file_path: str,
-                       is_external: bool = False):
+    def file_not_found(cls, log: logging.Logger, file_type: str, file_path: str, is_external: bool = False):
         """For missing file errors."""
         solutions = [f'Check that the {file_type} file exists at: {file_path}']
         if is_external:
             solutions.append('Verify the external path is accessible')
         else:
-            solutions.append(
-                f'Ensure the {file_type} was properly loaded into the experiment'
-            )
-        return cls(log, f'{file_type} not found: {file_path}',
-                   possible_solutions=solutions)
+            solutions.append(f'Ensure the {file_type} was properly loaded into the experiment')
+        return cls(log, f'{file_type} not found: {file_path}', possible_solutions=solutions)
 
     @classmethod
-    def files_changed_after_load(cls, log: logging.Logger, file_type: str,
-                                  changed_files: list, remove_command: str,
-                                  load_command: str):
+    def files_changed_after_load(
+        cls, log: logging.Logger, file_type: str, changed_files: list, remove_command: str, load_command: str
+    ):
         """For 'files changed, need re-load' errors."""
         files_str = ', '.join(str(f) for f in changed_files[:5])
         if len(changed_files) > 5:
@@ -133,8 +133,10 @@ class TestfunctionIntegrityError(ExperimentIntegrityError):
 # Config group
 # ---------------------------------------------------------------------------
 
+
 class ExperimentConfigError(ExperimentException):
     """Group base for experiment configuration errors."""
+
     pass
 
 
@@ -150,28 +152,31 @@ class MultipleEnvironmentsError(ExperimentConfigError):
 # Direct children of ExperimentException (no sub-group)
 # ---------------------------------------------------------------------------
 
+
 class ExperimentAlreadyExistsError(ExperimentException):
     pass
 
 
 class ExperimentNotFoundError(ExperimentException):
     """Raised when an experiment with the given ULID does not exist in the database."""
+
     pass
 
 
 class ExperimentCommandError(ExperimentException):
-    def __init__(self, log: logging.Logger, command: str, exit_code: int,
-                 stdout: str = '', stderr: str = ''):
-        msg = (f'Command "{command}" failed with exit code {exit_code}.'
-               f'\nstdout: {stdout}\nstderr: {stderr}')
+    def __init__(self, log: logging.Logger, command: str, exit_code: int, stdout: str = '', stderr: str = ''):
+        msg = f'Command "{command}" failed with exit code {exit_code}.\nstdout: {stdout}\nstderr: {stderr}'
         super().__init__(log, msg)
 
 
 class VMSetupError(ExperimentException):
-    def __init__(self, log: logging.Logger, vm_name: str, command: str,
-                 exit_code: int, stdout: str = '', stderr: str = ''):
-        msg = (f'VM setup failed for "{vm_name}". Command "{command}" failed '
-               f'with exit code {exit_code}.\nstdout: {stdout}\nstderr: {stderr}')
+    def __init__(
+        self, log: logging.Logger, vm_name: str, command: str, exit_code: int, stdout: str = '', stderr: str = ''
+    ):
+        msg = (
+            f'VM setup failed for "{vm_name}". Command "{command}" failed '
+            f'with exit code {exit_code}.\nstdout: {stdout}\nstderr: {stderr}'
+        )
         super().__init__(log, msg)
 
 
@@ -185,7 +190,7 @@ class AdareVMProcessDiedError(ExperimentException):
         app_log_excerpt: str = None,
         app_log_fetch_error: str = None,
         startup_log_excerpt: str = None,
-        startup_log_fetch_error: str = None
+        startup_log_fetch_error: str = None,
     ):
         """
         Create error message with diagnostic information.
@@ -206,40 +211,35 @@ class AdareVMProcessDiedError(ExperimentException):
             "  - Import errors in adarevm code",
             "  - Permission denied accessing /adare/run/logs/",
             "  - Port 18765 already in use",
-            ""
+            "",
         ]
 
         # Show startup error log FIRST (has Python stacktraces and stderr)
         if startup_log_excerpt:
-            msg_parts.extend([
-                "AdareVM startup errors (stdout/stderr):",
-                "=" * 60,
-                startup_log_excerpt,
-                "=" * 60,
-                ""
-            ])
+            msg_parts.extend(["AdareVM startup errors (stdout/stderr):", "=" * 60, startup_log_excerpt, "=" * 60, ""])
         elif startup_log_fetch_error:
-            msg_parts.extend([
-                f"Could not fetch startup error log: {startup_log_fetch_error}",
-                ""
-            ])
+            msg_parts.extend([f"Could not fetch startup error log: {startup_log_fetch_error}", ""])
 
         # Then show application log (if available)
         if app_log_excerpt:
-            msg_parts.extend([
-                "AdareVM application log (last 100 lines):",
-                "NOTE: If timestamps are old, the process crashed before logging",
-                "=" * 60,
-                app_log_excerpt,
-                "=" * 60,
-                ""
-            ])
+            msg_parts.extend(
+                [
+                    "AdareVM application log (last 100 lines):",
+                    "NOTE: If timestamps are old, the process crashed before logging",
+                    "=" * 60,
+                    app_log_excerpt,
+                    "=" * 60,
+                    "",
+                ]
+            )
         elif app_log_fetch_error:
-            msg_parts.extend([
-                f"Could not fetch application log: {app_log_fetch_error}",
-                "Log location: /adare/run/logs/adarevm.log (Linux) or C:\\adare\\run\\logs\\adarevm.log (Windows)",
-                ""
-            ])
+            msg_parts.extend(
+                [
+                    f"Could not fetch application log: {app_log_fetch_error}",
+                    "Log location: /adare/run/logs/adarevm.log (Linux) or C:\\adare\\run\\logs\\adarevm.log (Windows)",
+                    "",
+                ]
+            )
 
         message = "\n".join(msg_parts)
 
@@ -248,7 +248,7 @@ class AdareVMProcessDiedError(ExperimentException):
             "Verify all Python dependencies are installed in the VM",
             "Ensure /adare/run/logs/ directory exists and is writable",
             "Check if port 18765 is already in use by another process",
-            "Try running the adarevm command manually in the VM to see errors"
+            "Try running the adarevm command manually in the VM to see errors",
         ]
 
         super().__init__(log, message, possible_solutions=solutions)
@@ -257,6 +257,7 @@ class AdareVMProcessDiedError(ExperimentException):
 # ---------------------------------------------------------------------------
 # Non-error exception (kept separate from ExperimentException)
 # ---------------------------------------------------------------------------
+
 
 class ExperimentNotChanged(LoggedException):
     informational = True

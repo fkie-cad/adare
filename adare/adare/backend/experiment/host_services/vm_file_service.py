@@ -30,11 +30,7 @@ class VMFileService:
         """
         self.action_executor = action_executor
 
-    async def pull_file(
-        self,
-        vm_path: str,
-        description: str = "Host test file pull"
-    ) -> Path:
+    async def pull_file(self, vm_path: str, description: str = "Host test file pull") -> Path:
         """
         Pull file or directory from VM to host artifacts directory.
 
@@ -57,10 +53,7 @@ class VMFileService:
             log.debug(f"VM File Service: Pulling '{vm_path}' from VM")
 
             # Reuse existing pull infrastructure
-            result = await self.action_executor.execute_programmatic_pull(
-                src_path=vm_path,
-                description=description
-            )
+            result = await self.action_executor.execute_programmatic_pull(src_path=vm_path, description=description)
 
             if result.success and result.data:
                 dest_path = Path(result.data.get('destination'))
@@ -77,11 +70,7 @@ class VMFileService:
             log.error(f"VM File Service: Pull operation failed: {e}", exc_info=True)
             raise RuntimeError(f"VM file pull failed: {e}") from e
 
-    async def read_file(
-        self,
-        vm_path: str,
-        encoding: str = 'utf-8'
-    ) -> str:
+    async def read_file(self, vm_path: str, encoding: str = 'utf-8') -> str:
         """
         Pull file from VM and read its contents.
 
@@ -101,10 +90,7 @@ class VMFileService:
             log.debug(f"VM File Service: Reading file '{vm_path}' from VM")
 
             # Pull file to host
-            local_path = await self.pull_file(
-                vm_path=vm_path,
-                description=f"Host test read: {vm_path}"
-            )
+            local_path = await self.pull_file(vm_path=vm_path, description=f"Host test read: {vm_path}")
 
             # Read file contents
             if not local_path.exists():
@@ -142,10 +128,7 @@ class VMFileService:
             log.debug(f"VM File Service: Reading bytes from '{vm_path}' in VM")
 
             # Pull file to host
-            local_path = await self.pull_file(
-                vm_path=vm_path,
-                description=f"Host test read bytes: {vm_path}"
-            )
+            local_path = await self.pull_file(vm_path=vm_path, description=f"Host test read bytes: {vm_path}")
 
             # Read file bytes
             if not local_path.exists():
@@ -165,11 +148,7 @@ class VMFileService:
             log.error(f"VM File Service: Read bytes operation failed: {e}", exc_info=True)
             raise RuntimeError(f"VM file read bytes failed: {e}") from e
 
-    async def pull_directory(
-        self,
-        vm_path: str,
-        description: str = "Host test directory pull"
-    ) -> Path:
+    async def pull_directory(self, vm_path: str, description: str = "Host test directory pull") -> Path:
         """
         Pull directory from VM to host artifacts directory.
 

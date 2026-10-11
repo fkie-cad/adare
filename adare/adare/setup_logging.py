@@ -81,8 +81,7 @@ def _determine_file_log_level(arguments: Any) -> int | None:
     return level_mapping.get(log_level)
 
 
-def _setup_application_logger(console_level: int, file_level: int | None,
-                             logfile: str | None) -> None:
+def _setup_application_logger(console_level: int, file_level: int | None, logfile: str | None) -> None:
     """Setup the main application logger using our custom implementation.
 
     Args:
@@ -90,12 +89,7 @@ def _setup_application_logger(console_level: int, file_level: int | None,
         file_level: File logging level (None if no file logging)
         logfile: Path to log file (None if no file logging)
     """
-    logger.setup_logger(
-        loglevel_console=console_level,
-        loglevel_file=file_level,
-        logfile=logfile,
-        console=True
-    )
+    logger.setup_logger(loglevel_console=console_level, loglevel_file=file_level, logfile=logfile, console=True)
 
 
 def _configure_root_logger(console_level: int) -> None:
@@ -134,6 +128,7 @@ def _hide_exception_records(record: logging.LogRecord) -> bool:
     The log file and --verbose/--very-verbose keep the line.
     """
     from adare.exceptions import EXCEPTION_LOG_MARKER
+
     return not getattr(record, EXCEPTION_LOG_MARKER, False)
 
 

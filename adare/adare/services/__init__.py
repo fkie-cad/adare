@@ -4,7 +4,16 @@
 # since eagerly importing e.g. EnvironmentService also runs os_catalog's
 # module-level profile scan, which then fires for commands that never touch
 # environments (e.g. `adare experiment list`).
-__all__ = ['ProjectService', 'EnvironmentService', 'VMService', 'ExperimentService', 'TestfunctionService', 'ManageService', 'ShowService', 'WebService']
+__all__ = [
+    'ProjectService',
+    'EnvironmentService',
+    'VMService',
+    'ExperimentService',
+    'TestfunctionService',
+    'ManageService',
+    'ShowService',
+    'WebService',
+]
 
 _SERVICE_MODULES = {
     'ProjectService': 'project_service',
@@ -23,5 +32,6 @@ def __getattr__(name):
     if module_name is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     import importlib
+
     module = importlib.import_module(f"{__name__}.{module_name}")
     return getattr(module, name)

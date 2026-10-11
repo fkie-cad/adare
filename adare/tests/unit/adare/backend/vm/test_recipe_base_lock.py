@@ -46,8 +46,12 @@ _ENV = {
         'provision': [{'name': 'hardening', 'shell': 'cmd', 'command': 'bcdedit /x'}],
     },
     'os': {
-        'os': 'Windows 11 (ARM64)', 'platform': 'windows', 'distribution': 'Home',
-        'version': '11', 'language': 'English', 'architecture': 'aarch64',
+        'os': 'Windows 11 (ARM64)',
+        'platform': 'windows',
+        'distribution': 'Home',
+        'version': '11',
+        'language': 'English',
+        'architecture': 'aarch64',
     },
 }
 
@@ -76,8 +80,7 @@ def recipe_env(tmp_path, monkeypatch):
     monkeypatch.setattr(recipe_module, 'VMS_DIR', vms)
     monkeypatch.setattr(recipe_module, 'RECIPE_BUILD_LOG_DIR', tmp_path / 'build-logs')
     # Free-space preflight must not depend on the developer's actual disk.
-    monkeypatch.setattr(recipe_module.shutil, 'disk_usage',
-                        lambda p: type('U', (), {'free': 500 * 1024 ** 3})())
+    monkeypatch.setattr(recipe_module.shutil, 'disk_usage', lambda p: type('U', (), {'free': 500 * 1024**3})())
 
     return {
         'metadata': parse_environment_file(env_file),
@@ -90,6 +93,7 @@ def recipe_env(tmp_path, monkeypatch):
 
 def _base_name(recipe_env) -> str:
     from adare.backend.vm.recipe import compute_base_hash
+
     return f'windows11arm64-recipebase-{compute_base_hash(recipe_env["metadata"])[:12]}'
 
 
@@ -110,6 +114,7 @@ def _write_cached_base(recipe_env, marker: bytes = b'cached') -> Path:
 
 def _run(recipe_env, **kwargs):
     from adare.backend.vm.recipe import build_or_reuse_recipe_vm
+
     return build_or_reuse_recipe_vm(
         recipe_env['metadata'],
         base_dir=recipe_env['env_file'].parent,
@@ -128,12 +133,15 @@ def _stage_two_patches(vm_id: str = 'VM1'):
     return (
         patch(f'{_RECIPE_MODULE}.vm_database.get_vm_by_recipe_hash', return_value=None),
         patch(f'{_RECIPE_MODULE}._provision_disk', return_value=Path('/dev/null')),
-        patch('adare.backend.vm.commands.load_vm_file_for_environment',
-              return_value={'vm_id': vm_id, 'was_existing': False}),
+        patch(
+            'adare.backend.vm.commands.load_vm_file_for_environment',
+            return_value={'vm_id': vm_id, 'was_existing': False},
+        ),
     )
 
 
 # --- the lock itself ---
+
 
 def test_flock_excludes_a_second_holder_within_one_process(tmp_path):
     """The assumption the rest of this file rests on.
@@ -181,6 +189,7 @@ def test_an_uncontended_lock_does_not_announce_a_wait(tmp_path):
 
 
 # --- Stage 1 under concurrency ---
+
 
 def test_a_second_builder_waits_instead_of_clobbering_the_first(recipe_env, capsys):
     """The original defect, end to end.
@@ -312,6 +321,7 @@ def test_force_does_not_accept_a_base_published_while_it_waited(recipe_env):
 
 # --- per-attempt artifacts and the lock file's lifetime ---
 
+
 def test_each_attempt_gets_its_own_install_log(recipe_env):
     """The serial log is derived from the disk name, so the name must be per-attempt.
 
@@ -327,9 +337,7 @@ def test_each_attempt_gets_its_own_install_log(recipe_env):
         disk = kwargs['vm_dir'] / f"{kwargs['vm_name']}.qcow2"
         disk.write_bytes(b'x' * 2_000_000)
         # Stand in for `-serial file:{stem}_install.log`, as linux_creator names it.
-        (kwargs['vm_dir'] / f"{kwargs['vm_name']}_install.log").write_text(
-            f'attempt {len(names)}\n'
-        )
+        (kwargs['vm_dir'] / f"{kwargs['vm_name']}_install.log").write_text(f'attempt {len(names)}\n')
         if len(names) == 1:
             raise VMCreationError('simulated installer failure')
         return disk
@@ -361,6 +369,7 @@ def test_a_normal_build_no_longer_forces_the_creator(recipe_env):
     forced. That refusal is an accidental second line of defence against exactly
     this bug, so a plain build must pass the caller's ``force`` through.
     """
+
     def _creator(**kwargs):
         disk = kwargs['vm_dir'] / f"{kwargs['vm_name']}.qcow2"
         disk.write_bytes(b'n' * 2_000_000)
@@ -379,6 +388,7 @@ def test_the_lock_file_survives_the_build(recipe_env):
     The next process would ``open`` a different inode, its ``flock`` would succeed
     at once, and two builders would proceed with everything looking correct.
     """
+
     def _creator(**kwargs):
         disk = kwargs['vm_dir'] / f"{kwargs['vm_name']}.qcow2"
         disk.write_bytes(b'l' * 2_000_000)
@@ -407,6 +417,7 @@ def test_a_cache_hit_takes_no_lock_at_all(recipe_env):
 
 # --- `vm prune` must not reclaim a running install's disk ---
 
+
 def test_prune_leaves_an_in_progress_partial_build_alone(tmp_path, monkeypatch, capsys):
     """`prune --force` used to unlink the disk of every running Stage 1.
 
@@ -429,8 +440,7 @@ def test_prune_leaves_an_in_progress_partial_build_alone(tmp_path, monkeypatch, 
 
     monkeypatch.setattr(configdirectory, 'RECIPE_BASE_CACHE_DIR', cache)
     monkeypatch.setattr(vm_cli, '_live_recipe_base_hashes', lambda: set())
-    monkeypatch.setattr(
-        'adare.hypervisor.qemu.mixins.configuration.get_qemu_disk_dir', lambda: disks)
+    monkeypatch.setattr('adare.hypervisor.qemu.mixins.configuration.get_qemu_disk_dir', lambda: disks)
 
     class _FakeVmApi:
         def __enter__(self):

@@ -62,9 +62,7 @@ def terminate_qemu_on_exit(
     previous: list[tuple[signal.Signals, object]] = []
 
     def _on_signal(signum: int, _frame: object) -> None:
-        raise QemuInstallTerminated(
-            f'{label} terminated by {signal.Signals(signum).name}'
-        )
+        raise QemuInstallTerminated(f'{label} terminated by {signal.Signals(signum).name}')
 
     # signal.signal() is main-thread only; without it we still reap on exceptions.
     if threading.current_thread() is threading.main_thread():
@@ -126,10 +124,7 @@ def wait_for_qemu_exit(
             if retcode != 0:
                 raise subprocess.CalledProcessError(retcode, process.args, stderr=stderr_output)
             if elapsed < 60:
-                log.warning(
-                    f'{label} completed suspiciously fast ({elapsed:.0f}s). '
-                    f'QEMU may have failed to start.'
-                )
+                log.warning(f'{label} completed suspiciously fast ({elapsed:.0f}s). QEMU may have failed to start.')
             return retcode
 
         except subprocess.TimeoutExpired:
@@ -142,9 +137,7 @@ def wait_for_qemu_exit(
                     process.wait(timeout=30)
                 except subprocess.TimeoutExpired:
                     process.kill()
-                raise TimeoutError(
-                    f'{label} did not complete within {timeout_minutes} minutes'
-                ) from None
+                raise TimeoutError(f'{label} did not complete within {timeout_minutes} minutes') from None
 
             # Periodic status update
             now = time.monotonic()

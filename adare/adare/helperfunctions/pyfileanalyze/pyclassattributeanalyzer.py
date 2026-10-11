@@ -14,11 +14,7 @@ class PyClassAttributeAnalyzer:
         self.root = attribute
 
     def get_attribute_as_dict(self) -> dict:
-        attr_dict = {
-            'name': '',
-            'type': '',
-            'value': ''
-        }
+        attr_dict = {'name': '', 'type': '', 'value': ''}
         target = self.root.target
         if type(target) is ast.Name:
             attr_dict['name'] = target.id

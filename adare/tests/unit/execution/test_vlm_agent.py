@@ -43,11 +43,13 @@ def _png_b64(**kw) -> str:
 # Action parser
 # ---------------------------------------------------------------------------
 
+
 def test_parse_click_absolute():
     a = parse_action(
-        '{"reasoning":"r","action":"click","x":100,"y":200,"button":"left",'
-        '"describe":"Next button"}',
-        coord_space='absolute', screen_width=1280, screen_height=800,
+        '{"reasoning":"r","action":"click","x":100,"y":200,"button":"left","describe":"Next button"}',
+        coord_space='absolute',
+        screen_width=1280,
+        screen_height=800,
     )
     assert a.kind == 'click'
     assert (a.x, a.y) == (100, 200)
@@ -57,7 +59,9 @@ def test_parse_click_absolute():
 def test_parse_click_normalized_1000_scales_to_pixels():
     a = parse_action(
         '{"action":"click","x":500,"y":500,"describe":"centre"}',
-        coord_space='normalized_1000', screen_width=1000, screen_height=800,
+        coord_space='normalized_1000',
+        screen_width=1000,
+        screen_height=800,
     )
     assert a.x == 500  # 500/1000 * 1000
     assert a.y == 400  # 500/1000 * 800
@@ -81,13 +85,13 @@ def test_parse_rejects_unknown_and_malformed():
     with pytest.raises(VLMError):
         parse_action('not json at all')
     with pytest.raises(VLMError):
-        parse_action('{"action":"click","describe":"missing coords"}',
-                     screen_width=100, screen_height=100)
+        parse_action('{"action":"click","describe":"missing coords"}', screen_width=100, screen_height=100)
 
 
 # ---------------------------------------------------------------------------
 # Recorder -> parse_playbook round-trip
 # ---------------------------------------------------------------------------
+
 
 def test_recorder_emits_valid_playbook(tmp_path):
     rec = PlaybookRecorder(tmp_path / 'gui_kubuntu.play.yaml', goal='install kubuntu')
@@ -108,8 +112,14 @@ def test_recorder_emits_valid_playbook(tmp_path):
     pb = parse_playbook(path)
     kinds = [type(a).__name__ for a in pb.actions]
     # every click is preceded by a wait_until gate on its own image crop
-    assert kinds == ['WaitUntilAction', 'ClickAction', 'KeyboardAction', 'KeyboardAction',
-                     'WaitUntilAction', 'IdleAction']
+    assert kinds == [
+        'WaitUntilAction',
+        'ClickAction',
+        'KeyboardAction',
+        'KeyboardAction',
+        'WaitUntilAction',
+        'IdleAction',
+    ]
 
     gate = pb.actions[0]
     assert isinstance(gate, WaitUntilAction)
@@ -141,6 +151,7 @@ def test_recorder_key_combination(tmp_path):
 
 def test_recorder_refuses_empty(tmp_path):
     from adare.backend.experiment.vlm.exceptions import PlaybookRecordingError
+
     rec = PlaybookRecorder(tmp_path / 'empty.play.yaml')
     with pytest.raises(PlaybookRecordingError):
         rec.finalize()
@@ -149,6 +160,7 @@ def test_recorder_refuses_empty(tmp_path):
 # ---------------------------------------------------------------------------
 # Agent loop (stubbed model + executor)
 # ---------------------------------------------------------------------------
+
 
 class _FakeClient:
     """Scripted stand-in for VLMClient."""
@@ -184,8 +196,7 @@ class _FakeExecutor:
     async def screenshot(self, region=None):
         self.n += 1
         shade = 30 if self.frozen else min(255, 30 + self.n * 5)
-        return {'status': 'success',
-                'image': {'data': _png_b64(color=(shade, shade, shade)), 'format': 'png'}}
+        return {'status': 'success', 'image': {'data': _png_b64(color=(shade, shade, shade)), 'format': 'png'}}
 
     async def click(self, x, y, button_type='left'):
         self.clicks.append((x, y, button_type))
@@ -214,9 +225,13 @@ async def test_agent_happy_path_records_playbook(tmp_path):
     executor = _FakeExecutor()
     recorder = PlaybookRecorder(tmp_path / 'gui.play.yaml', goal='install')
     agent = GuiAgent(
-        executor, _FakeClient(replies), 'install kubuntu',
-        recorder=recorder, run_dir=tmp_path / 'run',
-        max_steps=20, step_settle_seconds=0,
+        executor,
+        _FakeClient(replies),
+        'install kubuntu',
+        recorder=recorder,
+        run_dir=tmp_path / 'run',
+        max_steps=20,
+        step_settle_seconds=0,
     )
     result = await agent.run()
 
@@ -229,7 +244,12 @@ async def test_agent_happy_path_records_playbook(tmp_path):
     assert result.playbook_path is not None
     pb = parse_playbook(result.playbook_path)
     assert [type(a).__name__ for a in pb.actions] == [
-        'WaitUntilAction', 'ClickAction', 'KeyboardAction', 'KeyboardAction', 'WaitUntilAction']
+        'WaitUntilAction',
+        'ClickAction',
+        'KeyboardAction',
+        'KeyboardAction',
+        'WaitUntilAction',
+    ]
     # The illustrated report exists.
     assert (tmp_path / 'run' / 'install_report.md').exists()
 
@@ -238,8 +258,12 @@ async def test_agent_happy_path_records_playbook(tmp_path):
 async def test_agent_trips_max_steps(tmp_path):
     executor = _FakeExecutor(frozen=False)  # varies → not a stall
     agent = GuiAgent(
-        executor, _FakeClient(['{"action":"note"}'] * 10), 'goal',
-        max_steps=3, stall_limit=99, step_settle_seconds=0,
+        executor,
+        _FakeClient(['{"action":"note"}'] * 10),
+        'goal',
+        max_steps=3,
+        stall_limit=99,
+        step_settle_seconds=0,
     )
     result = await agent.run()
     assert result.success is False
@@ -250,8 +274,12 @@ async def test_agent_trips_max_steps(tmp_path):
 async def test_agent_trips_stall(tmp_path):
     executor = _FakeExecutor(frozen=True)  # identical screen every step
     agent = GuiAgent(
-        executor, _FakeClient(['{"action":"note"}'] * 10), 'goal',
-        max_steps=50, stall_limit=3, step_settle_seconds=0,
+        executor,
+        _FakeClient(['{"action":"note"}'] * 10),
+        'goal',
+        max_steps=50,
+        stall_limit=3,
+        step_settle_seconds=0,
     )
     result = await agent.run()
     assert result.success is False

@@ -8,6 +8,7 @@ These pin the conventions every read-only command builds on (see
 * one error message on stderr, a JSON document in json mode;
 * exit codes 0 ok / 1 error / 2 usage / 3 not found.
 """
+
 import json
 import logging
 from types import SimpleNamespace
@@ -36,12 +37,18 @@ log = logging.getLogger(__name__)
 # exercised end to end through the real decorator.
 # ---------------------------------------------------------------------------
 
+
 def _make_cli():
     from adare.run import AliasedGroup
 
     @click.group(cls=AliasedGroup)
-    @click.option('--output-format', '--format', 'output_format', default=None,
-                  type=click.Choice(['rich', 'plain', 'json', 'yaml']))
+    @click.option(
+        '--output-format',
+        '--format',
+        'output_format',
+        default=None,
+        type=click.Choice(['rich', 'plain', 'json', 'yaml']),
+    )
     @click.pass_context
     def root(ctx, output_format):
         ctx.ensure_object(SimpleNamespace)
@@ -135,14 +142,17 @@ class TestFormatPrecedence:
 # Plain rendering
 # ---------------------------------------------------------------------------
 
+
 class TestPlainRendering:
     ULID = '01KMX521675QWFY2PJ7VD9RVZB'
 
     def test_list_envelope_renders_tsv_with_header(self):
-        data = {'environments': [
-            {'ulid': self.ULID, 'name': 'ubuntu', 'published': False, 'tags': ['a', 'b']},
-            {'ulid': '01KN0687A86EBMP7ND5AAH7G4A', 'name': 'win', 'published': True, 'tags': []},
-        ]}
+        data = {
+            'environments': [
+                {'ulid': self.ULID, 'name': 'ubuntu', 'published': False, 'tags': ['a', 'b']},
+                {'ulid': '01KN0687A86EBMP7ND5AAH7G4A', 'name': 'win', 'published': True, 'tags': []},
+            ]
+        }
         lines = render_plain(data).split('\n')
         assert lines[0] == 'ulid\tname\tpublished\ttags'
         assert lines[1] == f'{self.ULID}\tubuntu\tfalse\ta,b'
@@ -162,8 +172,7 @@ class TestPlainRendering:
         assert out.split('\n')[1] == 'one two three\tx'
 
     def test_single_record_is_key_value_lines_with_nested_tables(self):
-        out = render_plain({'name': 'exp', 'ok': True, 'none': None,
-                            'tests': {'t1': {'name': 't1', 'missing': True}}})
+        out = render_plain({'name': 'exp', 'ok': True, 'none': None, 'tests': {'t1': {'name': 't1', 'missing': True}}})
         assert 'name\texp' in out
         assert 'ok\ttrue' in out
         assert 'none\t' in out.split('\n')
@@ -189,8 +198,10 @@ class TestPlainRendering:
         import numpy as np
 
         from adarelib.constants import StatusEnum
-        out = json.loads(get_formatter('json').format(
-            {'present': np.bool_(True), 'status': StatusEnum.FINISHED, 'n': np.int64(3)}))
+
+        out = json.loads(
+            get_formatter('json').format({'present': np.bool_(True), 'status': StatusEnum.FINISHED, 'n': np.int64(3)})
+        )
         assert out == {'present': True, 'status': 'finished', 'n': 3}
 
 
@@ -198,26 +209,33 @@ class TestPlainRendering:
 # Error codes, exit codes, error rendering
 # ---------------------------------------------------------------------------
 
+
 class TestExitCodeMapping:
-    @pytest.mark.parametrize('name, code', [
-        ('TestFunctionNotFoundError', 'TESTFUNCTION_NOT_FOUND'),
-        ('VMNotFoundError', 'VM_NOT_FOUND'),
-        ('RunNotFoundError', 'RUN_NOT_FOUND'),
-        ('ArgumentsError', 'ARGUMENTS'),
-        ('EnvironmentDoesNotExistInDatabase', 'ENVIRONMENT_DOES_NOT_EXIST_IN_DATABASE'),
-        ('SESSION_NOT_FOUND', 'SESSION_NOT_FOUND'),
-        ('HypervisorException', 'HYPERVISOR'),
-    ])
+    @pytest.mark.parametrize(
+        'name, code',
+        [
+            ('TestFunctionNotFoundError', 'TESTFUNCTION_NOT_FOUND'),
+            ('VMNotFoundError', 'VM_NOT_FOUND'),
+            ('RunNotFoundError', 'RUN_NOT_FOUND'),
+            ('ArgumentsError', 'ARGUMENTS'),
+            ('EnvironmentDoesNotExistInDatabase', 'ENVIRONMENT_DOES_NOT_EXIST_IN_DATABASE'),
+            ('SESSION_NOT_FOUND', 'SESSION_NOT_FOUND'),
+            ('HypervisorException', 'HYPERVISOR'),
+        ],
+    )
     def test_error_code_for(self, name, code):
         assert error_code_for(name) == code
 
-    @pytest.mark.parametrize('code, exit_code', [
-        ('RUN_NOT_FOUND', EXIT_NOT_FOUND),
-        ('ENVIRONMENT_DOES_NOT_EXIST_IN_DATABASE', EXIT_NOT_FOUND),
-        ('ARGUMENTS', EXIT_USAGE),
-        ('INVALID_PATH', EXIT_USAGE),
-        ('VM_OPERATION_FAILED', EXIT_ERROR),
-    ])
+    @pytest.mark.parametrize(
+        'code, exit_code',
+        [
+            ('RUN_NOT_FOUND', EXIT_NOT_FOUND),
+            ('ENVIRONMENT_DOES_NOT_EXIST_IN_DATABASE', EXIT_NOT_FOUND),
+            ('ARGUMENTS', EXIT_USAGE),
+            ('INVALID_PATH', EXIT_USAGE),
+            ('VM_OPERATION_FAILED', EXIT_ERROR),
+        ],
+    )
     def test_exit_code_for(self, code, exit_code):
         assert exit_code_for(code) == exit_code
 
@@ -233,27 +251,33 @@ class TestExitCodeMapping:
 
     def test_not_found_exits_3(self):
         from adare.exceptions import RunNotFoundError
+
         assert self._exit_code(lambda: RunNotFoundError(log, 'NOSUCH')) == EXIT_NOT_FOUND
 
     def test_generic_error_exits_1_not_255(self):
         from adare.exceptions import LoggedErrorException
+
         assert self._exit_code(lambda: LoggedErrorException(log, 'boom')) == EXIT_ERROR
 
     def test_plain_logged_exception_is_a_failure(self):
         from adare.exceptions import LoggedException
+
         assert self._exit_code(lambda: LoggedException(log, 'boom')) == EXIT_ERROR
 
     def test_arguments_error_exits_2(self):
         from adare.exceptions import ArgumentsError
+
         assert self._exit_code(lambda: ArgumentsError(log, 'bad')) == EXIT_USAGE
 
     def test_informational_message_exits_0(self):
         from adare.backend.project.exceptions import NoProjectsFoundMessage
+
         assert self._exit_code(lambda: NoProjectsFoundMessage(log, 'no projects found')) == EXIT_OK
 
     def test_handle_api_error_maps_not_found(self):
         from adare.cli.utils import handle_api_error
         from adare.core.result import Result
+
         with pytest.raises(SystemExit) as excinfo:
             handle_api_error(Result.fail('SESSION_NOT_FOUND', 'no such session'))
         assert excinfo.value.code == EXIT_NOT_FOUND
@@ -275,8 +299,10 @@ def _error_cli():
     @output_options
     def fail_cmd():
         def run(_args):
-            raise TestFunctionNotFoundError(log, 'testfunction "x.y" not found',
-                                            possible_solutions=['Run `adare test list`', 'Check spelling'])
+            raise TestFunctionNotFoundError(
+                log, 'testfunction "x.y" not found', possible_solutions=['Run `adare test list`', 'Check spelling']
+            )
+
         exec_with_error_printing(run, SimpleNamespace())
 
     return root
@@ -289,12 +315,14 @@ class TestErrorOutput:
         assert result.exit_code == EXIT_NOT_FOUND
         assert result.stdout == ''
         payload = json.loads(result.stderr.strip().splitlines()[-1])
-        assert payload == {'error': {
-            'code': 'TESTFUNCTION_NOT_FOUND',
-            'message': 'testfunction "x.y" not found',
-            'hint': 'Run `adare test list`',
-            'solutions': ['Run `adare test list`', 'Check spelling'],
-        }}
+        assert payload == {
+            'error': {
+                'code': 'TESTFUNCTION_NOT_FOUND',
+                'message': 'testfunction "x.y" not found',
+                'hint': 'Run `adare test list`',
+                'solutions': ['Run `adare test list`', 'Check spelling'],
+            }
+        }
 
     def test_text_mode_prints_one_concise_message_on_stderr(self, monkeypatch):
         monkeypatch.delenv('ADARE_FORMAT', raising=False)
@@ -320,7 +348,8 @@ class TestErrorOutput:
         result = CliRunner().invoke(cmd, ['SnapshotNotFoundException', '--json'])
         assert result.exit_code == EXIT_NOT_FOUND
         assert json.loads(result.stderr) == {
-            'error': {'code': 'SNAPSHOT_NOT_FOUND', 'message': 'gone', 'hint': None, 'solutions': []}}
+            'error': {'code': 'SNAPSHOT_NOT_FOUND', 'message': 'gone', 'hint': None, 'solutions': []}
+        }
 
         # Common resources get a default "list them" hint when the error has none.
         result = CliRunner().invoke(cmd, ['VMNotFoundError', '--json'])
@@ -330,6 +359,7 @@ class TestErrorOutput:
 # ---------------------------------------------------------------------------
 # `adare status`
 # ---------------------------------------------------------------------------
+
 
 class _FakeResult:
     def __init__(self, data=None, success=True, message=''):
@@ -341,9 +371,14 @@ class _FakeResult:
 def _fake_api(sessions=None, instances=None, db_ok=True):
     from pathlib import Path
 
-    db_status = SimpleNamespace(global_db_exists=True, global_db_accessible=db_ok,
-                                global_db_location=Path('/tmp/global.db'), valid=db_ok,
-                                pending_migrations=[], errors=[] if db_ok else ['broken'])
+    db_status = SimpleNamespace(
+        global_db_exists=True,
+        global_db_accessible=db_ok,
+        global_db_location=Path('/tmp/global.db'),
+        valid=db_ok,
+        pending_migrations=[],
+        errors=[] if db_ok else ['broken'],
+    )
     return SimpleNamespace(
         devmode=SimpleNamespace(list_sessions=lambda request: _FakeResult(sessions or [])),
         vm=SimpleNamespace(list_instances=lambda: _FakeResult(instances or [])),
@@ -354,16 +389,26 @@ def _fake_api(sessions=None, instances=None, db_ok=True):
 class TestStatus:
     def test_collect_status_counts_sessions_and_vms(self, monkeypatch, tmp_path):
         from adare.cli import status
-        monkeypatch.setattr('adare.backend.basics.determine_projectdirectory',
-                            lambda project, silent=False: tmp_path)
-        api = _fake_api(sessions=[SimpleNamespace(status='running'), SimpleNamespace(status='stopped'),
-                                  SimpleNamespace(status='stopped')],
-                        instances=[object(), object()])
+
+        monkeypatch.setattr('adare.backend.basics.determine_projectdirectory', lambda project, silent=False: tmp_path)
+        api = _fake_api(
+            sessions=[
+                SimpleNamespace(status='running'),
+                SimpleNamespace(status='stopped'),
+                SimpleNamespace(status='stopped'),
+            ],
+            instances=[object(), object()],
+        )
         data = status.collect_status(api)
-        assert data['project'] == {'available': True, 'name': tmp_path.name, 'path': str(tmp_path),
-                                   'error': None}
-        assert data['sessions'] == {'available': True, 'total': 3, 'running': 1, 'stopped': 2,
-                                    'other': 0, 'error': None}
+        assert data['project'] == {'available': True, 'name': tmp_path.name, 'path': str(tmp_path), 'error': None}
+        assert data['sessions'] == {
+            'available': True,
+            'total': 3,
+            'running': 1,
+            'stopped': 2,
+            'other': 0,
+            'error': None,
+        }
         assert data['vms'] == {'available': True, 'instances': 2, 'error': None}
         assert data['database']['available'] is True
         assert data['database']['pending_migrations'] == []
@@ -384,13 +429,21 @@ class TestStatus:
 
     def test_status_json_is_parseable(self, monkeypatch):
         from adare.run import cli
+
         monkeypatch.delenv('ADARE_FORMAT', raising=False)
-        fake = {'project': {'available': True, 'name': 'P', 'path': '/p', 'error': None},
-                'sessions': {'available': True, 'total': 0, 'running': 0, 'stopped': 0, 'other': 0,
-                             'error': None},
-                'vms': {'available': True, 'instances': 0, 'error': None},
-                'database': {'available': True, 'initialized': True, 'valid': True, 'location': None,
-                             'pending_migrations': [], 'errors': []}}
+        fake = {
+            'project': {'available': True, 'name': 'P', 'path': '/p', 'error': None},
+            'sessions': {'available': True, 'total': 0, 'running': 0, 'stopped': 0, 'other': 0, 'error': None},
+            'vms': {'available': True, 'instances': 0, 'error': None},
+            'database': {
+                'available': True,
+                'initialized': True,
+                'valid': True,
+                'location': None,
+                'pending_migrations': [],
+                'errors': [],
+            },
+        }
         monkeypatch.setattr('adare.cli.status.collect_status', lambda api=None: fake)
         result = CliRunner().invoke(cli, ['status', '--json'])
         assert result.exit_code == 0, result.output
@@ -398,6 +451,7 @@ class TestStatus:
 
     def test_status_plain_when_piped(self, monkeypatch):
         from adare.run import cli
+
         monkeypatch.delenv('ADARE_FORMAT', raising=False)
         fake = {'project': {'available': True, 'name': 'P', 'path': '/p', 'error': None}}
         monkeypatch.setattr('adare.cli.status.collect_status', lambda api=None: fake)
@@ -410,8 +464,10 @@ class TestStatus:
 # Regressions fixed alongside the foundation
 # ---------------------------------------------------------------------------
 
+
 def test_raw_text_is_emitted_verbatim():
     from adare.helperfunctions.output_formatter import RawText
+
     doc = 'tests:\n  - content: |\n      [b]keep[/b]\n'
     assert json.loads(get_formatter('json').format({'yaml': RawText(doc)})) == {'yaml': doc}
 
@@ -422,14 +478,20 @@ def test_abstract_tests_render_a_missing_testfunction_instead_of_crashing():
 
     from adare.database.api.frontend.test_queries import TestQueryMixin
 
-    parameter = SimpleNamespace(parameter=SimpleNamespace(name='dst', dtype='str'), parameter_id='p',
-                                value='/tmp/x')
-    test = SimpleNamespace(name='t1', description=None, testfunction=None, testfunction_id='01TF',
-                           testfunction_file_name=None, parameters=[parameter])
+    parameter = SimpleNamespace(parameter=SimpleNamespace(name='dst', dtype='str'), parameter_id='p', value='/tmp/x')
+    test = SimpleNamespace(
+        name='t1',
+        description=None,
+        testfunction=None,
+        testfunction_id='01TF',
+        testfunction_file_name=None,
+        parameters=[parameter],
+    )
     api = TestQueryMixin()
     api._project_api = MagicMock()
-    api._project_api._session.query.return_value.filter_by.return_value.one.return_value = (
-        SimpleNamespace(abstract_tests=[test]))
+    api._project_api._session.query.return_value.filter_by.return_value.one.return_value = SimpleNamespace(
+        abstract_tests=[test]
+    )
     data = api.get_abstract_tests('01EXP')
     assert data['t1']['testfunction_missing'] is True
     assert data['t1']['testfunction_name'] == '01TF (missing)'

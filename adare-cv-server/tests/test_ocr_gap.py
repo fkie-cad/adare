@@ -1,4 +1,3 @@
-
 import asyncio
 
 import cv2
@@ -19,9 +18,11 @@ def create_test_image_bytes(gap=30):
     is_success, buffer = cv2.imencode(".png", img)
     return buffer.tobytes()
 
+
 def test_ocr_separation_at_gap_30px():
     """Verify that 30px gap is separated."""
     asyncio.run(_run_test_ocr_separation())
+
 
 async def _run_test_ocr_separation():
     # Based on reproduction, 20px was merged even at 1.2.
@@ -49,6 +50,7 @@ async def _run_test_ocr_separation():
 
     # Explicitly check against merging
     assert "LabelValue" not in texts, "Words were merged into a single detection"
+
 
 if __name__ == "__main__":
     test_ocr_separation_at_gap_30px()

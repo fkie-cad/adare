@@ -9,12 +9,14 @@ from adarelib.event.event import TestResult
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
 # Check if winreg is available (Windows only)
 try:
     import winreg
+
     WINREG_AVAILABLE = True
 except ImportError:
     WINREG_AVAILABLE = False
@@ -25,6 +27,7 @@ except ImportError:
 # ============================================================================
 # Module-level helpers (deduplicated)
 # ============================================================================
+
 
 def _parse_registry_path(key_path):
     """Parse registry path into root key and subkey"""
@@ -41,7 +44,7 @@ def _parse_registry_path(key_path):
         'HKEY_USERS': winreg.HKEY_USERS,
         'HKU': winreg.HKEY_USERS,
         'HKEY_CURRENT_CONFIG': winreg.HKEY_CURRENT_CONFIG,
-        'HKCC': winreg.HKEY_CURRENT_CONFIG
+        'HKCC': winreg.HKEY_CURRENT_CONFIG,
     }
 
     # Split path
@@ -80,6 +83,7 @@ def _format_registry_type(reg_type):
 # ============================================================================
 # Windows-only registry tests
 # ============================================================================
+
 
 @testfunction(
     name='registry_key_exists',
@@ -138,9 +142,9 @@ def registry_key_exists(ctx: TestContext, key_path: str):
     description='tests if Windows registry value matches expected value (Windows only)',
     category=HostModeCategory.QGA_PROBE,
 )
-def registry_value_matches(ctx: TestContext, key_path: str, value_name: str,
-                           expected_value: str | int | bytes,
-                           value_type: str | None = None):
+def registry_value_matches(
+    ctx: TestContext, key_path: str, value_name: str, expected_value: str | int | bytes, value_type: str | None = None
+):
     r"""Pass when registry value ``value_name`` under ``key_path`` equals ``expected_value``.
 
     Use for: asserting a setting/MRU value written by an application. Windows only. A missing
@@ -199,17 +203,27 @@ def registry_value_matches(ctx: TestContext, key_path: str, value_name: str,
                     actual_type_name = _format_registry_type(reg_type)
 
                     if expected_type_name != actual_type_name:
-                        return TestResult.failed([f'registry value type mismatch. Expected: {expected_type_name}, Got: {actual_type_name}'])
+                        return TestResult.failed(
+                            [f'registry value type mismatch. Expected: {expected_type_name}, Got: {actual_type_name}']
+                        )
 
                 # Value comparison
                 if actual_value == expected_value:
-                    return TestResult.success([f'registry value matches: {actual_value} ({_format_registry_type(reg_type)})'])
-                return TestResult.failed([f'registry value mismatch. Expected: {expected_value}, Got: {actual_value} ({_format_registry_type(reg_type)})'])
+                    return TestResult.success(
+                        [f'registry value matches: {actual_value} ({_format_registry_type(reg_type)})']
+                    )
+                return TestResult.failed(
+                    [
+                        f'registry value mismatch. Expected: {expected_value}, Got: {actual_value} ({_format_registry_type(reg_type)})'
+                    ]
+                )
 
             except FileNotFoundError:
                 return TestResult.failed([f'registry key or value does not exist: {key_path}\\{value_name}'])
             except PermissionError:
-                return TestResult.execution_error(None, f"Permission denied accessing registry: {key_path}\\{value_name}")
+                return TestResult.execution_error(
+                    None, f"Permission denied accessing registry: {key_path}\\{value_name}"
+                )
 
         except ValueError as e:
             return TestResult.execution_error(e, "Registry path parsing error")

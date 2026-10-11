@@ -82,8 +82,7 @@ def _install_testfunction_requirements(requirements_file: Path, name: str) -> No
         log,
         message=(
             f'Failed to install dependencies for testfunction "{name}" from '
-            f'{requirements_file}'
-            + (f': {last_error}' if last_error else '')
+            f'{requirements_file}' + (f': {last_error}' if last_error else '')
         ),
         possible_solutions=[
             f'Install them manually: {manual_cmd}',
@@ -195,6 +194,7 @@ def testfunction_load(project_path: Path, name: str):
     # Upsert by hash: create the file at v1, or bump its version (and retain a
     # snapshot) when the content changed. This drives the versioned update path.
     from adare.database.api.testfunction import TestfunctionDbApi
+
     with TestfunctionDbApi() as api:
         action, file_obj = api.upsert_testfunction_file_obj(target_python_file, target_requirements_file)
         testfunction_id = file_obj.id
@@ -204,6 +204,7 @@ def testfunction_load(project_path: Path, name: str):
 
     # Protect testfunction files after loading (protect the global copies)
     from adare.helperfunctions.integrity import protect_loaded_files
+
     testfunction_files = [target_python_file, target_requirements_file]
     protected_files = protect_loaded_files(testfunction_files)
     log.info(f'Protected {len(protected_files)} testfunction files for {name}')
@@ -251,13 +252,17 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
 
     if usage['exists'] and not usage['can_safely_delete']:
         if not force:
-            log.info(f'Testfunction "{testfunction_name}" is currently used by {len(usage["experiments"])} experiments with {len(usage["runs"])} runs')
+            log.info(
+                f'Testfunction "{testfunction_name}" is currently used by {len(usage["experiments"])} experiments with {len(usage["runs"])} runs'
+            )
             log.info('Use --force to overwrite and delete associated experiment runs')
             log.info(f'Experiments affected: {", ".join([exp["name"] for exp in usage["experiments"]])}')
             return usage['testfunction_file_id']  # Return existing ID without updating
         # Force mode - ask for confirmation
         print(f'\n⚠️  WARNING: Testfunction "{testfunction_name}" is currently in use!')
-        print(f'   • Used by {len(usage["experiments"])} experiments: {", ".join([exp["name"] for exp in usage["experiments"]])}')
+        print(
+            f'   • Used by {len(usage["experiments"])} experiments: {", ".join([exp["name"] for exp in usage["experiments"]])}'
+        )
         print(f'   • Would delete {len(usage["runs"])} experiment runs')
         print('   • This action cannot be undone!')
 
@@ -273,6 +278,7 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
 
     # Use TestfunctionManager to install to global directory
     from adare.backend.testfunction.manager import TestfunctionManager
+
     manager = TestfunctionManager()
     manager.ensure_global_directory_exists()
 
@@ -288,6 +294,7 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
 
     # Upsert by hash: create at v1 or bump the version (retaining a snapshot) on change.
     from adare.database.api.testfunction import TestfunctionDbApi
+
     with TestfunctionDbApi() as api:
         action, file_obj = api.upsert_testfunction_file_obj(target_python_file, target_requirements_file)
         testfunction_id = file_obj.id
@@ -297,6 +304,7 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
 
     # Protect testfunction files after loading (protect the global copies)
     from adare.helperfunctions.integrity import protect_loaded_files
+
     testfunction_files = [target_python_file]
     if target_requirements_file.exists():
         testfunction_files.append(target_requirements_file)
@@ -350,8 +358,9 @@ def _refresh_global_testfunction(manager, source_py: Path, source_req: Path, nam
     src_files = [source_py, source_req] if source_req.exists() else [source_py]
     tgt_files = [target_py, target_req] if target_req.exists() else [target_py]
     if len(src_files) == len(tgt_files):
-        if combine_hashes([hash_file_sha256(f) for f in src_files]) == \
-                combine_hashes([hash_file_sha256(f) for f in tgt_files]):
+        if combine_hashes([hash_file_sha256(f) for f in src_files]) == combine_hashes(
+            [hash_file_sha256(f) for f in tgt_files]
+        ):
             return target_py, target_req
 
     unprotect_files_for_update([target_py, target_req])

@@ -15,6 +15,7 @@ pytestmark = pytest.mark.unit
 # exec_manage_reset_db
 # ---------------------------------------------------------------------------
 
+
 @patch("adare.cli.manage.print_success_message")
 @patch("adare.cli.manage.AdareAPI")
 def test_exec_manage_reset_db_success(mock_api_cls, mock_print_success):
@@ -77,6 +78,7 @@ def test_exec_manage_reset_db_failure(mock_api_cls, mock_handle_error):
 # exec_manage_init_db
 # ---------------------------------------------------------------------------
 
+
 @patch("builtins.print")
 @patch("adare.cli.manage.AdareAPI")
 def test_exec_manage_init_db_success(mock_api_cls, mock_print):
@@ -130,6 +132,7 @@ def test_exec_manage_init_db_failure_flag(mock_api_cls, mock_print):
 # ---------------------------------------------------------------------------
 # exec_manage_vm_runtime_refresh
 # ---------------------------------------------------------------------------
+
 
 @patch("adare.cli.manage.print_success_message")
 @patch("adare.cli.manage.AdareAPI")

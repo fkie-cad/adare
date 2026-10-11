@@ -111,6 +111,7 @@ class SyncMetadata(SerializerMixin, Base):
     """
     Metadata for tracking synchronization state of entities with remote instances.
     """
+
     __tablename__ = 'sync_metadata'
     RELATIONSHIPS_TO_DICT = True
 
@@ -148,6 +149,7 @@ class Status(SerializerMixin, Base):
     """
     Represents a status for test results or events (e.g., success, failure, pending).
     """
+
     __tablename__ = 'status'
     RELATIONSHIPS_TO_DICT = True
 
@@ -165,6 +167,7 @@ class Tag(SerializerMixin, Base):
     """
     Tag for categorizing experiments, environments, and other entities.
     """
+
     __tablename__ = 'tag'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id',)
@@ -183,6 +186,7 @@ class PostSetupInstallation(SerializerMixin, Base):
     """
     Post-setup installation command for environments, specifying commands to run after environment setup.
     """
+
     __tablename__ = 'post_setup_installation'
     RELATIONSHIPS_TO_DICT = True
 
@@ -204,6 +208,7 @@ class Result(SerializerMixin, Base):
     """
     Stores the result of a test, including status and optional details.
     """
+
     __tablename__ = 'result'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id', '-status_id')
@@ -237,6 +242,7 @@ class TestParameter(SerializerMixin, Base):
     """
     Defines a parameter for test functions, including type and description.
     """
+
     __tablename__ = 'test_parameter'
     RELATIONSHIPS_TO_DICT = True
 
@@ -259,6 +265,7 @@ class TestParameterEntry(SerializerMixin, Base):
     """
     Stores a value entry for a test parameter, used in test execution.
     """
+
     __tablename__ = 'test_parameter_entry'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id', '-parameter_id')
@@ -280,6 +287,7 @@ class TestFunctionFile(SerializerMixin, Base):
     """
     Represents a file containing one or more test functions, with metadata and hash.
     """
+
     __tablename__ = 'test_function_file'
     RELATIONSHIPS_TO_DICT = True
 
@@ -308,6 +316,7 @@ class TestFunction(SerializerMixin, Base):
     """
     Represents a test function definition, including its parameters and file association.
     """
+
     __tablename__ = 'test_function'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id',)
@@ -342,6 +351,7 @@ class Tool(SerializerMixin, Base):
     """
     Represents an external tool or command that can be used in tests or setups.
     """
+
     __tablename__ = 'tool'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id',)
@@ -361,6 +371,7 @@ class AbstractTest(SerializerMixin, Base):
     """
     Represents an abstract test, linking to a test function, parameters, and required tools.
     """
+
     __tablename__ = 'abstract_test'
     RELATIONSHIPS_TO_DICT = True
 
@@ -388,6 +399,7 @@ class OsInfo(SerializerMixin, Base):
     """
     Stores information about an operating system, such as platform, version, and architecture.
     """
+
     __tablename__ = 'os_info'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id', '-platform')
@@ -417,6 +429,7 @@ class LogFile(SerializerMixin, Base):
     """
     Represents a log file generated during experiment runs or environment setup.
     """
+
     __tablename__ = 'log_file'
     RELATIONSHIPS_TO_DICT = True
 
@@ -435,6 +448,7 @@ class NetworkDriveUser(SerializerMixin, Base):
     """
     Represents a user for network drive authentication (credentials should be hashed).
     """
+
     __tablename__ = 'network_drive_user'
     RELATIONSHIPS_TO_DICT = True
 
@@ -453,6 +467,7 @@ class SMBShare(SerializerMixin, Base):
     """
     Represents an SMB share, including local and remote paths and associated user.
     """
+
     __tablename__ = 'smb_share'
     RELATIONSHIPS_TO_DICT = True
 
@@ -474,6 +489,7 @@ class NFSShare(SerializerMixin, Base):
     """
     Represents an NFS share, including allowed hosts and paths.
     """
+
     __tablename__ = 'nfs_share'
     RELATIONSHIPS_TO_DICT = True
 
@@ -494,6 +510,7 @@ class SMBDrive(SerializerMixin, Base):
     """
     Represents an SMB drive, which can have multiple shares and users.
     """
+
     __tablename__ = 'smb_drive'
     RELATIONSHIPS_TO_DICT = True
 
@@ -511,6 +528,7 @@ class NFSDrive(SerializerMixin, Base):
     """
     Represents an NFS drive, which can have multiple shares.
     """
+
     __tablename__ = 'nfs_drive'
     RELATIONSHIPS_TO_DICT = True
 
@@ -526,6 +544,7 @@ class USBDrive(SerializerMixin, Base):
     """
     Represents a USB drive, including hardware identifiers and manufacturer info.
     """
+
     __tablename__ = 'usb_drive'
     RELATIONSHIPS_TO_DICT = True
 
@@ -542,6 +561,7 @@ class Project(SerializerMixin, Base):
     """
     Represents a project, grouping test function files and environments.
     """
+
     __tablename__ = 'project'
     RELATIONSHIPS_TO_DICT = True
 
@@ -564,6 +584,7 @@ class Vm(SerializerMixin, Base):
     """
     Represents a virtual machine, including its file path, OS info, and project association.
     """
+
     __tablename__ = 'vm'
     RELATIONSHIPS_TO_DICT = True
 
@@ -586,6 +607,7 @@ class VmSnapshot(SerializerMixin, Base):
 
     Tracks snapshots for fast experiment setup using VirtualBox snapshot functionality.
     """
+
     __tablename__ = 'vm_snapshot'
     RELATIONSHIPS_TO_DICT = True
 
@@ -605,6 +627,7 @@ class Environment(SerializerMixin, Base):
     """
     Represents a test environment, including OS info, project, and setup details.
     """
+
     __tablename__ = 'environment'
     RELATIONSHIPS_TO_DICT = True
 
@@ -657,6 +680,7 @@ class Experiment(SerializerMixin, Base):
     """
     Represents an experiment, including metadata, tags, environments, and test sets.
     """
+
     __tablename__ = 'experiment'
     RELATIONSHIPS_TO_DICT = True
 
@@ -718,6 +742,7 @@ class Event(SerializerMixin, Base):
     """
     Base class for events occurring during experiment runs (polymorphic).
     """
+
     __tablename__ = 'event'
     RELATIONSHIPS_TO_DICT = True
 
@@ -727,18 +752,22 @@ class Event(SerializerMixin, Base):
     experiment_run_id = Column(String, ForeignKey('experiment_run.id', ondelete='CASCADE'))
     experiment_run = relationship("ExperimentRun", backref=backref("events", cascade="all, delete-orphan"))
     error = Column(String)
-    parent_event_id = Column(CHAR(26), ForeignKey('event.id', ondelete='SET NULL'), nullable=True)  # Parent event ID for nested events
-    parent_event = relationship("Event", remote_side=[id], backref=backref("child_events", cascade="all, delete-orphan"))
+    parent_event_id = Column(
+        CHAR(26), ForeignKey('event.id', ondelete='SET NULL'), nullable=True
+    )  # Parent event ID for nested events
+    parent_event = relationship(
+        "Event", remote_side=[id], backref=backref("child_events", cascade="all, delete-orphan")
+    )
 
     # Success/failure tracking for all events
     success = Column(Boolean, nullable=True)
 
     # Universal event grouping ID to group start/complete event pairs
-    event_group_id = Column(String, nullable=True)     # Groups related events (start/complete pairs)
+    event_group_id = Column(String, nullable=True)  # Groups related events (start/complete pairs)
 
     # Specific event type (e.g., 'TEST_START', 'TEST_COMPLETE', 'CLICK_START', etc.)
     event_type_specific = Column(String, nullable=True)
-    execution_time = Column(Integer, nullable=True)     # Duration in milliseconds
+    execution_time = Column(Integer, nullable=True)  # Duration in milliseconds
 
     timestamp = Column(DateTime)
 
@@ -760,18 +789,14 @@ class Event(SerializerMixin, Base):
         """Allow setting ulid which maps to the id field."""
         self.id = value
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'event',
-        'polymorphic_on': event_type
-    }
-
-
+    __mapper_args__ = {'polymorphic_identity': 'event', 'polymorphic_on': event_type}
 
 
 class TestEvent(Event):
     """
     Event representing the execution of a test during an experiment run.
     """
+
     __tablename__ = 'test_events'
     __mapper_args__ = {
         'polymorphic_identity': 'test_event',
@@ -801,6 +826,7 @@ class ErrorEvent(Event):
     """
     Event representing an error that occurred during an experiment run.
     """
+
     __tablename__ = 'error_events'
     __mapper_args__ = {
         'polymorphic_identity': 'error_event',
@@ -822,13 +848,12 @@ class ErrorEvent(Event):
         return StatusEnum.ERROR
 
 
-
-
 class ActionEvent(Event):
     """
     Event representing any action during experiment execution (click, keyboard, test, etc.).
     This is a flexible event type that can store various action types and their data.
     """
+
     __tablename__ = 'action_events'
     __mapper_args__ = {
         'polymorphic_identity': 'action_event',
@@ -838,7 +863,7 @@ class ActionEvent(Event):
     # Action type and event type fields
     action_type = Column(String)  # e.g., 'click', 'keyboard', 'test', etc.
     # action_event_type = Column(String)   # e.g., 'click_start', 'click_complete', etc.
-    action_id = Column(String)    # Unique action identifier for pairing start/complete events
+    action_id = Column(String)  # Unique action identifier for pairing start/complete events
 
     # Execution time tracking is inherited from parent Event class
 
@@ -879,6 +904,7 @@ class EventFactory:
     """
     Factory for creating event instances based on category.
     """
+
     @staticmethod
     def create_event(category, **kwargs):
         # add category to kwargs
@@ -901,6 +927,7 @@ class ExperimentRunFiles(SerializerMixin, Base):
     """
     Stores references to log files generated during an experiment run.
     """
+
     __tablename__ = 'experiment_run_file'
     RELATIONSHIPS_TO_DICT = True
 
@@ -917,6 +944,7 @@ class Stage(SerializerMixin, Base):
     """
     Represents a stage in an experiment or test run, possibly hierarchical.
     """
+
     __tablename__ = 'stage'
     RELATIONSHIPS_TO_DICT = True
 
@@ -938,6 +966,7 @@ class StageInRun(SerializerMixin, Base):
     """
     Represents a stage instance within a specific experiment run, tracking timing and status.
     """
+
     __tablename__ = 'stage_in_run'
     RELATIONSHIPS_TO_DICT = True
 
@@ -977,6 +1006,7 @@ class ExperimentRun(SerializerMixin, Base):
     """
     Represents a single run of an experiment, including environment, timing, and results.
     """
+
     __tablename__ = 'experiment_run'
     RELATIONSHIPS_TO_DICT = True
 
@@ -1030,10 +1060,7 @@ class ExperimentRun(SerializerMixin, Base):
 
     @hybrid_property
     def tests(self):
-        return [
-            event for event in self.events
-            if isinstance(event, TestEvent)
-        ]
+        return [event for event in self.events if isinstance(event, TestEvent)]
 
     @hybrid_property
     def result_status(self):
@@ -1084,6 +1111,7 @@ class ExperimentRun(SerializerMixin, Base):
 
 class Playbook(SerializerMixin, Base):
     """Main playbook container linked to experiment."""
+
     __tablename__ = 'playbook'
     RELATIONSHIPS_TO_DICT = True
 
@@ -1106,6 +1134,7 @@ class Playbook(SerializerMixin, Base):
 
 class PlaybookItem(SerializerMixin, Base):
     """Unified model for actions and blocks with hierarchical support."""
+
     __tablename__ = 'playbook_item'
     RELATIONSHIPS_TO_DICT = True
 
@@ -1121,7 +1150,9 @@ class PlaybookItem(SerializerMixin, Base):
     target = Column(String)  # action targeting information (changed from JSON to String for Base compatibility)
 
     # For all items (actions and blocks)
-    parameters = Column(String, nullable=False)  # type-specific configuration (changed from JSON to String for Base compatibility)
+    parameters = Column(
+        String, nullable=False
+    )  # type-specific configuration (changed from JSON to String for Base compatibility)
     conditions = Column(String)  # execution conditions (changed from JSON to String for Base compatibility)
 
     name = Column(String(255))
@@ -1139,6 +1170,7 @@ class PlaybookItem(SerializerMixin, Base):
 
 class ActionExecution(SerializerMixin, Base):
     """Execution tracking per action step."""
+
     __tablename__ = 'action_execution'
     RELATIONSHIPS_TO_DICT = True
 
@@ -1150,7 +1182,9 @@ class ActionExecution(SerializerMixin, Base):
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
 
-    result_data = Column(String)  # screenshots, coordinates, error details, timing (changed from JSON to String for Base compatibility)
+    result_data = Column(
+        String
+    )  # screenshots, coordinates, error details, timing (changed from JSON to String for Base compatibility)
     error_message = Column(String)
     attempt_number = Column(Integer, default=1)
 
@@ -1158,4 +1192,3 @@ class ActionExecution(SerializerMixin, Base):
 
     # Relationships
     playbook_item = relationship("PlaybookItem", back_populates="executions")
-

@@ -33,12 +33,12 @@ def parse_metadata_file(metadata_file: Path) -> ExperimentMetadata:
             message=f'parsing errors while parsing metadata file {metadata_file}:{exec_msgs_str}',
             possible_solutions=[
                 'fix the structure of the metadata file',
-            ]
+            ],
         ) from e
     return metadata
 
 
-def parse_environment_file(environment_file: Path) -> EnvironmentMetadata|None:
+def parse_environment_file(environment_file: Path) -> EnvironmentMetadata | None:
     environment_dict = yaml_to_dict(environment_file)
     # Handle empty YAML files (yaml.safe_load returns None for empty files)
     environment_dict = environment_dict or {}
@@ -51,6 +51,6 @@ def parse_environment_file(environment_file: Path) -> EnvironmentMetadata|None:
             message=f'parsing errors while parsing environment file {environment_file}:{error_msg}',
             possible_solutions=[
                 'fix the structure of the environment file',
-            ]
+            ],
         ) from e
     return environment

@@ -3,6 +3,7 @@ VirtualBox VM networking operations mixin.
 
 Implements AbstractNetworkingMixin for VirtualBox-specific networking operations.
 """
+
 import asyncio
 import contextlib
 import logging
@@ -19,14 +20,17 @@ log = logging.getLogger(__name__)
 class NetworkingMixin(AbstractNetworkingMixin):
     """Mixin class providing networking operations for VirtualBox VMs."""
 
-    async def list_port_forwarding_rules(self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False) -> dict[str, PortForwardingRule]:
+    async def list_port_forwarding_rules(
+        self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
+    ) -> dict[str, PortForwardingRule]:
         """List all port forwarding rules for the VM."""
+
         async def _list_port_forwards_async():
             try:
                 result = run_subprocess(
                     [self.vboxmanage_exe, "showvminfo", self.vm_name, "--machinereadable"],
                     log_prefix="list_port_forwarding_rules: ",
-                    check=False
+                    check=False,
                 )
 
                 if result.returncode != 0:
@@ -65,9 +69,10 @@ class NetworkingMixin(AbstractNetworkingMixin):
         ctx_manager=None,
         stop_event=None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ) -> int:
         """Add a port forwarding rule to the VM."""
+
         async def _add_port_forward_async():
             # Create rule object for comparison
             new_rule = PortForwardingRule(
@@ -76,7 +81,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
                 host_ip=host_ip,
                 host_port=host_port,
                 guest_ip=guest_ip,
-                guest_port=guest_port
+                guest_port=guest_port,
             )
 
             # First check if identical rule already exists
@@ -89,7 +94,9 @@ class NetworkingMixin(AbstractNetworkingMixin):
                     if not silent:
                         log.info(f"Port forward '{name}' already exists with identical configuration - skipping")
                     return 0
-                log.warning(f"Port forward '{name}' exists but with different configuration - will attempt to remove and re-add")
+                log.warning(
+                    f"Port forward '{name}' exists but with different configuration - will attempt to remove and re-add"
+                )
                 log.debug(f"Existing: {existing_rule}, New: {new_rule}")
                 # Remove existing rule first
                 remove_args = ["modifyvm", self.vm_name, "--natpf1", "delete", name]
@@ -100,26 +107,25 @@ class NetworkingMixin(AbstractNetworkingMixin):
                         stop_event=stop_event,
                         silent=silent,
                         ctx_manager=ctx_manager,
-                        operation_name="port forward removal"
+                        operation_name="port forward removal",
                     )
                 except Exception as e:
                     log.warning(f"Failed to remove existing port forward '{name}': {e}")
 
             # Add the port forwarding rule
-            args = [
-                "modifyvm", self.vm_name,
-                "--natpf1", new_rule.to_vbox_format()
-            ]
+            args = ["modifyvm", self.vm_name, "--natpf1", new_rule.to_vbox_format()]
 
             try:
-                log.info(f"Adding port forward '{name}' ({protocol}) {host_ip}:{host_port} -> {guest_ip}:{guest_port} for VM '{self.vm_name}'")
+                log.info(
+                    f"Adding port forward '{name}' ({protocol}) {host_ip}:{host_port} -> {guest_ip}:{guest_port} for VM '{self.vm_name}'"
+                )
                 return_value, _, _ = await self._execute_streaming_command_async(
                     args,
                     log_file=log_file,
                     stop_event=stop_event,
                     silent=silent,
                     ctx_manager=ctx_manager,
-                    operation_name="port forward addition"
+                    operation_name="port forward addition",
                 )
 
                 if return_value == 0:
@@ -135,14 +141,10 @@ class NetworkingMixin(AbstractNetworkingMixin):
         return await self.manager.run_async(_add_port_forward_async)
 
     async def remove_port_forwarding(
-        self,
-        name: str,
-        ctx_manager=None,
-        stop_event=None,
-        log_file: Path | None = None,
-        silent: bool = False
+        self, name: str, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
     ) -> int:
         """Remove a port forwarding rule from the VM."""
+
         async def _remove_port_forward_async():
             # First check if the rule exists
             existing_rules = await self.list_port_forwarding_rules(ctx_manager, stop_event, log_file, silent=True)
@@ -163,13 +165,15 @@ class NetworkingMixin(AbstractNetworkingMixin):
                     stop_event=stop_event,
                     silent=silent,
                     ctx_manager=ctx_manager,
-                    operation_name="port forward removal"
+                    operation_name="port forward removal",
                 )
 
                 if return_value == 0:
                     log.info(f"Port forward '{name}' removed successfully from VM '{self.vm_name}'")
                 else:
-                    log.error(f"Failed to remove port forward '{name}' from VM '{self.vm_name}': return code {return_value}")
+                    log.error(
+                        f"Failed to remove port forward '{name}' from VM '{self.vm_name}': return code {return_value}"
+                    )
 
                 return return_value
             except Exception as e:
@@ -178,7 +182,16 @@ class NetworkingMixin(AbstractNetworkingMixin):
 
         return await self.manager.run_async(_remove_port_forward_async)
 
-    async def add_shared_folder(self, name: str, host_path: Path, readonly: bool = False, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False):
+    async def add_shared_folder(
+        self,
+        name: str,
+        host_path: Path,
+        readonly: bool = False,
+        ctx_manager=None,
+        stop_event=None,
+        log_file: Path | None = None,
+        silent: bool = False,
+    ):
         """
         Add a shared folder to the VM (VirtualBox configuration only).
         Checks if an identical shared folder already exists to prevent conflicts.
@@ -194,13 +207,10 @@ class NetworkingMixin(AbstractNetworkingMixin):
             log_file: Log file for output
             silent: Whether to suppress logging
         """
+
         async def _add_shared_folder_async():
             # Create config object for comparison
-            new_config = SharedFolderConfig(
-                name=name,
-                host_path=str(host_path),
-                readonly=readonly
-            )
+            new_config = SharedFolderConfig(name=name, host_path=str(host_path), readonly=readonly)
 
             # First check if identical folder already exists
             existing_folders = await self.list_shared_folders(ctx_manager, stop_event, log_file, silent)
@@ -212,7 +222,9 @@ class NetworkingMixin(AbstractNetworkingMixin):
                     if not silent:
                         log.info(f"Shared folder '{name}' already exists with identical configuration - skipping")
                     return 0
-                log.warning(f"Shared folder '{name}' exists but with different configuration - will attempt to remove and re-add")
+                log.warning(
+                    f"Shared folder '{name}' exists but with different configuration - will attempt to remove and re-add"
+                )
                 log.debug(f"Existing: {existing_config}, New: {new_config}")
                 # Remove existing folder first
                 remove_args = ["sharedfolder", "remove", self.vm_name, "--name", name]
@@ -223,17 +235,13 @@ class NetworkingMixin(AbstractNetworkingMixin):
                         stop_event=stop_event,
                         silent=silent,
                         ctx_manager=ctx_manager,
-                        operation_name="shared folder removal"
+                        operation_name="shared folder removal",
                     )
                 except Exception as e:
                     log.warning(f"Failed to remove existing shared folder '{name}': {e}")
 
             # Add the shared folder
-            args = [
-                "sharedfolder", "add", self.vm_name,
-                "--name", name,
-                "--hostpath", str(host_path)
-            ]
+            args = ["sharedfolder", "add", self.vm_name, "--name", name, "--hostpath", str(host_path)]
 
             if readonly:
                 args.append("--readonly")
@@ -247,14 +255,16 @@ class NetworkingMixin(AbstractNetworkingMixin):
                     stop_event=stop_event,
                     silent=silent,
                     ctx_manager=ctx_manager,
-                    operation_name="shared folder addition"
+                    operation_name="shared folder addition",
                 )
 
                 if return_value == 0:
                     log.info(f"Shared folder '{name}' added to VM '{self.vm_name}' successfully")
                     # NOTE: Verification removed - VBoxManage return code is authoritative
                 else:
-                    log.error(f"Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}")
+                    log.error(
+                        f"Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}"
+                    )
                     if stdout:
                         log.error(f"stdout: {stdout}")
                     if stderr:
@@ -264,6 +274,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
             except Exception as e:
                 log.error(f"Error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
                 import traceback
+
                 log.debug(f"Traceback: {traceback.format_exc()}")
                 return 1
 
@@ -275,6 +286,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
 
         if 'windows' in self.guest_os.lower():
             from pathlib import PureWindowsPath
+
             unc_path = f"\\\\vboxsvr\\{name}"
             mountpoint_str = str(mountpoint)
 
@@ -282,76 +294,102 @@ class NetworkingMixin(AbstractNetworkingMixin):
             if len(mountpoint_str) == 2 and mountpoint_str[1] == ':' and mountpoint_str[0].isalpha():
                 # Check if drive is already in use and disconnect it first
                 drive_letter = mountpoint_str.upper()
-                commands.append({
-                    'command': f'net use {drive_letter} /delete /y 2>$null',
-                    'description': f"Disconnect existing drive {drive_letter} if present",
-                    'ignore_errors': True
-                })
+                commands.append(
+                    {
+                        'command': f'net use {drive_letter} /delete /y 2>$null',
+                        'description': f"Disconnect existing drive {drive_letter} if present",
+                        'ignore_errors': True,
+                    }
+                )
 
                 # Mount to drive letter using net use command
                 mount_cmd = f'net use {drive_letter} "{unc_path}" /persistent:yes'
-                commands.append({
-                    'command': mount_cmd,
-                    'description': f"Mount shared folder {name} to drive {drive_letter}",
-                    'ignore_errors': False
-                })
+                commands.append(
+                    {
+                        'command': mount_cmd,
+                        'description': f"Mount shared folder {name} to drive {drive_letter}",
+                        'ignore_errors': False,
+                    }
+                )
             else:
                 # Mount to directory path using symbolic link (copy behavior from old API)
                 from pathlib import PureWindowsPath
+
                 win_mountpoint = mountpoint_str.replace('/', '\\')
                 parent_dir = PureWindowsPath(win_mountpoint).parent.as_posix()
 
                 # Create parent directory
-                commands.append({
-                    'command': f'if (!(Test-Path "{parent_dir}")) {{ New-Item -ItemType Directory -Path "{parent_dir}" -Force }}',
-                    'description': f"Create parent directory for {name}",
-                    'ignore_errors': True
-                })
+                commands.append(
+                    {
+                        'command': f'if (!(Test-Path "{parent_dir}")) {{ New-Item -ItemType Directory -Path "{parent_dir}" -Force }}',
+                        'description': f"Create parent directory for {name}",
+                        'ignore_errors': True,
+                    }
+                )
 
                 # Remove existing symbolic link if it exists
-                commands.append({
-                    'command': f'if (Test-Path "{win_mountpoint}") {{ Remove-Item "{win_mountpoint}" -Force -Recurse -ErrorAction SilentlyContinue }}',
-                    'description': f"Remove existing link for {name}",
-                    'ignore_errors': True
-                })
+                commands.append(
+                    {
+                        'command': f'if (Test-Path "{win_mountpoint}") {{ Remove-Item "{win_mountpoint}" -Force -Recurse -ErrorAction SilentlyContinue }}',
+                        'description': f"Remove existing link for {name}",
+                        'ignore_errors': True,
+                    }
+                )
 
                 # Create symbolic link (exact copy from old API)
                 mount_cmd = f'mklink /D "{win_mountpoint}" "{unc_path}"'
-                commands.append({
-                    'command': f"cmd /c '{mount_cmd}'",
-                    'description': f"Create symlink for {name}",
-                    'ignore_errors': False
-                })
+                commands.append(
+                    {
+                        'command': f"cmd /c '{mount_cmd}'",
+                        'description': f"Create symlink for {name}",
+                        'ignore_errors': False,
+                    }
+                )
         else:
             # Linux mounting with proper permissions for adare user
             unix_mountpoint = str(mountpoint)
 
             # Create mount point directory
-            commands.append({
-                'command': f'sudo mkdir -p {unix_mountpoint}',
-                'description': f"Create mount point for {name}",
-                'ignore_errors': True
-            })
+            commands.append(
+                {
+                    'command': f'sudo mkdir -p {unix_mountpoint}',
+                    'description': f"Create mount point for {name}",
+                    'ignore_errors': True,
+                }
+            )
 
             # Check if already mounted and unmount if necessary
-            commands.append({
-                'command': f'sudo umount {unix_mountpoint} 2>/dev/null || true',
-                'description': f"Unmount existing mount at {unix_mountpoint} if present",
-                'ignore_errors': True
-            })
+            commands.append(
+                {
+                    'command': f'sudo umount {unix_mountpoint} 2>/dev/null || true',
+                    'description': f"Unmount existing mount at {unix_mountpoint} if present",
+                    'ignore_errors': True,
+                }
+            )
 
             # Mount with proper uid/gid for adare user (1000:1000)
             # Use /sbin/mount.vboxsf directly for better stability
-            commands.append({
-                'command': f'sudo /sbin/mount.vboxsf -o uid=1000,gid=1000,dmode=775,fmode=664 {name} {unix_mountpoint}',
-                'description': f"Mount shared folder {name} with adare user permissions",
-                'ignore_errors': False
-            })
+            commands.append(
+                {
+                    'command': f'sudo /sbin/mount.vboxsf -o uid=1000,gid=1000,dmode=775,fmode=664 {name} {unix_mountpoint}',
+                    'description': f"Mount shared folder {name} with adare user permissions",
+                    'ignore_errors': False,
+                }
+            )
 
         return commands
 
-    async def mount_shared_folder(self, name: str, mountpoint: Path, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False):
+    async def mount_shared_folder(
+        self,
+        name: str,
+        mountpoint: Path,
+        ctx_manager=None,
+        stop_event=None,
+        log_file: Path | None = None,
+        silent: bool = False,
+    ):
         """Mount a shared folder inside the guest VM."""
+
         async def _mount_shared_folder_async():
             try:
                 log.info(f"Mounting shared folder '{name}' to '{mountpoint}' in VM '{self.vm_name}'")
@@ -374,7 +412,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
                         stop_event=stop_event,
                         silent=silent,
                         ctx_manager=ctx_manager,
-                        operation_name=f"mount command: {description}"
+                        operation_name=f"mount command: {description}",
                     )
 
                     if return_value != 0:
@@ -396,7 +434,9 @@ class NetworkingMixin(AbstractNetworkingMixin):
 
         return await self.manager.run_async(_mount_shared_folder_async)
 
-    async def _execute_linux_mount_with_retry(self, mount_command: str, description: str, stop_event=None, max_retries: int = 2) -> bool:
+    async def _execute_linux_mount_with_retry(
+        self, mount_command: str, description: str, stop_event=None, max_retries: int = 2
+    ) -> bool:
         """
         Execute a Linux mount command with retry logic.
 
@@ -425,10 +465,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
             # Execute the mount command
             args = self._build_guest_command_args(mount_command)
             return_value, stdout, stderr = await self._execute_streaming_command_async(
-                args,
-                stop_event=stop_event,
-                silent=False,
-                operation_name=f"mount {description} ({attempt_label})"
+                args, stop_event=stop_event, silent=False, operation_name=f"mount {description} ({attempt_label})"
             )
 
             if return_value == 0:
@@ -449,15 +486,18 @@ class NetworkingMixin(AbstractNetworkingMixin):
         log.error(f"Mount failed after {max_retries + 1} attempts: {description}")
         return False
 
-    async def list_shared_folders(self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False) -> dict[str, SharedFolderConfig]:
+    async def list_shared_folders(
+        self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
+    ) -> dict[str, SharedFolderConfig]:
         """List all shared folders for the VM."""
+
         async def _list_shared_folders_async():
             try:
                 result = run_subprocess(
                     [self.vboxmanage_exe, "showvminfo", self.vm_name, "--machinereadable"],
                     log_prefix="list_shared_folders: ",
                     check=False,
-                    timeout=30
+                    timeout=30,
                 )
 
                 if result.returncode != 0:
@@ -465,25 +505,25 @@ class NetworkingMixin(AbstractNetworkingMixin):
                     return {}
 
                 # O(n) single-pass parsing: build three dictionaries
-                name_map = {}      # {mapping_num: folder_name}
-                path_map = {}      # {mapping_num: folder_path}
+                name_map = {}  # {mapping_num: folder_name}
+                path_map = {}  # {mapping_num: folder_path}
                 readonly_map = {}  # {mapping_num: readonly_bool}
 
                 for line in result.stdout.split('\n'):
                     try:
                         if line.startswith('SharedFolderNameMachineMapping'):
                             # Extract: SharedFolderNameMachineMapping3="my_folder"
-                            remainder = line[len('SharedFolderNameMachineMapping'):]
+                            remainder = line[len('SharedFolderNameMachineMapping') :]
                             mapping_num, value = remainder.split('=', 1)
                             name_map[mapping_num] = value.strip('"')
 
                         elif line.startswith('SharedFolderPathMachineMapping'):
-                            remainder = line[len('SharedFolderPathMachineMapping'):]
+                            remainder = line[len('SharedFolderPathMachineMapping') :]
                             mapping_num, value = remainder.split('=', 1)
                             path_map[mapping_num] = value.strip('"')
 
                         elif line.startswith('SharedFolderReadOnlyMachineMapping'):
-                            remainder = line[len('SharedFolderReadOnlyMachineMapping'):]
+                            remainder = line[len('SharedFolderReadOnlyMachineMapping') :]
                             mapping_num, value = remainder.split('=', 1)
                             readonly_map[mapping_num] = value.strip('"').lower() == 'on'
 
@@ -499,9 +539,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
                         readonly = readonly_map.get(mapping_num, False)
 
                         shared_folders[folder_name] = SharedFolderConfig(
-                            name=folder_name,
-                            host_path=folder_path,
-                            readonly=readonly
+                            name=folder_name, host_path=folder_path, readonly=readonly
                         )
                     except ValueError as e:
                         log.warning(f"Failed to create SharedFolderConfig for mapping {mapping_num}: {e}")
@@ -519,8 +557,17 @@ class NetworkingMixin(AbstractNetworkingMixin):
 
         return await self.manager.run_async(_list_shared_folders_async)
 
-    async def remove_shared_folder(self, name: str, mountpoint: str | None = None, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False):
+    async def remove_shared_folder(
+        self,
+        name: str,
+        mountpoint: str | None = None,
+        ctx_manager=None,
+        stop_event=None,
+        log_file: Path | None = None,
+        silent: bool = False,
+    ):
         """Remove a shared folder from the VM."""
+
         async def _remove_shared_folder_async():
             try:
                 log.info(f"Removing shared folder '{name}' from VM '{self.vm_name}'")
@@ -533,7 +580,9 @@ class NetworkingMixin(AbstractNetworkingMixin):
                             unmount_cmd = f'net use {mountpoint.upper()} /delete /y'
                         else:
                             # Directory path - remove symbolic link
-                            unmount_cmd = f'if (Test-Path "{mountpoint}") {{ Remove-Item "{mountpoint}" -Force -Recurse }}'
+                            unmount_cmd = (
+                                f'if (Test-Path "{mountpoint}") {{ Remove-Item "{mountpoint}" -Force -Recurse }}'
+                            )
                     else:
                         # Linux guest
                         unmount_cmd = f'sudo umount "{mountpoint}" 2>/dev/null || true'
@@ -546,7 +595,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
                             stop_event=stop_event,
                             silent=True,  # Don't log unmount errors
                             ctx_manager=ctx_manager,
-                            operation_name="shared folder unmount"
+                            operation_name="shared folder unmount",
                         )
 
                 # Remove shared folder from VM configuration
@@ -557,13 +606,15 @@ class NetworkingMixin(AbstractNetworkingMixin):
                     stop_event=stop_event,
                     silent=silent,
                     ctx_manager=ctx_manager,
-                    operation_name="shared folder removal"
+                    operation_name="shared folder removal",
                 )
 
                 if return_value == 0:
                     log.info(f"Shared folder '{name}' removed successfully from VM '{self.vm_name}'")
                 else:
-                    log.error(f"Failed to remove shared folder '{name}' from VM '{self.vm_name}': return code {return_value}")
+                    log.error(
+                        f"Failed to remove shared folder '{name}' from VM '{self.vm_name}': return code {return_value}"
+                    )
 
                 return return_value
             except Exception as e:
@@ -572,8 +623,11 @@ class NetworkingMixin(AbstractNetworkingMixin):
 
         return await self.manager.run_async(_remove_shared_folder_async)
 
-    async def remove_all_shared_folders(self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False):
+    async def remove_all_shared_folders(
+        self, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
+    ):
         """Remove all shared folders from the VM."""
+
         async def _remove_all_shared_folders_async():
             try:
                 log.info(f"Removing all shared folders from VM '{self.vm_name}'")
@@ -589,11 +643,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
                 total_return_value = 0
                 for folder_name in shared_folders:
                     return_value = await self.remove_shared_folder(
-                        folder_name,
-                        ctx_manager=ctx_manager,
-                        stop_event=stop_event,
-                        log_file=log_file,
-                        silent=silent
+                        folder_name, ctx_manager=ctx_manager, stop_event=stop_event, log_file=log_file, silent=silent
                     )
                     if return_value != 0:
                         total_return_value = return_value
@@ -615,7 +665,9 @@ class NetworkingMixin(AbstractNetworkingMixin):
         for cmd_info in commands:
             self.queue_command(cmd_info['command'], cmd_info['description'])
 
-    async def mount_multiple_shared_folders(self, folders: dict, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False):
+    async def mount_multiple_shared_folders(
+        self, folders: dict, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False
+    ):
         """Mount multiple shared folders with retry logic for Linux mounts."""
         is_linux = 'linux' in self.guest_os.lower()
 
@@ -624,7 +676,9 @@ class NetworkingMixin(AbstractNetworkingMixin):
 
         if is_linux:
             # Clean slate approach: remove /adare directory to avoid any mount conflicts
-            self.queue_command('sudo rm -rf /adare 2>/dev/null || true', "Remove /adare directory to clean any stale mounts")
+            self.queue_command(
+                'sudo rm -rf /adare 2>/dev/null || true', "Remove /adare directory to clean any stale mounts"
+            )
 
             # Create parent directories and set ownership
             processed_parents = set()
@@ -641,7 +695,9 @@ class NetworkingMixin(AbstractNetworkingMixin):
 
             # Execute setup commands
             log.info("Executing directory setup commands")
-            setup_result = await self.execute_queued_commands(ctx_manager, stop_event, log_file, silent, win_noprofile=True)
+            setup_result = await self.execute_queued_commands(
+                ctx_manager, stop_event, log_file, silent, win_noprofile=True
+            )
             if setup_result != 0:
                 log.error(f"Directory setup failed with return code {setup_result}")
                 return setup_result
@@ -668,19 +724,17 @@ class NetworkingMixin(AbstractNetworkingMixin):
 
                 # Execute mount with retry logic
                 mount_success = await self._execute_linux_mount_with_retry(
-                    mount_cmd,
-                    f"shared folder {name} to {mountpoint}",
-                    stop_event=stop_event,
-                    max_retries=2
+                    mount_cmd, f"shared folder {name} to {mountpoint}", stop_event=stop_event, max_retries=2
                 )
 
                 if not mount_success:
                     # Mount failed after retries - raise exception to stop execution
                     from adare.exceptions import LoggedException
+
                     raise LoggedException(
                         log,
                         f"Failed to mount shared folder '{name}' after 3 attempts (initial + 2 retries). "
-                        f"This likely indicates VirtualBox shared folder is not properly configured or Guest Additions issue."
+                        f"This likely indicates VirtualBox shared folder is not properly configured or Guest Additions issue.",
                     )
 
             log.info("All shared folders mounted successfully")

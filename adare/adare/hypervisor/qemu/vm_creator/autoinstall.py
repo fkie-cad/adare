@@ -32,6 +32,7 @@ _FRONTMATTER_RE = re.compile(
 @dataclass(frozen=True)
 class TemplateMetadata:
     """Self-describing metadata parsed from a template's Jinja-comment frontmatter."""
+
     id: str
     description: str
     supports: tuple[str, ...]
@@ -122,6 +123,7 @@ def _discovery_cache_key() -> tuple[float, float]:
             return p.stat().st_mtime
         except OSError:
             return -1.0
+
     return (_mtime(TEMPLATES_DIR), _mtime(VM_TEMPLATES_DIR))
 
 
@@ -189,9 +191,11 @@ def generate_password_hash(password: str) -> str:
     # Use passlib if available (most reliable), otherwise use subprocess with openssl
     try:
         import subprocess
+
         result = subprocess.run(
             ['openssl', 'passwd', '-6', '-salt', salt, password],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
@@ -294,28 +298,28 @@ def _sha512_crypt(password: str, salt: str) -> str:
         return result
 
     encoded = (
-        _encode_triple(c[0], c[21], c[42], 4) +
-        _encode_triple(c[22], c[43], c[1], 4) +
-        _encode_triple(c[44], c[2], c[23], 4) +
-        _encode_triple(c[3], c[24], c[45], 4) +
-        _encode_triple(c[25], c[46], c[4], 4) +
-        _encode_triple(c[47], c[5], c[26], 4) +
-        _encode_triple(c[6], c[27], c[48], 4) +
-        _encode_triple(c[28], c[49], c[7], 4) +
-        _encode_triple(c[50], c[8], c[29], 4) +
-        _encode_triple(c[9], c[30], c[51], 4) +
-        _encode_triple(c[31], c[52], c[10], 4) +
-        _encode_triple(c[53], c[11], c[32], 4) +
-        _encode_triple(c[12], c[33], c[54], 4) +
-        _encode_triple(c[34], c[55], c[13], 4) +
-        _encode_triple(c[56], c[14], c[35], 4) +
-        _encode_triple(c[15], c[36], c[57], 4) +
-        _encode_triple(c[37], c[58], c[16], 4) +
-        _encode_triple(c[59], c[17], c[38], 4) +
-        _encode_triple(c[18], c[39], c[60], 4) +
-        _encode_triple(c[40], c[61], c[19], 4) +
-        _encode_triple(c[62], c[20], c[41], 4) +
-        _encode_triple(0, 0, c[63], 2)
+        _encode_triple(c[0], c[21], c[42], 4)
+        + _encode_triple(c[22], c[43], c[1], 4)
+        + _encode_triple(c[44], c[2], c[23], 4)
+        + _encode_triple(c[3], c[24], c[45], 4)
+        + _encode_triple(c[25], c[46], c[4], 4)
+        + _encode_triple(c[47], c[5], c[26], 4)
+        + _encode_triple(c[6], c[27], c[48], 4)
+        + _encode_triple(c[28], c[49], c[7], 4)
+        + _encode_triple(c[50], c[8], c[29], 4)
+        + _encode_triple(c[9], c[30], c[51], 4)
+        + _encode_triple(c[31], c[52], c[10], 4)
+        + _encode_triple(c[53], c[11], c[32], 4)
+        + _encode_triple(c[12], c[33], c[54], 4)
+        + _encode_triple(c[34], c[55], c[13], 4)
+        + _encode_triple(c[56], c[14], c[35], 4)
+        + _encode_triple(c[15], c[36], c[57], 4)
+        + _encode_triple(c[37], c[58], c[16], 4)
+        + _encode_triple(c[59], c[17], c[38], 4)
+        + _encode_triple(c[18], c[39], c[60], 4)
+        + _encode_triple(c[40], c[61], c[19], 4)
+        + _encode_triple(c[62], c[20], c[41], 4)
+        + _encode_triple(0, 0, c[63], 2)
     )
 
     return f'$6${salt_bytes.decode()}${encoded}'
@@ -410,13 +414,14 @@ def seed_filename(os_def: OsDefinition) -> str:
     layout = _INSTALLER_LAYOUTS.get(os_def.installer)
     if layout is None:
         raise ValueError(
-            f"Unknown installer family '{os_def.installer}' for {os_def.name}. "
-            f'Known: {sorted(_INSTALLER_LAYOUTS)}'
+            f"Unknown installer family '{os_def.installer}' for {os_def.name}. Known: {sorted(_INSTALLER_LAYOUTS)}"
         )
     return layout[0]
 
 
-def write_autoinstall_dir(os_def: OsDefinition, vm_name: str, output_dir: Path, setup_level: int = SetupLevel.FULL) -> Path:
+def write_autoinstall_dir(
+    os_def: OsDefinition, vm_name: str, output_dir: Path, setup_level: int = SetupLevel.FULL
+) -> Path:
     """Write the rendered autoinstall template and any auxiliary seed files.
 
     Filenames are chosen by ``os_def.installer``. Subiquity / cloud-init use
@@ -435,8 +440,7 @@ def write_autoinstall_dir(os_def: OsDefinition, vm_name: str, output_dir: Path, 
     layout = _INSTALLER_LAYOUTS.get(os_def.installer)
     if layout is None:
         raise ValueError(
-            f"Unknown installer family '{os_def.installer}' for {os_def.name}. "
-            f'Known: {sorted(_INSTALLER_LAYOUTS)}'
+            f"Unknown installer family '{os_def.installer}' for {os_def.name}. Known: {sorted(_INSTALLER_LAYOUTS)}"
         )
     rendered_name, aux_files = layout
 

@@ -1,4 +1,5 @@
 """Tests for the @testfunction decorator, TestContext, and related API."""
+
 import ast
 import asyncio
 from inspect import isclass
@@ -24,6 +25,7 @@ from adarelib.testset.basictest import BasicTest, HostModeCategory, Parameter
 # ---------------------------------------------------------------------------
 # Sample decorated test functions for testing
 # ---------------------------------------------------------------------------
+
 
 @testfunction(
     name='sample_test',
@@ -75,8 +77,8 @@ def exception_test(ctx, value: str):
 # Tests: Decorator class generation
 # ---------------------------------------------------------------------------
 
-class TestDecoratorGeneratesClasses:
 
+class TestDecoratorGeneratesClasses:
     def test_generates_test_class(self):
         assert hasattr(sample_test, '_test_class')
         assert isclass(sample_test._test_class)
@@ -121,8 +123,8 @@ class TestDecoratorGeneratesClasses:
 # Tests: cattrs structuring (critical for YAML playbook loading)
 # ---------------------------------------------------------------------------
 
-class TestCattrsStructuring:
 
+class TestCattrsStructuring:
     def test_structure_basic(self):
         test_cls = sample_test._test_class
         data = {
@@ -163,8 +165,8 @@ class TestCattrsStructuring:
 # Tests: TestContext assertion helpers
 # ---------------------------------------------------------------------------
 
-class TestContextAssertions:
 
+class TestContextAssertions:
     def test_fail_if_raises_when_true(self):
         ctx = TestContext.__new__(TestContext)
         ctx._test = None  # Not needed for assertion tests
@@ -192,8 +194,8 @@ class TestContextAssertions:
 # Tests: Return value handling
 # ---------------------------------------------------------------------------
 
-class TestReturnValueHandling:
 
+class TestReturnValueHandling:
     def _make_instance(self, func):
         """Create a test instance for a decorated function with dummy params."""
         test_cls = func._test_class
@@ -261,8 +263,8 @@ class TestReturnValueHandling:
 # Tests: TestfunctionLoader discovery
 # ---------------------------------------------------------------------------
 
-class TestLoaderDiscovery:
 
+class TestLoaderDiscovery:
     def test_loader_discovers_decorated_functions(self, tmp_path):
         """TestfunctionLoader should discover BasicTest subclasses from decorated functions."""
         from adarelib.testset.testfunction import TestfunctionLoader
@@ -346,8 +348,8 @@ class TestLoaderDiscovery:
 # Tests: AST Analyzer (client-side PyModuleAnalyzer)
 # ---------------------------------------------------------------------------
 
-class TestPyModuleAnalyzerDecoratorSupport:
 
+class TestPyModuleAnalyzerDecoratorSupport:
     def _create_module_file(self, tmp_path, content):
         """Write content to a temp .py file and return the path."""
         module_file = tmp_path / "test_module.py"
@@ -357,7 +359,9 @@ class TestPyModuleAnalyzerDecoratorSupport:
     def test_get_classes_includes_decorated_functions(self, tmp_path):
         from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
 
-        module_file = self._create_module_file(tmp_path, """
+        module_file = self._create_module_file(
+            tmp_path,
+            """
 from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 
@@ -368,7 +372,8 @@ from adarelib.testset.basictest import HostModeCategory
 )
 def my_test(ctx, dst: str, mode: str = "any"):
     pass
-""")
+""",
+        )
         analyzer = PyModuleAnalyzer(module_file)
         classes = analyzer.get_classes(parent='BasicTest')
         assert len(classes) == 1
@@ -377,13 +382,16 @@ def my_test(ctx, dst: str, mode: str = "any"):
     def test_decorated_function_has_testname_attribute(self, tmp_path):
         from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
 
-        module_file = self._create_module_file(tmp_path, """
+        module_file = self._create_module_file(
+            tmp_path,
+            """
 from adarelib.testset.api import testfunction
 
 @testfunction(name='check_file', description='checks a file')
 def check_file(ctx, path: str):
     pass
-""")
+""",
+        )
         analyzer = PyModuleAnalyzer(module_file)
         classes = analyzer.get_classes(parent='BasicTest')
         t = classes[0]
@@ -393,13 +401,16 @@ def check_file(ctx, path: str):
     def test_decorated_function_has_testdescription_attribute(self, tmp_path):
         from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
 
-        module_file = self._create_module_file(tmp_path, """
+        module_file = self._create_module_file(
+            tmp_path,
+            """
 from adarelib.testset.api import testfunction
 
 @testfunction(name='check_file', description='checks a file')
 def check_file(ctx, path: str):
     pass
-""")
+""",
+        )
         analyzer = PyModuleAnalyzer(module_file)
         t = analyzer.get_classes(parent='BasicTest')[0]
         assert t.has_attribute('testdescription')
@@ -408,13 +419,16 @@ def check_file(ctx, path: str):
     def test_decorated_function_has_parameter_attribute(self, tmp_path):
         from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
 
-        module_file = self._create_module_file(tmp_path, """
+        module_file = self._create_module_file(
+            tmp_path,
+            """
 from adarelib.testset.api import testfunction
 
 @testfunction(name='check_file', description='checks a file')
 def check_file(ctx, path: str, mode: str = "any"):
     pass
-""")
+""",
+        )
         analyzer = PyModuleAnalyzer(module_file)
         t = analyzer.get_classes(parent='BasicTest')[0]
         assert t.has_attribute('parameter')
@@ -424,13 +438,16 @@ def check_file(ctx, path: str, mode: str = "any"):
     def test_get_class_finds_synthetic_parameter_class(self, tmp_path):
         from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
 
-        module_file = self._create_module_file(tmp_path, """
+        module_file = self._create_module_file(
+            tmp_path,
+            """
 from adarelib.testset.api import testfunction
 
 @testfunction(name='check_file', description='checks a file')
 def check_file(ctx, path: str, mode: str = "any"):
     pass
-""")
+""",
+        )
         analyzer = PyModuleAnalyzer(module_file)
         param_class = analyzer.get_class('_DecoratorParam_check_file')
         assert param_class is not None
@@ -443,13 +460,16 @@ def check_file(ctx, path: str, mode: str = "any"):
     def test_get_method_returns_function_def(self, tmp_path):
         from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
 
-        module_file = self._create_module_file(tmp_path, """
+        module_file = self._create_module_file(
+            tmp_path,
+            """
 from adarelib.testset.api import testfunction
 
 @testfunction(name='check_file', description='checks a file')
 def check_file(ctx, path: str):
     return 'ok'
-""")
+""",
+        )
         analyzer = PyModuleAnalyzer(module_file)
         t = analyzer.get_classes(parent='BasicTest')[0]
         method = t.get_method('test')
@@ -461,7 +481,9 @@ def check_file(ctx, path: str):
     def test_mixed_class_and_decorator(self, tmp_path):
         from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
 
-        module_file = self._create_module_file(tmp_path, """
+        module_file = self._create_module_file(
+            tmp_path,
+            """
 import attrs
 from typing import ClassVar, Optional
 from adarelib.testset.basictest import BasicTest, Parameter
@@ -486,7 +508,8 @@ class ClassBased(BasicTest):
 @testfunction(name='decorator_test', description='another test')
 def decorator_test(ctx, value: str):
     pass
-""")
+""",
+        )
         analyzer = PyModuleAnalyzer(module_file)
         classes = analyzer.get_classes(parent='BasicTest')
         names = [c.name for c in classes]
@@ -496,7 +519,9 @@ def decorator_test(ctx, value: str):
     def test_no_decorated_functions(self, tmp_path):
         from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
 
-        module_file = self._create_module_file(tmp_path, """
+        module_file = self._create_module_file(
+            tmp_path,
+            """
 import attrs
 from typing import ClassVar, Optional
 from adarelib.testset.basictest import BasicTest, Parameter
@@ -516,7 +541,8 @@ class ClassBased(BasicTest):
 
     def test(self):
         pass
-""")
+""",
+        )
         analyzer = PyModuleAnalyzer(module_file)
         classes = analyzer.get_classes(parent='BasicTest')
         assert len(classes) == 1
@@ -526,6 +552,7 @@ class ClassBased(BasicTest):
 # ---------------------------------------------------------------------------
 # Sample async decorated function for testing
 # ---------------------------------------------------------------------------
+
 
 @testfunction(
     name='async_test',
@@ -542,8 +569,8 @@ async def async_test(ctx, text: str = None):
 # Tests: Async decorator class generation
 # ---------------------------------------------------------------------------
 
-class TestAsyncDecoratorGeneratesClasses:
 
+class TestAsyncDecoratorGeneratesClasses:
     def test_async_generates_test_class(self):
         assert hasattr(async_test, '_test_class')
         assert issubclass(async_test._test_class, BasicTest)
@@ -556,6 +583,7 @@ class TestAsyncDecoratorGeneratesClasses:
 
     def test_async_test_method_is_coroutine(self):
         import inspect
+
         test_cls = async_test._test_class
         param_cls = async_test._parameter_class
         instance = test_cls(name='t', parameter=param_cls(text='hello'), description='', variable_metadata=None)
@@ -576,7 +604,9 @@ class TestAsyncDecoratorGeneratesClasses:
         mock_context.screenshot.take.assert_awaited_once()
 
     def test_async_fail_if_produces_failed(self):
-        @testfunction(name='async_fail', description='fails async', execute_on_host=True, category=HostModeCategory.HOST_NATIVE)
+        @testfunction(
+            name='async_fail', description='fails async', execute_on_host=True, category=HostModeCategory.HOST_NATIVE
+        )
         async def async_fail(ctx, value: str = ''):
             ctx.fail_if(True, 'async fail')
 
@@ -588,7 +618,9 @@ class TestAsyncDecoratorGeneratesClasses:
         assert 'async fail' in result.details[0]
 
     def test_async_exception_becomes_error(self):
-        @testfunction(name='async_err', description='errors async', execute_on_host=True, category=HostModeCategory.HOST_NATIVE)
+        @testfunction(
+            name='async_err', description='errors async', execute_on_host=True, category=HostModeCategory.HOST_NATIVE
+        )
         async def async_err(ctx, value: str = ''):
             raise RuntimeError("boom")
 
@@ -603,8 +635,8 @@ class TestAsyncDecoratorGeneratesClasses:
 # Tests: TestContext host property
 # ---------------------------------------------------------------------------
 
-class TestContextHostProperty:
 
+class TestContextHostProperty:
     def test_host_context_none_by_default(self):
         ctx = TestContext.__new__(TestContext)
         ctx._test = None
@@ -623,8 +655,8 @@ class TestContextHostProperty:
 # Tests: TestContext handle_placeholders_comparison
 # ---------------------------------------------------------------------------
 
-class TestContextHandlePlaceholders:
 
+class TestContextHandlePlaceholders:
     def test_handle_placeholders_delegates(self):
         mock_test = MagicMock()
         mock_test._handle_placeholders_comparison.return_value = (True, "matched")

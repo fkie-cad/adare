@@ -96,7 +96,8 @@ def exec_vm_create(arguments):
     if setup_level != SetupLevel.FULL and os_def.install_mode in GUI_INSTALL_MODES:
         log.warning(
             '--setup %s has little effect for %s installs: they bake no Python environment anyway',
-            setup_level.name.lower(), os_def.install_mode,
+            setup_level.name.lower(),
+            os_def.install_mode,
         )
 
     iso_path = Path(iso).resolve() if iso else None
@@ -126,7 +127,7 @@ def exec_vm_create(arguments):
             print_error_message(
                 title=f'--byo-iso is Windows-only ({os_name} is a {os_def.platform} profile)',
                 details='A Linux ISO is freely redistributable, so it must be published '
-                        'as an http(s) URL rather than left to the consumer.',
+                'as an http(s) URL rather than left to the consumer.',
                 next_steps=[
                     f'Drop --byo-iso: adare vm create {os_name} --iso {iso_path} --recipe',
                     'Then publish with the catalog ISO URL for this profile',
@@ -136,6 +137,7 @@ def exec_vm_create(arguments):
 
         from adare.console import print_step
         from adare.helperfunctions.hash import hash_file_sha256
+
         print_step(f'Hashing ISO for recipe integrity: [dim]{iso_path}[/dim]')
         iso_sha256 = hash_file_sha256(iso_path)
         final_name = env_name or vm_name or f'{os_name}-recipe'
@@ -159,13 +161,12 @@ def exec_vm_create(arguments):
                 title=f'Recipe environment "{final_name}" created (consumer-supplied ISO)!',
                 location=str(env_file_path),
                 next_steps=[
-                    f'Build the disk on load: adare environment load {env_file_path} '
-                    f'--iso {iso_path}',
+                    f'Build the disk on load: adare environment load {env_file_path} --iso {iso_path}',
                     'Then: adare experiment load <playbook> && adare experiment run',
                 ],
                 tip=f'The descriptor names "{iso_path.name}" + its sha256 instead of a '
-                    f'path, so it is publishable. Consumers put that ISO in '
-                    f'~/.adare/isos/ (or pass --iso) and the disk is built there.',
+                f'path, so it is publishable. Consumers put that ISO in '
+                f'~/.adare/isos/ (or pass --iso) and the disk is built there.',
             )
             return
         print_success_message(
@@ -176,7 +177,7 @@ def exec_vm_create(arguments):
                 'Then: adare experiment load <playbook> && adare experiment run',
             ],
             tip='The disk is built once from the ISO on first load and cached by its recipe hash. '
-                'Drop in a fresh ISO (new iso_sha256) to rebuild as a new environment.',
+            'Drop in a fresh ISO (new iso_sha256) to rebuild as a new environment.',
         )
         return
 
@@ -227,7 +228,9 @@ def exec_vm_create(arguments):
     final_name = vm_name or disk_path.stem
 
     try:
-        env_file_path = build_baked_environment_file(disk_path=disk_path, os_def=os_def, vm_name=final_name, env_name=env_name)
+        env_file_path = build_baked_environment_file(
+            disk_path=disk_path, os_def=os_def, vm_name=final_name, env_name=env_name
+        )
         env_next_steps = [
             f'Load environment: adare environment load {env_file_path} --no-copy',
             'Then: adare experiment load <playbook> && adare experiment run',
@@ -240,12 +243,16 @@ def exec_vm_create(arguments):
         ]
 
     if os_def.install_mode == 'gui-auto':
-        tip = ('This VM was installed by the GUI agent. The generated playbook can be '
-               'edited and replayed; see the install report for a screenshot walkthrough.')
+        tip = (
+            'This VM was installed by the GUI agent. The generated playbook can be '
+            'edited and replayed; see the install report for a screenshot walkthrough.'
+        )
     elif os_def.install_mode == 'playbook':
-        tip = ('This VM was installed by deterministic playbook replay driven by '
-               'cv-server OCR (no vision LLM). The per-step screenshots next to the '
-               'disk show exactly what was clicked.')
+        tip = (
+            'This VM was installed by deterministic playbook replay driven by '
+            'cv-server OCR (no vision LLM). The per-step screenshots next to the '
+            'disk show exactly what was clicked.'
+        )
     elif os_def.install_mode == 'manual':
         tip = 'This VM was installed manually. Configure SSH/guest agent access for full ADARE integration.'
     elif setup_level == SetupLevel.BARE:

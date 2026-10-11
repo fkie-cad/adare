@@ -16,9 +16,11 @@ from adare.backend.devmode.session import DevModeSnapshot
 # Request DTOs
 # =============================================================================
 
+
 @dataclass
 class DevSessionStartRequest:
     """Request to start a new dev mode session."""
+
     project_path: Path
     environment_name: str
     name: str | None = None  # optional human-friendly label, selectable via -s
@@ -34,6 +36,7 @@ class DevSessionStartRequest:
 @dataclass
 class DevSessionStopRequest:
     """Request to stop a dev mode session."""
+
     session_id: str
     remove_resources: bool = False  # If True, delete all resources (VM, snapshots, database)
 
@@ -41,6 +44,7 @@ class DevSessionStopRequest:
 @dataclass
 class DevActionExecuteRequest:
     """Request to execute a single action."""
+
     session_id: str
     action_source: str  # 'file', 'yaml', 'stdin'
     action_content: str  # file path, YAML string, or stdin content
@@ -49,6 +53,7 @@ class DevActionExecuteRequest:
 @dataclass
 class DevPlaybookExecuteRequest:
     """Request to execute a playbook."""
+
     session_id: str
     playbook_source: str  # 'file', 'url', 'stdin'
     playbook_content: str  # path, URL, or stdin content
@@ -60,6 +65,7 @@ class DevPlaybookExecuteRequest:
 @dataclass
 class DevResetRequest:
     """Request to reset dev session state."""
+
     session_id: str
     reset_type: str  # 'soft', 'hard'
 
@@ -67,6 +73,7 @@ class DevResetRequest:
 @dataclass
 class DevCheckpointCreateRequest:
     """Request to create a checkpoint."""
+
     session_id: str
     name: str
     description: str = ""
@@ -75,6 +82,7 @@ class DevCheckpointCreateRequest:
 @dataclass
 class DevCheckpointRestoreRequest:
     """Request to restore a checkpoint."""
+
     session_id: str
     name: str
 
@@ -82,12 +90,14 @@ class DevCheckpointRestoreRequest:
 @dataclass
 class DevCheckpointListRequest:
     """Request to list checkpoints."""
+
     session_id: str
 
 
 @dataclass
 class DevCheckpointDeleteRequest:
     """Request to delete a checkpoint."""
+
     session_id: str
     name: str
 
@@ -95,24 +105,28 @@ class DevCheckpointDeleteRequest:
 @dataclass
 class DevSessionListRequest:
     """Request to list dev sessions."""
+
     project_path: Path | None = None
 
 
 @dataclass
 class DevSessionStateRequest:
     """Request to get session state."""
+
     session_id: str
 
 
 @dataclass
 class DevSessionCleanupRequest:
     """Request to cleanup stale sessions."""
+
     project_path: Path | None = None
 
 
 @dataclass
 class DevSessionRecordRequest:
     """Request to record a dev session."""
+
     session_id: str
     output_file: Path
 
@@ -120,12 +134,14 @@ class DevSessionRecordRequest:
 @dataclass
 class DevUpdateTestfunctionsRequest:
     """Request to update testfunctions in the VM."""
+
     session_id: str
 
 
 @dataclass
 class DevCVRestartRequest:
     """Request to restart the CV server."""
+
     session_id: str
     debug: bool | None = None
     debug_output_dir: Path | None = None
@@ -134,12 +150,14 @@ class DevCVRestartRequest:
 @dataclass
 class DevCVStopRequest:
     """Request to stop the CV server."""
+
     session_id: str
 
 
 @dataclass
 class DevGuiAgentRequest:
     """Request to drive a dev session's VM with the vision-LLM GUI agent."""
+
     session_id: str
     goal: str
     output_file: Path | None = None  # when set, record a replayable playbook
@@ -162,20 +180,22 @@ class DevGuiAuthorRequest:
     grounds the *where* for described clicks. With ``script`` set, runs the whole
     sequence; otherwise (``interactive``) opens a step-at-a-time REPL.
     """
+
     session_id: str
-    script: str | None = None          # text steps; None + interactive -> REPL
-    output_file: Path | None = None    # when set, record a replayable playbook
-    interactive: bool = False          # REPL mode when no script is given
+    script: str | None = None  # text steps; None + interactive -> REPL
+    output_file: Path | None = None  # when set, record a replayable playbook
+    interactive: bool = False  # REPL mode when no script is given
 
 
 @dataclass
 class DevServeMcpRequest:
     """Request to serve a dev session's VM as a GUI-automation MCP server."""
+
     session_id: str
-    host: str | None = None            # default: config.server.GUI_MCP_HOST
-    port: int | None = None            # default: config.server.GUI_MCP_PORT
-    project_path: Path | None = None   # for the testfunction catalog
-    output_dir: Path | None = None     # where recordings land (default: project dir)
+    host: str | None = None  # default: config.server.GUI_MCP_HOST
+    port: int | None = None  # default: config.server.GUI_MCP_PORT
+    project_path: Path | None = None  # for the testfunction catalog
+    output_dir: Path | None = None  # where recordings land (default: project dir)
 
 
 @dataclass
@@ -188,25 +208,27 @@ class DevAuthorPlaybookRequest:
     ``replay`` is set — replays it on the live session (serialized) to verify,
     repairing on failure and picking the best model.
     """
+
     session_id: str
     goal: str
-    models: list[str] | None = None    # default: author_playbook.DEFAULT_MODELS
-    rounds: int = 3                    # max author/repair rounds per model
-    replay: bool = False               # verify each valid playbook live on the VM
-    os_key: str = 'linux'              # replay OS key (CV/OCR grounding profile)
-    output_file: Path | None = None    # when set, write the best authored YAML here
-    host: str | None = None            # Ollama daemon base URL (default: localhost)
+    models: list[str] | None = None  # default: author_playbook.DEFAULT_MODELS
+    rounds: int = 3  # max author/repair rounds per model
+    replay: bool = False  # verify each valid playbook live on the VM
+    os_key: str = 'linux'  # replay OS key (CV/OCR grounding profile)
+    output_file: Path | None = None  # when set, write the best authored YAML here
+    host: str | None = None  # Ollama daemon base URL (default: localhost)
     read_timeout: float | None = None  # HTTP read timeout for cloud reasoning (s)
-
 
 
 # =============================================================================
 # Response DTOs
 # =============================================================================
 
+
 @dataclass
 class DevSessionInfo:
     """Detailed dev session information."""
+
     session_id: str
     project_path: Path
     environment_name: str
@@ -224,6 +246,7 @@ class DevSessionInfo:
 @dataclass
 class DevActionResult:
     """Result of executing a single action."""
+
     success: bool
     message: str
     execution_time: float
@@ -234,6 +257,7 @@ class DevActionResult:
 @dataclass
 class DevGuiAgentResult:
     """Result of a vision-LLM GUI agent run against a dev session."""
+
     success: bool
     reason: str
     steps: int
@@ -246,6 +270,7 @@ class DevGuiAgentResult:
 @dataclass
 class DevAuthorRoundInfo:
     """One author/validate/replay round in an authoring run (serializable)."""
+
     model: str
     round: int
     valid: bool
@@ -257,17 +282,19 @@ class DevAuthorRoundInfo:
 @dataclass
 class DevAuthorPlaybookResult:
     """Result of an LLM-authored playbook run against a dev session."""
-    success: bool                       # a parseable playbook was produced
+
+    success: bool  # a parseable playbook was produced
     best_model: str | None
-    best_passing: bool                  # the best playbook also replayed cleanly
+    best_passing: bool  # the best playbook also replayed cleanly
     playbook_yaml: str | None
     rounds: list[DevAuthorRoundInfo] = field(default_factory=list)
-    output_file: str | None = None      # path the best YAML was written to, if any
+    output_file: str | None = None  # path the best YAML was written to, if any
 
 
 @dataclass
 class DevPlaybookResult:
     """Result of executing a playbook."""
+
     success: bool
     total_actions: int
     successful_actions: int
@@ -281,6 +308,7 @@ class DevPlaybookResult:
 @dataclass
 class DevSessionListItem:
     """Compact session information for list views."""
+
     session_id: str
     experiment_name: str
     environment_name: str
@@ -296,6 +324,7 @@ class DevSessionListItem:
 @dataclass
 class DevCheckpointInfo:
     """Information about a checkpoint."""
+
     name: str
     description: str
     created_at: datetime
@@ -309,6 +338,7 @@ class DevCheckpointInfo:
 @dataclass
 class DevResetResult:
     """Result of a reset operation."""
+
     success: bool
     reset_type: str  # 'soft', 'hard'
     execution_time: float
@@ -323,14 +353,16 @@ class DevCleanupResult:
     reconciled to 'stopped' (so they stay resumable), and 'running' sessions
     with a live VM are left untouched.
     """
-    sessions_reconciled: int = 0            # dead-VM 'running' rows -> 'stopped'
+
+    sessions_reconciled: int = 0  # dead-VM 'running' rows -> 'stopped'
     reconciled_session_ids: list[str] = field(default_factory=list)
-    sessions_left_running: int = 0          # live-VM 'running' rows, untouched
+    sessions_left_running: int = 0  # live-VM 'running' rows, untouched
 
 
 @dataclass
 class DevUpdateTestfunctionsResult:
     """Result of updating testfunctions."""
+
     success: bool
     message: str
     execution_time: float
@@ -339,6 +371,7 @@ class DevUpdateTestfunctionsResult:
 @dataclass
 class DevPlaybookBatchExecuteRequest:
     """Request to execute multiple playbooks in batch."""
+
     session_id: str
     playbook_patterns: list[str]
     checkpoint_name: str = "batch_base"

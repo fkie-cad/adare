@@ -24,5 +24,3 @@ class EnvironmentDoesNotExistInDatabase(LoggedErrorException):
 
 class EnvironmentAlreadyExists(LoggedErrorException):
     pass
-
-

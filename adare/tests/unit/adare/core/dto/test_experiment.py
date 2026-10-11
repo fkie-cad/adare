@@ -25,7 +25,8 @@ class TestExperimentCreateRequest:
 class TestExperimentRunResult:
     def test_successful_run(self):
         result = ExperimentRunResult(
-            was_interrupted=False, was_successful=True,
+            was_interrupted=False,
+            was_successful=True,
         )
         assert result.was_successful is True
         assert result.run_info is None
@@ -33,7 +34,8 @@ class TestExperimentRunResult:
 
     def test_failed_run(self):
         result = ExperimentRunResult(
-            was_interrupted=False, was_successful=False,
+            was_interrupted=False,
+            was_successful=False,
             error_message="VM crashed",
         )
         assert result.error_message == "VM crashed"
@@ -71,13 +73,18 @@ class TestExperimentValidateResult:
 class TestBatchRunSummary:
     def test_construction(self):
         item = BatchRunResultItem(
-            environment_name="env1", experiment_name="exp1",
-            status="SUCCESS", duration=timedelta(seconds=30),
+            environment_name="env1",
+            experiment_name="exp1",
+            status="SUCCESS",
+            duration=timedelta(seconds=30),
         )
         summary = BatchRunSummary(
-            results=[item], total_combinations=1,
-            successful_runs=1, failed_runs=0,
-            interrupted_runs=0, skipped_runs=0,
+            results=[item],
+            total_combinations=1,
+            successful_runs=1,
+            failed_runs=0,
+            interrupted_runs=0,
+            skipped_runs=0,
             total_duration=timedelta(seconds=30),
         )
         assert len(summary.results) == 1

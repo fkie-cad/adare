@@ -34,6 +34,7 @@ ArrayContainsParameter = json_tf_module.array_contains._parameter_class
 
 # Import test helpers
 import importlib.util
+
 helpers_path = Path(__file__).parent / "helpers.py"
 spec = importlib.util.spec_from_file_location("helpers", helpers_path)
 helpers = importlib.util.module_from_spec(spec)
@@ -48,23 +49,16 @@ assert_test_error = helpers.assert_test_error
 # ContainsKey Tests
 # ============================================================================
 
+
 class TestContainsKey:
     """Tests for ContainsKey testfunction."""
 
     def test_contains_key_success_simple(self, create_json_file):
         """Test successful key existence check with simple key."""
-        json_file = create_json_file("test.json", {
-            "name": "Alice",
-            "age": 30,
-            "city": "New York"
-        })
+        json_file = create_json_file("test.json", {"name": "Alice", "age": 30, "city": "New York"})
 
         test = ContainsKey(
-            name="test_contains_key",
-            parameter=ContainsKeyParameter(
-                dst=str(json_file),
-                key_path="name"
-            )
+            name="test_contains_key", parameter=ContainsKeyParameter(dst=str(json_file), key_path="name")
         )
         result = test.test()
 
@@ -74,21 +68,10 @@ class TestContainsKey:
 
     def test_contains_key_success_nested(self, create_json_file):
         """Test successful nested key existence check with dot notation."""
-        json_file = create_json_file("test.json", {
-            "user": {
-                "profile": {
-                    "name": "Alice",
-                    "age": 30
-                }
-            }
-        })
+        json_file = create_json_file("test.json", {"user": {"profile": {"name": "Alice", "age": 30}}})
 
         test = ContainsKey(
-            name="test_contains_key",
-            parameter=ContainsKeyParameter(
-                dst=str(json_file),
-                key_path="user.profile.name"
-            )
+            name="test_contains_key", parameter=ContainsKeyParameter(dst=str(json_file), key_path="user.profile.name")
         )
         result = test.test()
 
@@ -98,22 +81,11 @@ class TestContainsKey:
 
     def test_contains_key_success_deeply_nested(self, create_json_file):
         """Test successful deeply nested key path."""
-        json_file = create_json_file("test.json", {
-            "level1": {
-                "level2": {
-                    "level3": {
-                        "level4": "deep_value"
-                    }
-                }
-            }
-        })
+        json_file = create_json_file("test.json", {"level1": {"level2": {"level3": {"level4": "deep_value"}}}})
 
         test = ContainsKey(
             name="test_contains_key",
-            parameter=ContainsKeyParameter(
-                dst=str(json_file),
-                key_path="level1.level2.level3.level4"
-            )
+            parameter=ContainsKeyParameter(dst=str(json_file), key_path="level1.level2.level3.level4"),
         )
         result = test.test()
 
@@ -122,17 +94,10 @@ class TestContainsKey:
 
     def test_contains_key_failure_missing_key(self, create_json_file):
         """Test failure when key doesn't exist."""
-        json_file = create_json_file("test.json", {
-            "name": "Alice",
-            "age": 30
-        })
+        json_file = create_json_file("test.json", {"name": "Alice", "age": 30})
 
         test = ContainsKey(
-            name="test_contains_key",
-            parameter=ContainsKeyParameter(
-                dst=str(json_file),
-                key_path="city"
-            )
+            name="test_contains_key", parameter=ContainsKeyParameter(dst=str(json_file), key_path="city")
         )
         result = test.test()
 
@@ -141,20 +106,10 @@ class TestContainsKey:
 
     def test_contains_key_failure_missing_nested_key(self, create_json_file):
         """Test failure when nested key path doesn't exist."""
-        json_file = create_json_file("test.json", {
-            "user": {
-                "profile": {
-                    "name": "Alice"
-                }
-            }
-        })
+        json_file = create_json_file("test.json", {"user": {"profile": {"name": "Alice"}}})
 
         test = ContainsKey(
-            name="test_contains_key",
-            parameter=ContainsKeyParameter(
-                dst=str(json_file),
-                key_path="user.profile.age"
-            )
+            name="test_contains_key", parameter=ContainsKeyParameter(dst=str(json_file), key_path="user.profile.age")
         )
         result = test.test()
 
@@ -167,11 +122,7 @@ class TestContainsKey:
         json_file.write_text("{invalid json content")
 
         test = ContainsKey(
-            name="test_contains_key",
-            parameter=ContainsKeyParameter(
-                dst=str(json_file),
-                key_path="name"
-            )
+            name="test_contains_key", parameter=ContainsKeyParameter(dst=str(json_file), key_path="name")
         )
         result = test.test()
 
@@ -182,10 +133,7 @@ class TestContainsKey:
         """Test failure when JSON file doesn't exist."""
         test = ContainsKey(
             name="test_contains_key",
-            parameter=ContainsKeyParameter(
-                dst=str(tmp_path / "nonexistent.json"),
-                key_path="name"
-            )
+            parameter=ContainsKeyParameter(dst=str(tmp_path / "nonexistent.json"), key_path="name"),
         )
         result = test.test()
 
@@ -194,17 +142,10 @@ class TestContainsKey:
 
     def test_contains_key_success_with_null_value(self, create_json_file):
         """Test successful key check when value is null."""
-        json_file = create_json_file("test.json", {
-            "name": "Alice",
-            "email": None
-        })
+        json_file = create_json_file("test.json", {"name": "Alice", "email": None})
 
         test = ContainsKey(
-            name="test_contains_key",
-            parameter=ContainsKeyParameter(
-                dst=str(json_file),
-                key_path="email"
-            )
+            name="test_contains_key", parameter=ContainsKeyParameter(dst=str(json_file), key_path="email")
         )
         result = test.test()
 
@@ -216,23 +157,17 @@ class TestContainsKey:
 # ValueMatches Tests
 # ============================================================================
 
+
 class TestValueMatches:
     """Tests for ValueMatches testfunction."""
 
     def test_value_matches_success_string(self, create_json_file):
         """Test successful direct string value comparison."""
-        json_file = create_json_file("test.json", {
-            "name": "Alice",
-            "age": 30
-        })
+        json_file = create_json_file("test.json", {"name": "Alice", "age": 30})
 
         test = ValueMatches(
             name="test_value_matches",
-            parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="name",
-                expected_value="Alice"
-            )
+            parameter=ValueMatchesParameter(dst=str(json_file), key_path="name", expected_value="Alice"),
         )
         result = test.test()
 
@@ -241,18 +176,11 @@ class TestValueMatches:
 
     def test_value_matches_success_number(self, create_json_file):
         """Test successful numeric value comparison."""
-        json_file = create_json_file("test.json", {
-            "age": 30,
-            "score": 95.5
-        })
+        json_file = create_json_file("test.json", {"age": 30, "score": 95.5})
 
         test = ValueMatches(
             name="test_value_matches",
-            parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="age",
-                expected_value=30
-            )
+            parameter=ValueMatchesParameter(dst=str(json_file), key_path="age", expected_value=30),
         )
         result = test.test()
 
@@ -260,17 +188,11 @@ class TestValueMatches:
 
     def test_value_matches_success_float(self, create_json_file):
         """Test successful float value comparison."""
-        json_file = create_json_file("test.json", {
-            "score": 95.5
-        })
+        json_file = create_json_file("test.json", {"score": 95.5})
 
         test = ValueMatches(
             name="test_value_matches",
-            parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="score",
-                expected_value=95.5
-            )
+            parameter=ValueMatchesParameter(dst=str(json_file), key_path="score", expected_value=95.5),
         )
         result = test.test()
 
@@ -278,18 +200,11 @@ class TestValueMatches:
 
     def test_value_matches_success_boolean_true(self, create_json_file):
         """Test successful boolean True value comparison."""
-        json_file = create_json_file("test.json", {
-            "active": True,
-            "verified": False
-        })
+        json_file = create_json_file("test.json", {"active": True, "verified": False})
 
         test = ValueMatches(
             name="test_value_matches",
-            parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="active",
-                expected_value=True
-            )
+            parameter=ValueMatchesParameter(dst=str(json_file), key_path="active", expected_value=True),
         )
         result = test.test()
 
@@ -297,17 +212,11 @@ class TestValueMatches:
 
     def test_value_matches_success_boolean_false(self, create_json_file):
         """Test successful boolean False value comparison."""
-        json_file = create_json_file("test.json", {
-            "active": False
-        })
+        json_file = create_json_file("test.json", {"active": False})
 
         test = ValueMatches(
             name="test_value_matches",
-            parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="active",
-                expected_value=False
-            )
+            parameter=ValueMatchesParameter(dst=str(json_file), key_path="active", expected_value=False),
         )
         result = test.test()
 
@@ -315,22 +224,11 @@ class TestValueMatches:
 
     def test_value_matches_success_nested(self, create_json_file):
         """Test successful nested value comparison."""
-        json_file = create_json_file("test.json", {
-            "user": {
-                "profile": {
-                    "name": "Alice",
-                    "age": 30
-                }
-            }
-        })
+        json_file = create_json_file("test.json", {"user": {"profile": {"name": "Alice", "age": 30}}})
 
         test = ValueMatches(
             name="test_value_matches",
-            parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="user.profile.name",
-                expected_value="Alice"
-            )
+            parameter=ValueMatchesParameter(dst=str(json_file), key_path="user.profile.name", expected_value="Alice"),
         )
         result = test.test()
 
@@ -338,19 +236,13 @@ class TestValueMatches:
 
     def test_value_matches_success_regex_match(self, create_json_file):
         """Test successful regex matching with regex_match=True."""
-        json_file = create_json_file("test.json", {
-            "email": "alice@example.com",
-            "phone": "123-4567"
-        })
+        json_file = create_json_file("test.json", {"email": "alice@example.com", "phone": "123-4567"})
 
         test = ValueMatches(
             name="test_value_matches",
             parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="email",
-                expected_value=r".*@example\.com",
-                regex_match=True
-            )
+                dst=str(json_file), key_path="email", expected_value=r".*@example\.com", regex_match=True
+            ),
         )
         result = test.test()
 
@@ -359,18 +251,13 @@ class TestValueMatches:
 
     def test_value_matches_failure_regex_no_match(self, create_json_file):
         """Test failure when regex doesn't match."""
-        json_file = create_json_file("test.json", {
-            "email": "alice@test.com"
-        })
+        json_file = create_json_file("test.json", {"email": "alice@test.com"})
 
         test = ValueMatches(
             name="test_value_matches",
             parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="email",
-                expected_value=r".*@example\.com",
-                regex_match=True
-            )
+                dst=str(json_file), key_path="email", expected_value=r".*@example\.com", regex_match=True
+            ),
         )
         result = test.test()
 
@@ -379,22 +266,16 @@ class TestValueMatches:
 
     def test_value_matches_success_wildcard_array_any_mode(self, create_json_file):
         """Test successful wildcard array matching with any mode."""
-        json_file = create_json_file("test.json", {
-            "users": [
-                {"name": "Alice", "age": 30},
-                {"name": "Bob", "age": 25},
-                {"name": "Charlie", "age": 35}
-            ]
-        })
+        json_file = create_json_file(
+            "test.json",
+            {"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}, {"name": "Charlie", "age": 35}]},
+        )
 
         test = ValueMatches(
             name="test_value_matches",
             parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="users[*].age",
-                expected_value=30,
-                wildcard_mode="any"
-            )
+                dst=str(json_file), key_path="users[*].age", expected_value=30, wildcard_mode="any"
+            ),
         )
         result = test.test()
 
@@ -404,22 +285,15 @@ class TestValueMatches:
 
     def test_value_matches_success_wildcard_array_all_mode(self, create_json_file):
         """Test successful wildcard array matching with all mode."""
-        json_file = create_json_file("test.json", {
-            "items": [
-                {"status": "active"},
-                {"status": "active"},
-                {"status": "active"}
-            ]
-        })
+        json_file = create_json_file(
+            "test.json", {"items": [{"status": "active"}, {"status": "active"}, {"status": "active"}]}
+        )
 
         test = ValueMatches(
             name="test_value_matches",
             parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="items[*].status",
-                expected_value="active",
-                wildcard_mode="all"
-            )
+                dst=str(json_file), key_path="items[*].status", expected_value="active", wildcard_mode="all"
+            ),
         )
         result = test.test()
 
@@ -429,22 +303,15 @@ class TestValueMatches:
 
     def test_value_matches_failure_wildcard_array_all_mode(self, create_json_file):
         """Test failure when not all array elements match in all mode."""
-        json_file = create_json_file("test.json", {
-            "items": [
-                {"status": "active"},
-                {"status": "inactive"},
-                {"status": "active"}
-            ]
-        })
+        json_file = create_json_file(
+            "test.json", {"items": [{"status": "active"}, {"status": "inactive"}, {"status": "active"}]}
+        )
 
         test = ValueMatches(
             name="test_value_matches",
             parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="items[*].status",
-                expected_value="active",
-                wildcard_mode="all"
-            )
+                dst=str(json_file), key_path="items[*].status", expected_value="active", wildcard_mode="all"
+            ),
         )
         result = test.test()
 
@@ -454,22 +321,22 @@ class TestValueMatches:
 
     def test_value_matches_success_wildcard_object_keys(self, create_json_file):
         """Test successful wildcard matching for all object keys."""
-        json_file = create_json_file("test.json", {
-            "config": {
-                "feature_a": {"enabled": True},
-                "feature_b": {"enabled": True},
-                "feature_c": {"enabled": True}
-            }
-        })
+        json_file = create_json_file(
+            "test.json",
+            {
+                "config": {
+                    "feature_a": {"enabled": True},
+                    "feature_b": {"enabled": True},
+                    "feature_c": {"enabled": True},
+                }
+            },
+        )
 
         test = ValueMatches(
             name="test_value_matches",
             parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="config.*.enabled",
-                expected_value=True,
-                wildcard_mode="all"
-            )
+                dst=str(json_file), key_path="config.*.enabled", expected_value=True, wildcard_mode="all"
+            ),
         )
         result = test.test()
 
@@ -478,21 +345,13 @@ class TestValueMatches:
 
     def test_value_matches_failure_wildcard_no_match_any_mode(self, create_json_file):
         """Test failure when wildcard matches no values in any mode."""
-        json_file = create_json_file("test.json", {
-            "users": [
-                {"name": "Alice", "age": 30},
-                {"name": "Bob", "age": 25}
-            ]
-        })
+        json_file = create_json_file("test.json", {"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]})
 
         test = ValueMatches(
             name="test_value_matches",
             parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="users[*].age",
-                expected_value=40,
-                wildcard_mode="any"
-            )
+                dst=str(json_file), key_path="users[*].age", expected_value=40, wildcard_mode="any"
+            ),
         )
         result = test.test()
 
@@ -501,22 +360,22 @@ class TestValueMatches:
 
     def test_value_matches_success_wildcard_object_any_mode(self, create_json_file):
         """Test successful wildcard object matching with any mode."""
-        json_file = create_json_file("test.json", {
-            "config": {
-                "feature_a": {"enabled": False},
-                "feature_b": {"enabled": True},
-                "feature_c": {"enabled": False}
-            }
-        })
+        json_file = create_json_file(
+            "test.json",
+            {
+                "config": {
+                    "feature_a": {"enabled": False},
+                    "feature_b": {"enabled": True},
+                    "feature_c": {"enabled": False},
+                }
+            },
+        )
 
         test = ValueMatches(
             name="test_value_matches",
             parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="config.*.enabled",
-                expected_value=True,
-                wildcard_mode="any"
-            )
+                dst=str(json_file), key_path="config.*.enabled", expected_value=True, wildcard_mode="any"
+            ),
         )
         result = test.test()
 
@@ -525,19 +384,12 @@ class TestValueMatches:
 
     def test_value_matches_with_placeholder_simple(self, create_json_file, variable_metadata_simple):
         """Test value matching with simple placeholder."""
-        json_file = create_json_file("test.json", {
-            "result": "value1",
-            "output": "value2"
-        })
+        json_file = create_json_file("test.json", {"result": "value1", "output": "value2"})
 
         test = ValueMatches(
             name="test_value_matches",
-            parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="result",
-                expected_value="{{VAR1}}"
-            ),
-            variable_metadata=variable_metadata_simple
+            parameter=ValueMatchesParameter(dst=str(json_file), key_path="result", expected_value="{{VAR1}}"),
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -545,18 +397,12 @@ class TestValueMatches:
 
     def test_value_matches_failure_placeholder_mismatch(self, create_json_file, variable_metadata_simple):
         """Test failure when placeholder value doesn't match."""
-        json_file = create_json_file("test.json", {
-            "result": "wrong_value"
-        })
+        json_file = create_json_file("test.json", {"result": "wrong_value"})
 
         test = ValueMatches(
             name="test_value_matches",
-            parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="result",
-                expected_value="{{VAR1}}"
-            ),
-            variable_metadata=variable_metadata_simple
+            parameter=ValueMatchesParameter(dst=str(json_file), key_path="result", expected_value="{{VAR1}}"),
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -564,17 +410,11 @@ class TestValueMatches:
 
     def test_value_matches_failure_direct_comparison(self, create_json_file):
         """Test failure when direct value comparison doesn't match."""
-        json_file = create_json_file("test.json", {
-            "name": "Alice"
-        })
+        json_file = create_json_file("test.json", {"name": "Alice"})
 
         test = ValueMatches(
             name="test_value_matches",
-            parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="name",
-                expected_value="Bob"
-            )
+            parameter=ValueMatchesParameter(dst=str(json_file), key_path="name", expected_value="Bob"),
         )
         result = test.test()
 
@@ -585,17 +425,11 @@ class TestValueMatches:
 
     def test_value_matches_failure_key_not_found(self, create_json_file):
         """Test failure when key path doesn't exist."""
-        json_file = create_json_file("test.json", {
-            "name": "Alice"
-        })
+        json_file = create_json_file("test.json", {"name": "Alice"})
 
         test = ValueMatches(
             name="test_value_matches",
-            parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="age",
-                expected_value=30
-            )
+            parameter=ValueMatchesParameter(dst=str(json_file), key_path="age", expected_value=30),
         )
         result = test.test()
 
@@ -609,11 +443,7 @@ class TestValueMatches:
 
         test = ValueMatches(
             name="test_value_matches",
-            parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="name",
-                expected_value="Alice"
-            )
+            parameter=ValueMatchesParameter(dst=str(json_file), key_path="name", expected_value="Alice"),
         )
         result = test.test()
 
@@ -622,21 +452,21 @@ class TestValueMatches:
 
     def test_value_matches_success_nested_wildcard(self, create_json_file):
         """Test successful nested wildcard path matching."""
-        json_file = create_json_file("test.json", {
-            "teams": [
-                {"members": [{"role": "admin"}, {"role": "user"}]},
-                {"members": [{"role": "admin"}, {"role": "admin"}]}
-            ]
-        })
+        json_file = create_json_file(
+            "test.json",
+            {
+                "teams": [
+                    {"members": [{"role": "admin"}, {"role": "user"}]},
+                    {"members": [{"role": "admin"}, {"role": "admin"}]},
+                ]
+            },
+        )
 
         test = ValueMatches(
             name="test_value_matches",
             parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="teams[*].members[*].role",
-                expected_value="admin",
-                wildcard_mode="any"
-            )
+                dst=str(json_file), key_path="teams[*].members[*].role", expected_value="admin", wildcard_mode="any"
+            ),
         )
         result = test.test()
 
@@ -644,17 +474,11 @@ class TestValueMatches:
 
     def test_value_matches_success_case_sensitive(self, create_json_file):
         """Test that value matching is case sensitive by default."""
-        json_file = create_json_file("test.json", {
-            "name": "Alice"
-        })
+        json_file = create_json_file("test.json", {"name": "Alice"})
 
         test = ValueMatches(
             name="test_value_matches",
-            parameter=ValueMatchesParameter(
-                dst=str(json_file),
-                key_path="name",
-                expected_value="alice"
-            )
+            parameter=ValueMatchesParameter(dst=str(json_file), key_path="name", expected_value="alice"),
         )
         result = test.test()
 
@@ -666,22 +490,17 @@ class TestValueMatches:
 # ArrayContains Tests
 # ============================================================================
 
+
 class TestArrayContains:
     """Tests for ArrayContains testfunction."""
 
     def test_array_contains_success_string(self, create_json_file):
         """Test successful string element membership."""
-        json_file = create_json_file("test.json", {
-            "names": ["Alice", "Bob", "Charlie"]
-        })
+        json_file = create_json_file("test.json", {"names": ["Alice", "Bob", "Charlie"]})
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="names",
-                expected_element="Bob"
-            )
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="names", expected_element="Bob"),
         )
         result = test.test()
 
@@ -691,17 +510,11 @@ class TestArrayContains:
 
     def test_array_contains_success_number(self, create_json_file):
         """Test successful numeric element membership."""
-        json_file = create_json_file("test.json", {
-            "scores": [85, 90, 95, 100]
-        })
+        json_file = create_json_file("test.json", {"scores": [85, 90, 95, 100]})
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="scores",
-                expected_element=95
-            )
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="scores", expected_element=95),
         )
         result = test.test()
 
@@ -709,17 +522,11 @@ class TestArrayContains:
 
     def test_array_contains_success_boolean(self, create_json_file):
         """Test successful boolean element membership."""
-        json_file = create_json_file("test.json", {
-            "flags": [True, False, True]
-        })
+        json_file = create_json_file("test.json", {"flags": [True, False, True]})
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="flags",
-                expected_element=False
-            )
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="flags", expected_element=False),
         )
         result = test.test()
 
@@ -727,21 +534,11 @@ class TestArrayContains:
 
     def test_array_contains_success_nested_array(self, create_json_file):
         """Test successful nested array element membership."""
-        json_file = create_json_file("test.json", {
-            "data": {
-                "results": {
-                    "values": [10, 20, 30]
-                }
-            }
-        })
+        json_file = create_json_file("test.json", {"data": {"results": {"values": [10, 20, 30]}}})
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="data.results.values",
-                expected_element=20
-            )
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="data.results.values", expected_element=20),
         )
         result = test.test()
 
@@ -749,20 +546,13 @@ class TestArrayContains:
 
     def test_array_contains_success_complex_object(self, create_json_file):
         """Test successful complex object element membership."""
-        json_file = create_json_file("test.json", {
-            "users": [
-                {"name": "Alice", "age": 30},
-                {"name": "Bob", "age": 25}
-            ]
-        })
+        json_file = create_json_file("test.json", {"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]})
 
         test = ArrayContains(
             name="test_array_contains",
             parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="users",
-                expected_element={"name": "Alice", "age": 30}
-            )
+                dst=str(json_file), array_path="users", expected_element={"name": "Alice", "age": 30}
+            ),
         )
         result = test.test()
 
@@ -770,17 +560,11 @@ class TestArrayContains:
 
     def test_array_contains_success_nested_list(self, create_json_file):
         """Test successful nested list element membership."""
-        json_file = create_json_file("test.json", {
-            "matrix": [[1, 2], [3, 4], [5, 6]]
-        })
+        json_file = create_json_file("test.json", {"matrix": [[1, 2], [3, 4], [5, 6]]})
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="matrix",
-                expected_element=[3, 4]
-            )
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="matrix", expected_element=[3, 4]),
         )
         result = test.test()
 
@@ -788,17 +572,11 @@ class TestArrayContains:
 
     def test_array_contains_failure_element_not_found(self, create_json_file):
         """Test failure when element is not in array."""
-        json_file = create_json_file("test.json", {
-            "names": ["Alice", "Bob", "Charlie"]
-        })
+        json_file = create_json_file("test.json", {"names": ["Alice", "Bob", "Charlie"]})
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="names",
-                expected_element="David"
-            )
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="names", expected_element="David"),
         )
         result = test.test()
 
@@ -807,17 +585,11 @@ class TestArrayContains:
 
     def test_array_contains_failure_not_array(self, create_json_file):
         """Test failure when path points to non-array value."""
-        json_file = create_json_file("test.json", {
-            "name": "Alice"
-        })
+        json_file = create_json_file("test.json", {"name": "Alice"})
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="name",
-                expected_element="Alice"
-            )
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="name", expected_element="Alice"),
         )
         result = test.test()
 
@@ -826,17 +598,11 @@ class TestArrayContains:
 
     def test_array_contains_failure_array_path_not_found(self, create_json_file):
         """Test failure when array path doesn't exist."""
-        json_file = create_json_file("test.json", {
-            "names": ["Alice"]
-        })
+        json_file = create_json_file("test.json", {"names": ["Alice"]})
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="values",
-                expected_element="test"
-            )
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="values", expected_element="test"),
         )
         result = test.test()
 
@@ -845,18 +611,12 @@ class TestArrayContains:
 
     def test_array_contains_with_placeholder_simple(self, create_json_file, variable_metadata_simple):
         """Test array contains with simple placeholder."""
-        json_file = create_json_file("test.json", {
-            "results": ["value1", "value2", "other"]
-        })
+        json_file = create_json_file("test.json", {"results": ["value1", "value2", "other"]})
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="results",
-                expected_element="{{VAR1}}"
-            ),
-            variable_metadata=variable_metadata_simple
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="results", expected_element="{{VAR1}}"),
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -865,18 +625,12 @@ class TestArrayContains:
 
     def test_array_contains_failure_placeholder_mismatch(self, create_json_file, variable_metadata_simple):
         """Test failure when placeholder doesn't match any array element."""
-        json_file = create_json_file("test.json", {
-            "results": ["wrong1", "wrong2", "wrong3"]
-        })
+        json_file = create_json_file("test.json", {"results": ["wrong1", "wrong2", "wrong3"]})
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="results",
-                expected_element="{{VAR1}}"
-            ),
-            variable_metadata=variable_metadata_simple
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="results", expected_element="{{VAR1}}"),
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -885,17 +639,11 @@ class TestArrayContains:
 
     def test_array_contains_empty_array(self, create_json_file):
         """Test behavior with empty array."""
-        json_file = create_json_file("test.json", {
-            "items": []
-        })
+        json_file = create_json_file("test.json", {"items": []})
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="items",
-                expected_element="anything"
-            )
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="items", expected_element="anything"),
         )
         result = test.test()
 
@@ -904,17 +652,11 @@ class TestArrayContains:
 
     def test_array_contains_success_null_element(self, create_json_file):
         """Test successful null element membership."""
-        json_file = create_json_file("test.json", {
-            "values": ["a", None, "b"]
-        })
+        json_file = create_json_file("test.json", {"values": ["a", None, "b"]})
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="values",
-                expected_element=None
-            )
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="values", expected_element=None),
         )
         result = test.test()
 
@@ -927,11 +669,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(
-                dst=str(json_file),
-                array_path="items",
-                expected_element="test"
-            )
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="items", expected_element="test"),
         )
         result = test.test()
 
@@ -943,10 +681,8 @@ class TestArrayContains:
         test = ArrayContains(
             name="test_array_contains",
             parameter=ArrayContainsParameter(
-                dst=str(tmp_path / "nonexistent.json"),
-                array_path="items",
-                expected_element="test"
-            )
+                dst=str(tmp_path / "nonexistent.json"), array_path="items", expected_element="test"
+            ),
         )
         result = test.test()
 

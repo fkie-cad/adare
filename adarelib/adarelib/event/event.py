@@ -95,18 +95,12 @@ class ErrorEvent(Event):
     error_msg: str = ''
 
 
-
-
 # EventSystemData removed - was unused dead code
-
 
 
 def transform_data_to_event(data: dict) -> Event:
     """Legacy function - only supports basic event types for backward compatibility."""
-    supported_events = {
-        'test': TestEvent,
-        'error': ErrorEvent
-    }
+    supported_events = {'test': TestEvent, 'error': ErrorEvent}
     if data['category'] in supported_events:
         event_class = supported_events[data['category']]
         return cattrs.structure(data, event_class)

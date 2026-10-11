@@ -36,8 +36,7 @@ class ManualVMCreator(BaseVMCreator):
         """Validate the user-supplied ISO path."""
         if self.iso_path is None:
             raise ManualVMCreationError(
-                f'ISO required for manual install. '
-                f'Use --iso /path/to/{self.os_def.display_name}.iso'
+                f'ISO required for manual install. Use --iso /path/to/{self.os_def.display_name}.iso'
             )
         if not self.iso_path.is_file():
             raise ManualVMCreationError(f'ISO file not found: {self.iso_path}')
@@ -106,33 +105,45 @@ def _run_manual_installation(
     # firmware can enumerate PCI and USB devices. Fine-grained highmem-*
     # properties avoid the ~3 GB RAM cap imposed by blanket highmem=off.
     if os_def.architecture == 'aarch64':
-        machine = machine.replace(
-            'virt,', 'virt,highmem-mmio=off,highmem-ecam=off,highmem-redists=off,')
+        machine = machine.replace('virt,', 'virt,highmem-mmio=off,highmem-ecam=off,highmem-redists=off,')
 
     # QMP socket for ACPI shutdown
     qmp_sock_path = disk_path.parent / f'.{disk_path.stem}-qmp.sock'
 
     cmd = [
         arch_params['exe'],
-        '-machine', machine,
-        '-cpu', arch_params['cpu'],
-        '-m', str(ram_mb),
-        '-smp', str(cpus),
+        '-machine',
+        machine,
+        '-cpu',
+        arch_params['cpu'],
+        '-m',
+        str(ram_mb),
+        '-smp',
+        str(cpus),
         # Disk
-        '-drive', f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
+        '-drive',
+        f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
         # ISO as CD-ROM
-        '-cdrom', str(iso_path),
+        '-cdrom',
+        str(iso_path),
         # QMP for ACPI shutdown
-        '-qmp', f'unix:{qmp_sock_path},server=on,wait=off',
+        '-qmp',
+        f'unix:{qmp_sock_path},server=on,wait=off',
         # Network
-        '-netdev', 'user,id=net0',
-        '-device', 'virtio-net-pci,netdev=net0',
+        '-netdev',
+        'user,id=net0',
+        '-device',
+        'virtio-net-pci,netdev=net0',
         # Virtio RNG
-        '-device', 'virtio-rng-pci',
+        '-device',
+        'virtio-rng-pci',
         # USB tablet for absolute mouse positioning in native display
-        '-device', 'qemu-xhci',
-        '-device', 'usb-tablet',
-        '-device', 'usb-kbd',
+        '-device',
+        'qemu-xhci',
+        '-device',
+        'usb-tablet',
+        '-device',
+        'usb-kbd',
     ]
 
     # VGA / display — ramfb only during install (virtio-gpu-pci conflicts with
@@ -161,8 +172,10 @@ def _run_manual_installation(
             bios_args = ['-bios', ovmf_code]
         else:
             bios_args = [
-                '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
-                '-drive', f'if=pflash,format=raw,file={nvram_path}',
+                '-drive',
+                f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
+                '-drive',
+                f'if=pflash,format=raw,file={nvram_path}',
             ]
         # Insert after '-machine' and its value
         machine_idx = cmd.index('-machine') + 2
@@ -196,8 +209,4 @@ def _run_manual_installation(
 
     if process.returncode and process.returncode != 0:
         stderr = process.stderr.read().decode() if process.stderr else ''
-        raise ManualVMCreationError(
-            f'QEMU exited with code {process.returncode}: {stderr.strip()}'
-        )
-
-
+        raise ManualVMCreationError(f'QEMU exited with code {process.returncode}: {stderr.strip()}')

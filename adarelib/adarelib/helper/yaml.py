@@ -9,9 +9,7 @@ log = logging.getLogger(__name__)
 
 
 def yaml_to_dict(file: Path, loader=None):
-    return (
-        yaml.load(file.read_text(), Loader=loader) if loader else yaml.safe_load(file.read_text())
-    )
+    return yaml.load(file.read_text(), Loader=loader) if loader else yaml.safe_load(file.read_text())
 
 
 def dict_to_yaml(file: Path, data, dumper=None):

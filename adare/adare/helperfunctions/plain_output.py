@@ -15,6 +15,7 @@ format was requested, so the rules favour ``cut``/``awk``/``while read``:
 The input is already-prepared data (see ``StructuredOutputFormatter.prepare_data``):
 dicts, lists and JSON scalars only.
 """
+
 import json
 from typing import Any
 
@@ -51,8 +52,7 @@ def _is_scalar_or_scalar_list(value: Any) -> bool:
 
 def _is_flat_record(value: Any) -> bool:
     """A non-empty dict whose values are scalars or scalar lists (dotted-key material)."""
-    return isinstance(value, dict) and bool(value) and all(
-        _is_scalar_or_scalar_list(v) for v in value.values())
+    return isinstance(value, dict) and bool(value) and all(_is_scalar_or_scalar_list(v) for v in value.values())
 
 
 def _is_record_map(value: Any) -> bool:

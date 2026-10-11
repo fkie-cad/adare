@@ -12,8 +12,16 @@ from adare.frontend.terminal.testfunction_catalog import output_mode
 
 log = logging.getLogger(__name__)
 
-_STYLE = {'ok': 'green', 'linked': 'green', 'copied': 'green', 'updated': 'yellow', 'missing': 'dim',
-          'stale': 'red', 'conflict': 'red', 'foreign-link': 'yellow'}
+_STYLE = {
+    'ok': 'green',
+    'linked': 'green',
+    'copied': 'green',
+    'updated': 'yellow',
+    'missing': 'dim',
+    'stale': 'red',
+    'conflict': 'red',
+    'foreign-link': 'yellow',
+}
 
 _NEXT_STEPS = '''
 Next steps:
@@ -33,8 +41,11 @@ class SkillsSourceNotFoundError(LoggedErrorException):
 def _source():
     source = skills_source()
     if source is None:
-        raise SkillsSourceNotFoundError(log, 'No ADARE skills directory found', possible_solutions=[
-            'run from an ADARE source checkout, or refresh appdata with `make update`'])
+        raise SkillsSourceNotFoundError(
+            log,
+            'No ADARE skills directory found',
+            possible_solutions=['run from an ADARE source checkout, or refresh appdata with `make update`'],
+        )
     return source
 
 
@@ -72,8 +83,14 @@ def _expand(value: str, choices: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def exec_agent_setup(arguments) -> None:
-    links = setup(_source(), _expand(arguments.client, CLIENTS), _expand(arguments.scope, SCOPES),
-                  copy=arguments.copy, force=arguments.force, dry_run=arguments.dry_run)
+    links = setup(
+        _source(),
+        _expand(arguments.client, CLIENTS),
+        _expand(arguments.scope, SCOPES),
+        copy=arguments.copy,
+        force=arguments.force,
+        dry_run=arguments.dry_run,
+    )
     _render(links, 'ADARE skills' + (' (dry run)' if arguments.dry_run else ''))
     blocked = [link for link in links if link.status in ('conflict', 'foreign-link')]
     if blocked and _human():

@@ -3,6 +3,7 @@ Output models for structured JSON/YAML data.
 
 These models provide standardized data structures for CLI output formatting.
 """
+
 from datetime import datetime
 from typing import Any
 
@@ -12,6 +13,7 @@ import attrs
 @attrs.define
 class ProjectInfo:
     """Project information for structured output."""
+
     name: str
     description: str = ""
     path: str = ""
@@ -34,6 +36,7 @@ class ProjectInfo:
 @attrs.define
 class EnvironmentInfo:
     """Environment information for structured output."""
+
     name: str
     ulid: str
     project: str
@@ -81,13 +84,14 @@ class EnvironmentInfo:
                 'created_at': self.created_at.isoformat() if self.created_at else None,
                 'experiment_count': self.experiment_count,
             },
-            'file': self.file
+            'file': self.file,
         }
 
 
 @attrs.define
 class ExperimentInfo:
     """Experiment information for structured output."""
+
     name: str
     ulid: str
     project: str
@@ -127,13 +131,14 @@ class ExperimentInfo:
                 'created_at': self.created_at.isoformat() if self.created_at else None,
                 'run_count': self.run_count,
                 'last_run': self.last_run.isoformat() if self.last_run else None,
-            }
+            },
         }
 
 
 @attrs.define
 class TestFunctionInfo:
     """Test function information for structured output."""
+
     name: str
     dotnotation: str
     description: str = ""
@@ -165,13 +170,14 @@ class TestFunctionInfo:
                 'full_path': self.full_file_path,
                 'sha256': self.file_sha256,
                 'description': self.file_description,
-            }
+            },
         }
 
 
 @attrs.define
 class RunInfo:
     """Experiment run information for structured output."""
+
     ulid: str
     experiment_name: str
     experiment_ulid: str
@@ -217,13 +223,14 @@ class RunInfo:
             'test_results': {
                 'overall_result': self.overall_result,
                 'tests': self.test_results,
-            }
+            },
         }
 
 
 @attrs.define
 class VMInfo:
     """VM information for structured output."""
+
     name: str
     status: str = ""
     environment: str = ""

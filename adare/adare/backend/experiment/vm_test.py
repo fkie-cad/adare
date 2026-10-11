@@ -34,7 +34,7 @@ def create_ova_test_context(ova_file_path: Path, guest_platform: str):
         vm_cpus=2,
         vm_memory=2048,
         websocket_port=19000,  # Test port outside production range
-        vm_resolution=(1920, 1080)
+        vm_resolution=(1920, 1080),
     )
 
     # Create context with minimal required fields
@@ -73,24 +73,18 @@ async def import_ova_for_test(context):
         username=username,
         password=password,
         cpus=context.config.vm_cpus,
-        ram=context.config.vm_memory
+        ram=context.config.vm_memory,
     )
 
     # Import OVA file (using same pattern as working vm database import)
     await context.vm.create_from_ovf_or_ova(
-        file_path=context._ova_file_path,
-        silent=True,
-        stop_event=context.user_interrupt_event
+        file_path=context._ova_file_path, silent=True, stop_event=context.user_interrupt_event
     )
 
     # Setup minimal shared directories configuration for testing
     from adare.config import SHARE_POINT_VM
-    context.config.shared_directories = {
-        'app': {
-            'host': str(context.adarevm),
-            'guest': SHARE_POINT_VM
-        }
-    }
+
+    context.config.shared_directories = {'app': {'host': str(context.adarevm), 'guest': SHARE_POINT_VM}}
 
     log.info("OVA imported successfully")
 
@@ -174,10 +168,7 @@ async def test_python_availability(context):
     if _is_windows(context):
         # Windows ships 'python'/'py', not 'python3'. The App Execution Alias
         # stub returns non-zero, so accept either launcher.
-        cmd = (
-            "python --version; if ($LASTEXITCODE -eq 0) { exit 0 }; "
-            "py --version; exit $LASTEXITCODE"
-        )
+        cmd = "python --version; if ($LASTEXITCODE -eq 0) { exit 0 }; py --version; exit $LASTEXITCODE"
     else:
         cmd = "python3 --version"
     python_result = await context.vm.run_command(cmd, stop_event=context.user_interrupt_event)
@@ -227,8 +218,7 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
     """
     if guest_bind_port is not None and guest_bind_port != 18765:
         log.warning(
-            f"adarevm binds 18765 unconditionally; requested guest_bind_port="
-            f"{guest_bind_port} cannot be honored."
+            f"adarevm binds 18765 unconditionally; requested guest_bind_port={guest_bind_port} cannot be honored."
         )
     try:
         if _is_windows(context):
@@ -245,8 +235,7 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
                     '/v AllowInsecureGuestAuth /t REG_DWORD /d 1 /f >$null 2>&1; '
                     'Set-SmbClientConfiguration -RequireSecuritySignature $false '
                     '-Force -ErrorAction SilentlyContinue; '
-                    f'net use \\\\10.0.2.4\\qemu /persistent:no 2>>"{stderr_log}"; '
-                    + run_cmd
+                    f'net use \\\\10.0.2.4\\qemu /persistent:no 2>>"{stderr_log}"; ' + run_cmd
                 )
             start_result = await context.vm.run_command(
                 run_cmd,
@@ -261,12 +250,10 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
                 log.info("AdareVM server started successfully (port 18765 listening)")
                 return True, None
             log.warning(
-                f"Failed to start adarevm server. Exit code: "
-                f"{start_result.returncode}. stderr: {start_result.stderr}"
+                f"Failed to start adarevm server. Exit code: {start_result.returncode}. stderr: {start_result.stderr}"
             )
             return False, (
-                f"Failed to start adarevm server. Exit code: "
-                f"{start_result.returncode}. stderr: {start_result.stderr}"
+                f"Failed to start adarevm server. Exit code: {start_result.returncode}. stderr: {start_result.stderr}"
             )
 
         # Linux: mirror the real experiment launch (agent_command_builders).
@@ -276,6 +263,7 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
         # grant the guest-agent (root) access to the autologin user's X display
         # (DISPLAY/XAUTHORITY + `xhost +SI:localuser:root`), then run adarevm.
         import asyncio
+
         sync_command = "cd /adare/vm/adarevm && uv sync 2>&1 | tail -3"
         log.info("Pre-syncing adarevm venv in guest (first run builds deps)...")
         await context.vm.run_command(sync_command, stop_event=context.user_interrupt_event)
@@ -365,6 +353,7 @@ def _get_host_gui_executor(context):
         from adare.backend.experiment.execution.qemu_host_gui_executor import (
             QEMUHostGUIExecutor,
         )
+
         executor = QEMUHostGUIExecutor(context.vm)
         context._host_gui_executor = executor
     return executor
@@ -490,6 +479,7 @@ def _decode_clixml_xml(xml_block: str) -> str:
     except ET.ParseError:
         # Malformed CLIXML: strip tags and return the raw text.
         import re
+
         return re.sub(r'<[^>]+>', ' ', xml_block)
 
     for progress in root.findall('.//Obj[@S="progress"]'):
@@ -527,7 +517,7 @@ def _decode_guest_stderr(stderr: str) -> str:
     objs_match = re.search(r'<Objs[^>]*>.*?</Objs>', text, re.IGNORECASE | re.DOTALL)
     if objs_match:
         decoded = _decode_clixml_xml(objs_match.group(0))
-        text = text[:objs_match.start()] + '\n' + decoded + '\n' + text[objs_match.end():]
+        text = text[: objs_match.start()] + '\n' + decoded + '\n' + text[objs_match.end() :]
 
     # Strip any remaining tags (e.g. stray <S>, <AV>, <Props> fragments).
     text = re.sub(r'<[^>]+>', ' ', text)
@@ -560,7 +550,7 @@ def _split_reason(reason: str | None) -> tuple[str, str]:
     if idx == -1:
         return reason, ''
     summary = reason[:idx].rstrip('.') + '.'
-    detail = _decode_guest_stderr(reason[idx + len(marker):])
+    detail = _decode_guest_stderr(reason[idx + len(marker) :])
     return summary, detail
 
 
@@ -647,7 +637,7 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
         'adarevm_server_starts': False,
         'websocket_connection': False,
         'screenshot_command': False,
-        'click_command': False
+        'click_command': False,
     }
     # Host/QMP results are only populated on QEMU (they gate the QEMU verdict).
     if is_qemu:
@@ -656,16 +646,24 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
 
     try:
         # Test 1: Basic VM responsiveness with substage
-        compatibility_results['vm_responsive'] = await _run_compat_substage(VMResponseTestStage, flow_console, context, test_vm_response)
+        compatibility_results['vm_responsive'] = await _run_compat_substage(
+            VMResponseTestStage, flow_console, context, test_vm_response
+        )
 
         # Test 2: Shared folder access with substage
-        compatibility_results['shared_folders_working'] = await _run_compat_substage(VMSharedFoldersTestStage, flow_console, context, test_shared_folders)
+        compatibility_results['shared_folders_working'] = await _run_compat_substage(
+            VMSharedFoldersTestStage, flow_console, context, test_shared_folders
+        )
 
         # Test 3: Python availability with substage
-        compatibility_results['python_available'] = await _run_compat_substage(VMPythonTestStage, flow_console, context, test_python_availability)
+        compatibility_results['python_available'] = await _run_compat_substage(
+            VMPythonTestStage, flow_console, context, test_python_availability
+        )
 
         # Test 4: uv availability with substage
-        compatibility_results['uv_available'] = await _run_compat_substage(VMUvTestStage, flow_console, context, test_uv_availability)
+        compatibility_results['uv_available'] = await _run_compat_substage(
+            VMUvTestStage, flow_console, context, test_uv_availability
+        )
 
         # QEMU only: host-side QMP UI checks FIRST -- the gating, production-
         # representative path. Run before the (slow, non-fatal on QEMU) agent
@@ -674,22 +672,34 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
         # Screenshot must precede click so the executor records the screen
         # resolution the click's coordinate normalization needs.
         if is_qemu:
-            compatibility_results['host_screenshot'] = await _run_compat_substage(VMHostScreenshotTestStage, flow_console, context, test_host_screenshot)
-            compatibility_results['host_click'] = await _run_compat_substage(VMHostClickTestStage, flow_console, context, test_host_click)
+            compatibility_results['host_screenshot'] = await _run_compat_substage(
+                VMHostScreenshotTestStage, flow_console, context, test_host_screenshot
+            )
+            compatibility_results['host_click'] = await _run_compat_substage(
+                VMHostClickTestStage, flow_console, context, test_host_click
+            )
 
         # Test 5: Start adarevm WebSocket server with substage
-        compatibility_results['adarevm_server_starts'] = await _run_compat_substage(VMAdareServerTestStage, flow_console, context, test_adarevm_server_start, guest_bind_port=guest_bind_port)
+        compatibility_results['adarevm_server_starts'] = await _run_compat_substage(
+            VMAdareServerTestStage, flow_console, context, test_adarevm_server_start, guest_bind_port=guest_bind_port
+        )
 
         # Test 6: WebSocket connection with substage
-        compatibility_results['websocket_connection'] = await _run_compat_substage(VMWebSocketTestStage, flow_console, context, test_websocket_connection)
+        compatibility_results['websocket_connection'] = await _run_compat_substage(
+            VMWebSocketTestStage, flow_console, context, test_websocket_connection
+        )
 
         # Only run WebSocket commands if connection was successful
         if compatibility_results['websocket_connection']:
             # Test 7: Screenshot command with substage
-            compatibility_results['screenshot_command'] = await _run_compat_substage(VMScreenshotTestStage, flow_console, context, test_screenshot_command)
+            compatibility_results['screenshot_command'] = await _run_compat_substage(
+                VMScreenshotTestStage, flow_console, context, test_screenshot_command
+            )
 
             # Test 8: Click command with substage
-            compatibility_results['click_command'] = await _run_compat_substage(VMClickTestStage, flow_console, context, test_click_command)
+            compatibility_results['click_command'] = await _run_compat_substage(
+                VMClickTestStage, flow_console, context, test_click_command
+            )
 
     except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.error(f"Compatibility test error: {e}")
@@ -721,8 +731,8 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
         else:
             log.info("VM appears compatible with ADARE (host/QMP GUI automation working)")
         agent_ok = all(
-            compatibility_results[k] for k in
-            ('adarevm_server_starts', 'websocket_connection', 'screenshot_command', 'click_command')
+            compatibility_results[k]
+            for k in ('adarevm_server_starts', 'websocket_connection', 'screenshot_command', 'click_command')
         )
         log.info(f"Agent-mode (in-guest adarevm) checks: {'PASS' if agent_ok else 'FAIL (non-fatal on QEMU)'}")
     else:
@@ -764,7 +774,9 @@ async def cleanup_test_vm(context, keep_vm: bool = False):
     log.info("Cleanup completed")
 
 
-async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = False, vm_cleanup_mode: str = 'prompt') -> bool:
+async def ova_test(
+    ova_file_path: Path, guest_platform: str, verbose: bool = False, vm_cleanup_mode: str = 'prompt'
+) -> bool:
     """
     Test OVA file compatibility with ADARE using separate workflow that reuses existing steps.
 
@@ -793,12 +805,16 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
 
     # Create and start flow console for better visibility
     from adare.backend.experiment.diff_run import __create_and_start_flow_console, __start_event_listeners
+
     user_interrupt_event = threading.Event()
-    flow_console = __create_and_start_flow_console("vm_test", disable_printing=False, external_stop_event=user_interrupt_event)
+    flow_console = __create_and_start_flow_console(
+        "vm_test", disable_printing=False, external_stop_event=user_interrupt_event
+    )
     flow_console.start_experiment_timer(f"VM Test: {ova_file_path.name}")
 
     # Start stage event coordinator for stage management
     from adare.backend.events.coordinator import start_stage_coordinator
+
     start_stage_coordinator()
     __start_event_listeners("vm_test")
 
@@ -830,7 +846,9 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
         vm_compatibility_success = False
         if not stop_event.is_set():
             async with StageCtxManagerLite(VMCompatibilityTestStage(), flow_console, level=1):
-                vm_compatibility_success = await step_runner.run_async_step(lambda ctx: test_vm_compatibility(ctx, flow_console), context)
+                vm_compatibility_success = await step_runner.run_async_step(
+                    lambda ctx: test_vm_compatibility(ctx, flow_console), context
+                )
 
         # Check if VM compatibility tests passed
         if not vm_compatibility_success:
@@ -847,6 +865,7 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
         log.error(f"OVA test failed with unexpected error: {e}")
         # Always show traceback for debugging VM test failures
         import traceback
+
         traceback.print_exc()
         flow_console.finish_experiment_timer(success=False)
         return False
@@ -872,6 +891,7 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
         # Stop the flow console
         try:
             from adare.backend.events.coordinator import stop_stage_coordinator
+
             stop_stage_coordinator()
             flow_console.stop()
             # With the Live display stopped, print the parsed failure block below
@@ -890,6 +910,7 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
 # overlay backed by the immutable base disk, and reuses the same compatibility
 # test functions and stage classes as ova_test.
 # =============================================================================
+
 
 def create_registered_test_context(vm_name: str, disk_path: str, guest_platform: str, architecture: str):
     """Create minimal context for testing a registered QEMU VM.
@@ -920,7 +941,7 @@ def create_registered_test_context(vm_name: str, disk_path: str, guest_platform:
         vm_cpus=2,
         vm_memory=2048,
         websocket_port=19000,  # Test port outside production range
-        vm_resolution=(1920, 1080)
+        vm_resolution=(1920, 1080),
     )
 
     context = ExperimentRunCtx(config=config)
@@ -977,7 +998,7 @@ async def create_qemu_vm_for_test(context):
         machine=vm_machine,
         accel=vm_accel,
         disk_path=context._registered_disk_path,
-        architecture=vm_architecture
+        architecture=vm_architecture,
     )
     log.debug(f"Created QEMU VM instance for test: {context.vm_name}")
 
@@ -1035,12 +1056,14 @@ async def setup_qemu_share_for_test(context):
     log.info(f"Configuring test file share for adarevm ({mode} mode)...")
 
     if mode == 'virtiofs':
-        shares = [{
-            'tag': 'vm',
-            'host_path': str(share_root),
-            'guest_mount': guest_mount,
-            'readonly': False,
-        }]
+        shares = [
+            {
+                'tag': 'vm',
+                'host_path': str(share_root),
+                'guest_mount': guest_mount,
+                'readonly': False,
+            }
+        ]
 
         context.vm.config.virtiofs_enabled = True
         context.vm.config.virtiofs_shares = shares
@@ -1061,8 +1084,12 @@ async def setup_qemu_share_for_test(context):
         # directory in the share, so stage adarevm under a 'vm' subdir; it
         # becomes //10.0.2.4/qemu/vm -> C:\adare\vm (or /adare/vm on Linux).
         smb_dir = Path(tempfile.mkdtemp(prefix='adare_smb_test_'))
-        shutil.copytree(str(share_root), str(smb_dir / 'vm'), dirs_exist_ok=True,
-                        ignore=shutil.ignore_patterns('.venv', '.git', '__pycache__'))
+        shutil.copytree(
+            str(share_root),
+            str(smb_dir / 'vm'),
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns('.venv', '.git', '__pycache__'),
+        )
 
         context.vm.config.smb_share_path = str(smb_dir)
         context.vm.config.virtiofs_enabled = False
@@ -1073,10 +1100,7 @@ async def setup_qemu_share_for_test(context):
         # since setup() was bypassed and post_boot uses a fresh strategy instance)
         context._test_smb_dir = str(smb_dir)
 
-        log.info(
-            f"Configured QEMU SLIRP SMB share: {share_root} -> "
-            f"{smb_dir / 'vm'} -> {guest_mount}"
-        )
+        log.info(f"Configured QEMU SLIRP SMB share: {share_root} -> {smb_dir / 'vm'} -> {guest_mount}")
         return
 
     raise HypervisorException(
@@ -1109,19 +1133,20 @@ class _CleanupFailed(Exception):
     propagate out of the finally block and does NOT flip the compatibility
     verdict.
     """
+
     def __init__(self, errors: list[str]):
         super().__init__("; ".join(errors))
         self.errors = errors
 
 
-async def _cleanup_registered_test_vm(context, keep_vm: bool = False,
-                                      flow_console=None, stage_id: str | None = None):
+async def _cleanup_registered_test_vm(context, keep_vm: bool = False, flow_console=None, stage_id: str | None = None):
     """Stop the test VM and remove its transient overlay + libvirt domain.
 
     Replicates the overlay + libvirt-undefine parts of the QEMU cleanup in
     vm_lifecycle_manager (NOT _release_vm_instance, which touches the
     VmInstance DB table). The immutable base disk is left untouched.
     """
+
     def _update_message(message: str) -> None:
         if flow_console is not None and stage_id is not None:
             try:
@@ -1214,10 +1239,7 @@ async def _cleanup_registered_test_vm(context, keep_vm: bool = False,
                         )
                         log.info(f"Undefined libvirt domain '{context.vm.vm_name}'")
                     else:
-                        log.warning(
-                            f"Cannot undefine domain '{context.vm.vm_name}' - "
-                            f"still running (state: {state})."
-                        )
+                        log.warning(f"Cannot undefine domain '{context.vm.vm_name}' - still running (state: {state}).")
                 except libvirt.libvirtError as e:
                     _surface_error("undefine", "Undefining libvirt domain", e)
                 finally:
@@ -1231,6 +1253,7 @@ async def _cleanup_registered_test_vm(context, keep_vm: bool = False,
     try:
         if smb_dir:
             import shutil
+
             shutil.rmtree(smb_dir, ignore_errors=True)
             log.debug(f"Removed test SMB share directory: {smb_dir}")
     except Exception as e:
@@ -1248,7 +1271,7 @@ async def vm_test_registered(
     guest_platform: str,
     architecture: str = 'x86_64',
     verbose: bool = False,
-    vm_cleanup_mode: str = 'prompt'
+    vm_cleanup_mode: str = 'prompt',
 ) -> bool:
     """Test a registered QEMU VM's compatibility with ADARE.
 
@@ -1281,12 +1304,16 @@ async def vm_test_registered(
 
     # Create and start flow console for better visibility (use the fixed diff_run import)
     from adare.backend.experiment.diff_run import __create_and_start_flow_console, __start_event_listeners
+
     user_interrupt_event = threading.Event()
-    flow_console = __create_and_start_flow_console("vm_test", disable_printing=False, external_stop_event=user_interrupt_event)
+    flow_console = __create_and_start_flow_console(
+        "vm_test", disable_printing=False, external_stop_event=user_interrupt_event
+    )
     flow_console.start_experiment_timer(f"VM Test: {vm_name}")
 
     # Start stage event coordinator for stage management
     from adare.backend.events.coordinator import start_stage_coordinator
+
     start_stage_coordinator()
     __start_event_listeners("vm_test")
 
@@ -1327,13 +1354,16 @@ async def vm_test_registered(
             return False
 
         elapsed_time = time.time() - start_time
-        log.info(f"Registered VM test completed successfully! VM is compatible with ADARE. (took {elapsed_time:.1f} seconds)")
+        log.info(
+            f"Registered VM test completed successfully! VM is compatible with ADARE. (took {elapsed_time:.1f} seconds)"
+        )
         flow_console.finish_experiment_timer(success=True)
         return True
 
     except (OSError, ConnectionError, TimeoutError, RuntimeError, ValueError) as e:
         log.error(f"Registered VM test failed with unexpected error: {e}")
         import traceback
+
         traceback.print_exc()
         flow_console.finish_experiment_timer(success=False)
         return False
@@ -1367,6 +1397,7 @@ async def vm_test_registered(
         # Stop the flow console
         try:
             from adare.backend.events.coordinator import stop_stage_coordinator
+
             stop_stage_coordinator()
             flow_console.stop()
             # With the Live display stopped, print the parsed failure block below

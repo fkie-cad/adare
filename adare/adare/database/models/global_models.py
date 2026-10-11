@@ -65,6 +65,7 @@ class SyncMetadata(SerializerMixin, GlobalBase):
     """
     Metadata for tracking synchronization state of entities with remote instances.
     """
+
     __tablename__ = 'sync_metadata'
     RELATIONSHIPS_TO_DICT = True
 
@@ -102,6 +103,7 @@ class Tag(SerializerMixin, GlobalBase):
     """
     Tag for categorizing environments and other global entities.
     """
+
     __tablename__ = 'tag'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id',)
@@ -120,6 +122,7 @@ class PostSetupInstallation(SerializerMixin, GlobalBase):
     """
     Post-setup installation command for environments.
     """
+
     __tablename__ = 'post_setup_installation'
     RELATIONSHIPS_TO_DICT = True
 
@@ -141,6 +144,7 @@ class TestParameter(SerializerMixin, GlobalBase):
     """
     Defines a parameter for test functions, including type and description.
     """
+
     __tablename__ = 'test_parameter'
     RELATIONSHIPS_TO_DICT = True
 
@@ -161,6 +165,7 @@ class TestFunctionFile(RemoteIdentityMixin, SerializerMixin, GlobalBase):
     """
     Represents a file containing one or more test functions, with metadata and hash.
     """
+
     __tablename__ = 'test_function_file'
     RELATIONSHIPS_TO_DICT = True
 
@@ -193,6 +198,7 @@ class TestFunction(SerializerMixin, GlobalBase):
     """
     Represents a test function definition, including its parameters and file association.
     """
+
     __tablename__ = 'test_function'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id',)
@@ -237,6 +243,7 @@ class TestFunctionFileVersion(SerializerMixin, GlobalBase):
     where the on-disk copy of that version was kept. Old versions are never
     pruned (forensic tool; snapshots are cheap .py files).
     """
+
     __tablename__ = 'test_function_file_version'
     RELATIONSHIPS_TO_DICT = True
 
@@ -249,9 +256,7 @@ class TestFunctionFileVersion(SerializerMixin, GlobalBase):
     snapshot_dir = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=True, default=func.now())
 
-    __table_args__ = (
-        UniqueConstraint('file_id', 'version', name='uq_test_function_file_version'),
-    )
+    __table_args__ = (UniqueConstraint('file_id', 'version', name='uq_test_function_file_version'),)
 
     def __repr__(self):
         return f"<TestFunctionFileVersion(file_id='{self.file_id}', version={self.version})>"
@@ -263,6 +268,7 @@ class TestFunctionVersion(SerializerMixin, GlobalBase):
     is the per-method pin source. `file_version` records which file version
     introduced this method hash.
     """
+
     __tablename__ = 'test_function_version'
     RELATIONSHIPS_TO_DICT = True
 
@@ -275,9 +281,7 @@ class TestFunctionVersion(SerializerMixin, GlobalBase):
     file_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=True, default=func.now())
 
-    __table_args__ = (
-        UniqueConstraint('test_function_id', 'version', name='uq_test_function_version'),
-    )
+    __table_args__ = (UniqueConstraint('test_function_id', 'version', name='uq_test_function_version'),)
 
     def __repr__(self):
         return f"<TestFunctionVersion(test_function_id='{self.test_function_id}', version={self.version})>"
@@ -287,6 +291,7 @@ class OsInfo(SerializerMixin, GlobalBase):
     """
     Operating system information for VMs and environments.
     """
+
     __tablename__ = 'os_info'
     RELATIONSHIPS_TO_DICT = True
 
@@ -310,6 +315,7 @@ class Project(SerializerMixin, GlobalBase):
     """
     Project metadata stored in global database.
     """
+
     __tablename__ = 'project'
     RELATIONSHIPS_TO_DICT = True
 
@@ -326,6 +332,7 @@ class Vm(SerializerMixin, GlobalBase):
     """
     Virtual machine definition stored globally.
     """
+
     __tablename__ = 'vm'
     RELATIONSHIPS_TO_DICT = True
 
@@ -366,6 +373,7 @@ class VmSnapshot(SerializerMixin, GlobalBase):
     """
     VM snapshot information.
     """
+
     __tablename__ = 'vm_snapshot'
     RELATIONSHIPS_TO_DICT = True
 
@@ -405,6 +413,7 @@ class VmInstance(SerializerMixin, GlobalBase):
     enabling multiple experiments to run concurrently with the same environment.
     Supports both VirtualBox and QEMU hypervisors.
     """
+
     __tablename__ = 'vm_instance'
     RELATIONSHIPS_TO_DICT = True
 
@@ -441,8 +450,9 @@ class VmInstance(SerializerMixin, GlobalBase):
         # processes/connections) that no two *active* instances share a port.
         # Scoped to status='active' so releasing a port (websocket_port=None)
         # or stale values on non-active rows never trips the constraint.
-        Index('idx_vm_instance_active_websocket_port', 'websocket_port', unique=True,
-              sqlite_where=(status == 'active')),
+        Index(
+            'idx_vm_instance_active_websocket_port', 'websocket_port', unique=True, sqlite_where=(status == 'active')
+        ),
     )
 
     def __str__(self):
@@ -500,6 +510,7 @@ class Environment(RemoteIdentityMixin, SerializerMixin, GlobalBase):
     """
     Environment definition stored globally.
     """
+
     __tablename__ = 'environment'
     RELATIONSHIPS_TO_DICT = True
 

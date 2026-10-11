@@ -38,10 +38,18 @@ DISK = Path('/tmp/adare-test-disk.qcow2')
 
 def _os_def(**overrides) -> OsDefinition:
     defaults = dict(
-        name='kubuntu2404', display_name='Kubuntu 24.04', platform='linux',
-        distribution='ubuntu', version='24.04', iso_url='', iso_sha256='',
-        iso_filename='', default_disk_size='60G', default_ram_mb=8192,
-        default_cpus=4, architecture='aarch64',
+        name='kubuntu2404',
+        display_name='Kubuntu 24.04',
+        platform='linux',
+        distribution='ubuntu',
+        version='24.04',
+        iso_url='',
+        iso_sha256='',
+        iso_filename='',
+        default_disk_size='60G',
+        default_ram_mb=8192,
+        default_cpus=4,
+        architecture='aarch64',
     )
     defaults.update(overrides)
     return OsDefinition(**defaults)
@@ -58,12 +66,11 @@ def calls(monkeypatch):
         def _call(**kwargs):
             recorded.append((module_name, kwargs))
             return DISK
+
         return _call
 
     for module_name, function_name in CREATORS.items():
-        module = importlib.import_module(
-            f'adare.hypervisor.qemu.vm_creator.{module_name}'
-        )
+        module = importlib.import_module(f'adare.hypervisor.qemu.vm_creator.{module_name}')
         monkeypatch.setattr(module, function_name, _recorder(module_name))
     return recorded
 
@@ -88,20 +95,26 @@ class TestInstallModeBeatsPlatform:
     """The regression: a Linux-platform profile with a GUI install_mode must NOT
     reach linux_creator."""
 
-    @pytest.mark.parametrize('install_mode,expected', [
-        ('gui-auto', 'gui_creator'),
-        ('playbook', 'playbook_creator'),
-        ('manual', 'manual_creator'),
-    ])
+    @pytest.mark.parametrize(
+        'install_mode,expected',
+        [
+            ('gui-auto', 'gui_creator'),
+            ('playbook', 'playbook_creator'),
+            ('manual', 'manual_creator'),
+        ],
+    )
     def test_linux_platform_with_gui_mode_routes_to_gui_creator(self, calls, install_mode, expected):
         _build(_os_def(platform='linux', install_mode=install_mode))
         assert [module for module, _ in calls] == [expected]
 
-    @pytest.mark.parametrize('install_mode,expected', [
-        ('gui-auto', 'gui_creator'),
-        ('playbook', 'playbook_creator'),
-        ('manual', 'manual_creator'),
-    ])
+    @pytest.mark.parametrize(
+        'install_mode,expected',
+        [
+            ('gui-auto', 'gui_creator'),
+            ('playbook', 'playbook_creator'),
+            ('manual', 'manual_creator'),
+        ],
+    )
     def test_windows_platform_with_gui_mode_routes_to_gui_creator(self, calls, install_mode, expected):
         _build(_os_def(platform='windows', install_mode=install_mode))
         assert [module for module, _ in calls] == [expected]
@@ -125,12 +138,14 @@ class TestPlatformFallback:
 
 
 class TestIsoRequirement:
-
-    @pytest.mark.parametrize('os_def_kwargs', [
-        dict(platform='linux', install_mode='manual'),
-        dict(platform='linux', install_mode='gui-auto'),
-        dict(platform='windows', install_mode='auto'),
-    ])
+    @pytest.mark.parametrize(
+        'os_def_kwargs',
+        [
+            dict(platform='linux', install_mode='manual'),
+            dict(platform='linux', install_mode='gui-auto'),
+            dict(platform='windows', install_mode='auto'),
+        ],
+    )
     def test_missing_iso_raises_before_any_creator_runs(self, calls, os_def_kwargs):
         with pytest.raises(InstallerIsoRequired):
             _build(_os_def(**os_def_kwargs), iso_path=None)
@@ -155,7 +170,6 @@ class TestIsoRequirement:
 
 
 class TestArgumentForwarding:
-
     def test_gui_options_reach_the_gui_creator(self, calls):
         _build(
             _os_def(install_mode='gui-auto'),
@@ -175,15 +189,20 @@ class TestArgumentForwarding:
         assert 'allow_emulation' not in kwargs
 
     def test_other_creators_get_compress_and_allow_emulation(self, calls):
-        _build(_os_def(platform='linux', install_mode='auto'),
-               compress=False, allow_emulation=True)
+        _build(_os_def(platform='linux', install_mode='auto'), compress=False, allow_emulation=True)
         _, kwargs = calls[0]
         assert kwargs['compress'] is False
         assert kwargs['allow_emulation'] is True
 
     def test_sizing_and_identity_are_passed_through(self, calls):
-        _build(_os_def(platform='linux', install_mode='auto'),
-               vm_name='myvm', disk_size='120G', ram_mb=16384, cpus=8, force=True)
+        _build(
+            _os_def(platform='linux', install_mode='auto'),
+            vm_name='myvm',
+            disk_size='120G',
+            ram_mb=16384,
+            cpus=8,
+            force=True,
+        )
         _, kwargs = calls[0]
         assert kwargs['vm_name'] == 'myvm'
         assert kwargs['disk_size'] == '120G'
@@ -207,7 +226,11 @@ class TestRecipeUsesTheSameDispatch:
             params=RecipeParams(setup_level=2, disk_size='60G', ram_mb=4096, cpus=2),
         )
         built = recipe_module._build_disk(
-            os_def, recipe, Path('/tmp/installer.iso'), 'vm', force=False,
+            os_def,
+            recipe,
+            Path('/tmp/installer.iso'),
+            'vm',
+            force=False,
         )
         assert built == DISK
         assert [module for module, _ in calls] == ['gui_creator']
@@ -221,7 +244,11 @@ class TestRecipeUsesTheSameDispatch:
         recipe = Recipe(profile='haiku', iso_sha256='a' * 64)
         with pytest.raises(EnvironmentLoadFailed, match='recipe build unsupported'):
             recipe_module._build_disk(
-                os_def, recipe, Path('/tmp/installer.iso'), 'vm', force=False,
+                os_def,
+                recipe,
+                Path('/tmp/installer.iso'),
+                'vm',
+                force=False,
             )
 
 

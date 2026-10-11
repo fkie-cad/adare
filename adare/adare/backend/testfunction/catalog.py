@@ -140,8 +140,13 @@ class CatalogEntry:
     def to_dict(self, compact: bool = False) -> dict:
         """``compact`` is the token-cheap form for listings: what to call and why."""
         if compact:
-            return {'dotnotation': self.dotnotation, 'summary': self.summary,
-                    'signature': self.signature(), 'os': self.os, 'installed': self.installed}
+            return {
+                'dotnotation': self.dotnotation,
+                'summary': self.summary,
+                'signature': self.signature(),
+                'os': self.os,
+                'installed': self.installed,
+            }
         data = asdict(self)
         data.pop('code_sha')
         data['signature'] = self.signature()
@@ -153,6 +158,7 @@ class CatalogEntry:
 # Source parsing
 # ---------------------------------------------------------------------------
 
+
 def testfunction_code_without_docstring(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     """Source of a testfunction for hashing, docstring excluded.
 
@@ -160,8 +166,12 @@ def testfunction_code_without_docstring(func_node: ast.FunctionDef | ast.AsyncFu
     version: only code changes do.
     """
     body = func_node.body
-    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
-            and isinstance(body[0].value.value, str):
+    if (
+        body
+        and isinstance(body[0], ast.Expr)
+        and isinstance(body[0].value, ast.Constant)
+        and isinstance(body[0].value.value, str)
+    ):
         body = body[1:] or [ast.Pass()]
     stripped = copy.copy(func_node)
     stripped.body = body
@@ -173,8 +183,9 @@ def _decorator_call(node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.Call | 
         if not isinstance(decorator, ast.Call):
             continue
         func = decorator.func
-        if (isinstance(func, ast.Name) and func.id == 'testfunction') or \
-                (isinstance(func, ast.Attribute) and func.attr == 'testfunction'):
+        if (isinstance(func, ast.Name) and func.id == 'testfunction') or (
+            isinstance(func, ast.Attribute) and func.attr == 'testfunction'
+        ):
             return decorator
     return None
 
@@ -232,13 +243,15 @@ def _params(node: ast.FunctionDef | ast.AsyncFunctionDef, arg_docs: dict[str, st
         if arg.arg in ('ctx', 'self'):
             continue
         has_default = default is not _NO_DEFAULT
-        specs.append(ParamSpec(
-            name=arg.arg,
-            type=ast.unparse(arg.annotation) if arg.annotation else '',
-            required=not has_default,
-            default=_default_value(default) if has_default else None,
-            doc=arg_docs.get(arg.arg, ''),
-        ))
+        specs.append(
+            ParamSpec(
+                name=arg.arg,
+                type=ast.unparse(arg.annotation) if arg.annotation else '',
+                required=not has_default,
+                default=_default_value(default) if has_default else None,
+                doc=arg_docs.get(arg.arg, ''),
+            )
+        )
     return tuple(specs)
 
 
@@ -269,21 +282,23 @@ def parse_collection(path: Path, installed: bool) -> list[CatalogEntry]:
         testname = _kwarg(call, 'name', node.name)
         summary = _kwarg(call, 'description', '') or ''
         doc = ast.get_docstring(node) or ''
-        entries.append(CatalogEntry(
-            # Host-native tests carry their full dotnotation in the name (``visual.exists``).
-            dotnotation=testname if '.' in testname else f'{collection}.{testname}',
-            collection=collection,
-            name=testname,
-            summary=summary,
-            category=_kwarg(call, 'category', 'AGENT_ONLY'),
-            os=_infer_os(collection, summary),
-            installed=installed,
-            path=path.as_posix(),
-            execute_on_host=bool(_kwarg(call, 'execute_on_host', False)),
-            doc=doc,
-            params=_params(node, parse_args_section(doc)),
-            code_sha=hashlib.sha256(testfunction_code_without_docstring(node).encode()).hexdigest(),
-        ))
+        entries.append(
+            CatalogEntry(
+                # Host-native tests carry their full dotnotation in the name (``visual.exists``).
+                dotnotation=testname if '.' in testname else f'{collection}.{testname}',
+                collection=collection,
+                name=testname,
+                summary=summary,
+                category=_kwarg(call, 'category', 'AGENT_ONLY'),
+                os=_infer_os(collection, summary),
+                installed=installed,
+                path=path.as_posix(),
+                execute_on_host=bool(_kwarg(call, 'execute_on_host', False)),
+                doc=doc,
+                params=_params(node, parse_args_section(doc)),
+                code_sha=hashlib.sha256(testfunction_code_without_docstring(node).encode()).hexdigest(),
+            )
+        )
     return entries
 
 
@@ -393,6 +408,7 @@ def find(entries: list[CatalogEntry], dotnotation: str) -> CatalogEntry | None:
 # Search
 # ---------------------------------------------------------------------------
 
+
 def _tokens(text: str) -> list[str]:
     return [t for t in re.split(r'[^a-z0-9]+', text.lower()) if t]
 
@@ -409,7 +425,8 @@ def _matches(query_token: str, field_tokens: set[str]) -> bool:
         return True
     # cheap stemming: "deletes"/"deleting" vs "delete", "files" vs "file"
     return len(query_token) >= 4 and any(
-        t.startswith(query_token) or query_token.startswith(t) for t in field_tokens if len(t) >= 4)
+        t.startswith(query_token) or query_token.startswith(t) for t in field_tokens if len(t) >= 4
+    )
 
 
 def _fields(entry: CatalogEntry) -> dict[str, set[str]]:
@@ -422,11 +439,19 @@ def _fields(entry: CatalogEntry) -> dict[str, set[str]]:
     }
 
 
-def search(entries: list[CatalogEntry], query: str = '', *, collection: str | None = None,
-           category: str | None = None, os: str | None = None, limit: int | None = None) -> list[CatalogEntry]:
+def search(
+    entries: list[CatalogEntry],
+    query: str = '',
+    *,
+    collection: str | None = None,
+    category: str | None = None,
+    os: str | None = None,
+    limit: int | None = None,
+) -> list[CatalogEntry]:
     """Rank entries for a natural-language ``query``; filters are exact (case-insensitive)."""
     pool = [
-        e for e in entries
+        e
+        for e in entries
         if (not collection or e.collection.lower() == collection.lower())
         and (not category or e.category.lower() == category.lower())
         and (not os or e.os in (os.lower(), 'any'))

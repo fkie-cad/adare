@@ -33,6 +33,7 @@ def _default_text(entry_param) -> str:
 # list / search
 # ---------------------------------------------------------------------------
 
+
 def _list_table(entries: list[CatalogEntry], title: str) -> Panel:
     table = Table(expand=True, header_style='bold')
     table.add_column('testfunction', style='cyan', no_wrap=True)
@@ -47,8 +48,15 @@ def _list_table(entries: list[CatalogEntry], title: str) -> Panel:
     return Panel(Group(table, Text.from_markup(caption)), title=title, border_style='blue', title_align='left')
 
 
-def render_entries(entries: list[CatalogEntry], formatter, output_file=None, *, title: str = 'testfunctions',
-                   full: bool = False, with_example: bool = False) -> None:
+def render_entries(
+    entries: list[CatalogEntry],
+    formatter,
+    output_file=None,
+    *,
+    title: str = 'testfunctions',
+    full: bool = False,
+    with_example: bool = False,
+) -> None:
     mode = output_mode(formatter)
     if mode in ('json', 'yaml'):
         records = []
@@ -70,6 +78,7 @@ def render_entries(entries: list[CatalogEntry], formatter, output_file=None, *, 
 # info
 # ---------------------------------------------------------------------------
 
+
 def _info_panel(entry: CatalogEntry, version: int | None) -> Panel:
     params = Table(expand=True, header_style='bold')
     for column in ('parameter', 'type', 'default', 'description'):
@@ -84,14 +93,18 @@ def _info_panel(entry: CatalogEntry, version: int | None) -> Panel:
     parts = [Text(entry.summary, style='bold'), Text.from_markup(meta)]
     if entry.doc:
         parts.append(Text(entry.doc.split('\nArgs:')[0].strip()))
-    parts += [params, Text('example (paste into the playbook):', style='bold'),
-              Syntax(entry.example_yaml(), 'yaml', background_color='default')]
+    parts += [
+        params,
+        Text('example (paste into the playbook):', style='bold'),
+        Syntax(entry.example_yaml(), 'yaml', background_color='default'),
+    ]
     title = f'[b gold3]{entry.dotnotation}[/b gold3]' + (f' [dim]v{version}[/dim]' if version else '')
     return Panel(Group(*parts), title=title, border_style='blue', title_align='left')
 
 
-def render_entry(entry: CatalogEntry, formatter, output_file=None, *, example_only: bool = False,
-                 version: int | None = None) -> None:
+def render_entry(
+    entry: CatalogEntry, formatter, output_file=None, *, example_only: bool = False, version: int | None = None
+) -> None:
     mode = output_mode(formatter)
     if example_only:
         if mode in ('json', 'yaml'):
@@ -113,6 +126,7 @@ def render_entry(entry: CatalogEntry, formatter, output_file=None, *, example_on
 # ---------------------------------------------------------------------------
 # catalog (Markdown reference for skills/docs)
 # ---------------------------------------------------------------------------
+
 
 def catalog_markdown(entries: list[CatalogEntry]) -> str:
     out = [

@@ -1,4 +1,5 @@
 """Database and system management endpoints."""
+
 import logging
 
 from fastapi import APIRouter
@@ -12,12 +13,15 @@ router = APIRouter(prefix="/api/manage", tags=["manage"])
 
 # ---- Helpers ----
 
+
 def _api():
     from adare.api import AdareAPI
+
     return AdareAPI()
 
 
 # ---- Endpoints ----
+
 
 @router.get("/db-status")
 async def get_db_status():

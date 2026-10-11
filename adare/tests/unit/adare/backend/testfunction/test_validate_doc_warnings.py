@@ -52,8 +52,7 @@ def test_docstring_warnings_flags_missing_docstring_and_args(collection_dir):
 
     assert len(warnings) == 2
     assert any('doccheck.undocumented' in w and 'no docstring' in w for w in warnings)
-    assert any('doccheck.partly' in w and 'mode' in w and 'dst' not in w.split('parameter(s)')[-1]
-               for w in warnings)
+    assert any('doccheck.partly' in w and 'mode' in w and 'dst' not in w.split('parameter(s)')[-1] for w in warnings)
     assert not any('doccheck.complete' in w for w in warnings)
 
 

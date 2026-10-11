@@ -43,35 +43,39 @@ def _resolve_duplicate_active_ports(conn) -> int:
     Returns:
         Number of rows cleared.
     """
-    dupes = conn.execute(text(
-        """
+    dupes = conn.execute(
+        text(
+            """
         SELECT websocket_port
         FROM vm_instance
         WHERE status = 'active' AND websocket_port IS NOT NULL
         GROUP BY websocket_port
         HAVING COUNT(*) > 1
         """
-    )).fetchall()
+        )
+    ).fetchall()
 
     cleared = 0
     for (port,) in dupes:
-        rows = conn.execute(text(
-            """
+        rows = conn.execute(
+            text(
+                """
             SELECT id FROM vm_instance
             WHERE status = 'active' AND websocket_port = :port
             ORDER BY last_used_at DESC
             """
-        ), {'port': port}).fetchall()
+            ),
+            {'port': port},
+        ).fetchall()
 
         # Keep the most-recently-used row, clear the port on the rest.
         for (instance_id,) in rows[1:]:
-            conn.execute(text(
-                "UPDATE vm_instance SET websocket_port = NULL WHERE id = :id"
-            ), {'id': instance_id})
+            conn.execute(text("UPDATE vm_instance SET websocket_port = NULL WHERE id = :id"), {'id': instance_id})
             cleared += 1
             log.warning(
                 "Cleared duplicate active websocket_port %s from vm_instance %s",
-                port, instance_id,
+                port,
+                instance_id,
             )
 
     return cleared
@@ -93,10 +97,9 @@ def upgrade(conn) -> None:
         print("No duplicate active websocket_port values found.")
 
     print(f"Creating unique index '{_INDEX_NAME}'...")
-    conn.execute(text(
-        f"CREATE UNIQUE INDEX IF NOT EXISTS {_INDEX_NAME} "
-        f"ON vm_instance (websocket_port) WHERE status = 'active'"
-    ))
+    conn.execute(
+        text(f"CREATE UNIQUE INDEX IF NOT EXISTS {_INDEX_NAME} ON vm_instance (websocket_port) WHERE status = 'active'")
+    )
 
 
 def run_migration() -> bool:

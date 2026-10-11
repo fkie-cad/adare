@@ -5,6 +5,7 @@ Implements AbstractCommandMixin for QEMU-specific command execution using:
 - QEMU Guest Agent for runtime commands
 - libguestfs for file operations when VM is stopped
 """
+
 import asyncio
 import json
 
@@ -37,7 +38,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         stop_event: threading.Event | None = None,
         silent: bool = False,
         ctx_manager=None,
-        operation_name: str = "command execution"
+        operation_name: str = "command execution",
     ) -> tuple[int, str, str]:
         """
         Execute a QEMU command asynchronously with streaming output.
@@ -61,9 +62,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             stdout_lines = []
@@ -118,7 +117,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         silent: bool = False,
         ctx_manager=None,
         operation_name: str = "command execution",
-        timeout: int | None = None
+        timeout: int | None = None,
     ) -> int:
         """
         Execute a QEMU command synchronously with streaming output.
@@ -139,12 +138,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             log.info(f"Executing {operation_name}: {' '.join(args)}")
 
         try:
-            proc = subprocess.Popen(
-                args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                bufsize=0
-            )
+            proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
 
             output_lines = []
             while True:
@@ -178,7 +172,6 @@ class CommandExecutionMixin(AbstractCommandMixin):
         except (OSError, subprocess.SubprocessError) as e:
             log.error(f"Error executing {operation_name}: {e}")
             raise HypervisorException(f"Command execution failed: {e}") from e
-
 
     def _build_guest_command_args(
         self,
@@ -277,6 +270,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 log.debug(f"CLAUDE DEBUG: Full Windows guest command (Scheduled Task): {command}")
             if background and not run_as_user:
                 import shlex
+
                 command_components = shlex.split(command, posix=False)
                 log.info(f"XXX: {command}")
                 log.info(f"XXX: {command_components}")
@@ -304,21 +298,17 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
                 if self._path_discovery_attempted and not self._cached_guest_path:
                     log.warning(
-                        "PATH discovery was attempted but failed - "
-                        "inject_user_path will use fallback paths only"
+                        "PATH discovery was attempted but failed - inject_user_path will use fallback paths only"
                     )
 
                 base_path = self._cached_guest_path or ""
 
-                custom_path_dirs = [
-                    r'C:\adare\project_shared\tools',
-                    r'C:\adare\shared\tools'
-                ]
+                custom_path_dirs = [r'C:\adare\project_shared\tools', r'C:\adare\shared\tools']
 
                 # Join only the items that aren't empty
                 paths = base_path + ";".join(custom_path_dirs)
                 log.debug(f"Injecting user PATH dirs: {paths}")
-                #command = f'$env:Path = "{path_dirs_str};$env:Path"; {command}'
+                # command = f'$env:Path = "{path_dirs_str};$env:Path"; {command}'
                 if background:
                     command = f'$env:Path += ";{paths}"; {command}'
                 else:
@@ -407,6 +397,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             # Add ADARE_GUI_MODE environment variable if host-based GUI
             if hasattr(self, 'adare_gui_mode'):
                 from adare.backend.experiment.execution.base import GUIExecutionMode
+
                 if self.adare_gui_mode == GUIExecutionMode.HOST:
                     env_vars.append("ADARE_GUI_MODE=host")
                     log.info("Setting ADARE_GUI_MODE=host - PyAutoGUI will be skipped in guest")
@@ -450,10 +441,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             start_time = time.time()
             while time.time() - start_time < timeout:
                 # Use short timeout for the check itself
-                returncode, stdout, _ = await self._execute_guest_command_via_agent(
-                    check_cmd,
-                    timeout=10
-                )
+                returncode, stdout, _ = await self._execute_guest_command_via_agent(check_cmd, timeout=10)
 
                 stdout_str = stdout.strip().lower()
                 if returncode == 0 and 'ready' in stdout_str:
@@ -503,7 +491,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             if 'windows' in self.guest_os.lower():
                 await self._wait_for_user_session()
 
-            # Build discovery command based on guest OS
+                # Build discovery command based on guest OS
                 # Windows: Get PATH from registry only (more robust than file search)
                 # We prioritize user PATH over machine PATH
                 discovery_cmd = (
@@ -526,17 +514,13 @@ class CommandExecutionMixin(AbstractCommandMixin):
             # Windows PowerShell startup can be slow, especially on first run
             discovery_timeout = 120 if 'windows' in self.guest_os.lower() else 10
             returncode, stdout, stderr = await self._execute_guest_command_via_agent(
-                command=discovery_cmd,
-                timeout=discovery_timeout
+                command=discovery_cmd, timeout=discovery_timeout
             )
 
             stdout = stdout.strip()
 
             if returncode != 0:
-                log.warning(
-                    f"PATH discovery command failed with exit code {returncode}. "
-                    f"stderr: {stderr[:100]}"
-                )
+                log.warning(f"PATH discovery command failed with exit code {returncode}. stderr: {stderr[:100]}")
                 return None
 
             if not stdout:
@@ -547,18 +531,12 @@ class CommandExecutionMixin(AbstractCommandMixin):
             if 'windows' in self.guest_os.lower():
                 # Windows: PATH should contain at least one drive path (e.g., C:\)
                 if ':\\' not in stdout:
-                    log.warning(
-                        f"Discovered Windows PATH appears invalid "
-                        f"(no drive paths found): {stdout[:100]}"
-                    )
+                    log.warning(f"Discovered Windows PATH appears invalid (no drive paths found): {stdout[:100]}")
                     return None
             else:
                 # Linux: PATH should contain /bin or /usr/bin
                 if '/bin' not in stdout and '/usr/bin' not in stdout:
-                    log.warning(
-                        f"Discovered Linux PATH appears invalid "
-                        f"(missing /bin or /usr/bin): {stdout[:100]}"
-                    )
+                    log.warning(f"Discovered Linux PATH appears invalid (missing /bin or /usr/bin): {stdout[:100]}")
                     return None
 
             log.info(f"Successfully discovered guest PATH: {stdout[:150]}...")
@@ -601,10 +579,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     f'Select-Object -First 1 -ExpandProperty FullName'
                 )
 
-                returncode, stdout, _ = await self._execute_guest_command_via_agent(
-                    command=check_cmd,
-                    timeout=30
-                )
+                returncode, stdout, _ = await self._execute_guest_command_via_agent(command=check_cmd, timeout=30)
 
                 if returncode == 0 and stdout.strip():
                     python_base = stdout.strip()
@@ -635,10 +610,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
             # Verify it exists
             check_cmd = f'Test-Path "{candidate}"'
-            returncode, stdout, _ = await self._execute_guest_command_via_agent(
-                command=check_cmd,
-                timeout=10
-            )
+            returncode, stdout, _ = await self._execute_guest_command_via_agent(command=check_cmd, timeout=10)
 
             if returncode == 0 and 'True' in stdout:
                 log.info(f"Resolved {executable} to {candidate}")
@@ -685,10 +657,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             log.debug(f"Executing XAUTHORITY detection command: {detect_cmd[:100]}...")
 
             # Execute detection command via guest agent
-            returncode, stdout, stderr = await self._execute_guest_command_via_agent(
-                detect_cmd,
-                timeout=10
-            )
+            returncode, stdout, stderr = await self._execute_guest_command_via_agent(detect_cmd, timeout=10)
 
             if returncode == 0 and stdout.strip():
                 # Successfully found XAUTHORITY file
@@ -742,12 +711,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
         return xauthority_path
 
-    async def copy_from_guest(
-        self,
-        guest_path: str,
-        host_path: str,
-        recursive: bool = True
-    ) -> bool:
+    async def copy_from_guest(self, guest_path: str, host_path: str, recursive: bool = True) -> bool:
         """
         Copy files/directories from guest to host using libguestfs.
 
@@ -911,11 +875,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
             # Execute via QMP using guest-exec with environment variables
             # Format: {"execute": "guest-exec", "arguments": {"path": "/bin/sh", "arg": ["-c", "command"], "env": ["HOME=/home/user"]}}
-            qga_args = {
-                "path": cmd_args[0],
-                "arg": cmd_args[1:] if len(cmd_args) > 1 else [],
-                "capture-output": True
-            }
+            qga_args = {"path": cmd_args[0], "arg": cmd_args[1:] if len(cmd_args) > 1 else [], "capture-output": True}
 
             # Only provide 'env' for non-Windows guests.
             # On Windows, providing 'env' replaces the entire environment block, stripping critical
@@ -925,13 +885,11 @@ class CommandExecutionMixin(AbstractCommandMixin):
             if 'windows' not in self.guest_os.lower() and env_vars:
                 qga_args["env"] = env_vars
 
-            qga_cmd = {
-                "execute": "guest-exec",
-                "arguments": qga_args
-            }
+            qga_cmd = {"execute": "guest-exec", "arguments": qga_args}
 
             # CLAUDE DEBUG: Log the EXACT JSON payload being sent to libvirt to verify 'env' is missing
             import json
+
             log.debug(f"CLAUDE DEBUG: QGA JSON payload: {json.dumps(qga_cmd)}")
 
             # Send command via libvirt API (not direct socket access)
@@ -959,10 +917,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     log.info("Stop event detected, abandoning guest command wait")
                     return -1, "", "Cancelled"
 
-                status_cmd = {
-                    "execute": "guest-exec-status",
-                    "arguments": {"pid": pid}
-                }
+                status_cmd = {"execute": "guest-exec-status", "arguments": {"pid": pid}}
 
                 status_response = await self._send_qga_command_via_libvirt(status_cmd)
 
@@ -1108,8 +1063,10 @@ class CommandExecutionMixin(AbstractCommandMixin):
         Returns:
             Response dictionary
         """
+
         async def _qga_async():
             import libvirt
+
             try:
                 # Ensure libvirt domain is available
                 try:
@@ -1138,7 +1095,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                         self._libvirt_domain,
                         cmd_json,
                         timeout,  # seconds; callers pass higher values for file I/O
-                        0   # flags
+                        0,  # flags
                     )
 
                 return json.loads(result)
@@ -1163,11 +1120,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         # Run via manager's async executor
         return await self.manager.run_async(_qga_async)
 
-    async def _check_process_status_via_agent(
-        self,
-        pid: int,
-        timeout: int = 5
-    ) -> tuple[bool, int | None, str]:
+    async def _check_process_status_via_agent(self, pid: int, timeout: int = 5) -> tuple[bool, int | None, str]:
         """
         Check if a process is still running via QEMU Guest Agent.
 
@@ -1189,10 +1142,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             >>>     print(f"Process died with exit code {exit_code}")
         """
         try:
-            status_cmd = {
-                "execute": "guest-exec-status",
-                "arguments": {"pid": pid}
-            }
+            status_cmd = {"execute": "guest-exec-status", "arguments": {"pid": pid}}
 
             status_response = await self._send_qga_command_via_libvirt(status_cmd)
 

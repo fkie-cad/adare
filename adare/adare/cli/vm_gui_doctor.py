@@ -30,6 +30,7 @@ def _classify_coords(rx: float, ry: float) -> tuple[str | None, float, float]:
     Returns (detected_or_None, err_absolute_px, err_normalized_px). ``None`` when
     neither convention lands within tolerance of the known target.
     """
+
     def _err(px: float, py: float) -> float:
         return math.hypot(px - _TARGET[0], py - _TARGET[1])
 
@@ -73,7 +74,9 @@ async def _run_checks() -> tuple[bool, str | None]:
     except VLMError as exc:
         console.print(f'[red]✗ endpoint unreachable / auth failed[/red]: {exc}')
         return False, None
-    console.print(f'[green]✓ endpoint reachable[/green] ({VLLM_BASE_URL}, model {VLLM_MODEL}) — replied: {reply.strip()[:40]!r}')
+    console.print(
+        f'[green]✓ endpoint reachable[/green] ({VLLM_BASE_URL}, model {VLLM_MODEL}) — replied: {reply.strip()[:40]!r}'
+    )
 
     # 2) Coordinate calibration.
     b64 = _calibration_png_b64()
@@ -84,8 +87,7 @@ async def _run_checks() -> tuple[bool, str | None]:
     reply = None
     try:
         reply = await client.chat(
-            [{'role': 'user', 'content': [
-                client.text_content(prompt), client.image_content(b64)]}],
+            [{'role': 'user', 'content': [client.text_content(prompt), client.image_content(b64)]}],
             max_tokens=100,
         )
         obj = _extract_json_object(reply)
@@ -101,8 +103,10 @@ async def _run_checks() -> tuple[bool, str | None]:
     console.print(f'  error as absolute pixels: {err_abs:.0f}px | as normalized_1000: {err_norm:.0f}px')
 
     if detected is None:
-        console.print('[yellow]! neither convention matched well — the model may not be '
-                      'grounding-capable, or the reply was off.[/yellow]')
+        console.print(
+            '[yellow]! neither convention matched well — the model may not be '
+            'grounding-capable, or the reply was off.[/yellow]'
+        )
         return True, None
     console.print(f'[green]✓ coordinate convention detected[/green]: {detected}')
     return True, detected
@@ -129,8 +133,10 @@ def exec_vm_gui_doctor(arguments):
     if not reachable:
         print_error_message(
             title='vLLM endpoint not usable',
-            next_steps=['Verify ADARE_VLLM_BASE_URL / ADARE_VLLM_API_KEY / ADARE_VLLM_MODEL',
-                        'For Ollama Cloud the base URL is https://ollama.com/v1'],
+            next_steps=[
+                'Verify ADARE_VLLM_BASE_URL / ADARE_VLLM_API_KEY / ADARE_VLLM_MODEL',
+                'For Ollama Cloud the base URL is https://ollama.com/v1',
+            ],
         )
         return
 
@@ -140,33 +146,38 @@ def exec_vm_gui_doctor(arguments):
     if ffmpeg_path:
         console.print(f'[green]✓ ffmpeg found[/green] (for `adare dev agent --video`): {ffmpeg_path}')
     else:
-        console.print('[yellow]! ffmpeg not found[/yellow] — `--video` will error; '
-                      'install ffmpeg or set ADARE_FFMPEG')
+        console.print('[yellow]! ffmpeg not found[/yellow] — `--video` will error; install ffmpeg or set ADARE_FFMPEG')
 
     # SpiceClientGLib bindings for `--video-backend=spice` (informational — this
     # backend is opt-in, so missing bindings must not fail the doctor).
     spice_client_ok = False
     try:
         import gi
+
         gi.require_version('SpiceClientGLib', '2.0')
         from gi.repository import SpiceClientGLib  # noqa: F401
+
         spice_client_ok = True
     except (ImportError, ValueError):
         spice_client_ok = False
     if spice_client_ok:
         console.print('[green]✓ SpiceClientGLib found[/green] (for `--video-backend=spice`)')
     else:
-        console.print('[yellow]! SpiceClientGLib not found[/yellow] — '
-                      '`--video-backend=spice` will error; install the spice-gtk '
-                      "GObject-introspection typelib (e.g. Debian/Ubuntu: "
-                      "'apt install gir1.2-spice-client-glib-2.0 python3-gi')")
+        console.print(
+            '[yellow]! SpiceClientGLib not found[/yellow] — '
+            '`--video-backend=spice` will error; install the spice-gtk '
+            "GObject-introspection typelib (e.g. Debian/Ubuntu: "
+            "'apt install gir1.2-spice-client-glib-2.0 python3-gi')"
+        )
 
     next_steps = []
     if not ffmpeg_path:
         next_steps.append('For `adare dev agent --video`: install ffmpeg or set ADARE_FFMPEG')
     if not spice_client_ok:
-        next_steps.append('For `--video-backend=spice`: install gir1.2-spice-client-glib-2.0 '
-                          '(or your distro\'s spice-gtk GObject-introspection package)')
+        next_steps.append(
+            'For `--video-backend=spice`: install gir1.2-spice-client-glib-2.0 '
+            '(or your distro\'s spice-gtk GObject-introspection package)'
+        )
     if detected and detected != VLLM_COORD_SPACE:
         next_steps.append(
             f'Set the coordinate space to match the model: '
@@ -175,8 +186,9 @@ def exec_vm_gui_doctor(arguments):
     elif detected:
         next_steps.append(f'Coordinate space already correct: ADARE_VLLM_COORD_SPACE={VLLM_COORD_SPACE}')
     else:
-        next_steps.append('Could not auto-detect the coordinate space — try a grounding model '
-                          '(e.g. gemma4:31b) and re-run.')
+        next_steps.append(
+            'Could not auto-detect the coordinate space — try a grounding model (e.g. gemma4:31b) and re-run.'
+        )
 
     print_success_message(
         title=f'GUI-automation preflight complete (model: {VLLM_MODEL})',

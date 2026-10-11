@@ -17,7 +17,6 @@ log = logging.getLogger(__name__)
 
 
 class EnvironmentDbApi(GlobalDatabaseApi):
-
     def __init__(self):
         super().__init__()
         self._start_session()
@@ -33,9 +32,13 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         return os_info, True
 
     def get_environments_by_path(self, path: Path) -> list[Environment]:
-        """ returns a list of environments with the given path sorted by creation date"""
-        return self._session.query(Environment).filter(Environment.file == path.as_posix()).order_by(
-            sqlalchemy.desc(Environment.created_at)).all()
+        """returns a list of environments with the given path sorted by creation date"""
+        return (
+            self._session.query(Environment)
+            .filter(Environment.file == path.as_posix())
+            .order_by(sqlalchemy.desc(Environment.created_at))
+            .all()
+        )
 
     def get_or_create_tags(self, tag_names: list[str]) -> list:
         """
@@ -60,17 +63,27 @@ class EnvironmentDbApi(GlobalDatabaseApi):
     def get_environment_by_hash(self, sha256hash: str) -> Environment:
         return self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
 
-    def __get_or_create_installations(self, installations: list[PostsetupInstallationsAttrs]) -> list[PostSetupInstallation]:
+    def __get_or_create_installations(
+        self, installations: list[PostsetupInstallationsAttrs]
+    ) -> list[PostSetupInstallation]:
         installation_objects = []
         for installation in installations:
             installation_obj, created = self.get_or_create(PostSetupInstallation, **attrs.asdict(installation))
             installation_objects.append(installation_obj)
         return installation_objects
 
-    def get_or_create_environment(self, project_path: Path, name: str, description: str,
-                                  vm_id: str, tags: list[str],
-                                  installations: list[dict], environment_file: Path,
-                                  sha256hash: str, hypervisor: str = 'virtualbox') -> tuple[Environment, bool]:
+    def get_or_create_environment(
+        self,
+        project_path: Path,
+        name: str,
+        description: str,
+        vm_id: str,
+        tags: list[str],
+        installations: list[dict],
+        environment_file: Path,
+        sha256hash: str,
+        hypervisor: str = 'virtualbox',
+    ) -> tuple[Environment, bool]:
         # For global environments, check by hash only (no project dependency)
         environment = self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
         if environment:
@@ -86,7 +99,7 @@ class EnvironmentDbApi(GlobalDatabaseApi):
             sha256hash=sha256hash,
             hypervisor=hypervisor,
             file=environment_file.resolve().as_posix(),  # Store absolute path
-            tags=tag_objects
+            tags=tag_objects,
         )
         installation_objects = []
         for install_dict in installations:
@@ -97,15 +110,23 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         self._session.commit()
         return environment, True
 
-    def update_environment(self, name: str, description: str, vm_id: str,
-                          environment_file: Path, sha256hash: str, hypervisor: str = 'virtualbox') -> Environment | None:
+    def update_environment(
+        self,
+        name: str,
+        description: str,
+        vm_id: str,
+        environment_file: Path,
+        sha256hash: str,
+        hypervisor: str = 'virtualbox',
+    ) -> Environment | None:
         environment = self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
         if not environment:
             log.error(f"Environment with hash '{sha256hash}' not found in database -> cannot update")
             return None
         if environment.runs:
             log.error(
-                f"Environment with hash '{sha256hash}' has already been used for experiments, so it cannot be updated because this would invalidate the results")
+                f"Environment with hash '{sha256hash}' has already been used for experiments, so it cannot be updated because this would invalidate the results"
+            )
             return None
         # OS info is now stored in the VM, not separately
         environment.name = name
@@ -126,8 +147,6 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         # retrieve all environments and expunge them from the session
         # Since environments are now global, we return all environments regardless of project_path
         return self._session.query(Environment).all()
-
-
 
     # def get_environments(self, project_path: Path = None) -> list:
     #     # retrieve all environments and expunge them from the session
@@ -164,26 +183,17 @@ class EnvironmentDbApi(GlobalDatabaseApi):
     #     ]
 
     def get_environment_installations(self, environment_ulid: str):
-        if (
-            env := self._session.query(Environment)
-            .filter_by(ulid=environment_ulid)
-            .first()
-        ):
+        if env := self._session.query(Environment).filter_by(ulid=environment_ulid).first():
             return [
                 PostsetupInstallationsAttrs(
-                    name=installation.name,
-                    command=installation.command,
-                    description=installation.description
-                ) for installation in env.installations
+                    name=installation.name, command=installation.command, description=installation.description
+                )
+                for installation in env.installations
             ]
         raise ValueError(f'environment {environment_ulid} not found in database')
 
     def get_environment_platform(self, environment_ulid: str):
-        if (
-            env := self._session.query(Environment)
-            .filter_by(ulid=environment_ulid)
-            .first()
-        ):
+        if env := self._session.query(Environment).filter_by(ulid=environment_ulid).first():
             return env.vm.osinfo.platform
         raise ValueError(f'environment {environment_ulid} not found in database')
 
@@ -196,11 +206,7 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         return None
 
     def get_environment_vm(self, environment_ulid: str) -> str:
-        if (
-            env := self._session.query(Environment)
-            .filter_by(ulid=environment_ulid)
-            .first()
-        ):
+        if env := self._session.query(Environment).filter_by(ulid=environment_ulid).first():
             return env.vm.name if env.vm else None
         raise ValueError(f'environment {environment_ulid} not found in database')
 
@@ -218,8 +224,12 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         """
         environment = self.get_environment_by_ulid(ulid)
         apply_remote_identity(
-            self._session, environment, SyncMetadata,
-            remote_ulid=remote_ulid, remote_url=remote_url, is_published=is_published,
+            self._session,
+            environment,
+            SyncMetadata,
+            remote_ulid=remote_ulid,
+            remote_url=remote_url,
+            is_published=is_published,
         )
         self._session.commit()
         return environment

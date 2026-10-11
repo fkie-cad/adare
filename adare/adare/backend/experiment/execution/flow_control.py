@@ -29,13 +29,18 @@ log = logging.getLogger(__name__)
 MIN_PIXEL_POLL_INTERVAL = 0.5
 
 
-
 class FlowControlExecutor:
     """Handles execution of control flow actions (block, loop, wait_until, pause)."""
 
-    def __init__(self, websocket_client, target_resolution_executor, condition_checker,
-                 experiment_run_id: str | None = None, execution_context: dict = None,
-                 flow_console = None):
+    def __init__(
+        self,
+        websocket_client,
+        target_resolution_executor,
+        condition_checker,
+        experiment_run_id: str | None = None,
+        execution_context: dict = None,
+        flow_console=None,
+    ):
         """
         Initialize flow control executor.
 
@@ -54,9 +59,14 @@ class FlowControlExecutor:
         self.execution_context = execution_context if execution_context is not None else {}
         self.flow_console = flow_console
 
-    async def execute_block(self, action: BlockAction, parent_event_id: str = None,
-                           event_emitter = None, variable_resolver = None,
-                           action_executor = None) -> ActionResult:
+    async def execute_block(
+        self,
+        action: BlockAction,
+        parent_event_id: str = None,
+        event_emitter=None,
+        variable_resolver=None,
+        action_executor=None,
+    ) -> ActionResult:
         """Execute conditional block action with MCP-based condition checking."""
         # Check conditions if present
         screenshot_path = None  # Track screenshot path for result data
@@ -72,16 +82,11 @@ class FlowControlExecutor:
                     if screenshot_path:
                         data['screenshot_path'] = screenshot_path
                     return ActionResult(
-                        success=True,
-                        message="Block conditions not met, skipping",
-                        data=data if data else None
+                        success=True, message="Block conditions not met, skipping", data=data if data else None
                     )
             except (RuntimeError, OSError, ValueError, TypeError, KeyError) as e:
                 log.error(f"Error checking block conditions: {e}")
-                return ActionResult(
-                    success=False,
-                    message=f"Condition check failed: {str(e)}"
-                )
+                return ActionResult(success=False, message=f"Condition check failed: {str(e)}")
 
         # Use the block's parent_event_id as parent context for sub-actions
         block_parent_event_id = parent_event_id
@@ -90,26 +95,35 @@ class FlowControlExecutor:
         results = []
         for i, block_action in enumerate(action.actions):
             # Create sub-action ID
-            sub_action_id = f"block_sub_{i}_{int(time.time()*1000)}"
+            sub_action_id = f"block_sub_{i}_{int(time.time() * 1000)}"
 
             # Emit sub-action start event
             if self.experiment_run_id and event_emitter:
                 try:
-                    sub_start_event = event_emitter.create_action_start_event(block_action, i, sub_action_id, parent_event_id=block_parent_event_id)
+                    sub_start_event = event_emitter.create_action_start_event(
+                        block_action, i, sub_action_id, parent_event_id=block_parent_event_id
+                    )
                     emit_action(self.experiment_run_id, sub_start_event, sub_action_id)
                 except (RuntimeError, AttributeError, TypeError) as e:
                     log.error(f"Failed to emit sub-action start event: {e}")
 
             # Execute the sub-action with variable resolution
             start_time = time.time()
-            result = await action_executor.execute_action(block_action, parent_event_id=block_parent_event_id, event_emitter=event_emitter, variable_resolver=variable_resolver)
+            result = await action_executor.execute_action(
+                block_action,
+                parent_event_id=block_parent_event_id,
+                event_emitter=event_emitter,
+                variable_resolver=variable_resolver,
+            )
             execution_time = time.time() - start_time
             result.execution_time = execution_time
 
             # Emit sub-action complete event
             if self.experiment_run_id and event_emitter:
                 try:
-                    sub_complete_event = event_emitter.create_action_complete_event(block_action, i, sub_action_id, result, parent_event_id=block_parent_event_id)
+                    sub_complete_event = event_emitter.create_action_complete_event(
+                        block_action, i, sub_action_id, result, parent_event_id=block_parent_event_id
+                    )
                     emit_action(self.experiment_run_id, sub_complete_event, sub_action_id)
                 except (RuntimeError, AttributeError, TypeError) as e:
                     log.error(f"Failed to emit sub-action complete event: {e}")
@@ -127,7 +141,7 @@ class FlowControlExecutor:
                 return ActionResult(
                     success=False,
                     message=f"Block action failed: {result.message}",
-                    data={'actions_executed': len(results)}
+                    data={'actions_executed': len(results)},
                 )
 
             # Apply custom delay between actions if specified
@@ -144,15 +158,16 @@ class FlowControlExecutor:
         if screenshot_path:
             data['screenshot_path'] = screenshot_path
 
-        return ActionResult(
-            success=True,
-            message=f"Block executed successfully ({len(results)} actions)",
-            data=data
-        )
+        return ActionResult(success=True, message=f"Block executed successfully ({len(results)} actions)", data=data)
 
-    async def execute_loop(self, action: LoopAction, parent_event_id: str = None,
-                          event_emitter = None, variable_resolver = None,
-                          action_executor = None) -> ActionResult:
+    async def execute_loop(
+        self,
+        action: LoopAction,
+        parent_event_id: str = None,
+        event_emitter=None,
+        variable_resolver=None,
+        action_executor=None,
+    ) -> ActionResult:
         """Execute loop action - iterate N times or over a list.
 
         Automatic variables available in loop body:
@@ -180,6 +195,7 @@ class FlowControlExecutor:
                     elif isinstance(resolved, str):
                         # Try parsing as JSON list
                         import json
+
                         try:
                             items = json.loads(resolved)
                             if not isinstance(items, list):
@@ -205,7 +221,7 @@ class FlowControlExecutor:
             for i in range(iteration_count):
                 # Create loop-specific execution context with automatic variables
                 loop_context = self.execution_context.copy()
-                loop_context['index'] = i           # 0-based index
+                loop_context['index'] = i  # 0-based index
                 loop_context['total'] = iteration_count
 
                 # Add item variable for list iteration
@@ -229,12 +245,10 @@ class FlowControlExecutor:
                     # Execute each action in the loop body
                     for j, loop_action in enumerate(action.actions):
                         # Create sub-action ID
-                        sub_action_id = f"loop_{i}_action_{j}_{int(time.time()*1000)}"
+                        sub_action_id = f"loop_{i}_action_{j}_{int(time.time() * 1000)}"
 
                         # Resolve variables in the loop action with loop context
-                        resolved_loop_action = variable_resolver.resolve_action_variables(
-                            loop_action, loop_context
-                        )
+                        resolved_loop_action = variable_resolver.resolve_action_variables(loop_action, loop_context)
 
                         # Emit sub-action start event (use resolved action for display)
                         if self.experiment_run_id and event_emitter:
@@ -252,7 +266,7 @@ class FlowControlExecutor:
                             loop_action,  # Pass original, will be re-resolved in execute_action
                             parent_event_id=parent_event_id,
                             event_emitter=event_emitter,
-                            variable_resolver=variable_resolver
+                            variable_resolver=variable_resolver,
                         )
                         execution_time = time.time() - start_time
                         result.execution_time = execution_time
@@ -261,8 +275,7 @@ class FlowControlExecutor:
                         if self.experiment_run_id and event_emitter:
                             try:
                                 sub_complete_event = event_emitter.create_action_complete_event(
-                                    resolved_loop_action, j, sub_action_id, result,
-                                    parent_event_id=parent_event_id
+                                    resolved_loop_action, j, sub_action_id, result, parent_event_id=parent_event_id
                                 )
                                 emit_action(self.experiment_run_id, sub_complete_event, sub_action_id)
                             except (RuntimeError, AttributeError, TypeError) as e:
@@ -290,7 +303,7 @@ class FlowControlExecutor:
                                     # reads 'iterations' / 'actions_executed').
                                     'iterations': i,
                                     'actions_executed': len(results),
-                                }
+                                },
                             )
 
                 finally:
@@ -298,11 +311,16 @@ class FlowControlExecutor:
                     # This preserves variables created by save_timestamp, command capture, etc.
                     # while ensuring loop control variables (index, total, item) don't leak
                     loop_control_vars = {'index', 'total', action.item_var if action.item_var else 'item'}
-                    new_vars = {k: v for k, v in loop_context.items()
-                                if k not in loop_control_vars and k not in saved_flow_context}
+                    new_vars = {
+                        k: v
+                        for k, v in loop_context.items()
+                        if k not in loop_control_vars and k not in saved_flow_context
+                    }
 
                     if new_vars:
-                        log.debug(f"Merging {len(new_vars)} new variables from loop iteration {i}: {list(new_vars.keys())}")
+                        log.debug(
+                            f"Merging {len(new_vars)} new variables from loop iteration {i}: {list(new_vars.keys())}"
+                        )
                         saved_flow_context.update(new_vars)
                         saved_action_context.update(new_vars)
                         saved_simple_actions_context.update(new_vars)
@@ -316,7 +334,7 @@ class FlowControlExecutor:
             return ActionResult(
                 success=True,
                 message=f"Loop completed ({iteration_count} iterations, {len(results)} actions)",
-                data={'iterations': iteration_count, 'actions_executed': len(results)}
+                data={'iterations': iteration_count, 'actions_executed': len(results)},
             )
 
         except Exception as e:
@@ -324,8 +342,9 @@ class FlowControlExecutor:
             return ActionResult(success=False, message=str(e))
 
     @staticmethod
-    def _wait_until_timeout_result(action: WaitUntilAction, start_time: float, check_count: int,
-                                    last_screenshot_path: str | None) -> ActionResult | None:
+    def _wait_until_timeout_result(
+        action: WaitUntilAction, start_time: float, check_count: int, last_screenshot_path: str | None
+    ) -> ActionResult | None:
         """Return a timeout ActionResult if action.timeout has elapsed, else None.
 
         Every early-exit point in execute_wait_until's loop (not just the bottom of
@@ -347,15 +366,18 @@ class FlowControlExecutor:
                 success=False,
                 message=f"Timeout waiting for condition after {elapsed_time:.1f}s ({check_count} checks)",
                 execution_time=elapsed_time,
-                data=data if data else None
+                data=data if data else None,
             )
         return None
 
-    async def execute_wait_until(self, action: WaitUntilAction, parent_event_id: str = None,
-                                event_emitter = None) -> ActionResult:
+    async def execute_wait_until(
+        self, action: WaitUntilAction, parent_event_id: str = None, event_emitter=None
+    ) -> ActionResult:
         """Execute wait until action - wait for condition to be satisfied with timeout and check interval."""
         try:
-            log.info(f"Starting wait until action with timeout={action.timeout}s, check_interval={action.check_interval}s, initial_delay={action.initial_delay}s")
+            log.info(
+                f"Starting wait until action with timeout={action.timeout}s, check_interval={action.check_interval}s, initial_delay={action.initial_delay}s"
+            )
 
             check_count = 0
             last_screenshot_path = None  # Track last screenshot for timeout result
@@ -380,13 +402,17 @@ class FlowControlExecutor:
                 # Since condition can be complex tree, we use a simplified description
                 condition_desc = "condition"
                 if action.condition.exists:
-                     t = action.condition.exists
-                     if t.text: condition_desc = f"exists_text_{t.text[:10]}"
-                     elif t.image: condition_desc = "exists_img"
+                    t = action.condition.exists
+                    if t.text:
+                        condition_desc = f"exists_text_{t.text[:10]}"
+                    elif t.image:
+                        condition_desc = "exists_img"
                 elif action.condition.not_exists:
-                     t = action.condition.not_exists
-                     if t.text: condition_desc = f"not_exists_text_{t.text[:10]}"
-                     elif t.image: condition_desc = "not_exists_img"
+                    t = action.condition.not_exists
+                    if t.text:
+                        condition_desc = f"not_exists_text_{t.text[:10]}"
+                    elif t.image:
+                        condition_desc = "not_exists_img"
 
                 check_context = f"wait_until_{check_count}_{condition_desc}"
 
@@ -402,13 +428,17 @@ class FlowControlExecutor:
                         timeout=per_check_budget,
                     )
                 except TimeoutError:
-                    log.warning(f"Screenshot capture on check #{check_count} exceeded remaining budget ({per_check_budget:.1f}s)")
+                    log.warning(
+                        f"Screenshot capture on check #{check_count} exceeded remaining budget ({per_check_budget:.1f}s)"
+                    )
                     screenshot_base64, screenshot_path = None, None
                 if screenshot_path:
                     last_screenshot_path = screenshot_path  # Keep track for timeout case
                 if not screenshot_base64:
                     log.debug(f"Failed to get screenshot on check #{check_count}")
-                    timeout_result = self._wait_until_timeout_result(action, start_time, check_count, last_screenshot_path)
+                    timeout_result = self._wait_until_timeout_result(
+                        action, start_time, check_count, last_screenshot_path
+                    )
                     if timeout_result:
                         return timeout_result
                     continue
@@ -433,19 +463,27 @@ class FlowControlExecutor:
                         constraint = action.skip.pixel_change
 
                         if constraint.above is not None and change_percent > constraint.above:
-                            log.debug(f"Skipping wait_until check: Pixel change {change_percent:.2f}% > {constraint.above}% (waiting for stability)")
+                            log.debug(
+                                f"Skipping wait_until check: Pixel change {change_percent:.2f}% > {constraint.above}% (waiting for stability)"
+                            )
                             should_skip_check = True
                         elif constraint.below is not None and change_percent < constraint.below:
-                            log.debug(f"Skipping wait_until check: Pixel change {change_percent:.2f}% < {constraint.below}% (waiting for activity)")
+                            log.debug(
+                                f"Skipping wait_until check: Pixel change {change_percent:.2f}% < {constraint.below}% (waiting for activity)"
+                            )
                             should_skip_check = True
-                        log.debug(f"Pixel change evaluated: {change_percent:.2f}% > {constraint.above}%, < {constraint.below}%")
+                        log.debug(
+                            f"Pixel change evaluated: {change_percent:.2f}% > {constraint.above}%, < {constraint.below}%"
+                        )
                         # If we didn't skip, and we evaluated, marks as satisfied
                         if not should_skip_check:
                             is_new_satisfaction = not pixel_constraint_satisfied
                             pixel_constraint_satisfied = True
 
                             if is_new_satisfaction and constraint.strategy == 'once':
-                                log.info("Pixel change constraint satisfied (latched) - proceeding with condition checks")
+                                log.info(
+                                    "Pixel change constraint satisfied (latched) - proceeding with condition checks"
+                                )
 
                             # Handle idle BEFORE search if configured
                             # We idle if:
@@ -454,7 +492,9 @@ class FlowControlExecutor:
                             should_idle = is_new_satisfaction or constraint.strategy == 'continuous'
 
                             if should_idle and constraint.idle and constraint.idle > 0:
-                                log.info(f"Pixel constraint satisfied, waiting configured idle {constraint.idle}s for UI to stabilize before search...")
+                                log.info(
+                                    f"Pixel constraint satisfied, waiting configured idle {constraint.idle}s for UI to stabilize before search..."
+                                )
                                 await asyncio.sleep(constraint.idle)
 
                                 # Refresh screenshot for actual search (UI might have finished rendering)
@@ -462,11 +502,15 @@ class FlowControlExecutor:
                                 refresh_budget = max(action.timeout - (time.time() - start_time), 0.1)
                                 try:
                                     refresh_base64, refresh_path = await asyncio.wait_for(
-                                        self.target_resolution.get_current_screenshot_with_path(action_context=refresh_context),
+                                        self.target_resolution.get_current_screenshot_with_path(
+                                            action_context=refresh_context
+                                        ),
                                         timeout=refresh_budget,
                                     )
                                 except TimeoutError:
-                                    log.warning(f"Post-idle screenshot refresh on check #{check_count} exceeded remaining budget ({refresh_budget:.1f}s)")
+                                    log.warning(
+                                        f"Post-idle screenshot refresh on check #{check_count} exceeded remaining budget ({refresh_budget:.1f}s)"
+                                    )
                                     refresh_base64, refresh_path = None, None
 
                                 if refresh_base64:
@@ -476,11 +520,12 @@ class FlowControlExecutor:
                                         last_screenshot_path = screenshot_path
                                 else:
                                     log.warning("Failed to refresh screenshot after idle, skipping check")
-                                    timeout_result = self._wait_until_timeout_result(action, start_time, check_count, last_screenshot_path)
+                                    timeout_result = self._wait_until_timeout_result(
+                                        action, start_time, check_count, last_screenshot_path
+                                    )
                                     if timeout_result:
                                         return timeout_result
                                     continue
-
 
                     except (ImportError, ValueError) as e:
                         # If optimization fails, fallback to normal check (fail open)
@@ -503,7 +548,9 @@ class FlowControlExecutor:
                                 timeout=per_check_budget,
                             )
                         except TimeoutError:
-                            log.warning(f"Condition evaluation on check #{check_count} exceeded remaining budget ({per_check_budget:.1f}s)")
+                            log.warning(
+                                f"Condition evaluation on check #{check_count} exceeded remaining budget ({per_check_budget:.1f}s)"
+                            )
                             condition_result = False
 
                     if condition_result:
@@ -519,7 +566,7 @@ class FlowControlExecutor:
                             success=True,
                             message=f"Condition satisfied after {elapsed_time:.1f}s ({check_count} checks)",
                             execution_time=elapsed_time,
-                            data=data if data else None
+                            data=data if data else None,
                         )
                 except Exception as e:
                     if isinstance(e, FileNotFoundError):
@@ -553,7 +600,9 @@ class FlowControlExecutor:
             log.error(f"Wait until action failed: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
 
-    async def _evaluate_wait_condition(self, condition, screenshot_base64: str, screenshot_path: str | None = None) -> bool:
+    async def _evaluate_wait_condition(
+        self, condition, screenshot_base64: str, screenshot_path: str | None = None
+    ) -> bool:
         """
         Recursively evaluate a WaitCondition tree.
 
@@ -572,6 +621,7 @@ class FlowControlExecutor:
                 target = condition.exists
                 if target.strategy is None:
                     from adare.types.playbook import BestConfidenceStrategy, TopLeftStrategy
+
                     if target.image:
                         target.strategy = BestConfidenceStrategy()
                         log.debug("Applied default BestConfidence strategy for image target")
@@ -593,6 +643,7 @@ class FlowControlExecutor:
                 target = condition.not_exists
                 if target.strategy is None:
                     from adare.types.playbook import BestConfidenceStrategy, TopLeftStrategy
+
                     if target.image:
                         target.strategy = BestConfidenceStrategy()
                         log.debug("Applied default BestConfidence strategy for image target")
@@ -632,43 +683,37 @@ class FlowControlExecutor:
             log.error(f"Error evaluating wait condition: {e}")
             return False
 
-    async def execute_pause(self, action: PauseAction, parent_event_id: str = None,
-                           event_emitter = None) -> ActionResult:
+    async def execute_pause(self, action: PauseAction, parent_event_id: str = None, event_emitter=None) -> ActionResult:
         """Execute pause action - wait for user input to continue."""
         try:
             pause_message = action.message or action.name or "Execution paused"
 
             # If we have a flow console, use the integrated interactive pause
             if self.flow_console and not self.flow_console.disable:
-                pause_id = f"pause_{int(time.time()*1000)}"
+                pause_id = f"pause_{int(time.time() * 1000)}"
 
                 # Run the pause in a thread pool to avoid blocking the asyncio loop
                 # This prevents timeout issues with long pauses
                 loop = asyncio.get_event_loop()
                 user_input = await loop.run_in_executor(
-                    None,
-                    functools.partial(self.flow_console.log_interactive_pause, pause_id, pause_message)
+                    None, functools.partial(self.flow_console.log_interactive_pause, pause_id, pause_message)
                 )
 
                 if user_input == 'c':
                     log.info("PAUSE: User continued execution")
                     return ActionResult(
-                        success=True,
-                        message="Execution resumed by user",
-                        data={"user_input": user_input}
+                        success=True, message="Execution resumed by user", data={"user_input": user_input}
                     )
                 if user_input == 'interrupted':
                     log.info("PAUSE: User interrupted with Ctrl+C")
                     return ActionResult(
-                        success=False,
-                        message="Pause action interrupted by user",
-                        data={"user_input": "interrupted"}
+                        success=False, message="Pause action interrupted by user", data={"user_input": "interrupted"}
                     )
                 log.warning(f"PAUSE: Unexpected input '{user_input}'")
                 return ActionResult(
                     success=False,
                     message=f"Pause action failed with input: {user_input}",
-                    data={"user_input": user_input}
+                    data={"user_input": user_input},
                 )
             # Fallback to simple input if no flow console available
             pause_symbol = "⏸️"
@@ -682,32 +727,22 @@ class FlowControlExecutor:
                     if user_input == 'c':
                         log.info("PAUSE: User continued execution")
                         return ActionResult(
-                            success=True,
-                            message="Execution resumed by user",
-                            data={"user_input": user_input}
+                            success=True, message="Execution resumed by user", data={"user_input": user_input}
                         )
                     print("Please press 'c' + Enter to continue execution")
                 except (EOFError, KeyboardInterrupt):
                     # Handle Ctrl+C or EOF gracefully
                     log.info("PAUSE: User interrupted with Ctrl+C")
                     return ActionResult(
-                        success=False,
-                        message="Pause action interrupted by user",
-                        data={"user_input": "interrupted"}
+                        success=False, message="Pause action interrupted by user", data={"user_input": "interrupted"}
                     )
                 except (OSError, RuntimeError) as e:
                     log.error(f"Error during pause input: {e}")
-                    return ActionResult(
-                        success=False,
-                        message=f"Pause action failed: {str(e)}"
-                    )
+                    return ActionResult(success=False, message=f"Pause action failed: {str(e)}")
 
         except (OSError, RuntimeError) as e:
             log.error(f"Error in pause action: {e}")
-            return ActionResult(
-                success=False,
-                message=f"Pause action failed: {str(e)}"
-            )
+            return ActionResult(success=False, message=f"Pause action failed: {str(e)}")
 
     def _evaluate_variable_condition(self, condition: VariableCondition) -> bool:
         """
@@ -784,8 +819,7 @@ class FlowControlExecutor:
         except (ValueError, TypeError) as e:
             raise ValueError(f"Failed to evaluate condition: {e}") from e
 
-    async def execute_stop(self, action: StopAction, parent_event_id: str = None,
-                          event_emitter = None) -> ActionResult:
+    async def execute_stop(self, action: StopAction, parent_event_id: str = None, event_emitter=None) -> ActionResult:
         """
         Execute stop action - conditionally halt playbook execution.
 
@@ -808,46 +842,36 @@ class FlowControlExecutor:
                         return ActionResult(
                             success=True,
                             message="Stop condition met - execution halted",
-                            data={
-                                'should_stop': True,
-                                'condition_met': True,
-                                'variable': action.condition.variable
-                            }
+                            data={'should_stop': True, 'condition_met': True, 'variable': action.condition.variable},
                         )
                     # Condition is false - continue execution
                     log.info("Stop condition not met - continuing execution")
                     return ActionResult(
                         success=True,
                         message="Stop condition not met - continuing",
-                        data={
-                            'should_stop': False,
-                            'condition_met': False,
-                            'variable': action.condition.variable
-                        }
+                        data={'should_stop': False, 'condition_met': False, 'variable': action.condition.variable},
                     )
 
                 except ValueError as e:
                     # Condition evaluation failed
                     log.error(f"Stop condition evaluation failed: {e}")
-                    return ActionResult(
-                        success=False,
-                        message=f"Stop condition evaluation failed: {str(e)}"
-                    )
+                    return ActionResult(success=False, message=f"Stop condition evaluation failed: {str(e)}")
             else:
                 # No condition - unconditional stop
                 log.info("Unconditional stop - halting playbook execution")
                 return ActionResult(
                     success=True,
                     message="Unconditional stop - execution halted",
-                    data={'should_stop': True, 'condition_met': None}
+                    data={'should_stop': True, 'condition_met': None},
                 )
 
         except Exception as e:
             log.error(f"Stop action failed: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
 
-    async def execute_continue(self, action: ContinueAction, parent_event_id: str = None,
-                              event_emitter = None) -> ActionResult:
+    async def execute_continue(
+        self, action: ContinueAction, parent_event_id: str = None, event_emitter=None
+    ) -> ActionResult:
         """
         Execute continue action - conditionally skip remaining actions in loop/block.
 
@@ -873,35 +897,28 @@ class FlowControlExecutor:
                             data={
                                 'should_continue': True,
                                 'condition_met': True,
-                                'variable': action.condition.variable
-                            }
+                                'variable': action.condition.variable,
+                            },
                         )
                     # Condition is false - continue normally
                     log.info("Continue condition not met - proceeding with remaining actions")
                     return ActionResult(
                         success=True,
                         message="Continue condition not met - proceeding normally",
-                        data={
-                            'should_continue': False,
-                            'condition_met': False,
-                            'variable': action.condition.variable
-                        }
+                        data={'should_continue': False, 'condition_met': False, 'variable': action.condition.variable},
                     )
 
                 except ValueError as e:
                     # Condition evaluation failed
                     log.error(f"Continue condition evaluation failed: {e}")
-                    return ActionResult(
-                        success=False,
-                        message=f"Continue condition evaluation failed: {str(e)}"
-                    )
+                    return ActionResult(success=False, message=f"Continue condition evaluation failed: {str(e)}")
             else:
                 # No condition - unconditional continue
                 log.info("Unconditional continue - skipping remaining actions in loop/block")
                 return ActionResult(
                     success=True,
                     message="Unconditional continue - skipping remaining actions",
-                    data={'should_continue': True, 'condition_met': None}
+                    data={'should_continue': True, 'condition_met': None},
                 )
 
         except Exception as e:

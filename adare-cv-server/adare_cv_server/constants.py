@@ -7,6 +7,7 @@ DEFAULT_PORT = 13109
 DEFAULT_HOST = "localhost"
 MCP_PATH = "/mcp"
 
+
 # Computer Vision Parameters
 class CVConstants:
     """Computer Vision algorithm constants."""
@@ -84,14 +85,15 @@ class CVConstants:
 
     # Method Weighting for Aggregation (priority-based confidence)
     METHOD_WEIGHTS = {
-        'canny_edge': 1.0,           # Highest - theme invariant, best for UI
+        'canny_edge': 1.0,  # Highest - theme invariant, best for UI
         'multiscale_template': 0.95,  # High - pixel exact matching
-        'sift': 0.90,                # Robust - gradient/complex icons
-        'orb': 0.85,                 # Good - but prone to text false positives
-        'template': 0.80             # Catch-all - relaxed threshold
+        'sift': 0.90,  # Robust - gradient/complex icons
+        'orb': 0.85,  # Good - but prone to text false positives
+        'template': 0.80,  # Catch-all - relaxed threshold
     }
     SIFT_NORMALIZATION_THRESHOLD = 20.0  # 20+ matches = 1.0 confidence
     ENABLE_AGGREGATION = True  # Feature toggle for multi-method aggregation
+
 
 # Debug Visualization
 class DebugConstants:
@@ -112,6 +114,7 @@ class DebugConstants:
 
     # Summary text
     SUMMARY_COLOR = (255, 255, 255)  # White in BGR
+
 
 # OCR Parameters
 class OCRConstants:
@@ -155,6 +158,7 @@ class OCRConstants:
     # source resolution. With limit_type "max" this is the longest allowed side.
     OCR_DET_LIMIT_SIDE_LEN = int(os.environ.get("ADARE_OCR_DET_LIMIT_SIDE_LEN", "2880"))
     OCR_DET_LIMIT_TYPE = os.environ.get("ADARE_OCR_DET_LIMIT_TYPE", "max")
+
 
 # Result limits
 DEFAULT_MAX_RESULTS = 50

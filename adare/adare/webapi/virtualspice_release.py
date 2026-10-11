@@ -81,14 +81,7 @@ def _asset_stem() -> str:
 
 
 def _cache_dir() -> Path:
-    return (
-        Path.home()
-        / ".local"
-        / "share"
-        / "adare"
-        / "virtualspice"
-        / VIRTUALSPICE_VERSION
-    )
+    return Path.home() / ".local" / "share" / "adare" / "virtualspice" / VIRTUALSPICE_VERSION
 
 
 def _binary_path() -> Path:
@@ -130,9 +123,7 @@ def _fetch_expected_sha256(session, tarball_name: str) -> str:
         resp = session.get(url, timeout=_DOWNLOAD_TIMEOUT)
         resp.raise_for_status()
     except requests.RequestException as exc:
-        raise ReleaseAssetError(
-            f"Could not fetch {_CHECKSUMS_NAME} from {url}: {exc}"
-        ) from exc
+        raise ReleaseAssetError(f"Could not fetch {_CHECKSUMS_NAME} from {url}: {exc}") from exc
 
     for line in resp.text.splitlines():
         line = line.strip()
@@ -147,9 +138,7 @@ def _fetch_expected_sha256(session, tarball_name: str) -> str:
         if name == tarball_name:
             return digest.lower()
 
-    raise ReleaseAssetError(
-        f"{_CHECKSUMS_NAME} has no entry for {tarball_name}"
-    )
+    raise ReleaseAssetError(f"{_CHECKSUMS_NAME} has no entry for {tarball_name}")
 
 
 def _download_bytes(
@@ -186,16 +175,12 @@ def _extract_single_binary(tar_bytes: bytes, dest: Path) -> None:
     """
     try:
         with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:gz") as tar:
-            member = next(
-                (m for m in tar.getmembers() if m.isfile()), None
-            )
+            member = next((m for m in tar.getmembers() if m.isfile()), None)
             if member is None:
                 raise ReleaseAssetError("Release tarball contains no file member")
             extracted = tar.extractfile(member)
             if extracted is None:
-                raise ReleaseAssetError(
-                    f"Could not read member {member.name} from release tarball"
-                )
+                raise ReleaseAssetError(f"Could not read member {member.name} from release tarball")
             payload = extracted.read()
     except tarfile.TarError as exc:
         raise ReleaseAssetError(f"Malformed release tarball: {exc}") from exc
@@ -236,10 +221,7 @@ def ensure_binary(
 
     actual = hashlib.sha256(data).hexdigest()
     if actual != expected:
-        raise ChecksumMismatchError(
-            f"sha256 mismatch for {tarball_name}: "
-            f"expected {expected}, got {actual}"
-        )
+        raise ChecksumMismatchError(f"sha256 mismatch for {tarball_name}: expected {expected}, got {actual}")
 
     dest = _binary_path()
     _extract_single_binary(data, dest)

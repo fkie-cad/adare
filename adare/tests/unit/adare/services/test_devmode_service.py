@@ -38,6 +38,7 @@ def service():
 @pytest.fixture
 def start_request():
     from adare.core.dto.devmode import DevSessionStartRequest
+
     return DevSessionStartRequest(
         project_path=Path("/tmp/proj"),
         environment_name="test-env",
@@ -47,18 +48,21 @@ def start_request():
 @pytest.fixture
 def stop_request():
     from adare.core.dto.devmode import DevSessionStopRequest
+
     return DevSessionStopRequest(session_id="sess-01")
 
 
 @pytest.fixture
 def list_request():
     from adare.core.dto.devmode import DevSessionListRequest
+
     return DevSessionListRequest(project_path=Path("/tmp/proj"))
 
 
 @pytest.fixture
 def action_request():
     from adare.core.dto.devmode import DevActionExecuteRequest
+
     return DevActionExecuteRequest(
         session_id="sess-01",
         action_source="yaml",
@@ -72,6 +76,7 @@ class TestDevModeServiceStartSession:
     @patch("adare.services.devmode.session_management.environment_database")
     def test_start_session_env_not_found(self, mock_env_db, service, start_request):
         from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
+
         mock_env_db.resolve_environment_identifier.side_effect = EnvironmentDoesNotExistInDatabase(
             MagicMock(), message="not found"
         )
@@ -236,6 +241,7 @@ class TestDevModeServiceExecuteAction:
 
     def test_execute_action_yaml_parse_error(self, service, action_request):
         import yaml
+
         with patch("asyncio.run", side_effect=yaml.YAMLError("bad yaml")):
             result = service.execute_action(action_request)
 

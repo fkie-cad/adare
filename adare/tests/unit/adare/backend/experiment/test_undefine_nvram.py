@@ -19,9 +19,7 @@ pytestmark = pytest.mark.unit
 
 from adare.backend.experiment.vm_lifecycle_manager import _undefine_keeping_firmware_state
 
-KEEP_BOTH = (
-    libvirt.VIR_DOMAIN_UNDEFINE_KEEP_NVRAM | libvirt.VIR_DOMAIN_UNDEFINE_KEEP_TPM
-)
+KEEP_BOTH = libvirt.VIR_DOMAIN_UNDEFINE_KEEP_NVRAM | libvirt.VIR_DOMAIN_UNDEFINE_KEEP_TPM
 
 
 class FakeDomain:
@@ -37,9 +35,7 @@ class FakeDomain:
         self.plain_undefine_calls = 0
 
     def undefineFlags(self, flags):  # noqa: N802 - mirrors the libvirt API name
-        if self.has_nvram and not flags & (
-            libvirt.VIR_DOMAIN_UNDEFINE_KEEP_NVRAM | libvirt.VIR_DOMAIN_UNDEFINE_NVRAM
-        ):
+        if self.has_nvram and not flags & (libvirt.VIR_DOMAIN_UNDEFINE_KEEP_NVRAM | libvirt.VIR_DOMAIN_UNDEFINE_NVRAM):
             raise libvirt.libvirtError('Cannot undefine domain with NVRAM')
         self.undefine_flags_calls.append(flags)
 
@@ -122,6 +118,7 @@ class TestFlagSelection:
 
     def test_libvirt_error_propagates_to_the_caller(self):
         """The caller distinguishes 'already gone' from a real leak, so errors must escape."""
+
         class Failing(FakeDomain):
             def undefineFlags(self, flags):  # noqa: N802 - mirrors the libvirt API name
                 raise libvirt.libvirtError('unexpected failure')

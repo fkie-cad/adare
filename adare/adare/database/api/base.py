@@ -48,6 +48,7 @@ def experiment_name_from_run_path(run_path: str | Path | None) -> str | None:
 
 def validate_input(func):
     """Decorator for input validation of API methods."""
+
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
         # Basic validation - can be extended per method
@@ -55,11 +56,13 @@ def validate_input(func):
             return func(self, *args, **kwargs)
         except (ValueError, TypeError) as e:
             raise ValidationError(log, f"Invalid input for {func.__name__}: {e}") from e
+
     return wrapper
 
 
 def handle_db_errors(func):
     """Decorator for standardized database error handling."""
+
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
         try:
@@ -73,6 +76,7 @@ def handle_db_errors(func):
         except Exception as e:
             log.error(f"Unexpected error in {func.__name__}: {e}", exc_info=True)
             raise
+
     return wrapper
 
 
@@ -104,10 +108,7 @@ class EnhancedDatabaseApi:
                 pool_pre_ping=True,  # Verify connections before use
             )
             self._session_factory = sessionmaker(
-                bind=self._engine,
-                autoflush=False,
-                autocommit=False,
-                expire_on_commit=False
+                bind=self._engine, autoflush=False, autocommit=False, expire_on_commit=False
             )
         except (SQLAlchemyError, OSError, PermissionError) as e:
             log.error(f"Failed to setup database: {e}")
@@ -334,11 +335,14 @@ class EnhancedDatabaseApi:
 
     @validate_input
     @handle_db_errors
-    def list_entities(self, model: type[T],
-                     filters: dict[str, Any] | None = None,
-                     order_by: str | None = None,
-                     limit: int | None = None,
-                     offset: int | None = None) -> list[T]:
+    def list_entities(
+        self,
+        model: type[T],
+        filters: dict[str, Any] | None = None,
+        order_by: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[T]:
         """
         List entities with optional filtering and pagination.
 
@@ -460,8 +464,9 @@ class EnhancedDatabaseApi:
 
     @validate_input
     @handle_db_errors
-    def bulk_create_entities(self, model: type[T], items: list[dict[str, Any]],
-                            return_objects: bool = False) -> list[T]:
+    def bulk_create_entities(
+        self, model: type[T], items: list[dict[str, Any]], return_objects: bool = False
+    ) -> list[T]:
         """
         Bulk create multiple entities efficiently.
 
@@ -558,6 +563,7 @@ class GlobalDatabaseApi(EnhancedDatabaseApi):
         try:
             from adare.database.migrations.runner import apply_pending
             from adare.database.models.global_models import GlobalBase
+
             GlobalBase.metadata.create_all(self.engine)
             # create_all builds missing tables but never ALTERs existing ones —
             # heal schema drift from model changes on already-installed databases.
@@ -595,6 +601,7 @@ class ProjectDatabaseApi(EnhancedDatabaseApi):
         try:
             from adare.database.migrations.runner import apply_pending
             from adare.database.models.project_models import ProjectBase
+
             ProjectBase.metadata.create_all(self.engine)
             # create_all builds missing tables but never ALTERs existing ones —
             # heal schema drift from model changes on already-installed databases.

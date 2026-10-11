@@ -28,36 +28,43 @@ from adare.types.playbook import (
 
 
 class TestSiblingDescription:
-
     def test_keyboard_keeps_its_sibling_description(self):
-        action = structure_action({
-            'keyboard': {'key': 'enter'},
-            'description': 'Case Information: Next',
-        })
+        action = structure_action(
+            {
+                'keyboard': {'key': 'enter'},
+                'description': 'Case Information: Next',
+            }
+        )
         assert isinstance(action, KeyboardAction)
         assert action.description == 'Case Information: Next'
 
     def test_click_keeps_its_sibling_description(self):
-        action = structure_action({
-            'click': {'target': {'text': 'Recent Activity'}},
-            'description': 'Toggle Recent Activity',
-        })
+        action = structure_action(
+            {
+                'click': {'target': {'text': 'Recent Activity'}},
+                'description': 'Toggle Recent Activity',
+            }
+        )
         assert isinstance(action, ClickAction)
         assert action.description == 'Toggle Recent Activity'
 
     def test_idle_keeps_its_sibling_description(self):
-        action = structure_action({
-            'idle': {'duration': 5},
-            'description': 'Wait till Next Button becomes clickable',
-        })
+        action = structure_action(
+            {
+                'idle': {'duration': 5},
+                'description': 'Wait till Next Button becomes clickable',
+            }
+        )
         assert isinstance(action, IdleAction)
         assert action.description == 'Wait till Next Button becomes clickable'
 
     def test_command_keeps_its_sibling_description(self):
-        action = structure_action({
-            'command': {'command': 'dir', 'shell': True},
-            'description': 'List the directory',
-        })
+        action = structure_action(
+            {
+                'command': {'command': 'dir', 'shell': True},
+                'description': 'List the directory',
+            }
+        )
         assert isinstance(action, CommandAction)
         assert action.description == 'List the directory'
 
@@ -70,18 +77,22 @@ class TestSiblingDescription:
         assert action.description == 'inner'
 
     def test_identical_inner_and_sibling_is_accepted(self):
-        action = structure_action({
-            'keyboard': {'key': 'enter', 'description': 'same'},
-            'description': 'same',
-        })
+        action = structure_action(
+            {
+                'keyboard': {'key': 'enter', 'description': 'same'},
+                'description': 'same',
+            }
+        )
         assert action.description == 'same'
 
     def test_conflicting_inner_and_sibling_raises(self):
         with pytest.raises(ValueError, match='two different description values'):
-            structure_action({
-                'keyboard': {'key': 'enter', 'description': 'inner'},
-                'description': 'outer',
-            })
+            structure_action(
+                {
+                    'keyboard': {'key': 'enter', 'description': 'inner'},
+                    'description': 'outer',
+                }
+            )
 
     def test_inline_test_form_keeps_its_sibling_description(self):
         action = structure_action({'test': 'test_report_exists', 'description': 'Check it'})
@@ -97,7 +108,8 @@ class TestSiblingDescription:
         from adare.types.playbook import _ACTION_CLASSES
 
         without = [
-            key for key, cls in _ACTION_CLASSES.items()
+            key
+            for key, cls in _ACTION_CLASSES.items()
             if 'description' not in {field.name for field in attrs.fields(cls)}
         ]
         assert without == [], (
@@ -116,9 +128,7 @@ class TestSiblingDescription:
         class _NoDescriptionAction:
             value: str = ''
 
-        monkeypatch.setitem(
-            playbook_module._ACTION_CLASSES, 'teleport', _NoDescriptionAction
-        )
+        monkeypatch.setitem(playbook_module._ACTION_CLASSES, 'teleport', _NoDescriptionAction)
         with pytest.raises(ValueError, match="has no 'description' field"):
             structure_action({'teleport': {'value': 'x'}, 'description': 'nowhere to put this'})
 

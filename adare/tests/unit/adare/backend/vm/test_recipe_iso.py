@@ -23,12 +23,21 @@ ISO_NAME = 'Win11_25H2_English_Arm64_v2.iso'
 
 # --- Helpers ---
 
+
 def _os_def(**overrides) -> OsDefinition:
     defaults = dict(
-        name='windows11arm64', display_name='Windows 11 (ARM64)', platform='windows',
-        distribution='windows', version='11', iso_url='', iso_sha256='',
-        iso_filename='', default_disk_size='160G', default_ram_mb=8192,
-        default_cpus=4, architecture='aarch64',
+        name='windows11arm64',
+        display_name='Windows 11 (ARM64)',
+        platform='windows',
+        distribution='windows',
+        version='11',
+        iso_url='',
+        iso_sha256='',
+        iso_filename='',
+        default_disk_size='160G',
+        default_ram_mb=8192,
+        default_cpus=4,
+        architecture='aarch64',
         iso_notes='Download from microsoft.com/software-download/windows11',
     )
     defaults.update(overrides)
@@ -37,7 +46,9 @@ def _os_def(**overrides) -> OsDefinition:
 
 def _recipe(**overrides) -> Recipe:
     defaults = dict(
-        profile='windows11arm64', iso_sha256='a' * 64, iso_name=ISO_NAME,
+        profile='windows11arm64',
+        iso_sha256='a' * 64,
+        iso_name=ISO_NAME,
     )
     defaults.update(overrides)
     return Recipe(**defaults)
@@ -70,20 +81,19 @@ def iso_dirs(tmp_path, monkeypatch):
 
 # --- T14: search order, first existing file wins ---
 
+
 def test_explicit_iso_file_wins(iso_dirs):
     """--iso FILE is honoured whatever it is named; the digest decides correctness."""
     explicit = _write_iso(iso_dirs['explicit'], 'renamed-by-the-user.iso')
     _write_iso(iso_dirs['iso'])
-    found = resolve_byo_iso(_recipe(), _os_def(), iso_override=explicit,
-                            base_dir=iso_dirs['base'])
+    found = resolve_byo_iso(_recipe(), _os_def(), iso_override=explicit, base_dir=iso_dirs['base'])
     assert found == explicit
 
 
 def test_explicit_iso_directory_is_searched_by_name(iso_dirs):
     expected = _write_iso(iso_dirs['explicit'])
     _write_iso(iso_dirs['iso'])
-    found = resolve_byo_iso(_recipe(), _os_def(), iso_override=iso_dirs['explicit'],
-                            base_dir=iso_dirs['base'])
+    found = resolve_byo_iso(_recipe(), _os_def(), iso_override=iso_dirs['explicit'], base_dir=iso_dirs['base'])
     assert found == expected
 
 
@@ -116,9 +126,9 @@ def test_qemu_cache_is_the_last_resort(iso_dirs):
 def test_missing_explicit_override_falls_through_to_the_search(iso_dirs):
     """A bad --iso must not shadow an ISO that IS present in a standard location."""
     expected = _write_iso(iso_dirs['iso'])
-    found = resolve_byo_iso(_recipe(), _os_def(),
-                            iso_override=iso_dirs['explicit'] / 'nope.iso',
-                            base_dir=iso_dirs['base'])
+    found = resolve_byo_iso(
+        _recipe(), _os_def(), iso_override=iso_dirs['explicit'] / 'nope.iso', base_dir=iso_dirs['base']
+    )
     assert found == expected
 
 
@@ -136,22 +146,26 @@ def test_a_lone_unrelated_iso_in_iso_dir_is_not_used(iso_dirs):
 
 # --- T14: traversal rejected before touching the filesystem ---
 
-@pytest.mark.parametrize('bad_name', [
-    '../../etc/passwd',
-    '../Win11.iso',
-    'sub/dir/w.iso',
-    'sub\\dir\\w.iso',
-    '/absolute/Win11.iso',
-    'C:\\ISO\\Win11.iso',
-    'https://example.com/Win11.iso',
-    'Win11.img',
-    'Win11',
-    '',
-    '   ',
-    '.iso',
-    '-leading-dash.iso',
-    'x' * 250 + '.iso',
-])
+
+@pytest.mark.parametrize(
+    'bad_name',
+    [
+        '../../etc/passwd',
+        '../Win11.iso',
+        'sub/dir/w.iso',
+        'sub\\dir\\w.iso',
+        '/absolute/Win11.iso',
+        'C:\\ISO\\Win11.iso',
+        'https://example.com/Win11.iso',
+        'Win11.img',
+        'Win11',
+        '',
+        '   ',
+        '.iso',
+        '-leading-dash.iso',
+        'x' * 250 + '.iso',
+    ],
+)
 def test_invalid_iso_name_is_rejected(iso_dirs, bad_name):
     with pytest.raises(EnvironmentLoadFailed, match='bare ISO filename'):
         resolve_byo_iso(_recipe(iso_name=bad_name), _os_def(), base_dir=iso_dirs['base'])
@@ -159,36 +173,38 @@ def test_invalid_iso_name_is_rejected(iso_dirs, bad_name):
 
 def test_traversal_is_rejected_before_any_filesystem_access(iso_dirs, monkeypatch):
     """The name check must precede path construction, not follow it."""
+
     def _explode(*args, **kwargs):  # pragma: no cover - must never run
         raise AssertionError('filesystem was touched for an invalid iso_name')
 
     monkeypatch.setattr(Path, 'is_file', _explode)
     monkeypatch.setattr(Path, 'is_dir', _explode)
     with pytest.raises(EnvironmentLoadFailed):
-        resolve_byo_iso(_recipe(iso_name='../../etc/passwd'), _os_def(),
-                        base_dir=iso_dirs['base'])
+        resolve_byo_iso(_recipe(iso_name='../../etc/passwd'), _os_def(), base_dir=iso_dirs['base'])
 
 
-@pytest.mark.parametrize('good_name', [
-    'Win11_25H2_English_Arm64_v2.iso',
-    'ubuntu-24.04.4-live-server-arm64.iso',
-    'a.iso',
-    'X+Y_1.2.3-final.iso',
-])
+@pytest.mark.parametrize(
+    'good_name',
+    [
+        'Win11_25H2_English_Arm64_v2.iso',
+        'ubuntu-24.04.4-live-server-arm64.iso',
+        'a.iso',
+        'X+Y_1.2.3-final.iso',
+    ],
+)
 def test_valid_bare_filenames_are_accepted(iso_dirs, good_name):
     expected = _write_iso(iso_dirs['iso'], good_name)
-    found = resolve_byo_iso(_recipe(iso_name=good_name), _os_def(),
-                            base_dir=iso_dirs['base'])
+    found = resolve_byo_iso(_recipe(iso_name=good_name), _os_def(), base_dir=iso_dirs['base'])
     assert found == expected
 
 
 # --- T14: the not-found error is the whole UX ---
 
+
 def test_not_found_error_names_the_file_digest_profile_and_every_path(iso_dirs, monkeypatch):
     monkeypatch.setenv(ISO_DIR_ENV, str(iso_dirs['env']))
     with pytest.raises(EnvironmentLoadFailed) as excinfo:
-        resolve_byo_iso(_recipe(iso_sha256='b' * 64), _os_def(),
-                        base_dir=iso_dirs['base'])
+        resolve_byo_iso(_recipe(iso_sha256='b' * 64), _os_def(), base_dir=iso_dirs['base'])
     message = str(excinfo.value)
     assert ISO_NAME in message
     assert 'b' * 64 in message
@@ -222,6 +238,7 @@ def test_not_found_error_suggests_all_three_supply_routes(iso_dirs):
 
 
 # --- digest verification ---
+
 
 def test_verify_iso_accepts_a_matching_digest(tmp_path):
     content = b'the real iso bytes'
@@ -268,6 +285,7 @@ def test_missing_file_is_reported_as_missing(tmp_path):
 
 # --- gate 5: BYO is Windows-only on the consumer side too ---
 
+
 def test_byo_over_a_linux_profile_is_rejected_at_consume_time(tmp_path):
     """An honestly-declared Linux BYO recipe is refused: publish the ISO instead."""
     from adare.backend.vm.recipe import build_or_reuse_recipe_vm
@@ -275,8 +293,7 @@ def test_byo_over_a_linux_profile_is_rejected_at_consume_time(tmp_path):
 
     metadata = EnvironmentMetadata(
         vm_type='recipe',
-        recipe=Recipe(profile='ubuntu2404', iso_sha256='d' * 64,
-                      iso_name='ubuntu-24.04-live-server-amd64.iso'),
+        recipe=Recipe(profile='ubuntu2404', iso_sha256='d' * 64, iso_name='ubuntu-24.04-live-server-amd64.iso'),
         os=OsInfo(os='Ubuntu', platform='linux', distribution='ubuntu'),
     )
     with pytest.raises(EnvironmentLoadFailed) as excinfo:
@@ -301,8 +318,7 @@ def test_spoofed_windows_platform_over_a_linux_profile_is_rejected_at_consume_ti
 
     metadata = EnvironmentMetadata(
         vm_type='recipe',
-        recipe=Recipe(profile='ubuntu2404', iso_sha256='d' * 64,
-                      iso_name='ubuntu-24.04-live-server-amd64.iso'),
+        recipe=Recipe(profile='ubuntu2404', iso_sha256='d' * 64, iso_name='ubuntu-24.04-live-server-amd64.iso'),
         os=OsInfo(os='Ubuntu', platform='windows', distribution='ubuntu'),
     )
     with pytest.raises(EnvironmentLoadFailed, match='does not build'):
@@ -316,8 +332,7 @@ def test_platform_mismatch_is_rejected_at_consume_time(tmp_path):
 
     metadata = EnvironmentMetadata(
         vm_type='recipe',
-        recipe=Recipe(profile='ubuntu2404', iso_sha256='d' * 64,
-                      iso='https://releases.ubuntu.com/24.04/x.iso'),
+        recipe=Recipe(profile='ubuntu2404', iso_sha256='d' * 64, iso='https://releases.ubuntu.com/24.04/x.iso'),
         os=OsInfo(os='Windows 11', platform='windows', distribution='Home'),
     )
     with pytest.raises(EnvironmentLoadFailed, match='does not build'):
@@ -328,8 +343,7 @@ def test_a_local_iso_path_is_fine_for_a_consumer(tmp_path, monkeypatch):
     """`publishing=False` on consume: only publishing insists on a URL."""
     from adare.services.recipe_contract import check_recipe_publish_contract
 
-    recipe = Recipe(profile='windows11arm64', iso_sha256='e' * 64,
-                    iso='/Users/someone/ISO/Win11.iso')
+    recipe = Recipe(profile='windows11arm64', iso_sha256='e' * 64, iso='/Users/someone/ISO/Win11.iso')
     check_recipe_publish_contract(recipe, 'windows', publishing=False)
     with pytest.raises(Exception, match='http'):
         check_recipe_publish_contract(recipe, 'windows', publishing=True)
@@ -344,8 +358,7 @@ def test_a_non_canonical_digest_is_fine_for_a_consumer_but_not_for_a_publisher(t
     """
     from adare.services.recipe_contract import check_recipe_publish_contract
 
-    recipe = Recipe(profile='windows11arm64', iso_sha256='E' * 64,
-                    iso='https://files.example.org/Win11.iso')
+    recipe = Recipe(profile='windows11arm64', iso_sha256='E' * 64, iso='https://files.example.org/Win11.iso')
     check_recipe_publish_contract(recipe, 'windows', publishing=False)
     with pytest.raises(Exception, match='canonical'):
         check_recipe_publish_contract(recipe, 'windows', publishing=True)

@@ -11,6 +11,7 @@ QGA Protocol Commands Used:
     guest-file-close  - closes handle
     guest-exec        - for mkdir/ls (via existing run_command infrastructure)
 """
+
 import asyncio
 import base64
 import contextlib
@@ -88,9 +89,7 @@ class QGAFileTransfer:
         backoff = QGA_INITIAL_BACKOFF
 
         for attempt in range(1, QGA_MAX_RETRIES + 1):
-            response = await self.vm._send_qga_command_via_libvirt(
-                cmd, timeout=QGA_FILE_OP_TIMEOUT
-            )
+            response = await self.vm._send_qga_command_via_libvirt(cmd, timeout=QGA_FILE_OP_TIMEOUT)
 
             if 'error' not in response:
                 if attempt > 1:
@@ -100,8 +99,7 @@ class QGAFileTransfer:
             last_error = response['error'].get('desc', 'Unknown error')
             error_lower = last_error.lower()
 
-            permanent_errors = ('not found', 'no such file', 'permission denied',
-                                'invalid argument', 'access denied')
+            permanent_errors = ('not found', 'no such file', 'permission denied', 'invalid argument', 'access denied')
             is_permanent = any(pe in error_lower for pe in permanent_errors)
 
             if attempt < QGA_MAX_RETRIES and not is_permanent:
@@ -118,42 +116,25 @@ class QGAFileTransfer:
 
     async def _guest_file_open(self, path: str, mode: str = 'r') -> int:
         """Open file on guest via QGA. Returns handle."""
-        cmd = {
-            "execute": "guest-file-open",
-            "arguments": {"path": path, "mode": mode}
-        }
-        response = await self._send_qga_with_retry(
-            cmd, f"file-open '{path}' (mode={mode})"
-        )
+        cmd = {"execute": "guest-file-open", "arguments": {"path": path, "mode": mode}}
+        response = await self._send_qga_with_retry(cmd, f"file-open '{path}' (mode={mode})")
 
         handle = response.get('return')
         if handle is None:
-            raise HypervisorException(
-                f"No handle returned for guest-file-open on '{path}'"
-            )
+            raise HypervisorException(f"No handle returned for guest-file-open on '{path}'")
         return handle
 
     async def _guest_file_write(self, handle: int, data: bytes) -> int:
         """Write chunk to open guest file handle."""
         encoded = base64.b64encode(data).decode('ascii')
-        cmd = {
-            "execute": "guest-file-write",
-            "arguments": {"handle": handle, "buf-b64": encoded}
-        }
-        response = await self._send_qga_with_retry(
-            cmd, f"file-write (handle={handle}, {len(data)} bytes)"
-        )
+        cmd = {"execute": "guest-file-write", "arguments": {"handle": handle, "buf-b64": encoded}}
+        response = await self._send_qga_with_retry(cmd, f"file-write (handle={handle}, {len(data)} bytes)")
         return response.get('return', {}).get('count', 0)
 
     async def _guest_file_read(self, handle: int, count: int) -> tuple[bytes, bool]:
         """Read chunk from open guest file handle."""
-        cmd = {
-            "execute": "guest-file-read",
-            "arguments": {"handle": handle, "count": count}
-        }
-        response = await self._send_qga_with_retry(
-            cmd, f"file-read (handle={handle}, {count} bytes)"
-        )
+        cmd = {"execute": "guest-file-read", "arguments": {"handle": handle, "count": count}}
+        response = await self._send_qga_with_retry(cmd, f"file-read (handle={handle}, {count} bytes)")
 
         result = response.get('return', {})
         encoded = result.get('buf-b64', '')
@@ -163,10 +144,7 @@ class QGAFileTransfer:
 
     async def _guest_file_close(self, handle: int) -> None:
         """Close guest file handle."""
-        cmd = {
-            "execute": "guest-file-close",
-            "arguments": {"handle": handle}
-        }
+        cmd = {"execute": "guest-file-close", "arguments": {"handle": handle}}
         try:
             await self._send_qga_with_retry(cmd, f"file-close (handle={handle})")
         except HypervisorException as e:
@@ -185,9 +163,7 @@ class QGAFileTransfer:
 
         result = await self.vm.run_command(cmd, silent=True)
         if result.returncode != 0:
-            raise HypervisorException(
-                f"Failed to create directory '{guest_path}' on guest: {result.stderr}"
-            )
+            raise HypervisorException(f"Failed to create directory '{guest_path}' on guest: {result.stderr}")
 
     async def upload_file(self, host_path: Path, guest_path: str) -> None:
         """Upload single file from host to guest.
@@ -229,16 +205,13 @@ class QGAFileTransfer:
                 if elapsed > 0 and bytes_written > 0:
                     throughput_kb = (bytes_written / 1024) / elapsed
                     log.info(
-                        f"Uploaded {host_path.name}: {bytes_written} bytes "
-                        f"in {elapsed:.1f}s ({throughput_kb:.0f} KB/s)"
+                        f"Uploaded {host_path.name}: {bytes_written} bytes in {elapsed:.1f}s ({throughput_kb:.0f} KB/s)"
                     )
                 return  # success
 
             except HypervisorException as e:
                 last_error = e
-                log.warning(
-                    f"Upload of {host_path.name} failed on attempt {attempt}/{QGA_MAX_RETRIES}: {e}"
-                )
+                log.warning(f"Upload of {host_path.name} failed on attempt {attempt}/{QGA_MAX_RETRIES}: {e}")
                 # Try to close the broken handle (best-effort)
                 if handle is not None:
                     with contextlib.suppress(HypervisorException):
@@ -249,9 +222,7 @@ class QGAFileTransfer:
                     log.info(f"Retrying upload of {host_path.name} in {backoff:.0f}s...")
                     await asyncio.sleep(backoff)
 
-        raise HypervisorException(
-            f"Failed to upload {host_path.name} after {QGA_MAX_RETRIES} attempts: {last_error}"
-        )
+        raise HypervisorException(f"Failed to upload {host_path.name} after {QGA_MAX_RETRIES} attempts: {last_error}")
 
     async def upload_directory(self, host_path: Path, guest_path: str) -> None:
         """Recursively upload directory from host to guest.
@@ -404,21 +375,13 @@ class QGAFileTransfer:
 
             # Extract on guest
             if self.is_windows:
-                extract_cmd = (
-                    f'tar.exe -xzf "{guest_tar}" -C "{guest_base}"; '
-                    f'Remove-Item "{guest_tar}"'
-                )
+                extract_cmd = f'tar.exe -xzf "{guest_tar}" -C "{guest_base}"; Remove-Item "{guest_tar}"'
             else:
-                extract_cmd = (
-                    f"sudo tar xzf '{guest_tar}' -C '{guest_base}' && "
-                    f"rm '{guest_tar}'"
-                )
+                extract_cmd = f"sudo tar xzf '{guest_tar}' -C '{guest_base}' && rm '{guest_tar}'"
 
             result = await self.vm.run_command(extract_cmd, silent=True)
             if result.returncode != 0:
-                raise HypervisorException(
-                    f"Tar extraction failed on guest (rc={result.returncode}): {result.stderr}"
-                )
+                raise HypervisorException(f"Tar extraction failed on guest (rc={result.returncode}): {result.stderr}")
 
             log.info("Tar-based bulk transfer completed successfully")
 

@@ -97,7 +97,7 @@ class HostTestContext:
             vm_file=vm_file_service,
             icons=icon_library,
             playbook_dir=playbook_dir,
-            experiment_dir=experiment_dir
+            experiment_dir=experiment_dir,
         )
 
     @classmethod
@@ -145,5 +145,5 @@ class HostTestContext:
             guest_file=guest_file,
             guest_command=guest_command,
             playbook_dir=playbook_dir,
-            experiment_dir=experiment_dir
+            experiment_dir=experiment_dir,
         )

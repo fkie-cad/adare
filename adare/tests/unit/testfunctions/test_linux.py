@@ -38,6 +38,7 @@ LogEntryExistsParameter = linux_module.log_entry_exists._parameter_class
 
 # Import test helpers
 import importlib.util
+
 helpers_path = Path(__file__).parent / "helpers.py"
 spec = importlib.util.spec_from_file_location("helpers", helpers_path)
 helpers = importlib.util.module_from_spec(spec)
@@ -53,24 +54,17 @@ assert_test_execution_error = helpers.assert_test_execution_error
 # SystemServiceStatus Tests
 # ============================================================================
 
+
 class TestSystemServiceStatus:
     """Tests for SystemServiceStatus testfunction."""
 
     @patch('platform.system', return_value='Linux')
     def test_service_status_success_active(self, mock_platform, mock_subprocess_run):
         """Test successful service status check with active status."""
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0,
-            stdout='active\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='active\n', stderr='')
 
         test = SystemServiceStatus(
-            name="test_service",
-            parameter=SystemServiceStatusParameter(
-                service_name="nginx",
-                expected_status="active"
-            )
+            name="test_service", parameter=SystemServiceStatusParameter(service_name="nginx", expected_status="active")
         )
         result = test.test()
 
@@ -78,27 +72,17 @@ class TestSystemServiceStatus:
         assert 'nginx' in result.details[0]
         assert 'active' in result.details[0]
         mock_subprocess_run.assert_called_once_with(
-            ['systemctl', 'is-active', 'nginx'],
-            capture_output=True,
-            text=True,
-            timeout=10
+            ['systemctl', 'is-active', 'nginx'], capture_output=True, text=True, timeout=10
         )
 
     @patch('platform.system', return_value='Linux')
     def test_service_status_success_inactive(self, mock_platform, mock_subprocess_run):
         """Test successful service status check with inactive status."""
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=3,
-            stdout='inactive\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=3, stdout='inactive\n', stderr='')
 
         test = SystemServiceStatus(
             name="test_service",
-            parameter=SystemServiceStatusParameter(
-                service_name="apache2",
-                expected_status="inactive"
-            )
+            parameter=SystemServiceStatusParameter(service_name="apache2", expected_status="inactive"),
         )
         result = test.test()
 
@@ -109,18 +93,10 @@ class TestSystemServiceStatus:
     @patch('platform.system', return_value='Linux')
     def test_service_status_failure_mismatch(self, mock_platform, mock_subprocess_run):
         """Test failure when service status doesn't match expected."""
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=3,
-            stdout='inactive\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=3, stdout='inactive\n', stderr='')
 
         test = SystemServiceStatus(
-            name="test_service",
-            parameter=SystemServiceStatusParameter(
-                service_name="nginx",
-                expected_status="active"
-            )
+            name="test_service", parameter=SystemServiceStatusParameter(service_name="nginx", expected_status="active")
         )
         result = test.test()
 
@@ -133,11 +109,7 @@ class TestSystemServiceStatus:
     def test_service_status_not_linux(self, mock_platform):
         """Test execution error when not running on Linux."""
         test = SystemServiceStatus(
-            name="test_service",
-            parameter=SystemServiceStatusParameter(
-                service_name="nginx",
-                expected_status="active"
-            )
+            name="test_service", parameter=SystemServiceStatusParameter(service_name="nginx", expected_status="active")
         )
         result = test.test()
 
@@ -150,11 +122,7 @@ class TestSystemServiceStatus:
         mock_subprocess_run.side_effect = subprocess.TimeoutExpired('systemctl', 10)
 
         test = SystemServiceStatus(
-            name="test_service",
-            parameter=SystemServiceStatusParameter(
-                service_name="nginx",
-                expected_status="active"
-            )
+            name="test_service", parameter=SystemServiceStatusParameter(service_name="nginx", expected_status="active")
         )
         result = test.test()
 
@@ -168,11 +136,7 @@ class TestSystemServiceStatus:
         mock_subprocess_run.side_effect = FileNotFoundError("systemctl not found")
 
         test = SystemServiceStatus(
-            name="test_service",
-            parameter=SystemServiceStatusParameter(
-                service_name="nginx",
-                expected_status="active"
-            )
+            name="test_service", parameter=SystemServiceStatusParameter(service_name="nginx", expected_status="active")
         )
         result = test.test()
 
@@ -182,28 +146,18 @@ class TestSystemServiceStatus:
     @patch('platform.system', return_value='Linux')
     def test_service_status_with_placeholder(self, mock_platform, mock_subprocess_run, variable_metadata_simple):
         """Test service status check with placeholder in service name."""
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0,
-            stdout='active\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='active\n', stderr='')
 
         test = SystemServiceStatus(
             name="test_service",
-            parameter=SystemServiceStatusParameter(
-                service_name="{{VAR1}}",
-                expected_status="active"
-            ),
-            variable_metadata=variable_metadata_simple
+            parameter=SystemServiceStatusParameter(service_name="{{VAR1}}", expected_status="active"),
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
         assert_test_success(result)
         mock_subprocess_run.assert_called_once_with(
-            ['systemctl', 'is-active', 'value1'],
-            capture_output=True,
-            text=True,
-            timeout=10
+            ['systemctl', 'is-active', 'value1'], capture_output=True, text=True, timeout=10
         )
 
 
@@ -211,24 +165,17 @@ class TestSystemServiceStatus:
 # ProcessRunning Tests
 # ============================================================================
 
+
 class TestProcessRunning:
     """Tests for ProcessRunning testfunction."""
 
     @patch('platform.system', return_value='Linux')
     def test_process_running_success_single_instance(self, mock_platform, mock_subprocess_run):
         """Test successful process check with single instance."""
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0,
-            stdout='1234\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='1234\n', stderr='')
 
         test = ProcessRunning(
-            name="test_process",
-            parameter=ProcessRunningParameter(
-                process_name="nginx",
-                min_instances=1
-            )
+            name="test_process", parameter=ProcessRunningParameter(process_name="nginx", min_instances=1)
         )
         result = test.test()
 
@@ -237,27 +184,16 @@ class TestProcessRunning:
         assert '1 instances' in result.details[0]
         assert '1234' in result.details[0]
         mock_subprocess_run.assert_called_once_with(
-            ['pgrep', '-f', 'nginx'],
-            capture_output=True,
-            text=True,
-            timeout=10
+            ['pgrep', '-f', 'nginx'], capture_output=True, text=True, timeout=10
         )
 
     @patch('platform.system', return_value='Linux')
     def test_process_running_success_multiple_instances(self, mock_platform, mock_subprocess_run):
         """Test successful process check with multiple instances."""
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0,
-            stdout='1234\n1235\n1236\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='1234\n1235\n1236\n', stderr='')
 
         test = ProcessRunning(
-            name="test_process",
-            parameter=ProcessRunningParameter(
-                process_name="nginx",
-                min_instances=2
-            )
+            name="test_process", parameter=ProcessRunningParameter(process_name="nginx", min_instances=2)
         )
         result = test.test()
 
@@ -271,18 +207,10 @@ class TestProcessRunning:
     @patch('platform.system', return_value='Linux')
     def test_process_running_failure_not_running(self, mock_platform, mock_subprocess_run):
         """Test failure when process is not running."""
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=1,
-            stdout='',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=1, stdout='', stderr='')
 
         test = ProcessRunning(
-            name="test_process",
-            parameter=ProcessRunningParameter(
-                process_name="nonexistent",
-                min_instances=1
-            )
+            name="test_process", parameter=ProcessRunningParameter(process_name="nonexistent", min_instances=1)
         )
         result = test.test()
 
@@ -293,18 +221,10 @@ class TestProcessRunning:
     @patch('platform.system', return_value='Linux')
     def test_process_running_failure_insufficient_instances(self, mock_platform, mock_subprocess_run):
         """Test failure when insufficient process instances."""
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0,
-            stdout='1234\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='1234\n', stderr='')
 
         test = ProcessRunning(
-            name="test_process",
-            parameter=ProcessRunningParameter(
-                process_name="nginx",
-                min_instances=3
-            )
+            name="test_process", parameter=ProcessRunningParameter(process_name="nginx", min_instances=3)
         )
         result = test.test()
 
@@ -316,11 +236,7 @@ class TestProcessRunning:
     def test_process_running_not_linux(self, mock_platform):
         """Test execution error when not running on Linux."""
         test = ProcessRunning(
-            name="test_process",
-            parameter=ProcessRunningParameter(
-                process_name="nginx",
-                min_instances=1
-            )
+            name="test_process", parameter=ProcessRunningParameter(process_name="nginx", min_instances=1)
         )
         result = test.test()
 
@@ -333,11 +249,7 @@ class TestProcessRunning:
         mock_subprocess_run.side_effect = subprocess.TimeoutExpired('pgrep', 10)
 
         test = ProcessRunning(
-            name="test_process",
-            parameter=ProcessRunningParameter(
-                process_name="nginx",
-                min_instances=1
-            )
+            name="test_process", parameter=ProcessRunningParameter(process_name="nginx", min_instances=1)
         )
         result = test.test()
 
@@ -348,34 +260,25 @@ class TestProcessRunning:
     @patch('platform.system', return_value='Linux')
     def test_process_running_with_placeholder(self, mock_platform, mock_subprocess_run, variable_metadata_simple):
         """Test process check with placeholder in process name."""
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0,
-            stdout='1234\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='1234\n', stderr='')
 
         test = ProcessRunning(
             name="test_process",
-            parameter=ProcessRunningParameter(
-                process_name="{{VAR2}}",
-                min_instances=1
-            ),
-            variable_metadata=variable_metadata_simple
+            parameter=ProcessRunningParameter(process_name="{{VAR2}}", min_instances=1),
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
         assert_test_success(result)
         mock_subprocess_run.assert_called_once_with(
-            ['pgrep', '-f', 'value2'],
-            capture_output=True,
-            text=True,
-            timeout=10
+            ['pgrep', '-f', 'value2'], capture_output=True, text=True, timeout=10
         )
 
 
 # ============================================================================
 # UserExists Tests
 # ============================================================================
+
 
 class TestUserExists:
     """Tests for UserExists testfunction."""
@@ -390,12 +293,7 @@ class TestUserExists:
                 mock_user.pw_dir = '/home/testuser'
                 mock_pwd.getpwnam.return_value = mock_user
 
-                test = UserExists(
-                    name="test_user",
-                    parameter=UserExistsParameter(
-                        username="testuser"
-                    )
-                )
+                test = UserExists(name="test_user", parameter=UserExistsParameter(username="testuser"))
                 result = test.test()
 
                 assert_test_success(result)
@@ -414,13 +312,7 @@ class TestUserExists:
                 mock_user.pw_dir = '/home/testuser'
                 mock_pwd.getpwnam.return_value = mock_user
 
-                test = UserExists(
-                    name="test_user",
-                    parameter=UserExistsParameter(
-                        username="testuser",
-                        uid=1000
-                    )
-                )
+                test = UserExists(name="test_user", parameter=UserExistsParameter(username="testuser", uid=1000))
                 result = test.test()
 
                 assert_test_success(result)
@@ -437,11 +329,7 @@ class TestUserExists:
                 mock_pwd.getpwnam.return_value = mock_user
 
                 test = UserExists(
-                    name="test_user",
-                    parameter=UserExistsParameter(
-                        username="testuser",
-                        home_dir="/home/testuser"
-                    )
+                    name="test_user", parameter=UserExistsParameter(username="testuser", home_dir="/home/testuser")
                 )
                 result = test.test()
 
@@ -455,12 +343,7 @@ class TestUserExists:
             with patch.object(linux_module, 'pwd') as mock_pwd:
                 mock_pwd.getpwnam.side_effect = KeyError("getpwnam(): name not found")
 
-                test = UserExists(
-                    name="test_user",
-                    parameter=UserExistsParameter(
-                        username="nonexistent"
-                    )
-                )
+                test = UserExists(name="test_user", parameter=UserExistsParameter(username="nonexistent"))
                 result = test.test()
 
                 assert_test_failed(result)
@@ -477,13 +360,7 @@ class TestUserExists:
                 mock_user.pw_dir = '/home/testuser'
                 mock_pwd.getpwnam.return_value = mock_user
 
-                test = UserExists(
-                    name="test_user",
-                    parameter=UserExistsParameter(
-                        username="testuser",
-                        uid=1000
-                    )
-                )
+                test = UserExists(name="test_user", parameter=UserExistsParameter(username="testuser", uid=1000))
                 result = test.test()
 
                 assert_test_failed(result)
@@ -502,11 +379,7 @@ class TestUserExists:
                 mock_pwd.getpwnam.return_value = mock_user
 
                 test = UserExists(
-                    name="test_user",
-                    parameter=UserExistsParameter(
-                        username="testuser",
-                        home_dir="/opt/testuser"
-                    )
+                    name="test_user", parameter=UserExistsParameter(username="testuser", home_dir="/opt/testuser")
                 )
                 result = test.test()
 
@@ -518,12 +391,7 @@ class TestUserExists:
     @patch('platform.system', return_value='Windows')
     def test_user_exists_not_linux(self, mock_platform):
         """Test execution error when not running on Linux."""
-        test = UserExists(
-            name="test_user",
-            parameter=UserExistsParameter(
-                username="testuser"
-            )
-        )
+        test = UserExists(name="test_user", parameter=UserExistsParameter(username="testuser"))
         result = test.test()
 
         assert_test_execution_error(result)
@@ -533,12 +401,7 @@ class TestUserExists:
     def test_user_exists_modules_not_available(self, mock_platform):
         """Test execution error when Unix modules not available."""
         with patch.object(linux_module, 'UNIX_MODULES_AVAILABLE', False):
-            test = UserExists(
-                name="test_user",
-                parameter=UserExistsParameter(
-                    username="testuser"
-                )
-            )
+            test = UserExists(name="test_user", parameter=UserExistsParameter(username="testuser"))
             result = test.test()
 
             assert_test_execution_error(result)
@@ -557,10 +420,8 @@ class TestUserExists:
 
                 test = UserExists(
                     name="test_user",
-                    parameter=UserExistsParameter(
-                        username="{{VAR1}}"
-                    ),
-                    variable_metadata=variable_metadata_simple
+                    parameter=UserExistsParameter(username="{{VAR1}}"),
+                    variable_metadata=variable_metadata_simple,
                 )
                 result = test.test()
 
@@ -572,6 +433,7 @@ class TestUserExists:
 # LogEntryExists Tests
 # ============================================================================
 
+
 class TestLogEntryExists:
     """Tests for LogEntryExists testfunction."""
 
@@ -581,19 +443,10 @@ class TestLogEntryExists:
         log_file = tmp_path / "test.log"
         log_file.write_text("line1\nerror occurred\nline3\n")
 
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0,
-            stdout='error occurred\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='error occurred\n', stderr='')
 
         test = LogEntryExists(
-            name="test_log",
-            parameter=LogEntryExistsParameter(
-                log_file=str(log_file),
-                pattern="error",
-                max_lines=1000
-            )
+            name="test_log", parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="error", max_lines=1000)
         )
         result = test.test()
 
@@ -612,19 +465,10 @@ class TestLogEntryExists:
         log_file = tmp_path / "test.log"
         log_file.write_text("error1\nerror2\nerror3\n")
 
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0,
-            stdout='error1\nerror2\nerror3\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='error1\nerror2\nerror3\n', stderr='')
 
         test = LogEntryExists(
-            name="test_log",
-            parameter=LogEntryExistsParameter(
-                log_file=str(log_file),
-                pattern="error",
-                max_lines=1000
-            )
+            name="test_log", parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="error", max_lines=1000)
         )
         result = test.test()
 
@@ -637,19 +481,11 @@ class TestLogEntryExists:
         log_file = tmp_path / "test.log"
         log_file.write_text("line1\nline2\nline3\n")
 
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=1,
-            stdout='',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=1, stdout='', stderr='')
 
         test = LogEntryExists(
             name="test_log",
-            parameter=LogEntryExistsParameter(
-                log_file=str(log_file),
-                pattern="notfound",
-                max_lines=1000
-            )
+            parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="notfound", max_lines=1000),
         )
         result = test.test()
 
@@ -662,12 +498,7 @@ class TestLogEntryExists:
         log_file = tmp_path / "nonexistent.log"
 
         test = LogEntryExists(
-            name="test_log",
-            parameter=LogEntryExistsParameter(
-                log_file=str(log_file),
-                pattern="error",
-                max_lines=1000
-            )
+            name="test_log", parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="error", max_lines=1000)
         )
         result = test.test()
 
@@ -680,11 +511,7 @@ class TestLogEntryExists:
         """Test execution error when not running on Linux."""
         test = LogEntryExists(
             name="test_log",
-            parameter=LogEntryExistsParameter(
-                log_file="/var/log/syslog",
-                pattern="error",
-                max_lines=1000
-            )
+            parameter=LogEntryExistsParameter(log_file="/var/log/syslog", pattern="error", max_lines=1000),
         )
         result = test.test()
 
@@ -700,12 +527,7 @@ class TestLogEntryExists:
         mock_subprocess_run.side_effect = subprocess.TimeoutExpired('bash', 30)
 
         test = LogEntryExists(
-            name="test_log",
-            parameter=LogEntryExistsParameter(
-                log_file=str(log_file),
-                pattern="error",
-                max_lines=1000
-            )
+            name="test_log", parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="error", max_lines=1000)
         )
         result = test.test()
 
@@ -714,25 +536,19 @@ class TestLogEntryExists:
         assert str(log_file) in result.details[0]
 
     @patch('platform.system', return_value='Linux')
-    def test_log_entry_exists_with_placeholder_log_file(self, mock_platform, mock_subprocess_run, tmp_path, variable_metadata_simple):
+    def test_log_entry_exists_with_placeholder_log_file(
+        self, mock_platform, mock_subprocess_run, tmp_path, variable_metadata_simple
+    ):
         """Test log search with placeholder in log file path."""
         log_file = tmp_path / "value1.log"
         log_file.write_text("error\n")
 
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0,
-            stdout='error\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='error\n', stderr='')
 
         test = LogEntryExists(
             name="test_log",
-            parameter=LogEntryExistsParameter(
-                log_file=str(tmp_path / "{{VAR1}}.log"),
-                pattern="error",
-                max_lines=1000
-            ),
-            variable_metadata=variable_metadata_simple
+            parameter=LogEntryExistsParameter(log_file=str(tmp_path / "{{VAR1}}.log"), pattern="error", max_lines=1000),
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -742,25 +558,19 @@ class TestLogEntryExists:
         assert 'value1.log' in call_args[0][0][2]
 
     @patch('platform.system', return_value='Linux')
-    def test_log_entry_exists_with_placeholder_pattern(self, mock_platform, mock_subprocess_run, tmp_path, variable_metadata_simple):
+    def test_log_entry_exists_with_placeholder_pattern(
+        self, mock_platform, mock_subprocess_run, tmp_path, variable_metadata_simple
+    ):
         """Test log search with placeholder in search pattern."""
         log_file = tmp_path / "test.log"
         log_file.write_text("value2\n")
 
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0,
-            stdout='value2\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='value2\n', stderr='')
 
         test = LogEntryExists(
             name="test_log",
-            parameter=LogEntryExistsParameter(
-                log_file=str(log_file),
-                pattern="{{VAR2}}",
-                max_lines=1000
-            ),
-            variable_metadata=variable_metadata_simple
+            parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="{{VAR2}}", max_lines=1000),
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -775,19 +585,10 @@ class TestLogEntryExists:
         log_file = tmp_path / "test.log"
         log_file.write_text("error\n")
 
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0,
-            stdout='error\n',
-            stderr=''
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='error\n', stderr='')
 
         test = LogEntryExists(
-            name="test_log",
-            parameter=LogEntryExistsParameter(
-                log_file=str(log_file),
-                pattern="error",
-                max_lines=500
-            )
+            name="test_log", parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="error", max_lines=500)
         )
         result = test.test()
 

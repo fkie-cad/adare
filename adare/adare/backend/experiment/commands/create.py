@@ -30,18 +30,20 @@ def experiment_create(project_path: Path, experiment: str):
         f'Edit {experiment_directory.playbookfile.name} to define a sequence of gui actions and tests',
         f'Edit {experiment_directory.metadatafile.name} to add experiment details, such as possible environments, tags, and more',
         f'Before run load the experiment with: adare experiment load {experiment}',
-        f'Run the experiment with: adare experiment run {experiment} -e <environment>'
+        f'Run the experiment with: adare experiment run {experiment} -e <environment>',
     ]
 
     print_success_message(
         title=f'Experiment "{experiment}" created successfully!',
         location=str(experiment_directory.path),
         next_steps=next_steps,
-        tip='See documentation for an tutorial on how write an experiment here: https://adare.seclab-bonn.de/docs/gettingstarted/index.html#create-an-experiment'
+        tip='See documentation for an tutorial on how write an experiment here: https://adare.seclab-bonn.de/docs/gettingstarted/index.html#create-an-experiment',
     )
 
 
-def experiment_clone(project_path: Path, source_experiment: str, target_experiment: str, environments: list[str] = None):
+def experiment_clone(
+    project_path: Path, source_experiment: str, target_experiment: str, environments: list[str] = None
+):
     """Clone an existing experiment to create a variation.
 
     Args:
@@ -64,8 +66,8 @@ def experiment_clone(project_path: Path, source_experiment: str, target_experime
             f'source experiment directory [b]{source_dir.path}[/b] does not exist',
             possible_solutions=[
                 f'check if experiment name "{source_experiment}" is correct',
-                'list available experiments with: adare experiment list'
-            ]
+                'list available experiments with: adare experiment list',
+            ],
         )
 
     if target_dir.exists():
@@ -74,8 +76,8 @@ def experiment_clone(project_path: Path, source_experiment: str, target_experime
             f'target experiment directory [b]{target_dir.path}[/b] already exists',
             possible_solutions=[
                 'choose a different name for the cloned experiment',
-                f'remove existing experiment with: rm -rf {target_dir.path}'
-            ]
+                f'remove existing experiment with: rm -rf {target_dir.path}',
+            ],
         )
 
     log.info(f'cloning experiment {source_experiment} to {target_experiment}')
@@ -85,8 +87,7 @@ def experiment_clone(project_path: Path, source_experiment: str, target_experime
         log.info(f'copied experiment directory from {source_dir.path} to {target_dir.path}')
     except OSError as e:
         raise ExperimentDirectoryCreationError(
-            log,
-            message=f'failed to clone experiment directory: {e.strerror}'
+            log, message=f'failed to clone experiment directory: {e.strerror}'
         ) from e
 
     if environments:
@@ -102,7 +103,7 @@ def experiment_clone(project_path: Path, source_experiment: str, target_experime
 
     next_steps = [
         f'Edit cloned experiment files in: {target_dir.path}',
-        f'Run the cloned experiment with: adare experiment run {target_experiment} -e <environment>'
+        f'Run the cloned experiment with: adare experiment run {target_experiment} -e <environment>',
     ]
 
     if environments:
@@ -114,7 +115,7 @@ def experiment_clone(project_path: Path, source_experiment: str, target_experime
         title=f'Experiment "{target_experiment}" cloned from "{source_experiment}" successfully!',
         location=str(target_dir.path),
         next_steps=next_steps,
-        tip=env_info
+        tip=env_info,
     )
 
 

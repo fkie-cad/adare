@@ -25,12 +25,10 @@ def _check_gui_enabled() -> dict[str, str] | None:
     Returns error dict if disabled, None if enabled.
     """
     import os
+
     mode = os.environ.get('ADARE_GUI_MODE', 'agent').lower()
     if mode in ('host', 'disabled'):
-        return {
-            "status": "error",
-            "message": f"GUI automation disabled (ADARE_GUI_MODE={mode})"
-        }
+        return {"status": "error", "message": f"GUI automation disabled (ADARE_GUI_MODE={mode})"}
     return None
 
 
@@ -125,7 +123,7 @@ def take_screenshot(x: int = None, y: int = None, width: int = None, height: int
         log.error("maim command not found - please install maim")
         return {"status": "error", "message": "maim command not found - please install maim package"}
     except RuntimeError as e:
-         return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": str(e)}
     except Exception as e:
         log.error(f"Screenshot processing failed: {str(e)}")
         return {"status": "error", "message": f"Screenshot processing failed: {str(e)}"}
@@ -137,14 +135,8 @@ def take_screenshot(x: int = None, y: int = None, width: int = None, height: int
     return {
         "status": "success",
         "message": "Screenshot captured successfully",
-        "image": {
-            "data": img_base64,
-            "format": "png"
-        },
-        "offset": {
-            "x": x if x is not None else 0,
-            "y": y if y is not None else 0
-        }
+        "image": {"data": img_base64, "format": "png"},
+        "offset": {"x": x if x is not None else 0, "y": y if y is not None else 0},
     }
 
 
@@ -163,10 +155,11 @@ def take_window_screenshots(window: str) -> list[dict[str, Any]]:
     if platform.system() == "Windows":
         # TODO: Implement Windows window screenshot
         log.warning("Window screenshot functionality is not implemented for Windows yet.")
-        return [take_screenshot()] # Reuse logic which checks enabled
+        return [take_screenshot()]  # Reuse logic which checks enabled
     if platform.system() == "Linux":
         try:
             from adarevm.platforms.linux import get_windows_by_search_string
+
             windows = get_windows_by_search_string(window)
             if not windows:
                 return []
@@ -179,7 +172,7 @@ def take_window_screenshots(window: str) -> list[dict[str, Any]]:
             log.error("x11helper not available on this system")
             return [{"status": "error", "message": "x11helper not available"}]
     else:
-         return [{"status": "error", "message": "Screenshot for this platform is not implemented yet."}]
+        return [{"status": "error", "message": "Screenshot for this platform is not implemented yet."}]
     return screenshots
 
 
@@ -196,7 +189,7 @@ def click(x: int, y: int) -> dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     log.info(f"GUI click called with x={x}, y={y}")
@@ -217,7 +210,7 @@ def right_click(x: int, y: int) -> dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     log.info(f"GUI right_click called with x={x}, y={y}")
@@ -238,7 +231,7 @@ def double_click(x: int, y: int) -> dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     log.info(f"GUI double_click called with x={x}, y={y}")
@@ -259,7 +252,7 @@ def drag(x1: int, y1: int, x2: int, y2: int) -> dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     log.info(f"GUI drag called from ({x1}, {y1}) to ({x2}, {y2})")
@@ -280,7 +273,7 @@ def keyboard_action(action_type: str, key: str) -> dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     if action_type == "press":
@@ -308,7 +301,7 @@ def scroll(direction: str, amount: int) -> dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     if direction == "up":
@@ -333,7 +326,7 @@ def move_mouse(x: int, y: int) -> dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     log.info(f"GUI move_mouse called with x={x}, y={y}")
@@ -349,5 +342,6 @@ def idle(duration: float) -> dict[str, str]:
     # Idle is safe to run even if GUI is disabled as it's just sleep
     log.info(f"GUI idle called for {duration} seconds")
     import time
+
     time.sleep(duration)
     return {"status": "success", "message": f"Idle for {duration} seconds"}

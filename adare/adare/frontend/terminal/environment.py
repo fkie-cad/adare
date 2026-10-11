@@ -122,22 +122,14 @@ class EnvironmentPanel:
             Layout(name="osinfo", ratio=1),
         )
 
-        layout["content"]["info"]["general"].update(
-            InfoPanel(self.environment)
-        )
-        layout["content"]["info"]["osinfo"].update(
-            OsInfoPanel(self.environment)
-        )
+        layout["content"]["info"]["general"].update(InfoPanel(self.environment))
+        layout["content"]["info"]["osinfo"].update(OsInfoPanel(self.environment))
         description = self.environment['description'].values[0]
         if description:
-            layout["content"]["description"].update(
-                DescriptionPanel(self.environment['description'].values[0])
-            )
+            layout["content"]["description"].update(DescriptionPanel(self.environment['description'].values[0]))
         else:
             layout["content"]["description"].visible = False
-        layout["tags"].update(
-            TagsText(self.environment['tags'].values[0])
-        )
+        layout["tags"].update(TagsText(self.environment['tags'].values[0]))
 
         return Panel(layout, title=title, border_style="blue", title_align="left")
 
@@ -171,11 +163,7 @@ def _annotate_disk_status(environment: pd.DataFrame) -> None:
     # None where there is nothing local to stat (e.g. a URL-baked environment), so it is
     # reported as unknown rather than as missing.
     environment['disk_path'] = disk_path
-    environment['disk_present'] = (
-        Path(disk_path).is_file()
-        if disk_path and '://' not in disk_path
-        else None
-    )
+    environment['disk_present'] = Path(disk_path).is_file() if disk_path and '://' not in disk_path else None
 
 
 def _tag_list(tags) -> list[str]:
@@ -189,6 +177,7 @@ def print_environment(environment_name: str, formatter=None, output_file=None, d
     # Get formatter if not provided
     if formatter is None:
         from adare.run import get_formatter_from_context
+
         formatter, output_file, dual_output = get_formatter_from_context()
 
     with DataRetrievalApi() as db:
@@ -222,8 +211,8 @@ def print_environment(environment_name: str, formatter=None, output_file=None, d
                     'distribution': environment['osinfo_distribution'].values[0],
                     'version': environment['osinfo_version'].values[0],
                     'language': environment['osinfo_language'].values[0],
-                    'architecture': environment['osinfo_architecture'].values[0]
-                }
+                    'architecture': environment['osinfo_architecture'].values[0],
+                },
             }
             formatter.print_or_save(structured_data, output_file, dual_output)
 

@@ -52,20 +52,13 @@ def _classify_libguestfs_failure(stderr: str) -> tuple[str, list[str]]:
                 "/boot/vmlinuz-$(uname -r)"
             ),
             "Diagnose the exact cause: libguestfs-test-tool",
-            (
-                "Re-run with full tracing: "
-                "LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1 "
-                "guestfish --ro -a <disk> run"
-            ),
+            ("Re-run with full tracing: LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1 guestfish --ro -a <disk> run"),
         ]
 
     if (
         'command not found' in stderr_lower
         or 'guestfish: not found' in stderr_lower
-        or (
-            'no such file or directory' in stderr_lower
-            and 'guestfish' in stderr_lower
-        )
+        or ('no such file or directory' in stderr_lower and 'guestfish' in stderr_lower)
     ):
         headline = "guestfish/libguestfs is not installed on this host."
         return headline, [
@@ -75,9 +68,7 @@ def _classify_libguestfs_failure(stderr: str) -> tuple[str, list[str]]:
         ]
 
     if 'permission denied' in stderr_lower:
-        headline = (
-            "libguestfs could not access a required file (permission denied)."
-        )
+        headline = "libguestfs could not access a required file (permission denied)."
         return headline, [
             "Check that your user can read the disk file (qcow2)",
             "Check kernel readability: sudo chmod +r /boot/vmlinuz-*",
@@ -90,16 +81,9 @@ def _classify_libguestfs_failure(stderr: str) -> tuple[str, list[str]]:
     )
     return headline, [
         "Diagnose host setup: libguestfs-test-tool",
-        (
-            "Re-run with full tracing: "
-            "LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1 "
-            "guestfish --ro -a <disk> run"
-        ),
+        ("Re-run with full tracing: LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1 guestfish --ro -a <disk> run"),
         "Common cause (kernel unreadable): sudo chmod +r /boot/vmlinuz-*",
-        (
-            "Common cause (not installed): "
-            "sudo apt install libguestfs-tools"
-        ),
+        ("Common cause (not installed): sudo apt install libguestfs-tools"),
     ]
 
 
@@ -148,10 +132,7 @@ class GuestfishClient:
                 # This safely clears dirty bits and hibernation flags
                 # that prevent RW mounting
                 if fs_type == 'ntfs':
-                    log.info(
-                        f"Ensuring NTFS filesystem {root_device} is clean "
-                        f"(running ntfsfix)..."
-                    )
+                    log.info(f"Ensuring NTFS filesystem {root_device} is clean (running ntfsfix)...")
                     self.remove_ntfs_hibernation(disk_path, root_device)
 
             # Add run as first command (no leading colon), then mount
@@ -209,8 +190,14 @@ class GuestfishClient:
         """
         # NO leading colon before first command! Colon only separates commands.
         cmd = [
-            'guestfish', '--ro', '--format=qcow2', '-a', disk_path,
-            'run', ':', 'list-filesystems',
+            'guestfish',
+            '--ro',
+            '--format=qcow2',
+            '-a',
+            disk_path,
+            'run',
+            ':',
+            'list-filesystems',
         ]
 
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -233,22 +220,11 @@ class GuestfishClient:
 
         if not os_filesystems:
             raise HypervisorException(
-                f"No suitable OS filesystem found on {disk_path}\n"
-                f"Detected filesystems:\n{result.stdout}",
+                f"No suitable OS filesystem found on {disk_path}\nDetected filesystems:\n{result.stdout}",
                 possible_solutions=[
-                    (
-                        "Inspect the disk manually: "
-                        f"guestfish --ro -a {disk_path} : run : list-filesystems"
-                    ),
-                    (
-                        "Mount the correct partition manually: "
-                        f"guestfish --ro -a {disk_path} : run : "
-                        "mount /dev/sdaX /"
-                    ),
-                    (
-                        "Confirm this disk image actually contains a "
-                        "supported OS filesystem (ext4, ext3, xfs, ntfs)"
-                    ),
+                    (f"Inspect the disk manually: guestfish --ro -a {disk_path} : run : list-filesystems"),
+                    (f"Mount the correct partition manually: guestfish --ro -a {disk_path} : run : mount /dev/sdaX /"),
+                    ("Confirm this disk image actually contains a supported OS filesystem (ext4, ext3, xfs, ntfs)"),
                 ],
             )
 
@@ -265,13 +241,18 @@ class GuestfishClient:
         for device, fs_type in os_filesystems:
             # NO leading colon before first command
             size_cmd = [
-                'guestfish', '--ro', '--format=qcow2', '-a', disk_path,
-                'run', ':', 'blockdev-getsize64', device,
+                'guestfish',
+                '--ro',
+                '--format=qcow2',
+                '-a',
+                disk_path,
+                'run',
+                ':',
+                'blockdev-getsize64',
+                device,
             ]
 
-            size_result = subprocess.run(
-                size_cmd, capture_output=True, text=True, check=False
-            )
+            size_result = subprocess.run(size_cmd, capture_output=True, text=True, check=False)
             if size_result.returncode == 0:
                 try:
                     size = int(size_result.stdout.strip())
@@ -281,31 +262,20 @@ class GuestfishClient:
                         largest_device = device
                         largest_fs_type = fs_type
                 except ValueError:
-                    log.warning(
-                        f"Could not parse size for {device}: "
-                        f"{size_result.stdout}"
-                    )
+                    log.warning(f"Could not parse size for {device}: {size_result.stdout}")
             else:
-                log.warning(
-                    f"Size query failed for {device}: "
-                    f"{size_result.stderr}"
-                )
+                log.warning(f"Size query failed for {device}: {size_result.stderr}")
 
         # Log all detected partitions for debugging
         if partition_sizes:
             log.debug("Detected partitions with sizes:")
-            for dev, fs, sz in sorted(
-                partition_sizes, key=lambda x: x[2], reverse=True
-            ):
+            for dev, fs, sz in sorted(partition_sizes, key=lambda x: x[2], reverse=True):
                 size_gb = sz / (1024 * 1024 * 1024)
                 log.debug(f"  {dev}: {fs}, {size_gb:.2f} GB")
 
         if not largest_device:
             # Fallback to first filesystem if size detection fails
-            log.warning(
-                "Could not determine partition sizes, "
-                "using first detected filesystem"
-            )
+            log.warning("Could not determine partition sizes, using first detected filesystem")
             return os_filesystems[0]
 
         # Warn if selected partition is suspiciously small for an OS partition
@@ -315,15 +285,12 @@ class GuestfishClient:
         if largest_size < min_size_bytes:
             log.warning(
                 f"Selected partition {largest_device} is only "
-                f"{largest_size / (1024*1024*1024):.2f} GB. "
+                f"{largest_size / (1024 * 1024 * 1024):.2f} GB. "
                 f"This may be a recovery partition, not the main OS partition. "
                 f"Expected at least {min_size_gb} GB for {largest_fs_type}."
             )
 
-        log.debug(
-            f"Selected root filesystem: {largest_device} "
-            f"({largest_fs_type}, size: {largest_size} bytes)"
-        )
+        log.debug(f"Selected root filesystem: {largest_device} ({largest_fs_type}, size: {largest_size} bytes)")
         return largest_device, largest_fs_type
 
     def _parse_filesystems_output(self, stdout: str) -> list[tuple[str, str]]:
@@ -347,9 +314,7 @@ class GuestfishClient:
                 os_filesystems.append((device, fs_type))
         return os_filesystems
 
-    def is_ntfs_hibernated(
-        self, disk_path: str, device: str
-    ) -> tuple[bool, str]:
+    def is_ntfs_hibernated(self, disk_path: str, device: str) -> tuple[bool, str]:
         """Check if NTFS filesystem is in hibernation state.
 
         Windows Fast Startup and hibernation leave NTFS filesystems in a
@@ -366,16 +331,19 @@ class GuestfishClient:
         """
         # First, detect filesystem type
         cmd = [
-            'guestfish', '--ro', '--format=qcow2', '-a', disk_path,
-            'run', ':', 'list-filesystems',
+            'guestfish',
+            '--ro',
+            '--format=qcow2',
+            '-a',
+            disk_path,
+            'run',
+            ':',
+            'list-filesystems',
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
         if result.returncode != 0:
-            log.warning(
-                f"Failed to detect filesystem type for {device}: "
-                f"{result.stderr}"
-            )
+            log.warning(f"Failed to detect filesystem type for {device}: {result.stderr}")
             return False, 'unknown'
 
         # Parse output to find filesystem type for this device
@@ -390,33 +358,34 @@ class GuestfishClient:
 
         # Only check hibernation for NTFS filesystems
         if fs_type != 'ntfs':
-            log.debug(
-                f"Device {device} is {fs_type}, "
-                f"skipping hibernation check"
-            )
+            log.debug(f"Device {device} is {fs_type}, skipping hibernation check")
             return False, fs_type
 
         # Try to mount NTFS filesystem read-only to check for hibernation
-        log.debug(
-            f"Checking NTFS hibernation state for {device}"
-        )
+        log.debug(f"Checking NTFS hibernation state for {device}")
 
         # Use guestfish to check if filesystem can be mounted
         test_cmd = [
-            'guestfish', '--ro', '--format=qcow2', '-a', disk_path,
-            'run', ':', 'mount-ro', device, '/',
-            ':', 'is-file', '/hiberfil.sys',
+            'guestfish',
+            '--ro',
+            '--format=qcow2',
+            '-a',
+            disk_path,
+            'run',
+            ':',
+            'mount-ro',
+            device,
+            '/',
+            ':',
+            'is-file',
+            '/hiberfil.sys',
         ]
 
-        test_result = subprocess.run(
-            test_cmd, capture_output=True, text=True, check=False
-        )
+        test_result = subprocess.run(test_cmd, capture_output=True, text=True, check=False)
 
         # Check stderr for hibernation-related messages and
         # hiberfil.sys existence
-        is_hibernated = self._check_ntfs_hibernation_output(
-            test_result.stdout, test_result.stderr
-        )
+        is_hibernated = self._check_ntfs_hibernation_output(test_result.stdout, test_result.stderr)
 
         if is_hibernated:
             log.debug(f"NTFS hibernation detected on {device}")
@@ -424,9 +393,7 @@ class GuestfishClient:
 
         return False, fs_type
 
-    def _check_ntfs_hibernation_output(
-        self, stdout: str, stderr: str
-    ) -> bool:
+    def _check_ntfs_hibernation_output(self, stdout: str, stderr: str) -> bool:
         """Analyze guestfish output to detect NTFS hibernation.
 
         Args:
@@ -437,18 +404,12 @@ class GuestfishClient:
             True if hibernation detected
         """
         stderr_lower = stderr.lower()
-        if (
-            'hibernat' in stderr_lower
-            or 'hiberfile' in stderr_lower
-            or 'unsafe' in stderr_lower
-        ):
+        if 'hibernat' in stderr_lower or 'hiberfile' in stderr_lower or 'unsafe' in stderr_lower:
             return True
 
         return 'true' in stdout.lower()
 
-    def remove_ntfs_hibernation(
-        self, disk_path: str, device: str
-    ) -> None:
+    def remove_ntfs_hibernation(self, disk_path: str, device: str) -> None:
         """Remove NTFS hibernation metadata to enable read-write mounting.
 
         Uses ntfsfix utility which safely removes Windows hibernation data.
@@ -471,22 +432,26 @@ class GuestfishClient:
         # The -d flag removes the dirty bit and hibernation file
         # Use 'debug sh' to invoke ntfsfix binary directly
         cmd = [
-            'guestfish', '--rw', '--format=qcow2', '-a', disk_path, '--',
-            'run', ':', 'debug', 'sh', f'ntfsfix -d {device}',
+            'guestfish',
+            '--rw',
+            '--format=qcow2',
+            '-a',
+            disk_path,
+            '--',
+            'run',
+            ':',
+            'debug',
+            'sh',
+            f'ntfsfix -d {device}',
         ]
 
         log.debug(f"Running ntfsfix command: {' '.join(cmd)}")
 
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, check=False
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
         if result.returncode != 0:
             # Check if ntfsfix command is not available
-            if (
-                'unknown command' in result.stderr.lower()
-                or 'ntfsfix' in result.stderr.lower()
-            ):
+            if 'unknown command' in result.stderr.lower() or 'ntfsfix' in result.stderr.lower():
                 raise HypervisorException(
                     f"Failed to remove NTFS hibernation: ntfsfix utility "
                     f"not available.\n"
@@ -517,14 +482,10 @@ class GuestfishClient:
                 f"-a {disk_path} : run : ntfsfix {device}"
             )
 
-        log.info(
-            f"Successfully removed NTFS hibernation metadata from {device}"
-        )
+        log.info(f"Successfully removed NTFS hibernation metadata from {device}")
         log.debug(f"ntfsfix output: {result.stdout}")
 
-    def run_script(
-        self, disk_path: str, commands: list[str]
-    ) -> bool:
+    def run_script(self, disk_path: str, commands: list[str]) -> bool:
         """Run a guestfish script from a temp file.
 
         Creates a temporary file with the given commands, executes
@@ -542,16 +503,19 @@ class GuestfishClient:
         script_fd = None
         script_path = None
         try:
-            script_fd, script_path = tempfile.mkstemp(
-                suffix='.guestfish', text=True
-            )
+            script_fd, script_path = tempfile.mkstemp(suffix='.guestfish', text=True)
             with os.fdopen(script_fd, 'w') as f:
                 f.write(script_content)
                 script_fd = None
 
             cmd = [
-                'guestfish', '--ro', '--format=qcow2',
-                '-a', disk_path, '-f', script_path,
+                'guestfish',
+                '--ro',
+                '--format=qcow2',
+                '-a',
+                disk_path,
+                '-f',
+                script_path,
             ]
 
             result = subprocess.run(
@@ -562,10 +526,7 @@ class GuestfishClient:
             )
 
             if result.returncode != 0:
-                log.warning(
-                    f"Guestfish extraction script had errors "
-                    f"(partial success possible): {result.stderr}"
-                )
+                log.warning(f"Guestfish extraction script had errors (partial success possible): {result.stderr}")
                 return False
 
             return True

@@ -32,11 +32,9 @@ class CommandParameterForm:
             ui.label("Click Action Parameters").classes("text-subtitle1 q-mb-sm")
 
             # Target selection
-            target_type = ui.select(
-                ["position", "image", "text"],
-                label="Target Type",
-                value="position"
-            ).classes("w-48")
+            target_type = ui.select(["position", "image", "text"], label="Target Type", value="position").classes(
+                "w-48"
+            )
 
             target_container = ui.column()
 
@@ -52,23 +50,15 @@ class CommandParameterForm:
                         strategy_select = ui.select(
                             ["first", "best_confidence", "largest", "smallest"],
                             label="Selection Strategy",
-                            value="first"
+                            value="first",
                         )
-                        self.current_inputs.update({
-                            "image": image_input,
-                            "strategy": strategy_select
-                        })
+                        self.current_inputs.update({"image": image_input, "strategy": strategy_select})
                     elif target_type.value == "text":
                         text_input = ui.input("Text to find")
                         strategy_select = ui.select(
-                            ["first", "best_confidence", "closest_to"],
-                            label="Selection Strategy",
-                            value="first"
+                            ["first", "best_confidence", "closest_to"], label="Selection Strategy", value="first"
                         )
-                        self.current_inputs.update({
-                            "text": text_input,
-                            "strategy": strategy_select
-                        })
+                        self.current_inputs.update({"text": text_input, "strategy": strategy_select})
 
             target_type.on('update:model-value', lambda: update_target_form())
             self.current_inputs["target_type"] = target_type
@@ -86,11 +76,7 @@ class CommandParameterForm:
             ui.label("Keyboard Action Parameters").classes("text-subtitle1 q-mb-sm")
 
             # Input type selection
-            input_type = ui.select(
-                ["keys", "combination"],
-                label="Input Type",
-                value="keys"
-            ).classes("w-48")
+            input_type = ui.select(["keys", "combination"], label="Input Type", value="keys").classes("w-48")
 
             input_container = ui.column()
 
@@ -101,10 +87,9 @@ class CommandParameterForm:
                         keys_input = ui.input("Text to type").classes("w-full")
                         self.current_inputs["keys"] = keys_input
                     elif input_type.value == "combination":
-                        combo_input = ui.input(
-                            "Key combination (comma-separated)",
-                            placeholder="ctrl,c"
-                        ).classes("w-full")
+                        combo_input = ui.input("Key combination (comma-separated)", placeholder="ctrl,c").classes(
+                            "w-full"
+                        )
                         self.current_inputs["combination"] = combo_input
 
             input_type.on('update:model-value', lambda: update_input_form())
@@ -125,10 +110,7 @@ class CommandParameterForm:
             duration_input = ui.number("Duration (seconds)", value=1.0, min=0.1, step=0.1)
             desc_input = ui.input("Description (optional)").classes("w-full")
 
-            self.current_inputs = {
-                "duration": duration_input,
-                "description": desc_input
-            }
+            self.current_inputs = {"duration": duration_input, "description": desc_input}
 
     def create_screenshot_form(self):
         """Create form for screenshot action parameters."""
@@ -151,21 +133,15 @@ class CommandParameterForm:
                         with ui.row():
                             width_input = ui.number("Width", value=800, min=1)
                             height_input = ui.number("Height", value=600, min=1)
-                        self.current_inputs.update({
-                            "x": x_input,
-                            "y": y_input,
-                            "width": width_input,
-                            "height": height_input
-                        })
+                        self.current_inputs.update(
+                            {"x": x_input, "y": y_input, "width": width_input, "height": height_input}
+                        )
 
             full_screen.on('update:model-value', lambda: update_region_form())
 
             desc_input = ui.input("Description (optional)").classes("w-full")
 
-            self.current_inputs = {
-                "full_screen": full_screen,
-                "description": desc_input
-            }
+            self.current_inputs = {"full_screen": full_screen, "description": desc_input}
 
             update_region_form()
 
@@ -186,7 +162,7 @@ class CommandParameterForm:
                 "cwd": cwd_input,
                 "timeout": timeout_input,
                 "shell": shell_checkbox,
-                "description": desc_input
+                "description": desc_input,
             }
 
     def create_test_form(self):
@@ -198,10 +174,7 @@ class CommandParameterForm:
             test_name_input = ui.input("Test name").classes("w-full")
             desc_input = ui.input("Description (optional)").classes("w-full")
 
-            self.current_inputs = {
-                "name": test_name_input,
-                "description": desc_input
-            }
+            self.current_inputs = {"name": test_name_input, "description": desc_input}
 
     def create_pause_form(self):
         """Create form for pause action parameters."""
@@ -213,11 +186,7 @@ class CommandParameterForm:
             message_input = ui.input("Pause message (optional)").classes("w-full")
             desc_input = ui.input("Description (optional)").classes("w-full")
 
-            self.current_inputs = {
-                "name": name_input,
-                "message": message_input,
-                "description": desc_input
-            }
+            self.current_inputs = {"name": name_input, "message": message_input, "description": desc_input}
 
     def get_action_data(self, command_type: str) -> dict[str, Any]:
         """Get action data from current form inputs."""
@@ -226,19 +195,14 @@ class CommandParameterForm:
             if self.current_inputs["target_type"].value == "position":
                 target["position"] = [
                     int(self.current_inputs["x"].value or 0),
-                    int(self.current_inputs["y"].value or 0)
+                    int(self.current_inputs["y"].value or 0),
                 ]
             elif self.current_inputs["target_type"].value == "image":
                 target["image"] = self.current_inputs["image"].value
             elif self.current_inputs["target_type"].value == "text":
                 target["text"] = self.current_inputs["text"].value
 
-            return {
-                "click": {
-                    "target": target,
-                    "description": self.current_inputs["description"].value or ""
-                }
-            }
+            return {"click": {"target": target, "description": self.current_inputs["description"].value or ""}}
 
         if command_type == "keyboard":
             keyboard_data = {"description": self.current_inputs["description"].value or ""}
@@ -254,28 +218,28 @@ class CommandParameterForm:
             return {
                 "idle": {
                     "duration": self.current_inputs["duration"].value or 1.0,
-                    "description": self.current_inputs["description"].value or ""
+                    "description": self.current_inputs["description"].value or "",
                 }
             }
 
         if command_type == "screenshot":
-            screenshot_data = {
-                "description": self.current_inputs["description"].value or ""
-            }
+            screenshot_data = {"description": self.current_inputs["description"].value or ""}
             if not self.current_inputs["full_screen"].value:
-                screenshot_data.update({
-                    "x": int(self.current_inputs["x"].value or 0),
-                    "y": int(self.current_inputs["y"].value or 0),
-                    "width": int(self.current_inputs["width"].value or 800),
-                    "height": int(self.current_inputs["height"].value or 600)
-                })
+                screenshot_data.update(
+                    {
+                        "x": int(self.current_inputs["x"].value or 0),
+                        "y": int(self.current_inputs["y"].value or 0),
+                        "width": int(self.current_inputs["width"].value or 800),
+                        "height": int(self.current_inputs["height"].value or 600),
+                    }
+                )
 
             return {"screenshot": screenshot_data}
 
         if command_type == "command":
             command_data = {
                 "cmd": self.current_inputs["cmd"].value or "",
-                "description": self.current_inputs["description"].value or ""
+                "description": self.current_inputs["description"].value or "",
             }
             if self.current_inputs["cwd"].value:
                 command_data["cwd"] = self.current_inputs["cwd"].value
@@ -290,14 +254,12 @@ class CommandParameterForm:
             return {
                 "test": {
                     "name": self.current_inputs["name"].value or "",
-                    "description": self.current_inputs["description"].value or ""
+                    "description": self.current_inputs["description"].value or "",
                 }
             }
 
         if command_type == "pause":
-            pause_data = {
-                "description": self.current_inputs["description"].value or ""
-            }
+            pause_data = {"description": self.current_inputs["description"].value or ""}
             if self.current_inputs["name"].value:
                 pause_data["name"] = self.current_inputs["name"].value
             if self.current_inputs["message"].value:
@@ -354,11 +316,7 @@ class ActionHistoryPanel:
 
     def add_action(self, action_data: dict[str, Any], result: dict[str, Any], timestamp: str):
         """Add an action to the history."""
-        self.action_history.append({
-            "action": action_data,
-            "result": result,
-            "timestamp": timestamp
-        })
+        self.action_history.append({"action": action_data, "result": result, "timestamp": timestamp})
         self.refresh()
 
     def clear_history(self):
@@ -368,10 +326,7 @@ class ActionHistoryPanel:
 
     def get_successful_actions(self) -> list:
         """Get only successful actions for saving to playbook."""
-        return [
-            item["action"] for item in self.action_history
-            if item["result"].get("success", False)
-        ]
+        return [item["action"] for item in self.action_history if item["result"].get("success", False)]
 
     def refresh(self):
         """Refresh the display."""
@@ -382,9 +337,4 @@ class ActionHistoryPanel:
                 return
 
             for item in reversed(self.action_history):  # Show most recent first
-                TestResultCard(
-                    self.container,
-                    item["action"],
-                    item["result"],
-                    item["timestamp"]
-                ).render()
+                TestResultCard(self.container, item["action"], item["result"], item["timestamp"]).render()
