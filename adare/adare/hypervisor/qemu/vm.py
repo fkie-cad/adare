@@ -32,6 +32,7 @@ from adare.hypervisor.exceptions import (
     VMAlreadyRunningException,
     VMStartException,
 )
+from adare.hypervisor.port_forward import qemu_hostfwd
 from adare.hypervisor.qemu.accel import native_accel
 from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
 from adare.hypervisor.qemu.libvirt_undefine import (
@@ -474,16 +475,12 @@ class QEMUVM(
 
         # Add port forwarding rules
         for _name, rule in self.config.port_forwarding_rules.items():
-            protocol = rule['protocol']
-            host_port = rule['host_port']
-            guest_port = rule['guest_port']
-            host_ip = rule.get('host_ip', '')
-            guest_ip = rule.get('guest_ip', '')
-
-            hostfwd = (
-                f"{protocol}:{host_ip}:{host_port}-{guest_ip}:{guest_port}"
-                if host_ip
-                else f"{protocol}::{host_port}-:{guest_port}"
+            hostfwd = qemu_hostfwd(
+                rule['protocol'],
+                rule['host_port'],
+                rule['guest_port'],
+                rule.get('host_ip', ''),
+                rule.get('guest_ip', ''),
             )
             netdev_args += f",hostfwd={hostfwd}"
 

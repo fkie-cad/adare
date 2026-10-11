@@ -13,6 +13,7 @@ import ulid
 from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.database.exceptions import DatabaseError
+from adare.hypervisor.port_forward import forward_connect_host
 from adare.types.stages import ConnectToVMStage
 
 from .session import DevModeSession, DevModeState
@@ -382,10 +383,11 @@ class DevModeSessionManager:
                         stage_ulid,
                         event=None,  # Dev mode doesn't have a dedicated interrupt event at this point
                     ) as stage_ctx:
-                        stage_ctx.stage.sub_msg = f"Reconnecting to localhost:{websocket_port}"
+                        agent_host = forward_connect_host()
+                        stage_ctx.stage.sub_msg = f"Reconnecting to {agent_host}:{websocket_port}"
 
-                        log.info(f"Attempting WebSocket reconnection to localhost:{websocket_port}")
-                        client = AdareVMClient(port=websocket_port)
+                        log.info(f"Attempting WebSocket reconnection to {agent_host}:{websocket_port}")
+                        client = AdareVMClient(host=agent_host, port=websocket_port)
 
                         # Try to reconnect
                         if hasattr(client, 'reconnect'):
