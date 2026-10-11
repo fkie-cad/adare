@@ -74,7 +74,7 @@ def _api():
 
 
 @router.get("")
-async def list_experiments(tags: str | None = Query(None, description="Comma-separated tags to filter by")):
+def list_experiments(tags: str | None = Query(None, description="Comma-separated tags to filter by")):
     """List all experiments, optionally filtered by tags."""
     tag_list = [t.strip() for t in tags.split(",")] if tags else None
     result = _api().show.list_experiments(tags=tag_list)
@@ -82,14 +82,14 @@ async def list_experiments(tags: str | None = Query(None, description="Comma-sep
 
 
 @router.get("/{name}")
-async def get_experiment(name: str):
+def get_experiment(name: str):
     """Get experiment details by name."""
     result = _api().show.get_experiment(name=name)
     return result_to_response(result)
 
 
 @router.post("")
-async def create_experiment(body: ExperimentCreateBody):
+def create_experiment(body: ExperimentCreateBody):
     """Create a new experiment."""
     from adare.core.dto.experiment import ExperimentCreateRequest
 
@@ -110,7 +110,7 @@ async def run_experiment(name: str, body: ExperimentRunBody):
 
 
 @router.post("/{name}/clone")
-async def clone_experiment(name: str, body: ExperimentCloneBody):
+def clone_experiment(name: str, body: ExperimentCloneBody):
     """Clone an existing experiment."""
     from adare.core.dto.experiment import ExperimentCloneRequest
 
@@ -125,7 +125,7 @@ async def clone_experiment(name: str, body: ExperimentCloneBody):
 
 
 @router.delete("/{name}")
-async def remove_experiment(name: str, body: ExperimentRemoveBody):
+def remove_experiment(name: str, body: ExperimentRemoveBody):
     """Remove an experiment."""
     from adare.core.dto.experiment import ExperimentRemoveRequest
 
@@ -140,7 +140,7 @@ async def remove_experiment(name: str, body: ExperimentRemoveBody):
 
 
 @router.post("/{name}/validate")
-async def validate_experiment(name: str, body: ExperimentValidateBody):
+def validate_experiment(name: str, body: ExperimentValidateBody):
     """Validate experiment configuration and integrity."""
     from adare.core.dto.experiment import ExperimentValidateRequest
 
@@ -154,7 +154,7 @@ async def validate_experiment(name: str, body: ExperimentValidateBody):
 
 
 @router.post("/{name}/environments")
-async def add_experiment_environments(name: str, body: ExperimentEnvLinkBody):
+def add_experiment_environments(name: str, body: ExperimentEnvLinkBody):
     """Link one or more environments to an experiment."""
     from adare.core.dto.experiment import ExperimentEnvModifyRequest
 
@@ -170,7 +170,7 @@ async def add_experiment_environments(name: str, body: ExperimentEnvLinkBody):
 
 # DELETE with body: use api_route so FastAPI accepts the body parameter.
 @router.api_route("/{name}/environments", methods=["DELETE"])
-async def remove_experiment_environments(name: str, body: ExperimentEnvLinkBody):
+def remove_experiment_environments(name: str, body: ExperimentEnvLinkBody):
     """Unlink one or more environments from an experiment."""
     from adare.core.dto.experiment import ExperimentEnvModifyRequest
 

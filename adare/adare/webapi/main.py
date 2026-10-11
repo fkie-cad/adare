@@ -4,6 +4,7 @@ ADARE Web API - FastAPI application for web frontend.
 Provides REST and WebSocket endpoints for dev mode session control.
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -35,6 +36,11 @@ from adare.webapi.adapters import result_to_response
 from adare.webapi.websocket_manager import ws_manager
 
 logger = logging.getLogger(__name__)
+
+# Services are synchronous and drive VMs through their own asyncio.run(), so
+# they must never run on the server's event loop: handlers without awaits are
+# plain `def` (FastAPI runs them in its threadpool) and async handlers hand
+# service calls to asyncio.to_thread.
 
 
 @asynccontextmanager
@@ -74,8 +80,10 @@ class SessionStartRequest(BaseModel):
     """Request to start a new session."""
 
     project_path: str
-    experiment_name: str
     environment_name: str
+    # Dev sessions are bound to an environment, not an experiment; still
+    # accepted so existing clients keep working, but unused.
+    experiment_name: str | None = None
     gui_mode: str | None = None
     vm_memory: int | None = None
     vm_cpus: int | None = None
@@ -135,11 +143,10 @@ async def start_session(request: SessionStartRequest):
     Returns:
         Session info on success, error on failure
     """
-    logger.info(f"Starting session for {request.experiment_name}")
+    logger.info(f"Starting session on {request.environment_name}")
 
     dto = DevSessionStartRequest(
         project_path=Path(request.project_path),
-        experiment_name=request.experiment_name,
         environment_name=request.environment_name,
         gui_mode=request.gui_mode,
         vm_memory=request.vm_memory,
@@ -147,16 +154,16 @@ async def start_session(request: SessionStartRequest):
         debug_screenshots=request.debug_screenshots,
     )
 
-    result = api.devmode.start_session(dto)
+    result = await asyncio.to_thread(api.devmode.start_session, dto)
 
-    if result.is_success():
+    if result.success:
         # Send WebSocket notification
-        session_id = result.value.session_id
+        session_id = result.data.session_id
         await ws_manager.send_session_state(
             session_id,
             {
                 "status": "started",
-                "vm_running": result.value.vm_running,
+                "vm_running": result.data.vm_running,
             },
         )
 
@@ -180,16 +187,16 @@ async def stop_session(session_id: str, request: SessionStopRequest | None = Non
 
     dto = DevSessionStopRequest(session_id=session_id, remove_resources=request.remove_resources)
 
-    result = api.devmode.stop_session(dto)
+    result = await asyncio.to_thread(api.devmode.stop_session, dto)
 
-    if result.is_success():
+    if result.success:
         await ws_manager.send_session_state(session_id, {"status": "stopped"})
 
     return result_to_response(result)
 
 
 @app.get("/api/sessions")
-async def list_sessions(project_path: str | None = None):
+def list_sessions(project_path: str | None = None):
     """
     List all active dev mode sessions.
 
@@ -206,7 +213,7 @@ async def list_sessions(project_path: str | None = None):
 
 
 @app.get("/api/sessions/{session_id}/state")
-async def get_session_state(session_id: str):
+def get_session_state(session_id: str):
     """
     Get current session state.
 
@@ -222,7 +229,7 @@ async def get_session_state(session_id: str):
 
 
 @app.post("/api/sessions/cleanup")
-async def cleanup_sessions(project_path: str | None = None):
+def cleanup_sessions(project_path: str | None = None):
     """
     Cleanup stale sessions.
 
@@ -266,18 +273,18 @@ async def execute_action(session_id: str, request: ActionExecuteRequest):
         action_content=request.action_yaml,
     )
 
-    result = api.devmode.execute_action(dto)
+    result = await asyncio.to_thread(api.devmode.execute_action, dto)
 
     # Send action complete event
-    if result.is_success():
+    if result.success:
         await ws_manager.send_action_complete(
             session_id,
             action_type="action",
-            success=result.value.success,
+            success=result.data.success,
             result={
-                "message": result.value.message,
-                "execution_time": result.value.execution_time,
-                "coordinates": result.value.coordinates,
+                "message": result.data.message,
+                "execution_time": result.data.execution_time,
+                "coordinates": result.data.coordinates,
             },
         )
 
@@ -285,7 +292,7 @@ async def execute_action(session_id: str, request: ActionExecuteRequest):
 
 
 @app.post("/api/sessions/{session_id}/playbooks/execute")
-async def execute_playbook(session_id: str, request: PlaybookExecuteRequest):
+def execute_playbook(session_id: str, request: PlaybookExecuteRequest):
     """
     Execute a full playbook.
 
@@ -327,7 +334,7 @@ async def execute_playbook(session_id: str, request: PlaybookExecuteRequest):
 
 
 @app.post("/api/sessions/{session_id}/reset")
-async def reset_session(session_id: str, reset_type: Literal["soft", "hard"] = Query("soft")):
+def reset_session(session_id: str, reset_type: Literal["soft", "hard"] = Query("soft")):
     """
     Reset session state.
 
@@ -368,16 +375,16 @@ async def create_checkpoint(session_id: str, request: CheckpointCreateRequest):
 
     dto = DevCheckpointCreateRequest(session_id=session_id, name=request.name, description=request.description)
 
-    result = api.devmode.create_checkpoint(dto)
+    result = await asyncio.to_thread(api.devmode.create_checkpoint, dto)
 
-    if result.is_success():
+    if result.success:
         await ws_manager.send_checkpoint_created(session_id, request.name)
 
     return result_to_response(result)
 
 
 @app.get("/api/sessions/{session_id}/checkpoints")
-async def list_checkpoints(session_id: str):
+def list_checkpoints(session_id: str):
     """
     List available checkpoints.
 
@@ -393,7 +400,7 @@ async def list_checkpoints(session_id: str):
 
 
 @app.post("/api/sessions/{session_id}/checkpoints/{checkpoint_name}/restore")
-async def restore_checkpoint(session_id: str, checkpoint_name: str):
+def restore_checkpoint(session_id: str, checkpoint_name: str):
     """
     Restore to a checkpoint.
 
@@ -412,7 +419,7 @@ async def restore_checkpoint(session_id: str, checkpoint_name: str):
 
 
 @app.delete("/api/sessions/{session_id}/checkpoints/{checkpoint_name}")
-async def delete_checkpoint(session_id: str, checkpoint_name: str):
+def delete_checkpoint(session_id: str, checkpoint_name: str):
     """
     Delete a checkpoint.
 
@@ -436,7 +443,7 @@ async def delete_checkpoint(session_id: str, checkpoint_name: str):
 
 
 @app.post("/api/playbooks/save")
-async def save_playbook(request: PlaybookSaveRequest):
+def save_playbook(request: PlaybookSaveRequest):
     """
     Save a playbook to YAML file.
 
@@ -467,7 +474,7 @@ async def save_playbook(request: PlaybookSaveRequest):
 
 
 @app.get("/api/playbooks/{filename}")
-async def load_playbook(filename: str):
+def load_playbook(filename: str):
     """
     Load a playbook from YAML file.
 
@@ -501,7 +508,7 @@ async def load_playbook(filename: str):
 
 
 @app.get("/api/actions/types")
-async def get_action_types():
+def get_action_types():
     """
     Get metadata for all available action types.
 
@@ -645,7 +652,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
 
 @app.get("/api/health")
-async def health_check():
+def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "adare-web-api"}
 
@@ -695,7 +702,7 @@ _frontend_dist = next((p for p in _frontend_dist_candidates if p.is_dir()), _fro
 
 
 @app.get("/{path:path}")
-async def spa_fallback(path: str):
+def spa_fallback(path: str):
     """Serve static files from the built frontend, with SPA index.html fallback."""
     if not _frontend_dist.is_dir():
         raise HTTPException(status_code=404, detail="Frontend not built. Run: pnpm build")

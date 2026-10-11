@@ -132,7 +132,7 @@ async def run_agent(session_id: str, body: AgentRunBody):
 
 
 @router.get("/{session_id}/agent/steps/{index}.png")
-async def agent_step_image(session_id: str, index: int):
+def agent_step_image(session_id: str, index: int):
     """Serve the annotated ``step_NNN.png`` written by the latest run."""
     run_dir = _RUN_DIRS.get(session_id)
     if run_dir is None:

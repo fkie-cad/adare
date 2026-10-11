@@ -80,7 +80,7 @@ async def _create(body):
         patch('adare.webapi.routes.environments._api', return_value=api),
         patch('adare.webapi.routes.environments.result_to_response', side_effect=lambda r: {'success': True}),
     ):
-        response = await create_environment(body)
+        response = create_environment(body)
     return response, api
 
 
