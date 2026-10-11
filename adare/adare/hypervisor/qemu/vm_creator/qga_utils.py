@@ -21,6 +21,8 @@ import socket
 import time
 from pathlib import Path
 
+from adare.helperfunctions.backoff import backoff_delays
+
 log = logging.getLogger(__name__)
 
 # Raw bytes of file data moved per guest-file-read / guest-file-write round-trip.
@@ -197,6 +199,8 @@ def qga_exec(
             ``progress_interval`` seconds while the command is still running, so a
             45-minute ``msiexec`` can drive a live spinner instead of looking hung.
         progress_interval: Seconds between ``progress_callback`` invocations.
+        poll_interval: Longest gap between ``guest-exec-status`` polls; polling
+            starts at 50 ms and backs off to it, so quick commands return quickly.
 
     Raises:
         QgaError: On agent/transport failure, a missing pid, or *timeout*.
@@ -218,6 +222,7 @@ def qga_exec(
     started = time.monotonic()
     deadline = started + timeout
     next_progress = started + progress_interval
+    poll_delays = backoff_delays(cap=poll_interval)
     while time.monotonic() < deadline:
         status = _command(sock_path, 'guest-exec-status', {'pid': pid})
         if status.get('exited', False):
@@ -231,7 +236,7 @@ def qga_exec(
         if progress_callback is not None and now >= next_progress:
             progress_callback(now - started)
             next_progress = now + progress_interval
-        time.sleep(poll_interval)
+        time.sleep(next(poll_delays))
     raise QgaError(f'Timeout waiting for guest command (pid {pid}) after {timeout:.0f}s')
 
 

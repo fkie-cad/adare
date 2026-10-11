@@ -22,6 +22,7 @@ import threading
 import time
 from pathlib import Path
 
+from adare.helperfunctions.backoff import backoff_delays
 from adare.hypervisor.base.mixins.commands import AbstractCommandMixin
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
@@ -446,8 +447,8 @@ class CommandExecutionMixin(AbstractCommandMixin, _Host):
             )
 
             start_time = time.time()
+            poll_delays = backoff_delays(initial=0.5, cap=2.0)
             while time.time() - start_time < timeout:
-                # Use short timeout for the check itself
                 returncode, stdout, _ = await self._execute_guest_command_via_agent(check_cmd, timeout=10)
 
                 stdout_str = stdout.strip().lower()
@@ -455,11 +456,10 @@ class CommandExecutionMixin(AbstractCommandMixin, _Host):
                     log.info(f"User session and registry hive for '{self.username}' are ready")
                     return True
 
-                # Log status every few seconds (throttled by the sleep)
                 if 'waiting' in stdout_str or 'error' in stdout_str:
                     log.debug(f"Session wait status: {stdout.strip()}")
 
-                await asyncio.sleep(2)
+                await asyncio.sleep(next(poll_delays))
 
             log.warning(f"Timed out waiting for user session after {timeout}s")
             return False
@@ -892,8 +892,9 @@ class CommandExecutionMixin(AbstractCommandMixin, _Host):
                 log.debug(f"Command started in background with PID {pid}")
                 return 0, f"Started with PID {pid}", ""
 
-            # Wait for command to complete and get status
+            # Wait for command to complete and get status (short polls first: most commands are quick)
             start_time = time.time()
+            poll_delays = backoff_delays()
             while time.time() - start_time < timeout:
                 if stop_event and stop_event.is_set():
                     log.info("Stop event detected, abandoning guest command wait")
@@ -921,8 +922,7 @@ class CommandExecutionMixin(AbstractCommandMixin, _Host):
                     log.debug(f"Guest command completed with return code {returncode}")
                     return returncode, stdout, stderr
 
-                # Sleep briefly before checking again
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(next(poll_delays))
 
             log.error("Timeout waiting for guest command to complete")
             return -1, "", "Timeout"
