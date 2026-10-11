@@ -8,6 +8,7 @@ Implements AbstractCommandMixin for QEMU-specific command execution using:
 
 import asyncio
 import json
+from typing import TYPE_CHECKING
 
 try:
     import libvirt_qemu
@@ -25,10 +26,16 @@ from adare.hypervisor.base.mixins.commands import AbstractCommandMixin
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
 
+if TYPE_CHECKING:
+    from adare.hypervisor.qemu.mixins.host import QEMUVMHost as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class CommandExecutionMixin(AbstractCommandMixin):
+class CommandExecutionMixin(AbstractCommandMixin, _Host):
     """Mixin class providing command execution operations for QEMU VMs."""
 
     async def _execute_streaming_command_async(
@@ -594,31 +601,6 @@ class CommandExecutionMixin(AbstractCommandMixin):
             log.warning(f"Error discovering Python scripts path: {e}")
             return None
 
-    async def _resolve_guest_executable_path(self, executable: str) -> str | None:
-        """
-        Resolve the absolute path for a guest executable (like adarevm).
-        """
-        # Cache key for this specific executable
-        cache_attr = f'_cached_path_{executable}'
-        if hasattr(self, cache_attr):
-            return getattr(self, cache_attr)
-
-        scripts_path = await self._discover_python_scripts_path()
-        if scripts_path:
-            # Construct candidate path
-            candidate = f"{scripts_path}\\{executable}.exe"
-
-            # Verify it exists
-            check_cmd = f'Test-Path "{candidate}"'
-            returncode, stdout, _ = await self._execute_guest_command_via_agent(command=check_cmd, timeout=10)
-
-            if returncode == 0 and 'True' in stdout:
-                log.info(f"Resolved {executable} to {candidate}")
-                setattr(self, cache_attr, candidate)
-                return candidate
-
-        return None
-
     async def _detect_xauthority(self) -> str | None:
         """
         Detect XAUTHORITY file location in Linux guest VM.
@@ -957,96 +939,6 @@ class CommandExecutionMixin(AbstractCommandMixin):
         except OSError as e:
             log.error(f"OS error executing guest command '{command}': {e}")
             return -1, "", f"OS error: {e}"
-
-    async def _send_qga_command_direct(self, socket_path: str, command: dict) -> dict:
-        """
-        Send command to QEMU Guest Agent socket via direct socket connection.
-
-        WARNING: This method does not work with libvirt-managed VMs because
-        libvirt owns the socket connection. Use _send_qga_command_via_libvirt()
-        instead for libvirt-managed VMs.
-
-        Implements proper QMP protocol handshake:
-        1. Read and discard greeting message (if present)
-        2. Send command
-        3. Read response
-
-        Args:
-            socket_path: Path to guest agent Unix socket
-            command: QGA command dictionary
-
-        Returns:
-            Response dictionary
-        """
-        try:
-            log.debug(f"Attempting to connect to guest agent socket: {socket_path}")
-            reader, writer = await asyncio.open_unix_connection(socket_path)
-            log.debug("Successfully connected to guest agent socket")
-
-            # Step 1: Handle QMP greeting (protocol requirement)
-            # The guest agent may send a greeting message on first connection
-            try:
-                greeting_line = await asyncio.wait_for(reader.readline(), timeout=0.5)
-                greeting = json.loads(greeting_line.decode('utf-8'))
-
-                # Check if this is a QMP greeting
-                if 'QMP' in greeting:
-                    log.debug(f"Received QGA greeting: {greeting}")
-                    # Greeting received and discarded - proceed with command
-                else:
-                    # Not a greeting - this shouldn't happen, but log it
-                    log.warning(f"Unexpected first message from QGA: {greeting}")
-                    # Treat it as the actual response (fallback behavior)
-                    writer.close()
-                    await writer.wait_closed()
-                    return greeting
-
-            except TimeoutError:
-                # No greeting received - this is fine, some QGA versions don't send it
-                log.debug("No QGA greeting received (timeout), proceeding with command")
-            except json.JSONDecodeError as e:
-                # Invalid JSON in greeting - log but continue
-                log.warning(f"Failed to parse QGA greeting: {e}")
-
-            # Step 2: Send command as JSON
-            cmd_json = json.dumps(command) + '\n'
-            log.debug(f"Sending QGA command: {command.get('execute', 'unknown')}")
-            log.debug(f"Command JSON: {cmd_json.strip()}")
-            writer.write(cmd_json.encode('utf-8'))
-            log.debug("Command written to buffer, flushing...")
-            await writer.drain()
-            log.debug("Command flushed successfully")
-
-            # Step 3: Read response with timeout to prevent indefinite blocking
-            response_line = await asyncio.wait_for(reader.readline(), timeout=5.0)
-            response = json.loads(response_line.decode('utf-8'))
-
-            log.debug(f"QGA response: {response}")
-
-            writer.close()
-            await writer.wait_closed()
-
-            return response
-
-        except TimeoutError as e:
-            log.error(f"Timeout communicating with guest agent: {e}")
-            return {"error": {"desc": f"Communication timeout: {e}"}}
-        except json.JSONDecodeError as e:
-            log.error(f"Failed to parse guest agent response: {e}")
-            return {"error": {"desc": f"Invalid JSON response: {e}"}}
-        except ConnectionRefusedError as e:
-            log.error(f"Guest agent connection refused: {e}")
-            return {"error": {"desc": f"Connection refused: {e}"}}
-        except FileNotFoundError as e:
-            log.error(f"Guest agent socket not found: {e}")
-            return {"error": {"desc": f"Socket not found: {e}"}}
-        except OSError as e:
-            # Log detailed error information including errno
-            errno_num = getattr(e, 'errno', 'unknown')
-            log.error(f"OS error communicating with guest agent: {e} (errno={errno_num})")
-            log.error(f"Socket path: {socket_path}")
-            log.error(f"Command attempted: {command.get('execute', 'unknown')}")
-            return {"error": {"desc": f"OS error: {e}"}}
 
     async def _send_qga_command_via_libvirt(self, command: dict, timeout: int = 5) -> dict:
         """
