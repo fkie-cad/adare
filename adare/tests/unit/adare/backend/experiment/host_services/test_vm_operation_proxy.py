@@ -178,3 +178,30 @@ class TestGuestFileProxyInheritance:
                 raise ValueError("test error")
         assert temp_root is not None
         assert not temp_root.exists()
+
+
+class TestGuestCommandProxySearchLogFile:
+    """search_log_file passes playbook values to the guest shell quoted."""
+
+    @staticmethod
+    async def _command_for(guest_os: str, log_path: str, pattern: str) -> str:
+        from unittest.mock import AsyncMock
+
+        vm = MagicMock()
+        vm.run_command = AsyncMock(return_value=MagicMock(returncode=1, stdout='', stderr=''))
+        await GuestCommandProxy(vm, guest_os).search_log_file(log_path, pattern, max_lines=50)
+        return vm.run_command.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_linux_values_are_shell_quoted(self):
+        import shlex
+
+        pattern = "x'; rm -rf / #$(id)"
+        cmd = await self._command_for('Ubuntu 24.04', "/var/log/it's.log", pattern)
+        assert shlex.split(cmd) == ['tail', '-n', '50', '--', "/var/log/it's.log", '|', 'grep', '-E', '--', pattern]
+
+    @pytest.mark.asyncio
+    async def test_windows_values_are_powershell_single_quoted(self):
+        cmd = await self._command_for('Windows 11', "C:\\logs\\it's.log", '$(Remove-Item C:\\x)')
+        assert "-LiteralPath 'C:\\logs\\it''s.log'" in cmd
+        assert "-Pattern '$(Remove-Item C:\\x)'" in cmd
