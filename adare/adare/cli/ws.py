@@ -28,7 +28,7 @@ async def exec_ws_action(args: SimpleNamespace):
     """Execute WebSocket actions from YAML file."""
     try:
         # Determine connection parameters based on VM instance or explicit host/port
-        host = getattr(args, 'host', 'localhost')
+        host = getattr(args, 'host', '127.0.0.1')
         vm_instance = getattr(args, 'vm_instance', None)
 
         if vm_instance:

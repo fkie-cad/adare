@@ -626,12 +626,39 @@ class TestDomainXMLBuilderQemuCommandline:
 
         assert '-netdev' in arg_values
         netdev_idx = arg_values.index('-netdev')
-        assert arg_values[netdev_idx + 1] == 'user,id=net0,hostfwd=tcp::2222-:22'
+        # rules without a host address bind to loopback, never all interfaces
+        assert arg_values[netdev_idx + 1] == 'user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22'
 
         assert '-device' in arg_values
         device_idx = arg_values.index('-device')
         # PC/i440FX: NIC pinned to the allocator's reserved network slot (0x3)
         assert arg_values[device_idx + 1] == 'virtio-net-pci,netdev=net0,addr=0x3'
+
+    @pytest.mark.parametrize(
+        ('env', 'rule_ip', 'expected'),
+        [
+            (None, '', 'tcp:127.0.0.1:2222-:22'),
+            ('0.0.0.0', '', 'tcp:0.0.0.0:2222-:22'),
+            ('10.0.0.5', '', 'tcp:10.0.0.5:2222-:22'),
+            ('10.0.0.5', '127.0.0.1', 'tcp:127.0.0.1:2222-:22'),
+        ],
+    )
+    @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
+    @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Linux')
+    def test_port_forwarding_bind_host(self, mock_platform, mock_which, monkeypatch, env, rule_ip, expected):
+        """ADARE_FORWARD_BIND sets the listen address of rules that carry none."""
+        if env is None:
+            monkeypatch.delenv('ADARE_FORWARD_BIND', raising=False)
+        else:
+            monkeypatch.setenv('ADARE_FORWARD_BIND', env)
+        config = make_linux_pc_config(
+            port_forwarding_rules={'ssh': {'protocol': 'tcp', 'host_port': 2222, 'guest_port': 22, 'host_ip': rule_ip}}
+        )
+        root = ET.fromstring(DomainXMLBuilder(config).build())
+
+        ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0'}
+        arg_values = [a.get('value') for a in root.findall('.//qemu:commandline/qemu:arg', ns)]
+        assert arg_values[arg_values.index('-netdev') + 1] == f'user,id=net0,hostfwd={expected}'
 
 
 class TestDomainXMLBuilderVirtioFS:

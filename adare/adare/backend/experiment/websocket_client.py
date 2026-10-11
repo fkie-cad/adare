@@ -19,6 +19,7 @@ from typing import Any
 
 import websockets
 
+from adare.hypervisor.port_forward import forward_connect_host
 from adarelib.websocket.protocol import (
     EventMessage,
     ToolRegistry,
@@ -44,8 +45,8 @@ class AdareVMClient:
     and receiving real-time events and results.
     """
 
-    def __init__(self, host: str = 'localhost', port: int = 18765):
-        self.server_url = f'ws://{host}:{port}'
+    def __init__(self, host: str | None = None, port: int = 18765):
+        self.server_url = f'ws://{host or forward_connect_host()}:{port}'
         self.websocket: websockets.WebSocketClientProtocol | None = None
         self.connected = False
 

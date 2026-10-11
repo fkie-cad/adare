@@ -293,7 +293,7 @@ async def test_websocket_connection(context):
         from adare.backend.experiment.websocket_client import AdareVMClient
 
         # Create WebSocket client
-        client = AdareVMClient(host='localhost', port=context.config.websocket_port)
+        client = AdareVMClient(port=context.config.websocket_port)
         context.client = client
 
         # Try to connect with reasonable timeout

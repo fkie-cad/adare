@@ -22,6 +22,7 @@ from adare.config import get_vm_credentials
 from adare.exceptions import LoggedException
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
 from adare.hypervisor.exceptions import GuestAgentTimeoutException, HypervisorException
+from adare.hypervisor.port_forward import forward_bind_host
 from adare.hypervisor.qemu.accel import resolve_accel
 from adare.hypervisor.qemu.disk_diff import DiskDiffComparator
 from adare.hypervisor.qemu.file_transfer import get_file_transfer_strategy
@@ -392,6 +393,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             protocol='tcp',
             host_port=context.config.websocket_port,
             guest_port=18765,
+            host_ip=forward_bind_host(),
             stop_event=context.user_interrupt_event,
             silent=False,
         )
