@@ -245,7 +245,19 @@ def exec_vlm_list(arguments):
     """List saved profiles, marking the active one."""
     from rich.table import Table
 
+    from adare.cli.output import emit, is_structured_output
+
     existing = userconfig.profiles()
+    if is_structured_output():
+        active = userconfig.active_name()
+        emit({'profiles': [{
+            'name': name,
+            'active': name == active,
+            'model': existing[name].get(_MODEL, _DEFAULTS[_MODEL]),
+            'base_url': existing[name].get(_BASE_URL, _DEFAULTS[_BASE_URL]),
+            'api_key': _mask(existing[name].get(_API_KEY)),  # never the raw key
+        } for name in sorted(existing)]})
+        return
     if not existing:
         print_success_message(
             title='No VLM profiles yet',
@@ -313,7 +325,17 @@ def exec_vlm_show(arguments):
     """Print the resolved VLM config with each value's source."""
     from rich.table import Table
 
+    from adare.cli.output import emit, is_structured_output
+
     active = userconfig.active_name()
+    if is_structured_output():
+        settings = []
+        for name in (_BASE_URL, _MODEL, _COORD, _API_KEY):
+            value, source = _resolved(name)
+            settings.append({'setting': name, 'value': _mask(value) if name == _API_KEY else value,
+                             'source': source})
+        emit({'active_profile': active, 'config_file': str(userconfig.path()), 'settings': settings})
+        return
     table = Table(title=f'Resolved VLM configuration (active profile: {active or "none"})',
                   title_style='bold')
     table.add_column('Setting', style='cyan', no_wrap=True)
