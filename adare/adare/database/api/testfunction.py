@@ -1,5 +1,6 @@
 # external imports
 import ast
+import copy
 
 # configure logging
 import logging
@@ -29,6 +30,21 @@ from adare.helperfunctions.hash import combine_hashes, hash_file_sha256, hash_st
 from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
 
 log = logging.getLogger(__name__)
+
+
+def testfunction_code_without_docstring(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    """Source of a testfunction for hashing, docstring excluded.
+
+    Documentation (the catalog's ``Args:`` section) must not bump the function's
+    version: only code changes do.
+    """
+    body = func_node.body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+            and isinstance(body[0].value.value, str):
+        body = body[1:] or [ast.Pass()]
+    stripped = copy.copy(func_node)
+    stripped.body = body
+    return ast.unparse(stripped)
 
 
 class TestfunctionDbApi(GlobalDatabaseApi):
@@ -249,8 +265,7 @@ class TestfunctionDbApi(GlobalDatabaseApi):
             TestFunctionFile.name == name).first() is not None
 
     def __get_testfunction_hash(self, test_class):
-        testfunction_bytes = ast.unparse(test_class.get_method('test'))
-        return hash_string_sha256(testfunction_bytes)
+        return hash_string_sha256(testfunction_code_without_docstring(test_class.get_method('test')))
 
     def __update_testfunction(self, testfunction_obj, t_func_class, sha256_testfunction, module_analyzer,
                               testfunction_file, file_version: int):

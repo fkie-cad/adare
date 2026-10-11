@@ -737,7 +737,7 @@ class ShowService:
                 return Result.fail(
                     code="TestfunctionNotFoundError",
                     message=f"Testfunction '{dotnotation}' not found",
-                    solutions=['Use `adare show testfunctions` to list available testfunctions']
+                    solutions=['Use `adare test list` to list available testfunctions']
                 )
 
             detail = TestfunctionDetail(
