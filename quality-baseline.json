@@ -43,7 +43,7 @@
   "oversized_files": {
     "adare-cv-server/adare_cv_server/feature_matching.py": 1147,
     "adare/adare/backend/experiment/variable_resolver.py": 1044,
-    "adare/adare/backend/experiment/vm_lifecycle_manager.py": 1134,
+    "adare/adare/backend/experiment/vm_lifecycle_manager.py": 1116,
     "adare/adare/backend/experiment/vm_test.py": 1407,
     "adare/adare/backend/vm/commands.py": 1006,
     "adare/adare/backend/vm/instance_manager.py": 1005,

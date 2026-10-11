@@ -1,5 +1,4 @@
 import logging
-import os
 import shutil
 import subprocess
 import threading
@@ -203,16 +202,11 @@ class VMLifecycleManager:
         elif not adarevm_target.exists() or not adarelib_target.exists():
             log.info("Project VM runtime directory incomplete, updating")
             needs_update = True
-        else:
-            # Check if source files are newer than target
-            adarevm_source_time = self._get_latest_mtime(adarevm_source)
-            adarelib_source_time = self._get_latest_mtime(adarelib_source)
-            adarevm_target_time = self._get_latest_mtime(adarevm_target)
-            adarelib_target_time = self._get_latest_mtime(adarelib_target)
-
-            if adarevm_source_time > adarevm_target_time or adarelib_source_time > adarelib_target_time:
-                log.info("Source files newer than cached runtime, updating")
-                needs_update = True
+        elif self._runtime_copy_stale(adarevm_source, adarevm_target) or self._runtime_copy_stale(
+            adarelib_source, adarelib_target
+        ):
+            log.info("Agent sources changed since the cached runtime was copied, updating")
+            needs_update = True
 
         if needs_update:
             # Create/recreate VM runtime directory
@@ -244,26 +238,14 @@ class VMLifecycleManager:
             log.warning("Falling back to editable install mode (wheels will not be available)")
             # Don't raise - let it fall back to editable install
 
-    def _get_latest_mtime(self, directory: Path) -> float:
-        """Get the latest modification time in a directory tree."""
-        if not directory.exists():
-            return 0.0
+    @staticmethod
+    def _runtime_copy_stale(source: Path, target: Path) -> bool:
+        """True if the cached copy's contents differ from the agent sources.
 
-        latest = 0.0
-        for root, dirs, files in os.walk(directory):
-            # Skip __pycache__ directories
-            dirs[:] = [d for d in dirs if d != '__pycache__']
-
-            for file in files:
-                if file.endswith('.pyc'):
-                    continue
-                file_path = Path(root) / file
-                try:
-                    mtime = file_path.stat().st_mtime
-                    latest = max(latest, mtime)
-                except (OSError, PermissionError):
-                    continue
-        return latest
+        Compared by content, not mtime: building a wheel rewrites the copy's
+        pyproject.toml, which made the copy look newer than any later source edit.
+        """
+        return agent_wheels.source_hash(source) != agent_wheels.source_hash(target)
 
     async def create_and_prepare_vm(self, context: ExperimentRunCtx):
         """Create and prepare VM for experiment with snapshots and shared folders."""
