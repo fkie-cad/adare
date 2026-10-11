@@ -16,6 +16,6 @@ def init_jinja_environment(template_folder: Path):
             loader=FileSystemLoader(template_folder.as_posix()),
             autoescape=select_autoescape()
         )
-    except FileNotFoundError or OSError as e:
+    except OSError as e:
         log.error(e)
         return None

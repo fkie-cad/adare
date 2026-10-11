@@ -152,7 +152,7 @@ async def start_session(request: SessionStartRequest):
 
 
 @app.post("/api/sessions/{session_id}/stop")
-async def stop_session(session_id: str, request: SessionStopRequest = SessionStopRequest()):
+async def stop_session(session_id: str, request: SessionStopRequest | None = None):
     """
     Stop a dev mode session.
 
@@ -164,6 +164,7 @@ async def stop_session(session_id: str, request: SessionStopRequest = SessionSto
         Success indicator
     """
     logger.info(f"Stopping session {session_id}")
+    request = request or SessionStopRequest()
 
     dto = DevSessionStopRequest(
         session_id=session_id, remove_resources=request.remove_resources

@@ -17,7 +17,9 @@ log = logging.getLogger(__name__)
 class UserSessionApi(DatabaseApi):
     """Database API for managing authenticated user sessions and their tokens."""
 
-    def __init__(self, db_path: Path = config_database.get_database_location()):
+    def __init__(self, db_path: Path | None = None):
+        if db_path is None:
+            db_path = config_database.get_database_location()
         super().__init__(db_path)
         BaseLogin.metadata.create_all(self.engine)
 

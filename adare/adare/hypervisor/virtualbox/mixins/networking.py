@@ -6,6 +6,7 @@ Implements AbstractNetworkingMixin for VirtualBox-specific networking operations
 import asyncio
 import contextlib
 import logging
+import subprocess
 from pathlib import Path
 
 from adare.hypervisor.base.mixins.networking import AbstractNetworkingMixin

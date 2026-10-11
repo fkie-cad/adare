@@ -54,7 +54,7 @@ class NetworkDrive:
             try:
                 vg_directory.mkdir()
                 log.debug(f'directory for network drive ({vg_directory}) was created successfully')
-            except OSError or FileExistsError as e:
+            except OSError as e:
                 log.error(e)
                 raise NetworkdriveCreationError from e
 
@@ -142,7 +142,7 @@ class NetworkDrive:
             f_path = (self.vg_directory/"setup_smb.sh")
             f = open(f_path.as_posix(), mode="w")
             f.write(setup_smb_template.render({'configuration': self.smb}))
-        except FileNotFoundError or OSError as e:
+        except OSError as e:
             log.error(e)
             return -1
         log.info(f'setup_smb.sh was created successfully in network drive directory ({self.vg_directory})')
@@ -151,7 +151,7 @@ class NetworkDrive:
             f_path = (self.vg_directory / "config" / "smb.conf")
             f = open(f_path.as_posix(), mode="w")
             f.write(smb_conf_template.render({'configuration': self.smb}))
-        except FileNotFoundError or OSError as e:
+        except OSError as e:
             log.error(e)
             return -1
         log.info(f'smb.conf was created successfully in network drive directory ({self.vg_directory})')
@@ -168,7 +168,7 @@ class NetworkDrive:
             f.write(setup_nfs_template.render({
                 'configuration': self.nfs
             }))
-        except FileNotFoundError or OSError or KeyError as e:
+        except (OSError, KeyError) as e:
             log.error(e)
             return -1
         log.info(f'setup_nfs.sh was created successfully in network drive directory ({self.vg_directory})')

@@ -244,7 +244,7 @@ class ExperimentDirectory(Directory):
     def remove(self) -> bool:
         try:
             shutil.rmtree(self.path)
-        except FileNotFoundError or OSError as e:
+        except OSError as e:
             raise ExperimentRemovalError(
                 log,
                 message=f'Failed to remove experiment directory {self.path}: {e.strerror}'

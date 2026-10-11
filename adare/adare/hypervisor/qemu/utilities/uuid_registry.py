@@ -6,7 +6,10 @@ Provides a registry pattern for VM discovery by UUID and name.
 import glob
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from adare.hypervisor.qemu.vm import QEMUVM
 
 
 class QEMUVMRegistry:

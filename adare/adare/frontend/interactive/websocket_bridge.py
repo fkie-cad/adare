@@ -87,7 +87,7 @@ class WebSocketBridge:
     def __init__(self, playbook_controller: PlaybookController):
         self.playbook_controller = playbook_controller
         self.connected_clients: set[websockets.WebSocketServerProtocol] = set()
-        self.command_history: List[WebSocketCommand] = []
+        self.command_history: list[WebSocketCommand] = []
 
     async def handle_client(self, websocket, path):
         """Handle new WebSocket client connection."""

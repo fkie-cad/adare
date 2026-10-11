@@ -222,8 +222,6 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
         # Direct python file
         python_file = testfunction_path
         requirements_file = testfunction_path.parent / 'requirements.txt'
-        # Use parent directory as a "fake" project path for database purposes
-        project_path = testfunction_path.parent
         testfunction_name = python_file.stem
     elif testfunction_path.is_dir():
         # Directory containing testfunction - look for .py file inside
@@ -241,7 +239,6 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
             python_file = python_files[0]
 
         requirements_file = testfunction_path / 'requirements.txt'
-        project_path = testfunction_path
         testfunction_name = testfunction_path.name
     else:
         raise TestfunctionMissingFileError(
