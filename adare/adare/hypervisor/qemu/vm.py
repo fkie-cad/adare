@@ -1393,12 +1393,12 @@ class QEMUVM(
                 log.debug(f"Sending QMP command: {command.get('execute', 'unknown')}")
 
                 log_file = get_experiment_log_file()
-                with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
-                    result = libvirt_qemu.qemuMonitorCommand(
-                        self._libvirt_domain,
-                        cmd_json,
-                        0,  # flags (0 = default QMP mode)
-                    )
+
+                def _monitor_command() -> str:  # in a worker thread: off the loop, redirect lock never spans an await
+                    with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                        return str(libvirt_qemu.qemuMonitorCommand(self._libvirt_domain, cmd_json, 0))  # 0 = QMP mode
+
+                result = await asyncio.to_thread(_monitor_command)
 
                 response = json.loads(result)
 

@@ -24,7 +24,7 @@ def _api():
 
 
 @router.get("/db-status")
-async def get_db_status():
+def get_db_status():
     """Check database system status."""
     result = _api().manage.get_db_status()
     return result_to_response(result)

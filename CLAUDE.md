@@ -197,4 +197,5 @@ tests:
 - Keep files <1000 lines
 - Update docs when adding features
 - Review flow & fix errors after changes
+- Web API handlers never call a sync service on the event loop: plain `def` handlers, or `await asyncio.to_thread(...)` in async ones (services run their own `asyncio.run`; enforced by `tests/unit/adare/webapi/test_async_boundary.py`)
 - never catch generic exception (with except Exception) - use more specific Excpetion that are expected instead

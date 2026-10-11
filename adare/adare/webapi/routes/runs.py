@@ -55,7 +55,7 @@ def _resolve_run_dir(ulid: str) -> Path | None:
 
 
 @router.get("")
-async def list_runs(
+def list_runs(
     project: str | None = Query(None),
     environment: str | None = Query(None),
     experiment: str | None = Query(None),
@@ -73,14 +73,14 @@ async def list_runs(
 
 
 @router.get("/{ulid}")
-async def get_run(ulid: str):
+def get_run(ulid: str):
     """Get run details by ULID."""
     result = _api().show.get_run(ulid=ulid)
     return result_to_response(result)
 
 
 @router.delete("/{ulid}")
-async def remove_run(ulid: str, project_path: str | None = Query(None)):
+def remove_run(ulid: str, project_path: str | None = Query(None)):
     """Remove a run by ULID."""
     from pathlib import Path
 
@@ -95,7 +95,7 @@ async def remove_run(ulid: str, project_path: str | None = Query(None)):
 
 
 @router.get("/{ulid}/artifacts")
-async def list_run_artifacts(ulid: str):
+def list_run_artifacts(ulid: str):
     """List a run's on-disk artifacts (screenshots, video, report, logs)."""
     run_dir = _resolve_run_dir(ulid)
     if run_dir is None:
@@ -117,7 +117,7 @@ async def list_run_artifacts(ulid: str):
 
 
 @router.get("/{ulid}/artifacts/{artifact_path:path}")
-async def get_run_artifact(ulid: str, artifact_path: str):
+def get_run_artifact(ulid: str, artifact_path: str):
     """Stream a single run artifact file."""
     run_dir = _resolve_run_dir(ulid)
     if run_dir is None:

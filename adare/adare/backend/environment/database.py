@@ -1,5 +1,6 @@
 # external imports
 # configure logging
+import asyncio
 import logging
 from pathlib import Path
 
@@ -19,21 +20,6 @@ from adare.database.models.global_models import Environment
 from adare.types.environment import EnvironmentMetadata
 
 log = logging.getLogger(__name__)
-
-
-def _run_blocking(coro):
-    """Run an async coroutine to completion from sync code, whether or not an
-    event loop is already running (CLI vs. async web route)."""
-    import asyncio
-
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)  # no loop (CLI): run directly
-    import concurrent.futures  # loop present (web route): isolate in a thread
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(asyncio.run, coro).result()
 
 
 def _cleanup_vm_file_if_unused(vm_file_path: Path, project_path: Path, db):
@@ -493,7 +479,8 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
                 # replaces the old DB-only call and no-ops cleanly with zero instances.
                 from adare.backend.vm import commands as vm_commands
 
-                _run_blocking(vm_commands.delete_vm(vm_id, force=force))
+                # Sync entry point: the CLI, and the web API runs it in a worker thread.
+                asyncio.run(vm_commands.delete_vm(vm_id, force=force))
                 log.info(f'Deleted VM (hypervisor + database record): {vm_id}')
 
                 # Delete VM file from disk - ONLY if it's in managed storage
