@@ -1,6 +1,7 @@
 """Mixin for project and environment related queries."""
 
 import logging
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
@@ -15,10 +16,16 @@ from adare.exceptions import (
     EnvironmentNotFoundError,
 )
 
+if TYPE_CHECKING:
+    from adare.database.api.frontend._base import DataRetrievalBase as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class ProjectQueryMixin:
+class ProjectQueryMixin(_Host):
     """Mixin providing project and environment query methods."""
 
     def _enrich_project_data(self, data: pd.DataFrame) -> pd.DataFrame:

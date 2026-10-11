@@ -8,11 +8,11 @@ from adare.database.api.frontend.test_queries import TestQueryMixin
 
 
 class DataRetrievalApi(
-    DataRetrievalBase,
     ProjectQueryMixin,
     ExperimentQueryMixin,
     RunQueryMixin,
     TestQueryMixin,
+    DataRetrievalBase,  # last: the mixins subclass it for type checking
 ):
     """
     Unified API for retrieving data from both global and project databases.
