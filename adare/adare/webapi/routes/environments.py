@@ -1,5 +1,6 @@
 """Environment management endpoints."""
 
+import asyncio
 import logging
 import re
 from pathlib import Path
@@ -125,14 +126,14 @@ def _validate_url_format(url: str, sha256: str | None, kind: str, vm_format: str
 
 
 @router.get("")
-async def list_environments():
+def list_environments():
     """List all environments."""
     result = _api().show.list_environments()
     return result_to_response(result)
 
 
 @router.get("/os-profiles")
-async def list_os_profiles():
+def list_os_profiles():
     """List available OS profiles for building recipe environments.
 
     Declared before ``/{name}`` so the literal path isn't captured as an
@@ -143,14 +144,14 @@ async def list_os_profiles():
 
 
 @router.get("/{name}")
-async def get_environment(name: str):
+def get_environment(name: str):
     """Get environment details by name."""
     result = _api().show.get_environment(name)
     return result_to_response(result)
 
 
 @router.post("")
-async def create_environment(body: EnvironmentCreateBody):
+def create_environment(body: EnvironmentCreateBody):
     """Create a new environment descriptor from a published URL (baked or recipe)."""
     from adare.core.dto.environment import EnvironmentCreateRequest
 
@@ -267,7 +268,7 @@ async def create_environment(body: EnvironmentCreateBody):
 
 
 @router.post("/check-url")
-async def check_environment_url(body: CheckUrlBody):
+def check_environment_url(body: CheckUrlBody):
     """Validate a published VM/ISO URL: format (contract) + reachability (HEAD).
 
     Returns ``{valid, reachable, status, reason}``. ``valid`` reflects the
@@ -312,7 +313,7 @@ async def check_environment_url(body: CheckUrlBody):
 
 
 @router.delete("/{name}")
-async def delete_environment(name: str, force: bool = False):
+def delete_environment(name: str, force: bool = False):
     """Delete an environment by name or ULID."""
     result = _api().environment.delete(name, force=force)
     return result_to_response(result)
@@ -327,7 +328,7 @@ async def verify_environment(name: str, body: EnvironmentVerifyBody):
     """
     project_path = Path(body.project_path)
 
-    setup_result = _api().experiment.ensure_verify_setup(project_path, name)
+    setup_result = await asyncio.to_thread(_api().experiment.ensure_verify_setup, project_path, name)
     if not setup_result.success:
         return result_to_response(setup_result)
 
