@@ -114,14 +114,12 @@ class CatalogEntry:
         )
 
     def example(self) -> dict:
-        """A ready-to-paste ``tests:`` list item (required params get a placeholder)."""
-        parameter = {}
-        for p in self.params:
-            # An empty-string default (``dst: str = ''``) is required in practice.
-            if p.required or p.default == '':
-                parameter[p.name] = f'<{p.type or "value"}>'
-            elif p.default not in (None, [], {}):
-                parameter[p.name] = p.default
+        """A ready-to-paste ``tests:`` list item: placeholders for what must be filled in.
+
+        Optional parameters are left out (their defaults apply); an empty-string
+        default (``dst: str = ''``) is required in practice, so it gets a placeholder.
+        """
+        parameter = {p.name: f'<{p.type or "value"}>' for p in self.params if p.required or p.default == ''}
         item = {'name': f'check_{self.name.split(".")[-1]}', 'function': self.dotnotation}
         if parameter:
             item['parameter'] = parameter
