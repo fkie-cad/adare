@@ -18,6 +18,8 @@ import asyncio
 import logging
 from typing import Any
 
+from adare.config.server import MCP_CONTROL_PORT
+
 log = logging.getLogger(__name__)
 
 DEFAULT_SERVER_NAME = 'adare-control'
@@ -63,7 +65,7 @@ def serve(
     *,
     transport: str = 'stdio',
     host: str = '127.0.0.1',
-    port: int = 13111,
+    port: int = MCP_CONTROL_PORT,
     path: str = '/mcp',
     server_name: str = DEFAULT_SERVER_NAME,
 ) -> None:

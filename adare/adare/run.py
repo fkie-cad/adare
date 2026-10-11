@@ -726,7 +726,7 @@ def mcp():
     help='MCP transport: stdio (client launches this process) or http',
 )
 @click.option('--host', default='127.0.0.1', show_default=True, help='[http] Bind host')
-@click.option('--port', type=int, default=13111, show_default=True, help='[http] Bind port')
+@click.option('--port', type=int, default=None, help='[http] Bind port (default: ADARE_MCP_PORT or 13112)')
 def mcp_serve(transport, host, port):
     """Serve the whole ADARE lifecycle as MCP tools.
 
@@ -737,7 +737,7 @@ def mcp_serve(transport, host, port):
 
     Examples:
         adare mcp serve                       # stdio (for a client to launch)
-        adare mcp serve --transport http --port 13111
+        adare mcp serve --transport http --port 13112
 
     Client setup (Claude Code / OpenCode) and the playbook fix loop:
         docs/mcp-clients.md   ·   skill: .claude/skills/adare-playbook/SKILL.md
