@@ -339,7 +339,7 @@ def build_tools(api: Any | None = None) -> list[ChatTool]:
     def _experiment_run(experiment, environment, project=None):
         import asyncio
 
-        return asyncio.run(api.experiment.run(_resolve_project(project), experiment, environment))
+        return asyncio.run(api.experiment.run_to_completion(_resolve_project(project), experiment, environment))
 
     add(
         'experiment_run',
