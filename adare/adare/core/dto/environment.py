@@ -177,7 +177,7 @@ class EnvironmentListItem:
         }
 
     @classmethod
-    def from_model(cls, env) -> "EnvironmentListItem":
+    def from_model(cls, env: Any) -> "EnvironmentListItem":  # legacy Column-typed model
         """Create from SQLAlchemy Environment model."""
         vm_name = None
         if hasattr(env, 'vm') and env.vm:
