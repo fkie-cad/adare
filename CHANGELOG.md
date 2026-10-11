@@ -82,6 +82,17 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   the real WebSocket handshake instead of sleeping 3 s (6 s in `vm test`), dev
   snapshot create/restore run off the event loop, and host-mode screenshots skip
   a 0.1 s settle and encode PNGs faster (level 1: same pixels, ~1.5x larger files).
+- Downloads stream 1 MiB chunks into `<file>.part` and are renamed into place
+  only when complete, hashing as they go; the sha256 check after an ISO/VM
+  download no longer re-reads the file.
+- Installer ISO / downloaded VM digests are cached in a `<file>.sha256` sidecar
+  (size, mtime, inode); `vm create` and `env load` re-hash only a changed file.
+- Faster startup: pandas, requests/aiohttp, trogon and the OS-profile catalog
+  load on first use (`import adare.run` ~98 -> ~44 ms, DB commands ~-160 ms);
+  `load_catalog()` is cached until a testfunction source changes.
+- cv-server: `find_icon` runs off the event loop and decodes its inputs once
+  per request; OCR calls share one executor (they queue instead of running
+  concurrently on the shared PaddleOCR instance).
 
 ### Fixed
 - Every dev-session web route failed: async handlers called services that run
@@ -111,6 +122,8 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - The guest agent no longer logs command environment values.
 - Bumped 28 locked dependencies with published advisories (aiohttp, starlette,
   urllib3, cryptography, pyjwt, python-multipart, mcp, fastmcp, …).
+- `linux.log_entry_exists` (guest and host-mode QGA paths) passed `log_file` and
+  `pattern` to the shell unquoted, allowing command injection from a playbook.
 
 ### Removed
 - Broken console scripts `adareexp` and `mcp_gui` (their modules no longer exist).

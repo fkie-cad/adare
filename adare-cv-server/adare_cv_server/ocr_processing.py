@@ -18,6 +18,11 @@ from .exceptions import OCRProcessingError
 
 log = logging.getLogger(__name__)
 
+# One executor for the process instead of a fresh ThreadPoolExecutor (thread
+# start + join) per OCR call. It also bounds how many OCR predictions run at once
+# on the shared PaddleOCR instance to MAX_WORKERS.
+_OCR_EXECUTOR = ThreadPoolExecutor(max_workers=OCRConstants.MAX_WORKERS, thread_name_prefix='ocr')
+
 
 class OCRProcessor:
     """Handles OCR processing operations using PaddleOCR."""
@@ -26,9 +31,8 @@ class OCRProcessor:
     # involve network I/O) and was previously rebuilt on every single call, which
     # is why a single find_text call could intermittently take 10s of minutes
     # instead of its usual sub-second cost. Cache one instance for the process
-    # lifetime instead. Guarded by a lock since MAX_WORKERS callers can overlap
-    # across concurrent experiment runs even though each run's own executor is
-    # single-threaded.
+    # lifetime instead. Guarded by a lock since the first callers can race to
+    # build it (OCR runs on the module-level executor's MAX_WORKERS threads).
     _ocr_instance = None
     _ocr_instance_lock = threading.Lock()
 
@@ -143,12 +147,10 @@ class OCRProcessor:
     @staticmethod
     async def process_screenshot(screenshot_bytes: bytes) -> list[tuple[list[list[float]], tuple[str, float]]]:
         """Process screenshot with OCR asynchronously."""
-        executor = ThreadPoolExecutor(max_workers=OCRConstants.MAX_WORKERS)
-
         try:
             log.info("Running PaddleOCR...")
-            result = await asyncio.get_event_loop().run_in_executor(
-                executor, OCRProcessor._run_paddle_ocr, screenshot_bytes
+            result = await asyncio.get_running_loop().run_in_executor(
+                _OCR_EXECUTOR, OCRProcessor._run_paddle_ocr, screenshot_bytes
             )
             log.info("PaddleOCR completed successfully")
             return result
@@ -157,8 +159,6 @@ class OCRProcessor:
             raise
         except Exception as e:
             raise OCRProcessingError(f"PaddleOCR failed: {e}") from e
-        finally:
-            executor.shutdown(wait=True)
 
     @staticmethod
     def calculate_text_center(box: list[list[float]], offset_x: int = 0, offset_y: int = 0) -> tuple[int, int]:

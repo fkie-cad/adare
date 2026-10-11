@@ -1,5 +1,6 @@
 # external imports
 import platform
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -195,8 +196,8 @@ def log_entry_exists(ctx: TestContext, log_file: str, pattern: str, max_lines: i
     """Pass when one of the last ``max_lines`` lines of ``log_file`` matches ``pattern`` (``grep -E``).
 
     Use for: checking an action left a trace in a text log (syslog, auth.log, app logs). Linux
-    only; meant for plain-text logs (not the binary journal). Runs ``tail -n N "log_file" | grep -E "pattern"``
-    through bash, so ``"``, ``$`` and backticks in either value are interpreted by the shell.
+    only; meant for plain-text logs (not the binary journal). Runs ``tail -n N -- log_file | grep -E -- pattern``
+    with both values shell-quoted, so they are taken literally (no shell expansion or command injection).
 
     Args:
         log_file: Guest path of a plain-text log; a missing file fails. No glob support.
@@ -222,9 +223,11 @@ def log_entry_exists(ctx: TestContext, log_file: str, pattern: str, max_lines: i
         return TestResult.failed([f'log file {log_file} does not exist'])
 
     try:
-        # Use tail to get last N lines and grep for pattern
+        # Use tail to get last N lines and grep for pattern. Both values are
+        # user input: quote them so the shell can't interpret them.
+        command = f'tail -n {int(max_lines)} -- {shlex.quote(log_file)} | grep -E -- {shlex.quote(pattern)}'
         result = subprocess.run(
-            ['bash', '-c', f'tail -n {max_lines} "{log_file}" | grep -E "{pattern}"'],
+            ['bash', '-c', command],
             capture_output=True,
             text=True,
             timeout=30,
@@ -237,5 +240,5 @@ def log_entry_exists(ctx: TestContext, log_file: str, pattern: str, max_lines: i
 
     except subprocess.TimeoutExpired:
         return TestResult.execution_error(None, f"Timeout searching log file {log_file}")
-    except (subprocess.SubprocessError, OSError) as e:
+    except (subprocess.SubprocessError, OSError, ValueError) as e:
         return TestResult.execution_error(e, f"Failed to search log file {log_file}")
