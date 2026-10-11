@@ -444,7 +444,7 @@ class SnapshotMixin(AbstractSnapshotMixin, _Host):
     def _virsh_agent_return(self, qga_cmd: dict) -> dict:
         """Send *qga_cmd* via ``virsh qemu-agent-command``; its ``return`` object, or {} if none."""
         cmd = ['virsh', 'qemu-agent-command', self.vm_name, json.dumps(qga_cmd)]
-        result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+        result = subprocess.run(cmd, check=False, capture_output=True, text=True, errors='replace')
         try:
             ret = json.loads(result.stdout).get('return') if result.returncode == 0 else None
         except (json.JSONDecodeError, AttributeError):
