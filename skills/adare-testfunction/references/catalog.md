@@ -474,10 +474,10 @@ executes SQL query against SQLite database and validates result
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  |  |
-| **query** | `str` |  |  |
-| expected_rows | `int` | `None` |  |
-| expected_result | `list` | `None` |  |
+| **dst** | `str` |  | Guest path to the database; a glob must match exactly one file (otherwise an error). A missing file fails the test. |
+| **query** | `str` |  | SQL to execute, e.g. ``SELECT url FROM urls WHERE url LIKE '%example%'``. A SQL error fails the test. |
+| expected_rows | `int` | `None` | Exact number of rows the query must return; ``None`` skips the check. Use ``0`` to assert a row is gone. |
+| expected_result | `list` | `None` | Exact expected rows as a list of ``{column: value}`` mappings, in query order; ``None`` skips the check. Placeholders compare the stringified result. |
 
 ```yaml
 tests:

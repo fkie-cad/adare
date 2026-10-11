@@ -72,6 +72,31 @@ def _snapshot(db_path: str, workdir: str) -> tuple[str, list[str], bool]:
     category=HostModeCategory.FILE_CONTENT,
 )
 def query_result(ctx: TestContext, dst: str, query: str, expected_rows: int = None, expected_result: list = None):
+    """Pass when ``query`` runs on the SQLite database and its result matches the expectations.
+
+    Use for: browser history, app settings or chat databases (e.g. a URL row was written or
+    deleted). The original file is never opened: ``dst`` and any ``-wal``/``-journal``
+    sidecar are copied to a temp dir and the copy is queried, so uncheckpointed changes are
+    seen and the evidence is not modified. Details report ``queried snapshot: <file> sha256=...``
+    per copied file. With neither expectation set, it passes whenever the query runs.
+
+    Args:
+        dst: Guest path to the database; a glob must match exactly one file (otherwise an
+            error). A missing file fails the test.
+        query: SQL to execute, e.g. ``SELECT url FROM urls WHERE url LIKE '%example%'``. A
+            SQL error fails the test.
+        expected_rows: Exact number of rows the query must return; ``None`` skips the check.
+            Use ``0`` to assert a row is gone.
+        expected_result: Exact expected rows as a list of ``{column: value}`` mappings, in
+            query order; ``None`` skips the check. Placeholders compare the stringified result.
+
+    Example:
+        function: sqlite.query_result
+        parameter:
+          dst: /home/user/.mozilla/firefox/*.default*/places.sqlite
+          query: SELECT url FROM moz_places WHERE url LIKE '%example.org%'
+          expected_rows: 0
+    """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
         return TestResult.error([f'database file {dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
