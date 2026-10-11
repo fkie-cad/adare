@@ -16,13 +16,7 @@ PACKAGE_DIR = Path(__file__).parent.parent.parent / "adare"
 
 # Modules that predate this check and import modules that no longer exist.
 # Delete the module (or fix it) and drop the entry; stale entries fail below.
-KNOWN_BROKEN = {
-    "adare.helperfunctions.subprocess.run_command",
-    "adare.networkdrive",
-    "adare.networkdrive.exceptions",
-    "adare.networkdrive.networkdrive",
-    "adare.webappaccess.request",
-}
+KNOWN_BROKEN: set[str] = set()
 
 
 def _module_names() -> list[str]:
