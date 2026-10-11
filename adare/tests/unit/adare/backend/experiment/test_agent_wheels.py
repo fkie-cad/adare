@@ -175,3 +175,31 @@ async def test_should_skip_requires_both_wheels(tmp_path):
     vm = _FakeVM({'adarelib': LIB, 'adarevm': VM})
     assert await agent_installer.should_skip_installation(tmp_path, vm, False, 'linux', threading.Event()) is False
     assert vm.commands == []
+
+
+class TestRuntimeCopyStaleness:
+    """The project's vm_runtime copy is refreshed by content, not by mtime."""
+
+    def test_copy_with_newer_mtime_but_old_content_is_stale(self, tmp_path):
+        import os
+
+        from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
+
+        source = _package(tmp_path / 'src', 'adarevm', version='0.2.0')
+        target = _package(tmp_path / 'copy', 'adarevm', version='0.1.1')
+        # A wheel build rewrites the copy's pyproject, leaving it newer than every source file.
+        later = (source / 'pyproject.toml').stat().st_mtime + 3600
+        os.utime(target / 'pyproject.toml', (later, later))
+
+        assert VMLifecycleManager._runtime_copy_stale(source, target)
+
+    def test_identical_copy_ignoring_build_output_is_fresh(self, tmp_path):
+        from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
+
+        source = _package(tmp_path / 'src', 'adarevm')
+        target = tmp_path / 'copy' / 'adarevm'
+        shutil.copytree(source, target)
+        (target / '__pycache__').mkdir()
+        (target / '__pycache__' / 'x.pyc').write_bytes(b'\0')
+
+        assert not VMLifecycleManager._runtime_copy_stale(source, target)
