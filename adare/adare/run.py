@@ -6,6 +6,13 @@ from types import SimpleNamespace
 import click
 from trogon import tui
 
+from adare.cli.errors import report_exception
+from adare.cli.output import FORMAT_CHOICES, FORMAT_ENV_VAR, output_options
+from adare.cli.output import get_formatter_from_context as _get_formatter_from_context
+from adare.config.configdirectory import ensure_directories
+from adare.exceptions import LoggedException
+from adare.setup_logging import setup_logging
+
 # Upper bound for one-line command summaries in group listings (see format_commands).
 _SHORT_HELP_LIMIT = 200
 
@@ -54,14 +61,6 @@ class AliasedGroup(click.Group):
         rows = [(name, cmd.get_short_help_str(limit=_SHORT_HELP_LIMIT) + suffix) for name, cmd, suffix in entries]
         with formatter.section("Commands"):
             formatter.write_dl(rows)
-
-
-# Internal imports - NOW LAZY LOADED inside functions
-from adare.cli.errors import report_exception
-from adare.cli.output import FORMAT_CHOICES, FORMAT_ENV_VAR, output_options
-from adare.cli.output import get_formatter_from_context as _get_formatter_from_context
-from adare.exceptions import LoggedException
-from adare.setup_logging import setup_logging
 
 
 def get_formatter_from_context():
@@ -138,6 +137,7 @@ def cli(ctx, logfile, verbose, very_verbose, log_level, output_format, output_fi
     ctx.obj.output_format = output_format.lower() if output_format else None
     ctx.obj.output_file = output_file
     ctx.obj.command_output_format = None  # set by a subcommand's --json/--format
+    ensure_directories()
     setup_logging(ctx.obj, sys.argv)
 
 
