@@ -1,7 +1,7 @@
 """Feature matching algorithms for icon detection."""
 
 import logging
-from typing import Any
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -414,10 +414,10 @@ class CannyEdgeMatcher:
     making it ideal for UI icons that may appear in different color schemes.
     """
 
-    _debug_output_dir: Any | None = None  # Class variable for debug output directory
+    _debug_output_dir: str | Path | None = None  # Class variable for debug output directory
 
     @classmethod
-    def set_debug_output_dir(cls, output_dir: Any) -> None:
+    def set_debug_output_dir(cls, output_dir: str | Path) -> None:
         """Set directory for saving debug images."""
         cls._debug_output_dir = output_dir
 
@@ -737,8 +737,6 @@ class CannyEdgeMatcher:
             return
 
         try:
-            from pathlib import Path
-
             from .constants import DebugConstants
 
             # Ensure output directory exists
