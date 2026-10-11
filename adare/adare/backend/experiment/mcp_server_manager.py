@@ -209,7 +209,7 @@ class MCPServerManager:
             log_file_handle = None
             if self.log_file:
                 self.log_file.parent.mkdir(parents=True, exist_ok=True)
-                log_file_handle = open(self.log_file, 'w')
+                log_file_handle = open(self.log_file, 'w')  # noqa: SIM115 - handed to the child process as stdout
                 log_file_handle.write(f"=== MCP GUI Server Log Started at {datetime.now()} ===\n")
                 log_file_handle.flush()
 

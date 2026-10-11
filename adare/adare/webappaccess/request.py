@@ -72,8 +72,8 @@ async def send_experiment_request(request_ulid: str):
         experiment = request.experiment
         action_file = experiment.action_file
 
-        # get file handles
-        action_file_handle = open(action_file, 'rb')
+        with open(action_file, 'rb') as action_file_handle:
+            action_file_bytes = action_file_handle.read()
 
         data = {
             'title': request.title,
@@ -143,7 +143,7 @@ async def send_experiment_request(request_ulid: str):
         with aiohttp.MultipartWriter("form-data") as mpwriter:
             # add action file (testset integrated into playbook)
             action_file_mp = mpwriter.append(
-                action_file_handle.read(),
+                action_file_bytes,
             )
             action_file_mp.set_content_disposition('form-data', name='action_file', filename='action_file')
             # add experiment data as json
@@ -174,9 +174,6 @@ async def send_experiment_request(request_ulid: str):
             error_msg = f"server ({config_server.WEBSERVER_URL}) is not reachable (connection error)"
         finally:
             await aiohttp_session.close()
-
-        # close file handles
-        action_file_handle.close()
 
         if error_msg:
             return False, error_msg

@@ -3,7 +3,6 @@ import logging
 import re
 import subprocess
 
-
 log = logging.getLogger(__name__)
 
 

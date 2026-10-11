@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 # configure logging
 import logging
 
-
 log = logging.getLogger(__name__)
 
 

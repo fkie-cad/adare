@@ -487,7 +487,7 @@ class SystemToolsMixin:
             # Append tools paths to PATH
             if self.tools_paths:
                 # Find PATH key (case-insensitive)
-                path_key = next((k for k in cmd_env.keys() if k.lower() == 'path'), 'PATH')
+                path_key = next((k for k in cmd_env if k.lower() == 'path'), 'PATH')
                 current_path = cmd_env.get(path_key, '')
 
                 # Append tool paths using os.pathsep

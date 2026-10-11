@@ -202,8 +202,10 @@ def _make_test_class(
         '__annotations__': {
             'name': str,
             'parameter': param_cls,
-            'description': Optional[str],
-            'variable_metadata': Optional[dict],
+            # Runtime annotations consumed by attrs/cattrs structuring on the guest;
+            # kept as typing.Optional until `X | None` is verified there.
+            'description': Optional[str],  # noqa: UP045
+            'variable_metadata': Optional[dict],  # noqa: UP045
         },
         'description': '',
         'variable_metadata': None,

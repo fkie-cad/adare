@@ -204,7 +204,7 @@ class TestToolsMixin:
                     return TestResult.error(hint_lines)
                 available_functions = []
                 for coll_name, coll_funcs in supported_tests.items():
-                    for func_name in coll_funcs.keys():
+                    for func_name in coll_funcs:
                         available_functions.append(f"{coll_name}.{func_name}")
 
                 return TestResult.error(
