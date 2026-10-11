@@ -4,11 +4,11 @@ import time
 from types import SimpleNamespace
 
 import click
-from trogon import tui
 
 from adare.cli.errors import report_exception
 from adare.cli.output import FORMAT_CHOICES, FORMAT_ENV_VAR, output_options
 from adare.cli.output import get_formatter_from_context as _get_formatter_from_context
+from adare.cli.tui import tui
 from adare.config.configdirectory import ensure_directories
 from adare.exceptions import LoggedException
 from adare.setup_logging import setup_logging
