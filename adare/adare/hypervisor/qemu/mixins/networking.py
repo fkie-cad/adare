@@ -24,10 +24,17 @@ shared folders.
 import logging
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adare.hypervisor.base.mixins.networking import AbstractNetworkingMixin
 from adare.hypervisor.exceptions import UnsupportedFeatureException
 from adare.hypervisor.qemu.models import PortForwardingRule, SharedFolderConfig
+
+if TYPE_CHECKING:
+    from adare.hypervisor.qemu.mixins.host import QEMUVMHost as _Host
+else:
+    _Host = object
+
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +45,7 @@ def _use_shared_folder_mode() -> bool:
     return libguestfs_env not in ('true', '1', 'yes')
 
 
-class NetworkingMixin(AbstractNetworkingMixin):
+class NetworkingMixin(AbstractNetworkingMixin, _Host):
     """Mixin class providing networking operations for QEMU VMs."""
 
     # ==================== Port Forwarding ====================
@@ -236,7 +243,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         """
         if not _use_shared_folder_mode():
             raise UnsupportedFeatureException(
-                "Shared folders require virtio-fs mode. Unset QEMU_LIBGUESTFS environment variable to enable virtio-fs."
+                'qemu', 'shared folders without virtio-fs (unset QEMU_LIBGUESTFS to enable virtio-fs)'
             )
 
         if not silent:

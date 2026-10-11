@@ -17,6 +17,7 @@ import os
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 try:
     import libvirt
@@ -26,10 +27,16 @@ except ImportError:
 from adare.hypervisor.base.mixins.snapshots import AbstractSnapshotMixin
 from adare.hypervisor.exceptions import HypervisorException
 
+if TYPE_CHECKING:
+    from adare.hypervisor.qemu.mixins.host import QEMUVMHost as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class SnapshotMixin(AbstractSnapshotMixin):
+class SnapshotMixin(AbstractSnapshotMixin, _Host):
     """Mixin class providing external snapshot operations for QEMU VMs using virsh."""
 
     def _use_qmp_internal_snapshot(self) -> bool:
