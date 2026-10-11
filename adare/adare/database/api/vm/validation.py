@@ -6,6 +6,7 @@ Provides validation, hashing, and file management methods for VMs.
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adare.config.configdirectory import VMS_DIR
 from adare.helperfunctions.file.hash import file_sha256_with_progress
@@ -13,10 +14,16 @@ from adare.validators.vm_validators import VMValidatorFactory
 
 from .exceptions import VMLoadError, VMValidationError
 
+if TYPE_CHECKING:
+    from adare.database.api.base import GlobalDatabaseApi as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class VmValidationMixin:
+class VmValidationMixin(_Host):
     """Mixin providing VM file validation and file operation methods."""
 
     def validate_vm_file(
