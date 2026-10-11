@@ -275,13 +275,10 @@ class CommandExecutionMixin(AbstractCommandMixin, _Host):
                     f"else {{ [Console]::Error.WriteLine(\"Scheduled task failed: status=$status result=$rc\"); exit 1 }}; "
                     f"}} "
                 )
-                log.debug(f"CLAUDE DEBUG: Full Windows guest command (Scheduled Task): {command}")
             if background and not run_as_user:
                 import shlex
 
                 command_components = shlex.split(command, posix=False)
-                log.info(f"XXX: {command}")
-                log.info(f"XXX: {command_components}")
                 command = ["Start-Process"]
                 if binary_is_filepath:
                     binary_path = command_components[0]
@@ -323,7 +320,6 @@ class CommandExecutionMixin(AbstractCommandMixin, _Host):
                     command = f'$env:Path += ";{paths}"; & {command}'
 
             command_base64 = base64.b64encode(command.encode('utf-16le')).decode('utf-8')
-            log.info(f"CLAUDE DEBUG: Full Windows guest command: {command}")
             return ["powershell.exe", "-EncodedCommand", command_base64]
         if redirect_stderr:
             stderr_redirect = f" 2>>{redirect_stderr}"
@@ -868,11 +864,6 @@ class CommandExecutionMixin(AbstractCommandMixin, _Host):
                 qga_args["env"] = env_vars
 
             qga_cmd = {"execute": "guest-exec", "arguments": qga_args}
-
-            # CLAUDE DEBUG: Log the EXACT JSON payload being sent to libvirt to verify 'env' is missing
-            import json
-
-            log.debug(f"CLAUDE DEBUG: QGA JSON payload: {json.dumps(qga_cmd)}")
 
             # Send command via libvirt API (not direct socket access)
             qga_response = await self._send_qga_command_via_libvirt(qga_cmd)
