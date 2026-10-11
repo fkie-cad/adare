@@ -323,11 +323,17 @@ def close_matches(entries: list[CatalogEntry], dotnotation: str, n: int = 3) -> 
 
 
 def find(entries: list[CatalogEntry], dotnotation: str) -> CatalogEntry | None:
-    """Exact lookup; also accepts the legacy 3-part ``project.file.function`` form."""
+    """Resolve like the run-time loader does (``ExperimentDbApi`` test creation).
+
+    A bare name means ``standard.<name>``; the legacy 3-part
+    ``project.file.function`` form ignores the project (testfunctions are global).
+    """
     by_name = {e.dotnotation: e for e in entries}
     if dotnotation in by_name:
         return by_name[dotnotation]
     parts = dotnotation.split('.')
+    if len(parts) == 1:
+        return by_name.get(f'standard.{dotnotation}')
     return by_name.get('.'.join(parts[-2:])) if len(parts) == 3 else None
 
 

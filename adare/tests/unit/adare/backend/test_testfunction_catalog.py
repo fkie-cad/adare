@@ -130,3 +130,12 @@ def test_bundled_catalog_is_complete():
     assert {'standard', 'visual', 'windows', 'linux'} <= collections
     assert find(bundled, 'visual.exists').installed  # host-native: always available, never synced
     assert len(bundled) >= 40
+
+
+def test_find_bare_name_means_standard_like_runtime(tmp_path):
+    root = tmp_path / 'standard'
+    root.mkdir()
+    (root / 'standard.py').write_text(
+        "@testfunction(name='file_exists', description='tests if file exists')\ndef file_exists(ctx, dst: str):\n    pass\n")
+    entries = load_catalog([(tmp_path, True)])
+    assert find(entries, 'file_exists').dotnotation == 'standard.file_exists'

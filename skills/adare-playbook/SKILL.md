@@ -28,8 +28,8 @@ itself is pure Bash + the `adare` CLI, so it's portable to any agent with a shel
   `adare-devvm`.
 - **Running / inspecting / sharing** an experiment (test vs prod runs, run ULIDs,
   publish) → `adare-experiment`.
-- Writing the forensic functions a playbook's **`tests:` block** calls →
-  `adare-testfunction`.
+- Writing a **new** forensic function for the `tests:` block → `adare-testfunction`.
+  Picking an existing one is covered below under *Add assertions*.
 - Building the **base VM / environment** a playbook runs on → `adare-vm-build`.
 
 ## Fix an existing playbook (default — CLI + file edit, no MCP)
@@ -73,6 +73,40 @@ Two ways, pick per task — both are CLI:
 Start the session first with `adare dev start -e <env>`. Finish by installing the
 result into an experiment: `adare exp playbook set <exp> <file>` (validated +
 backed up + DB-ingested).
+
+## Add assertions (`tests:`)
+
+Assertions turn a replay into a forensic result. Find the function, don't guess it:
+
+```sh
+adare test search "recently-used file entry was written"   # ranked matches + example
+adare test info standard.file_exists --example             # paste-ready tests: block
+```
+
+Define each test once under `tests:`, then trigger it at the right point in
+`actions:` with `- test: <name>`. Assert before **and** after the interaction (for
+example absent before, present after) so the artifact is attributable to the GUI
+action:
+
+```yaml
+tests:
+  - name: xbel_absent_before
+    function: standard.file_does_not_exist
+    parameter:
+      dst: '{{ xbel_file }}'
+  - name: xbel_written_after
+    function: standard.file_content_contains
+    parameter:
+      dst: '{{ xbel_file }}'
+      content: '{{ text_file }}'   # parameter names come from `adare test info`
+actions:
+  - test: xbel_absent_before
+  # … GUI actions …
+  - test: xbel_written_after
+```
+
+`adare exp playbook validate` checks the YAML and that each `- test:` refers to a
+defined test. Parameter names and types come from `adare test info`.
 
 ## Optional: MCP (only if you need it)
 
