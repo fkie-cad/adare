@@ -456,8 +456,43 @@ class TestLogEntryExists:
 
         # Verify bash command construction
         call_args = mock_subprocess_run.call_args
-        assert call_args[0][0] == ['bash', '-c', f'tail -n 1000 "{log_file}" | grep -E "error"']
+        assert call_args[0][0] == ['bash', '-c', f"tail -n 1000 -- {log_file} | grep -E -- error"]
         assert call_args[1]['timeout'] == 30
+
+    @patch('platform.system', return_value='Linux')
+    def test_log_entry_exists_quotes_shell_metacharacters(self, mock_platform, mock_subprocess_run, tmp_path):
+        """log_file and pattern reach bash single-quoted, never as shell syntax."""
+        log_file = tmp_path / "it's.log"
+        log_file.write_text("x\n")
+        mock_subprocess_run.return_value = MagicMock(returncode=1, stdout='', stderr='')
+        pattern = '"; touch /tmp/pwned; echo "$(id)`id`'
+
+        LogEntryExists(
+            name="test_log", parameter=LogEntryExistsParameter(log_file=str(log_file), pattern=pattern, max_lines=1000)
+        ).test()
+
+        import shlex
+
+        command = mock_subprocess_run.call_args[0][0][2]
+        assert shlex.split(command) == ['tail', '-n', '1000', '--', str(log_file), '|', 'grep', '-E', '--', pattern]
+
+    @pytest.mark.skipif(sys.platform == 'win32', reason='needs bash, tail and grep')
+    @patch('platform.system', return_value='Linux')
+    def test_log_entry_exists_injection_is_not_executed(self, mock_platform, tmp_path):
+        """Real bash run: an injected command in the pattern must not execute."""
+        log_file = tmp_path / "app.log"
+        log_file.write_text("hello\n")
+        marker = tmp_path / "pwned"
+
+        result = LogEntryExists(
+            name="test_log",
+            parameter=LogEntryExistsParameter(
+                log_file=str(log_file), pattern=f'x"; touch "{marker}"; echo "', max_lines=1000
+            ),
+        ).test()
+
+        assert not marker.exists()
+        assert_test_failed(result)
 
     @patch('platform.system', return_value='Linux')
     def test_log_entry_exists_success_multiple_matches(self, mock_platform, mock_subprocess_run, tmp_path):
