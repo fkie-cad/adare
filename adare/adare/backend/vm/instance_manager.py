@@ -12,7 +12,6 @@ Uses:
 
 import asyncio
 import logging
-import subprocess
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path

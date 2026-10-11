@@ -6,7 +6,6 @@ from types import SimpleNamespace
 import click
 from trogon import tui
 
-
 # Upper bound for one-line command summaries in group listings (see format_commands).
 _SHORT_HELP_LIMIT = 200
 

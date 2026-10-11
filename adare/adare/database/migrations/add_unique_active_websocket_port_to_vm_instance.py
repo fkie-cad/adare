@@ -106,9 +106,8 @@ def run_migration() -> bool:
     print("Running migration: add_unique_active_websocket_port_to_vm_instance")
 
     try:
-        with VmApi() as api:
-            with api.engine.begin() as conn:
-                upgrade(conn)
+        with VmApi() as api, api.engine.begin() as conn:
+            upgrade(conn)
 
         print("✓ Migration completed successfully!")
         print("\nIMPORTANT:")

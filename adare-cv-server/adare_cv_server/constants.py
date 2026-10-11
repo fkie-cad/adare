@@ -120,9 +120,9 @@ class OCRConstants:
     MAX_WORKERS = 1
     CSV_HEADER = "text,x,y,confidence"
     DEBUG_CSV_HEADER = "operation,timestamp,screenshot_file,text,confidence,center_x,center_y,box_x1,box_y1,box_x2,box_y2,box_x3,box_y3,box_x4,box_y4"
-    
+
     # PaddleOCR detection parameters
-    # unclip_ratio: Controls how much the detection box is expanded. 
+    # unclip_ratio: Controls how much the detection box is expanded.
     # Smaller value (e.g. 1.2) helps separate close text instances.
     # Default is usually around 1.5.
     OCR_DET_UNCLIP_RATIO = 1.8

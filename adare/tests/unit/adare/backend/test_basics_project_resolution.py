@@ -102,7 +102,7 @@ class TestDetermineProjectDirectory:
 
             def get_project(self, name, silent=False):
                 seen['silent'] = silent
-                return None
+                return
 
             def get_project_by_path(self, path, silent=False):
                 return original
@@ -126,7 +126,7 @@ class TestDetermineProjectDirectory:
 
             def get_project(self, name, silent=False):
                 loud['silent'] = silent
-                return None
+                return
 
             def get_project_by_path(self, path, silent=False):  # pragma: no cover
                 raise AssertionError('a bare name must not reach the path lookup')
@@ -155,7 +155,7 @@ class TestDetermineProjectDirectory:
 
             def get_project_by_path(self, path, silent=False):
                 probed.append(path.as_posix())
-                return None
+                return
 
         import adare.database.api.project as project_module
         monkeypatch.setattr(project_module, 'ProjectDbApi', _Db)

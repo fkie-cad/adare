@@ -29,7 +29,7 @@ def _run_blocking(coro):
         asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)          # no loop (CLI): run directly
-    import concurrent.futures            # loop present (web route): isolate in a thread
+    import concurrent.futures  # loop present (web route): isolate in a thread
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
         return pool.submit(asyncio.run, coro).result()
 

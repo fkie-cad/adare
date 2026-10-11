@@ -85,4 +85,4 @@ def test_testfunction_has_reference_page(collection, func, testname):
 
 def test_undocumented_list_has_no_unknown_entries():
     known = {f"{c}.{t}" for c, _, t in TESTFUNCTIONS}
-    assert UNDOCUMENTED <= known, f"unknown testfunctions in UNDOCUMENTED: {UNDOCUMENTED - known}"
+    assert known >= UNDOCUMENTED, f"unknown testfunctions in UNDOCUMENTED: {UNDOCUMENTED - known}"

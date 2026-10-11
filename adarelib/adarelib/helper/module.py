@@ -1,6 +1,6 @@
-from pathlib import Path
 import importlib.util
 import re
+from pathlib import Path
 
 
 def import_module_from_pyfile(file: Path):

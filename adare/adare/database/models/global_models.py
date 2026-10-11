@@ -9,7 +9,19 @@ These models are stored in the global database and shared across all projects.
 from pathlib import Path
 
 import ulid
-from sqlalchemy import CHAR, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, UniqueConstraint, func
+from sqlalchemy import (
+    CHAR,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Table,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import backref, declarative_base, relationship

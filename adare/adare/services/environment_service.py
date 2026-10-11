@@ -581,7 +581,8 @@ class EnvironmentService:
         qcow2 supports this; other vm_formats aren't touched.
         """
         from adare.hypervisor.qemu.vm_creator.disk_helpers import (
-            DiskCompressionError, compress_qcow2_zstd,
+            DiskCompressionError,
+            compress_qcow2_zstd,
         )
 
         if fmt != 'qcow2':

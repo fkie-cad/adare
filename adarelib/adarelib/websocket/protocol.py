@@ -5,11 +5,11 @@ This module defines the message types and structures used for communication
 between the host (adare) and VM (adarevm) over WebSocket connections.
 """
 
-from typing import Dict, Any, Optional, Union, List
-from dataclasses import dataclass, asdict
 import json
 import uuid
+from dataclasses import asdict, dataclass
 from enum import Enum
+from typing import Any
 
 
 class MessageType(str, Enum):
@@ -17,11 +17,11 @@ class MessageType(str, Enum):
     # Tool calling (MCP-inspired)
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
-    
+
     # Real-time events
-    EVENT = "event" 
+    EVENT = "event"
     STATUS = "status"
-    
+
     # Connection management
     CONNECT = "connect"
     DISCONNECT = "disconnect"
@@ -35,18 +35,18 @@ class EventType(str, Enum):
     TEST_START = "test_start"
     TEST_COMPLETE = "test_complete"
     TEST_FAILED = "test_failed"
-    
+
     # GUI automation events
     GUI_CLICK = "gui_click"
     GUI_FIND = "gui_find"
     GUI_KEYPRESS = "gui_keypress"
     GUI_IDLE = "gui_idle"
     GUI_DRAG = "gui_drag"
-    
+
     # Command execution events
     COMMAND_START = "command_start"
     COMMAND_COMPLETE = "command_complete"
-    
+
     # General events
     LOG = "log"
     ERROR = "error"
@@ -57,13 +57,13 @@ class EventType(str, Enum):
 class BaseMessage:
     """Base class for all WebSocket messages."""
     type: MessageType
-    id: Optional[str] = None
-    timestamp: Optional[float] = None
-    
+    id: str | None = None
+    timestamp: float | None = None
+
     def to_json(self) -> str:
         """Convert message to JSON string."""
         return json.dumps(asdict(self), default=str)
-    
+
     @classmethod
     def from_json(cls, json_str: str) -> 'BaseMessage':
         """Create message from JSON string."""
@@ -71,13 +71,13 @@ class BaseMessage:
         return cls(**data)
 
 
-@dataclass  
+@dataclass
 class ToolCallMessage(BaseMessage):
     """Message for calling a tool on the VM."""
     type: MessageType = MessageType.TOOL_CALL
     tool: str = ""
-    params: Dict[str, Any] = None
-    
+    params: dict[str, Any] = None
+
     def __post_init__(self):
         if self.id is None:
             self.id = str(uuid.uuid4())
@@ -90,9 +90,9 @@ class ToolResultMessage(BaseMessage):
     """Message containing the result of a tool call."""
     type: MessageType = MessageType.TOOL_RESULT
     success: bool = True
-    result: Dict[str, Any] = None
-    error: Optional[str] = None
-    
+    result: dict[str, Any] = None
+    error: str | None = None
+
     def __post_init__(self):
         if self.result is None:
             self.result = {}
@@ -103,8 +103,8 @@ class EventMessage(BaseMessage):
     """Message for streaming real-time events."""
     type: MessageType = MessageType.EVENT
     event_type: EventType = ""
-    data: Dict[str, Any] = None
-    
+    data: dict[str, Any] = None
+
     def __post_init__(self):
         if self.data is None:
             self.data = {}
@@ -115,8 +115,8 @@ class StatusMessage(BaseMessage):
     """Message for status updates."""
     type: MessageType = MessageType.STATUS
     status: str = ""
-    data: Dict[str, Any] = None
-    
+    data: dict[str, Any] = None
+
     def __post_init__(self):
         if self.data is None:
             self.data = {}
@@ -126,8 +126,8 @@ class StatusMessage(BaseMessage):
 class ConnectMessage(BaseMessage):
     """Message for connection establishment."""
     type: MessageType = MessageType.CONNECT
-    client_info: Dict[str, Any] = None
-    
+    client_info: dict[str, Any] = None
+
     def __post_init__(self):
         if self.client_info is None:
             self.client_info = {}
@@ -136,7 +136,7 @@ class ConnectMessage(BaseMessage):
 # Message type mapping for deserialization
 MESSAGE_TYPES = {
     MessageType.TOOL_CALL: ToolCallMessage,
-    MessageType.TOOL_RESULT: ToolResultMessage, 
+    MessageType.TOOL_RESULT: ToolResultMessage,
     MessageType.EVENT: EventMessage,
     MessageType.STATUS: StatusMessage,
     MessageType.CONNECT: ConnectMessage,
@@ -156,23 +156,23 @@ def parse_message(json_str: str) -> BaseMessage:
 
 # Convenience functions for creating common messages
 
-def create_tool_call(tool: str, params: Dict[str, Any] = None) -> ToolCallMessage:
+def create_tool_call(tool: str, params: dict[str, Any] = None) -> ToolCallMessage:
     """Create a tool call message."""
     return ToolCallMessage(tool=tool, params=params or {})
 
 
-def create_tool_result(call_id: str, success: bool = True, 
-                      result: Dict[str, Any] = None, error: str = None) -> ToolResultMessage:
+def create_tool_result(call_id: str, success: bool = True,
+                      result: dict[str, Any] = None, error: str = None) -> ToolResultMessage:
     """Create a tool result message."""
     return ToolResultMessage(id=call_id, success=success, result=result or {}, error=error)
 
 
-def create_event(event_type: EventType, data: Dict[str, Any] = None) -> EventMessage:
+def create_event(event_type: EventType, data: dict[str, Any] = None) -> EventMessage:
     """Create an event message."""
     return EventMessage(event_type=event_type, data=data or {})
 
 
-def create_status(status: str, data: Dict[str, Any] = None) -> StatusMessage:
+def create_status(status: str, data: dict[str, Any] = None) -> StatusMessage:
     """Create a status message."""
     return StatusMessage(status=status, data=data or {})
 
@@ -181,7 +181,7 @@ def create_status(status: str, data: Dict[str, Any] = None) -> StatusMessage:
 
 class ToolRegistry:
     """Registry of available tools on the VM."""
-    
+
     # GUI Actions
     SCREENSHOT = "screenshot"
     CLICK = "click"
@@ -192,7 +192,7 @@ class ToolRegistry:
     SCROLL = "scroll"
     GOTO = "goto"
     IDLE = "idle"
-    
+
     # Test Management
     UPLOAD_TESTFUNCTIONS = "upload_testfunctions"
     UPLOAD_TESTSET = "upload_testset"

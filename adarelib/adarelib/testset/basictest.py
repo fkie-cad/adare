@@ -1,15 +1,16 @@
 # external imports
 import glob
-from enum import Enum
-from typing import TYPE_CHECKING, Optional, ClassVar, Dict, Any, List, Tuple, Union
-import attrs
-import re
-
-# internal imports
-from adarelib.testset.yaml.customtags import YamlCustomTag
 
 # configure logging
 import logging
+import re
+from enum import Enum
+from typing import TYPE_CHECKING, Any, ClassVar
+
+import attrs
+
+# internal imports
+from adarelib.testset.yaml.customtags import YamlCustomTag
 
 log = logging.getLogger(__name__)
 
@@ -92,11 +93,11 @@ class BasicTest:
 
     name: str
     parameter: Parameter
-    description: Optional[str]
-    variable_metadata: Optional[Dict[str, Any]]
+    description: str | None
+    variable_metadata: dict[str, Any] | None
 
     def resolve_globfilepath(self, globfilepath: str, match_mode: str = "single",
-                            return_list: bool = False) -> tuple[Union[str, list[str]], str]:
+                            return_list: bool = False) -> tuple[str | list[str], str]:
         """
         Find file(s) matching glob expression with flexible matching modes.
 
@@ -120,22 +121,21 @@ class BasicTest:
             # Existing behavior: exactly 1 match required
             if not found_files:
                 return ([] if return_list else ""), "no files match the given path (glob) expression"
-            elif len(found_files) > 1:
+            if len(found_files) > 1:
                 return ([] if return_list else ""), f"{len(found_files)} files found that match given path (glob) expression"
-            else:
-                return (found_files if return_list else found_files[0]), ""
-        else:  # match_mode == "any"
-            # New behavior: 0+ matches allowed
-            return found_files if return_list else (found_files[0] if found_files else ""), ""
+            return (found_files if return_list else found_files[0]), ""
+        # match_mode == "any"
+        # New behavior: 0+ matches allowed
+        return found_files if return_list else (found_files[0] if found_files else ""), ""
 
 
     # === PLACEHOLDER HELPER METHODS ===
-    
+
     def has_placeholders(self, text: str) -> bool:
         """Check if text has any {{ }} placeholders."""
         return '{{' in text and '}}' in text
 
-    def get_placeholders(self, text: str) -> List[str]:
+    def get_placeholders(self, text: str) -> list[str]:
         """Get all placeholder names from text."""
         matches = re.findall(r'\{\{\s*([^}]+)\s*\}\}', text)
         return [match.strip() for match in matches]
@@ -174,23 +174,23 @@ class BasicTest:
         result = re.sub(r'\{\{\s*([^}]+)\s*\}\}', replace_placeholder, result)
 
         return result
-    
-    def get_placeholder_metadata(self, placeholder_name: str) -> Dict[str, Any]:
+
+    def get_placeholder_metadata(self, placeholder_name: str) -> dict[str, Any]:
         """Get metadata for specific placeholder."""
         if not self.variable_metadata:
             return {}
         return self.variable_metadata.get(placeholder_name, {})
-    
+
     def has_tolerance_metadata(self, placeholder_name: str) -> bool:
         """Check if placeholder has tolerance metadata."""
         metadata = self.get_placeholder_metadata(placeholder_name)
         return 'tolerance' in metadata and bool(metadata['tolerance'])
-    
-    def compare_with_placeholder(self, placeholder_name: str, actual_value: str) -> Tuple[bool, str]:
+
+    def compare_with_placeholder(self, placeholder_name: str, actual_value: str) -> tuple[bool, str]:
         """Compare actual value with placeholder based on its type (regex, timestamp, string)."""
         metadata = self.get_placeholder_metadata(placeholder_name)
         placeholder_type = metadata.get('type', 'string')
-        
+
         if placeholder_type == 'regex':
             import re
             try:
@@ -198,35 +198,33 @@ class BasicTest:
                 compiled_regex = re.compile(regex_pattern)
                 if compiled_regex.match(actual_value):
                     return True, f"Regex match: '{actual_value}' matches pattern '{regex_pattern}'"
-                else:
-                    return False, f"Regex no match: '{actual_value}' doesn't match pattern '{regex_pattern}'"
+                return False, f"Regex no match: '{actual_value}' doesn't match pattern '{regex_pattern}'"
             except re.error as e:
                 return False, f"Regex error: Invalid pattern '{regex_pattern}' - {e}"
-        
+
         elif placeholder_type == 'timestamp':
             return self._compare_timestamp_with_tolerance(metadata, actual_value)
-        
+
         else:
             # Default: exact string comparison
             expected = metadata.get('resolved_value', '')
             success = actual_value == expected
             return success, f"Exact comparison: {'match' if success else 'no match'}"
 
-    def _compare_timestamp_with_tolerance(self, metadata: dict, actual_value: str) -> Tuple[bool, str]:
+    def _compare_timestamp_with_tolerance(self, metadata: dict, actual_value: str) -> tuple[bool, str]:
         """Compare timestamp values with tolerance."""
         log.debug(f"Starting tolerance comparison - metadata: {metadata}")
         log.debug(f"VM file timestamp: '{actual_value}'")
-        
+
         if 'tolerance' not in metadata or not metadata['tolerance']:
-            # No tolerance - do exact comparison  
+            # No tolerance - do exact comparison
             expected = metadata.get('resolved_value', '')
             success = actual_value == expected
             return success, f"Exact comparison: {'match' if success else 'no match'}"
-        
+
         # Has tolerance - do timestamp comparison
         try:
-            import datetime
-            
+
             # Parse actual timestamp using format metadata if available
             actual_dt = self._parse_timestamp_with_format(actual_value, metadata)
             log.debug(f"Parsed VM timestamp: {actual_dt}")
@@ -234,7 +232,7 @@ class BasicTest:
             # Parse original timestamp (raw_value should be in ISO format)
             raw_value = metadata.get('raw_value', '')
             log.debug(f"Raw timestamp value: '{raw_value}'")
-            
+
             # Check if timestamp needs runtime resolution
             if metadata.get('needs_runtime_resolution', False) and '{{' in raw_value and '}}' in raw_value:
                 log.debug(f"Template '{raw_value}' marked for runtime resolution")
@@ -256,7 +254,7 @@ class BasicTest:
             # Get tolerance range - handle both single value and array
             tolerance = metadata.get('tolerance', 0)
             log.debug(f"Tolerance from metadata: {tolerance}")
-            
+
             if isinstance(tolerance, (int, float)):
                 # Single value: create symmetric range around original timestamp
                 abs_tolerance = abs(tolerance)
@@ -273,7 +271,7 @@ class BasicTest:
             else:
                 lower_tolerance = 0
                 upper_tolerance = 0
-                
+
             log.debug(f"Calculated tolerance range: {lower_tolerance}s to {upper_tolerance}s")
 
             # Calculate difference
@@ -283,18 +281,17 @@ class BasicTest:
             # Check if within tolerance
             within_range = lower_tolerance <= diff_seconds <= upper_tolerance
             log.debug(f"Within tolerance? {within_range} ({lower_tolerance} <= {diff_seconds} <= {upper_tolerance})")
-            
+
             if within_range:
                 return True, f"Within tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)"
-            else:
-                return False, f"Outside tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)"
-                
+            return False, f"Outside tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)"
+
         except Exception as e:
             # Fallback to string comparison
             expected = metadata.get('resolved_value', '')
             success = actual_value == expected
             return success, f"Tolerance comparison failed ({e}), used string comparison"
-    
+
     def _parse_timestamp_with_format(self, timestamp_str: str, metadata: dict, is_expected: bool = False) -> 'datetime.datetime':
         """
         Parse timestamp using format metadata.
@@ -316,6 +313,7 @@ class BasicTest:
         - Provide `metadata['format']` for deterministic parsing when possible.
         """
         import datetime
+
         from dateutil import parser as _parser
 
         _SYSTEM_TZ = datetime.datetime.now().astimezone().tzinfo
@@ -358,12 +356,11 @@ class BasicTest:
                     # If already aware, normalize to local for consistency.
                     dt = dt.astimezone(_SYSTEM_TZ)
                 return dt
-            else:
-                # Explicitly treat as UTC wall time → attach UTC if naive, then convert to local.
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=datetime.timezone.utc)  # label as UTC
-                # Convert aware/UTC to system local for display/consistency.
-                return dt.astimezone(_SYSTEM_TZ)
+            # Explicitly treat as UTC wall time → attach UTC if naive, then convert to local.
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=datetime.timezone.utc)  # label as UTC
+            # Convert aware/UTC to system local for display/consistency.
+            return dt.astimezone(_SYSTEM_TZ)
 
         fmt = metadata.get('format')
 
@@ -409,32 +406,32 @@ class BasicTest:
         dt = _parser.parse(timestamp_str)
         return _finalize(dt)
 
-    def _handle_placeholders_comparison(self, actual_content: str, expected_template: str) -> Tuple[bool, str]:
+    def _handle_placeholders_comparison(self, actual_content: str, expected_template: str) -> tuple[bool, str]:
         """Handle comparison when placeholders are present using string splitting approach."""
         placeholders = self.get_placeholders(expected_template)
-        
+
         # Check if we got unconverted Jinja2 templates (client-side issue)
         for placeholder in placeholders:
             if '|' in placeholder:
                 return False, f"Received unconverted Jinja2 template '{{{{ {placeholder} }}}}'. This suggests client-side variable resolution failed. Expected placeholder format: '{{{{ VARIABLE_RESOLVED }}}}'."
-        
+
         # Split template into text parts (before/between/after placeholders)
         import re
         text_parts = re.split(r'\{\{\s*[^}]+\s*\}\}', expected_template)
-        
+
         # Extract values by finding delimiters step by step
         current_pos = 0
         extracted_values = []
-        
+
         for i in range(len(placeholders)):
             # Check that text before this placeholder matches
             expected_prefix = text_parts[i]
             if not actual_content[current_pos:].startswith(expected_prefix):
                 return False, f"Text before '{placeholders[i]}' doesn't match. Expected: '{expected_prefix}'"
-            
+
             # Move past the matching prefix
             current_pos += len(expected_prefix)
-            
+
             # Find where this placeholder's value ends
             # Check if there's a meaningful next delimiter (not empty and not the last)
             if i + 1 < len(text_parts) and text_parts[i + 1]:
@@ -481,20 +478,20 @@ class BasicTest:
                     # No final suffix - take everything to end
                     placeholder_value = actual_content[current_pos:]
                     current_pos = len(actual_content)
-            
+
             extracted_values.append(placeholder_value)
-        
+
         # Validate each extracted value using its metadata
         validation_messages = []
         for i, placeholder in enumerate(placeholders):
             actual_value = extracted_values[i]
-            
+
             success, msg = self.compare_with_placeholder(placeholder, actual_value)
             validation_messages.append(f"{placeholder}: {msg}")
-            
+
             if not success:
                 return False, f"Validation failed - {'; '.join(validation_messages)}"
-        
+
         return True, f"All placeholders valid - {'; '.join(validation_messages)}"
 
     def test(self):

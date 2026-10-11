@@ -1,10 +1,12 @@
+import logging
 from pathlib import Path
+
 import cattrs
+
+from adarelib.helper.yaml import yaml_to_dict
 from adarelib.testset.type import TestsetFile
 from adarelib.testset.yaml.customloader import YAML_TESTSET_LOADER
-from adarelib.helper.yaml import yaml_to_dict
 
-import logging
 log = logging.getLogger(__name__)
 
 def parse_testsetfile(testset_file: Path) -> TestsetFile:

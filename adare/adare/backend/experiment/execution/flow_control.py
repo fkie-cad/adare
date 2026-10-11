@@ -401,7 +401,7 @@ class FlowControlExecutor:
                         self.target_resolution.get_current_screenshot_with_path(action_context=check_context),
                         timeout=per_check_budget,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     log.warning(f"Screenshot capture on check #{check_count} exceeded remaining budget ({per_check_budget:.1f}s)")
                     screenshot_base64, screenshot_path = None, None
                 if screenshot_path:
@@ -465,7 +465,7 @@ class FlowControlExecutor:
                                         self.target_resolution.get_current_screenshot_with_path(action_context=refresh_context),
                                         timeout=refresh_budget,
                                     )
-                                except asyncio.TimeoutError:
+                                except TimeoutError:
                                     log.warning(f"Post-idle screenshot refresh on check #{check_count} exceeded remaining budget ({refresh_budget:.1f}s)")
                                     refresh_base64, refresh_path = None, None
 
@@ -502,7 +502,7 @@ class FlowControlExecutor:
                                 self._evaluate_wait_condition(action.condition, screenshot_base64, screenshot_path),
                                 timeout=per_check_budget,
                             )
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             log.warning(f"Condition evaluation on check #{check_count} exceeded remaining budget ({per_check_budget:.1f}s)")
                             condition_result = False
 

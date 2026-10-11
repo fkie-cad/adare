@@ -1,10 +1,10 @@
-from pathlib import Path
-from subprocess import Popen, PIPE, TimeoutExpired
-import platform
 import ctypes
-import os
 import logging
+import os
+import platform
 import uuid
+from pathlib import Path
+from subprocess import PIPE, Popen, TimeoutExpired
 
 log = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
         else:
             # Use sudo on Linux
             command_str = f"sudo {command_str}"
-            log.info(f"Running command with elevated privileges (sudo)")
+            log.info("Running command with elevated privileges (sudo)")
     elif is_running_elevated and not is_windows:
         # Drop privileges when running with elevated privileges
         target_user = run_as_user if run_as_user else DEFAULT_RUN_AS_USER
@@ -131,8 +131,8 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
     elif not shell and is_windows:
         # Windows CreateProcess does not automatically resolve executable path from 'env' PATH
         # We must manually resolve it if a custom env is provided
-        import shutil
         import shlex
+        import shutil
 
         search_path = None
         if env:
@@ -157,8 +157,8 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
                         # shlex.split should yield the executable as first item.
                         # Ideally, users should pass list for shell=False
                         log.info(f"Resolved executable '{exe_name}' to '{resolved_exe}'")
-                        
-                        # Replace the first part of the original string? 
+
+                        # Replace the first part of the original string?
                         # Or just switch to list mode? subprocess handles list better for shell=False
                         parts[0] = resolved_exe
                         command = parts # Switch to list mode with full path
@@ -204,7 +204,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
     import time
     start_time = time.time()
     log.debug(f"Starting process at {start_time}")
-    
+
     try:
         if cwd:
             proc = Popen(command, stdout=PIPE, stderr=PIPE, cwd=cwd, shell=shell, env=process_env)
@@ -216,9 +216,9 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
             # junctions/symlinks to SMB/UNC paths. Copy the executable and its
             # sibling files (.NET runtime DLLs, configs) to a local temp dir
             # and retry. File I/O over SMB works fine — only execution fails.
+            import shlex
             import shutil
             import tempfile
-            import shlex
 
             log.warning(f"Direct execution failed ({e}), copying to local temp for retry")
 
@@ -245,7 +245,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
                 proc = Popen(command, stdout=PIPE, stderr=PIPE, shell=shell, env=process_env)
         else:
             raise
-    
+
     log.debug(f"Process started with PID: {proc.pid}")
 
     # Handle background mode - return immediately without waiting
@@ -308,8 +308,8 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
 
     # Always log stdout (even if empty)
     log.info(f"stdout: {stdout if stdout else ''}")
-    
-    # Always log stderr (even if empty)  
+
+    # Always log stderr (even if empty)
     log.info(f"stderr: {stderr if stderr else ''}")
 
     ret = {

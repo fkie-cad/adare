@@ -8,8 +8,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 from adare.backend.experiment.exceptions import ExperimentNotFoundError, MultipleEnvironmentsError, NoEnvironmentError
-from adare.database.api.environment import EnvironmentDbApi
 from adare.database.api.base import experiment_name_from_run_path
+from adare.database.api.environment import EnvironmentDbApi
 from adare.database.api.experiment import ExperimentApi
 from adare.database.api.stage import StageDbApi
 from adare.database.exceptions import EnvironmentMissingError

@@ -6,15 +6,15 @@ eliminating the broken PowerShell extraction approach. Parses all 4 NTFS
 timestamps (Created, Modified, Accessed, MFT Modified) along with file
 paths and sizes.
 
-Uses CreateFileW/ReadFile to open \\.\C: and stream MFT records directly,
+Uses CreateFileW/ReadFile to open \\.\\C: and stream MFT records directly,
 handling MFT fragmentation via data run parsing.
 """
 
-import sys
-import struct
 import logging
 import platform
-from typing import Dict, Optional, Tuple, Any
+import struct
+import sys
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -305,7 +305,7 @@ class MFTParser:
         return seconds - FILETIME_TO_UNIX_OFFSET
 
     @staticmethod
-    def parse_standard_information(attr_data: bytes) -> Dict[str, float]:
+    def parse_standard_information(attr_data: bytes) -> dict[str, float]:
         """Parse $STANDARD_INFORMATION attribute (0x10).
 
         Offset  Size  Description
@@ -335,7 +335,7 @@ class MFTParser:
             return {}
 
     @staticmethod
-    def parse_file_name(attr_data: bytes) -> Tuple[Optional[int], Optional[str], bool]:
+    def parse_file_name(attr_data: bytes) -> tuple[int | None, str | None, bool]:
         """Parse $FILE_NAME attribute (0x30).
 
         Returns:
@@ -402,7 +402,7 @@ class MFTParser:
             return data
 
     @staticmethod
-    def parse_mft_entry(data: bytes, record_number: int) -> Optional[MFTRecord]:
+    def parse_mft_entry(data: bytes, record_number: int) -> MFTRecord | None:
         """Parse a single 1024-byte MFT entry.
 
         Returns MFTRecord or None if invalid/deleted.
@@ -585,7 +585,7 @@ class MFTParser:
     def parse_mft_from_volume(
         volume_reader: 'NTFSVolumeReader',
         boot_sector: 'NTFSBootSector',
-    ) -> Dict[int, MFTRecord]:
+    ) -> dict[int, MFTRecord]:
         """Stream-parse all MFT entries directly from the volume.
 
         1. Read MFT entry 0 at the boot sector offset
@@ -669,9 +669,9 @@ class MFTParser:
 
 
 def reconstruct_paths_memoized(
-    records: Dict[int, MFTRecord],
-    root_path_filter: Optional[str] = None,
-) -> Dict[str, Dict[str, Any]]:
+    records: dict[int, MFTRecord],
+    root_path_filter: str | None = None,
+) -> dict[str, dict[str, Any]]:
     """Reconstruct full file paths from parent references with memoization.
 
     Uses a path cache so each record's path is computed at most once,
@@ -684,13 +684,13 @@ def reconstruct_paths_memoized(
     Returns:
         Dict mapping full paths to metadata
     """
-    path_cache: Dict[int, Optional[str]] = {}
+    path_cache: dict[int, str | None] = {}
 
     # Guard against very deep directory trees
     old_limit = sys.getrecursionlimit()
     sys.setrecursionlimit(max(old_limit, 10000))
 
-    def get_path(record_num: int, depth: int = 0) -> Optional[str]:
+    def get_path(record_num: int, depth: int = 0) -> str | None:
         if record_num in path_cache:
             return path_cache[record_num]
 
@@ -769,9 +769,9 @@ def reconstruct_paths_memoized(
 
 def _get_path_iterative(
     record_num: int,
-    records: Dict[int, MFTRecord],
-    path_cache: Dict[int, Optional[str]],
-) -> Optional[str]:
+    records: dict[int, MFTRecord],
+    path_cache: dict[int, str | None],
+) -> str | None:
     """Iterative fallback for very deep directory trees."""
     chain = []
     current = record_num
@@ -815,7 +815,7 @@ class MFTReader:
     """High-level MFT reader with privilege checking."""
 
     @staticmethod
-    def check_admin_privileges() -> Tuple[bool, str]:
+    def check_admin_privileges() -> tuple[bool, str]:
         """Check if running with Administrator privileges on Windows.
 
         Returns:
@@ -849,8 +849,8 @@ class MFTReader:
     @staticmethod
     def get_mft_snapshot(
         volume: str = "C:",
-        root_path: Optional[str] = None,
-    ) -> Dict[str, Dict[str, Any]]:
+        root_path: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
         """Get filesystem snapshot by parsing MFT directly from the volume.
 
         Reads MFT entries by opening the raw volume device via Win32 API,

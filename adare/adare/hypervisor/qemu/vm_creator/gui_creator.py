@@ -182,7 +182,6 @@ class GUIVMCreator(BaseVMCreator):
         from adare.backend.experiment.vlm import (
             GuiAgent,
             PlaybookRecorder,
-            VLMClient,
             run_acceptance_checks,
             run_playbook,
         )

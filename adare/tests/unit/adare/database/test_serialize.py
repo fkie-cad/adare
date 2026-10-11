@@ -302,9 +302,8 @@ class TestUnpublishedDependenciesFailLoudly:
                 api.serialize_run_by_ulid(RUN_ULID)
 
     def test_missing_run_raises(self, published_project):
-        with SerializeApi(published_project) as api:
-            with pytest.raises(RunSerializationError, match='not found'):
-                api.serialize_run_by_ulid('01JQNOSUCHRUN0000000000000')
+        with SerializeApi(published_project) as api, pytest.raises(RunSerializationError, match='not found'):
+            api.serialize_run_by_ulid('01JQNOSUCHRUN0000000000000')
 
 
 class TestRemoteIdentityPersists:

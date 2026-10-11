@@ -371,8 +371,9 @@ class GuiAgent:
         ``continue`` the gate is disabled for the rest of the run
         (``self.interactive = False``) and ``'approve'`` is returned.
         """
-        from adare.console import console
         from rich.panel import Panel
+
+        from adare.console import console
 
         detail = action.describe or action.summary or ''
         header = f'Step {index} — {action.kind.upper()}'
@@ -614,7 +615,7 @@ class GuiAgent:
         if not self.run_dir:
             return None
         lines = [
-            f'# GUI agent install report',
+            '# GUI agent install report',
             '',
             f'**Goal:** {self.goal}',
             f'**Outcome:** {"SUCCESS" if result.success else "FAILED"} — {result.reason}',

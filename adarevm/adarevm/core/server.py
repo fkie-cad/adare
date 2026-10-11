@@ -6,34 +6,36 @@ using a custom WebSocket protocol for real-time GUI automation and test executio
 """
 
 import asyncio
-import websockets
 import json
 import logging
-from pathlib import Path
-from typing import Dict, List, Any, Optional, Set
 import platform
+from pathlib import Path
+from typing import Any
+
+import websockets
 
 log = logging.getLogger(__name__)
 
 # Import our WebSocket protocol
 from adarelib.websocket.protocol import (
-    parse_message, create_tool_result, create_event, create_status,
-    MessageType, EventType, ToolRegistry,
-    ToolResultMessage, EventMessage
+    EventMessage,
+    EventType,
+    MessageType,
+    ToolResultMessage,
 )
+from adarevm.core.tools.file_tools import FileToolsMixin
 
 # Import tool mixins
 from adarevm.core.tools.gui_tools import GUIToolsMixin
-from adarevm.core.tools.test_tools import TestToolsMixin
-from adarevm.core.tools.system_tools import SystemToolsMixin
-from adarevm.core.tools.file_tools import FileToolsMixin
 from adarevm.core.tools.icon_tools import IconToolsMixin
+from adarevm.core.tools.system_tools import SystemToolsMixin
+from adarevm.core.tools.test_tools import TestToolsMixin
 
 
 class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMixin, IconToolsMixin):
     """WebSocket server for adarevm GUI automation and test execution."""
 
-    def _split_command_line(self, command: str) -> List[str]:
+    def _split_command_line(self, command: str) -> list[str]:
         """Split a command string into arguments using platform-native parsing."""
         if platform.system().lower() == "windows":
             return self._split_windows_command_line(command)
@@ -45,7 +47,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             # Fallback for unbalanced quotes
             return command.split(" ")
 
-    def _split_windows_command_line(self, command: str) -> List[str]:
+    def _split_windows_command_line(self, command: str) -> list[str]:
         """Split a Windows command string using pure Python shlex."""
         import shlex
         try:
@@ -66,10 +68,10 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             # Fallback
             return command.split(" ")
 
-    def __init__(self, host="0.0.0.0", port=18765, tools_paths: List[str] = None, data_paths: List[str] = None, installation_mode: str = "wheel"):
+    def __init__(self, host="0.0.0.0", port=18765, tools_paths: list[str] = None, data_paths: list[str] = None, installation_mode: str = "wheel"):
         self.host = host
         self.port = port
-        self.clients: Set[websockets.WebSocketServerProtocol] = set()
+        self.clients: set[websockets.WebSocketServerProtocol] = set()
 
         # Shared data paths (project and experiment data directories)
         self.data_paths = data_paths or []
@@ -84,13 +86,13 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
         log.info(f"Installation mode: {installation_mode}")
 
         # Test management state
-        self.testfunctions_dir: Optional[Path] = None
-        self.current_variables: Dict[str, Any] = {}
-        self._testfunction_cache: Optional[dict] = None  # Cache discovered testfunctions
+        self.testfunctions_dir: Path | None = None
+        self.current_variables: dict[str, Any] = {}
+        self._testfunction_cache: dict | None = None  # Cache discovered testfunctions
 
         # Task management for non-blocking tool execution
-        self.running_tasks: Dict[str, asyncio.Task] = {}
-        self.client_tasks: Dict[websockets.WebSocketServerProtocol, Set[str]] = {}
+        self.running_tasks: dict[str, asyncio.Task] = {}
+        self.client_tasks: dict[websockets.WebSocketServerProtocol, set[str]] = {}
 
         # Tool registry
         self.tools = {
@@ -159,7 +161,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
                 )
 
         server = await websockets.serve(self.handle_client, self.host, self.port)
-        log.info(f"Server started successfully")
+        log.info("Server started successfully")
         return server
 
     async def handle_client(self, websocket):
@@ -172,7 +174,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
         try:
             # Send welcome message
             await self.send_event(websocket, EventType.LOG, {
-                "message": f"Connected to AdareVM server",
+                "message": "Connected to AdareVM server",
                 "server_info": {
                     "host": self.host,
                     "port": self.port,
@@ -213,7 +215,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             log.error(f"Unexpected error handling message: {e}", exc_info=True)
             await self.send_error(websocket, str(e))
 
-    async def handle_tool_call(self, websocket, message: Dict[str, Any]):
+    async def handle_tool_call(self, websocket, message: dict[str, Any]):
         """
         Handle a tool call from the client.
 
@@ -266,7 +268,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             )
             await websocket.send(error_msg.to_json())
 
-    async def send_event(self, websocket, event_type: str, data: Dict[str, Any]):
+    async def send_event(self, websocket, event_type: str, data: dict[str, Any]):
         """Send an event message to the client."""
         event_msg = EventMessage(event_type=event_type, data=data)
         await websocket.send(event_msg.to_json())
@@ -340,7 +342,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             if websocket in self.client_tasks and task_id in self.client_tasks[websocket]:
                 self.client_tasks[websocket].discard(task_id)
 
-    async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
+    async def broadcast_event(self, event_type: str, data: dict[str, Any]):
         """Broadcast an event to all connected clients."""
         if self.clients:
             event_msg = EventMessage(event_type=event_type, data=data)

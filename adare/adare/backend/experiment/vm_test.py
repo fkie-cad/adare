@@ -623,7 +623,6 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
         VMUvTestStage,
         VMWebSocketTestStage,
     )
-    from adare.backend.experiment.commands.manage import StageCtxManagerLite
 
     log.info("Testing VM compatibility with ADARE WebSocket server...")
 
@@ -777,9 +776,9 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
     Returns:
         True if VM is compatible with ADARE, False otherwise
     """
-    from adare.types.stages import VMCompatibilityTestStage, VMTestCleanupStage, VMTestSetupStage
     from adare.backend.experiment.commands.manage import StageCtxManagerLite
     from adare.backend.experiment.step_runner import ExperimentStepRunner
+    from adare.types.stages import VMCompatibilityTestStage, VMTestCleanupStage, VMTestSetupStage
 
     if not ova_file_path.exists():
         raise LoggedException(log, f"OVA file not found: {ova_file_path}")
@@ -1268,9 +1267,9 @@ async def vm_test_registered(
     Returns:
         True if the VM is compatible with ADARE, False otherwise
     """
-    from adare.types.stages import VMCompatibilityTestStage, VMTestCleanupStage, VMTestSetupStage
     from adare.backend.experiment.commands.manage import StageCtxManagerLite
     from adare.backend.experiment.step_runner import ExperimentStepRunner
+    from adare.types.stages import VMCompatibilityTestStage, VMTestCleanupStage, VMTestSetupStage
 
     if guest_platform not in ['linux', 'windows']:
         raise LoggedException(log, f"Invalid platform '{guest_platform}'. Must be 'linux' or 'windows'")

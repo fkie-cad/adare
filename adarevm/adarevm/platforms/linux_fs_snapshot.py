@@ -9,7 +9,7 @@ including all 3 Linux timestamps (mtime, atime, ctime).
 import json
 import logging
 import subprocess
-from typing import Dict, Any
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class LinuxFSSnapshot:
     EXCLUDED_PATHS = ['/proc', '/sys', '/dev', '/run']
 
     @staticmethod
-    def get_snapshot(root_path: str = '/') -> Dict[str, Dict[str, Any]]:
+    def get_snapshot(root_path: str = '/') -> dict[str, dict[str, Any]]:
         """
         Get filesystem snapshot using find command.
 

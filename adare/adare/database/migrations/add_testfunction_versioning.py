@@ -152,9 +152,8 @@ def run_migration() -> bool:
     print("Running migration: add_testfunction_versioning")
 
     try:
-        with GlobalDatabaseApi() as api:
-            with api.engine.begin() as conn:
-                upgrade(conn)
+        with GlobalDatabaseApi() as api, api.engine.begin() as conn:
+            upgrade(conn)
 
         print("✓ Migration completed successfully!")
         print("\nIMPORTANT:")

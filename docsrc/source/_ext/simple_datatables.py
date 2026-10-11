@@ -1,5 +1,6 @@
 # simple_datatable.py
 import json
+
 from sphinx.application import Sphinx
 
 CDN_JS  = "https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/umd/simple-datatables.js"

@@ -120,6 +120,15 @@ directory = "htmlcov"
 [tool.ruff]
 target-version = "py313"
 line-length = 120
+extend-exclude = ["paper", "docsrc/build"]
+
+# Code that runs inside guest VMs must stay importable on the guests' Python
+# (adarevm/adarelib declare >=3.10), so pyupgrade must not emit 3.11+ syntax there.
+[tool.ruff.per-file-target-version]
+"adarevm/**/*.py" = "py310"
+"adarelib/**/*.py" = "py310"
+"adare/appdata/testfunctions/**/*.py" = "py310"
+"examples/testfunctions/**/*.py" = "py310"
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "B", "BLE", "S110", "S112", "C901", "I", "UP", "SIM", "RET"]
@@ -134,6 +143,12 @@ known-first-party = ["adare", "adarelib", "adarevm"]
 "**/test_*.py" = ["S"]
 "**/testfunctions/test_*.py" = ["S", "F401", "E402", "I"]
 "**/appdata/testfunctions/**/*.py" = ["I", "F401", "E402"]
+# Scaffold copied to users: the imports are there as a starting point.
+"**/appdata/templates/**/*.py" = ["F401"]
+# Star re-exports kept for backwards compatibility.
+"adare/adare/types/__init__.py" = ["F403", "F405"]
+"adare/adare/logger/__init__.py" = ["F403"]
+"adare/adare/frontend/interactive/dev_server.py" = ["F403"]
 
 [tool.mypy]
 python_version = "3.13"

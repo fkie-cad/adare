@@ -421,7 +421,6 @@ def create_legacy_boot_iso(
     the answer file). The original Windows ISO is left untouched and must stay
     attached alongside this override to supply install.wim.
     """
-    import shutil
     import subprocess
     import tempfile
 

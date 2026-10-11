@@ -146,9 +146,8 @@ def test_an_interrupted_build_does_not_poison_the_cache(recipe_env):
         raise KeyboardInterrupt('simulated SIGINT during the OS install')
 
     with patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-               side_effect=_killed_mid_install):
-        with pytest.raises(KeyboardInterrupt):
-            _run(recipe_env)
+               side_effect=_killed_mid_install), pytest.raises(KeyboardInterrupt):
+        _run(recipe_env)
 
     assert not base.exists(), 'an interrupted build published a cache entry'
     # The partial name carries a per-attempt suffix, so match it by shape.
@@ -340,12 +339,11 @@ def test_setup_level_bare_with_provision_is_rejected_before_building(recipe_env,
 
     from adare.backend.vm.recipe import build_or_reuse_recipe_vm
     with patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-               side_effect=_must_not_run):
-        with pytest.raises(EnvironmentLoadFailed, match='setup_level'):
-            build_or_reuse_recipe_vm(
-                parse_environment_file(env_file), base_dir=env_file.parent,
-                iso_override=recipe_env['iso_dir'],
-            )
+               side_effect=_must_not_run), pytest.raises(EnvironmentLoadFailed, match='setup_level'):
+        build_or_reuse_recipe_vm(
+            parse_environment_file(env_file), base_dir=env_file.parent,
+            iso_override=recipe_env['iso_dir'],
+        )
     assert hashlib  # keep the import meaningful for readers
 
 
@@ -357,9 +355,8 @@ def test_insufficient_free_disk_is_rejected_before_building(recipe_env, monkeypa
         raise AssertionError('a build started without enough free disk')
 
     with patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm',
-               side_effect=_must_not_run):
-        with pytest.raises(EnvironmentLoadFailed, match='free disk space'):
-            _run(recipe_env)
+               side_effect=_must_not_run), pytest.raises(EnvironmentLoadFailed, match='free disk space'):
+        _run(recipe_env)
 
 
 def test_free_disk_requirement_is_lower_when_the_base_is_already_cached(recipe_env, monkeypatch):

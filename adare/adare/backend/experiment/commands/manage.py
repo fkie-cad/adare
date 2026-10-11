@@ -74,10 +74,7 @@ class StageCtxManagerLite:
         duration = (self.end_time - self.start_time).total_seconds()
 
         # Determine status based on exception and explicit result
-        if exc_type:
-            status = StatusEnum.FAILED
-            message = f"{self.stage.msg} (failed)"
-        elif self.result is False:
+        if exc_type or self.result is False:
             status = StatusEnum.FAILED
             message = f"{self.stage.msg} (failed)"
         else:

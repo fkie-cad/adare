@@ -1,12 +1,12 @@
-from typing import Callable, Awaitable, Optional
-import contextlib
 import asyncio
+import contextlib
+import logging
 import time
+from collections.abc import Awaitable, Callable
 
 from adarelib.event.event import Event
 from adarelib.event.ws import EVENT
 
-import logging
 log = logging.getLogger(__name__)
 
 class EventCtxManager(contextlib.AbstractContextManager):
@@ -18,9 +18,9 @@ class EventCtxManager(contextlib.AbstractContextManager):
     """
     event: Event
     log_func: Callable[[str], Awaitable[None]]
-    websocket_broadcaster: Optional[Callable] = None
+    websocket_broadcaster: Callable | None = None
 
-    def __init__(self, event: Event, log_func: Callable[[str], Awaitable[None]], websocket_broadcaster: Optional[Callable] = None):
+    def __init__(self, event: Event, log_func: Callable[[str], Awaitable[None]], websocket_broadcaster: Callable | None = None):
         self.log_func = log_func
         self.event = event
         self.websocket_broadcaster = websocket_broadcaster
@@ -28,7 +28,7 @@ class EventCtxManager(contextlib.AbstractContextManager):
     def _log(self):
         """Log the event using the legacy format."""
         event_ws_msg = EVENT(self.event)
-        
+
         # Create coroutine but don't await it - let the caller handle it
         if asyncio.iscoroutinefunction(self.log_func):
             # Schedule the coroutine to run in the event loop
@@ -52,7 +52,7 @@ class EventCtxManager(contextlib.AbstractContextManager):
                 # Convert event to WebSocket format
                 event_type = self._get_websocket_event_type()
                 event_data = self._convert_to_websocket_data()
-                
+
                 await self.websocket_broadcaster(event_type, event_data)
             except Exception as e:
                 log.error(f"Failed to broadcast WebSocket event: {e}")
@@ -60,13 +60,13 @@ class EventCtxManager(contextlib.AbstractContextManager):
     def _get_websocket_event_type(self) -> str:
         """Convert Event type to WebSocket event type."""
         event_class = self.event.__class__.__name__
-        
+
         # Map event types to WebSocket event types
         mapping = {
             'TestEvent': 'test_progress',
             'ErrorEvent': 'error',
         }
-        
+
         return mapping.get(event_class, 'log')
 
     def _convert_to_websocket_data(self) -> dict:
@@ -75,7 +75,7 @@ class EventCtxManager(contextlib.AbstractContextManager):
             "timestamp": time.time(),
             "status": getattr(self.event, 'status', None),
         }
-        
+
         # Add event-specific data
         if hasattr(self.event, 'test_name'):
             data['test_name'] = self.event.test_name
@@ -88,12 +88,12 @@ class EventCtxManager(contextlib.AbstractContextManager):
                 'status': self.event.result.status,
                 'details': getattr(self.event.result, 'details', [])
             }
-        
+
         return data
 
     def __enter__(self):
         self._log()
-        
+
         # Also broadcast over WebSocket if available
         if self.websocket_broadcaster:
             try:
@@ -102,14 +102,14 @@ class EventCtxManager(contextlib.AbstractContextManager):
                     asyncio.create_task(self._broadcast_websocket_event())
             except RuntimeError:
                 pass  # No event loop running
-        
+
         return self
 
     def update(self, event: Event):
         self.event = event
         self._log()
-        
-        # Also broadcast over WebSocket if available  
+
+        # Also broadcast over WebSocket if available
         if self.websocket_broadcaster:
             try:
                 loop = asyncio.get_event_loop()
@@ -123,13 +123,13 @@ class EventCtxManager(contextlib.AbstractContextManager):
 
 
 # Global WebSocket broadcaster reference
-_websocket_broadcaster: Optional[Callable] = None
+_websocket_broadcaster: Callable | None = None
 
 def set_websocket_broadcaster(broadcaster: Callable):
     """Set the global WebSocket event broadcaster."""
     global _websocket_broadcaster
     _websocket_broadcaster = broadcaster
 
-def get_websocket_broadcaster() -> Optional[Callable]:
+def get_websocket_broadcaster() -> Callable | None:
     """Get the global WebSocket event broadcaster."""
     return _websocket_broadcaster

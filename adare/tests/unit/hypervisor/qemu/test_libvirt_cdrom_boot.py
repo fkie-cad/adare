@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-import pytest
 
 from adare.hypervisor.qemu.libvirt_xml import generate_domain_xml
 from adare.hypervisor.qemu.models import QEMUVMConfig

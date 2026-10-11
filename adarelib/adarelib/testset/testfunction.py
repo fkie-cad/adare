@@ -1,15 +1,16 @@
+import logging
+import threading
 from inspect import isclass
 from pathlib import Path
-import threading
-import cattrs
-import attrs
 
+import attrs
+import cattrs
+
+from adarelib.common.variables import VariableRegistry
+from adarelib.helper.module import import_module_from_pyfile
 from adarelib.testset.basictest import BasicTest
 from adarelib.testset.type import TestsetFile
-from adarelib.helper.module import import_module_from_pyfile
-from adarelib.common.variables import VariableRegistry
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -38,16 +39,15 @@ class ModuleLoadFailure:
                     f"uv pip install {pkg}"
                 )
             return f"Testfunction '{self.module_name}' has missing dependency: {self.exception_message}"
-        elif self.exception_type == 'ImportError':
+        if self.exception_type == 'ImportError':
             return f"Testfunction '{self.module_name}' import failed: {self.exception_message}"
-        elif self.exception_type == 'SyntaxError':
+        if self.exception_type == 'SyntaxError':
             return f"Testfunction '{self.module_name}' has syntax error: {self.exception_message}"
-        elif self.exception_type == 'ContractViolation':
+        if self.exception_type == 'ContractViolation':
             return f"Testfunction '{self.module_name}' violates the authoring contract: {self.exception_message}"
-        elif self.exception_type == 'DuplicateTestnameError':
+        if self.exception_type == 'DuplicateTestnameError':
             return f"Testfunction '{self.module_name}' has {self.exception_message}"
-        else:
-            return f"Testfunction '{self.module_name}' failed to load: {self.exception_type}: {self.exception_message}"
+        return f"Testfunction '{self.module_name}' failed to load: {self.exception_type}: {self.exception_message}"
 
 
 class TestfunctionLoader:
@@ -279,13 +279,13 @@ def get_missing_testfunctions(testset: TestsetFile, testfunction_collection: dic
             missing.append(test.function)
             log.error(f"Missing testfunction: {test.function}")
             log.debug(f"Available testfunctions: {testfunction_collection}")
-    
+
     if missing:
         log.error(f"Missing testfunctions: {missing}")
         log.debug(f"Available testfunction collections: {list(testfunction_collection.keys())}")
         for collection_name, functions in testfunction_collection.items():
             log.debug(f"Collection '{collection_name}': {list(functions.keys())}")
-    
+
     return missing
 
 
@@ -301,12 +301,12 @@ def structure_tests(testset: TestsetFile, testfunction_collection: dict) -> tupl
         try:
             # Convert test to dict and ensure variables are properly handled
             test_dict = attrs.asdict(test)
-            
+
             # Convert variables to VariableRegistry if present
             if 'variables' in test_dict and test_dict['variables']:
                 if not isinstance(test_dict['variables'], VariableRegistry):
                     test_dict['variables'] = VariableRegistry.from_dict(test_dict['variables'])
-            
+
             testclass_instance = cattrs.structure(test_dict, testclass)
         except cattrs.errors.ClassValidationError as e:
             log.error('an test has missing/wrong parameters in the testset file -> see exception below')

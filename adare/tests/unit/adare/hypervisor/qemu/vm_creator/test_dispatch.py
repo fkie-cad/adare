@@ -228,5 +228,5 @@ class TestRecipeUsesTheSameDispatch:
 def test_gui_install_modes_constant_matches_the_dispatch_branches():
     """`GUI_INSTALL_MODES` drives CLI behaviour (setup-level warning, skipping the
     post-install session); it must stay in step with the modes handled above."""
-    assert GUI_INSTALL_MODES == frozenset({'manual', 'gui-auto'})
+    assert frozenset({'manual', 'gui-auto'}) == GUI_INSTALL_MODES
     assert dispatch.GUI_INSTALL_MODES is GUI_INSTALL_MODES

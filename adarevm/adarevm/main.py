@@ -1,12 +1,10 @@
 import argparse
 import asyncio
+import json
 import logging
 import os
 import platform
 from pathlib import Path
-from typing import List
-
-import json
 
 log = logging.getLogger(__name__)
 
@@ -47,12 +45,12 @@ def __parse_args():
     parser = argparse.ArgumentParser(description='ADARE VM Agent')
     parser.add_argument('--logfile', '-l', type=str, default=None,
                         help='Path to log file')
-    
+
     # Run directory as positional argument (optional)
     # If provided, it overrides defaults and is used to look for config.json
     parser.add_argument('run_dir', nargs='?', default=str(DEFAULT_RUN_DIR),
                         help='Path to run directory containing config.json')
-                        
+
     parser.add_argument('--tools-path', '-t', action='append', default=[],
                         dest='tools_paths',
                         help='Path to add to PATH for tools (can be specified multiple times)')
@@ -65,7 +63,7 @@ def __parse_args():
     return parser.parse_args()
 
 
-async def main(tools_paths: List[str] = None, data_paths: List[str] = None, installation_mode: str = "wheel"):
+async def main(tools_paths: list[str] = None, data_paths: list[str] = None, installation_mode: str = "wheel"):
     from adarevm.core.server import AdareVMServer
     server_instance = AdareVMServer(
         tools_paths=tools_paths,
@@ -91,15 +89,15 @@ def load_config(run_dir: str) -> dict:
     if not config_path.exists():
         log.warning(f"Config file not found: {config_path}")
         return {}
-    
+
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path) as f:
             return json.load(f)
     except Exception as e:
         log.warning(f"Failed to load config from {config_path}: {e}")
         return {}
 
-def _log_shared_paths(paths: List[str], file_transfer_mode: str):
+def _log_shared_paths(paths: list[str], file_transfer_mode: str):
     """Log how /adare was populated and what each tools/data path holds.
 
     Missing or empty shares are otherwise invisible in this log, which is the
@@ -120,13 +118,13 @@ def _log_shared_paths(paths: List[str], file_transfer_mode: str):
 
 def run():
     args = __parse_args()
-    
+
     # Load config from file
     config = load_config(args.run_dir)
-    
+
     # Merge config with args (args take precedence if specified, but usually won't be)
     # Config keys: 'tools_paths', 'data_paths', 'logfile'
-    
+
     loglevel_lookup = {
         'DEBUG': logging.DEBUG,
         'INFO': logging.INFO,
@@ -143,7 +141,7 @@ def run():
 
     # Log version information
     try:
-        from importlib.metadata import version, PackageNotFoundError
+        from importlib.metadata import PackageNotFoundError, version
         try:
             adarevm_version = version('adarevm')
         except PackageNotFoundError:

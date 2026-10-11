@@ -1,18 +1,15 @@
-from collections.abc import Callable
+import logging
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-import shutil
-from typing import Awaitable
 
-from adarelib.testset.parser import parse_testsetfile
-from adarelib.testset.type import TestsetFile
-from adarelib.testset.testfunction import import_basictest_subclasses, get_missing_testfunctions, structure_tests
 from adarelib.constants import StatusEnum
 from adarelib.event.event import TestEvent
+from adarelib.testset.parser import parse_testsetfile
+from adarelib.testset.testfunction import get_missing_testfunctions, import_basictest_subclasses, structure_tests
+from adarelib.testset.type import TestsetFile
 from adarevm.core.events import EventCtxManager
-from adarevm.automation.shell import execute_on_shell
 from adarevm.exception import LoggedErrorException
 
-import logging
 log = logging.getLogger(__name__)
 
 

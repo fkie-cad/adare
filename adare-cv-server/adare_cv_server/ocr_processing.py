@@ -1,16 +1,17 @@
 """OCR processing utilities using PaddleOCR."""
 
-import logging
-import io
-import math
 import asyncio
+import io
+import logging
+import math
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Any, Tuple, Union, Optional
-import numpy as np
-import cv2
 from datetime import datetime
+from typing import Any
+
+import cv2
+import numpy as np
 
 from .constants import OCRConstants
 from .exceptions import OCRProcessingError
@@ -60,7 +61,7 @@ class OCRProcessor:
         return cls._ocr_instance
 
     @staticmethod
-    def _run_paddle_ocr(screenshot_bytes: bytes) -> List[Tuple[List[List[float]], Tuple[str, float]]]:
+    def _run_paddle_ocr(screenshot_bytes: bytes) -> list[tuple[list[list[float]], tuple[str, float]]]:
         """Run PaddleOCR in a separate thread to avoid blocking."""
         try:
             ocr = OCRProcessor._get_paddle_ocr()
@@ -141,7 +142,7 @@ class OCRProcessor:
             raise OCRProcessingError(f"OCR failed: {str(e)}") from e
 
     @staticmethod
-    async def process_screenshot(screenshot_bytes: bytes) -> List[Tuple[List[List[float]], Tuple[str, float]]]:
+    async def process_screenshot(screenshot_bytes: bytes) -> list[tuple[list[list[float]], tuple[str, float]]]:
         """Process screenshot with OCR asynchronously."""
         executor = ThreadPoolExecutor(max_workers=OCRConstants.MAX_WORKERS)
 
@@ -161,7 +162,7 @@ class OCRProcessor:
             executor.shutdown(wait=True)
 
     @staticmethod
-    def calculate_text_center(box: List[List[float]], offset_x: int = 0, offset_y: int = 0) -> Tuple[int, int]:
+    def calculate_text_center(box: list[list[float]], offset_x: int = 0, offset_y: int = 0) -> tuple[int, int]:
         """Calculate center coordinates from bounding box."""
         x_coords = [point[0] for point in box]
         y_coords = [point[1] for point in box]
@@ -173,10 +174,10 @@ class OCRProcessor:
 class TextMatcher:
     """Text matching utilities supporting substring, regex, and fuzzy matching."""
 
-    _regex_cache: Dict[Tuple[str, int], re.Pattern] = {}
+    _regex_cache: dict[tuple[str, int], re.Pattern] = {}
 
     @classmethod
-    def compile_regex(cls, pattern: str, flags: Optional[List[str]] = None) -> Optional[re.Pattern]:
+    def compile_regex(cls, pattern: str, flags: list[str] | None = None) -> re.Pattern | None:
         """Compile and cache regex pattern with flags.
 
         Args:
@@ -216,7 +217,7 @@ class TextMatcher:
             return None
 
     @classmethod
-    def regex_match(cls, pattern: str, text: str, flags: Optional[List[str]] = None) -> bool:
+    def regex_match(cls, pattern: str, text: str, flags: list[str] | None = None) -> bool:
         """Check if regex pattern matches text.
 
         Args:
@@ -319,8 +320,8 @@ class FuzzyMatcher:
         pattern: str,
         text_detected: str,
         allow_missing_chars = None,  # Union[bool, str, List[str]]
-        max_missing: Optional[int] = None,
-        min_similarity: Optional[float] = None,
+        max_missing: int | None = None,
+        min_similarity: float | None = None,
         case_sensitive: bool = False
     ) -> bool:
         """Fuzzy match with missing chars or similarity threshold.
@@ -406,7 +407,7 @@ class FuzzyMatcher:
     def regex_fuzzy_match(
         pattern: str,
         text_detected: str,
-        flags: Optional[List[str]] = None,
+        flags: list[str] | None = None,
         min_similarity: float = 0.8,
         case_sensitive: bool = False
     ) -> bool:
@@ -445,8 +446,8 @@ class FuzzyMatcher:
 
 class TextDetector:
     """Handles text detection and search operations."""
-    
-    _debug_output_dir: Optional[Any] = None
+
+    _debug_output_dir: Any | None = None
 
     @classmethod
     def set_debug_output_dir(cls, output_dir: Any) -> None:
@@ -454,14 +455,14 @@ class TextDetector:
         cls._debug_output_dir = output_dir
 
     @classmethod
-    def _save_debug_image(cls, screenshot_bytes: bytes, detections: List[Any], prefix: str = "ocr", timestamp: str = None) -> None:
+    def _save_debug_image(cls, screenshot_bytes: bytes, detections: list[Any], prefix: str = "ocr", timestamp: str = None) -> None:
         """Save screenshot with annotated detections if debug dir is set."""
         if not cls._debug_output_dir:
             return
 
         try:
             # cv2 and numpy are already imported at the top
-            
+
             # Decode image
             nparr = np.frombuffer(screenshot_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -470,15 +471,15 @@ class TextDetector:
             for detection in detections:
                 box, (text, score) = detection
                 box = np.array(box).astype(np.int32).reshape((-1, 1, 2))
-                
+
                 # Draw bounding box (Red)
                 cv2.polylines(img, [box], True, (0, 0, 255), 2)
-                
+
                 # Draw text and score (Blue)
                 # Ensure text is clean string
                 display_text = f"{text} ({score:.2f})"
                 x, y = box[0][0]
-                cv2.putText(img, display_text, (int(x), int(y) - 5), 
+                cv2.putText(img, display_text, (int(x), int(y) - 5),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
             # Generate timestamp if not provided
@@ -488,7 +489,7 @@ class TextDetector:
             # Save to file
             filename = f"{prefix}_{timestamp}.png"
             filepath = cls._debug_output_dir / filename
-            
+
             cv2.imwrite(str(filepath), img)
             log.info(f"Saved OCR debug image to {filepath}")
 
@@ -496,7 +497,7 @@ class TextDetector:
             log.warning(f"Failed to save OCR debug image: {e}")
 
     @classmethod
-    def _save_debug_csv(cls, detections: List[Any], prefix: str = "ocr", timestamp: str = None) -> None:
+    def _save_debug_csv(cls, detections: list[Any], prefix: str = "ocr", timestamp: str = None) -> None:
         """Save detection data to CSV if debug dir is set.
 
         Args:
@@ -571,7 +572,7 @@ class TextDetector:
         offset_x: int = 0,
         offset_y: int = 0,
         output_format: str = "json"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get all detected text from screenshot data."""
         log.info("Starting OCR to get all detected text")
 
@@ -608,7 +609,7 @@ class TextDetector:
         return TextDetector._format_output(all_text, output_format)
 
     @staticmethod
-    def _calculate_box_dimensions(box: List[List[float]]) -> Tuple[int, int]:
+    def _calculate_box_dimensions(box: list[list[float]]) -> tuple[int, int]:
         """Calculate width and height from bounding box."""
         x_coords = [point[0] for point in box]
         y_coords = [point[1] for point in box]
@@ -624,12 +625,12 @@ class TextDetector:
         offset_y: int = 0,
         output_format: str = "json",
         match_mode: str = "substring",
-        regex_flags: Optional[List[str]] = None,
-        allow_missing_chars: Optional[Union[bool, str, List[str]]] = None,
-        max_missing: Optional[int] = None,
-        min_similarity: Optional[float] = None,
+        regex_flags: list[str] | None = None,
+        allow_missing_chars: bool | str | list[str] | None = None,
+        max_missing: int | None = None,
+        min_similarity: float | None = None,
         case_sensitive: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Find specific text locations in screenshot data with advanced matching.
 
         Args:
@@ -717,22 +718,20 @@ class TextDetector:
 
         if output_format.lower() == "csv":
             return TextDetector._format_csv_output(matches)
-        else:
-            return TextDetector._format_json_text_output(matches)
+        return TextDetector._format_json_text_output(matches)
 
     @staticmethod
-    def _format_output(all_text: List[Dict[str, Any]], output_format: str) -> Dict[str, Any]:
+    def _format_output(all_text: list[dict[str, Any]], output_format: str) -> dict[str, Any]:
         """Format output based on requested format."""
         if output_format.lower() == "csv":
             return TextDetector._format_csv_output(all_text)
-        else:
-            return {
-                "format": "json",
-                "all_text": all_text
-            }
+        return {
+            "format": "json",
+            "all_text": all_text
+        }
 
     @staticmethod
-    def _format_csv_output(text_data: List[Dict[str, Any]]) -> Dict[str, str]:
+    def _format_csv_output(text_data: list[dict[str, Any]]) -> dict[str, str]:
         """Format text data as CSV."""
         csv_output = io.StringIO()
         csv_output.write(f"{OCRConstants.CSV_HEADER}\n")
@@ -748,7 +747,7 @@ class TextDetector:
         }
 
     @staticmethod
-    def _format_json_text_output(matches: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _format_json_text_output(matches: list[dict[str, Any]]) -> dict[str, Any]:
         """Format text matches in JSON format for backward compatibility."""
         locations = []
         confidences = []
@@ -765,7 +764,7 @@ class TextDetector:
                 loc_data["location"]["width"] = match["width"]
             if "height" in match:
                 loc_data["location"]["height"] = match["height"]
-                
+
             locations.append(loc_data)
             confidences.append(match["confidence"])
 
