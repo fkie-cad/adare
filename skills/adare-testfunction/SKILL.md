@@ -25,7 +25,7 @@ adare test search "the deleted file is gone"          # ranked, synonym-aware, w
 adare test search "registry value" --os windows       # filters: --collection, --os, --category
 adare test info standard.file_does_not_exist          # signature, types, defaults, parameter docs
 adare test info standard.file_does_not_exist --example  # just the tests: block to paste
-adare --format json test search "icon visible"        # machine-readable (flag goes before `test`)
+adare test search "icon visible" --json              # machine-readable
 ```
 
 No project or VM needed; this reads the collection sources directly. The full

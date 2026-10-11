@@ -909,10 +909,17 @@ def get_vm_info(vm_id: str) -> dict:
     snapshot_info = {}
     try:
         from adare.backend.vm.snapshot_manager import SnapshotManager
-        manager = SnapshotManager()
-        snapshot_info = manager.get_snapshot_info(vm)
-    except (VMError, OSError, ImportError) as e:
+        from adare.hypervisor.exceptions import HypervisorException
+    except ImportError as e:
         log.debug(f"Could not get snapshot info for VM {vm_id}: {e}")
+    else:
+        try:
+            manager = SnapshotManager()
+            snapshot_info = manager.get_snapshot_info(vm)
+        except (VMError, OSError, HypervisorException) as e:
+            # HypervisorException: SnapshotManager builds a VirtualBox manager, which
+            # fails on a QEMU-only host without VBoxManage ("vm info" used to die here).
+            log.debug(f"Could not get snapshot info for VM {vm_id}: {e}")
 
     return {
         'id': vm.id,

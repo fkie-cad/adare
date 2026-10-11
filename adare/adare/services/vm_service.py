@@ -263,7 +263,7 @@ class VMService:
                         message=f'VM "{vm.name}" has {len(instances)} active instances',
                         solutions=[
                             'Use --force to delete VM and all its instances',
-                            'Remove instances first with `adare vm instance remove`',
+                            'Remove instances first with `adare vm remove`',
                         ]
                     )
 
@@ -378,7 +378,7 @@ class VMService:
                         code="VmInstanceNotFoundError",
                         message=f'VM instance with ID {instance_id} not found',
                         solutions=[
-                            'Use `adare vm instance list` to see available instances',
+                            'Use `adare vm list` to see available instances',
                             'Check if the instance ID is correct',
                         ]
                     )
@@ -545,7 +545,7 @@ class VMService:
                         code="VmInstanceNotFoundError",
                         message=f'VM instance with ID {instance_id} not found',
                         solutions=[
-                            'Use `adare vm instance list` to see available instances',
+                            'Use `adare vm list` to see available instances',
                         ]
                     )
 

@@ -463,7 +463,7 @@ class SnapshotManager:
             if state != 'poweroff':
                 log.error(
                     f"QEMU VM must be stopped for {operation_name}. "
-                    f"Current state: {state}. Stop the VM first with: adare vm stop {vm_instance.instance_name}"
+                    f"Current state: {state}. Stop the VM instance {vm_instance.instance_name} first"
                 )
                 return False
             return True

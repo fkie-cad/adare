@@ -259,4 +259,4 @@ class AdareVMProcessDiedError(ExperimentException):
 # ---------------------------------------------------------------------------
 
 class ExperimentNotChanged(LoggedException):
-    pass
+    informational = True

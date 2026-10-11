@@ -1,105 +1,120 @@
-Output Formats (in development)
-===============================
+Output Formats, Errors and Exit Codes
+=====================================
 
-ADARE CLI supports multiple output formats to enable automation and integration with external tools.
-By default, commands use Rich formatting for human-readable terminal output, but you can also
-export data in structured formats like JSON and YAML.
+ADARE's CLI is meant to be driven by people, shell scripts and AI agents alike.
+Every read-only command can print its data as Rich tables (for humans), plain
+tab-separated text (for ``cut``/``awk``), JSON or YAML, and every command
+reports errors and exit codes the same way.
 
-Global Options
---------------
+Choosing a format
+-----------------
 
-All ADARE commands support the following output format options:
-
-.. code-block:: bash
-
-   adare --output-format <format> [command]
-   adare --format <format> [command]            # Short form
-   adare --output-file <file> [command]         # Save to file
-
-Supported formats:
-- ``rich`` (default): Human-readable terminal output with colors and formatting
-- ``json``: Machine-readable JSON format
-- ``yaml``: Human and machine-readable YAML format
-
-Examples
---------
-
-Basic Usage
-~~~~~~~~~~~
+Read-only ``list``/``info``/``show``/``status`` commands take the format flags
+**after the subcommand**:
 
 .. code-block:: bash
 
-   # Default Rich output
-   adare show projects
+   adare env list --json
+   adare experiment info my_experiment --format yaml
+   adare run list --format plain
+   adare status --json
 
-   # JSON output to console
-   adare --format json show projects
-
-   # YAML output to file
-   adare --format yaml --output-file projects.yaml show projects
-
-   # Dual output: Rich to console AND JSON to file
-   adare --output-file results.json show projects
-
-   # Dual output: Rich to console AND YAML to file
-   adare --format yaml --output-file results.yaml show projects
-
-Information Commands
-~~~~~~~~~~~~~~~~~~~~
-
-All ``show`` commands support structured output:
+The global options before the subcommand keep working, and an environment
+variable sets a default for a whole shell or CI job:
 
 .. code-block:: bash
 
-   # List all projects in JSON
-   adare --format json show projects
+   adare --format json env list           # alias: --output-format
+   ADARE_FORMAT=json adare env list
+   adare --output-file runs.json run list # Rich on the console + JSON file
 
-   # List experiments with YAML output
-   adare --format yaml show experiments
+Formats:
 
-   # Get specific experiment details
-   adare --format json show experiment my_experiment
+- ``rich``: colour tables and panels for a terminal.
+- ``plain``: tab-separated text. A list is one header row plus one row per item;
+  a single record is ``key<TAB>value`` lines (nested tables follow under a
+  ``# name`` line). Values are never truncated (full ULIDs), nested fields become
+  dotted columns (``vm.id``), booleans are ``true``/``false``, lists are
+  comma-joined, and there is no colour, box drawing or emoji.
+- ``json`` / ``yaml``: one parseable document on stdout. ``--json`` is shorthand
+  for ``--format json``.
 
-   # List runs for automation
-   adare --format json show runs
+Precedence, highest first:
 
-Experiment Execution
-~~~~~~~~~~~~~~~~~~~~
+1. ``--json`` / ``--format`` after the subcommand
+2. ``adare --format`` / ``--output-format`` before it
+3. ``ADARE_FORMAT`` (``rich``, ``plain``, ``json`` or ``yaml``)
+4. auto: ``rich`` when stdout is a terminal, ``plain`` when it is piped or redirected
 
-Experiment runs provide comprehensive results in structured formats:
+``-o`` is deliberately **not** a format flag: several commands already use it for
+an output file. ``NO_COLOR`` is respected by the Rich output.
 
-.. code-block:: bash
+Commands that cannot produce structured data (for example ``vm gui-doctor``, which
+streams live probe results) still accept ``--format rich|plain`` but exit with a
+usage error (exit code 2) when asked for ``json``/``yaml``, instead of printing a
+table that a JSON parser would choke on.
 
-   # Run experiment with JSON summary
-   adare --format json experiment run my_experiment test_env
+stdout and stderr
+-----------------
 
-   # Run batch experiments with YAML output
-   adare --format yaml experiment run "exp_*" "*_env"
+stdout carries only data. Logs, progress messages, warnings and errors go to
+stderr, so ``adare env list --json | jq .`` works even while warnings are shown.
 
-   # Save results to file for analysis
-   adare --format json --output-file results.json experiment run my_experiment
+Errors
+------
 
-   # DUAL OUTPUT: Normal Rich console + JSON file (perfect for automation!)
-   adare --output-file results.json experiment run my_experiment test_env
+A failure prints **one** concise message on stderr:
+
+.. code-block:: text
+
+   Error: Experiment run "NOSUCH" not found
+   Hints:
+     - Use `adare run list` to list available experiment runs
+     - Check if the run ULID is correct
+
+In ``json`` (and ``yaml``) mode the message is a document instead:
+
+.. code-block:: json
+
+   {"error": {"code": "RUN_NOT_FOUND",
+              "message": "Experiment run \"NOSUCH\" not found",
+              "hint": "Use `adare run list` to list available experiment runs",
+              "solutions": ["Use `adare run list` to list available experiment runs",
+                            "Check if the run ULID is correct"]}}
+
+``code`` is derived from the exception class (``TestFunctionNotFoundError`` ->
+``TESTFUNCTION_NOT_FOUND``, ``VMNotFoundError`` -> ``VM_NOT_FOUND``); ``hint`` is
+the first suggested fix or ``null``; ``solutions`` is always a list. Tracebacks are
+only printed with ``--very-verbose``.
+
+Exit codes
+----------
+
+=====  ===========================================================
+Code   Meaning
+=====  ===========================================================
+``0``  success (including informational results such as "no projects found")
+``1``  error
+``2``  usage error (bad option or argument, unsupported ``--format``)
+``3``  not found (the named run, environment, experiment, VM, profile ... does not exist)
+=====  ===========================================================
+
+Earlier versions exited ``255`` on every error and ``0`` on some failures
+(e.g. ``vm info`` or ``os-profile show`` with an unknown name).
 
 Dual Output Mode
-~~~~~~~~~~~~~~~~
+----------------
 
-ADARE supports **dual output** - showing human-readable Rich output on the console while simultaneously saving structured data to a file. This is perfect for interactive use with automation capabilities.
+``--output-file FILE`` shows the normal console output **and** saves the
+structured data to ``FILE``:
+
+- ``--output-file FILE`` alone: Rich (or plain) console + JSON file
+- ``--format yaml --output-file FILE``: console + YAML file
 
 .. code-block:: bash
 
-   # Show normal Rich output + save JSON to file
-   adare --output-file test.json experiment run test_sqlite -t
-
-   # Show normal Rich output + save YAML to file
-   adare --format yaml --output-file test.yaml show experiments
-
-**How it works:**
-- ``--output-file FILE`` = Always enables dual output (Rich console + structured file)
-- ``--format FORMAT --output-file FILE`` = Rich console + FORMAT file
-- ``--format FORMAT`` (without --output-file) = FORMAT to console only
-- Default file format is JSON, unless ``--format`` specifies otherwise
+   adare --output-file results.json experiment run my_experiment -e test_env
+   adare --format yaml --output-file experiments.yaml experiment list
 
 Output Schema
 -------------
@@ -290,7 +305,7 @@ Best Practices
 1. **Automation**: Use ``--format json`` for scripts and automation
 2. **Human Review**: Use ``--format yaml`` for configuration files and human review
 3. **File Output**: Always use ``--output-file`` for large result sets to avoid terminal overflow
-4. **Error Handling**: Check exit codes in addition to parsing output for robust automation
+4. **Error Handling**: Check exit codes (0/1/2/3) and, in json mode, parse the ``{"error": ...}`` document on stderr
 5. **Schema Validation**: Validate JSON output structure before processing in critical systems
 
 Troubleshooting
@@ -300,7 +315,7 @@ Common Issues
 ~~~~~~~~~~~~~
 
 **Invalid JSON output**:
-   Ensure no other output (like warnings) is mixed with JSON. Use ``--very-verbose`` flag carefully.
+   Read stdout only: logs and warnings go to stderr. Anything else on stdout in json mode is a bug.
 
 **Missing fields in output**:
    Some fields may be null/empty if data is not available. Always check for existence before accessing.
