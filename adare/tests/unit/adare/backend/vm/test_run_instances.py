@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from adare.backend.vm import run_instances
+from adare.backend.vm import run_instances, slots
+from adare.backend.vm.exceptions import VMError
 from adare.database.api.vm import VmApi
 from adare.database.models.global_models import Vm, VmInstance
 
@@ -62,6 +63,37 @@ class TestAllocate:
 
         assert first.owner_pid == os.getpid() and first.status == 'active'
         assert first.websocket_port != second.websocket_port
+
+    def test_holds_the_vm_slot_until_the_run_is_removed(self, global_db, tmp_path):
+        if not slots.slots_enabled():
+            pytest.skip('VM slots need fcntl (POSIX)')
+        slot_dir = tmp_path / 'vm_slots'
+        vm = _vm()
+        slot = slots.acquire_slot(max_slots=1, directory=slot_dir, timeout=0)
+
+        instance = run_instances.allocate_qemu_run_instance(vm, '01JAAAAAAAAAAAAAAAAAAAAAAA', slot=slot)
+        with pytest.raises(slots.VMSlotTimeout):
+            slots.acquire_slot(max_slots=1, directory=slot_dir, timeout=0)
+
+        with (
+            patch('adare.hypervisor.qemu.run_resources.destroy_run_domain'),
+            patch('adare.hypervisor.qemu.run_resources.remove_run_files'),
+        ):
+            run_instances.remove_qemu_run_instance(instance.instance_name)
+        slots.acquire_slot(max_slots=1, directory=slot_dir, timeout=0).release()
+
+    def test_releases_the_vm_slot_when_allocation_fails(self, global_db, tmp_path):
+        if not slots.slots_enabled():
+            pytest.skip('VM slots need fcntl (POSIX)')
+        slot_dir = tmp_path / 'vm_slots'
+        slot = slots.acquire_slot(max_slots=1, directory=slot_dir, timeout=0)
+
+        with (
+            patch('adare.backend.vm.port_manager.reserve_port_atomically', return_value=None),
+            pytest.raises(VMError),
+        ):
+            run_instances.allocate_qemu_run_instance(_vm(), '01JAAAAAAAAAAAAAAAAAAAAAAA', slot=slot)
+        slots.acquire_slot(max_slots=1, directory=slot_dir, timeout=0).release()
 
 
 class TestPidAlive:

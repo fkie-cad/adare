@@ -133,6 +133,17 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - Playbook-level `on_failure:` action list: runs once after the first failure that
   stops the playbook and before the run ends; never changes the failed status.
   Accepted by `adare exp playbook validate` and validated like normal steps.
+- Cross-process VM slots (`adare.backend.vm.slots`): `N` flock files under
+  `<appdata>/vm_slots/` cap the live VMs across all `adare` processes (N =
+  `ADARE_MAX_VMS`, else the same key in the active config profile, else 20, the
+  old per-VM instance limit). Every run's VM (QEMU run instance or pooled
+  VirtualBox instance) takes one slot before it boots (waits up to
+  `ADARE_VM_SLOT_TIMEOUT`, default 30 s) and keeps it until the run is removed or
+  the instance released, so parallel runs cannot exhaust host memory; the kernel frees a crashed
+  process's slot. `adare vm slots status [--json]` shows the slots;
+  `adare vm slots exclusive [--timeout s] -- <cmd>` runs a command holding every
+  slot (its adare child processes run under that lease). A slot belongs to the
+  allocating process, so a VM that outlives it (detached dev session) stops counting.
 
 ### Changed
 - Development tasks have one definition: CI runs the Makefile targets (`make lint`,
