@@ -4,6 +4,7 @@ VM command operations.
 High-level VM operations for CLI and other interfaces.
 """
 
+import asyncio
 import contextlib
 import logging
 import threading
@@ -532,6 +533,7 @@ async def _prepare_qemu_run_instance(
     import ulid
 
     from adare.backend.vm.run_instances import allocate_qemu_run_instance, reconcile_instances
+    from adare.backend.vm.slots import acquire_slot
 
     # Crashed runs leave rows (holding ports) and run files behind; reap them first.
     report = await reconcile_instances()
@@ -543,7 +545,9 @@ async def _prepare_qemu_run_instance(
         log.info("VM integrity verification was interrupted")
         return None
 
-    instance = allocate_qemu_run_instance(source_vm, experiment_run_ulid or str(ulid.ULID()), machine_key)
+    # Cap live VMs across adare processes (ADARE_MAX_VMS): wait for a free slot before booting.
+    slot = await asyncio.to_thread(acquire_slot)
+    instance = allocate_qemu_run_instance(source_vm, experiment_run_ulid or str(ulid.ULID()), machine_key, slot)
     instance_id: str = instance.id
     return instance_id
 
