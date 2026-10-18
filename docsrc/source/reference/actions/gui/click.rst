@@ -57,6 +57,47 @@ Parameters
    * - ``description``
      - string
      - Human-readable description (optional)
+   * - ``verify``
+     - mapping
+     - Effect check, one of ``exists: <target>`` / ``not_exists: <target>`` (optional)
+   * - ``retries``
+     - int
+     - Extra click attempts when ``verify`` does not hold (default 0; requires ``verify``)
+   * - ``verify_timeout``
+     - float
+     - Seconds to poll ``verify`` after each click (default 3.0; one check is always made)
+
+Verify and Retry
+----------------
+
+A click is reported successful as soon as the input events were delivered; nothing checks
+that the widget reacted (a menu that only showed its hover state, a missed press). Add
+``verify`` to check the effect and re-click if it is absent:
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           text: "^Tools$"
+           text_match: {mode: regex}
+         verify:
+           exists:
+             text: "Settings"
+         retries: 2
+         verify_timeout: 3
+         description: "Open the Tools menu (re-click if it did not open)"
+
+After each click the condition is polled for up to ``verify_timeout`` seconds. If it does
+not hold and attempts remain, the target is resolved again (fresh detection, no cached
+match) and clicked again. If it never holds the action fails. A click whose target was not
+found, or whose input delivery failed, is not retried. Do not use ``retries`` on a click
+that navigates or toggles (a second click may undo the first): use ``retries: 0`` with
+``verify`` to only check.
+
+``ADARE_CLICK_SETTLE_MS`` (environment, default ``10``) sets the pause between the pointer
+move and the button press on QEMU hosts; raise it if widgets ignore a click that arrives
+right after the pointer.
 
 Target Options
 --------------

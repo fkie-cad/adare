@@ -295,7 +295,7 @@ class PlaybookApi(ProjectDatabaseApi):
 
         # CRITICAL: Check WaitCondition BEFORE hasattr(__dict__) because attrs classes
         # may not have __dict__ (they use __slots__ by default)
-        from adare.types.playbook import Target, WaitCondition
+        from adare.types.playbook import ClickVerify, Target, WaitCondition
 
         if isinstance(value, WaitCondition):
             return self._serialize_wait_condition(value)
@@ -304,6 +304,12 @@ class PlaybookApi(ProjectDatabaseApi):
         # (e.g. a DragAction's src/dst). Serialize it symmetrically here.
         if isinstance(value, Target):
             return self._target_to_json(value)
+        if isinstance(value, ClickVerify):
+            return {
+                name: self._target_to_json(getattr(value, name))
+                for name in ('exists', 'not_exists')
+                if getattr(value, name) is not None
+            }
 
         # Now check for __dict__ for other object types
         if hasattr(value, '__dict__'):
@@ -531,6 +537,7 @@ class PlaybookApi(ProjectDatabaseApi):
             ActionTestAction,
             BlockAction,
             ClickAction,
+            ClickVerify,
             CommandAction,
             DragAction,
             GotoAction,
@@ -570,8 +577,22 @@ class PlaybookApi(ProjectDatabaseApi):
                 raise ValueError(f"Invalid JSON in {action_type} action parameters: {params[:200]}") from e
 
         if action_type == 'click':
+            click_verify = None
+            verify_json = params.get('verify')
+            if isinstance(verify_json, dict) and ('exists' in verify_json or 'not_exists' in verify_json):
+                click_verify = ClickVerify(
+                    exists=self._json_to_target(verify_json['exists']) if verify_json.get('exists') else None,
+                    not_exists=self._json_to_target(verify_json['not_exists'])
+                    if verify_json.get('not_exists')
+                    else None,
+                )
             return ClickAction(
-                target=self._json_to_target(item.target), type=params.get('type', 'left'), description=description
+                target=self._json_to_target(item.target),
+                type=params.get('type', 'left'),
+                description=description,
+                verify=click_verify,
+                retries=params.get('retries', 0) if click_verify else 0,
+                verify_timeout=params.get('verify_timeout', 3.0),
             )
 
         if action_type == 'drag':

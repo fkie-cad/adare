@@ -56,9 +56,86 @@ class GUIActionsMixin(_Host):
 
         action_context = f"click_{action.type}_{target_name}"
 
-        return await self.target_resolution.execute_action_with_steps(
-            action, handler, parent_event_id, event_emitter, action_context=action_context
+        if getattr(action, 'verify', None) is None:
+            # No verify condition: one click, no effect check, no retry (unchanged behaviour).
+            return await self.target_resolution.execute_action_with_steps(
+                action, handler, parent_event_id, event_emitter, action_context=action_context
+            )
+
+        return await self._execute_click_with_verify(action, handler, parent_event_id, event_emitter, action_context)
+
+    async def _execute_click_with_verify(
+        self, action: ClickAction, handler, parent_event_id, event_emitter, action_context: str
+    ) -> ActionResult:
+        """Click, check ``action.verify``, and re-resolve + re-click up to ``action.retries`` times.
+
+        Every attempt resolves the target afresh (the one-shot match cache is bypassed for
+        retries), so a widget that moved is found again. A failed attempt that never produced
+        a click (target not found, QMP error) is not retried: retry is for a click that was
+        delivered but had no effect.
+        """
+        attempts = 1 + max(0, action.retries)
+        last_result: ActionResult | None = None
+        for attempt in range(1, attempts + 1):
+            if attempt > 1:
+                # Force a fresh detection: the screen changed since the previous attempt.
+                action.target.use_cache = False
+                log.warning(f"Click verify failed; retry {attempt - 1}/{action.retries} for {action_context}")
+            result = await self.target_resolution.execute_action_with_steps(
+                action, handler, parent_event_id, event_emitter, action_context=f"{action_context}_try{attempt}"
+            )
+            last_result = result
+            if not result.success:
+                return result
+
+            if await self._click_verified(action):
+                data = dict(result.data or {})
+                data['click_attempts'] = attempt
+                data['verified'] = True
+                result.data = data
+                return result
+
+        data = dict(last_result.data or {}) if last_result else {}
+        data['click_attempts'] = attempts
+        data['verified'] = False
+        condition = 'exists' if action.verify.exists is not None else 'not_exists'
+        target = action.verify.exists if action.verify.exists is not None else action.verify.not_exists
+        return ActionResult(
+            success=False,
+            message=(
+                f"Click verify failed after {attempts} attempt(s): "
+                f"{condition} {target.text or target.image or target.position!r} not satisfied "
+                f"within {action.verify_timeout}s"
+            ),
+            coordinates=last_result.coordinates if last_result else None,
+            data=data,
         )
+
+    async def _click_verified(self, action: ClickAction) -> bool:
+        """Poll ``action.verify`` for up to ``verify_timeout`` seconds (at least one check)."""
+        verify = action.verify
+        want_exists = verify.exists is not None
+        target = verify.exists if want_exists else verify.not_exists
+        if target.strategy is None:
+            from adare.types.playbook import BestConfidenceStrategy, TopLeftStrategy
+
+            target.strategy = BestConfidenceStrategy() if target.image else TopLeftStrategy()
+
+        deadline = time.monotonic() + max(0.0, action.verify_timeout)
+        while True:
+            screenshot_base64, _ = await self.target_resolution.get_current_screenshot_with_path(
+                action_context="click_verify"
+            )
+            if screenshot_base64:
+                self.target_resolution.begin_resolution()
+                match = await self.target_resolution.target_resolver.resolve_target(target, screenshot_base64)
+                if (match is not None) == want_exists:
+                    return True
+            else:
+                log.warning("Click verify: could not take a screenshot")
+            if time.monotonic() >= deadline:
+                return False
+            await asyncio.sleep(min(0.5, max(0.0, deadline - time.monotonic())))
 
     async def execute_drag(self, action: DragAction, parent_event_id: str = None, event_emitter=None) -> ActionResult:
         """Execute drag action - special handling for two targets."""
