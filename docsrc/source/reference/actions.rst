@@ -331,6 +331,46 @@ Basic Test Structure
        parameter:
          dst: "/evidence/test.txt"
 
+Failure Evidence and ``on_failure``
+===================================
+
+When an action fails (target not found, ``wait_until`` timeout, command error) the playbook
+stops at that action. ADARE keeps what the screen showed, in ``<run>/reporting/failure/``:
+
+- ``aNN_last_search.png``: the screenshot the target resolver last searched
+- ``aNN_screen.png``: a fresh screenshot after the failure (omitted if identical)
+- ``aNN_ocr.json``: the full OCR dump of that screenshot
+- ``aNN_failure.json``: the action, every target it refers to (with offset, strategy,
+  ``text_match``), the error message and the target of the last search (the failing inner
+  step for a ``block``/``loop``)
+
+``NN`` is the 1-based index of the action in the playbook. Set ``ADARE_FAILURE_EVIDENCE=0``
+to turn this off. Assertion (``test:``) failures do not produce a screenshot.
+
+An optional playbook-level ``on_failure:`` list holds steps that run **once**, after the
+first failure that stops the playbook and before the run ends, for example to collect more
+evidence or to exit the application cleanly:
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target: {text: "File"}
+     - wait_until:
+         condition: {exists: {text: "New Window"}}
+   on_failure:
+     - screenshot:
+         name: after_failure
+     - pull:
+         src: "{{ adare_user_documents }}/session.log"
+     - keyboard:
+         combination: [ctrl, q]
+
+``on_failure`` steps are validated like normal steps (``adare exp playbook validate``) and
+can use any variable the playbook defines. They never change the run's failed status or its
+counts; a failing step is logged and the remaining steps still run. No ``on_failure`` list
+means nothing runs after a failure, exactly as before.
+
 Test Failure Handling
 ======================
 

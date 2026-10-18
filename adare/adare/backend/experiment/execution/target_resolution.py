@@ -50,6 +50,9 @@ class TargetResolutionExecutor:
         self.screenshots_dir = screenshots_dir
         self.gui_executor = gui_executor
         self.screenshot_counter = 0
+        # Last screenshot a search ran on and the target it looked for (failure evidence, G8).
+        self.last_screenshot_base64: str | None = None
+        self.last_target = None
         self.current_action_prefix: str | None = None
         self._manifest_initialized = False
 
@@ -147,6 +150,7 @@ class TargetResolutionExecutor:
         # This call is itself a target-resolution attempt, whether it ends up
         # served from cache or via fresh CV - advance the counter either way.
         self.begin_resolution()
+        self.last_target = target
 
         # Apply smart defaults if no strategy specified
         if target.strategy is None:
@@ -481,6 +485,7 @@ class TargetResolutionExecutor:
             if result and 'image' in result:
                 # Extract base64 data from result
                 screenshot_base64 = result['image']['data'] if 'data' in result['image'] else result['image']
+                self.last_screenshot_base64 = screenshot_base64
 
                 # Save screenshot to disk if debug mode is enabled
                 screenshot_path = await self._save_debug_screenshot(screenshot_base64, action_context)
