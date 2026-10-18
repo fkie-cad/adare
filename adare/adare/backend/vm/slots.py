@@ -28,6 +28,7 @@ Limitation: a slot is held by the process that allocated the instance. A VM that
 that process (a detached dev session) stops counting once the process exits.
 """
 
+import contextlib
 import logging
 import os
 import time
@@ -38,7 +39,7 @@ from adare.backend.vm.exceptions import VMError
 try:  # POSIX only; on Windows hosts the counter is a no-op.
     import fcntl
 except ImportError:  # pragma: no cover
-    fcntl = None
+    fcntl = None  # type: ignore[assignment]
 
 log = logging.getLogger(__name__)
 
@@ -108,7 +109,7 @@ def max_vm_slots() -> int:
         from adare.config import userconfig
 
         from_config = _positive_int(userconfig.get(MAX_VMS_ENV), f"{MAX_VMS_ENV} (user config)")
-    except Exception as exc:  # config must never block a run
+    except (OSError, ValueError, KeyError, TypeError) as exc:  # config must never block a run
         log.debug(f"Could not read {MAX_VMS_ENV} from user config: {exc}")
         from_config = None
     return from_config if from_config is not None else DEFAULT_MAX_VMS
@@ -177,10 +178,8 @@ class SlotLease:
     def release(self) -> None:
         fds, self._fds = self._fds, {}
         for fd in fds.values():
-            try:
+            with contextlib.suppress(OSError):
                 os.close(fd)  # closing the descriptor drops the flock
-            except OSError:
-                pass
 
     def __enter__(self) -> "SlotLease":
         return self
@@ -200,11 +199,9 @@ class _NoLease(SlotLease):
 
 
 def _write_holder(fd: int) -> None:
-    try:
+    with contextlib.suppress(OSError):
         os.ftruncate(fd, 0)
         os.pwrite(fd, f"{os.getpid()}\n".encode(), 0)
-    except OSError:
-        pass
 
 
 def _acquire_guard(directory: Path, mode: int, deadline: float) -> int | None:

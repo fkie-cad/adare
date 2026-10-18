@@ -16,10 +16,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-pytestmark = pytest.mark.unit
-
-fcntl = pytest.importorskip("fcntl")
-
 from adare.backend.vm import slots
 from adare.backend.vm.slots import (
     VMSlotTimeout,
@@ -29,6 +25,8 @@ from adare.backend.vm.slots import (
     max_vm_slots,
     slot_status,
 )
+
+pytestmark = [pytest.mark.unit, pytest.mark.skipif(not slots.slots_enabled(), reason="needs fcntl")]
 
 FAST = 0.4  # timeout (s) for expected-failure waits
 
@@ -110,9 +108,8 @@ def test_n_slots_then_timeout_then_release_frees_one(tmp_path):
 
 
 def test_lease_context_manager_releases(tmp_path):
-    with acquire_slot(FAST, max_slots=1, directory=tmp_path):
-        with pytest.raises(VMSlotTimeout):
-            acquire_slot(0.1, max_slots=1, directory=tmp_path)
+    with acquire_slot(FAST, max_slots=1, directory=tmp_path), pytest.raises(VMSlotTimeout):
+        acquire_slot(0.1, max_slots=1, directory=tmp_path)
     acquire_slot(FAST, max_slots=1, directory=tmp_path).release()
 
 

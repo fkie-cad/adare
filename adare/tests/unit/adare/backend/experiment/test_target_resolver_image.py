@@ -4,13 +4,9 @@ The CV server is replaced by a fake MCP client, so these tests need no VM and no
 """
 
 import base64
-import io
 from types import SimpleNamespace
 
 import pytest
-
-pytestmark = pytest.mark.unit
-
 from PIL import Image
 
 from adare.backend.experiment import target_resolver as tr
@@ -21,6 +17,8 @@ from adare.types.playbook import (
     Target,
     TopLeftStrategy,
 )
+
+pytestmark = pytest.mark.unit
 
 SCREEN_B64 = base64.b64encode(b"not-an-image").decode()
 

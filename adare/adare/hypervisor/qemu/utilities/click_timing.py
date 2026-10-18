@@ -13,6 +13,7 @@ MAX_CLICK_SETTLE_MS = 5000.0
 def click_settle_seconds() -> float:
     """Gap between the pointer move and the button press, in seconds.
 
+    A longer gap lets GTK/Firefox process pointer-enter before the press (hover-only clicks).
     Read from ``ADARE_CLICK_SETTLE_MS`` on every click (so a dev session can change it).
     Unset, empty, non-numeric or out-of-range values give the default of 10 ms.
     """

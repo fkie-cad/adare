@@ -10,8 +10,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-pytestmark = pytest.mark.unit
-
 from adare.backend.experiment import failure_evidence as fe
 from adare.backend.experiment.action_executor import ActionResult
 from adare.backend.experiment.playbook_controller import PlaybookController
@@ -26,6 +24,8 @@ from adare.types.playbook import (
     WaitUntilAction,
     parse_playbook,
 )
+
+pytestmark = pytest.mark.unit
 
 PNG = base64.b64encode(b"\x89PNG-fake").decode()
 PNG2 = base64.b64encode(b"\x89PNG-other").decode()

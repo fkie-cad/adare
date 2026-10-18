@@ -1490,7 +1490,6 @@ class QEMUVM(
         # Normalize coordinates for USB tablet device
         norm_x, norm_y = self._normalize_coordinates(x, y)
 
-        # Map button names to QMP button strings
         button_map = {'left': 'left', 'right': 'right', 'middle': 'middle', 'double': 'left'}
         qmp_button = button_map.get(button, 'left')
 
@@ -1510,9 +1509,7 @@ class QEMUVM(
             log.error(f"QMP mouse move failed: {move_response.get('error')}")
             return False
 
-        # Move-to-press settle: 10 ms unless ADARE_CLICK_SETTLE_MS overrides it. A longer gap
-        # lets GTK/Firefox process pointer-enter before the press (hover-only clicks).
-        await asyncio.sleep(click_settle_seconds())
+        await asyncio.sleep(click_settle_seconds())  # move-to-press gap (ADARE_CLICK_SETTLE_MS)
 
         # Step 2: Press button
         press_command = {

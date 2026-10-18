@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from adare.backend.events.emitters import emit_action
 from adare.types.playbook import (
     ClickAction,
+    ClickVerify,
     DragAction,
     GotoAction,
     IdleAction,
@@ -56,18 +57,21 @@ class GUIActionsMixin(_Host):
 
         action_context = f"click_{action.type}_{target_name}"
 
-        if getattr(action, 'verify', None) is None:
+        verify = action.verify
+        if verify is None:
             # No verify condition: one click, no effect check, no retry (unchanged behaviour).
             return await self.target_resolution.execute_action_with_steps(
                 action, handler, parent_event_id, event_emitter, action_context=action_context
             )
 
-        return await self._execute_click_with_verify(action, handler, parent_event_id, event_emitter, action_context)
+        return await self._execute_click_with_verify(
+            action, verify, handler, parent_event_id, event_emitter, action_context
+        )
 
     async def _execute_click_with_verify(
-        self, action: ClickAction, handler, parent_event_id, event_emitter, action_context: str
+        self, action: ClickAction, verify: ClickVerify, handler, parent_event_id, event_emitter, action_context: str
     ) -> ActionResult:
-        """Click, check ``action.verify``, and re-resolve + re-click up to ``action.retries`` times.
+        """Click, check ``verify``, and re-resolve + re-click up to ``action.retries`` times.
 
         Every attempt resolves the target afresh (the one-shot match cache is bypassed for
         retries), so a widget that moved is found again. A failed attempt that never produced
@@ -81,41 +85,37 @@ class GUIActionsMixin(_Host):
                 # Force a fresh detection: the screen changed since the previous attempt.
                 action.target.use_cache = False
                 log.warning(f"Click verify failed; retry {attempt - 1}/{action.retries} for {action_context}")
-            result = await self.target_resolution.execute_action_with_steps(
+            result: ActionResult = await self.target_resolution.execute_action_with_steps(
                 action, handler, parent_event_id, event_emitter, action_context=f"{action_context}_try{attempt}"
             )
             last_result = result
             if not result.success:
                 return result
 
-            if await self._click_verified(action):
-                data = dict(result.data or {})
-                data['click_attempts'] = attempt
-                data['verified'] = True
-                result.data = data
+            if await self._click_verified(action, verify):
+                result.data = {**(result.data or {}), 'click_attempts': attempt, 'verified': True}
                 return result
 
-        data = dict(last_result.data or {}) if last_result else {}
-        data['click_attempts'] = attempts
-        data['verified'] = False
-        condition = 'exists' if action.verify.exists is not None else 'not_exists'
-        target = action.verify.exists if action.verify.exists is not None else action.verify.not_exists
+        want_exists = verify.exists is not None
+        target = verify.exists if want_exists else verify.not_exists
+        described = (target.text or target.image or target.position) if target else None
         return ActionResult(
             success=False,
             message=(
                 f"Click verify failed after {attempts} attempt(s): "
-                f"{condition} {target.text or target.image or target.position!r} not satisfied "
+                f"{'exists' if want_exists else 'not_exists'} {described!r} not satisfied "
                 f"within {action.verify_timeout}s"
             ),
             coordinates=last_result.coordinates if last_result else None,
-            data=data,
+            data={**((last_result.data if last_result else None) or {}), 'click_attempts': attempts, 'verified': False},
         )
 
-    async def _click_verified(self, action: ClickAction) -> bool:
-        """Poll ``action.verify`` for up to ``verify_timeout`` seconds (at least one check)."""
-        verify = action.verify
+    async def _click_verified(self, action: ClickAction, verify: ClickVerify) -> bool:
+        """Poll ``verify`` for up to ``action.verify_timeout`` seconds (at least one check)."""
         want_exists = verify.exists is not None
         target = verify.exists if want_exists else verify.not_exists
+        if target is None:
+            return True
         if target.strategy is None:
             from adare.types.playbook import BestConfidenceStrategy, TopLeftStrategy
 
