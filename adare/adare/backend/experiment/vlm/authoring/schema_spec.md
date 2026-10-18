@@ -32,6 +32,7 @@ A `Target` says *what on screen* an action refers to. Fields:
 | `strategy`   | strategy object | which match to pick when several are found |
 | `offset`     | Offset          | shift the click off the matched point |
 | `use_cache`  | bool            | reuse the previously matched location (skip re-search) |
+| `min_margin` | float           | image targets: accept only if the match beats the runner-up by this much |
 
 **Author rule:** prefer `text:` targets. Do not invent `image:` filenames — you
 have no crops to reference.
