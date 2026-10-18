@@ -214,6 +214,8 @@ class PlaybookApi(ProjectDatabaseApi):
             result["offset"] = attrs.asdict(target.offset)
         if target.use_cache is not None:
             result["use_cache"] = target.use_cache
+        if target.min_margin is not None:
+            result["min_margin"] = target.min_margin
         return result
 
     def _strategy_to_json(self, strategy) -> dict[str, Any]:
@@ -464,6 +466,7 @@ class PlaybookApi(ProjectDatabaseApi):
             strategy=strategy,
             offset=offset,
             use_cache=target_json.get('use_cache'),
+            min_margin=target_json.get('min_margin'),
         )
 
     def _json_to_strategy(self, strategy_json: dict[str, Any]):

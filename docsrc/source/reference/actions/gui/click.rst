@@ -72,6 +72,15 @@ Target Options
   between. Set explicitly to ``false`` to opt out and force a fresh detection for
   this target even when that condition holds. See
   `Reusing a wait_until Match (Performance)`_ below.
+- ``offset``: ``{x, y, base}`` shifts the click from an anchor on the matched box.
+  ``base`` is one of ``center`` (default), ``top-left``, ``top-right``,
+  ``bottom-left``, ``bottom-right``, ``center-left``, ``center-right``,
+  ``top-center``, ``bottom-center``. Works for text and image targets (for images
+  the box is the matched template at the detected scale).
+- ``min_margin``: float 0.0-1.0, image targets only. Accept the selected match only
+  if its confidence beats the best *other* candidate (above the confidence floor)
+  by at least this much; otherwise the target counts as not found. Unset = no check.
+  Candidates below the confidence floor (0.7) are never selected for image targets.
 
 Advanced Text Matching
 -----------------------
