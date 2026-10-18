@@ -120,6 +120,13 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   candidates below the confidence floor are dropped before the strategy runs, and
   `target.min_margin` (0.0-1.0) accepts a match only if it beats the best other
   above-floor candidate by that margin.
+- `click` takes `verify: {exists|not_exists: <target>}`, `retries: n` (default 0)
+  and `verify_timeout` (seconds, default 3): after the click the condition is
+  polled; if it does not hold the target is re-resolved and clicked again, up to
+  `retries` more times, and the action fails if the effect never appears. Without
+  `verify` a click behaves exactly as before.
+- `ADARE_CLICK_SETTLE_MS` sets the QMP pointer-move-to-press gap (default 10 ms,
+  the previous fixed value).
 
 ### Changed
 - Development tasks have one definition: CI runs the Makefile targets (`make lint`,

@@ -182,6 +182,16 @@ class VariableUsageValidator(PlaybookValidator):
         if hasattr(action, 'target') and action.target:
             self._extract_from_target(action.target, 'target', action_index, action_type, references)
 
+        # ClickAction.verify targets
+        click_verify = getattr(action, 'verify', None)
+        if click_verify is not None:
+            for field_name in ('exists', 'not_exists'):
+                verify_target = getattr(click_verify, field_name, None)
+                if verify_target:
+                    self._extract_from_target(
+                        verify_target, f'verify.{field_name}', action_index, action_type, references
+                    )
+
         # Dispatch to type-specific extractors
         for action_cls, extractor in self._action_extractors():
             if isinstance(action, action_cls):

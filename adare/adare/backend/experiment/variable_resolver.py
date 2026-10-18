@@ -101,6 +101,14 @@ class VariableResolver:
         if getattr(resolved_action, 'target', None):
             resolved_action.target = self.resolve_target_variables(resolved_action.target, execution_context)
 
+        # ClickAction.verify keeps its Target inside a small exists/not_exists holder.
+        click_verify = getattr(resolved_action, 'verify', None)
+        if click_verify is not None:
+            if click_verify.exists is not None:
+                click_verify.exists = self.resolve_target_variables(click_verify.exists, execution_context)
+            if click_verify.not_exists is not None:
+                click_verify.not_exists = self.resolve_target_variables(click_verify.not_exists, execution_context)
+
         # WaitUntilAction keeps its Targets inside a recursive `condition` tree rather than
         # a flat `target` attribute, so the branch above never reached them and the guest
         # was asked to wait for a literal "{{ filename }}".

@@ -65,11 +65,37 @@ class KeyboardAction:
 
 
 @attrs.define
+class ClickVerify:
+    """Effect check for a click: exactly one of ``exists`` / ``not_exists``."""
+
+    exists: Target | None = None
+    not_exists: Target | None = None
+
+    def __attrs_post_init__(self):
+        if (self.exists is None) == (self.not_exists is None):
+            raise ValueError("click verify must set exactly one of: exists, not_exists")
+
+
+@attrs.define
 class ClickAction:
     target: Target
     type: str = 'left'  # 'left', 'right', 'double'
     description: str = ''
     machine: str | None = None  # Machine key from playbook.machines this action targets (multi-machine playbooks only)
+    # Optional effect check. After the click the condition is polled for up to ``verify_timeout``
+    # seconds; if it does not hold, the target is re-resolved and clicked again, up to ``retries``
+    # more times. Without ``verify`` the click is fire-and-forget, exactly as before.
+    verify: ClickVerify | None = None
+    retries: int = 0
+    verify_timeout: float = 3.0
+
+    def __attrs_post_init__(self):
+        if self.retries < 0:
+            raise ValueError(f"click retries must be >= 0, got {self.retries}")
+        if self.verify_timeout < 0:
+            raise ValueError(f"click verify_timeout must be >= 0, got {self.verify_timeout}")
+        if self.verify is None and self.retries:
+            raise ValueError("click retries requires a verify condition (verify: {exists|not_exists: ...})")
 
 
 @attrs.define
@@ -753,6 +779,7 @@ _STRICT_CLASSES = (
     Target,
     Settings,
     ClickAction,
+    ClickVerify,
     DragAction,
     KeyboardAction,
     IdleAction,
