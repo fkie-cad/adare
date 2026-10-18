@@ -9,7 +9,7 @@ management, variable resolution, and test loading.
 import logging
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +87,10 @@ class PlaybookExecutionResult:
     total_tests: int = 0
     successful_tests: int = 0
     failed_tests: int = 0
+    # Playbook-level ``on_failure:`` steps (run after the first stopping failure). They never
+    # change ``success`` or the counts above; results are kept here for logging and reports.
+    on_failure_results: list[ActionResult] = field(default_factory=list)
+    failure_evidence: list[dict] = field(default_factory=list)
 
 
 class PlaybookController:
@@ -208,6 +212,10 @@ class PlaybookController:
         # Performance tracking
         self.start_time: float | None = None
         self.action_timings: dict[str, float] = {}
+
+        # Failure evidence (G8) and on_failure results; see execute_playbook.
+        self.on_failure_results: list[ActionResult] = []
+        self.failure_evidence: list[dict] = []
 
         # Auto-pull on test failure tracking
         self._auto_pull_files: list[str] = []
@@ -636,6 +644,7 @@ class PlaybookController:
             except (OSError, ConnectionError, TimeoutError, ValueError) as e:
                 log.warning(f"Failed to capture initial debug screenshot: {e}")
 
+        stopped_on_failure = False
         for i, action in enumerate(playbook.actions):
             # i is 0-based, so action index is i+1
             action_index = i + 1
@@ -736,6 +745,11 @@ class PlaybookController:
             if not result.success:
                 log.error(f"Action {i + 1} failed: {result.message}")
 
+                # G8: keep what the screen showed and what was being looked for. Test
+                # (assertion) failures are not GUI failures and need no screenshot.
+                if not self._is_test_action(resolved_action):
+                    await self._record_failure_evidence(action_index, resolved_action, result)
+
                 # Check if we should continue on test failure
                 should_continue = False
                 if self._is_test_action(resolved_action):
@@ -758,11 +772,17 @@ class PlaybookController:
 
                 if not should_continue:
                     # Stop execution after failed action
+                    stopped_on_failure = True
                     break
 
             # Apply global idle setting
             if hasattr(playbook, 'settings') and playbook.settings and playbook.settings.idle:
                 await self.client.idle(playbook.settings.idle)
+
+        # Run the playbook's on_failure steps once, before the run ends. They are not part of
+        # action_results, so they cannot change the failed status or the tallies.
+        if stopped_on_failure and getattr(playbook, 'on_failure', None):
+            await self._run_on_failure_steps(playbook.on_failure)
 
         successful = sum(1 for r in self.action_results if r.success)
         failed = len(self.action_results) - successful
@@ -785,7 +805,61 @@ class PlaybookController:
             total_tests=total_tests,
             successful_tests=successful_tests,
             failed_tests=failed_tests,
+            on_failure_results=self.on_failure_results,
+            failure_evidence=self.failure_evidence,
         )
+
+    async def _record_failure_evidence(self, action_index: int, resolved_action: ActionType, result: ActionResult):
+        """Save screenshot, OCR dump and target description for a failed action (never raises)."""
+        from adare.backend.experiment.failure_evidence import collect_failure_evidence
+
+        try:
+            record = await collect_failure_evidence(
+                run_dir=self.experiment_run_directory,
+                action_index=action_index,
+                action=resolved_action,
+                result=result,
+                target_resolution=self.action_executor.target_resolution,
+            )
+        except Exception as e:  # noqa: BLE001 - evidence must never change the run outcome
+            log.error(f"Failure evidence for action {action_index} failed: {e}", exc_info=True)
+            return
+        if record:
+            self.failure_evidence.append(record)
+            if result.data is None:
+                result.data = {}
+            if isinstance(result.data, dict):
+                result.data['failure_evidence'] = record.get('files', {})
+
+    async def _run_on_failure_steps(self, steps: list[ActionType]):
+        """Execute the ``on_failure:`` steps in order; one failing step does not stop the rest.
+
+        No flow-console events are emitted for them (the run tally is derived from events and
+        must not change), and no DB execution records are written; results go to the log and
+        to ``self.on_failure_results``.
+        """
+        log.warning(f"Running {len(steps)} on_failure step(s) after a failed action")
+        for j, step in enumerate(steps):
+            step_name = type(step).__name__
+            context = f"onfail{j + 1:02d}_{self._get_action_detail(step)}".rstrip("_")
+            start = time.time()
+            try:
+                step_result = await self.action_executor.execute_action(
+                    step,
+                    parent_event_id=None,
+                    event_emitter=None,
+                    variable_resolver=self.variable_resolver,
+                    action_context=context,
+                )
+            except Exception as e:  # noqa: BLE001 - recovery steps must not abort the run
+                log.error(f"on_failure step {j + 1} ({step_name}) raised: {e}", exc_info=True)
+                step_result = ActionResult(success=False, message=f"{type(e).__name__}: {e}")
+            step_result.execution_time = time.time() - start
+            self.on_failure_results.append(step_result)
+            if step_result.success:
+                log.info(f"on_failure step {j + 1}/{len(steps)} ({step_name}) ok")
+            else:
+                log.error(f"on_failure step {j + 1}/{len(steps)} ({step_name}) failed: {step_result.message}")
 
     async def _create_database_execution_record(self, action_index: int) -> str | None:
         """Create database execution record for action tracking."""

@@ -127,6 +127,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `verify` a click behaves exactly as before.
 - `ADARE_CLICK_SETTLE_MS` sets the QMP pointer-move-to-press gap (default 10 ms,
   the previous fixed value).
+- Evidence on a failed action: screenshot of the last search, a fresh screenshot,
+  the full OCR dump and the target description(s) are written to
+  `<run>/reporting/failure/aNN_*` (switch off with `ADARE_FAILURE_EVIDENCE=0`).
+- Playbook-level `on_failure:` action list: runs once after the first failure that
+  stops the playbook and before the run ends; never changes the failed status.
+  Accepted by `adare exp playbook validate` and validated like normal steps.
 
 ### Changed
 - Development tasks have one definition: CI runs the Makefile targets (`make lint`,
