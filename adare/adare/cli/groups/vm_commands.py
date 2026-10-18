@@ -275,6 +275,54 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         args = SimpleNamespace(instance_id=instance_id, snapshot_name=snapshot_name)
         exec_with_error_printing(exec_vm_delete_snapshot, args)
 
+    # Cross-process VM slot counter (adare.backend.vm.slots)
+    @vm.group(cls=AliasedGroup)
+    def slots():
+        """Cross-process VM slots (ADARE_MAX_VMS, default 20)."""
+        pass
+
+    @slots.command(name='status')
+    @click.option('--json', 'as_json', is_flag=True, help='Print machine-readable JSON')
+    def slots_status(as_json):
+        """Show how many VM slots exist, are taken and by which pids."""
+        import json as _json
+
+        from adare.backend.vm.slots import slot_status
+
+        status = slot_status()
+        if as_json:
+            click.echo(_json.dumps(status))
+            return
+        click.echo(f"VM slots: {status['taken']} taken, {status['free']} free of {status['total']}")
+        for index, pid in sorted(status['holders'].items()):
+            click.echo(f"  slot {index}: pid {pid}")
+
+    @slots.command(name='exclusive', context_settings={'ignore_unknown_options': True})
+    @click.option('--timeout', type=float, default=None, help='Seconds to wait for running VMs (default 30)')
+    @click.argument('command', nargs=-1, type=click.UNPROCESSED, required=True)
+    def slots_exclusive(timeout, command):
+        """Run COMMAND while holding every VM slot (no other adare process can start a VM).
+
+        The exit status is the command's. The slots are released when it exits.
+
+        \b
+        Example:
+            adare vm slots exclusive -- adare dev start ...
+        """
+        import subprocess
+        import sys
+
+        from adare.backend.vm.slots import VMSlotTimeout, acquire_all_slots, exclusive_env
+
+        try:
+            lease = acquire_all_slots(timeout)
+        except VMSlotTimeout as exc:
+            click.echo(f"error: {exc}", err=True)
+            sys.exit(75)  # EX_TEMPFAIL: try again later
+        with lease:
+            click.echo(f"Holding all {len(lease)} VM slots", err=True)
+            sys.exit(subprocess.call(list(command), env=exclusive_env()))
+
     @vm.command(name='create')
     @click.argument('os_name')
     @click.option('--iso', type=click.Path(exists=True), help='Path to OS ISO (required for Windows)')

@@ -21,11 +21,16 @@ from dataclasses import dataclass, field
 from typing import cast
 
 from adare.backend.vm.exceptions import VMError
+from adare.backend.vm.slots import SlotLease
 from adare.database.api.vm import VmApi
 from adare.database.exceptions import DatabaseError
 from adare.database.models.global_models import Vm, VmInstance
 
 log = logging.getLogger(__name__)
+
+# Cross-process VM slots (adare.backend.vm.slots) held by this process's runs, by instance
+# name. Kept until the run is removed; the kernel frees them if the process dies.
+_run_slots: dict[str, SlotLease] = {}
 
 
 def pid_alive(pid: int | None) -> bool:
@@ -61,8 +66,27 @@ def run_instance_name(vm_name: str, experiment_run_ulid: str, machine_key: str |
     return name
 
 
-def allocate_qemu_run_instance(source_vm: Vm, experiment_run_ulid: str, machine_key: str | None = None) -> VmInstance:
-    """Create the run's instance row with a reserved websocket port. No disk is copied."""
+def allocate_qemu_run_instance(
+    source_vm: Vm, experiment_run_ulid: str, machine_key: str | None = None, slot: SlotLease | None = None
+) -> VmInstance:
+    """Create the run's instance row with a reserved websocket port. No disk is copied.
+
+    ``slot`` (from :func:`adare.backend.vm.slots.acquire_slot`) is held until
+    :func:`remove_qemu_run_instance`; it is released here if the allocation fails.
+    """
+    instance = None
+    try:
+        instance = _allocate_qemu_run_instance(source_vm, experiment_run_ulid, machine_key)
+    finally:
+        if slot is not None:
+            if instance is None:
+                slot.release()
+            else:
+                _run_slots[str(instance.instance_name)] = slot
+    return instance
+
+
+def _allocate_qemu_run_instance(source_vm: Vm, experiment_run_ulid: str, machine_key: str | None) -> VmInstance:
     from adare.backend.vm.port_manager import reserve_port_atomically
 
     name = run_instance_name(source_vm.name, experiment_run_ulid, machine_key)
@@ -95,6 +119,9 @@ def remove_qemu_run_instance(instance_name: str) -> None:
         instance = api.get_vm_instance_by_name(instance_name)
         if instance is not None:
             api.delete_vm_instance(instance.id)
+    slot = _run_slots.pop(instance_name, None)
+    if slot is not None:
+        slot.release()
 
 
 @dataclass
