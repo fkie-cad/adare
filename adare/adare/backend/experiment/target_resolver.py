@@ -375,6 +375,28 @@ class MCPTargetResolver:
             log.error(f"Error resolving target via MCP: {e}")
             return None
 
+    async def dump_all_text(self, screenshot_base64: str):
+        """Full OCR dump of a screenshot (``get_all_text``), for failure evidence.
+
+        Returns the detections as a JSON-safe list/dict, or None if the CV server could not
+        be reached or returned nothing.
+        """
+        if not screenshot_base64:
+            return None
+        try:
+            async with Client(self.mcp_gui_url, timeout=120.0) as client:
+                result = await client.call_tool(
+                    "get_all_text",
+                    {"screenshot_base64": screenshot_base64, "offset_x": 0, "offset_y": 0, "format": "json"},
+                )
+            data = self._parse_mcp_result(result)
+        except (OSError, ConnectionError, TimeoutError, RuntimeError, json.JSONDecodeError, ValueError, KeyError) as e:
+            log.warning(f"OCR dump failed: {e}")
+            return None
+        if isinstance(data, dict) and "all_text" in data:
+            return data["all_text"]
+        return data
+
     async def find_element(
         self,
         description: str,

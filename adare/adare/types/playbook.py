@@ -500,6 +500,11 @@ class Playbook:
     machines: dict[str, MachineSpec] | None = (
         None  # Multi-machine playbooks only; absent/None = today's single implicit VM
     )
+    # Optional recovery/evidence steps. They run once, after the first action failure that
+    # stops the playbook (target not found, wait_until timeout, command error, ...) and before
+    # the run ends. They never change the run's failed status; a failing step inside the list
+    # is logged and the remaining steps still run.
+    on_failure: list[ActionType] = attrs.Factory(list)
 
 
 def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str

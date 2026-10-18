@@ -875,6 +875,18 @@ def validate_playbook(playbook: Playbook) -> None:
     settings_validator = SettingsValidator()
     machine_routing_validator = MachineRoutingValidator()
 
+    # on_failure steps are validated like main steps (variables, filters, machine routing):
+    # validate a view where they follow the main actions. Their indices continue after the
+    # main ones and are re-labelled in the messages below.
+    main_count = len(playbook.actions)
+    on_failure = list(getattr(playbook, 'on_failure', None) or [])
+    if on_failure:
+        import attrs
+
+        playbook_view = attrs.evolve(playbook, actions=[*playbook.actions, *on_failure], on_failure=[])
+    else:
+        playbook_view = playbook
+
     validators = [
         settings_validator,
         usage_validator,
@@ -887,8 +899,14 @@ def validate_playbook(playbook: Playbook) -> None:
     # Collect all validation results
     combined_result = ValidationResult()
     for validator in validators:
-        result = validator.validate(playbook)
+        result = validator.validate(playbook_view)
         combined_result.merge(result)
+
+    if on_failure:
+        for error in combined_result.errors:
+            if error.action_index is not None and error.action_index >= main_count:
+                error.message = f"[on_failure step {error.action_index - main_count + 1}] {error.message}"
+                error.action_index = None
 
     # Log warnings
     for warning in combined_result.warnings:

@@ -630,6 +630,7 @@ class FlowControlExecutor:
                         log.debug("Applied default TopLeft strategy for text target")
 
                 self.target_resolution.begin_resolution()
+                self.target_resolution.last_target = target
                 target_match = await self.target_resolution.target_resolver.resolve_target(target, screenshot_base64)
 
                 # Cache successful match if we have a path
@@ -652,6 +653,7 @@ class FlowControlExecutor:
                         log.debug("Applied default TopLeft strategy for text target")
 
                 self.target_resolution.begin_resolution()
+                self.target_resolution.last_target = target
                 target_match = await self.target_resolution.target_resolver.resolve_target(target, screenshot_base64)
                 return target_match is None
 

@@ -743,6 +743,24 @@ class PlaybookApi(ProjectDatabaseApi):
 
         return variables, tests
 
+    def _load_on_failure_from_yaml(self, yaml_content: str | None) -> list:
+        """Structure the playbook-level ``on_failure:`` list from the stored YAML.
+
+        ``on_failure`` steps are not stored as PlaybookItems (they are not part of the
+        main sequence), so they are read from the original YAML, like variables and tests.
+        """
+        if not yaml_content:
+            return []
+        from adarelib.testset.yaml.customloader import get_custom_loader
+
+        from adare.types.playbook import structure_action
+
+        data = yaml.load(yaml_content, Loader=get_custom_loader())
+        steps = data.get('on_failure') if isinstance(data, dict) else None
+        if not steps:
+            return []
+        return [structure_action(step) for step in steps]
+
     def load_playbook_from_database(self, experiment_id: str) -> PlaybookType:
         """Load Playbook object from database models (no YAML parsing for actions).
 
@@ -778,4 +796,10 @@ class PlaybookApi(ProjectDatabaseApi):
         from adare.types.playbook import Playbook as PlaybookType
 
         log.info(f"Playbook reconstruction complete - {len(actions)} actions, {len(tests)} tests")
-        return PlaybookType(actions=actions, settings=settings, variables=variables, tests=tests)
+        return PlaybookType(
+            actions=actions,
+            settings=settings,
+            variables=variables,
+            tests=tests,
+            on_failure=self._load_on_failure_from_yaml(playbook.original_yaml_content),
+        )
