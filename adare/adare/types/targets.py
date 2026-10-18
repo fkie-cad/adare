@@ -210,6 +210,12 @@ class Target:
     use_cache: bool | None = None  # If False, forces a fresh detection even when the
     # immediately-preceding target resolution would
     # otherwise be reused. Default (None/True): auto-reuse.
+    min_margin: float | None = None  # Image targets: accept the selected match only if its confidence beats the
+    # best other candidate by at least this much (0.0-1.0). None = no margin check.
+
+    def __attrs_post_init__(self):
+        if self.min_margin is not None and not (0.0 <= self.min_margin <= 1.0):
+            raise ValueError(f"Target.min_margin must be between 0.0 and 1.0, got {self.min_margin}")
 
 
 @attrs.define

@@ -147,6 +147,7 @@ def _aggregate_matches(
     final_similarities = []
     final_methods = []
     final_contributing_methods = []
+    final_sizes = []
 
     for loc in filtered_locations:
         matches_at_loc = location_to_matches.get(loc, [])
@@ -167,10 +168,12 @@ def _aggregate_matches(
         final_similarities.append(primary.weighted_similarity)
         final_methods.append(primary.method)
         final_contributing_methods.append(contributing)
+        primary_size = primary.size if primary.size != (0, 0) else _estimate_match_size(primary.scale, icon_size)
+        final_sizes.append([int(primary_size[0]), int(primary_size[1])])
 
     # Sort by similarity (descending)
     sorted_results = sorted(
-        zip(final_locations, final_similarities, final_methods, final_contributing_methods),
+        zip(final_locations, final_similarities, final_methods, final_contributing_methods, final_sizes),
         key=lambda x: x[1],
         reverse=True,
     )
@@ -181,7 +184,10 @@ def _aggregate_matches(
 
     # Unpack
     if sorted_results:
-        final_locations, final_similarities, final_methods, final_contributing_methods = zip(*sorted_results)
+        final_locations, final_similarities, final_methods, final_contributing_methods, final_sizes = zip(
+            *sorted_results
+        )
+        final_sizes = list(final_sizes)
         final_locations = list(final_locations)
         final_similarities = list(final_similarities)
         final_methods = list(final_methods)
@@ -191,6 +197,7 @@ def _aggregate_matches(
         final_similarities = []
         final_methods = []
         final_contributing_methods = []
+        final_sizes = []
 
     # Determine method_used
     unique_methods = set(final_methods)
@@ -215,6 +222,9 @@ def _aggregate_matches(
         'similarities': final_similarities,
         'methods': final_methods,
         'contributing_methods': final_contributing_methods,
+        # Matched box size (width, height) per location, at the detected scale.
+        # Additive: hosts that predate it fall back to the template's native size.
+        'sizes': final_sizes,
         'method_used': method_used,
     }
 

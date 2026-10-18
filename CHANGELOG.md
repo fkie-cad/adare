@@ -114,6 +114,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   finished booting" and a screenshot, instead of a bare timeout after three cold
   boots (~19 min). The guest's screen sitting still for a minute is what tells it
   apart from a slow boot.
+- Image targets honour the offset `base` (`top-left`, `center-left`, ...) like text
+  targets: the box comes from the new `sizes` field of `find_icon` (or the
+  template's native size). `center` (the default) is unchanged. Image and icon
+  candidates below the confidence floor are dropped before the strategy runs, and
+  `target.min_margin` (0.0-1.0) accepts a match only if it beats the best other
+  above-floor candidate by that margin.
 
 ### Changed
 - Development tasks have one definition: CI runs the Makefile targets (`make lint`,
