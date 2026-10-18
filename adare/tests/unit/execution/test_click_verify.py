@@ -10,12 +10,12 @@ from unittest.mock import AsyncMock, MagicMock
 import cattrs
 import pytest
 
-pytestmark = pytest.mark.unit
-
 from adare.backend.experiment.execution.base import ActionResult
 from adare.backend.experiment.execution.simple_actions import SimpleActionsExecutor
 from adare.hypervisor.qemu.utilities.click_timing import click_settle_seconds
 from adare.types.playbook import ClickAction, ClickVerify, Target, structure_action
+
+pytestmark = pytest.mark.unit
 
 
 class FakeTargetResolution:

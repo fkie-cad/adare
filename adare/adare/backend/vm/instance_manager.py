@@ -418,17 +418,18 @@ class VmInstanceManager:
 
     def _keep_slot(self, instance: VmInstance, slot: SlotLease) -> VmInstance:
         """Tie ``slot`` to ``instance`` until it is released or removed."""
-        previous = self._slot_leases.pop(instance.id, None)
+        instance_id = str(instance.id)
+        previous = self._slot_leases.pop(instance_id, None)
         if previous is not None:
             previous.release()
-        self._slot_leases[instance.id] = slot
+        self._slot_leases[instance_id] = slot
         return instance
 
     def _slot_in_use(self, slot: SlotLease) -> bool:
         return any(lease is slot for lease in self._slot_leases.values())
 
     def _release_slot(self, instance_id: str) -> None:
-        lease = self._slot_leases.pop(instance_id, None)
+        lease = self._slot_leases.pop(str(instance_id), None)
         if lease is not None:
             lease.release()
 
