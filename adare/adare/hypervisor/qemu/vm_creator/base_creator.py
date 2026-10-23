@@ -46,8 +46,14 @@ class BaseVMCreator(ABC):
         3. Ensure ISO availability
         4. Create disk image (and optional NVRAM)
         5. Run installation
-        6. Print success / clean up on failure
+        6. Readiness pass (see guest_readiness) for --setup base and up
+        7. Print success / clean up on failure
+
+    ``readiness_pass`` is off for creators that make the guest ready themselves
+    (playbook) or cannot (manual, gui-auto).
     """
+
+    readiness_pass = True
 
     def __init__(
         self,
@@ -93,10 +99,26 @@ class BaseVMCreator(ABC):
             self._cleanup_on_failure(disk_path, nvram_path)
             raise
         self._validate_disk_after_install(disk_path)
-        if self.compress:
+        if self.readiness_pass and self.setup_level >= SetupLevel.BASE:
+            # Flattens (and compresses) into a new disk; the install is kept on failure.
+            disk_path = self._make_guest_ready(disk_path)
+        elif self.compress:
             disk_path = self._compress_disk(disk_path)
         self._print_success(disk_path)
         return disk_path
+
+    def _make_guest_ready(self, disk_path: Path) -> Path:
+        from adare.hypervisor.qemu.vm_creator.guest_readiness import make_guest_ready
+
+        return make_guest_ready(
+            disk_path,
+            self.os_def,
+            self.setup_level,
+            self.ram_mb,
+            self.cpus,
+            allow_emulation=self.allow_emulation,
+            compress=self.compress,
+        )
 
     # ── Abstract hooks ───────────────────────────────────────────────
 

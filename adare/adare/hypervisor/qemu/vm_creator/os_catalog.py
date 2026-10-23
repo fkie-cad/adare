@@ -104,6 +104,10 @@ class OsDefinition:
     # the installed disk. See playbook_creator.
     install_steps: list = field(default_factory=list)
     verify_steps: list = field(default_factory=list)
+    # Optional override of the steps that install the guest agent from a text
+    # console after verify_steps (--setup base and up). Empty uses the default
+    # apt bootstrap; see playbook_provision.
+    bootstrap_steps: list = field(default_factory=list)
     # Plain-text pointer telling a human where to obtain this ISO. Populated for
     # the profiles that cannot ship a URL (Windows: the installer is licensed,
     # not redistributable), and used as the fallback `recipe.iso_notes` for a
@@ -880,6 +884,7 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     seed_transport=data.get('seed_transport', 'cdrom'),
                     install_steps=data.get('install_steps', []),
                     verify_steps=data.get('verify_steps', []),
+                    bootstrap_steps=data.get('bootstrap_steps', []),
                     iso_notes=data.get('iso_notes', ''),
                 )
             except (OSError, yaml.YAMLError, TypeError, ValueError) as e:

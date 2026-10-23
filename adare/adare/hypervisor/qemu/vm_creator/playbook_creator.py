@@ -32,6 +32,12 @@ from adare.console import console, print_section, print_step
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
+from adare.hypervisor.qemu.vm_creator.playbook_provision import (
+    AUTOLOGIN_CHECK_LINUX,
+    bootstrap_steps,
+    provision_steps,
+)
+from adare.hypervisor.qemu.vm_creator.qga_utils import QgaError, qga_exec, qga_shutdown, qga_wait_ready
 from adare.hypervisor.qemu.vm_creator.qmp_utils import qemu_params_for_arch
 
 log = logging.getLogger(__name__)
@@ -95,6 +101,11 @@ def _char_to_keys(ch: str) -> tuple[list[str], bool]:
 HEARTBEAT_S = 60.0
 # A wait_text whose frame has not changed this long is flagged as possibly stuck.
 STUCK_S = 600.0
+# Guest-agent waits while making the installed desktop ADARE-ready: the console
+# bootstrap runs apt update + install; a reboot is a plain desktop boot.
+AGENT_BOOTSTRAP_TIMEOUT_S = 900.0
+AGENT_REBOOT_TIMEOUT_S = 600.0
+AUTOLOGIN_TIMEOUT_S = 180.0
 
 
 def _fmt_duration(seconds: float) -> str:
@@ -233,6 +244,9 @@ def _as_list(value) -> list[str]:
 class PlaybookVMCreator(BaseVMCreator):
     """Create a VM by replaying a profile's embedded GUI-installer playbook."""
 
+    # Readied inside its own install session (bootstrap + provision + check).
+    readiness_pass = False
+
     def _ensure_iso(self) -> None:
         if self.iso_path is not None:
             if not self.iso_path.is_file():
@@ -272,23 +286,141 @@ class PlaybookVMCreator(BaseVMCreator):
                 q.close()
             self._stop(proc, sock)
 
-        # ── 2. reboot from the installed disk, verify ─────────────────────
+        # ── 2. reboot from the installed disk, verify, make ADARE-ready ───
+        # The guest-agent port is there from this boot on, so the agent that
+        # the bootstrap installs is started by udev and reachable at once.
         print_section('Booting installed system')
-        proc = self._launch(disk_path, None, sock, run_dir, nvram_path)
+        provision = self.setup_level >= SetupLevel.BASE
+        qga_sock = run_dir / 'qga.sock'
+        proc = self._launch(disk_path, None, sock, run_dir, nvram_path, qga_sock=qga_sock if provision else None)
         q = None
         try:
             q = _QMP(str(sock), ppm)
             if self.os_def.verify_steps:
                 self._run_steps(q, self.os_def.verify_steps, run_dir, 'verify')
-            self._shutdown(proc, q, grace=60)
+            if provision:
+                self._make_adare_ready(q, qga_sock, run_dir)
+                self._shutdown_via_agent(proc, q, qga_sock)
+            else:
+                self._shutdown(proc, q, grace=60)
         finally:
             if q:
                 q.close()
             self._stop(proc, sock)
+            if qga_sock.exists():
+                qga_sock.unlink()
         console.print(f'[green]Playbook install complete[/green] — screenshots in {run_dir}')
 
+    # -- making the installed desktop ADARE-ready ----------------------------
+    def _make_adare_ready(self, q: _QMP, qga_sock: Path, run_dir: Path) -> None:
+        """Install the guest agent, provision over it, and prove the result.
+
+        See playbook_provision for what is done and why. Each failure raises with
+        a screenshot of the guest next to the install screenshots.
+        """
+        print_section('Making the guest ADARE-ready')
+        self._run_steps(q, bootstrap_steps(self.os_def), run_dir, 'bootstrap')
+        if not self._wait_for_agent(qga_sock, AGENT_BOOTSTRAP_TIMEOUT_S, 'waiting for the guest agent'):
+            self._save_shot(q, run_dir / 'bootstrap_FAILED.png')
+            raise PlaybookVMCreationError(
+                f'the guest agent did not come up within {AGENT_BOOTSTRAP_TIMEOUT_S:.0f}s of installing it from '
+                f'the text console (no network in the guest, or the console login failed); '
+                f'see {run_dir / "bootstrap_FAILED.png"}'
+            )
+        print_step('    guest agent is up')
+
+        for step in provision_steps(self.setup_level, self.os_def.architecture):
+            print_step(f'{time.strftime("%H:%M:%S")} [provision] {step.name}')
+            self._guest_run(q, qga_sock, run_dir, step.name, step.command, step.timeout_minutes * 60.0)
+
+        print_step(f'{time.strftime("%H:%M:%S")} [provision] rebooting to check the result')
+        qga_shutdown(qga_sock, 'reboot')
+        time.sleep(15)
+        if not self._wait_for_agent(qga_sock, AGENT_REBOOT_TIMEOUT_S, 'waiting for the guest agent after reboot'):
+            self._save_shot(q, run_dir / 'reboot_FAILED.png')
+            raise PlaybookVMCreationError(
+                f'the guest agent did not come back within {AGENT_REBOOT_TIMEOUT_S:.0f}s after the provisioning '
+                f'reboot; see {run_dir / "reboot_FAILED.png"}'
+            )
+        self._wait_for_autologin(q, qga_sock, run_dir)
+        q.wait_stable(settle=8, timeout=120)
+        self._save_shot(q, run_dir / 'ready_desktop.png')
+        print_step(f'    guest is ADARE-ready — desktop: {run_dir / "ready_desktop.png"}')
+
+    @staticmethod
+    def _wait_for_agent(qga_sock: Path, timeout: float, what: str) -> bool:
+        heartbeat = _Heartbeat(what, timeout)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if qga_wait_ready(qga_sock, timeout=min(10.0, max(deadline - time.time(), 1.0))):
+                return True
+            heartbeat.beat()
+        return False
+
+    def _guest_run(self, q: _QMP, qga_sock: Path, run_dir: Path, name: str, command: str, timeout: float) -> str:
+        """Run one root command in the guest; any failure fails the build."""
+        heartbeat = _Heartbeat(name, timeout)
+        try:
+            rc, out, err = qga_exec(
+                qga_sock,
+                command,
+                shell='bash',
+                timeout=timeout,
+                progress_callback=lambda _elapsed: heartbeat.beat(),
+                progress_interval=HEARTBEAT_S,
+            )
+        except QgaError as e:
+            self._save_shot(q, run_dir / 'provision_FAILED.png')
+            raise PlaybookVMCreationError(f'provisioning step {name!r}: {e}') from e
+        log.debug('provision %r: exit %s\nstdout:\n%s\nstderr:\n%s', name, rc, out, err)
+        if rc != 0:
+            self._save_shot(q, run_dir / 'provision_FAILED.png')
+            detail = (err or out).strip().splitlines()[-5:]
+            raise PlaybookVMCreationError(
+                f'provisioning step {name!r} exited {rc}' + (': ' + ' | '.join(detail) if detail else '')
+            )
+        return out
+
+    def _wait_for_autologin(self, q: _QMP, qga_sock: Path, run_dir: Path) -> None:
+        heartbeat = _Heartbeat('waiting for the automatic login', AUTOLOGIN_TIMEOUT_S)
+        deadline = time.time() + AUTOLOGIN_TIMEOUT_S
+        while time.time() < deadline:
+            try:
+                rc, _out, _err = qga_exec(qga_sock, AUTOLOGIN_CHECK_LINUX, shell='bash', timeout=30)
+            except QgaError as e:
+                log.debug('autologin check: %s', e)
+                rc = -1
+            if rc == 0:
+                print_step('    automatic login works')
+                return
+            heartbeat.beat()
+            time.sleep(5)
+        self._save_shot(q, run_dir / 'autologin_FAILED.png')
+        raise PlaybookVMCreationError(
+            f'no desktop session for the guest user {AUTOLOGIN_TIMEOUT_S:.0f}s after the provisioning reboot: '
+            f'automatic login is not working; see {run_dir / "autologin_FAILED.png"}'
+        )
+
+    def _shutdown_via_agent(self, proc, q: _QMP, qga_sock: Path, grace: float = 180.0) -> None:
+        """Clean OS shutdown through the agent: a logged-in desktop may answer
+        the ACPI power button with a dialog instead of powering off."""
+        print_step(f'Shutting the guest down (up to {grace:.0f}s)')
+        try:
+            qga_exec(qga_sock, 'sync', shell='bash', timeout=120)
+        except QgaError as e:
+            log.warning('sync before shutdown failed: %s', e)
+        qga_shutdown(qga_sock, 'powerdown')
+        heartbeat = _Heartbeat('waiting for the guest to power off', grace)
+        deadline = time.time() + grace
+        while proc.poll() is None and time.time() < deadline:
+            time.sleep(2)
+            heartbeat.beat()
+        if proc.poll() is None:
+            print_step('    guest still running, trying the ACPI power button')
+            self._shutdown(proc, q, grace=60)
+
     # -- qemu lifecycle -----------------------------------------------------
-    def _launch(self, disk_path, iso_path, sock, run_dir, nvram_path):
+    def _launch(self, disk_path, iso_path, sock, run_dir, nvram_path, qga_sock: Path | None = None):
         arch = qemu_params_for_arch(self.os_def)
         needs_uefi = self.os_def.requires_uefi or self.os_def.architecture == 'aarch64'
         cmd = [
@@ -321,6 +453,17 @@ class PlaybookVMCreator(BaseVMCreator):
         ]
         if iso_path is not None:
             cmd += ['-cdrom', str(iso_path), '-boot', 'd']
+        if qga_sock is not None:
+            if qga_sock.exists():
+                qga_sock.unlink()
+            cmd += [
+                '-device',
+                'virtio-serial-pci',
+                '-chardev',
+                f'socket,path={qga_sock},server=on,wait=off,id=qga0',
+                '-device',
+                'virtserialport,chardev=qga0,name=org.qemu.guest_agent.0',
+            ]
         if needs_uefi and nvram_path is not None:
             ovmf_code, _ = find_ovmf_firmware(self.os_def.architecture)
             cmd[1:1] = [

@@ -36,6 +36,9 @@ def _make_os_def(**overrides) -> OsDefinition:
 class ConcreteCreator(BaseVMCreator):
     """Concrete subclass for testing the abstract base."""
 
+    # The readiness pass boots the disk; test_guest_readiness covers it.
+    readiness_pass = False
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.steps_called: list[str] = []
