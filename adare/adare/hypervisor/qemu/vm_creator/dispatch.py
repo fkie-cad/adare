@@ -57,9 +57,7 @@ class GuiBuildOptions:
 
     record: bool = False
     relearn: bool = False
-    # None = the creator's default: gui-auto hides the VM, playbook shows it
-    # when there is a desktop session.
-    display: bool | None = None
+    display: bool = False
     template: str | None = None
 
 
@@ -122,7 +120,7 @@ def create_vm_disk(
             iso_path=iso_path,
             record=gui.record,
             relearn=gui.relearn,
-            display=bool(gui.display),
+            display=gui.display,
             template=gui.template,
             **hostable,
         )

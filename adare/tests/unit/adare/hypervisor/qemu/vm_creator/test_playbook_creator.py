@@ -256,22 +256,3 @@ class TestLiveTerminal:
         view = LiveView()
         with view.session('vm'):
             assert not view.active
-
-
-class TestVmWindow:
-    @pytest.mark.parametrize('flag', [True, False])
-    def test_flag_wins(self, flag, monkeypatch):
-        from adare.hypervisor.qemu.vm_creator.playbook_creator import _want_window
-
-        monkeypatch.setenv('DISPLAY', ':0')
-        assert _want_window(flag) is flag
-
-    def test_shown_by_default_on_a_desktop(self, monkeypatch):
-        from adare.hypervisor.qemu.vm_creator.playbook_creator import _want_window
-
-        monkeypatch.setattr(f'{MOD}.platform.system', lambda: 'Linux')
-        monkeypatch.delenv('DISPLAY', raising=False)
-        monkeypatch.setenv('WAYLAND_DISPLAY', 'wayland-0')
-        assert _want_window(None) is True
-        monkeypatch.delenv('WAYLAND_DISPLAY')
-        assert _want_window(None) is False
