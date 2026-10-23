@@ -1,14 +1,17 @@
 # external imports
 # configure logging
 import logging
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal
+from urllib.parse import urlparse
 
 import attrs
 import cattrs
 
 from adare.exceptions import DataStructuringError
 from adarelib.helper.yaml import yaml_to_dict
+
+_VIRTUALBOX_DISK_FORMATS = frozenset({'ova', 'ovf', 'vdi', 'vmdk'})
 
 log = logging.getLogger(__name__)
 
@@ -294,7 +297,9 @@ class EnvironmentMetadata:
     recipe: Recipe | None = None
 
     # Hypervisor configuration
-    hypervisor: str = "virtualbox"  # Default hypervisor
+    # Omitted -> inferred from the disk (see _infer_hypervisor): VirtualBox for
+    # OVA/VDI/VMDK images, QEMU for everything else, including recipes.
+    hypervisor: str | None = None
     hypervisor_config: dict = attrs.Factory(dict)  # Hypervisor-specific configuration
 
     # Legacy Vagrant-based environment fields (for backward compatibility)
@@ -306,6 +311,14 @@ class EnvironmentMetadata:
             raise ValueError("vm_type 'recipe' requires a 'recipe' block")
         if not self.vm and not self.vagrantbox and self.recipe is None:
             raise ValueError("One of 'vm', 'recipe', or 'vagrantbox' must be specified")
+        if self.hypervisor is None:
+            self.hypervisor = self._infer_hypervisor()
+
+    def _infer_hypervisor(self) -> str:
+        if self.recipe is not None or not self.vm:
+            return "qemu"
+        disk_format = self.vm_format or PurePosixPath(urlparse(self.vm).path).suffix.lstrip('.').lower()
+        return "virtualbox" if disk_format in _VIRTUALBOX_DISK_FORMATS else "qemu"
 
     @property
     def is_vagrant_environment(self) -> bool:

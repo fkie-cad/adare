@@ -515,7 +515,10 @@ class Environment(RemoteIdentityMixin, SerializerMixin, GlobalBase):
     RELATIONSHIPS_TO_DICT = True
 
     id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
-    name = Column(String, nullable=False, unique=True, index=True)
+    # Not unique on its own: reloading a changed environment file keeps the old
+    # row as a superseded version (runs still reference it). Only one *current*
+    # version per name is allowed -- see idx_environment_current_name.
+    name = Column(String, nullable=False, index=True)
     description = Column(String, nullable=True)
 
     # VM relationship
@@ -528,12 +531,30 @@ class Environment(RemoteIdentityMixin, SerializerMixin, GlobalBase):
     sha256hash = Column(String, nullable=True)
     hypervisor = Column(String, nullable=False, default='virtualbox', server_default='virtualbox')
 
+    # Disk hash this version was loaded against. Vm rows are shared by every
+    # environment using the same disk, and a forced rebuild can replace that
+    # disk in place; pinning the hash here lets a run detect that its
+    # environment version no longer matches the registered disk.
+    vm_hash = Column(String, nullable=True)
+
     created_at = Column(DateTime, nullable=True, default=func.now())
+    # Set when a newer version of the same name is loaded. NULL = current.
+    superseded_at = Column(DateTime, nullable=True, index=True)
 
     tags = relationship(Tag, secondary=mapping_environment_tag)
 
     sync_metadata_id = Column(CHAR(26), ForeignKey('sync_metadata.id', ondelete='CASCADE'), nullable=True)
     sync_metadata = relationship("SyncMetadata", backref="environment")
+
+    __table_args__ = (Index('idx_environment_current_name', 'name', unique=True, sqlite_where=superseded_at.is_(None)),)
+
+    @hybrid_property
+    def is_current(self) -> bool:
+        return self.superseded_at is None
+
+    @is_current.expression  # type: ignore[no-redef]
+    def is_current(cls):
+        return cls.superseded_at.is_(None)
 
     def __str__(self):
         return str(self.name)

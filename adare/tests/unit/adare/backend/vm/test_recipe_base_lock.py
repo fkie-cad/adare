@@ -134,7 +134,7 @@ def _stage_two_patches(vm_id: str = 'VM1'):
         patch(f'{_RECIPE_MODULE}.vm_database.get_vm_by_recipe_hash', return_value=None),
         patch(f'{_RECIPE_MODULE}._provision_disk', return_value=Path('/dev/null')),
         patch(
-            'adare.backend.vm.commands.load_vm_file_for_environment',
+            'adare.backend.vm.registration.load_vm_file_for_environment',
             return_value={'vm_id': vm_id, 'was_existing': False},
         ),
     )

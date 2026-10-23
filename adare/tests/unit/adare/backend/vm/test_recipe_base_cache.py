@@ -122,7 +122,7 @@ def test_a_present_base_disk_is_reused_without_invoking_the_installer(recipe_env
         patch('adare.hypervisor.qemu.vm_creator.linux_creator.create_linux_vm', side_effect=_must_not_run),
         patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2') as provision,
         patch(
-            'adare.backend.vm.commands.load_vm_file_for_environment',
+            'adare.backend.vm.registration.load_vm_file_for_environment',
             return_value={'vm_id': 'VM1', 'was_existing': False},
         ),
     ):
@@ -176,7 +176,7 @@ def test_the_installer_writes_to_a_partial_path_not_the_cache_name(recipe_env):
         patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_record),
         patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2'),
         patch(
-            'adare.backend.vm.commands.load_vm_file_for_environment',
+            'adare.backend.vm.registration.load_vm_file_for_environment',
             return_value={'vm_id': 'VM1', 'was_existing': False},
         ),
     ):
@@ -202,7 +202,7 @@ def test_a_truncated_cached_base_is_discarded_and_rebuilt(recipe_env):
         patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_rebuild) as creator,
         patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2'),
         patch(
-            'adare.backend.vm.commands.load_vm_file_for_environment',
+            'adare.backend.vm.registration.load_vm_file_for_environment',
             return_value={'vm_id': 'VM1', 'was_existing': False},
         ),
     ):
@@ -223,7 +223,7 @@ def test_a_plausibly_sized_cached_base_is_still_reused(recipe_env):
         patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_must_not_run),
         patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2'),
         patch(
-            'adare.backend.vm.commands.load_vm_file_for_environment',
+            'adare.backend.vm.registration.load_vm_file_for_environment',
             return_value={'vm_id': 'VM1', 'was_existing': False},
         ),
     ):
@@ -241,7 +241,7 @@ def test_an_absent_base_disk_triggers_the_installer(recipe_env):
         patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_fake_build) as creator,
         patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2'),
         patch(
-            'adare.backend.vm.commands.load_vm_file_for_environment',
+            'adare.backend.vm.registration.load_vm_file_for_environment',
             return_value={'vm_id': 'VM1', 'was_existing': False},
         ),
     ):
@@ -263,7 +263,7 @@ def test_reprovision_keeps_the_cached_base(recipe_env):
         patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', side_effect=_must_not_run),
         patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2') as provision,
         patch(
-            'adare.backend.vm.commands.load_vm_file_for_environment',
+            'adare.backend.vm.registration.load_vm_file_for_environment',
             return_value={'vm_id': 'VM2', 'was_existing': False},
         ),
     ):
@@ -280,7 +280,7 @@ def test_force_rebuilds_the_base_too(recipe_env):
         patch('adare.hypervisor.qemu.vm_creator.windows_creator.create_windows_vm', return_value=built) as creator,
         patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2'),
         patch(
-            'adare.backend.vm.commands.load_vm_file_for_environment',
+            'adare.backend.vm.registration.load_vm_file_for_environment',
             return_value={'vm_id': 'VM3', 'was_existing': False},
         ),
     ):
@@ -308,7 +308,7 @@ def test_reprovision_bypasses_the_registered_vm_cache(recipe_env):
         patch(f'{_RECIPE_MODULE}.vm_database.get_vm_by_recipe_hash', return_value=existing),
         patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2') as provision,
         patch(
-            'adare.backend.vm.commands.load_vm_file_for_environment',
+            'adare.backend.vm.registration.load_vm_file_for_environment',
             return_value={'vm_id': 'NEW', 'was_existing': False},
         ),
     ):
@@ -394,7 +394,7 @@ def test_free_disk_requirement_is_lower_when_the_base_is_already_cached(recipe_e
     with (
         patch(f'{_RECIPE_MODULE}._provision_disk', return_value=recipe_env['vms'] / 'out.qcow2'),
         patch(
-            'adare.backend.vm.commands.load_vm_file_for_environment',
+            'adare.backend.vm.registration.load_vm_file_for_environment',
             return_value={'vm_id': 'VM1', 'was_existing': False},
         ),
     ):
@@ -454,7 +454,7 @@ def test_a_provisionless_recipe_never_enters_stage_two(tmp_path, monkeypatch):
         patch(f'{_RECIPE_MODULE}._provision_disk', side_effect=_must_not_run),
         patch(f'{_RECIPE_MODULE}._build_base_disk', side_effect=_must_not_run),
         patch(
-            'adare.backend.vm.commands.load_vm_file_for_environment',
+            'adare.backend.vm.registration.load_vm_file_for_environment',
             return_value={'vm_id': 'VM1', 'was_existing': False},
         ),
     ):

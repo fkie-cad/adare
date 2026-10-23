@@ -53,6 +53,22 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `adare ws action` / `adare icons dump-all` take `--token` / `ADARE_AGENT_TOKEN`.
 
 ### Changed
+- Environments are versioned. `adare env load --force` on a changed file adds a
+  new version and keeps the old one with its runs; it used to delete the old
+  environment and every run of it in every project. `env remove` deletes all
+  versions, and `--force` now detaches experiments instead of leaving them
+  pointing at a deleted environment. Migration `add_environment_versioning`.
+- An environment without `hypervisor:` infers it from the disk (VirtualBox for
+  OVA/OVF/VDI/VMDK, QEMU otherwise) instead of always defaulting to VirtualBox.
+- `env load` refuses a disk-image environment without an `os` block, a
+  `vagrantbox`-only environment, and a local disk that does not match a declared
+  `vm_sha256` (only URL disks were checked).
+- Environments sharing one disk must agree on its hypervisor and guest
+  platform/architecture; `--force` refuses to replace a disk another environment
+  uses, and a run fails if its environment's disk was replaced after loading.
+- `env create --with-vm` writes the disk path into the new file instead of
+  registering the disk (`env load` does that).
+- `-p` is hidden on the environment commands that ignored it (environments are global).
 - Whole workspace formatted with `ruff format`; safe ruff autofixes applied.
 - `uv.lock` is committed; CI installs with `--locked`.
 - ruff and mypy pinned exactly in a `lint` dependency group.
@@ -95,6 +111,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Running an experiment without `-e` looked up an environment named after the
+  managed file (`<name>_<hash8>`) and failed.
+- Environment installation / platform lookups queried a non-existent `ulid` column.
+- Python API `vm.load` failed with a TypeError (missing `project_path`).
 - Every dev-session web route failed: async handlers called services that run
   their own `asyncio.run`; `/api/sessions/start` also passed a removed field and
   several routes read `result.value`/`is_success()`, which `Result` lacks.

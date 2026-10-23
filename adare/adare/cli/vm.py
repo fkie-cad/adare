@@ -443,7 +443,7 @@ def _live_recipe_base_hashes() -> set[str]:
     from adare.types.environment import parse_environment_file
 
     with EnvironmentDbApi() as db:
-        env_files = [env.file for env in db.get_environments() if env.file]
+        env_files = [env.file for env in db.get_environments(include_superseded=True) if env.file]
 
     hashes: set[str] = set()
     for env_file_str in env_files:
