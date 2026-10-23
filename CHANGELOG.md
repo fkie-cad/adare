@@ -121,6 +121,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   profiles use it. The live session is powered off via ACPI before the hard
   stop, `wait_stable` takes `required: true`, and a failing step saves
   `<phase>_<nn>_FAILED.png`.
+- Playbook installs went silent for up to an hour while waiting. Every step now
+  prints a timestamp and its duration, and waits print a progress line each
+  minute (elapsed / timeout, current on-screen text) plus a "may be stuck"
+  warning once the screen has not changed for 10 minutes.
 
 ### Security
 - The guest agent no longer accepts unauthenticated connections (per-run token);
