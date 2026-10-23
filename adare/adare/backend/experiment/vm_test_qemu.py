@@ -250,7 +250,7 @@ async def start_qemu_test_vm(context):
     from adare.hypervisor.qemu.lifecycle import QEMULifecycleStrategy
 
     log.info("Starting QEMU test VM...")
-    await QEMULifecycleStrategy().start_and_initialize_vm(context)
+    await QEMULifecycleStrategy().start_and_initialize_vm(context, rerun_file_transfer_on_retry=False)
     log.info("QEMU test VM started and ready")
 
 

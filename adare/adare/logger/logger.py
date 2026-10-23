@@ -153,6 +153,26 @@ def _setup_file_handler(logger: logging.Logger, level: int, logfile: str) -> Non
         print(f"Warning: Cannot initialize file logging - {e}")
 
 
+def attach_logfile(logfile: Path, level: int = logging.DEBUG) -> logging.FileHandler:
+    """Write the root logger's records at ``level`` and above to ``logfile``.
+
+    For commands that keep their own log by default, after startup logging is
+    configured. Lowers the root level when needed so ``level`` records reach the
+    file; console handlers keep their own level, so the terminal stays as quiet.
+
+    Raises:
+        OSError: If the file cannot be opened
+    """
+    file_handler = logging.FileHandler(logfile, encoding='utf-8')
+    file_handler.setFormatter(FileHandlerFormatter())
+    file_handler.setLevel(level)
+    root_logger = logging.getLogger()
+    root_logger.addHandler(file_handler)
+    if root_logger.level == logging.NOTSET or root_logger.level > level:
+        root_logger.setLevel(level)
+    return file_handler
+
+
 def update_console_level(level: int) -> None:
     """Update console logging level for all console handlers.
 

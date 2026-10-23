@@ -144,7 +144,13 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output with detailed error information')
     @click.option('--keep-vm', is_flag=True, help='Keep the test VM after completion (for further testing)')
     @click.option('--remove-vm', is_flag=True, help='Automatically remove the test VM after completion')
-    def test(target, platform, verbose, keep_vm, remove_vm):
+    @click.option(
+        '--log-file',
+        type=click.Path(dir_okay=False),
+        help='Where to write the full debug log (default: ./adare-vm-test-<target>-<timestamp>.log)',
+    )
+    @click.option('--no-log', is_flag=True, help='Do not write a log file')
+    def test(target, platform, verbose, keep_vm, remove_vm, log_file, no_log):
         """Test ADARE compatibility of a VM.
 
         TARGET may be either:
@@ -168,10 +174,17 @@ def register(cli, AliasedGroup, exec_with_error_printing):
           adare vm test my-registered-vm            # platform auto-derived
           adare vm test my-registered-vm --platform windows   # override
           adare vm test my-registered-vm --keep-vm
+          adare vm test my-registered-vm --no-log
+
+        A debug-level log of the whole test is written to the current directory
+        unless --no-log is given (or the global --logfile already captures it).
         """
         # Handle cleanup options
         if keep_vm and remove_vm:
             click.echo("Error: Cannot specify both --keep-vm and --remove-vm", err=True)
+            return
+        if log_file and no_log:
+            click.echo("Error: Cannot specify both --log-file and --no-log", err=True)
             return
 
         vm_cleanup_mode = 'prompt'  # Default
@@ -182,7 +195,14 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         from adare.cli.vm import exec_vm_test
 
-        args = SimpleNamespace(target=target, platform=platform, verbose=verbose, vm_cleanup_mode=vm_cleanup_mode)
+        args = SimpleNamespace(
+            target=target,
+            platform=platform,
+            verbose=verbose,
+            vm_cleanup_mode=vm_cleanup_mode,
+            log_file=log_file,
+            no_log=no_log,
+        )
         exec_with_error_printing(exec_vm_test, args)
 
     # Nested group for snapshot management

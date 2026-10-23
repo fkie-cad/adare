@@ -51,6 +51,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   and tools, and serves exactly the `Tool` enum. The host rejects other protocol
   versions (reinstalling the agent once first) and only calls advertised tools.
   `adare ws action` / `adare icons dump-all` take `--token` / `ADARE_AGENT_TOKEN`.
+- `adare vm test` writes a debug log to `./adare-vm-test-<target>-<timestamp>.log`
+  and prints its path at the end, failures included. `--log-file` picks the path,
+  `--no-log` turns it off, and an existing global `--logfile` is used as is.
 
 ### Changed
 - `adare vm` help separates registered VMs (`list`, `info`, `reset`) from
@@ -145,6 +148,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   the last machine's instance.
 - `adare vm test` used a fixed host port (19000), so two tests collided; it now
   also works for non-qcow2 disks and removes its config/varstore afterwards.
+- `adare vm test` on a QEMU VM crashed with `'NoneType' object has no attribute
+  'path'` when the first boot missed the guest-agent budget: the boot retry re-ran
+  the experiment file-transfer setup, which needs a run directory the test lacks.
 - Running an experiment without `-e` looked up an environment named after the
   managed file (`<name>_<hash8>`) and failed.
 - Environment installation / platform lookups queried a non-existent `ulid` column.

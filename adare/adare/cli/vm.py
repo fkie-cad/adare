@@ -180,6 +180,40 @@ def exec_vm_watch(arguments):
     )
 
 
+def _vm_test_logfile_path(target: str) -> Path:
+    """Default log path for 'adare vm test': the working directory, named after the target."""
+    import re
+    from datetime import datetime
+
+    name = re.sub(r'[^A-Za-z0-9._-]+', '_', Path(target).stem) or 'vm'
+    return Path.cwd() / f"adare-vm-test-{name}-{datetime.now():%Y%m%d-%H%M%S}.log"
+
+
+def _attach_vm_test_log(arguments) -> Path | None:
+    """Start the vm test's own log file unless disabled or already logging to one.
+
+    Returns the path being written, or None when there is no file log.
+    """
+    import sys
+
+    from adare.logger.logger import attach_logfile, get_current_logfile
+
+    if getattr(arguments, 'no_log', False):
+        return None
+    current = get_current_logfile()
+    if current is not None:  # the global --logfile already captures everything
+        return Path(current)
+
+    path = Path(arguments.log_file) if getattr(arguments, 'log_file', None) else _vm_test_logfile_path(arguments.target)
+    try:
+        attach_logfile(path)
+    except OSError as e:
+        print(f"Warning: cannot write vm test log to {path}: {e}", file=sys.stderr)
+        return None
+    log.info(f"COMMAND: {' '.join(sys.argv)}")
+    return path
+
+
 async def exec_vm_test(arguments):
     """Test ADARE compatibility of a VM: OVA file path OR registered VM name.
 
@@ -187,9 +221,22 @@ async def exec_vm_test(arguments):
     - existing file -> OVA compatibility test (--platform required)
     - otherwise -> resolve as a registered VM name and run the hypervisor-
       appropriate compatibility test (platform auto-derived from osinfo).
+
+    Writes a debug log to the working directory unless --no-log (see
+    ``_attach_vm_test_log``); its path is printed when the test ends, also on failure.
     """
     import sys
-    from pathlib import Path
+
+    logfile = _attach_vm_test_log(arguments)
+    try:
+        await _run_vm_test(arguments)
+    finally:
+        if logfile is not None:
+            print(f"Log: {logfile}", file=sys.stderr)
+
+
+async def _run_vm_test(arguments):
+    import sys
 
     from adare.core.dto.vm import VmRegisteredTestRequest, VmTestRequest
 

@@ -339,7 +339,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         budget = cls._ready_timeout(guest_platform) * (2 ** (attempt - 1))
         return min(budget, cls._READY_TIMEOUT_CAP)
 
-    async def _reset_vm_for_boot_retry(self, context):
+    async def _reset_vm_for_boot_retry(self, context, rerun_file_transfer: bool = True):
         """Return the VM to a clean, independent cold-boot state between boot attempts.
 
         A hard-killed / hung Windows guest can leave the overlay filesystem in a
@@ -351,7 +351,11 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
           2. discard the dirtied overlay,
           3. recreate a fresh overlay from the immutable base,
           4. re-run any pre-boot file transfer (re-injects for libguestfs;
-             cheap / no-op for QGA and virtiofs).
+             cheap / no-op for QGA and virtiofs). Skipped when
+             ``rerun_file_transfer`` is False: callers that configured their
+             shares on the VM config themselves (``adare vm test``) have no
+             experiment run directory for the strategy to build shares from,
+             and their config survives the overlay swap.
 
         NVRAM (UEFI vars, incl. the aarch64 shell-boot entry) is intentionally
         preserved — the boot-hang state lives in the guest filesystem, not UEFI.
@@ -375,12 +379,14 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             log.warning(f"Could not recreate overlay for boot retry (booting existing overlay): {e}")
 
         # 4. Re-run pre-boot file transfer so the fresh overlay carries any injected files.
+        if not rerun_file_transfer:
+            return
         try:
             await self.file_transfer.setup(context)
         except (HypervisorException, OSError) as e:
             log.warning(f"Re-running pre-boot file transfer during boot retry failed (continuing): {e}")
 
-    async def start_and_initialize_vm(self, context):
+    async def start_and_initialize_vm(self, context, rerun_file_transfer_on_retry: bool = True):
         """
         Start QEMU VM via libvirt and perform post-boot file transfer.
 
@@ -399,6 +405,9 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         Args:
             context: ExperimentRunCtx containing VM
+            rerun_file_transfer_on_retry: Re-run the strategy's pre-boot setup
+                when a boot attempt is retried. Pass False when the caller set up
+                the shares itself instead of through ``setup_file_transfer``.
         """
         from adare.backend.experiment.execution.base import GUIExecutionMode
         from adare.backend.experiment.execution.gui_executor_factory import resolve_gui_execution_mode
@@ -430,7 +439,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                     f"agent in {attempt_budgets[attempt - 2]}s; tearing down and retrying "
                     f"(attempt {attempt}/{max_attempts}, budget {ready_timeout}s)"
                 )
-                await self._reset_vm_for_boot_retry(context)
+                await self._reset_vm_for_boot_retry(context, rerun_file_transfer=rerun_file_transfer_on_retry)
 
             # Stage 1: Start VM
             with StageCtxManager(
