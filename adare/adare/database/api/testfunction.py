@@ -466,7 +466,6 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         return result
 
     def get_testfunction_files(self, project_path: Path = None):
-        if project_path:
-            project = self.get_project(project_path.name)
-            return self._session.query(TestFunctionFile).filter(TestFunctionFile.projects.contains(project)).all()
+        # Testfunctions are global: TestFunctionFile has no project relationship any
+        # more. project_path is accepted for call-site compatibility but unused.
         return self._session.query(TestFunctionFile).all()
