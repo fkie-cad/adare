@@ -114,3 +114,40 @@ class TestPlaybookProfiles:
     def test_verify_proves_the_login_succeeded(self, name, profile):
         gone = [s for s in profile['verify_steps'] if s['action'] == 'wait_text' and s.get('gone')]
         assert gone, f'{name}: verify_steps must check the greeter went away after login'
+
+
+class TestProgressOutput:
+    """Long waits must keep printing, so a run can be told apart from a hang."""
+
+    def _printed(self, step: dict, screens: list[list[str]], stuck_s: float = 600.0) -> list[str]:
+        mod = 'adare.hypervisor.qemu.vm_creator.playbook_creator'
+        with (
+            patch(f'{mod}.HEARTBEAT_S', 0),
+            patch(f'{mod}.STUCK_S', stuck_s),
+            patch(f'{mod}.print_step') as print_step,
+        ):
+            _wait_text(step, screens)
+        return [c.args[0] for c in print_step.call_args_list]
+
+    def test_wait_text_reports_elapsed_and_screen_text(self):
+        out = self._printed({'text': 'Restart Now'}, [['Installing system'], ['Restart Now']])
+        assert len(out) == 1
+        assert "waiting for 'Restart Now'" in out[0] and 'screen: Installing system' in out[0]
+
+    def test_wait_text_flags_a_frozen_screen(self):
+        # q.dump() is a MagicMock returning the same frame every poll.
+        out = self._printed({'text': 'Restart Now'}, [['Copying files'], ['Restart Now']], stuck_s=0)
+        assert 'may be stuck' in out[0]
+
+    def test_screen_text_cannot_inject_rich_markup(self):
+        out = self._printed({'text': 'done'}, [['[red]x[/red]'], ['done']])
+        assert '\\[red]' in out[0]
+
+    def test_steps_print_timestamp_and_duration(self, tmp_path):
+        q = MagicMock()
+        q.wait_stable.return_value = True
+        with patch('adare.hypervisor.qemu.vm_creator.playbook_creator.print_step') as print_step:
+            _creator()._run_steps(q, [{'action': 'wait_stable', 'note': 'boot'}], tmp_path, 'install')
+        header, done = (c.args[0] for c in print_step.call_args_list)
+        assert header[2] == ':' and '[install 00] wait_stable  boot' in header
+        assert done.strip().startswith('done in')

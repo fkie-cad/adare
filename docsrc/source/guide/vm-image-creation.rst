@@ -294,6 +294,15 @@ installer's "done" screen and lists its failure texts:
      - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}
 
 A unit test enforces both checks for every ``install_mode: playbook`` profile.
+
+**Watching a run.** Each step prints a timestamp when it starts and its duration
+when it ends; a long wait prints a line every minute with elapsed / timeout and
+the text currently on screen, and warns once the screen has not changed for 10
+minutes::
+
+   > 14:02:11 [install 25] wait_text  wait for install
+   >     … waiting for 'Restart Now': 5m00s / 60m00s — screen: Installing system | Copying files…
+   >     … waiting for 'Restart Now': 16m00s / 60m00s — screen unchanged for 10m00s, may be stuck — …
 When a step fails, the screen at that moment is saved as
 ``<vm>_playbook/<phase>_<nn>_FAILED.png`` next to the per-step screenshots.
 
