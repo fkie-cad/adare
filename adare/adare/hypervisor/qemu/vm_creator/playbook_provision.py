@@ -36,19 +36,35 @@ from adare.hypervisor.qemu.vm_creator.guest_readiness import (
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
 from adare.types.environment import ProvisionCommand
 
-__all__ = ['AUTOLOGIN_CHECK_LINUX', 'bootstrap_steps', 'provision_steps']
+__all__ = ['AUTOLOGIN_CHECK_LINUX', 'DECLARATIVE_DISTRIBUTIONS', 'bootstrap_steps', 'provision_steps']
 
-# Typed on the text console, so it stays one line. The retry loop rides out the
-# first-boot apt lock and a mirror hiccup; the guest agent itself is then started
-# by udev because the creator boots the guest with its virtio-serial port.
+# Typed on the text console, so it stays one line and holds no single quote
+# inside the sh -c script. It covers apt (with a retry loop for the first-boot
+# lock and mirror hiccups), dnf, zypper and pacman. The agent is then started by
+# udev, since the guest boots with its virtio-serial port; `systemctl start`
+# covers distributions that do not wire that up.
 AGENT_INSTALL_COMMAND = (
     f"echo {GUEST_PASSWORD} | sudo -S sh -c '"
-    'for i in 1 2 3 4 5; do '
-    'apt-get -o DPkg::Lock::Timeout=300 update && '
+    'if command -v apt-get >/dev/null; then '
+    'for i in 1 2 3 4 5; do apt-get -o DPkg::Lock::Timeout=300 update && '
     'DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y qemu-guest-agent '
     '&& break; sleep 15; done; '
-    "systemctl start qemu-guest-agent'"
+    'elif command -v dnf >/dev/null; then dnf -y install qemu-guest-agent; '
+    'elif command -v zypper >/dev/null; then zypper --non-interactive install qemu-guest-agent; '
+    'elif command -v pacman >/dev/null; then pacman -Sy --noconfirm --needed qemu-guest-agent; fi; '
+    "systemctl enable qemu-guest-agent; systemctl start qemu-guest-agent'"
 )
+
+# Distributions whose packages are declared, not installed: the console command
+# above cannot work there, so the creator explains the change instead.
+DECLARATIVE_DISTRIBUTIONS = {
+    'nixos': (
+        'NixOS installs nothing imperatively. Add to /etc/nixos/configuration.nix:\n'
+        '      services.qemuGuest.enable = true;\n'
+        '      services.displayManager.autoLogin = { enable = true; user = "adare"; };\n'
+        '    then run `sudo nixos-rebuild switch`, shut down, and run `adare vm test`.'
+    ),
+}
 
 
 def bootstrap_steps(os_def: OsDefinition) -> list[dict]:
@@ -66,7 +82,18 @@ def bootstrap_steps(os_def: OsDefinition) -> list[dict]:
     ]
 
 
-_APT = 'DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 -q'
+# Prefixed to every step that installs packages.
+_PKG = """pkg_install() {
+  if command -v apt-get >/dev/null; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get -o DPkg::Lock::Timeout=300 -q update && apt-get -o DPkg::Lock::Timeout=300 -q install -y "$@"
+  elif command -v dnf >/dev/null; then dnf -y install "$@"
+  elif command -v zypper >/dev/null; then zypper --non-interactive install "$@"
+  elif command -v pacman >/dev/null; then pacman -Sy --noconfirm --needed "$@"
+  else echo 'no supported package manager (apt, dnf, zypper, pacman)' >&2; return 1
+  fi
+}
+"""
 
 _SUDO = ProvisionCommand(
     name='passwordless sudo',
@@ -81,43 +108,64 @@ _PACKAGES = ProvisionCommand(
     name='base packages',
     shell='bash',
     timeout_minutes=20,
-    command=f'{_APT} update && {_APT} install -y cifs-utils openssh-server curl',
+    command=_PKG
+    + """set -e
+if command -v apt-get >/dev/null || command -v dnf >/dev/null; then ssh=openssh-server; else ssh=openssh; fi
+pkg_install cifs-utils "$ssh" curl""",
 )
 
-# The session type is left as the release ships it; only the greeter is skipped.
+# Configures the display manager that is actually enabled. The session type is
+# left as the distribution ships it; only the greeter is skipped.
 _AUTOLOGIN = ProvisionCommand(
     name='automatic login',
     shell='bash',
     timeout_minutes=5,
     command=f"""set -e
-if [ -d /etc/gdm3 ]; then
-  cat > /etc/gdm3/custom.conf <<'EOF'
+dm=$(basename "$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null)" .service)
+case "$dm" in
+  gdm|gdm3)
+    conf=/etc/gdm3/custom.conf
+    [ -d /etc/gdm3 ] || conf=/etc/gdm/custom.conf
+    cat > "$conf" <<'EOF'
 [daemon]
 AutomaticLoginEnable=true
 AutomaticLogin={GUEST_USER}
 EOF
-elif command -v sddm >/dev/null; then
-  mkdir -p /etc/sddm.conf.d
-  cat > /etc/sddm.conf.d/adare-autologin.conf <<'EOF'
+    ;;
+  sddm)
+    mkdir -p /etc/sddm.conf.d
+    cat > /etc/sddm.conf.d/adare-autologin.conf <<'EOF'
 [Autologin]
 User={GUEST_USER}
 Session=plasma.desktop
 Relogin=false
 EOF
-else
-  echo 'neither GDM nor SDDM found' >&2
-  exit 1
-fi""",
+    ;;
+  lightdm)
+    mkdir -p /etc/lightdm/lightdm.conf.d
+    cat > /etc/lightdm/lightdm.conf.d/50-adare-autologin.conf <<'EOF'
+[Seat:*]
+autologin-user={GUEST_USER}
+autologin-user-timeout=0
+EOF
+    groupadd -f autologin
+    usermod -aG autologin {GUEST_USER}
+    ;;
+  *)
+    echo "unsupported display manager '${{dm:-none}}' (supported: GDM, SDDM, LightDM)" >&2
+    exit 1
+    ;;
+esac""",
 )
 
-# Background apt runs hold the dpkg lock and change the system mid-experiment,
-# and their update prompts pop up over the desktop.
+# Background package runs hold the package lock and change the system
+# mid-experiment, and their update prompts pop up over the desktop.
 _NO_AUTO_UPDATES = ProvisionCommand(
     name='no automatic updates',
     shell='bash',
     timeout_minutes=5,
     command="""set -e
-for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service; do
+for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service dnf-makecache.timer; do
   if [ -n "$(systemctl list-unit-files --no-legend "$unit")" ]; then
     systemctl disable --now "$unit"
   fi
@@ -125,7 +173,10 @@ done""",
 )
 
 _PYTHON = ProvisionCommand(
-    name='python3-pip', shell='bash', timeout_minutes=20, command=f'{_APT} install -y python3-pip'
+    name='python3-pip',
+    shell='bash',
+    timeout_minutes=20,
+    command=_PKG + 'if command -v pacman >/dev/null; then pkg_install python-pip; else pkg_install python3-pip; fi',
 )
 
 

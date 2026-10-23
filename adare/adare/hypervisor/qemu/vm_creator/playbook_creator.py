@@ -293,25 +293,45 @@ class PlaybookVMCreator(BaseVMCreator):
         provision = self.setup_level >= SetupLevel.BASE
         qga_sock = run_dir / 'qga.sock'
         proc = self._launch(disk_path, None, sock, run_dir, nvram_path, qga_sock=qga_sock if provision else None)
-        q = None
-        try:
-            q = _QMP(str(sock), ppm)
-            if self.os_def.verify_steps:
-                self._run_steps(q, self.os_def.verify_steps, run_dir, 'verify')
-            if provision:
-                self._make_adare_ready(q, qga_sock, run_dir)
-                self._shutdown_via_agent(proc, q, qga_sock)
-            else:
+        if provision:
+            self.make_ready_in_session(proc, sock, qga_sock, run_dir, verify_steps=self.os_def.verify_steps)
+        else:
+            q = None
+            try:
+                q = _QMP(str(sock), ppm)
+                if self.os_def.verify_steps:
+                    self._run_steps(q, self.os_def.verify_steps, run_dir, 'verify')
                 self._shutdown(proc, q, grace=60)
-        finally:
-            if q:
-                q.close()
-            self._stop(proc, sock)
-            if qga_sock.exists():
-                qga_sock.unlink()
+            finally:
+                if q:
+                    q.close()
+                self._stop(proc, sock)
         console.print(f'[green]Playbook install complete[/green] — screenshots in {run_dir}')
 
     # -- making the installed desktop ADARE-ready ----------------------------
+    def make_ready_in_session(
+        self, proc, qmp_sock: Path, qga_sock: Path, run_dir: Path, verify_steps: list | None = None
+    ) -> None:
+        """Make a booted, freshly installed desktop ADARE-ready, then power it off.
+
+        *proc* is a QEMU booted from the installed disk with a QMP socket and a
+        guest-agent port. Shared with the manual creator, which boots its disk
+        through build_post_install_qemu_cmd and needs only this engine.
+        """
+        q = None
+        try:
+            q = _QMP(str(qmp_sock), run_dir / '_frame.ppm')
+            if verify_steps:
+                self._run_steps(q, verify_steps, run_dir, 'verify')
+            self._make_adare_ready(q, qga_sock, run_dir)
+            self._shutdown_via_agent(proc, q, qga_sock)
+        finally:
+            if q:
+                q.close()
+            self._stop(proc, qmp_sock)
+            if qga_sock.exists():
+                qga_sock.unlink()
+
     def _make_adare_ready(self, q: _QMP, qga_sock: Path, run_dir: Path) -> None:
         """Install the guest agent, provision over it, and prove the result.
 

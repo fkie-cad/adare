@@ -80,6 +80,22 @@ For OSes without a built-in unattended template, use a custom profile with
 The VM boots the live ISO in a window and waits for you to click through the
 graphical installer. (Manual mode drives QEMU directly and writes no seed file.)
 
+**Create the user** ``adare`` **with password** ``adare`` (an administrator / sudo
+account): ADARE's runtime logs in with it. With ``--setup base`` or ``full`` (the
+default), once you shut the installer down, ADARE boots the installed disk
+headless and sets a Linux guest up exactly like a playbook install (see
+*Making the guest ADARE-ready* below): it logs in on a text console, installs
+``qemu-guest-agent`` with one command that covers apt, dnf, zypper and pacman,
+then over the agent sets passwordless sudo, autologin for the enabled display
+manager (GDM, SDDM or LightDM), no screen lock, no welcome wizard and no
+background updates, and checks the agent and the autologin session after a
+reboot. Screenshots go to ``<vm>_setup/`` next to the disk.
+
+Because the install itself is your work, a failure here only **warns**, with
+what to fix; the disk is kept. NixOS installs nothing imperatively, so for it
+ADARE prints the ``configuration.nix`` lines to add instead. Windows manual
+installs and ``--setup bare`` skip the setup entirely.
+
 
 GUI-automated installation (record once, replay deterministically)
 ------------------------------------------------------------------
@@ -348,8 +364,14 @@ guest-agent channel, and over the agent
 The guest is then shut down cleanly and the overlay flattened (and compressed)
 into the final disk. If the agent never answers or a check fails, ``vm create``
 fails; the installed disk stays where it is for inspection and
-``<disk>_readiness.log`` records every command. Manual and ``gui-auto`` installs
-skip the pass and say so: what they installed has no guest agent to check with.
+``<disk>_readiness.log`` records every command. Manual installs get the playbook
+setup instead (see *Manual ISO install*); ``gui-auto`` installs skip it and say
+so.
+
+**Opting out.** ``--setup bare`` makes ADARE add nothing to the guest after the
+OS install: no agent, no provisioning, no check, for every install mode. For
+unattended installs the answer file still creates the ``adare`` account and sets
+autologin, since an unattended install needs an answer file anyway.
 
 An image with no guest agent (``--setup bare``, or built before this provisioning
 existed) does not hang ``adare vm test`` or an experiment through every boot

@@ -17,7 +17,9 @@ from adare.hypervisor.qemu.vm_creator.playbook_creator import (
     _char_to_keys,
 )
 from adare.hypervisor.qemu.vm_creator.playbook_provision import (
+    AGENT_INSTALL_COMMAND,
     AUTOLOGIN_CHECK_LINUX,
+    DECLARATIVE_DISTRIBUTIONS,
     bootstrap_steps,
     provision_steps,
 )
@@ -86,11 +88,19 @@ class TestBootstrapSteps:
         assert bootstrap_steps(replace(get_os_definition('ubuntu2404'), bootstrap_steps=custom)) == custom
 
     @pytest.mark.parametrize('name', _playbook_profile_names())
-    def test_default_bootstrap_only_serves_apt_profiles(self, name):
+    def test_default_bootstrap_serves_every_playbook_profile(self, name):
         os_def = get_os_definition(name)
-        assert os_def.bootstrap_steps or os_def.distribution in ('ubuntu', 'kubuntu', 'debian'), (
-            f'{name}: the default bootstrap installs the agent with apt; give the profile its own bootstrap_steps'
+        assert os_def.bootstrap_steps or os_def.distribution not in DECLARATIVE_DISTRIBUTIONS, (
+            f'{name}: the console bootstrap installs packages imperatively; give the profile its own bootstrap_steps'
         )
+
+    @pytest.mark.skipif(shutil.which('bash') is None, reason='needs bash')
+    def test_typed_install_command_is_valid_shell(self):
+        script = AGENT_INSTALL_COMMAND.split("sh -c '", 1)[1].rsplit("'", 1)[0]
+        assert "'" not in script, 'a single quote would end the typed sh -c argument'
+        for manager in ('apt-get', 'dnf', 'zypper', 'pacman'):
+            assert manager in script
+        assert subprocess.run(['bash', '-n', '-c', script], check=False).returncode == 0
 
 
 class TestLaunch:
