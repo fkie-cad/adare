@@ -114,13 +114,14 @@ always YAML + a verifiable external artifact, never bytes with no anchor.
 ## 5. Manage images
 
 ```sh
-adare vm list                          # all VMs (aliases: l)
-adare vm info <vm-id>                   # detail for one VM
-adare vm usage                         # instance usage statistics
+adare vm list                          # registered VMs (aliases: l)
+adare vm info <name-or-id>             # detail for a registered VM or an instance
+adare vm usage                         # instances and their usage
 adare vm snapshot list                 # snapshots (snapshot remove <…> to delete one)
 adare vm prune [--force] [--sockets]   # reclaim orphaned base disks (dry-run by default)
-adare vm remove --id <ulid> | --stopped | --all --force | --env <ulid> --force
-adare vm reset --force                 # reset ALL VMs (destructive)
+adare vm remove <name-or-id> [-f] [-y] # registered VM (+ its environments) or one instance
+adare vm remove --stopped | --all --force | --env <ulid> --force   # instances in bulk
+adare vm reset --force                 # remove the instances of ALL VMs (destructive)
 ```
 
 `vm prune` is the GC for orphaned `<name>-base.qcow2`/`-nvram.fd` debris (dry-run

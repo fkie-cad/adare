@@ -238,45 +238,24 @@ class VMService:
 
     def delete(self, vm_id: str, force: bool = False) -> Result[None]:
         """
-        Delete a VM from the system.
+        Delete a registered VM no environment uses: instances, hypervisor state, row and managed disk.
+
+        A VM environments run on is refused (``VMInUseByEnvironmentError``): removing
+        it removes those environments, which is `adare vm remove` / environment delete.
 
         Args:
             vm_id: VM database ID
-            force: Force deletion even if VM has instances
+            force: Keep going when an instance's cleanup fails
 
         Returns:
             Result[None] on success, or error information on failure.
         """
+        from adare.backend.vm.removal import remove_vm
+
         try:
-            with VmApi() as api:
-                vm = api.get_vm_by_id(vm_id)
-                if not vm:
-                    return Result.fail(
-                        code="VMNotFoundError",
-                        message=f'VM with ID {vm_id} not found',
-                        solutions=[
-                            'Use `adare vm list` to see available VMs',
-                        ],
-                    )
-
-                # Check for instances
-                instances = api.get_vm_instances_for_vm(vm_id)
-                if instances and not force:
-                    return Result.fail(
-                        code="VMHasInstancesError",
-                        message=f'VM "{vm.name}" has {len(instances)} active instances',
-                        solutions=[
-                            'Use --force to delete VM and all its instances',
-                            'Remove instances first with `adare vm remove`',
-                        ],
-                    )
-
-                api.delete_vm(vm_id)
-                return Result.ok(None)
-
-        except VMNotFoundError as e:
-            return Result.from_exception(e)
-        except VMError as e:
+            remove_vm(vm_id, force=force, cascade=False)
+            return Result.ok(None)
+        except (VMError, VMNotFoundError) as e:
             return Result.from_exception(e)
 
     def clear_all(self, force: bool = False) -> Result[VmClearResult]:
@@ -416,25 +395,25 @@ class VMService:
         except VMNotFoundError as e:
             return Result.from_exception(e)
 
-    async def remove_instance(self, instance_id: str) -> Result[None]:
+    async def remove_instance(self, instance_id: str, force: bool = False) -> Result[None]:
         """
         Remove a specific VM instance.
 
         Args:
             instance_id: VM instance ID
+            force: Remove it even if it is running or paused
 
         Returns:
             Result[None] on success, or error information on failure.
         """
         from adare.backend.vm.instance_manager import cleanup_vm_instance
+        from adare.hypervisor.exceptions import InstanceOperationException
 
         try:
-            await cleanup_vm_instance(instance_id)
+            await cleanup_vm_instance(instance_id, force=force)
             return Result.ok(None)
 
-        except VMNotFoundError as e:
-            return Result.from_exception(e)
-        except VMError as e:
+        except (VMNotFoundError, VMError, InstanceOperationException) as e:
             return Result.from_exception(e)
 
     async def remove_all_stopped_instances(self) -> Result[VmInstanceCleanupResult]:

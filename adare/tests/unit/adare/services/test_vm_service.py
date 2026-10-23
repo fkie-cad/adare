@@ -93,45 +93,36 @@ class TestVMServiceGetByName:
 
 
 class TestVMServiceDelete:
-    """Tests for VMService.delete()."""
+    """Tests for VMService.delete(): the shared removal path, never cascading into environments."""
 
-    @patch("adare.services.vm_service.VmApi")
-    def test_delete_success(self, mock_api_cls, service):
-        mock_api = MagicMock()
-        mock_api_cls.return_value.__enter__ = MagicMock(return_value=mock_api)
-        mock_api_cls.return_value.__exit__ = MagicMock(return_value=False)
-        mock_api.get_vm_by_id.return_value = _make_vm_mock()
-        mock_api.get_vm_instances_for_vm.return_value = []
-
-        result = service.delete("vm-01")
+    @patch("adare.backend.vm.removal.remove_vm")
+    def test_delete_success(self, mock_remove, service):
+        result = service.delete("vm-01", force=True)
 
         assert result.success is True
-        mock_api.delete_vm.assert_called_once_with("vm-01")
+        mock_remove.assert_called_once_with("vm-01", force=True, cascade=False)
 
-    @patch("adare.services.vm_service.VmApi")
-    def test_delete_not_found(self, mock_api_cls, service):
-        mock_api = MagicMock()
-        mock_api_cls.return_value.__enter__ = MagicMock(return_value=mock_api)
-        mock_api_cls.return_value.__exit__ = MagicMock(return_value=False)
-        mock_api.get_vm_by_id.return_value = None
+    @patch("adare.backend.vm.removal.remove_vm")
+    def test_delete_not_found(self, mock_remove, service):
+        from adare.database.api.vm import VMNotFoundError
+
+        mock_remove.side_effect = VMNotFoundError(MagicMock(), message="VM with ID vm-99 not found")
 
         result = service.delete("vm-99")
 
         assert result.success is False
         assert result.error.code == "VMNotFoundError"
 
-    @patch("adare.services.vm_service.VmApi")
-    def test_delete_has_instances_no_force(self, mock_api_cls, service):
-        mock_api = MagicMock()
-        mock_api_cls.return_value.__enter__ = MagicMock(return_value=mock_api)
-        mock_api_cls.return_value.__exit__ = MagicMock(return_value=False)
-        mock_api.get_vm_by_id.return_value = _make_vm_mock()
-        mock_api.get_vm_instances_for_vm.return_value = [MagicMock()]
+    @patch("adare.backend.vm.removal.remove_vm")
+    def test_delete_refuses_a_vm_environments_use(self, mock_remove, service):
+        from adare.backend.vm.exceptions import VMInUseByEnvironmentError
 
-        result = service.delete("vm-01", force=False)
+        mock_remove.side_effect = VMInUseByEnvironmentError(MagicMock(), message="used by environment(s) ubuntu")
+
+        result = service.delete("vm-01")
 
         assert result.success is False
-        assert result.error.code == "VMHasInstancesError"
+        assert result.error.code == "VMInUseByEnvironmentError"
 
 
 class TestVMServiceClearAll:
@@ -175,6 +166,29 @@ class TestVMServiceRemoveInstance:
         result = await mock_remove("inst-01")
 
         assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_remove_instance_forwards_force(self, service):
+        from unittest.mock import AsyncMock
+
+        with patch("adare.backend.vm.instance_manager.cleanup_vm_instance", new_callable=AsyncMock) as cleanup:
+            result = await service.remove_instance("inst-01", force=True)
+
+        assert result.success is True
+        cleanup.assert_awaited_once_with("inst-01", force=True)
+
+    @pytest.mark.asyncio
+    async def test_remove_running_instance_is_a_failure_result(self, service):
+        from adare.hypervisor.exceptions import InstanceStateException
+
+        with patch(
+            "adare.backend.vm.instance_manager.cleanup_vm_instance",
+            side_effect=InstanceStateException("inst-01", current_state="running", expected_states=["shutoff"]),
+        ):
+            result = await service.remove_instance("inst-01")
+
+        assert result.success is False
+        assert result.error.code == "InstanceStateException"
 
     @pytest.mark.asyncio
     async def test_remove_instance_not_found(self, service):

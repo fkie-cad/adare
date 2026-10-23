@@ -473,7 +473,7 @@ def _remove_instances_of(vms: list) -> dict:
     """Remove every instance (hypervisor VM + row) of ``vms``; the VM registrations stay.
 
     A VM's registration is what its environments run on -- removing it is
-    `adare env remove` / `adare vm reset`, not instance cleanup.
+    `adare vm remove <vm>` / `adare env remove`, not instance cleanup.
     """
     from adare.backend.vm.instance_manager import cleanup_vm_instance
 

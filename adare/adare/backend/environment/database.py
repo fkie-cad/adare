@@ -1,6 +1,5 @@
 # external imports
 # configure logging
-import asyncio
 import logging
 from pathlib import Path
 
@@ -237,18 +236,24 @@ def _scan_environment_references(
     return runs_per_project, orphaned, unscanned
 
 
-def delete_managed_file(path: Path, managed_dir: Path) -> None:
-    """Delete ``path`` only if it lives inside ``managed_dir`` (never user files)."""
+def find_environment_references(version_ids: set[str]) -> tuple[dict[Path, int], list[tuple[Path, str]], list[str]]:
+    """Read-only :func:`_scan_environment_references`: what removing ``version_ids`` would affect."""
+    return _scan_environment_references(version_ids, detach=False)
+
+
+def delete_managed_file(path: Path, managed_dir: Path) -> bool:
+    """Delete ``path`` only if it lives inside ``managed_dir`` (never user files); True if deleted."""
     try:
         if not path.exists():
-            return
+            return False
         if path.resolve().is_relative_to(managed_dir.resolve()):
             path.unlink()
             log.info(f'Deleted managed file: {path}')
-        else:
-            log.info(f'Skipping deletion of file outside managed storage: {path}')
+            return True
+        log.info(f'Skipping deletion of file outside managed storage: {path}')
     except (OSError, ValueError) as e:
         log.warning(f'Failed to delete {path}: {e}')
+    return False
 
 
 def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: bool = True):
@@ -259,7 +264,7 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
     detached from the environment (left with no environment, not deleted).
     A VM no longer referenced by any environment is torn down when ``cleanup_vm``.
     """
-    from adare.config.configdirectory import ENVIRONMENTS_DIR, VMS_DIR
+    from adare.config.configdirectory import ENVIRONMENTS_DIR
 
     with EnvironmentDbApi() as db:
         environment = _get_environment_or_raise(
@@ -322,8 +327,7 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
 
     if not cleanup_vm:
         return
-    from adare.backend.vm import commands as vm_commands
-    from adare.database.api.vm import VmApi
+    from adare.backend.vm.removal import teardown_unreferenced_vm
 
     for vm_id in vm_ids:
         try:
@@ -331,17 +335,8 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
                 if db.is_vm_referenced(vm_id):
                     log.info(f'VM {vm_id} is still used by other environments, skipping cleanup')
                     continue
-            with VmApi() as vm_api:
-                vm = vm_api.get_vm_by_id(vm_id)
-                vm_file_path = Path(vm.file) if vm and vm.file else None
             log.info(f'VM {vm_id} is not used by any other environment, cleaning up...')
-            # Tears down hypervisor state (instances, domains, overlays) and the
-            # VM database record. Sync entry point: the CLI, and the web API runs
-            # it in a worker thread.
-            asyncio.run(vm_commands.delete_vm(vm_id, force=force))
-            log.info(f'Deleted VM (hypervisor + database record): {vm_id}')
-            if vm_file_path:
-                delete_managed_file(vm_file_path, VMS_DIR)
+            teardown_unreferenced_vm(vm_id, force=force)
         except (OSError, DatabaseError, ValueError) as e:
             log.warning(f'Failed to cleanup VM {vm_id}: {e}')
 

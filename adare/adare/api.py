@@ -496,9 +496,9 @@ class VMAPI:
         """Get VM instance by ID."""
         return self._service.get_instance_by_id(instance_id)
 
-    async def remove_instance(self, instance_id):
-        """Remove a VM instance (async)."""
-        return await self._service.remove_instance(instance_id)
+    async def remove_instance(self, instance_id, force=False):
+        """Remove a VM instance (async); ``force`` also removes a running one."""
+        return await self._service.remove_instance(instance_id, force=force)
 
     async def remove_all_stopped_instances(self):
         """Remove all stopped VM instances (async)."""

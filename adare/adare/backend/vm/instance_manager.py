@@ -933,6 +933,11 @@ async def cleanup_vm_instance(instance_id: str, force: bool = False):
     await _instance_manager.cleanup_instance(instance_id, force=force)
 
 
+def get_instance_hypervisor_state(instance: VmInstance) -> str:
+    """The hypervisor's state of an instance ('running', 'paused', 'poweroff', 'not_found', ...)."""
+    return _instance_manager._get_hypervisor_vm_state(instance)
+
+
 async def remove_all_instances():
     """
     Remove all stopped VM instances.
