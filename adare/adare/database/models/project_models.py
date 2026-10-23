@@ -372,9 +372,8 @@ class Experiment(RemoteIdentityMixin, SerializerMixin, ProjectBase):
 
     @property
     def environments_names(self):
-        """Get environment names for this experiment."""
-        envs = self.environments
-        return [env.name for env in envs if env]
+        """Get environment names for this experiment (versions of one name count once)."""
+        return list(dict.fromkeys(env.name for env in self.environments if env))
 
     @property
     def tags_names(self):

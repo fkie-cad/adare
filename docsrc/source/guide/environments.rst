@@ -155,7 +155,12 @@ under an existing name needs ``--force`` and creates a **new version**: the
 previous version is kept (marked superseded), together with every experiment run
 that used it, so past results always resolve to the exact environment file and
 disk they ran against. Name lookups -- ``-e``, ``env list``, experiments
-started afterwards -- use the current version.
+started afterwards -- use the current version. ``--force`` on an unchanged file
+whose disk is unchanged too adds no version.
+
+An experiment remembers one version per environment name: after a forced reload
+it is still bound to a single environment, so ``adare experiment run`` without
+``-e`` keeps working (it picks the current version).
 
 Several environments may reference the same disk (disks are deduplicated by
 hash). Two environments that disagree about a shared disk's hypervisor or guest
@@ -184,9 +189,10 @@ before concluding that an environment is usable.
 An environment reported as ``MISSING`` can be removed with ``adare env remove``.
 Remove its name from any experiment that lists it first (``adare experiment
 remove-env``): without ``--force``, ``env remove`` refuses while any version has
-runs or is an experiment's only environment. With ``--force`` it deletes those
-runs and detaches the environment from the experiments (the experiments are
-kept).
+runs or is an experiment's only environment, and also while a registered
+project cannot be checked (its directory is missing or its database unreadable),
+since its runs might use the environment. With ``--force`` it deletes those runs
+and detaches the environment from the experiments (the experiments are kept).
 
 VM Storage Options
 ******************

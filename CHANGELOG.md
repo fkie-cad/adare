@@ -56,6 +56,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `--no-log` turns it off, and an existing global `--logfile` is used as is.
 
 ### Changed
+- `env remove` refuses without `--force` when a registered project cannot be
+  checked for references, and deletes exactly the versions it checked.
+- `env load --force` on an unchanged file whose disk is unchanged no longer adds
+  a duplicate environment version.
 - VM snapshots (`SnapshotManager`) are VirtualBox-only; QEMU runs have no
   instance to snapshot.
 - `adare vm` help separates registered VMs (`list`, `info`, `reset`) from
@@ -143,6 +147,16 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ### Fixed
 - Concurrent QEMU runs could delete each other's run files: the crashed-run
   sweep at run start now scans files before reading instance rows.
+- `experiment run` without `-e` failed with "multiple environments" after
+  `env load --force`; an experiment now keeps one version per environment name.
+- A failed or concurrent `env load` removes the VM row, disk copy and managed
+  file it created, and reports a concurrent load of the same name clearly.
+- A failed `env load --force` no longer deletes a VM it only updated in place.
+- Run setup reads an environment's version, file and VM in one query, so a
+  concurrent reload cannot pair one version's file with another's ULID.
+- A managed copy such as `win_20261023_<hash>.yml` reloads under its registered
+  name instead of losing the date suffix.
+- `env load` reports the environment's real hypervisor instead of `virtualbox`.
 - File-transfer factory tests no longer depend on the host having virtiofsd.
 - `adare vm test` let the guest (as root) build its uv venv and bytecode inside
   the shared `~/.adare/adare`, leaving root-owned files there that made the next
@@ -211,7 +225,8 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ### Removed
 - Duplicate libvirt domain teardown: the run path, its signal handler and
   `vm test` share `run_resources.destroy_run_domain`; dead QEMU branches in the
-  VirtualBox instance preparation and the broken `ensure_vm_available_for_environment`.
+  VirtualBox instance preparation, the broken `ensure_vm_available_for_environment`
+  and unused environment queries (`get_environment_by_hash`, summaries).
 - Dead VM/environment code: template-level snapshot shims, always-true VM
   "verification", the duplicated VirtualBox re-import in the run path (it now
   re-allocates through the normal path), unused environment API helpers and the
