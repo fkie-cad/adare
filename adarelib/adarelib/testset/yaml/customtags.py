@@ -1,29 +1,29 @@
 # external imports
-import yaml
-import re
-import attr
 import datetime
+import re
+from typing import TYPE_CHECKING
+
+import attr
 import dateutil.parser
 import dateutil.relativedelta
-from typing import Optional, TYPE_CHECKING
+import yaml
 
 if TYPE_CHECKING:
     from adarelib.common.variables import VariableRegistry
 
 # internal imports
-import adarelib.helper.regex as helper_regex
-
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
 @attr.define
 class ComparisonResult:
     success: bool
-    details: Optional[str] = attr.Factory(str)
+    details: str | None = attr.Factory(str)
     additional_information: dict = attr.Factory(dict)
-    exception: Optional[Exception] = None
+    exception: Exception | None = None
 
 
 class YamlCustomTag(yaml.YAMLObject):
@@ -35,7 +35,7 @@ class YamlCustomTag(yaml.YAMLObject):
 
 
 class YamlString(YamlCustomTag):
-    yaml_tag = u'!s'
+    yaml_tag = '!s'
 
     def __init__(self, string: str):
         self.string = string
@@ -54,12 +54,11 @@ class YamlString(YamlCustomTag):
     def compare(self, entry: str) -> ComparisonResult:
         if self.string == entry:
             return ComparisonResult(True)
-        else:
-            return ComparisonResult(False)
+        return ComparisonResult(False)
 
 
 class YamlPath(YamlCustomTag):
-    yaml_tag = u'!path'
+    yaml_tag = '!path'
 
     def __init__(self, string: str):
         self.string = string
@@ -78,14 +77,21 @@ class YamlPath(YamlCustomTag):
     def compare(self, entry: str) -> ComparisonResult:
         if self.string == entry:
             return ComparisonResult(True)
-        else:
-            return ComparisonResult(False)
+        return ComparisonResult(False)
 
 
 class YamlTimestamp(YamlCustomTag):
-    yaml_tag = u'!timestamp'
+    yaml_tag = '!timestamp'
 
-    def __init__(self, timestamp, timestamp_format_comparison=None, timestamp_format_in_entry=None, tolerance=None, timezone=None, format=None):
+    def __init__(
+        self,
+        timestamp,
+        timestamp_format_comparison=None,
+        timestamp_format_in_entry=None,
+        tolerance=None,
+        timezone=None,
+        format=None,
+    ):
         self.string = timestamp
         self.timestamp_format_comparison = timestamp_format_comparison
         self.timestamp_format_in_entry = timestamp_format_in_entry
@@ -110,22 +116,22 @@ class YamlTimestamp(YamlCustomTag):
             try:
                 data_timestamp = dateutil.parser.parse(entry)
             except dateutil.parser.ParserError as e:
-                return ComparisonResult(False, f'data timestamp couldn\'t be parsed', e)
+                return ComparisonResult(False, 'data timestamp couldn\'t be parsed', e)
         else:
             try:
                 data_timestamp = datetime.datetime.strptime(entry, self.timestamp_format_in_entry)
             except ValueError as e:
-                return ComparisonResult(False, f'data timestamp couldn\'t be parsed', e)
+                return ComparisonResult(False, 'data timestamp couldn\'t be parsed', e)
         if not self.timestamp_format_comparison:
             try:
                 timestamp = dateutil.parser.parse(self.string)
             except dateutil.parser.ParserError as e:
-                return ComparisonResult(False, f'comparison timestamp couldn\'t be parsed', e)
+                return ComparisonResult(False, 'comparison timestamp couldn\'t be parsed', e)
         else:
             try:
                 timestamp = datetime.datetime.strptime(entry, self.timestamp_format_comparison)
             except ValueError as e:
-                return ComparisonResult(False, f'data timestamp couldn\'t be parsed', e)
+                return ComparisonResult(False, 'data timestamp couldn\'t be parsed', e)
 
         timediff = abs(data_timestamp - timestamp)
         tolerance_seconds = self.tolerance if self.tolerance is not None else 1  # Default to 1 second if not specified
@@ -137,7 +143,7 @@ class YamlTimestamp(YamlCustomTag):
     def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.MappingNode):
         """Create YamlTimestamp from YAML mapping node, supporting new metadata fields."""
         mapping = loader.construct_mapping(node)
-        
+
         # Handle the case where the first argument might be positional (timestamp value)
         if 'timestamp' not in mapping and len(mapping) > 0:
             # If no 'timestamp' key, use the first key-value as the timestamp
@@ -145,7 +151,7 @@ class YamlTimestamp(YamlCustomTag):
             if isinstance(first_key, str) and not first_key.startswith(('timezone', 'format', 'tolerance')):
                 mapping['timestamp'] = first_key
                 mapping.pop(first_key, None)
-        
+
         return YamlTimestamp(**mapping)
 
     @classmethod
@@ -154,7 +160,7 @@ class YamlTimestamp(YamlCustomTag):
 
 
 class YamlRegexString(YamlCustomTag):
-    yaml_tag = u'!re'
+    yaml_tag = '!re'
 
     def __init__(self, string: str):
         self.string = string
@@ -186,7 +192,7 @@ class YamlRegexString(YamlCustomTag):
 
 
 class YamlRegexStringAll(YamlRegexString):
-    yaml_tag = u'!reALL'
+    yaml_tag = '!reALL'
 
     def __init__(self):
         super().__init__('.*')

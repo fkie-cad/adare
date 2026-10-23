@@ -12,15 +12,16 @@ Uses:
 
 import asyncio
 import logging
-import subprocess
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 from sqlalchemy.exc import IntegrityError
 
 from adare.backend.vm.exceptions import VMError
 from adare.backend.vm.port_manager import reserve_port_atomically
+from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.database.models.global_models import VmInstance
 from adare.hypervisor.base.identifier_strategy import (
     get_identifier_strategy,
@@ -43,7 +44,7 @@ class VmInstanceManager:
 
     # Configuration
     MAX_INSTANCES_PER_VM = 20  # Maximum instances per source VM
-    CLEANUP_AGE_DAYS = 7      # Age threshold for automatic cleanup
+    CLEANUP_AGE_DAYS = 7  # Age threshold for automatic cleanup
 
     def __init__(self):
         self._lock = threading.Lock()
@@ -70,7 +71,9 @@ class VmInstanceManager:
                     # Return the most recently used available instance
                     instances.sort(key=lambda x: x.last_used_at, reverse=True)
                     selected = instances[0]
-                    log.debug(f"Selected available instance: {selected.instance_name} (last used: {selected.last_used_at})")
+                    log.debug(
+                        f"Selected available instance: {selected.instance_name} (last used: {selected.last_used_at})"
+                    )
                     return selected
 
                 log.debug(f"No available instances found for vm_id={vm_id}")
@@ -126,37 +129,6 @@ class VmInstanceManager:
 
             return False
 
-    async def cleanup_oldest_error_instance(self, vm_id: str) -> bool:
-        """
-        Clean up the oldest instance in 'error' state for a VM.
-
-        This helps recover capacity occupied by broken instances.
-
-        Args:
-            vm_id: Source VM ID
-
-        Returns:
-            True if an instance was cleaned up
-        """
-        from adare.database.api.vm import VmApi
-
-        with VmApi() as api:
-            instances = api.get_vm_instances_for_vm(vm_id, status='error')
-
-            if instances:
-                # Find oldest error instance
-                oldest = min(instances, key=lambda x: x.last_used_at)
-                log.info(f"Cleaning up oldest error instance: {oldest.instance_name}")
-
-                # Clean up hypervisor VM
-                await self._cleanup_hypervisor_instance(oldest)
-
-                # Delete from database
-                api.delete_vm_instance(oldest.id)
-                return True
-
-            return False
-
     async def create_new_instance(self, vm_id: str, experiment_run_id: str) -> VmInstance:
         """
         Create a new VM instance for an experiment.
@@ -189,13 +161,11 @@ class VmInstanceManager:
                 cleanup_success = await self.cleanup_oldest_available_instance(vm_id)
 
                 if not cleanup_success:
-                    # If no available instances, try to cleanup error instances
-                    log.info("No available instances to cleanup, checking for error instances")
-                    cleanup_success = await self.cleanup_oldest_error_instance(vm_id)
-
-                if not cleanup_success:
                     # If still no room, we're at capacity
-                    raise VMError(log, f"VM {vm_id} at maximum instance capacity ({self.MAX_INSTANCES_PER_VM}) with all instances active")
+                    raise VMError(
+                        log,
+                        f"VM {vm_id} at maximum instance capacity ({self.MAX_INSTANCES_PER_VM}) with all instances active",
+                    )
 
                 log.debug("Cleanup completed, proceeding with new instance creation")
 
@@ -220,10 +190,7 @@ class VmInstanceManager:
             with VmApi() as api:
                 # Reserve port and create instance atomically to prevent race conditions
                 websocket_port = reserve_port_atomically(
-                    api_session=api,
-                    vm_id=vm_id,
-                    instance_name=instance_name,
-                    experiment_run_id=experiment_run_id
+                    api_session=api, vm_id=vm_id, instance_name=instance_name, experiment_run_id=experiment_run_id
                 )
 
                 if not websocket_port:
@@ -236,14 +203,18 @@ class VmInstanceManager:
 
                 # Extract the ID while the instance is still attached to session
                 instance_id = instance.id
-                log.info(f"Atomically created VM instance: {instance_name} on port {websocket_port} (ID: {instance_id})")
+                log.info(
+                    f"Atomically created VM instance: {instance_name} on port {websocket_port} (ID: {instance_id})"
+                )
 
             # Verify the instance can be retrieved from database after commit
             log.debug(f"Verifying instance {instance_id} can be retrieved from database")
             with VmApi() as api:
                 verification = api.get_vm_instance_by_id(instance_id)
                 if verification:
-                    log.debug(f"Instance verification successful - port {verification.websocket_port} atomically reserved")
+                    log.debug(
+                        f"Instance verification successful - port {verification.websocket_port} atomically reserved"
+                    )
                     return verification  # Return the fresh instance from verification
                 log.error(f"Instance {instance_id} not retrievable after creation and commit")
                 # Debug: Check what instances exist
@@ -259,6 +230,7 @@ class VmInstanceManager:
         except Exception as e:
             log.error(f"Error in create_new_instance: {e}")
             import traceback
+
             log.debug(f"create_new_instance traceback: {traceback.format_exc()}")
             raise
 
@@ -283,18 +255,17 @@ class VmInstanceManager:
             # Only validate snapshots for VirtualBox instances
             with VmApi() as api:
                 source_vm = api.get_vm_by_id(instance.vm_id)
-                is_virtualbox = (source_vm and source_vm.hypervisor == 'virtualbox')
+                is_virtualbox = source_vm and source_vm.hypervisor == 'virtualbox'
 
             if is_virtualbox:
                 snapshot_exists = verify_instance_base_snapshot_exists(instance)
                 if not snapshot_exists:
-                    log.warning(f"Base snapshot '{instance.base_snapshot_name}' not found for instance {instance.instance_name} - will need recreation")
+                    log.warning(
+                        f"Base snapshot '{instance.base_snapshot_name}' not found for instance {instance.instance_name} - will need recreation"
+                    )
                     # Reset snapshot info to trigger recreation
                     with VmApi() as api:
-                        api.update_vm_instance(
-                            instance.id,
-                            base_snapshot_name=None
-                        )
+                        api.update_vm_instance(instance.id, base_snapshot_name=None)
             else:
                 log.debug("Skipping snapshot validation for non-VirtualBox instance")
 
@@ -310,9 +281,11 @@ class VmInstanceManager:
             used_ports = set()
 
             for inst in active_instances:
-                if (inst.status == 'active' and
-                    inst.websocket_port is not None and
-                    PORT_RANGE_START <= inst.websocket_port <= PORT_RANGE_END):
+                if (
+                    inst.status == 'active'
+                    and inst.websocket_port is not None
+                    and PORT_RANGE_START <= inst.websocket_port <= PORT_RANGE_END
+                ):
                     used_ports.add(inst.websocket_port)
 
             claimed_port = None
@@ -328,9 +301,7 @@ class VmInstanceManager:
                 # IntegrityError and we try the next candidate.
                 try:
                     claimed = api.claim_available_vm_instance(
-                        instance.id,
-                        experiment_run_id=experiment_run_id,
-                        websocket_port=candidate
+                        instance.id, experiment_run_id=experiment_run_id, websocket_port=candidate
                     )
                 except IntegrityError:
                     log.debug(
@@ -372,6 +343,7 @@ class VmInstanceManager:
 
         # Add timeout to lock acquisition
         import time
+
         lock_acquired = False
         start_time = time.time()
 
@@ -396,7 +368,7 @@ class VmInstanceManager:
             with StageCtxManager(
                 VMInstanceSyncStage(),
                 experiment_run_id,
-                event=None  # No interrupt support at this level yet
+                event=None,  # No interrupt support at this level yet
             ) as stage_ctx:
                 # Update sub-message to show count
                 stage_ctx.stage.sub_msg = f"Checking {instance_count} instances"
@@ -456,15 +428,17 @@ class VmInstanceManager:
                 status='available',
                 current_experiment_run_id=None,
                 websocket_port=None,  # Clear port so it can be reallocated
-                last_used_at=datetime.now(UTC)
+                owner_pid=None,
+                last_used_at=datetime.now(UTC),
             )
 
-    async def cleanup_instance(self, instance_id: str):
+    async def cleanup_instance(self, instance_id: str, force: bool = False):
         """
         Clean up a specific VM instance.
 
         Args:
             instance_id: VM instance ID to cleanup
+            force: Remove the instance even if it is running or paused
 
         Raises:
             InstanceNotFoundException: If instance not found
@@ -480,11 +454,11 @@ class VmInstanceManager:
             # Check actual hypervisor state before removal
             hypervisor_state = self._get_hypervisor_vm_state(instance)
 
-            if hypervisor_state in ["running", "paused"]:
+            if hypervisor_state in ["running", "paused"] and not force:
                 raise InstanceStateException(
                     instance.instance_name,
                     current_state=hypervisor_state,
-                    expected_states=["poweroff", "shutoff", "not_found"]
+                    expected_states=["poweroff", "shutoff", "not_found"],
                 )
 
             # If VM is stopped or doesn't exist in hypervisor, safe to remove
@@ -497,27 +471,6 @@ class VmInstanceManager:
 
             # Delete from database
             api.delete_vm_instance(instance_id)
-
-    async def cleanup_old_instances(self, age_days: int = None):
-        """
-        Clean up old available instances based on age.
-
-        Args:
-            age_days: Age threshold in days (default: CLEANUP_AGE_DAYS)
-        """
-        from adare.database.api.vm import VmApi
-
-        if age_days is None:
-            age_days = self.CLEANUP_AGE_DAYS
-
-        cutoff_date = datetime.now(UTC) - timedelta(days=age_days)
-
-        with VmApi() as api:
-            old_instances = api.get_old_vm_instances(cutoff_date, status='available')
-
-            for instance in old_instances:
-                log.info(f"Cleaning up old instance: {instance.instance_name} (age: {(datetime.now(UTC) - instance.last_used_at).days} days)")
-                await self.cleanup_instance(instance.id)
 
     async def remove_all_instances(self):
         """
@@ -575,10 +528,7 @@ class VmInstanceManager:
 
             # Get VM folder path from VirtualBox
             result = subprocess.run(
-                ['VBoxManage', 'showvminfo', vm_name, '--machinereadable'],
-                capture_output=True,
-                text=True,
-                timeout=10
+                ['VBoxManage', 'showvminfo', vm_name, '--machinereadable'], capture_output=True, text=True, timeout=10
             )
 
             if result.returncode != 0:
@@ -603,7 +553,7 @@ class VmInstanceManager:
                     total_size += file_path.stat().st_size
 
             # Convert to GB
-            return total_size / (1024 ** 3)
+            return total_size / (1024**3)
 
         except (OSError, subprocess.SubprocessError, ValueError) as e:
             log.debug(f"Could not determine disk usage for instance {instance.instance_name}: {e}")
@@ -633,13 +583,15 @@ class VmInstanceManager:
                 hypervisor_state = self._get_hypervisor_vm_state(instance)
                 is_running = hypervisor_state in ["running", "paused"]
 
-                instance_details.append({
-                    'id': instance.id,
-                    'name': instance.instance_name,
-                    'disk_gb': disk_gb,
-                    'is_running': is_running,
-                    'vm_id': instance.vm_id
-                })
+                instance_details.append(
+                    {
+                        'id': instance.id,
+                        'name': instance.instance_name,
+                        'disk_gb': disk_gb,
+                        'is_running': is_running,
+                        'vm_id': instance.vm_id,
+                    }
+                )
 
             # Count running vs stopped
             running_count = sum(1 for i in instance_details if i['is_running'])
@@ -653,9 +605,8 @@ class VmInstanceManager:
                 'running_instances': running_count,
                 'stopped_instances': stopped_count,
                 'total_disk_gb': round(total_disk_gb, 2),
-                'top_disk_consumers': instance_details[:10]  # Top 10 consumers
+                'top_disk_consumers': instance_details[:10],  # Top 10 consumers
             }
-
 
     def _get_hypervisor_vm_state(self, instance: VmInstance) -> str:
         """
@@ -694,11 +645,6 @@ class VmInstanceManager:
         log.debug(f"{vm.hypervisor} state for {instance.instance_name}: {state}")
         return state
 
-    # Keep old method name as alias for backward compatibility
-    def _get_virtualbox_vm_state(self, instance: VmInstance) -> str:
-        """Alias for _get_hypervisor_vm_state for backward compatibility."""
-        return self._get_hypervisor_vm_state(instance)
-
     async def _check_instance_state_async(self, instance: VmInstance) -> tuple[str, str, str]:
         """
         Asynchronously check hypervisor state for a single instance.
@@ -721,7 +667,7 @@ class VmInstanceManager:
         hypervisor_state = await loop.run_in_executor(
             None,  # Uses default ThreadPoolExecutor
             self._get_hypervisor_vm_state,
-            instance
+            instance,
         )
 
         return (instance.id, instance.status, hypervisor_state)
@@ -741,15 +687,21 @@ class VmInstanceManager:
         Returns:
             Number of instances updated
         """
-        log.info(f"===== PARALLEL VERSION EXECUTING ===== vm_id={vm_id}")
         log.debug(f"Syncing instance states for vm_id={vm_id}")
         from adare.database.api.vm import VmApi
 
         updated_count = 0
 
         with VmApi() as api:
-            # Get all instances for this VM
-            instances = api.get_vm_instances_for_vm(vm_id)
+            # Rows held by a live process (this one or another `adare`) are in
+            # use or still being set up -- their hypervisor state says nothing yet.
+            from adare.backend.vm.run_instances import pid_alive
+
+            instances = [
+                instance
+                for instance in api.get_vm_instances_for_vm(vm_id)
+                if not (instance.status == 'active' and pid_alive(cast(int | None, instance.owner_pid)))
+            ]
             log.debug(f"Found {len(instances)} instances to sync for vm_id={vm_id}")
 
             if not instances:
@@ -757,10 +709,7 @@ class VmInstanceManager:
 
             # Create parallel tasks for state checking
             log.debug(f"Starting parallel state checks for {len(instances)} instances")
-            tasks = [
-                self._check_instance_state_async(instance)
-                for instance in instances
-            ]
+            tasks = [self._check_instance_state_async(instance) for instance in instances]
 
             # Execute all state checks in parallel
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -769,7 +718,6 @@ class VmInstanceManager:
             instances_by_id = {instance.id: instance for instance in instances}
             updates_to_apply = []
             deletes_to_apply = []
-            qemu_config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
 
             for result in results:
                 if isinstance(result, Exception):
@@ -788,16 +736,13 @@ class VmInstanceManager:
                     instance = instances_by_id.get(instance_id)
                     is_qemu_orphan = False
                     if instance is not None and instance.vm is not None and instance.vm.hypervisor == 'qemu':
-                        config_path = qemu_config_dir / f"{instance.instance_name}.json"
+                        config_path = QEMU_STATE_DIR / "vms" / f"{instance.instance_name}.json"
                         if not config_path.exists():
                             is_qemu_orphan = True
 
                     if is_qemu_orphan:
                         deletes_to_apply.append(instance_id)
-                        log.info(
-                            f"Instance {instance_id} orphaned (no hypervisor entry, "
-                            f"no QEMU config); deleting row"
-                        )
+                        log.info(f"Instance {instance_id} orphaned (no hypervisor entry, no QEMU config); deleting row")
                     elif current_db_status != "available":
                         new_db_status = "available"
                         log.info(f"Instance {instance_id} not found in hypervisor, will mark as available")
@@ -821,7 +766,10 @@ class VmInstanceManager:
                 api.update_vm_instance(
                     instance_id,
                     status=new_status,
-                    last_used_at=datetime.now(UTC)
+                    current_experiment_run_id=None,
+                    websocket_port=None,
+                    owner_pid=None,
+                    last_used_at=datetime.now(UTC),
                 )
                 updated_count += 1
                 log.info(f"Updated instance {instance_id} status to {new_status}")
@@ -905,6 +853,18 @@ class VmInstanceManager:
 
     async def _cleanup_qemu_vm(self, instance: VmInstance):
         """Clean up QEMU/libvirt VM for an instance."""
+        from adare.hypervisor.qemu import run_resources
+
+        instance_name = str(instance.instance_name)
+        if '_run_' in instance_name:
+            # Run-scoped instance: no disk copy of its own, only name-keyed run files.
+            run_resources.destroy_run_domain(instance_name)
+            run_resources.remove_run_files(instance_name)
+            return
+        # Pooled instance from before per-run overlays. Its domain carries the
+        # environment's shared vTPM, which removal would delete -- keep it as
+        # the environment's vTPM template first.
+        run_resources.adopt_legacy_tpm(str(instance.vm_id))
         try:
             from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
 
@@ -929,11 +889,6 @@ class VmInstanceManager:
             log.info(f"Cleaned up QEMU VM: {instance.instance_name}")
         except ImportError:
             log.warning("QEMU module not available for cleanup")
-
-    # Keep old method name as alias for backward compatibility
-    async def _cleanup_virtualbox_instance(self, instance: VmInstance):
-        """Alias for _cleanup_hypervisor_instance for backward compatibility."""
-        await self._cleanup_hypervisor_instance(instance)
 
 
 # Global instance for system-wide VM instance management
@@ -964,27 +919,23 @@ async def release_vm_instance(instance_id: str):
     await _instance_manager.release_instance(instance_id)
 
 
-async def cleanup_vm_instance(instance_id: str):
+async def cleanup_vm_instance(instance_id: str, force: bool = False):
     """
     Clean up a specific VM instance.
 
     Args:
         instance_id: VM instance ID to cleanup
+        force: Remove the instance even if it is running or paused
 
     Raises:
         VMError: If instance is actually running in VirtualBox
     """
-    await _instance_manager.cleanup_instance(instance_id)
+    await _instance_manager.cleanup_instance(instance_id, force=force)
 
 
-async def cleanup_old_vm_instances(age_days: int = None):
-    """
-    Clean up old available VM instances.
-
-    Args:
-        age_days: Age threshold in days
-    """
-    await _instance_manager.cleanup_old_instances(age_days)
+def get_instance_hypervisor_state(instance: VmInstance) -> str:
+    """The hypervisor's state of an instance ('running', 'paused', 'poweroff', 'not_found', ...)."""
+    return _instance_manager._get_hypervisor_vm_state(instance)
 
 
 async def remove_all_instances():

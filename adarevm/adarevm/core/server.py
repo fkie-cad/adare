@@ -6,49 +6,58 @@ using a custom WebSocket protocol for real-time GUI automation and test executio
 """
 
 import asyncio
-import websockets
+import hmac
 import json
 import logging
-from pathlib import Path
-from typing import Dict, List, Any, Optional, Set
 import platform
+from http import HTTPStatus
+from pathlib import Path
+from typing import Any
 
-import logging
+import websockets
+
 log = logging.getLogger(__name__)
 
 # Import our WebSocket protocol
 from adarelib.websocket.protocol import (
-    parse_message, create_tool_result, create_event, create_status,
-    MessageType, EventType, ToolRegistry,
-    ToolResultMessage, EventMessage
+    AUTH_HEADER,
+    AUTH_SCHEME,
+    PROTOCOL_VERSION,
+    EventMessage,
+    EventType,
+    MessageType,
+    Tool,
+    ToolResultMessage,
 )
+from adarevm.core.tools.file_tools import FileToolsMixin
 
 # Import tool mixins
 from adarevm.core.tools.gui_tools import GUIToolsMixin
-from adarevm.core.tools.test_tools import TestToolsMixin
-from adarevm.core.tools.system_tools import SystemToolsMixin
-from adarevm.core.tools.file_tools import FileToolsMixin
 from adarevm.core.tools.icon_tools import IconToolsMixin
+from adarevm.core.tools.system_tools import SystemToolsMixin
+from adarevm.core.tools.test_tools import TestToolsMixin
 
 
 class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMixin, IconToolsMixin):
     """WebSocket server for adarevm GUI automation and test execution."""
 
-    def _split_command_line(self, command: str) -> List[str]:
+    def _split_command_line(self, command: str) -> list[str]:
         """Split a command string into arguments using platform-native parsing."""
         if platform.system().lower() == "windows":
             return self._split_windows_command_line(command)
 
         import shlex
+
         try:
             return shlex.split(command)
         except ValueError:
             # Fallback for unbalanced quotes
             return command.split(" ")
 
-    def _split_windows_command_line(self, command: str) -> List[str]:
+    def _split_windows_command_line(self, command: str) -> list[str]:
         """Split a Windows command string using pure Python shlex."""
         import shlex
+
         try:
             # Use shlex with custom configuration for Windows-like parsing:
             # 1. posix=True: Enables quote stripping (removing " from "foo bar")
@@ -67,10 +76,20 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             # Fallback
             return command.split(" ")
 
-    def __init__(self, host="0.0.0.0", port=18765, tools_paths: List[str] = None, data_paths: List[str] = None, installation_mode: str = "wheel"):
+    def __init__(
+        self,
+        host="0.0.0.0",
+        port=18765,
+        tools_paths: list[str] = None,
+        data_paths: list[str] = None,
+        installation_mode: str = "wheel",
+        token: str | None = None,
+    ):
         self.host = host
         self.port = port
-        self.clients: Set[websockets.WebSocketServerProtocol] = set()
+        # Per-run secret from config.json; required on the WebSocket upgrade when set.
+        self.token = token
+        self.clients: set[websockets.WebSocketServerProtocol] = set()
 
         # Shared data paths (project and experiment data directories)
         self.data_paths = data_paths or []
@@ -85,40 +104,20 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
         log.info(f"Installation mode: {installation_mode}")
 
         # Test management state
-        self.testfunctions_dir: Optional[Path] = None
-        self.current_variables: Dict[str, Any] = {}
-        self._testfunction_cache: Optional[dict] = None  # Cache discovered testfunctions
+        self.testfunctions_dir: Path | None = None
+        self.current_variables: dict[str, Any] = {}
+        self._testfunction_cache: dict | None = None  # Cache discovered testfunctions
 
         # Task management for non-blocking tool execution
-        self.running_tasks: Dict[str, asyncio.Task] = {}
-        self.client_tasks: Dict[websockets.WebSocketServerProtocol, Set[str]] = {}
+        self.running_tasks: dict[str, asyncio.Task] = {}
+        self.client_tasks: dict[websockets.WebSocketServerProtocol, set[str]] = {}
 
-        # Tool registry
-        self.tools = {
-            "screenshot": self._screenshot,
-            "click": self._click,
-            "right_click": self._right_click,
-            "double_click": self._double_click,
-            "drag": self._drag,
-            "keyboard": self._keyboard,
-            "scroll": self._scroll,
-            "goto": self._goto,
-            "idle": self._idle,
-            "screenshot_window": self._screenshot_window,
-            "upload_testfunctions": self._upload_testfunctions,
-            "install_dependencies": self._install_dependencies,
-            "set_variables": self._set_variables,
-            "run_test": self._run_test,
-            "execute_shell": self._execute_shell,
-            "get_status": self._get_status,
-            "collect_system_info": self._collect_system_info,
-            "set_screenshot_method": self._set_screenshot_method,
-            "pull_file_chunk": self._pull_file_chunk,
-            "get_filesystem_snapshot": self._get_filesystem_snapshot,
-            "get_timestamp": self._get_timestamp,
-            "chain_commands": self._chain_commands,
-            "extract_icon": self._extract_icon,
-        }
+        # Tool registry: exactly the tools the protocol declares
+        self.tools = {}
+        for tool in Tool:
+            handler = getattr(self, f"_{tool.value}", None)
+            assert handler is not None, f"protocol tool {tool.value!r} has no _{tool.value} handler"
+            self.tools[tool.value] = handler
 
     async def start_server(self):
         """Start the WebSocket server."""
@@ -126,8 +125,9 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
 
         # Check if we should skip PyAutoGUI (host-based GUI mode)
         import os
+
         gui_mode = os.environ.get('ADARE_GUI_MODE', 'agent')
-        skip_pyautogui = (gui_mode == 'host')
+        skip_pyautogui = gui_mode == 'host'
 
         if skip_pyautogui:
             log.info(
@@ -138,6 +138,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             # Log screen size and initialize mouse position
             try:
                 import pyautogui
+
                 screen_width, screen_height = pyautogui.size()
                 log.info(f"Screen size: {screen_width}x{screen_height}")
 
@@ -159,9 +160,40 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
                     "This is normal when using host-based GUI automation."
                 )
 
-        server = await websockets.serve(self.handle_client, self.host, self.port)
-        log.info(f"Server started successfully")
+        if not self.token:
+            log.warning("No agent token configured: accepting unauthenticated connections (development only)")
+        server = await websockets.serve(self.handle_client, self.host, self.port, process_request=self._authenticate)
+        log.info("Server started successfully")
         return server
+
+    def _authenticate(self, connection, request):
+        """Reject the WebSocket upgrade unless it carries this run's token."""
+        if not self.token:
+            return None
+        supplied = request.headers.get(AUTH_HEADER, "")
+        expected = f"{AUTH_SCHEME} {self.token}"
+        if hmac.compare_digest(supplied.encode(), expected.encode()):
+            return None
+        log.warning(f"Rejected connection from {connection.remote_address}: missing or wrong agent token")
+        return connection.respond(HTTPStatus.UNAUTHORIZED, "missing or invalid agent token\n")
+
+    def welcome_data(self) -> dict[str, Any]:
+        """First message on every connection: protocol version, package versions, tools."""
+        from importlib.metadata import PackageNotFoundError, version
+
+        def _version(package: str) -> str:
+            try:
+                return version(package)
+            except PackageNotFoundError:
+                return "unknown"
+
+        return {
+            "message": "Connected to AdareVM server",
+            "protocol_version": PROTOCOL_VERSION,
+            "adarevm_version": _version("adarevm"),
+            "adarelib_version": _version("adarelib"),
+            "tools": sorted(self.tools),
+        }
 
     async def handle_client(self, websocket):
         """Handle a new client connection."""
@@ -171,15 +203,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
         log.info(f"Client connected: {client_address}")
 
         try:
-            # Send welcome message
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Connected to AdareVM server",
-                "server_info": {
-                    "host": self.host,
-                    "port": self.port,
-                    "available_tools": list(self.tools.keys())
-                }
-            })
+            await self.send_event(websocket, EventType.WELCOME, self.welcome_data())
 
             async for message in websocket:
                 await self.handle_message(websocket, message)
@@ -201,6 +225,13 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
 
             if msg_type == MessageType.TOOL_CALL:
                 await self.handle_tool_call(websocket, message)
+            elif msg_type == MessageType.CONNECT:
+                client_info = message.get('client_info') or {}
+                log.info(f"Client hello: {client_info}")
+                if client_info.get('protocol_version') != PROTOCOL_VERSION:
+                    log.warning(
+                        f"Client speaks protocol {client_info.get('protocol_version')}, this agent {PROTOCOL_VERSION}"
+                    )
             else:
                 log.warning(f"Unknown message type: {msg_type}")
 
@@ -214,7 +245,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             log.error(f"Unexpected error handling message: {e}", exc_info=True)
             await self.send_error(websocket, str(e))
 
-    async def handle_tool_call(self, websocket, message: Dict[str, Any]):
+    async def handle_tool_call(self, websocket, message: dict[str, Any]):
         """
         Handle a tool call from the client.
 
@@ -252,22 +283,14 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
 
         except ValueError as e:
             log.error(f"Invalid tool or parameters: {tool_name}: {e}")
-            error_msg = ToolResultMessage(
-                id=call_id,
-                success=False,
-                error=f"Invalid tool call: {e}"
-            )
+            error_msg = ToolResultMessage(id=call_id, success=False, error=f"Invalid tool call: {e}")
             await websocket.send(error_msg.to_json())
         except Exception as e:
             log.error(f"Tool execution failed: {tool_name}: {e}", exc_info=True)
-            error_msg = ToolResultMessage(
-                id=call_id,
-                success=False,
-                error=f"Tool execution error: {e}"
-            )
+            error_msg = ToolResultMessage(id=call_id, success=False, error=f"Tool execution error: {e}")
             await websocket.send(error_msg.to_json())
 
-    async def send_event(self, websocket, event_type: str, data: Dict[str, Any]):
+    async def send_event(self, websocket, event_type: str, data: dict[str, Any]):
         """Send an event message to the client."""
         event_msg = EventMessage(event_type=event_type, data=data)
         await websocket.send(event_msg.to_json())
@@ -275,7 +298,6 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
     async def send_error(self, websocket, error: str):
         """Send an error event to the client."""
         await self.send_event(websocket, EventType.ERROR, {"error": error})
-
 
     async def _cleanup_client_tasks(self, websocket):
         """Cancel all running tasks for a disconnected client."""
@@ -310,11 +332,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             try:
                 result = await task
                 # Send successful result back to client
-                result_msg = ToolResultMessage(
-                    id=call_id,
-                    success=True,
-                    result=result
-                )
+                result_msg = ToolResultMessage(id=call_id, success=True, result=result)
                 if websocket in self.clients:  # Check if client still connected
                     await websocket.send(result_msg.to_json())
                     log.debug(f"[{call_id[:8]}] Background task completed successfully")
@@ -326,11 +344,7 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             except Exception as e:
                 log.error(f"[{call_id[:8]}] Background task failed: {e}", exc_info=True)
                 # Send error result back to client
-                error_msg = ToolResultMessage(
-                    id=call_id,
-                    success=False,
-                    error=f"Tool execution error: {e}"
-                )
+                error_msg = ToolResultMessage(id=call_id, success=False, error=f"Tool execution error: {e}")
                 if websocket in self.clients:  # Check if client still connected
                     await websocket.send(error_msg.to_json())
 
@@ -341,12 +355,9 @@ class AdareVMServer(GUIToolsMixin, TestToolsMixin, SystemToolsMixin, FileToolsMi
             if websocket in self.client_tasks and task_id in self.client_tasks[websocket]:
                 self.client_tasks[websocket].discard(task_id)
 
-    async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
+    async def broadcast_event(self, event_type: str, data: dict[str, Any]):
         """Broadcast an event to all connected clients."""
         if self.clients:
             event_msg = EventMessage(event_type=event_type, data=data)
             message = event_msg.to_json()
-            await asyncio.gather(
-                *[client.send(message) for client in self.clients],
-                return_exceptions=True
-            )
+            await asyncio.gather(*[client.send(message) for client in self.clients], return_exceptions=True)

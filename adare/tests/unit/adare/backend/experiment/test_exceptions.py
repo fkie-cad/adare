@@ -42,6 +42,7 @@ LOG = logging.getLogger("test_exceptions")
 # Hierarchy tests
 # ---------------------------------------------------------------------------
 
+
 class TestExperimentExceptionHierarchy:
     """Verify the MRO / isinstance relationships for every exception class."""
 
@@ -53,38 +54,47 @@ class TestExperimentExceptionHierarchy:
     def test_filesystem_error_extends_experiment_exception(self):
         assert issubclass(ExperimentFileSystemError, ExperimentException)
 
-    @pytest.mark.parametrize("exc_cls", [
-        ExperimentFileCreationError,
-        ExperimentDirectoryCreationError,
-        ExperimentRemovalError,
-        ExperimentDirectoryAlreadyExistsError,
-        ExperimentDirectoryDoesNotExistError,
-        ExperimentFileMissingError,
-    ])
+    @pytest.mark.parametrize(
+        "exc_cls",
+        [
+            ExperimentFileCreationError,
+            ExperimentDirectoryCreationError,
+            ExperimentRemovalError,
+            ExperimentDirectoryAlreadyExistsError,
+            ExperimentDirectoryDoesNotExistError,
+            ExperimentFileMissingError,
+        ],
+    )
     def test_filesystem_subclass_isinstance_filesystem_error(self, exc_cls):
         exc = exc_cls(LOG, "test")
         assert isinstance(exc, ExperimentFileSystemError)
 
-    @pytest.mark.parametrize("exc_cls", [
-        ExperimentFileCreationError,
-        ExperimentDirectoryCreationError,
-        ExperimentRemovalError,
-        ExperimentDirectoryAlreadyExistsError,
-        ExperimentDirectoryDoesNotExistError,
-        ExperimentFileMissingError,
-    ])
+    @pytest.mark.parametrize(
+        "exc_cls",
+        [
+            ExperimentFileCreationError,
+            ExperimentDirectoryCreationError,
+            ExperimentRemovalError,
+            ExperimentDirectoryAlreadyExistsError,
+            ExperimentDirectoryDoesNotExistError,
+            ExperimentFileMissingError,
+        ],
+    )
     def test_filesystem_subclass_backward_compat_logged_error(self, exc_cls):
         exc = exc_cls(LOG, "test")
         assert isinstance(exc, LoggedErrorException)
 
-    @pytest.mark.parametrize("exc_cls", [
-        ExperimentFileCreationError,
-        ExperimentDirectoryCreationError,
-        ExperimentRemovalError,
-        ExperimentDirectoryAlreadyExistsError,
-        ExperimentDirectoryDoesNotExistError,
-        ExperimentFileMissingError,
-    ])
+    @pytest.mark.parametrize(
+        "exc_cls",
+        [
+            ExperimentFileCreationError,
+            ExperimentDirectoryCreationError,
+            ExperimentRemovalError,
+            ExperimentDirectoryAlreadyExistsError,
+            ExperimentDirectoryDoesNotExistError,
+            ExperimentFileMissingError,
+        ],
+    )
     def test_filesystem_subclass_isinstance_experiment_exception(self, exc_cls):
         exc = exc_cls(LOG, "test")
         assert isinstance(exc, ExperimentException)
@@ -153,6 +163,7 @@ class TestExperimentExceptionHierarchy:
 # ---------------------------------------------------------------------------
 # Group catch tests
 # ---------------------------------------------------------------------------
+
 
 class TestGroupCatching:
     """Verify that catching a group base catches all its children."""
@@ -224,43 +235,32 @@ class TestGroupCatching:
 # Factory method tests
 # ---------------------------------------------------------------------------
 
+
 class TestFileModifiedFactory:
     """Tests for ExperimentIntegrityError.file_modified()."""
 
     def test_returns_correct_type(self):
-        exc = ExperimentIntegrityError.file_modified(
-            LOG, "Playbook", "main.yml", "adare experiment load"
-        )
+        exc = ExperimentIntegrityError.file_modified(LOG, "Playbook", "main.yml", "adare experiment load")
         assert isinstance(exc, ExperimentIntegrityError)
 
     def test_message_contains_file_type(self):
-        exc = ExperimentIntegrityError.file_modified(
-            LOG, "Playbook", "main.yml", "adare experiment load"
-        )
+        exc = ExperimentIntegrityError.file_modified(LOG, "Playbook", "main.yml", "adare experiment load")
         assert "Playbook" in str(exc)
 
     def test_message_contains_file_name(self):
-        exc = ExperimentIntegrityError.file_modified(
-            LOG, "Playbook", "main.yml", "adare experiment load"
-        )
+        exc = ExperimentIntegrityError.file_modified(LOG, "Playbook", "main.yml", "adare experiment load")
         assert "main.yml" in str(exc)
 
     def test_message_mentions_modified_after_loading(self):
-        exc = ExperimentIntegrityError.file_modified(
-            LOG, "Playbook", "main.yml", "adare experiment load"
-        )
+        exc = ExperimentIntegrityError.file_modified(LOG, "Playbook", "main.yml", "adare experiment load")
         assert "modified after loading" in str(exc)
 
     def test_solutions_contain_reload_command(self):
-        exc = ExperimentIntegrityError.file_modified(
-            LOG, "Playbook", "main.yml", "adare experiment load"
-        )
+        exc = ExperimentIntegrityError.file_modified(LOG, "Playbook", "main.yml", "adare experiment load")
         assert any("adare experiment load" in s for s in exc.possible_solutions)
 
     def test_solutions_contain_unauthorized_check(self):
-        exc = ExperimentIntegrityError.file_modified(
-            LOG, "Playbook", "main.yml", "adare experiment load"
-        )
+        exc = ExperimentIntegrityError.file_modified(LOG, "Playbook", "main.yml", "adare experiment load")
         assert any("unauthorized" in s for s in exc.possible_solutions)
 
 
@@ -268,36 +268,26 @@ class TestFileNotFoundFactory:
     """Tests for ExperimentIntegrityError.file_not_found()."""
 
     def test_returns_correct_type(self):
-        exc = ExperimentIntegrityError.file_not_found(
-            LOG, "Environment", "/path/to/env.yml"
-        )
+        exc = ExperimentIntegrityError.file_not_found(LOG, "Environment", "/path/to/env.yml")
         assert isinstance(exc, ExperimentIntegrityError)
 
     def test_message_contains_file_type_and_path(self):
-        exc = ExperimentIntegrityError.file_not_found(
-            LOG, "Environment", "/path/to/env.yml"
-        )
+        exc = ExperimentIntegrityError.file_not_found(LOG, "Environment", "/path/to/env.yml")
         assert "Environment" in str(exc)
         assert "/path/to/env.yml" in str(exc)
 
     def test_internal_path_solutions(self):
-        exc = ExperimentIntegrityError.file_not_found(
-            LOG, "Environment", "/path/to/env.yml", is_external=False
-        )
+        exc = ExperimentIntegrityError.file_not_found(LOG, "Environment", "/path/to/env.yml", is_external=False)
         assert any("properly loaded" in s for s in exc.possible_solutions)
         assert not any("external path" in s for s in exc.possible_solutions)
 
     def test_external_path_solutions(self):
-        exc = ExperimentIntegrityError.file_not_found(
-            LOG, "Environment", "/mnt/share/env.yml", is_external=True
-        )
+        exc = ExperimentIntegrityError.file_not_found(LOG, "Environment", "/mnt/share/env.yml", is_external=True)
         assert any("external path" in s for s in exc.possible_solutions)
 
     def test_solutions_always_include_exists_check(self):
         for external in (True, False):
-            exc = ExperimentIntegrityError.file_not_found(
-                LOG, "Playbook", "/p", is_external=external
-            )
+            exc = ExperimentIntegrityError.file_not_found(LOG, "Playbook", "/p", is_external=external)
             assert any("exists at" in s for s in exc.possible_solutions)
 
 
@@ -312,17 +302,14 @@ class TestFilesChangedAfterLoadFactory:
 
     def test_message_lists_changed_files(self):
         exc = ExperimentIntegrityError.files_changed_after_load(
-            LOG, "Testfunction", ["alpha.py", "beta.py"],
-            "adare tf remove", "adare tf load"
+            LOG, "Testfunction", ["alpha.py", "beta.py"], "adare tf remove", "adare tf load"
         )
         assert "alpha.py" in str(exc)
         assert "beta.py" in str(exc)
 
     def test_message_truncates_after_five_files(self):
         files = [f"file{i}.py" for i in range(8)]
-        exc = ExperimentIntegrityError.files_changed_after_load(
-            LOG, "Testfunction", files, "rm", "load"
-        )
+        exc = ExperimentIntegrityError.files_changed_after_load(LOG, "Testfunction", files, "rm", "load")
         msg = str(exc)
         # First five should be present
         for f in files[:5]:
@@ -334,15 +321,12 @@ class TestFilesChangedAfterLoadFactory:
 
     def test_exactly_five_files_no_truncation(self):
         files = [f"f{i}.py" for i in range(5)]
-        exc = ExperimentIntegrityError.files_changed_after_load(
-            LOG, "Testfunction", files, "rm", "load"
-        )
+        exc = ExperimentIntegrityError.files_changed_after_load(LOG, "Testfunction", files, "rm", "load")
         assert "more" not in str(exc)
 
     def test_solutions_contain_remove_and_load_commands(self):
         exc = ExperimentIntegrityError.files_changed_after_load(
-            LOG, "Testfunction", ["a.py"],
-            "adare tf remove --all", "adare tf load"
+            LOG, "Testfunction", ["a.py"], "adare tf remove --all", "adare tf load"
         )
         assert any("adare tf remove --all" in s for s in exc.possible_solutions)
         assert any("adare tf load" in s for s in exc.possible_solutions)
@@ -377,22 +361,16 @@ class TestVMIntegrityFailedFactory:
     """Tests for ExperimentIntegrityError.vm_integrity_failed()."""
 
     def test_returns_correct_type(self):
-        exc = ExperimentIntegrityError.vm_integrity_failed(
-            LOG, "ubuntu22", "disk image missing"
-        )
+        exc = ExperimentIntegrityError.vm_integrity_failed(LOG, "ubuntu22", "disk image missing")
         assert isinstance(exc, ExperimentIntegrityError)
 
     def test_message_contains_vm_name_and_detail(self):
-        exc = ExperimentIntegrityError.vm_integrity_failed(
-            LOG, "ubuntu22", "disk image missing"
-        )
+        exc = ExperimentIntegrityError.vm_integrity_failed(LOG, "ubuntu22", "disk image missing")
         assert "ubuntu22" in str(exc)
         assert "disk image missing" in str(exc)
 
     def test_solutions_mention_verify_and_reimport(self):
-        exc = ExperimentIntegrityError.vm_integrity_failed(
-            LOG, "ubuntu22", "disk image missing"
-        )
+        exc = ExperimentIntegrityError.vm_integrity_failed(LOG, "ubuntu22", "disk image missing")
         assert any("Verify" in s for s in exc.possible_solutions)
         assert any("Re-import" in s for s in exc.possible_solutions)
 
@@ -401,27 +379,22 @@ class TestVMIntegrityFailedFactory:
 # Factory methods produce raiseable exceptions
 # ---------------------------------------------------------------------------
 
+
 class TestFactoryMethodsAreRaiseable:
     """Ensure factory-produced exceptions can be raised and caught properly."""
 
     def test_file_modified_is_raiseable(self):
-        exc = ExperimentIntegrityError.file_modified(
-            LOG, "Playbook", "main.yml", "adare experiment load"
-        )
+        exc = ExperimentIntegrityError.file_modified(LOG, "Playbook", "main.yml", "adare experiment load")
         with pytest.raises(ExperimentIntegrityError):
             raise exc
 
     def test_file_not_found_is_raiseable(self):
-        exc = ExperimentIntegrityError.file_not_found(
-            LOG, "Env", "/p"
-        )
+        exc = ExperimentIntegrityError.file_not_found(LOG, "Env", "/p")
         with pytest.raises(ExperimentIntegrityError):
             raise exc
 
     def test_files_changed_after_load_is_raiseable(self):
-        exc = ExperimentIntegrityError.files_changed_after_load(
-            LOG, "TF", ["a.py"], "rm", "load"
-        )
+        exc = ExperimentIntegrityError.files_changed_after_load(LOG, "TF", ["a.py"], "rm", "load")
         with pytest.raises(ExperimentIntegrityError):
             raise exc
 
@@ -431,17 +404,13 @@ class TestFactoryMethodsAreRaiseable:
             raise exc
 
     def test_vm_integrity_failed_is_raiseable(self):
-        exc = ExperimentIntegrityError.vm_integrity_failed(
-            LOG, "vm1", "bad disk"
-        )
+        exc = ExperimentIntegrityError.vm_integrity_failed(LOG, "vm1", "bad disk")
         with pytest.raises(ExperimentIntegrityError):
             raise exc
 
     def test_factory_caught_by_experiment_exception(self):
         """Factory results are also caught by the root ExperimentException."""
-        exc = ExperimentIntegrityError.file_modified(
-            LOG, "Playbook", "main.yml", "reload"
-        )
+        exc = ExperimentIntegrityError.file_modified(LOG, "Playbook", "main.yml", "reload")
         with pytest.raises(ExperimentException):
             raise exc
 

@@ -45,7 +45,7 @@ class PlayButton(Button):
         elif self.state == 'running':
             yield Static(Text.from_markup('Running :hourglass:'), classes='center', id=self.btn_id)
         elif self.state == 'replay':
-            yield Button( Text.from_markup('Replay :repeat:'), id=self.btn_id, classes='playbtn')
+            yield Button(Text.from_markup('Replay :repeat:'), id=self.btn_id, classes='playbtn')
         elif self.state == 'done':
             yield Static(Text.from_markup('Done :white_check_mark:'), classes='center', id=self.btn_id)
         elif self.state == 'in_queue':
@@ -56,6 +56,7 @@ class PlayButton(Button):
 
 class StepPanel(VerticalGroup):
     """A widget for one step. It shows the function name and a Play button."""
+
     state = reactive('not_started')
 
     def __init__(self, step_index: int, step: Step, **kwargs):
@@ -78,7 +79,6 @@ class StepPanel(VerticalGroup):
         vertical.recompose()
 
 
-
 class CustomIconizedButton(Button):
     """A custom button that displays an icon and a label."""
 
@@ -92,10 +92,11 @@ class CustomIconizedButton(Button):
         number_spaces = self.width - 4 - 1 - len(self.label)
         if number_spaces <= 0:
             number_spaces = 1
-        self.btn_text = Text.from_markup(f'{self.icon} {self.label}{" "*(number_spaces-1)}')
+        self.btn_text = Text.from_markup(f'{self.icon} {self.label}{" " * (number_spaces - 1)}')
 
     def compose(self) -> ComposeResult:
         yield Button(label=self.btn_text, id=self.btn_id, classes='actionbtn')
+
 
 class MachinePanel(Vertical):
     BORDER_TITLE = Text.from_markup('Machine :laptop_computer:')
@@ -112,7 +113,7 @@ class MachinePanel(Vertical):
         with Horizontal():
             with Vertical(classes='boxnopadding', id='metadatapanel') as box:
                 box.border_title = Text.from_markup('metadata :gear:')
-                #yield StatusStatic()
+                # yield StatusStatic()
                 yield Static(f'Experiment: {self.experiment}')
                 yield Static(f'Environment: {self.environment}')
             with Vertical(classes='verticalbuttonlist boxnopadding', id='actionspanel') as box:
@@ -124,7 +125,8 @@ class MachinePanel(Vertical):
 
 
 class StepListPanel(Vertical):
-    """ A widget that displays multiple StepGroups vertically. """
+    """A widget that displays multiple StepGroups vertically."""
+
     steps: list[Step]
     BORDER_TITLE = Text.from_markup('Steps Panel :rocket:')
     interrupted: reactive[bool] = reactive(False, recompose=True)
@@ -142,7 +144,9 @@ class StepListPanel(Vertical):
         else:
             with VerticalScroll():
                 yield Static(Text.from_markup('Run interrupted :high_voltage: \n\n\n'), classes='center')
-                yield Static(Text.from_markup('Please Quit :door: or Restart :rocket: the experiment'), classes='center')
+                yield Static(
+                    Text.from_markup('Please Quit :door: or Restart :rocket: the experiment'), classes='center'
+                )
 
 
 class MessageScreen(Screen):
@@ -163,6 +167,7 @@ class ExperimentApp(App):
     to the steps that are running will be disabled. Steps not yet executed remain enabled,
     so they can be queued for execution later.
     """
+
     run_ctx: ExperimentRunCtx
     steps: list[Step]
     shutdown_steps: list[Step]
@@ -200,7 +205,6 @@ class ExperimentApp(App):
         self.set_interval(0.1, self.process_queue)
         self.set_interval(0.1, self.proces_shutdown_queue)
 
-
     async def __run_blocking_step(self, step_func):
         """Run a blocking step in a separate thread if not cancelled."""
         await asyncio.to_thread(step_func, self.run_ctx)
@@ -208,10 +212,7 @@ class ExperimentApp(App):
     async def __run_async_step(self, step_func, stop_on_stop=True):
         task = asyncio.create_task(step_func(self.run_ctx))  # ✅ Create an actual task
         if stop_on_stop:
-            done, pending = await asyncio.wait(
-                [task, self.stop_event.wait()],
-                return_when=asyncio.FIRST_COMPLETED
-            )
+            done, pending = await asyncio.wait([task, self.stop_event.wait()], return_when=asyncio.FIRST_COMPLETED)
 
             # Explicitly check if the stop event future is in the `done` set
             if self.stop_event.is_set() or self.stop_event.wait() in done:
@@ -232,7 +233,6 @@ class ExperimentApp(App):
     def __run_callback_async(self, name: str):
         return asyncio.to_thread(self.__run_callback, name)
 
-
     async def run_step(self, step: Step, stop_on_stop: bool = True) -> None:
         if self.stop_event.is_set() and stop_on_stop:
             log.info(f"Stop event received. Skipping step {step.label}.")
@@ -246,7 +246,6 @@ class ExperimentApp(App):
             await self.__run_async_step(step.func, stop_on_stop=stop_on_stop)
         log.info(f"Step completed: {step.label}")
 
-
     def __update_step_panel(self, index: int, state: str = '', disabled: bool = False):
         if self.interrupted:
             return
@@ -258,7 +257,6 @@ class ExperimentApp(App):
         if state:
             play_btn_wrapper.state = state
         play_btn.disabled = disabled
-
 
     async def process_queue(self) -> None:
         if self.step_queue.empty():
@@ -310,7 +308,6 @@ class ExperimentApp(App):
         for element in interruptable_elements:
             element.interrupted = True
 
-
     def compose(self) -> ComposeResult:
         yield Header()
         yield Footer()
@@ -323,7 +320,6 @@ class ExperimentApp(App):
                 yield StepListPanel(self.steps)
             with Vertical(classes='main-layout-col'):
                 yield FlowPanel(self.run_ctx.experiment_run_ulid)
-
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id
@@ -341,7 +337,6 @@ class ExperimentApp(App):
             await self.action_quit()
         else:
             log.warning(f'Unknown button pressed: {button_id}')
-
 
     async def __shutdown_experiment_run(self):
         if not self.stop_event.is_set():
@@ -365,9 +360,3 @@ class ExperimentApp(App):
 
     async def action_quit(self) -> None:
         await self.__quit()
-
-
-
-
-
-

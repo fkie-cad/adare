@@ -1,8 +1,9 @@
 [project]
 name = "adare"
 version = "0.1.0"
-description = ""
+description = "Automated Desktop Analysis framework for Reproducible Experiments: host client for projects, VMs and experiments"
 authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 
@@ -78,11 +79,22 @@ grounding = [
 ]
 
 [dependency-groups]
+# openpyxl: needed by tests/unit/testfunctions/test_excel.py on the host (the excel
+# testfunction itself gets it in the guest via its requirements.txt). Mirrors the
+# workspace test group so CI can `uv sync --package adare --group test` without
+# pulling the heavy adare-cv-server (paddle) dependencies.
 test = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
     "pytest-mock>=3.11.0",
     "pytest-cov>=4.0.0",
+    "openpyxl>=3.1.0",
+]
+# Mirrors the workspace lint group (keep the pins identical) so the CI lint job and
+# `make lint` can install it with `--package adare`.
+lint = [
+    "ruff==0.15.11",
+    "mypy==2.4.0",
 ]
 
 [tool.uv.sources]

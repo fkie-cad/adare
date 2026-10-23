@@ -5,8 +5,6 @@ from unittest.mock import patch
 
 import pytest
 import ulid
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 pytestmark = pytest.mark.unit
 
@@ -42,6 +40,7 @@ from adare.types.output_models import (
 # Helpers — generate model instances with sensible defaults
 # ---------------------------------------------------------------------------
 
+
 def _ulid() -> str:
     return str(ulid.ULID())
 
@@ -51,18 +50,28 @@ def make_project(name="proj1", description="A project", path="/tmp/proj1"):
 
 
 def make_osinfo(
-    platform="Windows", os="Windows", distribution="10",
-    version="21H2", language="en-US",
+    platform="Windows",
+    os="Windows",
+    distribution="10",
+    version="21H2",
+    language="en-US",
 ):
     return OsInfo(
-        id=_ulid(), platform=platform, os=os,
-        distribution=distribution, version=version, language=language,
+        id=_ulid(),
+        platform=platform,
+        os=os,
+        distribution=distribution,
+        version=version,
+        language=language,
     )
 
 
 def make_vm(name="win10-vm", file="win10.box", hash_val="abc123", osinfo=None):
     return Vm(
-        id=_ulid(), name=name, file=file, hash=hash_val,
+        id=_ulid(),
+        name=name,
+        file=file,
+        hash=hash_val,
         osinfo_id=osinfo.id if osinfo else None,
     )
 
@@ -72,11 +81,16 @@ def make_sync_metadata(sync_status="synced"):
 
 
 def make_environment(
-    name="env1", description="An env", vm=None,
-    file="env.yaml", sync_metadata=None,
+    name="env1",
+    description="An env",
+    vm=None,
+    file="env.yaml",
+    sync_metadata=None,
 ):
     return Environment(
-        id=_ulid(), name=name, description=description,
+        id=_ulid(),
+        name=name,
+        description=description,
         vm_id=vm.id if vm else None,
         file=file,
         sync_metadata_id=sync_metadata.id if sync_metadata else None,
@@ -85,8 +99,11 @@ def make_environment(
 
 def make_experiment(name="exp1", description="An experiment", environment_ids=None, tags=None):
     exp = Experiment(
-        id=_ulid(), name=name, description=description,
-        sha256="deadbeef", environment_ids=environment_ids,
+        id=_ulid(),
+        name=name,
+        description=description,
+        sha256="deadbeef",
+        environment_ids=environment_ids,
     )
     if tags:
         exp.tags = tags
@@ -98,27 +115,38 @@ def make_tag(name="tag1"):
 
 
 def make_testfunction_file(
-    name="standard.py", path="/funcs/standard.py",
-    sha256hash="ffff", description="Standard tests",
+    name="standard.py",
+    path="/funcs/standard.py",
+    sha256hash="ffff",
+    description="Standard tests",
 ):
     return TestFunctionFile(
-        id=_ulid(), name=name, path=path,
-        sha256hash=sha256hash, description=description,
+        id=_ulid(),
+        name=name,
+        path=path,
+        sha256hash=sha256hash,
+        description=description,
     )
 
 
 def make_testfunction(name="file_exists", tf_file=None, description="Check file"):
     return TestFunction(
-        id=_ulid(), type="standard", name=name,
-        description=description, sha256hash="aaaa",
+        id=_ulid(),
+        type="standard",
+        name=name,
+        description=description,
+        sha256hash="aaaa",
         file_id=tf_file.id if tf_file else _ulid(),
     )
 
 
 def make_testparameter(name="dst", dtype="str", description="Destination path", optional=False):
     return TestParameter(
-        id=_ulid(), name=name, dtype=dtype,
-        description=description, optional=optional,
+        id=_ulid(),
+        name=name,
+        dtype=dtype,
+        description=description,
+        optional=optional,
     )
 
 
@@ -126,14 +154,18 @@ def make_run(experiment=None, start_time=None, end_time=None, status="PENDING", 
     return ExperimentRun(
         id=_ulid(),
         experiment_id=experiment.id if experiment else None,
-        start_time=start_time, end_time=end_time,
-        status=status, fake=fake, published=published,
+        start_time=start_time,
+        end_time=end_time,
+        status=status,
+        fake=fake,
+        published=published,
     )
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def db_path(tmp_path):
@@ -144,19 +176,11 @@ def db_path(tmp_path):
 @pytest.fixture()
 def structured_api(db_path):
     """Create tables for both GlobalBase and ProjectBase, return API as context manager."""
-    engine = create_engine(f"sqlite:///{db_path.as_posix()}")
-    GlobalBase.metadata.create_all(engine)
-    ProjectBase.metadata.create_all(engine)
+    api = StructuredDataApi(db_path)
+    GlobalBase.metadata.create_all(api.engine)
+    ProjectBase.metadata.create_all(api.engine)
 
-    api = StructuredDataApi.__new__(StructuredDataApi)
-    api.engine = engine
-    api.conn = engine.connect()
-    api.metadata = GlobalBase.metadata
-    api.session_starter = sessionmaker(autoflush=False, expire_on_commit=False)
-    api.session_starter.configure(bind=engine)
-
-    api._session = api.session_starter()
-    api._session.begin()
+    api._start_session()
     yield api
     api._session.rollback()
     api._session.close()
@@ -173,8 +197,8 @@ def _add_all(session, *objs):
 # TestGetProjectsStructured
 # ---------------------------------------------------------------------------
 
-class TestGetProjectsStructured:
 
+class TestGetProjectsStructured:
     def test_empty_db(self, structured_api):
         assert structured_api.get_projects_structured() == []
 
@@ -215,15 +239,18 @@ class TestGetProjectsStructured:
 # TestGetEnvironmentsStructured
 # ---------------------------------------------------------------------------
 
-class TestGetEnvironmentsStructured:
 
+class TestGetEnvironmentsStructured:
     def test_empty_db(self, structured_api):
         assert structured_api.get_environments_structured() == []
 
     def test_environment_with_vm_and_osinfo(self, structured_api):
         osinfo = make_osinfo(
-            platform="Windows", os="Windows",
-            distribution="10", version="21H2", language="en-US",
+            platform="Windows",
+            os="Windows",
+            distribution="10",
+            version="21H2",
+            language="en-US",
         )
         vm = make_vm(name="win10-box", file="win10.box", osinfo=osinfo)
         env = make_environment(name="win10-env", description="Win10 test env", vm=vm, file="win10.yaml")
@@ -270,8 +297,8 @@ class TestGetEnvironmentsStructured:
 # TestGetExperimentsStructured
 # ---------------------------------------------------------------------------
 
-class TestGetExperimentsStructured:
 
+class TestGetExperimentsStructured:
     def test_empty_db(self, structured_api):
         assert structured_api.get_experiments_structured() == []
 
@@ -328,16 +355,18 @@ class TestGetExperimentsStructured:
 # TestGetTestfunctionsStructured
 # ---------------------------------------------------------------------------
 
-class TestGetTestfunctionsStructured:
 
+class TestGetTestfunctionsStructured:
     def test_empty_db(self, structured_api):
         assert structured_api.get_testfunctions_structured() == []
 
     @patch("adare.database.api.structured_data.get_smart_display_name", return_value="standard.file_exists")
     def test_testfunction_with_file_and_params(self, mock_display, structured_api):
         tf_file = make_testfunction_file(
-            name="standard.py", path="/funcs/standard.py",
-            sha256hash="abcd1234", description="Standard test functions",
+            name="standard.py",
+            path="/funcs/standard.py",
+            sha256hash="abcd1234",
+            description="Standard test functions",
         )
         tf = make_testfunction(name="file_exists", tf_file=tf_file, description="Check if file exists")
         param = make_testparameter(name="dst", dtype="str", description="Destination", optional=False)
@@ -346,7 +375,8 @@ class TestGetTestfunctionsStructured:
         # Link parameter to testfunction via mapping table
         structured_api._session.execute(
             mapping_testfunction_testparameter.insert().values(
-                test_function_id=tf.id, test_parameter_id=param.id,
+                test_function_id=tf.id,
+                test_parameter_id=param.id,
             )
         )
         structured_api._session.flush()
@@ -407,8 +437,8 @@ class TestGetTestfunctionsStructured:
 # TestGetRunsStructured
 # ---------------------------------------------------------------------------
 
-class TestGetRunsStructured:
 
+class TestGetRunsStructured:
     def test_empty_db(self, structured_api):
         assert structured_api.get_runs_structured() == []
 

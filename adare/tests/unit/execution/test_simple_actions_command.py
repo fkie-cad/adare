@@ -1,4 +1,3 @@
-
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -11,17 +10,13 @@ from adare.types.playbook import CommandAction
 
 @pytest.mark.asyncio
 class TestSimpleActionsExecutorCommand:
-
     async def test_powershell_auto_wrap_execution(self):
         """Test that execute_command wraps PowerShell commands."""
         # Mock dependencies
         mock_client = AsyncMock()
         mock_client.execute_shell.return_value = {"status": "success", "returncode": 0}
 
-        executor = SimpleActionsExecutor(
-            websocket_client=mock_client,
-            target_resolution_executor=MagicMock()
-        )
+        executor = SimpleActionsExecutor(websocket_client=mock_client, target_resolution_executor=MagicMock())
 
         # Action with PowerShell syntax
         command_str = "$x = 1"
@@ -46,10 +41,7 @@ class TestSimpleActionsExecutorCommand:
         mock_client = AsyncMock()
         mock_client.execute_shell.return_value = {"status": "success", "returncode": 0}
 
-        executor = SimpleActionsExecutor(
-            websocket_client=mock_client,
-            target_resolution_executor=MagicMock()
-        )
+        executor = SimpleActionsExecutor(websocket_client=mock_client, target_resolution_executor=MagicMock())
 
         command_str = "echo hello"
         action = CommandAction(command=command_str)
@@ -67,10 +59,7 @@ class TestSimpleActionsExecutorCommand:
         mock_client = AsyncMock()
         mock_client.execute_shell.return_value = {"status": "success", "returncode": 0}
 
-        executor = SimpleActionsExecutor(
-            websocket_client=mock_client,
-            target_resolution_executor=MagicMock()
-        )
+        executor = SimpleActionsExecutor(websocket_client=mock_client, target_resolution_executor=MagicMock())
 
         # Initial input with r""
         action = CommandAction(command='r"$x = 1"')

@@ -21,6 +21,8 @@ import socket
 import time
 from pathlib import Path
 
+from adare.helperfunctions.backoff import backoff_delays
+
 log = logging.getLogger(__name__)
 
 # Raw bytes of file data moved per guest-file-read / guest-file-write round-trip.
@@ -59,8 +61,7 @@ def _recv_json(sock: socket.socket) -> dict:
         raise QgaError(f'Malformed JSON from guest agent: {e}') from e
 
 
-def _command(sock_path: Path, execute: str, arguments: dict | None = None,
-             timeout: float = 10.0):
+def _command(sock_path: Path, execute: str, arguments: dict | None = None, timeout: float = 10.0):
     """Run one guest-agent command over a fresh connection; return its ``return``.
 
     Raises QgaError if the agent replies with an ``error`` object or is
@@ -115,8 +116,7 @@ def _encode_powershell(script: str) -> str:
     return base64.b64encode(script.encode('utf-16le')).decode('utf-8')
 
 
-def _build_exec_args(command: str, cwd: str | None, windows: bool,
-                     shell: str | None = None) -> list[str]:
+def _build_exec_args(command: str, cwd: str | None, windows: bool, shell: str | None = None) -> list[str]:
     """Build the (path, arg[]) for ``guest-exec``.
 
     Reuses the shape of ``hypervisor/qemu/mixins/commands.py`` -- PowerShell with
@@ -170,11 +170,17 @@ def _build_exec_args(command: str, cwd: str | None, windows: bool,
     raise QgaError(f'Unsupported guest shell: {shell!r}')
 
 
-def qga_exec(sock_path: Path, command: str, cwd: str | None = None,
-             windows: bool = False, timeout: float = 3600.0,
-             poll_interval: float = 0.5, shell: str | None = None,
-             progress_callback=None,
-             progress_interval: float = 60.0) -> tuple[int, str, str]:
+def qga_exec(
+    sock_path: Path,
+    command: str,
+    cwd: str | None = None,
+    windows: bool = False,
+    timeout: float = 3600.0,
+    poll_interval: float = 0.5,
+    shell: str | None = None,
+    progress_callback=None,
+    progress_interval: float = 60.0,
+) -> tuple[int, str, str]:
     """Run *command* in the guest and return ``(returncode, stdout, stderr)``.
 
     Sends ``guest-exec`` then polls ``guest-exec-status`` until the process has
@@ -193,16 +199,22 @@ def qga_exec(sock_path: Path, command: str, cwd: str | None = None,
             ``progress_interval`` seconds while the command is still running, so a
             45-minute ``msiexec`` can drive a live spinner instead of looking hung.
         progress_interval: Seconds between ``progress_callback`` invocations.
+        poll_interval: Longest gap between ``guest-exec-status`` polls; polling
+            starts at 50 ms and backs off to it, so quick commands return quickly.
 
     Raises:
         QgaError: On agent/transport failure, a missing pid, or *timeout*.
     """
     args = _build_exec_args(command, cwd, windows, shell)
-    ret = _command(sock_path, 'guest-exec', {
-        'path': args[0],
-        'arg': args[1:],
-        'capture-output': True,
-    })
+    ret = _command(
+        sock_path,
+        'guest-exec',
+        {
+            'path': args[0],
+            'arg': args[1:],
+            'capture-output': True,
+        },
+    )
     pid = ret.get('pid') if isinstance(ret, dict) else None
     if pid is None:
         raise QgaError('guest-exec returned no pid')
@@ -210,6 +222,7 @@ def qga_exec(sock_path: Path, command: str, cwd: str | None = None,
     started = time.monotonic()
     deadline = started + timeout
     next_progress = started + progress_interval
+    poll_delays = backoff_delays(cap=poll_interval)
     while time.monotonic() < deadline:
         status = _command(sock_path, 'guest-exec-status', {'pid': pid})
         if status.get('exited', False):
@@ -223,8 +236,20 @@ def qga_exec(sock_path: Path, command: str, cwd: str | None = None,
         if progress_callback is not None and now >= next_progress:
             progress_callback(now - started)
             next_progress = now + progress_interval
-        time.sleep(poll_interval)
+        time.sleep(next(poll_delays))
     raise QgaError(f'Timeout waiting for guest command (pid {pid}) after {timeout:.0f}s')
+
+
+def qga_shutdown(sock_path: Path, mode: str = 'powerdown') -> None:
+    """Ask the guest to shut down cleanly (``powerdown`` / ``reboot`` / ``halt``).
+
+    The guest tears down the agent as part of shutting down, so the request
+    itself often gets no reply. That is success, not failure.
+    """
+    try:
+        _command(sock_path, 'guest-shutdown', {'mode': mode}, timeout=5.0)
+    except QgaError as e:
+        log.debug('guest-shutdown(%s) returned no clean reply (expected): %s', mode, e)
 
 
 def qga_reboot(sock_path: Path, ready_timeout: float = 900.0) -> None:
@@ -243,18 +268,11 @@ def qga_reboot(sock_path: Path, ready_timeout: float = 900.0) -> None:
     Raises:
         QgaError: If the agent does not come back within *ready_timeout*.
     """
-    # The guest tears down the agent as part of shutting down, so the request
-    # itself often gets no reply. That is success, not failure.
-    try:
-        _command(sock_path, 'guest-shutdown', {'mode': 'reboot'}, timeout=5.0)
-    except QgaError as e:
-        log.debug('guest-shutdown(reboot) returned no clean reply (expected): %s', e)
+    qga_shutdown(sock_path, 'reboot')
 
     time.sleep(15.0)
     if not qga_wait_ready(sock_path, timeout=ready_timeout):
-        raise QgaError(
-            f'guest agent did not come back within {ready_timeout:.0f}s after reboot'
-        )
+        raise QgaError(f'guest agent did not come back within {ready_timeout:.0f}s after reboot')
 
 
 def qga_push_file(sock_path: Path, local: str | Path, remote: str) -> int:
@@ -272,7 +290,7 @@ def qga_push_file(sock_path: Path, local: str | Path, remote: str) -> int:
     try:
         offset = 0
         while offset < len(data):
-            chunk = data[offset:offset + _FILE_CHUNK]
+            chunk = data[offset : offset + _FILE_CHUNK]
             buf_b64 = base64.b64encode(chunk).decode('utf-8')
             _command(sock_path, 'guest-file-write', {'handle': handle, 'buf-b64': buf_b64})
             offset += len(chunk)
@@ -291,8 +309,7 @@ def qga_pull_file(sock_path: Path, remote: str, local: str | Path) -> int:
     chunks: list[bytes] = []
     try:
         while True:
-            res = _command(sock_path, 'guest-file-read',
-                           {'handle': handle, 'count': _FILE_CHUNK})
+            res = _command(sock_path, 'guest-file-read', {'handle': handle, 'count': _FILE_CHUNK})
             buf_b64 = res.get('buf-b64', '')
             if buf_b64:
                 chunks.append(base64.b64decode(buf_b64))

@@ -130,7 +130,8 @@ class SerializeApi(ProjectDatabaseApi):
             event_dict['action_data'] = event.action_data
         elif event_type == 'test_event':
             event_dict['abstract_test_ulid'] = _remote_ulid(
-                event.abstract_test, 'abstract test',
+                event.abstract_test,
+                'abstract test',
                 event.abstract_test.id if event.abstract_test else '?',
             )
             event_dict['result'] = self.serialize_result(event.result)
@@ -159,8 +160,7 @@ class SerializeApi(ProjectDatabaseApi):
         if run is None:
             raise RunSerializationError('no such run in this project database')
 
-        experiment_ulid = _remote_ulid(run.experiment, 'experiment',
-                                      run.experiment.id if run.experiment else '?')
+        experiment_ulid = _remote_ulid(run.experiment, 'experiment', run.experiment.id if run.experiment else '?')
         environment_ulid = _remote_ulid(run.environment, 'environment', run.environment_id or '?')
 
         run_dict = {

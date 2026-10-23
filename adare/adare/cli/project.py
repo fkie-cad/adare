@@ -24,11 +24,7 @@ def exec_create_project(arguments):
     path = Path.cwd() / arguments.name
     description = arguments.description or ""
 
-    result = api.project.create(ProjectCreateRequest(
-        name=path.name,
-        path=path,
-        description=description
-    ))
+    result = api.project.create(ProjectCreateRequest(name=path.name, path=path, description=description))
 
     if result.success:
         # CLI handles presentation
@@ -36,7 +32,7 @@ def exec_create_project(arguments):
             title=f'Project "{result.data.name}" created successfully!',
             location=str(result.data.path),
             next_steps=result.data.next_steps,
-            tip=result.data.tip
+            tip=result.data.tip,
         )
     else:
         handle_api_error(result)
@@ -82,10 +78,18 @@ def exec_list_projects(arguments):
         return
 
     if not result.data:
+        from adare.cli.output import emit, is_structured_output
+
+        if is_structured_output():
+            # Machines get an empty list, not a status message.
+            emit({'projects': []})
+            return
         # No projects found - use existing exception for consistent messaging
         from adare.backend.project.exceptions import NoProjectsFoundMessage
+
         raise NoProjectsFoundMessage(log, message='no projects found')
 
     # Use existing print_project_list for rich/json/yaml formatting
     from adare.frontend.terminal.project_list import print_project_list
+
     print_project_list()

@@ -29,6 +29,7 @@ class IntegrityManager:
         # External files (loaded with --no-copy) should not be protected (user-managed)
         try:
             from adare.config.configdirectory import VMS_DIR
+
             try:
                 filepath.resolve().relative_to(VMS_DIR.resolve())
                 # File is in managed storage - proceed with protection
@@ -120,8 +121,8 @@ def verify_testfunction_integrity(testfunction_path: Path, requirements_path: Pa
             possible_solutions=[
                 f'Reload testfunction with `adare testfunction load {testfunction_path.stem}`',
                 'Check for unauthorized file modifications',
-                'Verify file permissions and access controls'
-            ]
+                'Verify file permissions and access controls',
+            ],
         )
 
 
@@ -137,8 +138,8 @@ def verify_experiment_integrity(experiment_file: Path, expected_hash: str) -> No
             possible_solutions=[
                 'Reload experiment to update stored hash',
                 'Check for unauthorized file modifications',
-                'Verify file permissions and access controls'
-            ]
+                'Verify file permissions and access controls',
+            ],
         )
 
 
@@ -154,8 +155,8 @@ def verify_environment_integrity(environment_file: Path, expected_hash: str) -> 
             possible_solutions=[
                 'Reload environment to update stored hash',
                 'Check for unauthorized file modifications',
-                'Verify file permissions and access controls'
-            ]
+                'Verify file permissions and access controls',
+            ],
         )
 
 

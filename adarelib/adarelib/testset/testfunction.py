@@ -1,15 +1,16 @@
+import logging
+import threading
 from inspect import isclass
 from pathlib import Path
-import threading
-import cattrs
-import attrs
 
+import attrs
+import cattrs
+
+from adarelib.common.variables import VariableRegistry
+from adarelib.helper.module import import_module_from_pyfile
 from adarelib.testset.basictest import BasicTest
 from adarelib.testset.type import TestsetFile
-from adarelib.helper.module import import_module_from_pyfile
-from adarelib.common.variables import VariableRegistry
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -17,6 +18,7 @@ log = logging.getLogger(__name__)
 @attrs.define
 class ModuleLoadFailure:
     """Track failed testfunction module loads with context."""
+
     module_name: str
     file_path: str
     exception_type: str
@@ -27,6 +29,7 @@ class ModuleLoadFailure:
         if self.exception_type == 'ModuleNotFoundError':
             # Extract dependency name from exception message
             import re
+
             match = re.search(r"No module named '([^']+)'", self.exception_message)
             if match:
                 dep_name = match.group(1)
@@ -38,16 +41,15 @@ class ModuleLoadFailure:
                     f"uv pip install {pkg}"
                 )
             return f"Testfunction '{self.module_name}' has missing dependency: {self.exception_message}"
-        elif self.exception_type == 'ImportError':
+        if self.exception_type == 'ImportError':
             return f"Testfunction '{self.module_name}' import failed: {self.exception_message}"
-        elif self.exception_type == 'SyntaxError':
+        if self.exception_type == 'SyntaxError':
             return f"Testfunction '{self.module_name}' has syntax error: {self.exception_message}"
-        elif self.exception_type == 'ContractViolation':
+        if self.exception_type == 'ContractViolation':
             return f"Testfunction '{self.module_name}' violates the authoring contract: {self.exception_message}"
-        elif self.exception_type == 'DuplicateTestnameError':
+        if self.exception_type == 'DuplicateTestnameError':
             return f"Testfunction '{self.module_name}' has {self.exception_message}"
-        else:
-            return f"Testfunction '{self.module_name}' failed to load: {self.exception_type}: {self.exception_message}"
+        return f"Testfunction '{self.module_name}' failed to load: {self.exception_type}: {self.exception_message}"
 
 
 class TestfunctionLoader:
@@ -126,34 +128,25 @@ class TestfunctionLoader:
                 module_name=name,
                 file_path=str(file_path),
                 exception_type='ModuleNotFoundError',
-                exception_message=str(e)
+                exception_message=str(e),
             )
 
         except ImportError as e:
             log.error(f"Import error loading testfunction '{name}' from {file_path}: {e}")
             self._load_failures[name] = ModuleLoadFailure(
-                module_name=name,
-                file_path=str(file_path),
-                exception_type='ImportError',
-                exception_message=str(e)
+                module_name=name, file_path=str(file_path), exception_type='ImportError', exception_message=str(e)
             )
 
         except SyntaxError as e:
             log.error(f"Syntax error in testfunction '{name}' at {file_path}: {e}")
             self._load_failures[name] = ModuleLoadFailure(
-                module_name=name,
-                file_path=str(file_path),
-                exception_type='SyntaxError',
-                exception_message=str(e)
+                module_name=name, file_path=str(file_path), exception_type='SyntaxError', exception_message=str(e)
             )
 
         except (AttributeError, TypeError) as e:
             log.error(f"Attribute/Type error loading testfunction '{name}' from {file_path}: {e}")
             self._load_failures[name] = ModuleLoadFailure(
-                module_name=name,
-                file_path=str(file_path),
-                exception_type=type(e).__name__,
-                exception_message=str(e)
+                module_name=name, file_path=str(file_path), exception_type=type(e).__name__, exception_message=str(e)
             )
 
         except ValueError as e:
@@ -162,10 +155,7 @@ class TestfunctionLoader:
             # of letting it abort the whole collection load.
             log.error(f"Contract violation loading testfunction '{name}' from {file_path}: {e}")
             self._load_failures[name] = ModuleLoadFailure(
-                module_name=name,
-                file_path=str(file_path),
-                exception_type='ContractViolation',
-                exception_message=str(e)
+                module_name=name, file_path=str(file_path), exception_type='ContractViolation', exception_message=str(e)
             )
 
     def _do_import(self, source=None, directory=None) -> dict:
@@ -263,9 +253,13 @@ def get_testclass_from_testfunction(testfunction: str, testfunction_collection: 
         load_failures = get_module_load_failures()
         if testfunction_list in load_failures:
             failure = load_failures[testfunction_list]
-            log.error(f"Testfunction collection '{testfunction_list}' is unavailable: {failure.get_user_friendly_message()}")
+            log.error(
+                f"Testfunction collection '{testfunction_list}' is unavailable: {failure.get_user_friendly_message()}"
+            )
         else:
-            log.error(f"Testfunction collection '{testfunction_list}' not found in available collections: {list(testfunction_collection.keys())}")
+            log.error(
+                f"Testfunction collection '{testfunction_list}' not found in available collections: {list(testfunction_collection.keys())}"
+            )
         return None
 
     return collection.get(testfunction_name)
@@ -279,13 +273,13 @@ def get_missing_testfunctions(testset: TestsetFile, testfunction_collection: dic
             missing.append(test.function)
             log.error(f"Missing testfunction: {test.function}")
             log.debug(f"Available testfunctions: {testfunction_collection}")
-    
+
     if missing:
         log.error(f"Missing testfunctions: {missing}")
         log.debug(f"Available testfunction collections: {list(testfunction_collection.keys())}")
         for collection_name, functions in testfunction_collection.items():
             log.debug(f"Collection '{collection_name}': {list(functions.keys())}")
-    
+
     return missing
 
 
@@ -301,12 +295,12 @@ def structure_tests(testset: TestsetFile, testfunction_collection: dict) -> tupl
         try:
             # Convert test to dict and ensure variables are properly handled
             test_dict = attrs.asdict(test)
-            
+
             # Convert variables to VariableRegistry if present
             if 'variables' in test_dict and test_dict['variables']:
                 if not isinstance(test_dict['variables'], VariableRegistry):
                     test_dict['variables'] = VariableRegistry.from_dict(test_dict['variables'])
-            
+
             testclass_instance = cattrs.structure(test_dict, testclass)
         except cattrs.errors.ClassValidationError as e:
             log.error('an test has missing/wrong parameters in the testset file -> see exception below')
@@ -316,4 +310,3 @@ def structure_tests(testset: TestsetFile, testfunction_collection: dict) -> tupl
         tests[test.name] = testclass_instance
 
     return tests, structure_error_dict
-

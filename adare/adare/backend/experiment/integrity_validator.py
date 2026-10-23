@@ -59,8 +59,7 @@ class IntegrityValidator:
         try:
             # Get all testfunction data from database
             tf_data = get_testfunction_files_data(
-                self.project_path,
-                fields=['path', 'requirements_path', 'sha256hash', 'name']
+                self.project_path, fields=['path', 'requirements_path', 'sha256hash', 'name']
             )
 
             # Create lookup by testfunction directory name
@@ -80,8 +79,8 @@ class IntegrityValidator:
                         possible_solutions=[
                             f"Load testfunction with 'adare testfunction load {tf_name}'",
                             "Check if testfunction directory exists",
-                            "Verify testfunction name spelling in playbook"
-                        ]
+                            "Verify testfunction name spelling in playbook",
+                        ],
                     )
 
                 tf_info = tf_lookup[tf_name]
@@ -94,8 +93,7 @@ class IntegrityValidator:
                 log.debug(f"Testfunction integrity verified: {tf_name}")
 
             log.info(
-                f"Testfunction integrity verification completed: "
-                f"{verified_count}/{len(testfunction_names)} verified"
+                f"Testfunction integrity verification completed: {verified_count}/{len(testfunction_names)} verified"
             )
 
         except ExperimentIntegrityError:
@@ -195,12 +193,8 @@ class IntegrityValidator:
         experiment_hashes = experiment_database.get_experiment_hashes(
             self.project_path, environment_name, experiment_name
         )
-        experiment_ulid = experiment_database.get_experiment_by_project_and_name(
-            self.project_path, experiment_name
-        )
-        experiment_run_count = experiment_database.get_experiment_run_count(
-            self.project_path, experiment_ulid
-        )
+        experiment_ulid = experiment_database.get_experiment_by_project_and_name(self.project_path, experiment_name)
+        experiment_run_count = experiment_database.get_experiment_run_count(self.project_path, experiment_ulid)
 
         file_changed: list[str] = []
         if experiment_directory.sha256_playbook != experiment_hashes['playbook']:
@@ -235,8 +229,4 @@ class IntegrityValidator:
                 )
             )
 
-        raise ExperimentIntegrityError(
-            log,
-            message,
-            possible_solutions=solutions
-        )
+        raise ExperimentIntegrityError(log, message, possible_solutions=solutions)

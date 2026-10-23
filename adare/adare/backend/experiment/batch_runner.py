@@ -23,6 +23,7 @@ class ExperimentResult:
 
     This class is immutable to ensure result integrity throughout the batch execution.
     """
+
     environment: str
     experiment: str
     status: StatusEnum
@@ -61,6 +62,7 @@ class BatchRunSummary:
 
     This class provides statistics and reporting for batch execution results.
     """
+
     results: list[ExperimentResult]
     total_combinations: int
     total_duration: timedelta
@@ -115,7 +117,7 @@ class BatchRunSummary:
                 result.experiment,
                 f"[{status_style}]{status_icon}[/{status_style}]",
                 duration_str,
-                error_str
+                error_str,
             )
         return table
 
@@ -144,8 +146,11 @@ class BatchRunSummary:
         console.print()
 
         # Print statistics
-        console.print(f"Summary: {self.successful_runs}/{self.total_combinations} successful ({self.success_rate:.0f}%), "
-                     f"Total time: {self.total_duration.total_seconds():.1f}s", style="bold")
+        console.print(
+            f"Summary: {self.successful_runs}/{self.total_combinations} successful ({self.success_rate:.0f}%), "
+            f"Total time: {self.total_duration.total_seconds():.1f}s",
+            style="bold",
+        )
         console.print()
 
     def to_dict(self) -> dict[str, Any]:
@@ -159,7 +164,7 @@ class BatchRunSummary:
                 'success_rate': self.success_rate,
                 'total_duration_seconds': self.total_duration.total_seconds(),
             },
-            'results': [result.to_dict() for result in self.results]
+            'results': [result.to_dict() for result in self.results],
         }
 
 
@@ -248,6 +253,7 @@ class ExperimentEnvironmentMatcher:
 
         try:
             from adare.database.api.environment import EnvironmentDbApi
+
             with EnvironmentDbApi() as api:
                 all_environments = api.get_environments(self.project_path)
                 environment_names = [env.name for env in all_environments if env.name]
@@ -293,7 +299,9 @@ class ExperimentEnvironmentMatcher:
                 # Fall back to checking if experiment exists at all
                 experiment = api.get_experiment_by_project_and_name(self.project_path, experiment_name)
                 if experiment is not None:
-                    log.warning(f'experiment "{experiment_name}" does not list "{environment_name}" in metadata.yml - running anyway')
+                    log.warning(
+                        f'experiment "{experiment_name}" does not list "{environment_name}" in metadata.yml - running anyway'
+                    )
                     return True
 
                 return False
@@ -322,13 +330,13 @@ class ExperimentEnvironmentMatcher:
 
         combinations = self._build_combinations(matched_experiments, matched_environments)
 
-        self._validate_combinations(exp_pattern, env_pattern, combinations,
-                                   matched_experiments, matched_environments)
+        self._validate_combinations(exp_pattern, env_pattern, combinations, matched_experiments, matched_environments)
 
         return combinations
 
-    def _validate_matches(self, exp_pattern: str, env_pattern: str,
-                         experiments: list[str], environments: list[str]) -> None:
+    def _validate_matches(
+        self, exp_pattern: str, env_pattern: str, experiments: list[str], environments: list[str]
+    ) -> None:
         """Validate that we found matching experiments and environments."""
         if not experiments:
             raise LoggedErrorException(
@@ -337,8 +345,8 @@ class ExperimentEnvironmentMatcher:
                 possible_solutions=[
                     f'Check if experiment pattern "{exp_pattern}" is correct',
                     'List available experiments with: adare experiment list',
-                    'Create experiments if needed with: adare experiment create <name>'
-                ]
+                    'Create experiments if needed with: adare experiment create <name>',
+                ],
             )
 
         if not environments:
@@ -348,8 +356,8 @@ class ExperimentEnvironmentMatcher:
                 possible_solutions=[
                     f'Check if environment pattern "{env_pattern}" is correct',
                     'List available environments with: adare environment list',
-                    'Create environments if needed with: adare environment create <name>'
-                ]
+                    'Create environments if needed with: adare environment create <name>',
+                ],
             )
 
     def _build_combinations(self, experiments: list[str], environments: list[str]) -> dict[str, list[str]]:
@@ -368,14 +376,21 @@ class ExperimentEnvironmentMatcher:
             if valid_experiments:
                 combinations[env_name] = sorted(valid_experiments)
 
-        log.info(f'Found {valid_count} valid combinations out of {total_possible} possible '
-                f'({len(experiments)} experiments × {len(environments)} environments)')
+        log.info(
+            f'Found {valid_count} valid combinations out of {total_possible} possible '
+            f'({len(experiments)} experiments × {len(environments)} environments)'
+        )
 
         return combinations
 
-    def _validate_combinations(self, exp_pattern: str, env_pattern: str,
-                              combinations: dict[str, list[str]],
-                              experiments: list[str], environments: list[str]) -> None:
+    def _validate_combinations(
+        self,
+        exp_pattern: str,
+        env_pattern: str,
+        combinations: dict[str, list[str]],
+        experiments: list[str],
+        environments: list[str],
+    ) -> None:
         """Validate that we found at least one valid combination."""
         if not combinations:
             raise LoggedErrorException(
@@ -385,8 +400,8 @@ class ExperimentEnvironmentMatcher:
                     f'Found experiments: {", ".join(experiments)}',
                     f'Found environments: {", ".join(environments)}',
                     'Check experiment-environment compatibility',
-                    'Ensure experiments are properly configured for the target environments'
-                ]
+                    'Ensure experiments are properly configured for the target environments',
+                ],
             )
 
 
@@ -402,7 +417,9 @@ class BatchExperimentRunner:
         self.matcher: ExperimentEnvironmentMatcher | None = None
         self.interrupt_requested: bool = False
 
-    def _handle_interruption(self, remaining_combinations: list[tuple[str, str]], current_env: str, current_exp: str) -> bool:
+    def _handle_interruption(
+        self, remaining_combinations: list[tuple[str, str]], current_env: str, current_exp: str
+    ) -> bool:
         """Handle interruption and prompt user whether to continue with remaining combinations.
 
         Args:
@@ -449,7 +466,7 @@ class BatchExperimentRunner:
         exp_pattern: str,
         env_pattern: str,
         show_flow_console: bool = False,
-        **experiment_kwargs: Any
+        **experiment_kwargs: Any,
     ) -> BatchRunSummary:
         """Execute batch run for all matching experiment-environment combinations.
 
@@ -479,17 +496,14 @@ class BatchExperimentRunner:
 
         self._print_execution_plan(combinations)
 
-        results = await self._execute_all_combinations(combinations, total_combinations,
-                                                      project_path, show_flow_console, **experiment_kwargs)
+        results = await self._execute_all_combinations(
+            combinations, total_combinations, project_path, show_flow_console, **experiment_kwargs
+        )
 
         end_time = datetime.now(UTC)
         total_duration = end_time - start_time
 
-        return BatchRunSummary(
-            results=results,
-            total_combinations=total_combinations,
-            total_duration=total_duration
-        )
+        return BatchRunSummary(results=results, total_combinations=total_combinations, total_duration=total_duration)
 
     async def _execute_all_combinations(
         self,
@@ -497,7 +511,7 @@ class BatchExperimentRunner:
         total_combinations: int,
         project_path: Path,
         show_flow_console: bool,
-        **experiment_kwargs: Any
+        **experiment_kwargs: Any,
     ) -> list[ExperimentResult]:
         """Execute all experiment-environment combinations."""
         results = []
@@ -517,7 +531,7 @@ class BatchExperimentRunner:
                 combination_count += 1
 
                 # Print environment header when switching to a new environment
-                if i == 0 or all_combinations[i-1][0] != env_name:
+                if i == 0 or all_combinations[i - 1][0] != env_name:
                     console.print(f"\n[bold cyan]Environment: {env_name}[/bold cyan]")
 
                 console.print(f"  [{combination_count}/{total_combinations}] Running {exp_name}...")
@@ -531,13 +545,14 @@ class BatchExperimentRunner:
                 # Handle interruption if experiment was interrupted
                 if result.status == StatusEnum.INTERRUPTED:
                     # Get remaining combinations
-                    remaining = all_combinations[i+1:]
+                    remaining = all_combinations[i + 1 :]
 
                     # Ask user if they want to continue
                     if remaining and self._handle_interruption(remaining, env_name, exp_name):
                         continue  # Continue with next combination
                     # Mark all remaining combinations as skipped
                     from datetime import datetime, timedelta
+
                     for rem_env, rem_exp in remaining:
                         skipped_result = ExperimentResult(
                             environment=rem_env,
@@ -546,7 +561,7 @@ class BatchExperimentRunner:
                             duration=timedelta(seconds=0),
                             error_message="Skipped due to user termination",
                             start_time=datetime.now(UTC),
-                            end_time=datetime.now(UTC)
+                            end_time=datetime.now(UTC),
                         )
                         results.append(skipped_result)
                     break
@@ -557,7 +572,9 @@ class BatchExperimentRunner:
             # This shouldn't happen since individual experiments handle interrupts,
             # but if it does, we should handle any remaining combinations
             if combination_count < total_combinations:
-                console.print(f"[yellow]Note: {total_combinations - combination_count} combinations were not attempted[/yellow]")
+                console.print(
+                    f"[yellow]Note: {total_combinations - combination_count} combinations were not attempted[/yellow]"
+                )
 
         return results
 
@@ -577,8 +594,7 @@ class BatchExperimentRunner:
             status_icon = "✗"
             status_color = "red"
 
-        console.print(f"    [{status_color}]{status_icon}[/{status_color}] "
-                     f"{result.duration.total_seconds():.1f}s")
+        console.print(f"    [{status_color}]{status_icon}[/{status_color}] {result.duration.total_seconds():.1f}s")
 
         if result.error_message:
             error_color = "yellow" if result.status == StatusEnum.INTERRUPTED else "red"
@@ -597,12 +613,7 @@ class BatchExperimentRunner:
         console.print()
 
     async def _execute_combination(
-        self,
-        project_path: Path,
-        experiment_name: str,
-        environment_name: str,
-        show_flow_console: bool,
-        **kwargs
+        self, project_path: Path, experiment_name: str, environment_name: str, show_flow_console: bool, **kwargs
     ) -> ExperimentResult:
         """Execute a single experiment-environment combination."""
         start_time = datetime.now(UTC)
@@ -617,7 +628,7 @@ class BatchExperimentRunner:
                 experiment_name=experiment_name,
                 environment_name=environment_name,
                 disable_printing=not show_flow_console,  # Control flow console display
-                **kwargs
+                **kwargs,
             )
 
             end_time = datetime.now(UTC)
@@ -641,7 +652,7 @@ class BatchExperimentRunner:
                 duration=duration,
                 error_message=error_msg,
                 start_time=start_time,
-                end_time=end_time
+                end_time=end_time,
             )
 
         except Exception as e:  # noqa: BLE001 -- top-level batch handler; must record any failure as a result
@@ -650,6 +661,7 @@ class BatchExperimentRunner:
 
             # Determine status based on exception type
             from adare.exceptions import LoggedException
+
             if isinstance(e, LoggedException):
                 status = StatusEnum.FAILED
                 error_msg = str(e.message) if hasattr(e, 'message') else str(e)
@@ -664,7 +676,7 @@ class BatchExperimentRunner:
                 duration=duration,
                 error_message=error_msg,
                 start_time=start_time,
-                end_time=end_time
+                end_time=end_time,
             )
 
 
@@ -683,8 +695,9 @@ def has_glob_patterns(experiment_pattern: str, environment_pattern: str) -> bool
 
     # Use class method directly to avoid creating unnecessary instance
     glob_chars = ExperimentEnvironmentMatcher._GLOB_CHARS
-    return (any(char in experiment_pattern for char in glob_chars) or
-            any(char in environment_pattern for char in glob_chars))
+    return any(char in experiment_pattern for char in glob_chars) or any(
+        char in environment_pattern for char in glob_chars
+    )
 
 
 async def run_batch_experiments(
@@ -692,7 +705,7 @@ async def run_batch_experiments(
     experiment_pattern: str,
     environment_pattern: str,
     show_flow_console: bool = False,
-    **experiment_kwargs: Any
+    **experiment_kwargs: Any,
 ) -> BatchRunSummary:
     """Main entry point for batch experiment execution.
 
@@ -728,4 +741,6 @@ async def run_batch_experiments(
         raise ValueError("Environment pattern cannot be empty")
 
     runner = BatchExperimentRunner()
-    return await runner.run_batch(project_path, experiment_pattern, environment_pattern, show_flow_console, **experiment_kwargs)
+    return await runner.run_batch(
+        project_path, experiment_pattern, environment_pattern, show_flow_console, **experiment_kwargs
+    )

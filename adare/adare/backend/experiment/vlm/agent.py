@@ -209,7 +209,8 @@ class GuiAgent:
         if self._subgoal:
             parts.append(
                 f'SUB-GOAL (focus only on this now): {self._subgoal}\n'
-                'Emit "step_done" as soon as THIS sub-goal is satisfied.')
+                'Emit "step_done" as soon as THIS sub-goal is satisfied.'
+            )
         if self.hints:
             parts.append('HINTS:\n' + '\n'.join(f'- {h}' for h in self.hints))
         if self._stall_note:
@@ -221,10 +222,13 @@ class GuiAgent:
         user_text = '\n\n'.join(parts)
         return [
             {'role': 'system', 'content': system},
-            {'role': 'user', 'content': [
-                self.client.text_content(user_text),
-                self.client.image_content(screenshot_b64),
-            ]},
+            {
+                'role': 'user',
+                'content': [
+                    self.client.text_content(user_text),
+                    self.client.image_content(screenshot_b64),
+                ],
+            },
         ]
 
     async def _decide(self, screenshot_b64: str, width: int, height: int) -> AgentAction:
@@ -232,8 +236,10 @@ class GuiAgent:
         reply = await self.client.chat(messages, temperature=0.0, max_tokens=800)
         try:
             return parse_action(
-                reply, coord_space=self.coord_space,
-                screen_width=width, screen_height=height,
+                reply,
+                coord_space=self.coord_space,
+                screen_width=width,
+                screen_height=height,
             )
         except VLMError as exc:
             # The model's intent was likely fine; only the serialization broke.
@@ -241,8 +247,12 @@ class GuiAgent:
             return await self._recover_decision(reply, exc, screenshot_b64, width, height)
 
     async def _recover_decision(
-        self, bad_reply: str, exc: VLMError,
-        screenshot_b64: str, width: int, height: int,
+        self,
+        bad_reply: str,
+        exc: VLMError,
+        screenshot_b64: str,
+        width: int,
+        height: int,
     ) -> AgentAction:
         """Two-tier self-heal for a failed decision parse.
 
@@ -260,17 +270,22 @@ class GuiAgent:
             try:
                 if _is_syntax_error(last_exc):
                     log.warning(
-                        'Decision parse failed (attempt %d/%d): %s; '
-                        'repairing via cheap text repair', attempt, n, last_exc)
+                        'Decision parse failed (attempt %d/%d): %s; repairing via cheap text repair',
+                        attempt,
+                        n,
+                        last_exc,
+                    )
                     reply = await self._repair_json(last_reply, last_exc)
                 else:
                     log.warning(
-                        'Decision parse failed (attempt %d/%d): %s; '
-                        'repairing via vision re-ask', attempt, n, last_exc)
+                        'Decision parse failed (attempt %d/%d): %s; repairing via vision re-ask', attempt, n, last_exc
+                    )
                     reply = await self._vision_reask(screenshot_b64, last_exc)
                 return parse_action(
-                    reply, coord_space=self.coord_space,
-                    screen_width=width, screen_height=height,
+                    reply,
+                    coord_space=self.coord_space,
+                    screen_width=width,
+                    screen_height=height,
                 )
             except VLMError as rexc:
                 last_exc = rexc
@@ -346,19 +361,27 @@ class GuiAgent:
         coords = None
         if action.kind in (A.CLICK, A.DOUBLE_CLICK) and action.x is not None:
             coords = (action.x, action.y)
-        self._emit({
-            'type': 'decided', 'index': index, 'kind': action.kind,
-            'describe': action.describe or action.summary or '',
-            'coords': coords,
-            'grounded': bool(action.crop_bbox) or bool(action.vlm_point),
-            'reasoning': action.reasoning,
-        })
+        self._emit(
+            {
+                'type': 'decided',
+                'index': index,
+                'kind': action.kind,
+                'describe': action.describe or action.summary or '',
+                'coords': coords,
+                'grounded': bool(action.crop_bbox) or bool(action.vlm_point),
+                'reasoning': action.reasoning,
+            }
+        )
 
     def _emit_executed(self, index: int, status: str, screenshot: str | None = None) -> None:
-        self._emit({
-            'type': 'executed', 'index': index, 'status': status,
-            'screenshot': screenshot,
-        })
+        self._emit(
+            {
+                'type': 'executed',
+                'index': index,
+                'status': status,
+                'screenshot': screenshot,
+            }
+        )
 
     # -- interactive gate ---------------------------------------------------
 
@@ -371,8 +394,9 @@ class GuiAgent:
         ``continue`` the gate is disabled for the rest of the run
         (``self.interactive = False``) and ``'approve'`` is returned.
         """
-        from adare.console import console
         from rich.panel import Panel
+
+        from adare.console import console
 
         detail = action.describe or action.summary or ''
         header = f'Step {index} — {action.kind.upper()}'
@@ -407,7 +431,11 @@ class GuiAgent:
     # -- grounding ----------------------------------------------------------
 
     def _ground_click(
-        self, pre_png: bytes, action: AgentAction, width: int, height: int,
+        self,
+        pre_png: bytes,
+        action: AgentAction,
+        width: int,
+        height: int,
     ) -> None:
         """Ground a click's element before it executes (best-effort, never raises).
 
@@ -430,7 +458,9 @@ class GuiAgent:
         try:
             b64 = base64.b64encode(pre_png).decode('ascii')
             det = self.locate_client.best_for(
-                b64, action.describe, near=(float(action.x), float(action.y)),
+                b64,
+                action.describe,
+                near=(float(action.x), float(action.y)),
             )
         # LocateAnythingError is a RuntimeError; also guard malformed responses.
         # Grounding is best-effort — a miss must never abort the agent run.
@@ -438,8 +468,7 @@ class GuiAgent:
             log.warning('LocateAnything grounding failed (%s); using VLM point + fixed crop', exc)
             return
         if det is None:
-            log.info('LocateAnything found no box for %r; using VLM point + fixed crop',
-                     action.describe)
+            log.info('LocateAnything found no box for %r; using VLM point + fixed crop', action.describe)
             return
         action.crop_bbox = self._pad_box(det.box)
         if self.locate_click:
@@ -449,12 +478,16 @@ class GuiAgent:
             action.x = max(0, min(width - 1, round(cx)))
             action.y = max(0, min(height - 1, round(cy)))
             log.info(
-                'LocateAnything grounded click %r to element centre (%d, %d); '
-                'VLM point was (%s, %s); crop %s',
-                action.describe, action.x, action.y, vlm_x, vlm_y, action.crop_bbox)
+                'LocateAnything grounded click %r to element centre (%d, %d); VLM point was (%s, %s); crop %s',
+                action.describe,
+                action.x,
+                action.y,
+                vlm_x,
+                vlm_y,
+                action.crop_bbox,
+            )
         else:
-            log.info('LocateAnything grounded %r to box %s (crop %s)',
-                     action.describe, det.box, action.crop_bbox)
+            log.info('LocateAnything grounded %r to box %s (crop %s)', action.describe, det.box, action.crop_bbox)
 
     def _pad_box(self, box: tuple[float, float, float, float]) -> list[float]:
         """Expand a grounded element box by the context margin + minimum size.
@@ -482,14 +515,18 @@ class GuiAgent:
         if kind in (A.CLICK, A.DOUBLE_CLICK):
             double = kind == A.DOUBLE_CLICK
             button = 'left' if double else action.button
-            res = await self.executor.click(action.x, action.y,
-                                             'double' if double else button)
+            res = await self.executor.click(action.x, action.y, 'double' if double else button)
             if self.recorder:
                 # crop_bbox was grounded in run() before this executed (or is
                 # None -> recorder falls back to the fixed box around the point).
                 self.recorder.record_click(
-                    pre_png, action.x, action.y, action.describe,
-                    button=button, double=double, bbox=action.crop_bbox,
+                    pre_png,
+                    action.x,
+                    action.y,
+                    action.describe,
+                    button=button,
+                    double=double,
+                    bbox=action.crop_bbox,
                 )
             return res.get('status', 'unknown')
         if kind == A.TYPE:
@@ -507,8 +544,7 @@ class GuiAgent:
         if kind == A.SCROLL:
             res = await self.executor.scroll(action.direction or 'down', action.amount or 3)
             if self.recorder:
-                self.recorder.record_scroll(action.direction or 'down',
-                                            action.amount or 3, action.describe)
+                self.recorder.record_scroll(action.direction or 'down', action.amount or 3, action.describe)
             return res.get('status', 'unknown')
         if kind == A.WAIT:
             if self.recorder and action.until_describe:
@@ -570,8 +606,7 @@ class GuiAgent:
             with Image.open(io.BytesIO(png)) as im:
                 img = im.convert('RGB')
             draw = ImageDraw.Draw(img)
-            green, red, orange, black = (
-                (0, 210, 0), (255, 40, 40), (255, 150, 0), (0, 0, 0))
+            green, red, orange, black = ((0, 210, 0), (255, 40, 40), (255, 150, 0), (0, 0, 0))
 
             if action.crop_bbox:
                 x1, y1, x2, y2 = (round(v) for v in action.crop_bbox)
@@ -614,7 +649,7 @@ class GuiAgent:
         if not self.run_dir:
             return None
         lines = [
-            f'# GUI agent install report',
+            '# GUI agent install report',
             '',
             f'**Goal:** {self.goal}',
             f'**Outcome:** {"SUCCESS" if result.success else "FAILED"} — {result.reason}',
@@ -711,8 +746,7 @@ class GuiAgent:
                     if self._maybe_nudge_restart(stall):
                         stall = 0  # give the model room to act on the nudge
                     else:
-                        return self._finish(
-                            False, f'screen unchanged for {stall} steps (stalled)')
+                        return self._finish(False, f'screen unchanged for {stall} steps (stalled)')
 
                 try:
                     action = await self._decide(b64, width, height)
@@ -737,14 +771,19 @@ class GuiAgent:
                     self._emit({'type': 'resume'})
                     if choice == 'skip':
                         note = action.describe or action.summary or action.kind
-                        self._records.append(StepRecord(
-                            index=index, action_kind=action.kind, describe=action.describe,
-                            reasoning=action.reasoning, result_status='skipped',
-                        ))
+                        self._records.append(
+                            StepRecord(
+                                index=index,
+                                action_kind=action.kind,
+                                describe=action.describe,
+                                reasoning=action.reasoning,
+                                result_status='skipped',
+                            )
+                        )
                         self._emit_executed(index, 'skipped')
                         self._history.append(
-                            f'{index}. {action.kind}({action.describe or action.summary}) '
-                            f'-> user skipped: {note}')
+                            f'{index}. {action.kind}({action.describe or action.summary}) -> user skipped: {note}'
+                        )
                         await asyncio.sleep(self.step_settle_seconds)
                         continue
                     if choice == 'quit':
@@ -756,12 +795,17 @@ class GuiAgent:
                 shot_file = self._persist_step(index, png, action, status)
                 self._emit_executed(index, status, screenshot=shot_file)
 
-                self._records.append(StepRecord(
-                    index=index, action_kind=action.kind, describe=action.describe,
-                    reasoning=action.reasoning, result_status=status, screenshot_file=shot_file,
-                ))
-                self._history.append(
-                    f'{index}. {action.kind}({action.describe or action.summary}) -> {status}')
+                self._records.append(
+                    StepRecord(
+                        index=index,
+                        action_kind=action.kind,
+                        describe=action.describe,
+                        reasoning=action.reasoning,
+                        result_status=status,
+                        screenshot_file=shot_file,
+                    )
+                )
+                self._history.append(f'{index}. {action.kind}({action.describe or action.summary}) -> {status}')
 
                 if action.kind == A.DONE:
                     return self._finish(True, 'agent reported done', summary=action.summary)
@@ -776,7 +820,10 @@ class GuiAgent:
 
     def _finish(self, success: bool, reason: str, *, summary: str = '') -> AgentRunResult:
         result = AgentRunResult(
-            success=success, reason=reason, steps=self._records, summary=summary,
+            success=success,
+            reason=reason,
+            steps=self._records,
+            summary=summary,
         )
         if self.recorder and self.recorder.action_count:
             try:
@@ -860,14 +907,19 @@ class GuiAgent:
                     self._emit({'type': 'resume'})
                     if choice == 'skip':
                         note = action.describe or action.summary or action.kind
-                        self._records.append(StepRecord(
-                            index=index, action_kind=action.kind, describe=action.describe,
-                            reasoning=action.reasoning, result_status='skipped',
-                        ))
+                        self._records.append(
+                            StepRecord(
+                                index=index,
+                                action_kind=action.kind,
+                                describe=action.describe,
+                                reasoning=action.reasoning,
+                                result_status='skipped',
+                            )
+                        )
                         self._emit_executed(index, 'skipped')
                         self._history.append(
-                            f'{index}. {action.kind}({action.describe or action.summary}) '
-                            f'-> user skipped: {note}')
+                            f'{index}. {action.kind}({action.describe or action.summary}) -> user skipped: {note}'
+                        )
                         await asyncio.sleep(self.step_settle_seconds)
                         continue
                     if choice == 'quit':
@@ -877,12 +929,17 @@ class GuiAgent:
                 shot_file = self._persist_step(index, png, action, status)
                 self._emit_executed(index, status, screenshot=shot_file)
 
-                self._records.append(StepRecord(
-                    index=index, action_kind=action.kind, describe=action.describe,
-                    reasoning=action.reasoning, result_status=status, screenshot_file=shot_file,
-                ))
-                self._history.append(
-                    f'{index}. {action.kind}({action.describe or action.summary}) -> {status}')
+                self._records.append(
+                    StepRecord(
+                        index=index,
+                        action_kind=action.kind,
+                        describe=action.describe,
+                        reasoning=action.reasoning,
+                        result_status=status,
+                        screenshot_file=shot_file,
+                    )
+                )
+                self._history.append(f'{index}. {action.kind}({action.describe or action.summary}) -> {status}')
 
                 if action.kind in (A.STEP_DONE, A.DONE):
                     return status  # 'step_done' or 'done'
@@ -920,7 +977,15 @@ def _label_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
 
 def _json_step(index: int, action: AgentAction, status: str) -> str:
     import json
-    return json.dumps({
-        'step': index, 'action': action.kind, 'describe': action.describe,
-        'reasoning': action.reasoning, 'status': status, 'raw': action.raw,
-    }, indent=2)
+
+    return json.dumps(
+        {
+            'step': index,
+            'action': action.kind,
+            'describe': action.describe,
+            'reasoning': action.reasoning,
+            'status': status,
+            'raw': action.raw,
+        },
+        indent=2,
+    )

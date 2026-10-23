@@ -4,6 +4,7 @@ Experiment Data Transfer Objects for API layer.
 These DTOs provide type-safe request/response objects for experiment operations,
 enabling consistent interfaces across CLI, REST API, and Web UI.
 """
+
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -12,9 +13,11 @@ from pathlib import Path
 # Experiment Request DTOs
 # =============================================================================
 
+
 @dataclass
 class ExperimentCreateRequest:
     """Request to create a new experiment."""
+
     project_path: Path
     name: str
 
@@ -22,6 +25,7 @@ class ExperimentCreateRequest:
 @dataclass
 class ExperimentLoadRequest:
     """Request to load an experiment."""
+
     project_path: Path
     name: str
     force: bool = False
@@ -31,6 +35,7 @@ class ExperimentLoadRequest:
 @dataclass
 class ExperimentRunRequest:
     """Request to run an experiment."""
+
     project_path: Path
     experiment_name: str
     environment_name: str
@@ -45,6 +50,7 @@ class ExperimentRunRequest:
 @dataclass
 class ExperimentCloneRequest:
     """Request to clone an experiment."""
+
     project_path: Path
     source_experiment: str
     target_experiment: str
@@ -54,6 +60,7 @@ class ExperimentCloneRequest:
 @dataclass
 class ExperimentRemoveRequest:
     """Request to remove an experiment."""
+
     project_path: Path
     name: str
     force: bool = False
@@ -63,6 +70,7 @@ class ExperimentRemoveRequest:
 @dataclass
 class ExperimentEnvModifyRequest:
     """Request to add or remove environments from experiments."""
+
     project_path: Path
     experiment_pattern: str
     environments: list[str]
@@ -72,6 +80,7 @@ class ExperimentEnvModifyRequest:
 @dataclass
 class ExperimentValidateRequest:
     """Request to validate an experiment configuration and integrity."""
+
     project_path: Path
     name: str
     environment: str | None = None
@@ -81,9 +90,11 @@ class ExperimentValidateRequest:
 # Experiment Response DTOs
 # =============================================================================
 
+
 @dataclass
 class ExperimentInfo:
     """Detailed experiment information."""
+
     id: str
     name: str
     description: str
@@ -100,6 +111,7 @@ class ExperimentInfo:
 @dataclass
 class ExperimentListItem:
     """Experiment item for listing (lighter than ExperimentInfo)."""
+
     id: str
     name: str
     description: str
@@ -110,6 +122,7 @@ class ExperimentListItem:
 @dataclass
 class ExperimentRunInfo:
     """Information about an experiment run."""
+
     id: str
     experiment_id: str
     experiment_name: str
@@ -125,6 +138,7 @@ class ExperimentRunInfo:
 @dataclass
 class ExperimentRunResult:
     """Result of an experiment run."""
+
     was_interrupted: bool
     was_successful: bool
     run_info: ExperimentRunInfo | None = None
@@ -134,6 +148,7 @@ class ExperimentRunResult:
 @dataclass
 class ExperimentCleanResult:
     """Result of cleaning experiment runs."""
+
     deleted_count: int
     experiment_name: str
 
@@ -141,6 +156,7 @@ class ExperimentCleanResult:
 @dataclass
 class ExperimentRemoveResult:
     """Result of removing an experiment."""
+
     removed_from_db: bool
     files_deleted: bool
     experiment_name: str
@@ -149,6 +165,7 @@ class ExperimentRemoveResult:
 @dataclass
 class ExperimentEnvModifyResult:
     """Result of adding/removing environments from experiments."""
+
     affected_experiments: list[str]
     environments_changed: list[str]
     operation: str  # 'add' or 'remove'
@@ -158,9 +175,11 @@ class ExperimentEnvModifyResult:
 # Batch Run DTOs
 # =============================================================================
 
+
 @dataclass
 class BatchRunRequest:
     """Request to run experiments in batch."""
+
     project_path: Path
     experiment_pattern: str
     environment_pattern: str
@@ -175,6 +194,7 @@ class BatchRunRequest:
 @dataclass
 class BatchRunResultItem:
     """Result of a single run in a batch."""
+
     environment_name: str
     experiment_name: str
     status: str  # SUCCESS, FAILED, INTERRUPTED, SKIPPED
@@ -186,6 +206,7 @@ class BatchRunResultItem:
 @dataclass
 class ValidationCheckResult:
     """Result of a single validation check."""
+
     name: str
     passed: bool
     message: str
@@ -195,6 +216,7 @@ class ValidationCheckResult:
 @dataclass
 class ExperimentValidateResult:
     """Result of validating an experiment."""
+
     name: str
     checks: list[ValidationCheckResult] = field(default_factory=list)
 
@@ -218,6 +240,7 @@ class ExperimentValidateResult:
 @dataclass
 class BatchRunSummary:
     """Summary of a batch run."""
+
     results: list[BatchRunResultItem]
     total_combinations: int
     successful_runs: int

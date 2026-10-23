@@ -28,10 +28,7 @@ class ProjectDbApi(GlobalDatabaseApi):
         """
         project = self._session.query(Project).filter(Project.name == name).first()
         if project:
-            raise DatabaseProjectCreationError(
-                log,
-                f"Project [i]{name}[/i] already exists in database"
-            )
+            raise DatabaseProjectCreationError(log, f"Project [i]{name}[/i] already exists in database")
         project = Project(name=name, path=path.as_posix(), description=description)
         self._session.add(project)
         return project
@@ -42,11 +39,7 @@ class ProjectDbApi(GlobalDatabaseApi):
         Raises:
             NoResultFound: If no project exists at the given path.
         """
-        if (
-            project := self._session.query(Project)
-            .filter(Project.path == path.as_posix())
-            .first()
-        ):
+        if project := self._session.query(Project).filter(Project.path == path.as_posix()).first():
             self._session.delete(project)
         else:
             raise sqlalchemy.orm.exc.NoResultFound(f"Project '{path.as_posix()}' not found in database")
@@ -90,15 +83,17 @@ class ProjectDbApi(GlobalDatabaseApi):
         project = self._session.query(Project).filter(Project.name == project_name).first()
         if not project:
             raise sqlalchemy.orm.exc.NoResultFound(f"Project '{project_name}' not found in database")
-        environment = self._session.query(Environment).filter(Environment.name == name,
-                                                              Environment.project == project).first()
+        environment = (
+            self._session.query(Environment).filter(Environment.name == name, Environment.project == project).first()
+        )
         if not environment:
             log.error(f"Environment '{name}' not found in database")
             return None
         return environment
 
-    def add_environment(self, name: str, path: Path, project_name: str, os_info: dict, vagrant_box: str,
-                        description: str = None) -> Environment:
+    def add_environment(
+        self, name: str, path: Path, project_name: str, os_info: dict, vagrant_box: str, description: str = None
+    ) -> Environment:
         """Add a new environment to a project.
 
         Creates the associated OsInfo record if it does not already exist.
@@ -133,7 +128,7 @@ class ProjectDbApi(GlobalDatabaseApi):
             description=description,
             project=project,
             vagrant_box=vagrant_box,
-            osinfo=os_info_obj
+            osinfo=os_info_obj,
         )
         self._session.add(environment)
         return environment
@@ -164,10 +159,6 @@ class ProjectDbApi(GlobalDatabaseApi):
         """
         if not project_name:
             return self._session.query(Environment).all()
-        if (
-            project := self._session.query(Project)
-            .filter(Project.name == project_name)
-            .first()
-        ):
+        if project := self._session.query(Project).filter(Project.name == project_name).first():
             return self._session.query(Environment).filter(Environment.project == project).all()
         raise sqlalchemy.orm.exc.NoResultFound(f"Project '{project_name}' not found in database")

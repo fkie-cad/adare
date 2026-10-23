@@ -63,7 +63,7 @@ class ExperimentApi(ProjectDatabaseApi):
 
     def delete_experiment_run(self, experiment_run: ExperimentRun):
         """
-            Deletes the experiment run from the database.
+        Deletes the experiment run from the database.
         """
         self._session.delete(experiment_run)
 
@@ -79,7 +79,7 @@ class ExperimentApi(ProjectDatabaseApi):
 
     def get_or_create_tags(self, tags: list[str]) -> list:
         """
-            Returns the tag objects for the given tag names.
+        Returns the tag objects for the given tag names.
         """
         tag_objects = []
         for tag in tags:
@@ -102,9 +102,11 @@ class ExperimentApi(ProjectDatabaseApi):
         try:
             with GlobalDatabaseApi() as global_api:
                 # Fix N+1 query: Use single query with IN clause
-                environments = global_api._session.query(Environment).filter(
-                    Environment.name.in_(names)
-                ).all()
+                environments = (
+                    global_api._session.query(Environment)
+                    .filter(Environment.name.in_(names), Environment.is_current)
+                    .all()
+                )
 
                 # Preserve order from input names
                 env_map = {env.name: env.id for env in environments}
@@ -124,19 +126,27 @@ class ExperimentApi(ProjectDatabaseApi):
 
         try:
             with GlobalDatabaseApi() as global_api:
-                return global_api._session.query(Environment).filter_by(name=environment_name).first()
+                return (
+                    global_api._session.query(Environment)
+                    .filter(Environment.name == environment_name, Environment.is_current)
+                    .first()
+                )
         except SQLAlchemyError as e:
             log.error(f"Database error querying global environment '{environment_name}': {e}")
             return None
 
-    def create_experiment(self, name: str, experiment_directory: ExperimentDirectory, auto_commit: bool = True) -> Experiment:
+    def create_experiment(
+        self, name: str, experiment_directory: ExperimentDirectory, auto_commit: bool = True
+    ) -> Experiment:
         testset = experiment_directory.load_testset()
         metadata = experiment_directory.load_metadata()
 
         abstract_test_objects: list = self.__get_abstracttests_from_testsetfile(testset)
         environment_ids = self.get_environments_by_name(metadata.environments)
         if not environment_ids:
-            log.info('no environments found for experiment - environments can be added later with: adare experiment add-env')
+            log.info(
+                'no environments found for experiment - environments can be added later with: adare experiment add-env'
+            )
 
         experiment = Experiment(
             name=name,
@@ -144,7 +154,7 @@ class ExperimentApi(ProjectDatabaseApi):
             sha256=experiment_directory.sha256,
             sha256_playbook=experiment_directory.sha256_playbook,
             sha256_metadata=experiment_directory.sha256_metadata,
-            environment_ids=environment_ids
+            environment_ids=environment_ids,
         )
         for obj in abstract_test_objects:
             if obj:
@@ -175,10 +185,12 @@ class ExperimentApi(ProjectDatabaseApi):
             # Create a PlaybookApi that reuses our existing session
             playbook_api = PlaybookApi(self.project_path)
             playbook_api._session = self._session  # Reuse the current session
-            playbook_api._engine = self._engine    # Reuse the current engine
+            playbook_api._engine = self._engine  # Reuse the current engine
 
             try:
-                playbook_api.populate_playbook_from_file(experiment, experiment_directory.playbookfile, parsed_playbook=experiment_directory._cached_playbook)
+                playbook_api.populate_playbook_from_file(
+                    experiment, experiment_directory.playbookfile, parsed_playbook=experiment_directory._cached_playbook
+                )
                 log.debug(f'populated playbook models for experiment {experiment.id}')
             except (SQLAlchemyError, OSError) as e:
                 log.error(f'failed to populate playbook models for experiment {experiment.id}: {e}')
@@ -213,9 +225,9 @@ class ExperimentApi(ProjectDatabaseApi):
         try:
             with GlobalDatabaseApi() as global_api:
                 # Fix N+1 query: Use single query with IN clause instead of loop
-                environments = global_api._session.query(Environment).filter(
-                    Environment.id.in_(experiment.environment_ids)
-                ).all()
+                environments = (
+                    global_api._session.query(Environment).filter(Environment.id.in_(experiment.environment_ids)).all()
+                )
 
                 # Preserve original order from environment_ids
                 env_map = {env.id: env.name for env in environments}
@@ -224,6 +236,20 @@ class ExperimentApi(ProjectDatabaseApi):
             log.error(f"Database error querying environment names for experiment {experiment_ulid}: {e}")
 
         return environment_names
+
+    @staticmethod
+    def _environment_names_by_id(environment_ids: list[str]) -> dict[str, str]:
+        """Map environment ids (any version) to their names; unknown ids are left out."""
+        from adare.database.api.base import GlobalDatabaseApi
+        from adare.database.models.global_models import Environment
+
+        with GlobalDatabaseApi() as global_api:
+            rows = (
+                global_api._session.query(Environment.id, Environment.name)
+                .filter(Environment.id.in_(environment_ids))
+                .all()
+            )
+        return {env_id: name for env_id, name in rows}
 
     def update_experiment_environments(self, experiment_ulid: str, new_env_names: list[str], auto_commit: bool = True):
         """Update experiment's environment_ids based on new environment names."""
@@ -239,8 +265,8 @@ class ExperimentApi(ProjectDatabaseApi):
                 message=f'Environments not found: {new_env_names}',
                 possible_solutions=[
                     'Load the environment with [i]adare environment load[/i]',
-                    'Create a new environment with [i]adare environment create[/i]'
-                ]
+                    'Create a new environment with [i]adare environment create[/i]',
+                ],
             )
 
         # Update environment_ids
@@ -255,20 +281,35 @@ class ExperimentApi(ProjectDatabaseApi):
         """Register an environment id into the experiment's indicator list.
 
         ``environment_ids`` is a *discovery indicator* of where an experiment can
-        run, not a hard gate. Appends ``environment_id`` if not already present and
-        returns ``True`` when a change was made, ``False`` otherwise.
+        run, not a hard gate. It holds one id per environment *name*: versions of
+        the same name (``env load --force``) replace each other, keeping the newest,
+        so a reload never turns one environment into "multiple environments".
+        Returns ``True`` when a change was made, ``False`` otherwise.
         """
         experiment = self.get_experiment_by_ulid(experiment_ulid)
         if not experiment:
             raise ValueError(f"Experiment {experiment_ulid} not found")
 
         current_ids = list(experiment.environment_ids or [])
-        if environment_id in current_ids:
+        names = self._environment_names_by_id([*current_ids, environment_id])
+        name = names.get(environment_id)
+        same_name = [env_id for env_id in current_ids if name is not None and names.get(env_id) == name]
+        # ULIDs sort by creation time: the newest version wins.
+        keep = max([*same_name, environment_id])
+        new_ids: list[str] = []
+        for env_id in current_ids:
+            if env_id in same_name:
+                if keep not in new_ids:
+                    new_ids.append(keep)
+            elif env_id not in new_ids:
+                new_ids.append(env_id)
+        if keep not in new_ids:
+            new_ids.append(keep)
+        if new_ids == current_ids:
             return False
 
-        current_ids.append(environment_id)
         # Reassign a new list so SQLAlchemy detects the change on the JSON column
-        experiment.environment_ids = current_ids
+        experiment.environment_ids = new_ids
 
         if auto_commit:
             self._session.commit()
@@ -276,7 +317,9 @@ class ExperimentApi(ProjectDatabaseApi):
         log.debug(f"Registered environment {environment_id} into experiment {experiment_ulid}")
         return True
 
-    def update_experiment_metadata_hash(self, experiment_ulid: str, sha256_metadata: str, auto_commit: bool = True) -> None:
+    def update_experiment_metadata_hash(
+        self, experiment_ulid: str, sha256_metadata: str, auto_commit: bool = True
+    ) -> None:
         """Refresh the stored metadata hash after metadata.yml was rewritten (bookkeeping)."""
         experiment = self.get_experiment_by_ulid(experiment_ulid)
         if experiment:
@@ -297,16 +340,12 @@ class ExperimentApi(ProjectDatabaseApi):
                 self._session.commit()
 
     def __create_logfile(self, path: Path) -> LogFile:
-        logfile = LogFile(
-            name=path.name,
-            path=path.as_posix()
-        )
+        logfile = LogFile(name=path.name, path=path.as_posix())
         self._session.add(logfile)
         return logfile
 
     def update_experiment_run(
-            self, run_ulid: str, path: Path,
-            logfile_adare: Path, logfile_adarevm: Path, status: int
+        self, run_ulid: str, path: Path, logfile_adare: Path, logfile_adarevm: Path, status: int
     ) -> ExperimentRun:
         """
         Update experiment run with VM-specific data (path, logfiles, status).
@@ -343,8 +382,12 @@ class ExperimentApi(ProjectDatabaseApi):
         return experiment_run
 
     def add_run_artifact(
-            self, run_ulid: str, kind: str, path: str,
-            machine_name: str | None = None, format: str | None = None,  # noqa: A002
+        self,
+        run_ulid: str,
+        kind: str,
+        path: str,
+        machine_name: str | None = None,
+        format: str | None = None,  # noqa: A002
     ) -> RunArtifact | None:
         """Record a per-machine artifact (disk image, pcap, ...) produced by a run.
 
@@ -380,11 +423,7 @@ class ExperimentApi(ProjectDatabaseApi):
             self._session.commit()
 
     def remove_experiment_by_ulid(self, experiment_ulid: str):
-        if (
-                experiment := self._session.query(Experiment)
-                        .filter(Experiment.id == experiment_ulid)
-                        .first()
-        ):
+        if experiment := self._session.query(Experiment).filter(Experiment.id == experiment_ulid).first():
             self.remove_experiment(experiment)
         else:
             raise ValueError(f'experiment with ulid {experiment_ulid} not found')
@@ -396,7 +435,11 @@ class ExperimentApi(ProjectDatabaseApi):
         self._session.delete(experiment)
 
     def remove_fake_experiment_run(self, experiment_run_ulid: str):
-        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_ulid, ExperimentRun.fake).first()
+        experiment_run = (
+            self._session.query(ExperimentRun)
+            .filter(ExperimentRun.id == experiment_run_ulid, ExperimentRun.fake)
+            .first()
+        )
         if experiment_run:
             # Query already filtered for fake == True, so if it exists, it's guaranteed to be fake
             self._session.delete(experiment_run)
@@ -430,11 +473,15 @@ class ExperimentApi(ProjectDatabaseApi):
         with GlobalDatabaseApi() as global_api:
             testfunction_file = global_api._session.query(TestFunctionFile).filter_by(name=testfunction_set).first()
             if testfunction_file:
-                testfunction = global_api._session.query(TestFunction).filter_by(
-                    name=testfunction_type,
-                    file_id=testfunction_file.id,
-                    is_current=True,
-                ).first()
+                testfunction = (
+                    global_api._session.query(TestFunction)
+                    .filter_by(
+                        name=testfunction_type,
+                        file_id=testfunction_file.id,
+                        is_current=True,
+                    )
+                    .first()
+                )
                 if testfunction:
                     testfunction_id = testfunction.id
                     pin = {
@@ -450,8 +497,9 @@ class ExperimentApi(ProjectDatabaseApi):
                 log,
                 message=f'testfunction [b]{test.function}[/b] mentioned in test [b]{test.name}[/b] does not exist in the database.',
                 possible_solutions=[
-                    'ensure spelling and check if the testfunction is loaded by running: [i]adare testfunction list --filter type={test.function}[/i]',
-                ]
+                    f'check the name with: [i]adare test info {test.function}[/i] (a bare name means standard.<name>)',
+                    'install the bundled testfunctions with: [i]adare test sync[/i]',
+                ],
             )
 
         # Create parameter entries for this test (project-specific)
@@ -463,9 +511,9 @@ class ExperimentApi(ProjectDatabaseApi):
             from adare.database.models.global_models import TestParameter
 
             # Single query for all parameters
-            global_parameters = global_api._session.query(TestParameter).filter(
-                TestParameter.name.in_(parameter_names)
-            ).all()
+            global_parameters = (
+                global_api._session.query(TestParameter).filter(TestParameter.name.in_(parameter_names)).all()
+            )
 
             # Create lookup map
             param_map = {p.name: p.id for p in global_parameters}
@@ -479,31 +527,23 @@ class ExperimentApi(ProjectDatabaseApi):
                     possible_solutions=[
                         'Ensure parameter names are correct',
                         f'Check available parameters with: adare testfunction info {test.function}',
-                    ]
+                    ],
                 )
 
             # Create parameter entries using batched lookup
             for p_key, p_val in test.parameter.items():
-                test_parameter_entry_obj = TestParameterEntry(
-                    parameter_id=param_map[p_key],
-                    value=str(p_val)
-                )
+                test_parameter_entry_obj = TestParameterEntry(parameter_id=param_map[p_key], value=str(p_val))
                 self._session.add(test_parameter_entry_obj)
                 parameter_entries.append(test_parameter_entry_obj)
 
         # Check if abstract test already exists
-        abstract_test_obj = self._session.query(AbstractTest).filter_by(
-            name=test.name,
-            testfunction_id=testfunction_id
-        ).first()
+        abstract_test_obj = (
+            self._session.query(AbstractTest).filter_by(name=test.name, testfunction_id=testfunction_id).first()
+        )
 
         # If abstract test doesn't exist, create it
         if not abstract_test_obj:
-            abstract_test_obj = AbstractTest(
-                name=test.name,
-                testfunction_id=testfunction_id,
-                **pin
-            )
+            abstract_test_obj = AbstractTest(name=test.name, testfunction_id=testfunction_id, **pin)
             self._session.add(abstract_test_obj)
         else:
             # Backfill pins on pre-versioning rows without overwriting an existing pin
@@ -521,7 +561,7 @@ class ExperimentApi(ProjectDatabaseApi):
 
     def __get_abstracttests_from_testsetfile(self, testset: FTestsetFile) -> list[AbstractTest]:
         """
-            Get/Creates the tests from the testset file.
+        Get/Creates the tests from the testset file.
         """
         return [self.__get_abstract_test(test) for test in testset.tests]
 
@@ -539,7 +579,9 @@ class ExperimentApi(ProjectDatabaseApi):
             experiment_run.vm_instance_id = vm_instance_id
             self._session.commit()
 
-    def sync_experiment(self, ulid: str, remote_ulid: str, abstract_tests_ulids: dict, remote_url: str, is_published: bool):
+    def sync_experiment(
+        self, ulid: str, remote_ulid: str, abstract_tests_ulids: dict, remote_url: str, is_published: bool
+    ):
         """Record where this experiment and its tests live on the server.
 
         The experiment's remote identity goes into its SyncMetadata row (read back
@@ -551,17 +593,23 @@ class ExperimentApi(ProjectDatabaseApi):
         experiment = self.get_experiment_by_ulid(ulid)
 
         apply_remote_identity(
-            self._session, experiment, SyncMetadata,
-            remote_ulid=remote_ulid, remote_url=remote_url, is_published=is_published,
+            self._session,
+            experiment,
+            SyncMetadata,
+            remote_ulid=remote_ulid,
+            remote_url=remote_url,
+            is_published=is_published,
         )
 
         # Iterate through the abstract tests ULIDs and update each corresponding AbstractTest object
         for test_name, test_ulid in abstract_tests_ulids.items():
-            abstract_test = (self._session.query(AbstractTest)
-                             .select_from(Experiment)
-                             .join(Experiment.abstract_tests)
-                             .filter(AbstractTest.name == test_name, Experiment.id == experiment.id)
-                             .first())
+            abstract_test = (
+                self._session.query(AbstractTest)
+                .select_from(Experiment)
+                .join(Experiment.abstract_tests)
+                .filter(AbstractTest.name == test_name, Experiment.id == experiment.id)
+                .first()
+            )
             if abstract_test:
                 abstract_test.remote_ulid = test_ulid
 
@@ -592,10 +640,11 @@ class ExperimentApi(ProjectDatabaseApi):
             raise ValueError(f'experiment "{experiment_name}" not found in project {project_path}')
 
         # Find all fake runs for this experiment
-        fake_runs = self._session.query(ExperimentRun).filter(
-            ExperimentRun.experiment_id == experiment.id,
-            ExperimentRun.fake
-        ).all()
+        fake_runs = (
+            self._session.query(ExperimentRun)
+            .filter(ExperimentRun.experiment_id == experiment.id, ExperimentRun.fake)
+            .all()
+        )
 
         # Count and delete them
         count = len(fake_runs)
@@ -618,10 +667,9 @@ class ExperimentApi(ProjectDatabaseApi):
         run = self._session.query(ExperimentRun).filter(ExperimentRun.id == run_ulid).first()
         if not run:
             from adare.exceptions import ExperimentRunNotFoundError
+
             raise ExperimentRunNotFoundError(
-                log,
-                f'Experiment run {run_ulid} not found',
-                possible_solutions=['Check the run ULID']
+                log, f'Experiment run {run_ulid} not found', possible_solutions=['Check the run ULID']
             )
 
         run.published = True

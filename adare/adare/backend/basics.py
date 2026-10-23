@@ -32,6 +32,7 @@ def determine_projectdirectory(project: str, silent: bool = False) -> Path | Non
     "does not exist in database".
     """
     from adare.database.api.project import ProjectDbApi
+
     if project:
         with ProjectDbApi() as db:
             # Quiet on the name miss when a path attempt still follows, so a
@@ -74,6 +75,7 @@ def determine_projectdirectory_for_removal(project_name: str) -> Path | None:
     :return: project directory path or None if not found in database
     """
     from adare.database.api.project import ProjectDbApi
+
     if project_name:
         with ProjectDbApi() as db:
             if project := db.get_project(project_name):

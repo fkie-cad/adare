@@ -54,16 +54,10 @@ class TwoTitleRule(Rule):
         self.title_right = title_right
         self.align = align
 
-    def __rich_console__(
-            self, console: Console, options: ConsoleOptions
-    ) -> RenderResult:
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         width = options.max_width
 
-        characters = (
-            "-"
-            if (options.ascii_only and not self.characters.isascii())
-            else self.characters
-        )
+        characters = "-" if (options.ascii_only and not self.characters.isascii()) else self.characters
 
         chars_len = cell_len(characters)
         if not self.title:
@@ -130,10 +124,9 @@ class TwoTitleRule(Rule):
         rule_text.plain = set_cell_size(rule_text.plain, width)
         return rule_text
 
-    def __rich_measure__(
-            self, console: Console, options: ConsoleOptions
-    ) -> Measurement:
+    def __rich_measure__(self, console: Console, options: ConsoleOptions) -> Measurement:
         return Measurement(1, 1)
+
 
 class TagsText:
     def __init__(self, tags: str):

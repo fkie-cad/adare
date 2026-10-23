@@ -28,8 +28,21 @@ class ExperimentRunHeader:
     published: bool
     fake: bool
 
-    def __init__(self, experiment_name: str, experiment_ulid: str, environment_ulid: str, environment_name: str,
-                 project_name: str, duration: pd.Timedelta, start_time: str, end_time: str, vm: str, osinfo: str, published: bool, fake: bool = False):
+    def __init__(
+        self,
+        experiment_name: str,
+        experiment_ulid: str,
+        environment_ulid: str,
+        environment_name: str,
+        project_name: str,
+        duration: pd.Timedelta,
+        start_time: str,
+        end_time: str,
+        vm: str,
+        osinfo: str,
+        published: bool,
+        fake: bool = False,
+    ):
         self.experiment_name = experiment_name
         self.experiment_ulid = experiment_ulid
         self.environment_ulid = environment_ulid
@@ -104,9 +117,7 @@ class ExperimentRunTestsPanel:
             # Add parameters section
             grid.add_row(':gear: [b]parameters[/b]:')
             for parameter in test_data['parameters']:
-                grid.add_row(
-                    f'  {parameter["name"]} ([i]{parameter["dtype"]}[/i]): [b]{parameter["value"]}[/b]'
-                )
+                grid.add_row(f'  {parameter["name"]} ([i]{parameter["dtype"]}[/i]): [b]{parameter["value"]}[/b]')
 
             # Add details section with better separation if details exist
             if test_data['result_details']:
@@ -119,8 +130,7 @@ class ExperimentRunTestsPanel:
 
         title = '[b light_steel_blue]tests[/b light_steel_blue]'
         title = f'{title} {StatusEnum.get_icon(self.test_overall_result, color=True)}'
-        return Panel(grid, title=title, border_style="blue",
-                     title_align='left', style='')
+        return Panel(grid, title=title, border_style="blue", title_align='left', style='')
 
 
 class ExperimentRunFlowPanel:
@@ -169,9 +179,7 @@ class ExperimentRunFlowPanel:
         grid.add_column(justify="left", ratio=1)
         # iterate over the rows of the stages dataframe
         for _index, row in self.stages.iterrows():
-            grid.add_row(
-                self.__generate_line(row)
-            )
+            grid.add_row(self.__generate_line(row))
         grid.add_row('')
         title = '[b honeydew2]flow[/b honeydew2]'
         title = f'{title} {StatusEnum.get_icon(self.status, color=True)}'
@@ -281,10 +289,10 @@ class ExperimentRunActionsPanel:
                 existing_event_type = grouped[event_group_id].get('event_type_specific', '') or ''
 
                 # Prefer complete events over start events for final display
-                is_complete_event = ('complete' in action_event_type.lower() or
-                                   row.get('status', 0) != 0)
-                is_existing_complete = ('complete' in existing_event_type.lower() or
-                                      grouped[event_group_id].get('status', 0) != 0)
+                is_complete_event = 'complete' in action_event_type.lower() or row.get('status', 0) != 0
+                is_existing_complete = (
+                    'complete' in existing_event_type.lower() or grouped[event_group_id].get('status', 0) != 0
+                )
 
                 # Only replace if current event is complete and existing is not, or if both are complete but this is newer
                 if is_complete_event and not is_existing_complete:
@@ -312,16 +320,18 @@ class ExperimentRunActionsPanel:
                 # Find the parent action by searching for action with matching event_group_id, action_id or id
                 parent_action = None
                 for _, paction in actions_by_id.items():
-                    if (paction.get('event_group_id') == parent_event_id or
-                        paction.get('action_id') == parent_event_id or
-                        paction.get('id') == parent_event_id):
+                    if (
+                        paction.get('event_group_id') == parent_event_id
+                        or paction.get('action_id') == parent_event_id
+                        or paction.get('id') == parent_event_id
+                    ):
                         parent_action = paction
                         break
 
                 if parent_action is not None:
-                    parent_key = (parent_action.get('event_group_id') or
-                                  parent_action.get('action_id') or
-                                  parent_action.get('id'))
+                    parent_key = (
+                        parent_action.get('event_group_id') or parent_action.get('action_id') or parent_action.get('id')
+                    )
                     if parent_key not in parent_to_children:
                         parent_to_children[parent_key] = []
                     parent_to_children[parent_key].append(action)
@@ -338,9 +348,7 @@ class ExperimentRunActionsPanel:
             result.append(action)
 
             # Add its children, sorted by timestamp
-            action_key = (action.get('event_group_id') or
-                         action.get('action_id') or
-                         action.get('id'))
+            action_key = action.get('event_group_id') or action.get('action_id') or action.get('id')
             if action_key in parent_to_children:
                 children = parent_to_children[action_key]
                 children.sort(key=lambda x: x.get('timestamp', 0))
@@ -380,6 +388,7 @@ def print_run(run_ulid: str, formatter=None, output_file=None, dual_output=False
     # Get formatter if not provided
     if formatter is None:
         from adare.run import get_formatter_from_context
+
         formatter, output_file, dual_output = get_formatter_from_context()
 
     console = DefaultConsole()
@@ -414,7 +423,7 @@ def print_run(run_ulid: str, formatter=None, output_file=None, dual_output=False
                 'result_status': int(data['result_status'].values[0]),
                 'stages': stages.to_dict('records') if not stages.empty else [],
                 'actions': actions_data.to_dict('records') if not actions_data.empty else [],
-                'tests': tests_data
+                'tests': tests_data,
             }
             formatter.print_or_save(structured_data, output_file, dual_output)
 
@@ -448,7 +457,6 @@ def print_run(run_ulid: str, formatter=None, output_file=None, dual_output=False
             tests,
         )
 
-
         left_side.split_column(
             Layout(flow, size=height_stages),
             Layout(actions, size=height_actions),
@@ -458,20 +466,22 @@ def print_run(run_ulid: str, formatter=None, output_file=None, dual_output=False
         environment_name = data['environment_name'].values[0]
         experiment_name = data['experiment_name'].values[0]
         experiment_ulid = run_ulid
-        header.update(ExperimentRunHeader(
-            experiment_name=experiment_name,
-            experiment_ulid=run_ulid,
-            environment_name=environment_name,
-            environment_ulid=data['environment_id'].values[0],
-            project_name=project_name,
-            duration=data['duration'][0],
-            start_time=data['timestamp_start'].values[0],
-            end_time=data['timestamp_end'].values[0],
-            vm=data['vm'].values[0].name,
-            osinfo=data['osinfo'].values[0],
-            published=data['published'].values[0],
-            fake=bool(data['fake'].values[0]) if 'fake' in data.columns else False,
-        ))
+        header.update(
+            ExperimentRunHeader(
+                experiment_name=experiment_name,
+                experiment_ulid=run_ulid,
+                environment_name=environment_name,
+                environment_ulid=data['environment_id'].values[0],
+                project_name=project_name,
+                duration=data['duration'][0],
+                start_time=data['timestamp_start'].values[0],
+                end_time=data['timestamp_end'].values[0],
+                vm=data['vm'].values[0].name,
+                osinfo=data['osinfo'].values[0],
+                published=data['published'].values[0],
+                fake=bool(data['fake'].values[0]) if 'fake' in data.columns else False,
+            )
+        )
 
         title = f'[b gold3]{project_name}.{environment_name}.{experiment_name} - [i]{experiment_ulid}[/i][/b gold3]'
         panel = Panel(layout, title=title, border_style='blue', title_align='left', height=height_total)
@@ -482,4 +492,3 @@ def print_run(run_ulid: str, formatter=None, output_file=None, dual_output=False
         actions.update(ExperimentRunActionsPanel(data['status'].values[0], actions_data))
 
         console.print(panel)
-

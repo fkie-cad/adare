@@ -77,7 +77,7 @@ class VMService:
                 os_version=request.os_version,
                 os_language=request.os_language,
                 os_architecture=request.os_architecture,
-                force=request.force
+                force=request.force,
             )
 
             # Get the loaded VM info
@@ -121,15 +121,17 @@ class VMService:
                     # Count instances for this VM
                     instance_count = len(api.get_vm_instances_for_vm(vm.id))
 
-                    items.append(VmListItem(
-                        id=vm.id,
-                        name=vm.name,
-                        description=vm.description or "",
-                        file_hash=vm.hash[:16] + "..." if vm.hash else "",
-                        hypervisor=vm.hypervisor or "virtualbox",
-                        os_platform=os_platform,
-                        instance_count=instance_count,
-                    ))
+                    items.append(
+                        VmListItem(
+                            id=vm.id,
+                            name=vm.name,
+                            description=vm.description or "",
+                            file_hash=vm.hash[:16] + "..." if vm.hash else "",
+                            hypervisor=vm.hypervisor or "virtualbox",
+                            os_platform=os_platform,
+                            instance_count=instance_count,
+                        )
+                    )
 
                 return Result.ok(items)
 
@@ -157,7 +159,7 @@ class VMService:
                         solutions=[
                             'Use `adare vm list` to see available VMs',
                             'Check if the VM ID is correct',
-                        ]
+                        ],
                     )
 
                 # Extract OS info
@@ -182,23 +184,25 @@ class VMService:
                 # Check if external
                 is_external = api.is_vm_external(vm.id)
 
-                return Result.ok(VmInfo(
-                    id=vm.id,
-                    name=vm.name,
-                    file_path=vm.file,
-                    file_hash=vm.hash,
-                    description=vm.description or "",
-                    hypervisor=vm.hypervisor or "virtualbox",
-                    use_snapshots=getattr(vm, 'use_snapshots', True),
-                    os_platform=os_platform,
-                    os_type=os_type,
-                    os_distribution=os_distribution,
-                    os_version=os_version,
-                    os_language=os_language,
-                    os_architecture=os_architecture,
-                    instance_count=instance_count,
-                    is_external=is_external,
-                ))
+                return Result.ok(
+                    VmInfo(
+                        id=vm.id,
+                        name=vm.name,
+                        file_path=vm.file,
+                        file_hash=vm.hash,
+                        description=vm.description or "",
+                        hypervisor=vm.hypervisor or "virtualbox",
+                        use_snapshots=getattr(vm, 'use_snapshots', True),
+                        os_platform=os_platform,
+                        os_type=os_type,
+                        os_distribution=os_distribution,
+                        os_version=os_version,
+                        os_language=os_language,
+                        os_architecture=os_architecture,
+                        instance_count=instance_count,
+                        is_external=is_external,
+                    )
+                )
 
         except VMNotFoundError as e:
             return Result.from_exception(e)
@@ -224,7 +228,7 @@ class VMService:
                         solutions=[
                             'Use `adare vm list` to see available VMs',
                             'Check if the VM name is spelled correctly',
-                        ]
+                        ],
                     )
 
                 return self.get_by_id(vm.id)
@@ -234,45 +238,24 @@ class VMService:
 
     def delete(self, vm_id: str, force: bool = False) -> Result[None]:
         """
-        Delete a VM from the system.
+        Delete a registered VM no environment uses: instances, hypervisor state, row and managed disk.
+
+        A VM environments run on is refused (``VMInUseByEnvironmentError``): removing
+        it removes those environments, which is `adare vm remove` / environment delete.
 
         Args:
             vm_id: VM database ID
-            force: Force deletion even if VM has instances
+            force: Keep going when an instance's cleanup fails
 
         Returns:
             Result[None] on success, or error information on failure.
         """
+        from adare.backend.vm.removal import remove_vm
+
         try:
-            with VmApi() as api:
-                vm = api.get_vm_by_id(vm_id)
-                if not vm:
-                    return Result.fail(
-                        code="VMNotFoundError",
-                        message=f'VM with ID {vm_id} not found',
-                        solutions=[
-                            'Use `adare vm list` to see available VMs',
-                        ]
-                    )
-
-                # Check for instances
-                instances = api.get_vm_instances_for_vm(vm_id)
-                if instances and not force:
-                    return Result.fail(
-                        code="VMHasInstancesError",
-                        message=f'VM "{vm.name}" has {len(instances)} active instances',
-                        solutions=[
-                            'Use --force to delete VM and all its instances',
-                            'Remove instances first with `adare vm instance remove`',
-                        ]
-                    )
-
-                api.delete_vm(vm_id)
-                return Result.ok(None)
-
-        except VMNotFoundError as e:
-            return Result.from_exception(e)
-        except VMError as e:
+            remove_vm(vm_id, force=force, cascade=False)
+            return Result.ok(None)
+        except (VMError, VMNotFoundError) as e:
             return Result.from_exception(e)
 
     def clear_all(self, force: bool = False) -> Result[VmClearResult]:
@@ -288,12 +271,14 @@ class VMService:
         try:
             results = backend_clear_all_vms(force=force)
 
-            return Result.ok(VmClearResult(
-                deleted_count=results['deleted_count'],
-                deleted_vms=results['deleted_vms'],
-                failed_count=results['failed_count'],
-                failed_vms=results['failed_vms'],
-            ))
+            return Result.ok(
+                VmClearResult(
+                    deleted_count=results['deleted_count'],
+                    deleted_vms=results['deleted_vms'],
+                    failed_count=results['failed_count'],
+                    failed_vms=results['failed_vms'],
+                )
+            )
 
         except VMError as e:
             return Result.from_exception(e)
@@ -312,12 +297,14 @@ class VMService:
         try:
             results = backend_clear_vms_by_environment(environment_ulid, force=force)
 
-            return Result.ok(VmClearResult(
-                deleted_count=results['deleted_count'],
-                deleted_vms=results['deleted_vms'],
-                failed_count=results['failed_count'],
-                failed_vms=results['failed_vms'],
-            ))
+            return Result.ok(
+                VmClearResult(
+                    deleted_count=results['deleted_count'],
+                    deleted_vms=results['deleted_vms'],
+                    failed_count=results['failed_count'],
+                    failed_vms=results['failed_vms'],
+                )
+            )
 
         except VMError as e:
             return Result.from_exception(e)
@@ -345,14 +332,16 @@ class VMService:
                     vm_name = instance.vm.name if instance.vm else "Unknown"
                     hypervisor = instance.vm.hypervisor if instance.vm else "virtualbox"
 
-                    items.append(VmInstanceListItem(
-                        id=instance.id,
-                        vm_name=vm_name,
-                        instance_name=instance.instance_name,
-                        status=instance.status,
-                        websocket_port=instance.websocket_port,
-                        hypervisor=hypervisor,
-                    ))
+                    items.append(
+                        VmInstanceListItem(
+                            id=instance.id,
+                            vm_name=vm_name,
+                            instance_name=instance.instance_name,
+                            status=instance.status,
+                            websocket_port=instance.websocket_port,
+                            hypervisor=hypervisor,
+                        )
+                    )
 
                 return Result.ok(items)
 
@@ -378,51 +367,53 @@ class VMService:
                         code="VmInstanceNotFoundError",
                         message=f'VM instance with ID {instance_id} not found',
                         solutions=[
-                            'Use `adare vm instance list` to see available instances',
+                            'Use `adare vm list` to see available instances',
                             'Check if the instance ID is correct',
-                        ]
+                        ],
                     )
 
                 vm_name = instance.vm.name if instance.vm else "Unknown"
                 hypervisor = instance.vm.hypervisor if instance.vm else "virtualbox"
 
-                return Result.ok(VmInstanceInfo(
-                    id=instance.id,
-                    vm_id=instance.vm_id,
-                    vm_name=vm_name,
-                    instance_name=instance.instance_name,
-                    status=instance.status,
-                    websocket_port=instance.websocket_port,
-                    vbox_uuid=instance.vbox_uuid,
-                    base_snapshot_name=instance.base_snapshot_name,
-                    current_experiment_run_id=instance.current_experiment_run_id,
-                    created_at=instance.created_at,
-                    last_used_at=instance.last_used_at,
-                    hypervisor=hypervisor,
-                ))
+                return Result.ok(
+                    VmInstanceInfo(
+                        id=instance.id,
+                        vm_id=instance.vm_id,
+                        vm_name=vm_name,
+                        instance_name=instance.instance_name,
+                        status=instance.status,
+                        websocket_port=instance.websocket_port,
+                        vbox_uuid=instance.vbox_uuid,
+                        base_snapshot_name=instance.base_snapshot_name,
+                        current_experiment_run_id=instance.current_experiment_run_id,
+                        created_at=instance.created_at,
+                        last_used_at=instance.last_used_at,
+                        hypervisor=hypervisor,
+                    )
+                )
 
         except VMNotFoundError as e:
             return Result.from_exception(e)
 
-    async def remove_instance(self, instance_id: str) -> Result[None]:
+    async def remove_instance(self, instance_id: str, force: bool = False) -> Result[None]:
         """
         Remove a specific VM instance.
 
         Args:
             instance_id: VM instance ID
+            force: Remove it even if it is running or paused
 
         Returns:
             Result[None] on success, or error information on failure.
         """
         from adare.backend.vm.instance_manager import cleanup_vm_instance
+        from adare.hypervisor.exceptions import InstanceOperationException
 
         try:
-            await cleanup_vm_instance(instance_id)
+            await cleanup_vm_instance(instance_id, force=force)
             return Result.ok(None)
 
-        except VMNotFoundError as e:
-            return Result.from_exception(e)
-        except VMError as e:
+        except (VMNotFoundError, VMError, InstanceOperationException) as e:
             return Result.from_exception(e)
 
     async def remove_all_stopped_instances(self) -> Result[VmInstanceCleanupResult]:
@@ -437,12 +428,14 @@ class VMService:
         try:
             removed_instances = await remove_all_instances()
 
-            return Result.ok(VmInstanceCleanupResult(
-                removed_count=len(removed_instances),
-                removed_instances=removed_instances,
-                failed_count=0,
-                failed_instances=[],
-            ))
+            return Result.ok(
+                VmInstanceCleanupResult(
+                    removed_count=len(removed_instances),
+                    removed_instances=removed_instances,
+                    failed_count=0,
+                    failed_instances=[],
+                )
+            )
 
         except VMError as e:
             return Result.from_exception(e)
@@ -469,13 +462,15 @@ class VMService:
                     vm_name = instance.vm.name if instance.vm else "Unknown"
                     by_vm[vm_name] = by_vm.get(vm_name, 0) + 1
 
-                return Result.ok(VmInstanceUsage(
-                    total_instances=total,
-                    active_instances=active,
-                    available_instances=available,
-                    stopped_instances=stopped,
-                    instances_by_vm=by_vm,
-                ))
+                return Result.ok(
+                    VmInstanceUsage(
+                        total_instances=total,
+                        active_instances=active,
+                        available_instances=available,
+                        stopped_instances=stopped,
+                        instances_by_vm=by_vm,
+                    )
+                )
 
         except VMNotFoundError as e:
             return Result.from_exception(e)
@@ -508,16 +503,18 @@ class VMService:
 
                 items = []
                 for snapshot in snapshots:
-                    items.append(VmSnapshotInfo(
-                        id=snapshot.id,
-                        name=snapshot.name,
-                        snapshot_type=snapshot.snapshot_type or "unknown",
-                        description=snapshot.description,
-                        created_at=snapshot.created_at,
-                        vm_id=snapshot.vm_id,
-                        vm_instance_id=snapshot.vm_instance_id,
-                        vbox_uuid=snapshot.vbox_uuid,
-                    ))
+                    items.append(
+                        VmSnapshotInfo(
+                            id=snapshot.id,
+                            name=snapshot.name,
+                            snapshot_type=snapshot.snapshot_type or "unknown",
+                            description=snapshot.description,
+                            created_at=snapshot.created_at,
+                            vm_id=snapshot.vm_id,
+                            vm_instance_id=snapshot.vm_instance_id,
+                            vbox_uuid=snapshot.vbox_uuid,
+                        )
+                    )
 
                 return Result.ok(items)
 
@@ -545,35 +542,21 @@ class VMService:
                         code="VmInstanceNotFoundError",
                         message=f'VM instance with ID {instance_id} not found',
                         solutions=[
-                            'Use `adare vm instance list` to see available instances',
-                        ]
+                            'Use `adare vm list` to see available instances',
+                        ],
                     )
 
-                # Get the parent VM record
-                vm_record = api.get_vm_by_id(instance.vm_id)
-                if not vm_record:
-                    return Result.fail(
-                        code="VMNotFoundError",
-                        message=f'Parent VM with ID {instance.vm_id} not found',
-                        solutions=[
-                            'The VM may have been deleted',
-                        ]
-                    )
-
-            # Delete the snapshot using snapshot manager
-            snapshot_manager = SnapshotManager()
-            success, msg = snapshot_manager._delete_snapshot(vm_record, snapshot_name)
-
-            if success:
-                return Result.ok(None)
-            return Result.fail(
-                code="SnapshotDeleteError",
-                message=f'Failed to delete snapshot "{snapshot_name}": {msg}',
-                solutions=[
-                    'Check if the snapshot exists',
-                    'Ensure the VM is not running',
-                ]
-            )
+            # Base snapshots are protected (VMError); QEMU run instances have none.
+            if not SnapshotManager().delete_instance_snapshot(instance, snapshot_name):
+                return Result.fail(
+                    code="SnapshotDeleteError",
+                    message=f'Failed to delete snapshot "{snapshot_name}"',
+                    solutions=[
+                        'Check if the snapshot exists',
+                        'Ensure the VM is not running',
+                    ],
+                )
+            return Result.ok(None)
 
         except VMNotFoundError as e:
             return Result.from_exception(e)
@@ -601,22 +584,26 @@ class VMService:
                 ova_file_path=request.ova_file_path,
                 guest_platform=request.guest_platform,
                 verbose=request.verbose,
-                vm_cleanup_mode=request.vm_cleanup_mode
+                vm_cleanup_mode=request.vm_cleanup_mode,
             )
 
             if success:
-                return Result.ok(VmTestResult(
-                    success=True,
+                return Result.ok(
+                    VmTestResult(
+                        success=True,
+                        ova_file=str(request.ova_file_path),
+                        guest_platform=request.guest_platform,
+                        message='VM test completed successfully! OVA file is compatible with ADARE.',
+                    )
+                )
+            return Result.ok(
+                VmTestResult(
+                    success=False,
                     ova_file=str(request.ova_file_path),
                     guest_platform=request.guest_platform,
-                    message='VM test completed successfully! OVA file is compatible with ADARE.'
-                ))
-            return Result.ok(VmTestResult(
-                success=False,
-                ova_file=str(request.ova_file_path),
-                guest_platform=request.guest_platform,
-                message='VM test failed! OVA file may not be compatible with ADARE.'
-            ))
+                    message='VM test failed! OVA file may not be compatible with ADARE.',
+                )
+            )
 
         except VMError as e:
             return Result.from_exception(e)
@@ -627,7 +614,7 @@ class VMService:
                 solutions=[
                     'Check if the file path is correct',
                     'Ensure the OVA file exists at the specified location',
-                ]
+                ],
             )
 
     async def test_registered_vm(self, request: VmRegisteredTestRequest) -> Result[VmTestResult]:
@@ -661,7 +648,7 @@ class VMService:
                     guest_platform=request.guest_platform,
                     architecture=request.architecture,
                     verbose=request.verbose,
-                    vm_cleanup_mode=request.vm_cleanup_mode
+                    vm_cleanup_mode=request.vm_cleanup_mode,
                 )
             elif hypervisor == 'virtualbox':
                 if Path(request.disk_path).suffix.lower() not in ('.ova', '.ovf'):
@@ -673,7 +660,7 @@ class VMService:
                         ),
                         solutions=[
                             'Test an .ova/.ovf file directly: adare vm test <file.ova> --platform <platform>',
-                        ]
+                        ],
                     )
 
                 from adare.backend.experiment.commands import ova_test
@@ -682,7 +669,7 @@ class VMService:
                     ova_file_path=Path(request.disk_path),
                     guest_platform=request.guest_platform,
                     verbose=request.verbose,
-                    vm_cleanup_mode=request.vm_cleanup_mode
+                    vm_cleanup_mode=request.vm_cleanup_mode,
                 )
             else:
                 return Result.fail(
@@ -690,22 +677,26 @@ class VMService:
                     message=f"Unknown hypervisor '{request.hypervisor}' for VM '{request.vm_name}'.",
                     solutions=[
                         "Supported hypervisors: 'qemu', 'virtualbox'",
-                    ]
+                    ],
                 )
 
             if success:
-                return Result.ok(VmTestResult(
-                    success=True,
+                return Result.ok(
+                    VmTestResult(
+                        success=True,
+                        ova_file=request.disk_path,
+                        guest_platform=request.guest_platform,
+                        message=f"VM test completed successfully! '{request.vm_name}' is compatible with ADARE.",
+                    )
+                )
+            return Result.ok(
+                VmTestResult(
+                    success=False,
                     ova_file=request.disk_path,
                     guest_platform=request.guest_platform,
-                    message=f"VM test completed successfully! '{request.vm_name}' is compatible with ADARE."
-                ))
-            return Result.ok(VmTestResult(
-                success=False,
-                ova_file=request.disk_path,
-                guest_platform=request.guest_platform,
-                message=f"VM test failed! '{request.vm_name}' may not be compatible with ADARE."
-            ))
+                    message=f"VM test failed! '{request.vm_name}' may not be compatible with ADARE.",
+                )
+            )
 
         except VMError as e:
             return Result.from_exception(e)

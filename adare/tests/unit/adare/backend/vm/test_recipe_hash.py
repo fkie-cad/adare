@@ -28,8 +28,12 @@ _WIN11ARM64_FRESH = {
         'params': {'setup_level': 2, 'disk_size': '120G'},
     },
     'os': {
-        'os': 'Windows 11 (ARM64)', 'platform': 'windows', 'distribution': 'Home',
-        'version': '11', 'language': 'English', 'architecture': 'aarch64',
+        'os': 'Windows 11 (ARM64)',
+        'platform': 'windows',
+        'distribution': 'Home',
+        'version': '11',
+        'language': 'English',
+        'architecture': 'aarch64',
     },
 }
 
@@ -45,6 +49,7 @@ GOLDEN_RECIPE_HASH = 'ded5718198b93145e8ba6df11daf40f84974b278f537298490b3bacd0a
 
 
 # --- Helpers ---
+
 
 def _hash(env_dict: dict, tmp_path: Path) -> tuple[str, str]:
     """Write *env_dict* as an environment file and return (recipe_hash, base_hash)."""
@@ -64,25 +69,33 @@ def _fresh(**recipe_overrides) -> dict:
 def _autopsy_provision(versions: list[str]) -> list[dict]:
     """The Phase-3 Autopsy provision shape, parameterized by version list."""
     return [
-        {'name': 'boot-hardening', 'shell': 'cmd',
-         'command': 'bcdedit /set {default} recoveryenabled No'},
-        {'name': 'autopsy', 'description': 'Autopsy {{ item }}', 'for_each': versions,
-         'steps': [
-             {'name': 'autopsy-{{ item }}-download',
-              'command': 'curl.exe -L -f -o "C:\\Windows\\Temp\\autopsy-{{ item }}.msi" '
-                         'https://example.invalid/autopsy-{{ item }}-64bit.msi',
-              'timeout_minutes': 20},
-             {'name': 'autopsy-{{ item }}-install',
-              'command': 'msiexec /i "C:\\Windows\\Temp\\autopsy-{{ item }}.msi"',
-              'allow_exit_codes': [0, 3010],
-              'verify': 'if (-not (Test-Path "C:\\Program Files\\Autopsy-{{ item }}")) { exit 1 }',
-              'log_files': ['C:\\Windows\\Temp\\autopsy-{{ item }}-msi.log'],
-              'timeout_minutes': 45},
-         ]},
+        {'name': 'boot-hardening', 'shell': 'cmd', 'command': 'bcdedit /set {default} recoveryenabled No'},
+        {
+            'name': 'autopsy',
+            'description': 'Autopsy {{ item }}',
+            'for_each': versions,
+            'steps': [
+                {
+                    'name': 'autopsy-{{ item }}-download',
+                    'command': 'curl.exe -L -f -o "C:\\Windows\\Temp\\autopsy-{{ item }}.msi" '
+                    'https://example.invalid/autopsy-{{ item }}-64bit.msi',
+                    'timeout_minutes': 20,
+                },
+                {
+                    'name': 'autopsy-{{ item }}-install',
+                    'command': 'msiexec /i "C:\\Windows\\Temp\\autopsy-{{ item }}.msi"',
+                    'allow_exit_codes': [0, 3010],
+                    'verify': 'if (-not (Test-Path "C:\\Program Files\\Autopsy-{{ item }}")) { exit 1 }',
+                    'log_files': ['C:\\Windows\\Temp\\autopsy-{{ item }}-msi.log'],
+                    'timeout_minutes': 45,
+                },
+            ],
+        },
     ]
 
 
 # --- T1: the golden hash ---
+
 
 def test_golden_recipe_hash_of_win11arm64_fresh(tmp_path):
     """No existing recipe environment's identity moved. See GOLDEN_RECIPE_HASH."""
@@ -100,6 +113,7 @@ def test_shipped_win11arm64_fresh_file_still_parses_and_hashes_the_same():
 
 
 # --- T2: base hash vs recipe hash ---
+
 
 def test_base_hash_equals_recipe_hash_when_there_is_no_provision(tmp_path):
     """No provision steps => Stage 2 is skipped and behaviour is unchanged."""
@@ -128,6 +142,7 @@ def test_two_recipes_differing_only_in_provision_have_different_recipe_hashes(tm
 
 
 # --- T3: expansion-based hashing ---
+
 
 def _substitute(value, item: str):
     """Recursively replace `{{ item }}` in a nested dict/list/str structure.
@@ -199,6 +214,7 @@ def test_editing_allow_exit_codes_does_change_the_hash(tmp_path):
 
 # --- T6: ISO identity ---
 
+
 def test_uppercase_iso_sha256_hashes_identically_after_normalization(tmp_path):
     """Letter case must not fork identity.
 
@@ -239,12 +255,15 @@ def test_changing_iso_sha256_changes_the_hash(tmp_path):
     assert _hash(changed, tmp_path)[0] != GOLDEN_RECIPE_HASH
 
 
-@pytest.mark.parametrize('params', [
-    {'setup_level': 1, 'disk_size': '120G'},
-    {'setup_level': 2, 'disk_size': '160G'},
-    {'setup_level': 2, 'disk_size': '120G', 'ram_mb': 8192},
-    {'setup_level': 2, 'disk_size': '120G', 'cpus': 4},
-])
+@pytest.mark.parametrize(
+    'params',
+    [
+        {'setup_level': 1, 'disk_size': '120G'},
+        {'setup_level': 2, 'disk_size': '160G'},
+        {'setup_level': 2, 'disk_size': '120G', 'ram_mb': 8192},
+        {'setup_level': 2, 'disk_size': '120G', 'cpus': 4},
+    ],
+)
 def test_changing_any_build_param_changes_the_hash(tmp_path, params):
     assert _hash(_fresh(params=params), tmp_path)[0] != GOLDEN_RECIPE_HASH
 

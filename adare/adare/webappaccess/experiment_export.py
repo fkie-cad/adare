@@ -1,6 +1,7 @@
 """
 Export experiment files for submission to the shared Gitea repository.
 """
+
 import logging
 import re
 from pathlib import Path
@@ -55,6 +56,7 @@ class ExperimentSubmissionError(ValueError):
 
 def _is_http_url(value: str) -> bool:
     from urllib.parse import urlparse
+
     return urlparse(value).scheme in ('http', 'https')
 
 
@@ -109,10 +111,9 @@ def _preflight_environment(env_file: Path) -> None:
             "'vm_sha256' is required and must be 64 hex characters to publish a baked VM URL."
         )
     if metadata.vm_format is not None and metadata.vm_format not in _VM_FORMATS:
-        raise EnvironmentSubmissionError(
-            "'vm_format' must be one of: " + ", ".join(_VM_FORMATS)
-        )
+        raise EnvironmentSubmissionError("'vm_format' must be one of: " + ", ".join(_VM_FORMATS))
     from urllib.parse import urlparse
+
     has_ext = urlparse(vm).path.lower().endswith(_DISK_EXTENSIONS)
     if not has_ext and not metadata.vm_format:
         raise EnvironmentSubmissionError(
@@ -299,10 +300,7 @@ def _server_testfunction_index() -> tuple[set[str], dict[str, set[str]], set[str
 
 def _server_environment_names() -> set[str]:
     """Read the names of the server's published environments."""
-    return {
-        env['name'] for env in _fetch_public_catalog('environment/')
-        if env.get('name')
-    }
+    return {env['name'] for env in _fetch_public_catalog('environment/') if env.get('name')}
 
 
 def _owning_set(function_name: str) -> str:
@@ -327,8 +325,9 @@ def _qualified_name(function_name: str) -> str:
     return function_name if '.' in function_name else f'{_owning_set(function_name)}.{function_name}'
 
 
-def _describe_missing_testfunction(function_name: str, bare_to_sets: dict[str, set[str]],
-                                   published_sets: set[str]) -> str:
+def _describe_missing_testfunction(
+    function_name: str, bare_to_sets: dict[str, set[str]], published_sets: set[str]
+) -> str:
     """One actionable line explaining why the server cannot resolve ``function_name``."""
     owner = _owning_set(function_name)
     bare = function_name.split('.', 1)[1] if '.' in function_name else function_name
@@ -339,20 +338,26 @@ def _describe_missing_testfunction(function_name: str, bare_to_sets: dict[str, s
         # carrying an unprefixed registration for this function means IT has not
         # been re-ingested since that migration -- resubmitting this experiment
         # will not help, since the mismatch is in the set's own registration.
-        return (f"  - {function_name}: the set '{owner}' is published but still registers this "
-                f"function as '{bare}' (without the set prefix), so the server's exact-name "
-                f"lookup for the qualified '{owner}.{bare}' misses it. Re-submit the "
-                f"testfunctionset so it is re-ingested under the qualified name: "
-                f"adare web submit testfunction {owner} -p <project>.")
+        return (
+            f"  - {function_name}: the set '{owner}' is published but still registers this "
+            f"function as '{bare}' (without the set prefix), so the server's exact-name "
+            f"lookup for the qualified '{owner}.{bare}' misses it. Re-submit the "
+            f"testfunctionset so it is re-ingested under the qualified name: "
+            f"adare web submit testfunction {owner} -p <project>."
+        )
 
     if owner not in published_sets:
-        return (f"  - {function_name}: testfunctionset '{owner}' is not published on the "
-                f"server. Submit it first: adare web submit testfunction {owner} "
-                f"-p <project>, then have that PR merged.")
+        return (
+            f"  - {function_name}: testfunctionset '{owner}' is not published on the "
+            f"server. Submit it first: adare web submit testfunction {owner} "
+            f"-p <project>, then have that PR merged."
+        )
 
-    return (f"  - {function_name}: testfunctionset '{owner}' is published but registers no "
-            f"function matching this name. Check the @testfunction(name=...) value in "
-            f"{owner}/{owner}.py and resubmit the set.")
+    return (
+        f"  - {function_name}: testfunctionset '{owner}' is published but registers no "
+        f"function matching this name. Check the @testfunction(name=...) value in "
+        f"{owner}/{owner}.py and resubmit the set."
+    )
 
 
 def _preflight_experiment(experiment_name: str, playbook_file: Path, metadata_file: Path) -> None:
@@ -377,7 +382,9 @@ def _preflight_experiment(experiment_name: str, playbook_file: Path, metadata_fi
         log.warning(
             'Could not parse %r to pre-flight its dependencies (%s); submitting '
             'anyway -- the server will still reject an unresolvable dependency at '
-            'ingest time.', experiment_name, e,
+            'ingest time.',
+            experiment_name,
+            e,
         )
         return
 
@@ -388,7 +395,9 @@ def _preflight_experiment(experiment_name: str, playbook_file: Path, metadata_fi
         log.warning(
             'Could not read the server catalog to pre-flight %r dependencies (%s); '
             'submitting anyway -- the server will still reject an unresolvable '
-            'dependency at ingest time.', experiment_name, e,
+            'dependency at ingest time.',
+            experiment_name,
+            e,
         )
         return
 
@@ -399,41 +408,32 @@ def _preflight_experiment(experiment_name: str, playbook_file: Path, metadata_fi
     # normalized the same way before the set-difference, or every unprefixed
     # `standard` function would false-positive as missing.
     missing_functions = [
-        function for function in dict.fromkeys(declared_functions)
-        if _qualified_name(function) not in registered
+        function for function in dict.fromkeys(declared_functions) if _qualified_name(function) not in registered
     ]
     if missing_functions:
-        problems.append(
-            f"Test functions the server cannot resolve for experiment '{experiment_name}':"
-        )
+        problems.append(f"Test functions the server cannot resolve for experiment '{experiment_name}':")
         problems.extend(
-            _describe_missing_testfunction(function, bare_to_sets, published_sets)
-            for function in missing_functions
+            _describe_missing_testfunction(function, bare_to_sets, published_sets) for function in missing_functions
         )
 
-    missing_environments = [
-        env for env in dict.fromkeys(declared_environments)
-        if env not in published_environments
-    ]
+    missing_environments = [env for env in dict.fromkeys(declared_environments) if env not in published_environments]
     if missing_environments:
-        problems.append(
-            f"Environments not published on the server for experiment '{experiment_name}':"
-        )
+        problems.append(f"Environments not published on the server for experiment '{experiment_name}':")
         problems.extend(
-            f"  - {env}: submit and merge it first: adare web submit environment {env} "
-            f"-p <project>" for env in missing_environments
+            f"  - {env}: submit and merge it first: adare web submit environment {env} -p <project>"
+            for env in missing_environments
         )
 
     if problems:
         raise ExperimentSubmissionError(
-            '\n'.join(problems)
-            + '\nThe server resolves these at ingest and would reject the pull request '
-              'with UNKNOWN_DEPENDENCY, so no PR was created.'
+            '\n'.join(problems) + '\nThe server resolves these at ingest and would reject the pull request '
+            'with UNKNOWN_DEPENDENCY, so no PR was created.'
         )
 
 
-def export_experiment_for_submission(project_path: Path, experiment_name: str,
-                                     check_dependencies: bool = True) -> dict[str, bytes]:
+def export_experiment_for_submission(
+    project_path: Path, experiment_name: str, check_dependencies: bool = True
+) -> dict[str, bytes]:
     """
     Collect experiment files for Gitea submission.
 

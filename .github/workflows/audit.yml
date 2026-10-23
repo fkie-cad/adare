@@ -1,0 +1,36 @@
+name: Dependency audit
+
+# Advisories appear independently of our code, so this runs weekly and whenever
+# the lockfile changes rather than gating every push.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  push:
+    branches: [dev, main]
+    paths: [uv.lock]
+  pull_request:
+    paths: [uv.lock]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    name: pip-audit (locked dependencies)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      # The opt-in `grounding` extra (local LocateAnything backend) is excluded:
+      # it pins transformers<5 for the model and is never part of a deployment.
+      - name: Export locked requirements
+        run: >
+          uv export --locked --all-packages --all-extras --no-extra grounding
+          --no-emit-workspace --no-hashes --no-dev --format requirements-txt -o requirements-audit.txt
+
+      - name: Audit
+        run: uvx pip-audit --disable-pip --no-deps -r requirements-audit.txt

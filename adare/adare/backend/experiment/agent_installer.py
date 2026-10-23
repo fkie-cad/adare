@@ -7,47 +7,12 @@ are already present.
 """
 
 import logging
-import re
 import threading
 from pathlib import Path
 
+from adare.backend.experiment.agent_wheels import AGENT_PACKAGES, wheel_versions
+
 log = logging.getLogger(__name__)
-
-
-def get_expected_version_from_wheels(wheels_dir: Path) -> str | None:
-    """Extract expected version from adarevm wheel filename.
-
-    Parses the version number from wheel files in the format:
-    adarevm-X.Y.Z-py3-none-any.whl
-
-    Args:
-        wheels_dir: Path to directory containing wheel files
-
-    Returns:
-        Version string (e.g., "0.1.0") if found, None otherwise
-
-    Example:
-        >>> get_expected_version_from_wheels(Path("/project/vm_runtime/wheels"))
-        "0.1.0"
-    """
-    if not wheels_dir.exists():
-        log.debug(f"Wheels directory does not exist: {wheels_dir}")
-        return None
-
-    adarevm_wheels = list(wheels_dir.glob('adarevm-*.whl'))
-    if not adarevm_wheels:
-        log.debug(f"No adarevm wheels found in {wheels_dir}")
-        return None
-
-    # Parse version from filename: adarevm-0.1.0-py3-none-any.whl
-    match = re.match(r'adarevm-(\d+\.\d+\.\d+)', adarevm_wheels[0].name)
-    if match:
-        version = match.group(1)
-        log.debug(f"Expected version from wheel: {version}")
-        return version
-
-    log.warning(f"Could not parse version from wheel filename: {adarevm_wheels[0].name}")
-    return None
 
 
 async def check_installed_version(
@@ -57,7 +22,7 @@ async def check_installed_version(
     platform: str,
     stop_event: threading.Event,
     wheels_available: bool = False,
-    inject_user_path: bool = False
+    inject_user_path: bool = False,
 ) -> str | None:
     """Check if package is installed in VM and return its version.
 
@@ -105,6 +70,7 @@ async def check_installed_version(
         if inject_user_path and platform == 'windows':
             try:
                 from adare.hypervisor.qemu.vm import QEMUVM
+
                 if isinstance(vm, QEMUVM):
                     run_kwargs['inject_user_path'] = True
                     log.debug(f"Checking {package_name} version with inject_user_path=True")
@@ -143,23 +109,18 @@ async def should_skip_installation(
     vm,  # VirtualBoxVM instance
     use_conda: bool,
     platform: str,
-    stop_event: threading.Event
+    stop_event: threading.Event,
 ) -> bool:
     """Determine if agent installation can be skipped.
 
-    Checks if both adarevm and adarelib are installed with the expected versions.
-    Returns True only if both packages are present with matching versions.
-
-    Decision logic:
-    1. If wheels not available → cannot verify, must install
-    2. If expected version cannot be determined → must install
-    3. If either package not installed → must install
-    4. If versions don't match expected → must reinstall
-    5. If both packages match expected version → can skip
+    Wheels carry a content-hash version (see ``agent_wheels``), so a guest is up
+    to date only if each package's installed version equals the version of its
+    own wheel. Guests installed before content hashing report a plain version
+    (``0.1.1``) and therefore reinstall once.
 
     Args:
         wheels_dir: Path to wheels directory
-        vm: VirtualBoxVM instance for version checking
+        vm: VM instance for version checking
         use_conda: True if using Conda environment
         platform: Guest OS platform ("windows" or "linux")
         stop_event: Threading event for cancellation
@@ -167,76 +128,40 @@ async def should_skip_installation(
     Returns:
         True if installation can be safely skipped
         False if installation must be performed
-
-    Example:
-        >>> await should_skip_installation(Path("/wheels"), vm, True, "linux", event)
-        True  # Agent already installed with correct version
     """
-    # Check if wheels are available
-    if not wheels_dir.exists() or not list(wheels_dir.glob('*.whl')):
-        log.debug("No wheels available, cannot verify version - must install")
+    expected = wheel_versions(wheels_dir)
+    missing = [pkg for pkg in AGENT_PACKAGES if pkg not in expected]
+    if missing:
+        log.debug(f"No wheel for {', '.join(missing)}, cannot verify version - must install")
         return False
 
-    # Get expected version from wheels
-    expected_version = get_expected_version_from_wheels(wheels_dir)
-    if not expected_version:
-        log.debug("Could not determine expected version, cannot skip installation")
-        return False
+    log.info(f"Checking for preinstalled agent (expected: {expected})...")
 
-    log.info(f"Checking for preinstalled agent (expected version: {expected_version})...")
-
-    # Check installed versions of both packages
-    # Pass wheels_available=True since this function already verified wheels exist (line 155)
-
-    # Special case for Windows QEMU: Try to check adarevm with inject_user_path
-    # This helps find adarevm when it's in a user-local path not in system PATH
+    # Windows QEMU: adarevm may live in a user-local path that is not on the
+    # system PATH, so try with the user's PATH injected first.
     vm_is_qemu = False
     try:
         from adare.hypervisor.qemu.vm import QEMUVM
+
         vm_is_qemu = isinstance(vm, QEMUVM)
     except ImportError:
         pass
 
-    adarevm_version = None
-    adarelib_version = None
-    if platform == 'windows' and vm_is_qemu:
-        log.debug("Using injected user PATH to check adarevm version on Windows QEMU")
-        adarevm_version = await check_installed_version(
-            'adarevm', vm, use_conda, platform, stop_event,
-            wheels_available=True, inject_user_path=True
-        )
-        adarelib_version = await check_installed_version(
-            'adarelib', vm, use_conda, platform, stop_event,
-            wheels_available=True, inject_user_path=True
-        )
+    for pkg in AGENT_PACKAGES:
+        installed = None
+        if platform == 'windows' and vm_is_qemu:
+            installed = await check_installed_version(
+                pkg, vm, use_conda, platform, stop_event, wheels_available=True, inject_user_path=True
+            )
+        if installed is None:
+            installed = await check_installed_version(pkg, vm, use_conda, platform, stop_event, wheels_available=True)
 
-    # Standard check (fallback or non-Windows-QEMU)
-    if adarevm_version is None:
-        adarevm_version = await check_installed_version('adarevm', vm, use_conda, platform, stop_event, wheels_available=True)
-    if adarelib_version is None:
-        adarelib_version = await check_installed_version('adarelib', vm, use_conda, platform, stop_event, wheels_available=True)
+        if installed is None:
+            log.info(f"{pkg} not installed, will install")
+            return False
+        if installed != expected[pkg]:
+            log.info(f"Version mismatch - {pkg} installed: {installed}, expected: {expected[pkg]}, will reinstall")
+            return False
 
-    # Log findings for debugging
-    log.debug(f"Installed versions - adarevm: {adarevm_version}, adarelib: {adarelib_version}")
-
-    # Decision logic with clear logging
-    if adarevm_version is None:
-        log.info("adarevm not installed, will install")
-        return False
-
-    if adarelib_version is None:
-        log.info("adarelib not installed (partial installation detected), will reinstall both")
-        return False
-
-    if adarevm_version != expected_version:
-        log.info(f"Version mismatch - adarevm installed: {adarevm_version}, expected: {expected_version}, will reinstall")
-        return False
-
-    if adarelib_version != expected_version:
-        log.info(f"Version mismatch - adarelib installed: {adarelib_version}, expected: {expected_version}, will reinstall")
-        return False
-
-    # Both packages installed with correct versions - can skip!
-    log.info(f"✓ Agent already installed with correct version {expected_version}, skipping installation")
-    log.info("PERFORMANCE: Saved ~10-30s by skipping agent installation")
+    log.info(f"✓ Agent already installed with current versions {expected}, skipping installation")
     return True

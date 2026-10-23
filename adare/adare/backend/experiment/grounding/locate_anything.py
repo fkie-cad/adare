@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class Detection:
     """One detected element: its label, box ``[x1, y1, x2, y2]`` and centre."""
+
     label: str
     box: tuple[float, float, float, float]
     center: tuple[float, float]
@@ -74,11 +75,13 @@ class LocateAnythingClient:
                 continue
             x1, y1, x2, y2 = (float(v) for v in box)
             center = d.get('center') or [(x1 + x2) / 2, (y1 + y2) / 2]
-            dets.append(Detection(
-                label=d.get('label', prompt),
-                box=(x1, y1, x2, y2),
-                center=(float(center[0]), float(center[1])),
-            ))
+            dets.append(
+                Detection(
+                    label=d.get('label', prompt),
+                    box=(x1, y1, x2, y2),
+                    center=(float(center[0]), float(center[1])),
+                )
+            )
         return dets
 
     def best_for(

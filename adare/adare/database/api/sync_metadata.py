@@ -32,10 +32,9 @@ class SyncMetadataApi(EnhancedDatabaseApi):
         super().__init__(db_path)
         GlobalBase.metadata.create_all(self.engine)
 
-    def create_sync_metadata(self,
-                           sync_direction: str = 'push',
-                           remote_id: str | None = None,
-                           remote_url: str | None = None) -> SyncMetadata:
+    def create_sync_metadata(
+        self, sync_direction: str = 'push', remote_id: str | None = None, remote_url: str | None = None
+    ) -> SyncMetadata:
         """
         Create new sync metadata entry.
 
@@ -61,13 +60,10 @@ class SyncMetadataApi(EnhancedDatabaseApi):
             sync_status='pending',
             remote_id=remote_id,
             remote_url=remote_url,
-            created_at=datetime.now(UTC)
+            created_at=datetime.now(UTC),
         )
 
-    def update_sync_status(self,
-                          sync_metadata_id: str,
-                          status: str,
-                          failure_reason: str | None = None) -> SyncMetadata:
+    def update_sync_status(self, sync_metadata_id: str, status: str, failure_reason: str | None = None) -> SyncMetadata:
         """
         Update sync status for metadata entry.
 
@@ -90,10 +86,7 @@ class SyncMetadataApi(EnhancedDatabaseApi):
 
         sync_metadata = self.get_by_ulid_or_404(SyncMetadata, sync_metadata_id)
 
-        update_data = {
-            'sync_status': status,
-            'failure_reason': failure_reason
-        }
+        update_data = {'sync_status': status, 'failure_reason': failure_reason}
 
         # Update last_sync_at for successful syncs
         if status == 'synced':
@@ -127,9 +120,7 @@ class SyncMetadataApi(EnhancedDatabaseApi):
         """
         return self.update_sync_status(sync_metadata_id, 'failed', failure_reason)
 
-    def get_pending_syncs(self,
-                         sync_direction: str | None = None,
-                         limit: int | None = None) -> list[SyncMetadata]:
+    def get_pending_syncs(self, sync_direction: str | None = None, limit: int | None = None) -> list[SyncMetadata]:
         """
         Get all pending sync metadata entries.
 
@@ -144,16 +135,9 @@ class SyncMetadataApi(EnhancedDatabaseApi):
         if sync_direction:
             filters['sync_direction'] = sync_direction
 
-        return self.list_entities(
-            SyncMetadata,
-            filters=filters,
-            order_by='created_at',
-            limit=limit
-        )
+        return self.list_entities(SyncMetadata, filters=filters, order_by='created_at', limit=limit)
 
-    def get_failed_syncs(self,
-                        since_hours: int | None = 24,
-                        limit: int | None = None) -> list[SyncMetadata]:
+    def get_failed_syncs(self, since_hours: int | None = 24, limit: int | None = None) -> list[SyncMetadata]:
         """
         Get failed sync metadata entries.
 
@@ -164,14 +148,10 @@ class SyncMetadataApi(EnhancedDatabaseApi):
         Returns:
             List of failed SyncMetadata instances
         """
-        query = self._session.query(SyncMetadata).filter(
-            SyncMetadata.sync_status == 'failed'
-        )
+        query = self._session.query(SyncMetadata).filter(SyncMetadata.sync_status == 'failed')
 
         if since_hours:
-            cutoff_time = datetime.now(UTC) - UTC.localize(
-                datetime.fromtimestamp(since_hours * 3600)
-            ).utctimetuple()
+            cutoff_time = datetime.now(UTC) - UTC.localize(datetime.fromtimestamp(since_hours * 3600)).utctimetuple()
             query = query.filter(SyncMetadata.created_at >= cutoff_time)
 
         if limit:
@@ -190,22 +170,20 @@ class SyncMetadataApi(EnhancedDatabaseApi):
 
         # Count by status
         for status in ['pending', 'synced', 'failed', 'local_only']:
-            stats[f'{status}_count'] = self.count_entities(
-                SyncMetadata,
-                {'sync_status': status}
-            )
+            stats[f'{status}_count'] = self.count_entities(SyncMetadata, {'sync_status': status})
 
         # Count by direction
         for direction in ['push', 'pull', 'bidirectional']:
-            stats[f'{direction}_count'] = self.count_entities(
-                SyncMetadata,
-                {'sync_direction': direction}
-            )
+            stats[f'{direction}_count'] = self.count_entities(SyncMetadata, {'sync_direction': direction})
 
         # Recent activity
-        recent_syncs = self._session.query(SyncMetadata).filter(
-            SyncMetadata.last_sync_at.isnot(None)
-        ).order_by(SyncMetadata.last_sync_at.desc()).limit(5).all()
+        recent_syncs = (
+            self._session.query(SyncMetadata)
+            .filter(SyncMetadata.last_sync_at.isnot(None))
+            .order_by(SyncMetadata.last_sync_at.desc())
+            .limit(5)
+            .all()
+        )
 
         stats['recent_syncs'] = [
             {
@@ -213,16 +191,14 @@ class SyncMetadataApi(EnhancedDatabaseApi):
                 'status': sync.sync_status,
                 'direction': sync.sync_direction,
                 'last_sync_at': sync.last_sync_at,
-                'remote_id': sync.remote_id
+                'remote_id': sync.remote_id,
             }
             for sync in recent_syncs
         ]
 
         return stats
 
-    def cleanup_old_syncs(self,
-                         older_than_days: int = 30,
-                         keep_failed: bool = True) -> int:
+    def cleanup_old_syncs(self, older_than_days: int = 30, keep_failed: bool = True) -> int:
         """
         Clean up old sync metadata entries.
 
@@ -233,13 +209,11 @@ class SyncMetadataApi(EnhancedDatabaseApi):
         Returns:
             Number of records deleted
         """
-        cutoff_time = datetime.now(UTC) - UTC.localize(
-            datetime.fromtimestamp(older_than_days * 24 * 3600)
-        ).utctimetuple()
-
-        query = self._session.query(SyncMetadata).filter(
-            SyncMetadata.created_at < cutoff_time
+        cutoff_time = (
+            datetime.now(UTC) - UTC.localize(datetime.fromtimestamp(older_than_days * 24 * 3600)).utctimetuple()
         )
+
+        query = self._session.query(SyncMetadata).filter(SyncMetadata.created_at < cutoff_time)
 
         if keep_failed:
             query = query.filter(SyncMetadata.sync_status != 'failed')
@@ -268,11 +242,7 @@ class SyncMetadataApi(EnhancedDatabaseApi):
         if sync_metadata.sync_status != 'failed':
             raise ValidationError(f"Cannot retry sync with status: {sync_metadata.sync_status}")
 
-        return self.update_entity(
-            sync_metadata,
-            sync_status='pending',
-            failure_reason=None
-        )
+        return self.update_entity(sync_metadata, sync_status='pending', failure_reason=None)
 
     def get_by_remote_id(self, remote_id: str) -> SyncMetadata | None:
         """
@@ -284,14 +254,11 @@ class SyncMetadataApi(EnhancedDatabaseApi):
         Returns:
             SyncMetadata instance or None if not found
         """
-        return self._session.query(SyncMetadata).filter(
-            SyncMetadata.remote_id == remote_id
-        ).first()
+        return self._session.query(SyncMetadata).filter(SyncMetadata.remote_id == remote_id).first()
 
-    def update_remote_info(self,
-                          sync_metadata_id: str,
-                          remote_id: str | None = None,
-                          remote_url: str | None = None) -> SyncMetadata:
+    def update_remote_info(
+        self, sync_metadata_id: str, remote_id: str | None = None, remote_url: str | None = None
+    ) -> SyncMetadata:
         """
         Update remote entity information.
 

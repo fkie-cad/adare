@@ -136,7 +136,9 @@ class GuestToHostTestExecutor:
             TestResult from test execution
         """
         category = self._get_test_category(test_function, test_instance)
-        log.info(f"GuestToHostTestExecutor: executing '{test_name}' (function={test_function}, category={category.value})")
+        log.info(
+            f"GuestToHostTestExecutor: executing '{test_name}' (function={test_function}, category={category.value})"
+        )
 
         try:
             if category == HostModeCategory.QGA_PROBE:
@@ -180,6 +182,7 @@ class GuestToHostTestExecutor:
 
         # Check for glob patterns
         has_glob = any(c in original_dst for c in ['*', '?', '[', ']'])
+        sidecars = getattr(type(test_instance), 'host_mode_sidecars', ())
 
         if has_glob:
             # Resolve glob on guest side, then pull matching files
@@ -195,16 +198,20 @@ class GuestToHostTestExecutor:
             # Pull each matching file
             for guest_path in matching_paths:
                 try:
-                    await self.guest_file.pull_file(guest_path)
+                    await self.guest_file.pull_file(guest_path, force=bool(sidecars))
                 except RuntimeError as e:
                     log.warning(f"GuestToHostTestExecutor: failed to pull {guest_path}: {e}")
+                    continue
+                missing = await self._pull_sidecars(guest_path, sidecars)
+                if missing:
+                    return self._sidecar_error(missing)
 
             # Rewrite dst to local glob pattern
             local_dst = str(self.guest_file._guest_path_to_local(original_dst))
         else:
             # Simple path — pull directly
             try:
-                local_path = await self.guest_file.pull_file(original_dst)
+                local_path = await self.guest_file.pull_file(original_dst, force=bool(sidecars))
                 local_dst = str(local_path)
             except (RuntimeError, FileNotFoundError) as e:
                 # For existence tests, this is expected if file doesn't exist
@@ -216,6 +223,10 @@ class GuestToHostTestExecutor:
                     return TestResult.failed([f'{original_dst} does not exist on guest: {e}'])
                 log.warning(f"GuestToHostTestExecutor: could not pull {original_dst}: {e}")
                 local_dst = str(self.guest_file._guest_path_to_local(original_dst))
+            else:
+                missing = await self._pull_sidecars(original_dst, sidecars)
+                if missing:
+                    return self._sidecar_error(missing)
 
         # Rewrite dst and run test
         object.__setattr__(test_instance.parameter, 'dst', local_dst)
@@ -226,6 +237,35 @@ class GuestToHostTestExecutor:
             object.__setattr__(test_instance.parameter, 'dst', original_dst)
 
         return result
+
+    async def _pull_sidecars(self, guest_path: str, suffixes: tuple[str, ...]) -> list[str]:
+        """Pull the companion files of guest_path (e.g. SQLite -wal/-journal).
+
+        Always re-pulled (no cache) and a local copy is removed when the sidecar
+        no longer exists on the guest, so dst and its sidecars come from the same
+        moment — a stale -wal next to a fresh database would corrupt the result.
+
+        Returns:
+            Guest paths of sidecars that exist but could not be pulled
+        """
+        missing = []
+        for suffix in suffixes:
+            sidecar = guest_path + suffix
+            if await self.guest_file.file_exists(sidecar):
+                try:
+                    await self.guest_file.pull_file(sidecar, force=True)
+                except (RuntimeError, FileNotFoundError) as e:
+                    log.warning(f"GuestToHostTestExecutor: failed to pull sidecar {sidecar}: {e}")
+                    missing.append(sidecar)
+            else:
+                self.guest_file._guest_path_to_local(sidecar).unlink(missing_ok=True)
+        return missing
+
+    @staticmethod
+    def _sidecar_error(missing: list[str]) -> TestResult:
+        return TestResult.error(
+            [f"could not pull {', '.join(missing)} from guest; testing without it would read stale data"]
+        )
 
     async def _execute_qga_probe_test(
         self,
@@ -286,9 +326,9 @@ class GuestToHostTestExecutor:
 
         if actual_status == expected_status:
             return TestResult.success([f'service {service_name} is {actual_status}'])
-        return TestResult.failed([
-            f'service {service_name} status mismatch. Expected: {expected_status}, Got: {actual_status}'
-        ])
+        return TestResult.failed(
+            [f'service {service_name} status mismatch. Expected: {expected_status}, Got: {actual_status}']
+        )
 
     async def _test_user_exists(self, test_instance: BasicTest) -> TestResult:
         """Check if user exists via QGA."""
@@ -357,22 +397,23 @@ class GuestToHostTestExecutor:
             expected_type_upper = expected_type.upper()
             # PowerShell type names: String, DWord, Binary, etc. Map to REG_ names
             ps_to_reg = {
-                'STRING': 'REG_SZ', 'EXPANDSTRING': 'REG_EXPAND_SZ',
-                'BINARY': 'REG_BINARY', 'DWORD': 'REG_DWORD',
-                'MULTISTRING': 'REG_MULTI_SZ', 'QWORD': 'REG_QWORD',
+                'STRING': 'REG_SZ',
+                'EXPANDSTRING': 'REG_EXPAND_SZ',
+                'BINARY': 'REG_BINARY',
+                'DWORD': 'REG_DWORD',
+                'MULTISTRING': 'REG_MULTI_SZ',
+                'QWORD': 'REG_QWORD',
             }
             actual_type_mapped = ps_to_reg.get(actual_type.upper(), actual_type.upper()) if actual_type else 'UNKNOWN'
             if expected_type_upper != actual_type_mapped:
-                return TestResult.failed([
-                    f'registry value type mismatch. Expected: {expected_type_upper}, Got: {actual_type_mapped}'
-                ])
+                return TestResult.failed(
+                    [f'registry value type mismatch. Expected: {expected_type_upper}, Got: {actual_type_mapped}']
+                )
 
         # Value comparison (compare as strings since QGA returns strings)
         if str(actual_value) == str(expected_value):
             return TestResult.success([f'registry value matches: {actual_value}'])
-        return TestResult.failed([
-            f'registry value mismatch. Expected: {expected_value}, Got: {actual_value}'
-        ])
+        return TestResult.failed([f'registry value mismatch. Expected: {expected_value}, Got: {actual_value}'])
 
     async def _test_file_permissions(self, test_instance: BasicTest) -> TestResult:
         """Check file permissions, owner, and group via QGA stat."""
@@ -447,18 +488,28 @@ class GuestToHostTestExecutor:
     def _parse_symbolic_permissions(perm_str: str) -> int:
         """Parse symbolic permission string like 'rwxr-xr-x' to integer."""
         import stat
+
         if len(perm_str) != 9:
             raise ValueError(f"Invalid symbolic permission format: {perm_str}")
         perms = 0
-        if perm_str[0] == 'r': perms |= stat.S_IRUSR
-        if perm_str[1] == 'w': perms |= stat.S_IWUSR
-        if perm_str[2] == 'x': perms |= stat.S_IXUSR
-        if perm_str[3] == 'r': perms |= stat.S_IRGRP
-        if perm_str[4] == 'w': perms |= stat.S_IWGRP
-        if perm_str[5] == 'x': perms |= stat.S_IXGRP
-        if perm_str[6] == 'r': perms |= stat.S_IROTH
-        if perm_str[7] == 'w': perms |= stat.S_IWOTH
-        if perm_str[8] == 'x': perms |= stat.S_IXOTH
+        if perm_str[0] == 'r':
+            perms |= stat.S_IRUSR
+        if perm_str[1] == 'w':
+            perms |= stat.S_IWUSR
+        if perm_str[2] == 'x':
+            perms |= stat.S_IXUSR
+        if perm_str[3] == 'r':
+            perms |= stat.S_IRGRP
+        if perm_str[4] == 'w':
+            perms |= stat.S_IWGRP
+        if perm_str[5] == 'x':
+            perms |= stat.S_IXGRP
+        if perm_str[6] == 'r':
+            perms |= stat.S_IROTH
+        if perm_str[7] == 'w':
+            perms |= stat.S_IWOTH
+        if perm_str[8] == 'x':
+            perms |= stat.S_IXOTH
         return perms
 
     async def _test_file_timestamps(self, test_instance: BasicTest) -> TestResult:
@@ -485,55 +536,64 @@ class GuestToHostTestExecutor:
 
         if comparison_type == 'equals':
             expected_time = self._parse_test_timestamp(
-                test_instance.parameter.expected_time,
-                getattr(test_instance.parameter, 'time_format', None)
+                test_instance.parameter.expected_time, getattr(test_instance.parameter, 'time_format', None)
             )
             tolerance = getattr(test_instance.parameter, 'tolerance_seconds', 0) or 0
             if abs(actual_time - expected_time) <= tolerance:
-                return TestResult.success([
-                    f'{timestamp_type} timestamp matches (±{tolerance}s): {datetime.fromtimestamp(actual_time)}'
-                ])
-            return TestResult.failed([
-                f'{timestamp_type} timestamp mismatch. '
-                f'Expected: {datetime.fromtimestamp(expected_time)}, Got: {datetime.fromtimestamp(actual_time)}'
-            ])
+                return TestResult.success(
+                    [f'{timestamp_type} timestamp matches (±{tolerance}s): {datetime.fromtimestamp(actual_time)}']
+                )
+            return TestResult.failed(
+                [
+                    f'{timestamp_type} timestamp mismatch. '
+                    f'Expected: {datetime.fromtimestamp(expected_time)}, Got: {datetime.fromtimestamp(actual_time)}'
+                ]
+            )
 
         if comparison_type == 'before':
             expected_time = self._parse_test_timestamp(
-                test_instance.parameter.expected_time,
-                getattr(test_instance.parameter, 'time_format', None)
+                test_instance.parameter.expected_time, getattr(test_instance.parameter, 'time_format', None)
             )
             if actual_time < expected_time:
-                return TestResult.success([f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected_time)}'])
-            return TestResult.failed([f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected_time)}'])
+                return TestResult.success(
+                    [f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected_time)}']
+                )
+            return TestResult.failed(
+                [f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected_time)}']
+            )
 
         if comparison_type == 'after':
             expected_time = self._parse_test_timestamp(
-                test_instance.parameter.expected_time,
-                getattr(test_instance.parameter, 'time_format', None)
+                test_instance.parameter.expected_time, getattr(test_instance.parameter, 'time_format', None)
             )
             if actual_time > expected_time:
-                return TestResult.success([f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected_time)}'])
-            return TestResult.failed([f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected_time)}'])
+                return TestResult.success(
+                    [f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected_time)}']
+                )
+            return TestResult.failed(
+                [f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected_time)}']
+            )
 
         if comparison_type == 'between':
             start_time = self._parse_test_timestamp(
-                test_instance.parameter.start_time,
-                getattr(test_instance.parameter, 'time_format', None)
+                test_instance.parameter.start_time, getattr(test_instance.parameter, 'time_format', None)
             )
             end_time = self._parse_test_timestamp(
-                test_instance.parameter.end_time,
-                getattr(test_instance.parameter, 'time_format', None)
+                test_instance.parameter.end_time, getattr(test_instance.parameter, 'time_format', None)
             )
             if start_time <= actual_time <= end_time:
-                return TestResult.success([
-                    f'{timestamp_type} timestamp is between '
+                return TestResult.success(
+                    [
+                        f'{timestamp_type} timestamp is between '
+                        f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
+                    ]
+                )
+            return TestResult.failed(
+                [
+                    f'{timestamp_type} timestamp is not between '
                     f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
-                ])
-            return TestResult.failed([
-                f'{timestamp_type} timestamp is not between '
-                f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
-            ])
+                ]
+            )
 
         if comparison_type == 'within_last':
             within_duration = test_instance.parameter.within_duration
@@ -565,8 +625,12 @@ class GuestToHostTestExecutor:
                 pass
 
         common_formats = [
-            '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%SZ',
-            '%Y-%m-%d', '%m/%d/%Y %H:%M:%S', '%m/%d/%Y',
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%dT%H:%M:%S',
+            '%Y-%m-%dT%H:%M:%SZ',
+            '%Y-%m-%d',
+            '%m/%d/%Y %H:%M:%S',
+            '%m/%d/%Y',
         ]
         for fmt in common_formats:
             try:

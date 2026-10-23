@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import click
 
+from adare.cli.output import output_options
+
 
 def register(cli, AliasedGroup, exec_with_error_printing):
     """Register web interface commands with the CLI."""
@@ -9,29 +11,36 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     # ------------------------------
     # Web interface commands
     # ------------------------------
-    @cli.group()
+    @cli.group(cls=AliasedGroup)
     def web():
-        """Web interface commands."""
+        """ADARE Web platform: log in, download, publish and submit shared work.
+
+        The local web UI is `adare ui`.
+        """
         pass
 
     @web.command()
     def login():
-        """Login to the web interface."""
+        """Login to the ADARE Web platform."""
         from adare.cli.web import exec_web_login
+
         args = SimpleNamespace()
         exec_with_error_printing(exec_web_login, args)
 
     @web.command()
     def logout():
-        """Logout from the web interface."""
+        """Logout from the ADARE Web platform."""
         from adare.cli.web import exec_web_logout
+
         args = SimpleNamespace()
         exec_with_error_printing(exec_web_logout, args)
 
     @web.command()
+    @output_options
     def status():
         """Show the web login status."""
         from adare.cli.web import exec_web_status
+
         args = SimpleNamespace()
         exec_with_error_printing(exec_web_status, args)
 
@@ -46,6 +55,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def download_experiment(ulid):
         """Download an experiment."""
         from adare.cli.web import exec_download_experiment
+
         args = SimpleNamespace(ulid=ulid)
         exec_with_error_printing(exec_download_experiment, args)
 
@@ -55,6 +65,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def download_testfunction(name, version):
         """Download a testfunction."""
         from adare.cli.web import exec_download_testfunction
+
         args = SimpleNamespace(name=name, version=version)
         exec_with_error_printing(exec_download_testfunction, args)
 
@@ -63,6 +74,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def download_environment(name):
         """Download an environment."""
         from adare.cli.web import exec_download_environment
+
         args = SimpleNamespace(name=name)
         exec_with_error_printing(exec_download_environment, args)
 
@@ -72,6 +84,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def download_bundle(ulid, project):
         """Download an experiment bundle (experiment + all dependencies)."""
         from adare.cli.web import exec_download_bundle
+
         args = SimpleNamespace(ulid=ulid, project=project)
         exec_with_error_printing(exec_download_bundle, args)
 
@@ -81,6 +94,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def publish(ulid, project):
         """Publish an experiment run to the server with progress tracking."""
         from adare.cli.web import exec_web_publish_run
+
         args = SimpleNamespace(ulid=ulid, project=project)
         exec_with_error_printing(exec_web_publish_run, args)
 
@@ -91,26 +105,31 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         pass
 
     @check.command(name='experiment')
+    @output_options
     @click.argument('ulid')
     def check_experiment(ulid):
         """Check if an experiment exists on the server."""
         from adare.cli.web import exec_web_check_experiment
+
         args = SimpleNamespace(ulid=ulid)
         exec_with_error_printing(exec_web_check_experiment, args)
 
     @check.command(name='run')
+    @output_options
     @click.argument('ulid')
     def check_run(ulid):
         """Check if an experiment run exists on the server."""
         from adare.cli.web import exec_web_check_run
+
         args = SimpleNamespace(ulid=ulid)
         exec_with_error_printing(exec_web_check_run, args)
 
     @web.command()
     @click.option('--project', '-p', help='Name of the project')
     def sync(project):
-        """Sync all environments and experiments with the web interface."""
+        """Sync all environments and experiments with the ADARE Web platform."""
         from adare.cli.web import exec_web_sync
+
         args = SimpleNamespace(project=project)
         exec_with_error_printing(exec_web_sync, args)
 
@@ -123,14 +142,18 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @submit.command(name='experiment')
     @click.argument('name')
     @click.option('--project', '-p', help='Name of the project')
-    @click.option('--skip-dependency-check', is_flag=True, default=False,
-                  help='Submit even if a referenced test function or environment is not '
-                       'resolvable in the server\'s published catalog')
+    @click.option(
+        '--skip-dependency-check',
+        is_flag=True,
+        default=False,
+        help='Submit even if a referenced test function or environment is not '
+        'resolvable in the server\'s published catalog',
+    )
     def submit_experiment(name, project, skip_dependency_check):
         """Submit an experiment as a PR to the shared repository."""
         from adare.cli.web import exec_submit_experiment
-        args = SimpleNamespace(name=name, project=project,
-                               skip_dependency_check=skip_dependency_check)
+
+        args = SimpleNamespace(name=name, project=project, skip_dependency_check=skip_dependency_check)
         exec_with_error_printing(exec_submit_experiment, args)
 
     @submit.command(name='testfunction')
@@ -139,6 +162,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def submit_testfunction(name, project):
         """Submit a testfunction as a PR to the shared repository."""
         from adare.cli.web import exec_submit_testfunction
+
         args = SimpleNamespace(name=name, project=project)
         exec_with_error_printing(exec_submit_testfunction, args)
 
@@ -148,6 +172,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def submit_environment(name, project):
         """Submit an environment as a PR to the shared repository."""
         from adare.cli.web import exec_submit_environment
+
         args = SimpleNamespace(name=name, project=project)
         exec_with_error_printing(exec_submit_environment, args)
 

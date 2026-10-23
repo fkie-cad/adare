@@ -10,16 +10,20 @@ from adare.core.dto.manage import DbInitResult, DbRepairResult, DbStatusResult, 
 class TestDbStatusResult:
     def test_healthy_db(self):
         r = DbStatusResult(
-            global_db_exists=True, global_db_accessible=True,
-            global_db_location=Path("/db"), valid=True,
+            global_db_exists=True,
+            global_db_accessible=True,
+            global_db_location=Path("/db"),
+            valid=True,
         )
         assert r.valid is True
         assert r.errors == []
 
     def test_unhealthy_db(self):
         r = DbStatusResult(
-            global_db_exists=False, global_db_accessible=False,
-            global_db_location=None, valid=False,
+            global_db_exists=False,
+            global_db_accessible=False,
+            global_db_location=None,
+            valid=False,
             errors=["Database not found"],
         )
         assert r.valid is False
@@ -46,8 +50,10 @@ class TestDbRepairResult:
 class TestVmResetResult:
     def test_construction(self):
         r = VmResetResult(
-            deleted_count=2, failed_count=1,
-            deleted_vms=["vm1", "vm2"], failed_vms=["vm3"],
+            deleted_count=2,
+            failed_count=1,
+            deleted_vms=["vm1", "vm2"],
+            failed_vms=["vm3"],
         )
         assert r.deleted_count == 2
         assert len(r.failed_vms) == 1

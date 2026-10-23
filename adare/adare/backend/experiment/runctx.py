@@ -24,7 +24,9 @@ class ExperimentConfig:
     vm_cpus: int = 4
     vm_memory: int = 4096  # Default, can be overridden based on guest platform or CLI
     vm_resolution: tuple[int, int] = (1920, 1080)
-    vm_display_resolution: str | None = None  # Guest display resolution "WxH" from playbook Settings.resolution; None = env/host default
+    vm_display_resolution: str | None = (
+        None  # Guest display resolution "WxH" from playbook Settings.resolution; None = env/host default
+    )
     websocket_port: int | None = None  # Allocated dynamically from database
     shared_directories: dict[str, dict[str, Path]] = field(default_factory=dict)
     gui_mode_override: str | None = None  # CLI override for GUI execution mode
@@ -61,6 +63,7 @@ class MachineRunCtx:
     vm: VirtualBoxVM | None = None
     vm_file: Path | None = None
     vm_name: str | None = None
+    vm_instance_id: str | None = None  # VmInstance row this machine runs on (released at cleanup)
     client: AdareVMClient | None = None
     mcp_server: MCPServerManager | None = None
     adarevm: Path | None = None
@@ -92,6 +95,11 @@ class ExperimentRunCtx:
     timestamp_start: datetime | None = None
     timestamp_before_vm_start: datetime | None = None
     timestamp_end: datetime | None = None
+
+    # --- Guest agent ---
+    # Per-run secret the agent requires on connect (see agent_token.py); shared
+    # by all machines of a run because they share the run's config.json.
+    agent_token: str | None = None
 
     # --- Concurrency ---
     stop_event: threading.Event = field(default_factory=threading.Event)
@@ -184,6 +192,19 @@ class ExperimentRunCtx:
     @vm_name.setter
     def vm_name(self, value: str | None) -> None:
         self.machines[self.primary_machine].vm_name = value
+
+    @property
+    def vm_instance_id(self) -> str | None:
+        return self.machines[self.primary_machine].vm_instance_id
+
+    @vm_instance_id.setter
+    def vm_instance_id(self, value: str | None) -> None:
+        self.machines[self.primary_machine].vm_instance_id = value
+
+    @property
+    def machine_key(self) -> str | None:
+        """Key of the machine this context describes (None for a single-VM run)."""
+        return self.primary_machine
 
     @property
     def client(self) -> AdareVMClient | None:

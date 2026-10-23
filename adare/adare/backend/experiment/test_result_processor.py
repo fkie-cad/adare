@@ -31,7 +31,9 @@ class TestResultProcessor:
     SUCCESS_STATUSES = {STATUS_SUCCESS, STATUS_WARNING}
 
     @classmethod
-    def process_test_result(cls, test_name: str, ws_result: dict[str, Any], expect_to_fail: bool = False) -> ActionResult:
+    def process_test_result(
+        cls, test_name: str, ws_result: dict[str, Any], expect_to_fail: bool = False
+    ) -> ActionResult:
         """
         Process test result received from WebSocket.
 
@@ -77,7 +79,9 @@ class TestResultProcessor:
 
         # Create detailed message with result category (use modified details)
         base_message = ws_result.get('message', '')
-        detailed_message = cls._create_detailed_message(base_message, test_status, modified_test_details, result_category)
+        detailed_message = cls._create_detailed_message(
+            base_message, test_status, modified_test_details, result_category
+        )
 
         # Determine overall success
         execution_success = ws_result.get('status') == 'success'
@@ -86,7 +90,7 @@ class TestResultProcessor:
         return ActionResult(
             success=overall_success,
             message=detailed_message,
-            data={**ws_result, 'result_category': result_category, 'expect_to_fail': expect_to_fail}
+            data={**ws_result, 'result_category': result_category, 'expect_to_fail': expect_to_fail},
         )
 
     @classmethod
@@ -112,12 +116,9 @@ class TestResultProcessor:
             return base_message
 
         # Create category-specific message prefixes
-        category_prefix = {
-            'success': '✓',
-            'warning': '⚠',
-            'test_failure': '✗',
-            'execution_error': '⚠'
-        }.get(category, '')
+        category_prefix = {'success': '✓', 'warning': '⚠', 'test_failure': '✗', 'execution_error': '⚠'}.get(
+            category, ''
+        )
 
         status_with_category = f"{category_prefix} {status}" if category_prefix else status
 
@@ -157,6 +158,7 @@ class TestResultProcessor:
         if isinstance(status, str):
             return status
         from adarelib.constants import StatusEnum
+
         name_map = {
             StatusEnum.SUCCESS: cls.STATUS_SUCCESS,
             StatusEnum.WARNING: cls.STATUS_WARNING,

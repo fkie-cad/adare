@@ -17,6 +17,7 @@ Example:
 
 Requires: qemu-system-x86_64, qemu-img, python3, PyYAML. KVM strongly recommended.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -51,17 +52,31 @@ def build_qemu_cmd(disk, iso, sock, serial_log, vm, nvram=None):
     """Assemble the qemu-system-x86_64 command line."""
     cmd = [
         'qemu-system-x86_64',
-        '-machine', 'pc,accel=kvm:tcg',
-        '-cpu', 'host',
-        '-m', str(vm['ram_mb']),
-        '-smp', str(vm['cpus']),
-        '-drive', f'file={disk},format=qcow2,if=virtio,cache=writeback',
-        '-vga', vm.get('vga', 'qxl'),
-        '-usb', '-device', 'usb-tablet',
-        '-netdev', 'user,id=n0', '-device', 'virtio-net-pci,netdev=n0',
-        '-qmp', f'unix:{sock},server,nowait',
-        '-serial', f'file:{serial_log}',
-        '-display', 'none',
+        '-machine',
+        'pc,accel=kvm:tcg',
+        '-cpu',
+        'host',
+        '-m',
+        str(vm['ram_mb']),
+        '-smp',
+        str(vm['cpus']),
+        '-drive',
+        f'file={disk},format=qcow2,if=virtio,cache=writeback',
+        '-vga',
+        vm.get('vga', 'qxl'),
+        '-usb',
+        '-device',
+        'usb-tablet',
+        '-netdev',
+        'user,id=n0',
+        '-device',
+        'virtio-net-pci,netdev=n0',
+        '-qmp',
+        f'unix:{sock},server,nowait',
+        '-serial',
+        f'file:{serial_log}',
+        '-display',
+        'none',
     ]
     if iso:
         cmd += ['-cdrom', str(iso), '-boot', 'd']
@@ -70,8 +85,10 @@ def build_qemu_cmd(disk, iso, sock, serial_log, vm, nvram=None):
         if not code:
             raise SystemExit('firmware: uefi requested but no OVMF_CODE.fd found')
         cmd[1:1] = [
-            '-drive', f'if=pflash,format=raw,readonly=on,file={code}',
-            '-drive', f'if=pflash,format=raw,file={nvram}',
+            '-drive',
+            f'if=pflash,format=raw,readonly=on,file={code}',
+            '-drive',
+            f'if=pflash,format=raw,file={nvram}',
         ]
     return cmd
 
@@ -94,10 +111,12 @@ def run_steps(q: QMP, steps, outdir: Path, w=1024, h=768):
             elif action == 'wait':
                 time.sleep(float(step['seconds']))
             elif action == 'wait_stable':
-                ok = q.wait_stable(settle=float(step.get('settle', 20)),
-                                   timeout=float(step.get('timeout', 600)),
-                                   poll=float(step.get('poll', 3)),
-                                   min_elapsed=float(step.get('min', 0)))
+                ok = q.wait_stable(
+                    settle=float(step.get('settle', 20)),
+                    timeout=float(step.get('timeout', 600)),
+                    poll=float(step.get('poll', 3)),
+                    min_elapsed=float(step.get('min', 0)),
+                )
                 if not ok:
                     print(f'    ! wait_stable timed out ({note or action})', flush=True)
             elif action == 'shot':
@@ -131,8 +150,7 @@ def stop(proc, sock):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('playbook', type=Path)
     ap.add_argument('--iso', type=Path, required=True, help='installer ISO')
     ap.add_argument('--disk', type=Path, help='qcow2 path (default: <vm-dir>/<name>.qcow2)')
@@ -150,11 +168,16 @@ def main():
     pb = yaml.safe_load(a.playbook.read_text())
     name = pb['name']
     vm = dict(pb.get('vm', {}))
-    vm.setdefault('ram_mb', 4096); vm.setdefault('cpus', 4)
-    vm.setdefault('disk_size', '60G'); vm.setdefault('vga', 'qxl')
-    if a.ram: vm['ram_mb'] = a.ram
-    if a.cpus: vm['cpus'] = a.cpus
-    if a.disk_size: vm['disk_size'] = a.disk_size
+    vm.setdefault('ram_mb', 4096)
+    vm.setdefault('cpus', 4)
+    vm.setdefault('disk_size', '60G')
+    vm.setdefault('vga', 'qxl')
+    if a.ram:
+        vm['ram_mb'] = a.ram
+    if a.cpus:
+        vm['cpus'] = a.cpus
+    if a.disk_size:
+        vm['disk_size'] = a.disk_size
 
     if not a.iso.is_file():
         raise SystemExit(f'ISO not found: {a.iso}')
@@ -169,8 +192,9 @@ def main():
         raise SystemExit(f'{disk} exists — pass --force to overwrite')
     if disk.exists():
         disk.unlink()
-    subprocess.run(['qemu-img', 'create', '-f', 'qcow2', str(disk), vm['disk_size']],
-                   check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(
+        ['qemu-img', 'create', '-f', 'qcow2', str(disk), vm['disk_size']], check=True, stdout=subprocess.DEVNULL
+    )
     nvram = None
     if vm.get('firmware') == 'uefi':
         nvram = disk.parent / f'{name}_VARS.fd'
@@ -189,7 +213,8 @@ def main():
         q = QMP(a.sock)
         print('== driving installer ==', flush=True)
         run_steps(q, pb.get('install', []), outdir)
-        q.close(); q = None
+        q.close()
+        q = None
 
         if pb.get('reboot_from_disk') and not a.keep_running:
             print('== rebooting from installed disk ==', flush=True)
@@ -214,8 +239,11 @@ def main():
         if not a.keep_running:
             stop(proc, a.sock)
 
-    print(f'\n== done ==\n  disk:        {disk}\n  screenshots: {outdir}\n'
-          f'  credentials: {pb.get("credentials", "see playbook")}', flush=True)
+    print(
+        f'\n== done ==\n  disk:        {disk}\n  screenshots: {outdir}\n'
+        f'  credentials: {pb.get("credentials", "see playbook")}',
+        flush=True,
+    )
 
 
 if __name__ == '__main__':

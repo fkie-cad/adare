@@ -95,9 +95,7 @@ class VLMClient:
             raise VLMError(f'vLLM message content was not text: {content!r}')
         return content
 
-    async def _post_with_retry(
-        self, url: str, payload: dict[str, Any], headers: dict[str, str]
-    ) -> dict[str, Any]:
+    async def _post_with_retry(self, url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
         """POST the payload, retrying only transport-level failures.
 
         ``httpx.TransportError`` (read timeouts, connection resets — the class
@@ -117,12 +115,14 @@ class VLMClient:
             except httpx.TransportError as exc:
                 last_exc = exc
                 if attempt < _TRANSPORT_RETRIES:
-                    delay = _TRANSPORT_BACKOFF_BASE ** attempt
+                    delay = _TRANSPORT_BACKOFF_BASE**attempt
                     log.warning(
-                        'vLLM transport error on attempt %d/%d (%s: %s); '
-                        'retrying in %.1fs',
-                        attempt, _TRANSPORT_RETRIES,
-                        type(exc).__name__, exc, delay,
+                        'vLLM transport error on attempt %d/%d (%s: %s); retrying in %.1fs',
+                        attempt,
+                        _TRANSPORT_RETRIES,
+                        type(exc).__name__,
+                        exc,
+                        delay,
                     )
                     await asyncio.sleep(delay)
                     continue
@@ -130,14 +130,10 @@ class VLMClient:
                 # Non-transport HTTP errors — chiefly httpx.HTTPStatusError from
                 # raise_for_status() (a real 4xx/5xx). Surface immediately, never
                 # retry: an auth or server error will not fix itself.
-                raise VLMError(
-                    f'vLLM request to {url} failed: '
-                    f'{type(exc).__name__}: {exc}'
-                ) from exc
+                raise VLMError(f'vLLM request to {url} failed: {type(exc).__name__}: {exc}') from exc
             except ValueError as exc:  # JSON decode
                 raise VLMError(f'vLLM returned non-JSON response: {exc}') from exc
 
         raise VLMError(
-            f'vLLM request to {url} failed after {_TRANSPORT_RETRIES} attempts: '
-            f'{type(last_exc).__name__}: {last_exc}'
+            f'vLLM request to {url} failed after {_TRANSPORT_RETRIES} attempts: {type(last_exc).__name__}: {last_exc}'
         ) from last_exc

@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from adare.config.configdirectory import ENVIRONMENTS_DIR, VMS_DIR
 from adare.config.database import get_global_database_location, get_project_database_location
-from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
+from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi, dispose_engines
 from adare.database.exceptions import DatabaseError
 from adare.database.fixtures import fixture_stages, fixture_status
 from adare.database.migrations.runner import Scope, apply_pending, invalidate_cache, pending
@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 
 class DatabaseInitializationError(DatabaseError):
     """Raised when database initialization fails."""
+
     pass
 
 
@@ -108,11 +109,7 @@ def initialize_database_system() -> dict[str, Any]:
     Returns:
         Dictionary with initialization results
     """
-    results = {
-        'global_db_initialized': False,
-        'global_db_location': None,
-        'errors': []
-    }
+    results = {'global_db_initialized': False, 'global_db_location': None, 'errors': []}
 
     try:
         # Ensure global directories exist first
@@ -185,10 +182,7 @@ def get_pending_migrations() -> list[str]:
 
     for project_path in _registered_project_paths():
         project_db = get_project_database_location(project_path)
-        names.extend(
-            f"{name} [{project_path.name}]"
-            for name in _pending_names(project_db, 'project')
-        )
+        names.extend(f"{name} [{project_path.name}]" for name in _pending_names(project_db, 'project'))
 
     return names
 
@@ -209,11 +203,7 @@ def migrate_database_system(quiet: bool = False) -> dict[str, Any]:
         Dictionary with ``migrated`` (bool), ``applied`` (list of migration
         names) and ``errors`` (list of str).
     """
-    results: dict[str, Any] = {
-        'migrated': False,
-        'applied': [],
-        'errors': []
-    }
+    results: dict[str, Any] = {'migrated': False, 'applied': [], 'errors': []}
 
     # --- global database -----------------------------------------------------
     try:
@@ -250,8 +240,7 @@ def migrate_database_system(quiet: bool = False) -> dict[str, Any]:
             try:
                 ProjectBase.metadata.create_all(engine)
                 results['applied'].extend(
-                    f"{name} [{project_path.name}]"
-                    for name in apply_pending(engine, 'project', quiet=quiet)
+                    f"{name} [{project_path.name}]" for name in apply_pending(engine, 'project', quiet=quiet)
                 )
             finally:
                 engine.dispose()
@@ -277,7 +266,7 @@ def validate_database_integrity() -> dict[str, Any]:
         'global_db_accessible': False,
         'schema_version_valid': True,
         'pending_migrations': [],
-        'errors': []
+        'errors': [],
     }
 
     try:
@@ -300,6 +289,7 @@ def validate_database_integrity() -> dict[str, Any]:
                 with GlobalDatabaseApi() as api:
                     # Try a simple query to test database accessibility
                     from sqlalchemy import text
+
                     api._session.execute(text("SELECT 1"))
                     results['global_db_accessible'] = True
                     log.debug("Global database is accessible")
@@ -333,7 +323,7 @@ def validate_project_database(project_path: Path) -> dict[str, Any]:
         'db_exists': False,
         'db_accessible': False,
         'project_path': str(project_path),
-        'errors': []
+        'errors': [],
     }
 
     try:
@@ -350,6 +340,7 @@ def validate_project_database(project_path: Path) -> dict[str, Any]:
                 with ProjectDatabaseApi(project_path) as api:
                     # Try a simple query to test database accessibility
                     from sqlalchemy import text
+
                     api._session.execute(text("SELECT 1"))
                     results['db_accessible'] = True
                     log.debug(f"Project database accessible for {project_path}")
@@ -380,11 +371,12 @@ def get_database_status() -> dict[str, Any]:
         'system_initialized': False,
         'global_database': {},
         'architecture_version': '2.0',  # New architecture version
-        'timestamp': None
+        'timestamp': None,
     }
 
     try:
         from datetime import datetime
+
         status['timestamp'] = datetime.now().isoformat()
 
         # Validate database integrity
@@ -410,11 +402,7 @@ def repair_database_system() -> dict[str, Any]:
     Returns:
         Dictionary with repair results
     """
-    results = {
-        'repaired': False,
-        'actions_taken': [],
-        'errors': []
-    }
+    results = {'repaired': False, 'actions_taken': [], 'errors': []}
 
     try:
         log.info("Starting database system repair...")
@@ -460,11 +448,7 @@ def clean_install_database_system() -> dict[str, Any]:
     Returns:
         Dictionary with installation results
     """
-    results = {
-        'installed': False,
-        'actions_taken': [],
-        'errors': []
-    }
+    results = {'installed': False, 'actions_taken': [], 'errors': []}
 
     try:
         log.warning("Starting clean database system installation...")
@@ -472,6 +456,8 @@ def clean_install_database_system() -> dict[str, Any]:
         # Remove existing global database if it exists
         global_db_location = get_global_database_location()
         if global_db_location.exists():
+            # Close pooled connections first: Windows cannot delete an open file.
+            dispose_engines()
             global_db_location.unlink()
             # The ledger went with the file — drop the cached applied-state so
             # the fresh database is stamped again.

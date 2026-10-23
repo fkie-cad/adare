@@ -1,4 +1,3 @@
-
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -7,7 +6,6 @@ from adare.types.playbook import CommandAction
 
 
 class TestCommandAction:
-
     def test_raw_string_parsing_r_double_quote(self):
         """Test parsing of r"..." raw string format."""
         # The input value simulates what the YAML loader might pass if it parses 'command: r"..."' as a string
@@ -86,4 +84,3 @@ class TestCommandAction:
         action = CommandAction(command='r"$x = 1"')
         # Should strip r"" but NOT wrap
         assert action.command == "$x = 1"
-

@@ -41,9 +41,7 @@ def _find_environment_file(project_path: Path, name: str) -> Path | None:
     # `ProjectDirectory.environments` currently resolves to the same global
     # ENVIRONMENTS_DIR, so dedupe rather than probing each path twice; listing both
     # keeps this correct if the project layout ever gains a local directory.
-    directories = list(dict.fromkeys(
-        [ProjectDirectory(project_path).environments, ENVIRONMENTS_DIR]
-    ))
+    directories = list(dict.fromkeys([ProjectDirectory(project_path).environments, ENVIRONMENTS_DIR]))
     for directory in directories:
         for ext in ('.yml', '.yaml'):
             candidate = directory / f'{name}{ext}'
@@ -52,8 +50,9 @@ def _find_environment_file(project_path: Path, name: str) -> Path | None:
     return None
 
 
-def recipe_byo(project_path: Path, name: str, iso_name: str | None = None,
-               iso_notes: str | None = None) -> Result[EnvironmentInfo]:
+def recipe_byo(
+    project_path: Path, name: str, iso_name: str | None = None, iso_notes: str | None = None
+) -> Result[EnvironmentInfo]:
     """Rewrite ``name``'s recipe ISO source into the consumer-supplied form.
 
     Args:
@@ -94,10 +93,7 @@ def recipe_byo(project_path: Path, name: str, iso_name: str | None = None,
     if source == 'byo':
         return Result.fail(
             code='AlreadyByoIso',
-            message=(
-                f'"{name}" already declares a consumer-supplied ISO '
-                f'({recipe.iso_name!r}); nothing to convert.'
-            ),
+            message=(f'"{name}" already declares a consumer-supplied ISO ({recipe.iso_name!r}); nothing to convert.'),
             solutions=['Edit recipe.iso_notes directly to change the download pointer'],
         )
     if source in ('both', 'none'):
@@ -116,7 +112,7 @@ def recipe_byo(project_path: Path, name: str, iso_name: str | None = None,
         return Result.fail(
             code='UnknownOsProfileError',
             message=f'Recipe profile {recipe.profile!r} is not a known OS profile.',
-            solutions=['Run: adare os-profile list'],
+            solutions=['Run: adare vm profile list'],
         )
 
     if os_def.platform != 'windows':
@@ -138,8 +134,7 @@ def recipe_byo(project_path: Path, name: str, iso_name: str | None = None,
                 f'Cannot derive a valid bare ISO filename (got {resolved_name!r}): it '
                 f"must have no directory separators, no '..', and end in '.iso'."
             ),
-            solutions=[f'Pass one explicitly: adare env recipe-byo {name} '
-                       f'--iso-name Win11_25H2_English_Arm64_v2.iso'],
+            solutions=[f'Pass one explicitly: adare env recipe-byo {name} --iso-name Win11_25H2_English_Arm64_v2.iso'],
         )
 
     digest = normalized_iso_sha256(recipe.iso_sha256)
@@ -151,8 +146,7 @@ def recipe_byo(project_path: Path, name: str, iso_name: str | None = None,
                 'is the ONLY handle the consumer has on the correct file, so it cannot '
                 'be omitted.'
             ),
-            solutions=[f'shasum -a 256 {recipe.iso}',
-                       'Add the result as recipe.iso_sha256, then re-run this command'],
+            solutions=[f'shasum -a 256 {recipe.iso}', 'Add the result as recipe.iso_sha256, then re-run this command'],
         )
 
     # Surgical edit of the parsed YAML rather than re-serializing from the attrs
@@ -170,22 +164,25 @@ def recipe_byo(project_path: Path, name: str, iso_name: str | None = None,
     dict_to_yaml(env_file, env_dict)
 
     log.info('Converted %s to a consumer-supplied ISO (%s)', env_file, resolved_name)
-    return Result.ok(EnvironmentInfo(
-        id='',
-        name=name,
-        description=metadata.description or '',
-        vm_name=None,
-        hypervisor=metadata.hypervisor,
-        os_platform=os_def.platform,
-        file_path=env_file,
-        next_steps=[
-            f'Confirm it still builds here: adare env load {env_file} --iso {previous_iso}'
-            if previous_iso else f'Confirm it still builds here: adare env load {env_file}',
-            f'Publish it: adare web submit environment {name}',
-        ],
-        tip=(
-            f'Consumers need "{resolved_name}" (sha256 {digest[:12]}...) in '
-            f'~/.adare/isos/. The recipe hash is unchanged, so any disk you have '
-            f'already built stays a cache hit.'
-        ),
-    ))
+    return Result.ok(
+        EnvironmentInfo(
+            id='',
+            name=name,
+            description=metadata.description or '',
+            vm_name=None,
+            hypervisor=metadata.hypervisor,
+            os_platform=os_def.platform,
+            file_path=env_file,
+            next_steps=[
+                f'Confirm it still builds here: adare env load {env_file} --iso {previous_iso}'
+                if previous_iso
+                else f'Confirm it still builds here: adare env load {env_file}',
+                f'Publish it: adare web submit environment {name}',
+            ],
+            tip=(
+                f'Consumers need "{resolved_name}" (sha256 {digest[:12]}...) in '
+                f'~/.adare/isos/. The recipe hash is unchanged, so any disk you have '
+                f'already built stays a cache hit.'
+            ),
+        )
+    )

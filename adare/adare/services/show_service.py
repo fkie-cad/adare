@@ -4,6 +4,7 @@ Show Service - Business logic for data display operations.
 This service handles data retrieval operations for display and returns Result[T] objects
 that can be consumed by any frontend (CLI, Web UI, REST API).
 """
+
 import logging
 from collections.abc import Callable
 from pathlib import Path
@@ -48,6 +49,7 @@ def _parse_env_source(file: str | None) -> tuple[str, str, str, str, str]:
     try:
         from adare.exceptions import DataStructuringError
         from adare.types.environment import parse_environment_file
+
         metadata = parse_environment_file(env_path)
     except (OSError, ValueError, DataStructuringError) as e:
         # A single malformed file must never break the whole list.
@@ -56,8 +58,11 @@ def _parse_env_source(file: str | None) -> tuple[str, str, str, str, str]:
     if metadata is None:
         return empty
     return (
-        metadata.vm or "", metadata.vm_type or "", metadata.vm_sha256 or "",
-        metadata.source_profile or "", metadata.source_iso_sha256 or "",
+        metadata.vm or "",
+        metadata.vm_type or "",
+        metadata.vm_sha256 or "",
+        metadata.source_profile or "",
+        metadata.source_iso_sha256 or "",
     )
 
 
@@ -152,19 +157,17 @@ class ShowService:
         except FileNotFoundError as e:
             log.error(f"Failed to list runs: {e}")
             return Result.fail(
-                code="RunListError",
-                message=f"Failed to list runs: {e}",
-                solutions=['Check database connection']
+                code="RunListError", message=f"Failed to list runs: {e}", solutions=['Check database connection']
             )
         except OSError as e:
             log.error(f"Failed to list runs: {e}")
             return Result.fail(
-                code="RunListError",
-                message=f"Failed to list runs: {e}",
-                solutions=['Check database connection']
+                code="RunListError", message=f"Failed to list runs: {e}", solutions=['Check database connection']
             )
 
-    def get_run(self, ulid: str = None, latest_in_project: bool = False, project_path: Path = None) -> Result[RunDetail]:
+    def get_run(
+        self, ulid: str = None, latest_in_project: bool = False, project_path: Path = None
+    ) -> Result[RunDetail]:
         """
         Get detailed information about a specific run.
 
@@ -188,21 +191,19 @@ class ShowService:
                         return Result.fail(
                             code="RunNotFoundError",
                             message="No runs found in current project",
-                            solutions=['Run an experiment first', 'Check if you are in a project directory']
+                            solutions=['Run an experiment first', 'Check if you are in a project directory'],
                         )
                     ulid = latest_run_data['id'].iloc[0]
 
             # Search across all project databases for the run
-            all_runs = self._query_across_projects(
-                lambda api, name: api.get_runs_structured(project_name=name)
-            )
+            all_runs = self._query_across_projects(lambda api, name: api.get_runs_structured(project_name=name))
 
             run = next((r for r in all_runs if r.ulid == ulid), None)
             if not run:
                 return Result.fail(
                     code="RunNotFoundError",
                     message=f"Run with ULID {ulid} not found",
-                    solutions=['Use `adare show runs` to find valid run ULIDs']
+                    solutions=['Use `adare runs list` to find valid run ULIDs'],
                 )
 
             detail = RunDetail(
@@ -228,14 +229,14 @@ class ShowService:
             return Result.fail(
                 code="RunRetrievalError",
                 message=f"Failed to get run: {e}",
-                solutions=['Check database connection', 'Verify the ULID is correct']
+                solutions=['Check database connection', 'Verify the ULID is correct'],
             )
         except OSError as e:
             log.error(f"Failed to get run {ulid}: {e}")
             return Result.fail(
                 code="RunRetrievalError",
                 message=f"Failed to get run: {e}",
-                solutions=['Check database connection', 'Verify the ULID is correct']
+                solutions=['Check database connection', 'Verify the ULID is correct'],
             )
 
     def get_run_files(self, ulid: str) -> Result[dict]:
@@ -246,15 +247,13 @@ class ShowService:
         """
         try:
             matches = self._query_across_projects(
-                lambda api, name: (
-                    [files] if (files := api.get_run_files(ulid)) is not None else []
-                )
+                lambda api, name: [files] if (files := api.get_run_files(ulid)) is not None else []
             )
             if not matches:
                 return Result.fail(
                     code="RunNotFoundError",
                     message=f"Run with ULID {ulid} not found",
-                    solutions=['Use `adare show runs` to find valid run ULIDs']
+                    solutions=['Use `adare runs list` to find valid run ULIDs'],
                 )
             return Result.ok(matches[0])
         except (FileNotFoundError, OSError) as e:
@@ -262,7 +261,7 @@ class ShowService:
             return Result.fail(
                 code="RunRetrievalError",
                 message=f"Failed to get run files: {e}",
-                solutions=['Check database connection', 'Verify the ULID is correct']
+                solutions=['Check database connection', 'Verify the ULID is correct'],
             )
 
     def remove_run(self, request: RunRemoveRequest) -> Result[RunRemoveResult]:
@@ -285,7 +284,7 @@ class ShowService:
                 return Result.fail(
                     code="ArgumentsError",
                     message="No run ULID provided",
-                    solutions=['Use `adare show runs` to find the ULID of the run to remove']
+                    solutions=['Use `adare runs list` to find the ULID of the run to remove'],
                 )
 
             # Get project path for database context
@@ -294,7 +293,7 @@ class ShowService:
                 return Result.fail(
                     code="NoProjectFoundError",
                     message="No project found in current directory or parent directories",
-                    solutions=['Run this command from within a project directory']
+                    solutions=['Run this command from within a project directory'],
                 )
 
             with ExperimentApi(project_path) as api:
@@ -304,7 +303,7 @@ class ShowService:
                     return Result.fail(
                         code="RunNotFoundError",
                         message=f"Run with ULID {request.ulid} not found",
-                        solutions=['Use `adare show runs` to find valid run ULIDs']
+                        solutions=['Use `adare runs list` to find valid run ULIDs'],
                     )
 
                 was_fake = run.fake
@@ -313,11 +312,13 @@ class ShowService:
                 api.delete_experiment_run(run)
                 api._session.commit()
 
-                return Result.ok(RunRemoveResult(
-                    removed=True,
-                    ulid=request.ulid,
-                    was_fake=was_fake,
-                ))
+                return Result.ok(
+                    RunRemoveResult(
+                        removed=True,
+                        ulid=request.ulid,
+                        was_fake=was_fake,
+                    )
+                )
 
         except NoProjectFoundError as e:
             return Result.from_exception(e)
@@ -328,7 +329,7 @@ class ShowService:
             return Result.fail(
                 code="RunRemovalError",
                 message=f"Failed to remove run: {e}",
-                solutions=['Check database permissions', 'Ensure the run exists']
+                solutions=['Check database permissions', 'Ensure the run exists'],
             )
 
     # =========================================================================
@@ -366,7 +367,7 @@ class ShowService:
             return Result.fail(
                 code="ProjectListError",
                 message=f"Failed to list projects: {e}",
-                solutions=['Check database connection']
+                solutions=['Check database connection'],
             )
 
     # =========================================================================
@@ -383,8 +384,8 @@ class ShowService:
         from pathlib import Path
 
         from adare.database.api.base import GlobalDatabaseApi
-        from adare.database.models.global_models import Vm
         from adare.database.api.structured_data import StructuredDataApi
+        from adare.database.models.global_models import Vm
 
         try:
             with StructuredDataApi() as api:
@@ -402,35 +403,33 @@ class ShowService:
                 disk_path = vm_files.get(env.vm_id) or ''
                 # Only a local path can be stat'ed; a URL-baked env has nothing to check
                 # here, which is reported as unknown rather than as missing.
-                disk_present = (
-                    Path(disk_path).is_file()
-                    if disk_path and '://' not in disk_path
-                    else None
+                disk_present = Path(disk_path).is_file() if disk_path and '://' not in disk_path else None
+                items.append(
+                    EnvironmentListItem(
+                        ulid=env.ulid,
+                        name=env.name,
+                        display_name=env.display_name,
+                        dotnotation=env.dotnotation,
+                        project=env.project,
+                        description=env.description,
+                        vm_name=env.vm_box,
+                        vm_id=env.vm_id,
+                        os_info=env.os_info,
+                        osinfo_os=env.osinfo_os,
+                        osinfo_distribution=env.osinfo_distribution,
+                        osinfo_version=env.osinfo_version,
+                        osinfo_language=env.osinfo_language,
+                        published=env.published,
+                        in_request=env.in_request,
+                        created_at=env.created_at,
+                        file=env.file,
+                        vm=vm,
+                        vm_type=vm_type,
+                        vm_sha256=vm_sha256,
+                        disk_path=disk_path,
+                        disk_present=disk_present,
+                    )
                 )
-                items.append(EnvironmentListItem(
-                    ulid=env.ulid,
-                    name=env.name,
-                    display_name=env.display_name,
-                    dotnotation=env.dotnotation,
-                    project=env.project,
-                    description=env.description,
-                    vm_name=env.vm_box,
-                    vm_id=env.vm_id,
-                    os_info=env.os_info,
-                    osinfo_os=env.osinfo_os,
-                    osinfo_distribution=env.osinfo_distribution,
-                    osinfo_version=env.osinfo_version,
-                    osinfo_language=env.osinfo_language,
-                    published=env.published,
-                    in_request=env.in_request,
-                    created_at=env.created_at,
-                    file=env.file,
-                    vm=vm,
-                    vm_type=vm_type,
-                    vm_sha256=vm_sha256,
-                    disk_path=disk_path,
-                    disk_present=disk_present,
-                ))
 
             return Result.ok(items)
 
@@ -439,7 +438,7 @@ class ShowService:
             return Result.fail(
                 code="EnvironmentListError",
                 message=f"Failed to list environments: {e}",
-                solutions=['Check database connection']
+                solutions=['Check database connection'],
             )
 
     def get_environment(self, name: str) -> Result[EnvironmentDetail]:
@@ -464,7 +463,7 @@ class ShowService:
                 return Result.fail(
                     code="EnvironmentNotFoundError",
                     message=f"Environment '{name}' not found",
-                    solutions=['Use `adare show environments` to list available environments']
+                    solutions=['Use `adare env list` to list available environments'],
                 )
 
             vm, vm_type, vm_sha256, source_profile, source_iso_sha256 = _parse_env_source(env.file)
@@ -479,11 +478,7 @@ class ShowService:
             with GlobalDatabaseApi() as db:
                 vm_row = db._session.query(Vm).filter_by(id=env.vm_id).first() if env.vm_id else None
             disk_path = (vm_row.file if vm_row else '') or ''
-            disk_present = (
-                Path(disk_path).is_file()
-                if disk_path and '://' not in disk_path
-                else None
-            )
+            disk_present = Path(disk_path).is_file() if disk_path and '://' not in disk_path else None
 
             detail = EnvironmentDetail(
                 ulid=env.ulid,
@@ -519,7 +514,7 @@ class ShowService:
             return Result.fail(
                 code="EnvironmentRetrievalError",
                 message=f"Failed to get environment: {e}",
-                solutions=['Check database connection']
+                solutions=['Check database connection'],
             )
 
     # =========================================================================
@@ -567,6 +562,7 @@ class ShowService:
 
             if tags:
                 from adare.database.api.tag import TagApi
+
                 with TagApi() as tag_api:
                     result = tag_api.get_entities_by_tags(
                         tag_names=tags,
@@ -583,14 +579,14 @@ class ShowService:
             return Result.fail(
                 code="ExperimentListError",
                 message=f"Failed to list experiments: {e}",
-                solutions=['Check database connection']
+                solutions=['Check database connection'],
             )
         except OSError as e:
             log.error(f"Failed to list experiments: {e}")
             return Result.fail(
                 code="ExperimentListError",
                 message=f"Failed to list experiments: {e}",
-                solutions=['Check database connection']
+                solutions=['Check database connection'],
             )
 
     def get_experiment(self, name: str = None, ulid: str = None, dotnotation: str = None) -> Result[ExperimentDetail]:
@@ -626,7 +622,7 @@ class ShowService:
                 return Result.fail(
                     code="ExperimentNotFoundError",
                     message=f"Experiment '{identifier}' not found",
-                    solutions=['Use `adare show experiments` to list available experiments']
+                    solutions=['Use `adare experiment list` to list available experiments'],
                 )
 
             detail = ExperimentDetail(
@@ -653,14 +649,14 @@ class ShowService:
             return Result.fail(
                 code="ExperimentRetrievalError",
                 message=f"Failed to get experiment: {e}",
-                solutions=['Check database connection']
+                solutions=['Check database connection'],
             )
         except OSError as e:
             log.error(f"Failed to get experiment: {e}")
             return Result.fail(
                 code="ExperimentRetrievalError",
                 message=f"Failed to get experiment: {e}",
-                solutions=['Check database connection']
+                solutions=['Check database connection'],
             )
 
     # =========================================================================
@@ -681,10 +677,7 @@ class ShowService:
 
         try:
             with StructuredDataApi() as api:
-                testfunctions = api.get_testfunctions_structured(
-                    include_parameters=True,
-                    testfunction_file=file_name
-                )
+                testfunctions = api.get_testfunctions_structured(include_parameters=True, testfunction_file=file_name)
 
             items = [
                 TestfunctionListItem(
@@ -712,7 +705,7 @@ class ShowService:
             return Result.fail(
                 code="TestfunctionListError",
                 message=f"Failed to list testfunctions: {e}",
-                solutions=['Check database connection']
+                solutions=['Check database connection'],
             )
 
     def get_testfunction(self, dotnotation: str) -> Result[TestfunctionDetail]:
@@ -737,7 +730,7 @@ class ShowService:
                 return Result.fail(
                     code="TestfunctionNotFoundError",
                     message=f"Testfunction '{dotnotation}' not found",
-                    solutions=['Use `adare show testfunctions` to list available testfunctions']
+                    solutions=['Use `adare test list` to list available testfunctions'],
                 )
 
             detail = TestfunctionDetail(
@@ -763,5 +756,5 @@ class ShowService:
             return Result.fail(
                 code="TestfunctionRetrievalError",
                 message=f"Failed to get testfunction: {e}",
-                solutions=['Check database connection']
+                solutions=['Check database connection'],
             )

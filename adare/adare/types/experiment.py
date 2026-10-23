@@ -5,7 +5,6 @@ This module contains types for experiment configurations and metadata.
 Moved from adare.types.backend to consolidate application-specific types.
 """
 
-
 import attrs
 
 from .backend import Disk, NFSConfiguration, SMBConfiguration, UsbDevice
@@ -16,6 +15,7 @@ class ExperimentMetadata:
     """
     Class to store the metadata of an experiment.
     """
+
     environments: list[str] = attrs.Factory(list)
     tags: list[str] = attrs.Factory(list)
     smb: SMBConfiguration | None = None

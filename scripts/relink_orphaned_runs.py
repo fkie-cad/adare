@@ -5,7 +5,7 @@ Background
 ----------
 A bug caused successful runs to be saved with ``experiment_id = NULL`` whenever the
 environment they ran in was not listed in the experiment's env indicator. Those runs
-executed fine but became invisible in ``adare run list``.
+executed fine but became invisible in ``adare runs list``.
 
 The forward fix (link-by-name in ``set_experiment_run_base_info``) means new runs no
 longer detach, so this is a *one-time* cleanup for databases that already contain
@@ -64,6 +64,7 @@ def main(argv=None) -> int:
         prefix = '[dry-run] would relink'
     else:
         from adare.backend.experiment import database as experiment_database
+
         summary = experiment_database.relink_unlinked_runs(project_path)
         prefix = 'relinked'
 
@@ -77,7 +78,7 @@ def main(argv=None) -> int:
     if summary['skipped_no_experiment']:
         print(f"  {summary['skipped_no_experiment']} run(s) referenced an experiment that no longer exists.")
     if not args.dry_run:
-        print("Done. Run 'adare run list' to see the recovered runs.")
+        print("Done. Run 'adare runs list' to see the recovered runs.")
     return 0
 
 

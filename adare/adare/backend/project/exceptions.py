@@ -23,4 +23,4 @@ class ProjectDirectoryMissingError(LoggedErrorException):
 
 
 class NoProjectsFoundMessage(LoggedException):
-    pass
+    informational = True

@@ -11,18 +11,21 @@ pytestmark = pytest.mark.unit
 @pytest.fixture
 def service():
     from adare.services.testfunction_service import TestfunctionService
+
     return TestfunctionService()
 
 
 @pytest.fixture
 def create_request():
     from adare.core.dto.testfunction import TestfunctionCreateRequest
+
     return TestfunctionCreateRequest(project_path=Path("/tmp/project"), name="check_file")
 
 
 @pytest.fixture
 def load_request():
     from adare.core.dto.testfunction import TestfunctionLoadRequest
+
     return TestfunctionLoadRequest(path=Path("/tmp/testfunctions/check_file.py"), force=False)
 
 
@@ -35,7 +38,6 @@ def _make_exception(exc_cls, message="test error"):
 # create()
 # ---------------------------------------------------------------------------
 class TestTestfunctionServiceCreate:
-
     @patch("adare.services.testfunction_service.backend_testfunction_create")
     def test_create_success(self, mock_create, service, create_request):
         result = service.create(create_request)
@@ -48,6 +50,7 @@ class TestTestfunctionServiceCreate:
     @patch("adare.services.testfunction_service.backend_testfunction_create")
     def test_create_fails_missing_file(self, mock_create, service, create_request):
         from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
+
         mock_create.side_effect = _make_exception(TestfunctionMissingFileError)
 
         result = service.create(create_request)
@@ -60,7 +63,6 @@ class TestTestfunctionServiceCreate:
 # load()
 # ---------------------------------------------------------------------------
 class TestTestfunctionServiceLoad:
-
     @patch("adare.services.testfunction_service.backend_testfunction_load_global")
     def test_load_success(self, mock_load, service, load_request):
         mock_load.return_value = "01ULID"
@@ -76,6 +78,7 @@ class TestTestfunctionServiceLoad:
     @patch("adare.services.testfunction_service.backend_testfunction_load_global")
     def test_load_directory_path(self, mock_load, service):
         from adare.core.dto.testfunction import TestfunctionLoadRequest
+
         req = TestfunctionLoadRequest(path=Path("/tmp/testfunctions/my_tests"), force=True)
         # Simulate directory (is_file returns False for MagicMock by default; use a real Path trick)
         mock_load.return_value = "01XYZ"
@@ -89,6 +92,7 @@ class TestTestfunctionServiceLoad:
     @patch("adare.services.testfunction_service.backend_testfunction_load_global")
     def test_load_fails_missing_file(self, mock_load, service, load_request):
         from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
+
         mock_load.side_effect = _make_exception(TestfunctionMissingFileError)
 
         result = service.load(load_request)
@@ -101,13 +105,14 @@ class TestTestfunctionServiceLoad:
 # remove()
 # ---------------------------------------------------------------------------
 class TestTestfunctionServiceRemove:
-
     @patch("adare.services.testfunction_service.backend_testfunction_remove")
     @patch("adare.services.testfunction_service.testfunction_database")
     def test_remove_success(self, mock_db, mock_remove, service):
         mock_db.testfunction_file_exists.return_value = True
         mock_db.get_testfunction_usage.return_value = {
-            "can_safely_delete": True, "experiments": [], "runs": [],
+            "can_safely_delete": True,
+            "experiments": [],
+            "runs": [],
         }
 
         result = service.remove("check_file", force=True)
@@ -159,6 +164,7 @@ class TestTestfunctionServiceRemove:
     @patch("adare.services.testfunction_service.testfunction_database")
     def test_remove_backend_exception(self, mock_db, service):
         from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
+
         mock_db.testfunction_file_exists.side_effect = _make_exception(TestfunctionMissingFileError)
 
         result = service.remove("check_file")
@@ -171,7 +177,6 @@ class TestTestfunctionServiceRemove:
 # list_all()
 # ---------------------------------------------------------------------------
 class TestTestfunctionServiceListAll:
-
     @patch("adare.services.testfunction_service.TestfunctionDbApi")
     def test_list_all_returns_items(self, mock_api_cls, service):
         tf_file = MagicMock()
@@ -219,11 +224,12 @@ class TestTestfunctionServiceListAll:
 # get_usage()
 # ---------------------------------------------------------------------------
 class TestTestfunctionServiceGetUsage:
-
     @patch("adare.services.testfunction_service.testfunction_database")
     def test_get_usage_success(self, mock_db, service):
         mock_db.get_testfunction_usage.return_value = {
-            "exists": True, "testfunction_file_id": 1, "can_safely_delete": False,
+            "exists": True,
+            "testfunction_file_id": 1,
+            "can_safely_delete": False,
             "projects_affected": [{"name": "proj1"}],
             "experiments": [{"name": "exp1"}],
             "runs": [{"id": 1}],
@@ -250,7 +256,6 @@ class TestTestfunctionServiceGetUsage:
 # exists()
 # ---------------------------------------------------------------------------
 class TestTestfunctionServiceExists:
-
     @patch("adare.services.testfunction_service.testfunction_database")
     def test_exists_true(self, mock_db, service):
         mock_db.testfunction_exists.return_value = True

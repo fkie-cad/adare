@@ -47,7 +47,6 @@ class ExperimentRunDirectory(Directory):
         self.forensic_log_file = self.reporting_directory / 'forensic_log.yml'
         self.tmp_directory = self.path / '.tmp'
 
-
     def create(self):
         """Create run directory structure with all subdirectories.
 
@@ -79,8 +78,8 @@ class ExperimentRunDirectory(Directory):
             error_msg = f"Failed to create run directory structure at {self.path}: {e}"
             log.error(error_msg)
             from adare.exceptions import LoggedException
-            raise LoggedException(log, message=error_msg) from e
 
+            raise LoggedException(log, message=error_msg) from e
 
     def clean(self):
         """Clean up temporary files and directories after experiment run.
@@ -97,6 +96,7 @@ class ExperimentRunDirectory(Directory):
 
 class DiffRunDirectory(Directory):
     """Directory structure for diff mode runs (stored under /diff instead of /run)."""
+
     log_directory: Path
     adare_log_file: Path
     mcp_gui_log_file: Path
@@ -155,8 +155,8 @@ class DiffRunDirectory(Directory):
             error_msg = f"Failed to create diff run directory structure at {self.path}: {e}"
             log.error(error_msg)
             from adare.exceptions import LoggedException
-            raise LoggedException(log, message=error_msg) from e
 
+            raise LoggedException(log, message=error_msg) from e
 
     def clean(self):
         """Clean up temporary files and directories after experiment run."""
@@ -206,13 +206,14 @@ class ExperimentDirectory(Directory):
         # Create YAML playbook file (now contains integrated tests)
         try:
             with open(self.playbookfile, 'w') as f:
-                f.write(jinja2.Template(playbookfile_template.read_text()).render(
-                    name=f'{self.experiment}',
-                ))
+                f.write(
+                    jinja2.Template(playbookfile_template.read_text()).render(
+                        name=f'{self.experiment}',
+                    )
+                )
         except OSError as e:
             raise ExperimentFileCreationError(
-                log,
-                message=f'Failed to create playbook file for experiment {self.experiment}: {e.strerror}'
+                log, message=f'Failed to create playbook file for experiment {self.experiment}: {e.strerror}'
             ) from e
 
         # Create metadata
@@ -221,8 +222,7 @@ class ExperimentDirectory(Directory):
                 f.write(jinja2.Template(metadatafile_template.read_text()).render(experiment=self.experiment))
         except OSError as e:
             raise ExperimentFileCreationError(
-                log,
-                message=f'Failed to create metadata file for experiment {self.experiment}: {e.strerror}'
+                log, message=f'Failed to create metadata file for experiment {self.experiment}: {e.strerror}'
             ) from e
 
     def create(self, empty: bool = False):
@@ -234,8 +234,7 @@ class ExperimentDirectory(Directory):
             self.shared_data.mkdir(exist_ok=True)
         except OSError as e:
             raise ExperimentDirectoryCreationError(
-                log,
-                message=f'Failed to create experiment directory {self.path}: {e.strerror}'
+                log, message=f'Failed to create experiment directory {self.path}: {e.strerror}'
             ) from e
 
         if not empty:
@@ -244,10 +243,9 @@ class ExperimentDirectory(Directory):
     def remove(self) -> bool:
         try:
             shutil.rmtree(self.path)
-        except FileNotFoundError or OSError as e:
+        except OSError as e:
             raise ExperimentRemovalError(
-                log,
-                message=f'Failed to remove experiment directory {self.path}: {e.strerror}'
+                log, message=f'Failed to remove experiment directory {self.path}: {e.strerror}'
             ) from e
         return True
 
@@ -255,11 +253,7 @@ class ExperimentDirectory(Directory):
         return self.path.exists()
 
     def check_for_missing_files(self):
-        if missing_files := [
-            f.name
-            for f in [self.metadatafile]
-            if not f.exists()
-        ]:
+        if missing_files := [f.name for f in [self.metadatafile] if not f.exists()]:
             missing_files_str = ','.join(missing_files)
             raise ExperimentFileMissingError(
                 log,
@@ -267,7 +261,7 @@ class ExperimentDirectory(Directory):
             )
 
     def retrieve_example(self, experiment: str):
-        example_dir = EXAMPLES_DIR/'experiments'/experiment
+        example_dir = EXAMPLES_DIR / 'experiments' / experiment
         shutil.copytree(example_dir, self.path)
 
     def load_metadata(self) -> ExperimentMetadata:
@@ -300,8 +294,7 @@ class ExperimentDirectory(Directory):
                 yaml.dump(metadata_dict, f, default_flow_style=False, sort_keys=False)
         except OSError as e:
             raise ExperimentFileCreationError(
-                log,
-                message=f'Failed to save metadata file for experiment {self.experiment}: {e.strerror}'
+                log, message=f'Failed to save metadata file for experiment {self.experiment}: {e.strerror}'
             ) from e
 
     def load_testset(self) -> TestsetFile:
@@ -315,9 +308,6 @@ class ExperimentDirectory(Directory):
 
         # Return TestsetFile constructed from playbook tests
         return TestsetFile(name=self.experiment, tests=self._cached_playbook.tests)
-
-
-
 
     @property
     def sha256_metadata(self) -> str:
@@ -385,6 +375,7 @@ class ExperimentDirectory(Directory):
 
         # Hash the semantic content using existing utility
         from adare.helperfunctions.hash import hash_dict_sha256
+
         return hash_dict_sha256(semantic_data)
 
     @property

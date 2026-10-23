@@ -51,6 +51,7 @@ def print_dict(dictionary: dict, title: str, header: list = None):
             table.add_row(key, str(value))
     console.print(table)
 
+
 def get_status_icon(status: str, include_text: bool = True):
     """
     returns the icon for a given status
@@ -84,4 +85,3 @@ def get_status_icon(status: str, include_text: bool = True):
     if include_text:
         return f'{icon} {status}'
     return icon
-

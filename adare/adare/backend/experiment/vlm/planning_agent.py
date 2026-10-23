@@ -30,8 +30,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from .actions import _extract_json_object
 from .agent import AgentRunResult, GuiAgent
@@ -86,7 +87,7 @@ class PlanStep:
     text: str
     success: str
     status: str = 'pending'  # pending | active | done | failed
-    hint: str = ''           # last failure reason, fed back on retry
+    hint: str = ''  # last failure reason, fed back on retry
 
 
 @dataclass
@@ -168,39 +169,48 @@ class PlanningAgent:
         """Decompose the terse goal (+ first screenshot) into an ordered plan."""
         messages = [
             {'role': 'system', 'content': _DECOMPOSE_SYSTEM},
-            {'role': 'user', 'content': [
-                self.planner.text_content(
-                    f'GOAL: {goal}\n\nThis is the current screen. '
-                    'Decompose the goal into ordered sub-goals.'),
-                self.planner.image_content(screenshot_b64),
-            ]},
+            {
+                'role': 'user',
+                'content': [
+                    self.planner.text_content(
+                        f'GOAL: {goal}\n\nThis is the current screen. Decompose the goal into ordered sub-goals.'
+                    ),
+                    self.planner.image_content(screenshot_b64),
+                ],
+            },
         ]
         reply = await self.planner.chat(messages, temperature=0.0, max_tokens=1200)
         plan = Plan(steps=self._parse_steps(reply))
-        log.info('Planner decomposed goal into %d sub-goals:\n%s',
-                 len(plan.steps), plan.render())
+        log.info('Planner decomposed goal into %d sub-goals:\n%s', len(plan.steps), plan.render())
         return plan
 
     async def revise(
-        self, goal: str, done_so_far: list[str], screenshot_b64: str, reason: str,
+        self,
+        goal: str,
+        done_so_far: list[str],
+        screenshot_b64: str,
+        reason: str,
     ) -> Plan:
         """Re-decompose the remainder after a sub-goal could not be completed."""
         done_txt = '\n'.join(f'- {d}' for d in done_so_far) or '(none yet)'
         messages = [
             {'role': 'system', 'content': _REVISE_SYSTEM},
-            {'role': 'user', 'content': [
-                self.planner.text_content(
-                    f'GOAL: {goal}\n\n'
-                    f'ALREADY DONE (do not repeat):\n{done_txt}\n\n'
-                    f'The last attempt failed because: {reason}\n\n'
-                    'This is the current screen. Re-plan the REMAINING sub-goals.'),
-                self.planner.image_content(screenshot_b64),
-            ]},
+            {
+                'role': 'user',
+                'content': [
+                    self.planner.text_content(
+                        f'GOAL: {goal}\n\n'
+                        f'ALREADY DONE (do not repeat):\n{done_txt}\n\n'
+                        f'The last attempt failed because: {reason}\n\n'
+                        'This is the current screen. Re-plan the REMAINING sub-goals.'
+                    ),
+                    self.planner.image_content(screenshot_b64),
+                ],
+            },
         ]
         reply = await self.planner.chat(messages, temperature=0.2, max_tokens=1200)
         plan = Plan(steps=self._parse_steps(reply))
-        log.info('Planner revised remainder into %d sub-goals:\n%s',
-                 len(plan.steps), plan.render())
+        log.info('Planner revised remainder into %d sub-goals:\n%s', len(plan.steps), plan.render())
         return plan
 
     # -- helpers ------------------------------------------------------------
@@ -213,9 +223,7 @@ class PlanningAgent:
         """The plan-wide context injected into the executor for this sub-goal."""
         parts = ['PLAN (you are executing the [>] step only):', plan.render()]
         if hint:
-            parts.append(
-                'A previous attempt at this sub-goal failed — do it differently. '
-                f'Reason it failed: {hint}')
+            parts.append(f'A previous attempt at this sub-goal failed — do it differently. Reason it failed: {hint}')
         return '\n'.join(parts)
 
     def _finish(self, success: bool, reason: str, *, summary: str = '') -> AgentRunResult:
@@ -241,7 +249,7 @@ class PlanningAgent:
 
                 name = f'plan_sg{i}_{self._ckpt_seq}'
                 self._ckpt_seq += 1
-                await self._checkpoint(name)                       # snapshot BEFORE
+                await self._checkpoint(name)  # snapshot BEFORE
                 mark = recorder.mark() if recorder else None
 
                 attempt = 0
@@ -249,7 +257,8 @@ class PlanningAgent:
                 while True:
                     context = self._plan_context(plan, i, sg.hint)
                     run_reason = await self.executor.execute_subgoal(
-                        sg.text, context,
+                        sg.text,
+                        context,
                         max_steps=self.subgoal_max_steps,
                         stall_limit=self.subgoal_stall_limit,
                     )
@@ -271,8 +280,7 @@ class PlanningAgent:
 
                     # Dead end: discard the steps recorded for this attempt and roll
                     # the live VM back to the pre-sub-goal checkpoint before retrying.
-                    log.info('Sub-goal %d failed verification (%s); backtracking',
-                             i, vreason or run_reason)
+                    log.info('Sub-goal %d failed verification (%s); backtracking', i, vreason or run_reason)
                     if mark is not None:
                         recorder.rollback(mark)
                     await self._restore(name)
@@ -286,10 +294,9 @@ class PlanningAgent:
                     if replans < self.replan_limit:
                         done = [s.text for s in plan.steps[:i]]
                         screen = await self._screenshot_b64()
-                        revised = await self.revise(
-                            self.goal, done, screen, vreason or run_reason)
+                        revised = await self.revise(self.goal, done, screen, vreason or run_reason)
                         replans += 1
-                        plan.steps[i:] = revised.steps            # keep verified prefix
+                        plan.steps[i:] = revised.steps  # keep verified prefix
                         outcome = 'replan'
                         break
 
@@ -301,11 +308,12 @@ class PlanningAgent:
                     i += 1
                     continue
                 if outcome == 'replan':
-                    continue                                       # i now = first revised step
+                    continue  # i now = first revised step
                 return self._finish(
                     False,
                     f'could not complete sub-goal {i + 1} ("{sg.text}") after '
-                    f'{self.retry_limit} retries and {replans} re-plan(s)')
+                    f'{self.retry_limit} retries and {replans} re-plan(s)',
+                )
 
             done_txt = '; '.join(s.text for s in plan.steps)
             return self._finish(True, 'all sub-goals verified', summary=done_txt)

@@ -37,17 +37,13 @@ class FilesystemSnapshot:
             'timestamp': self.timestamp,
             'os_type': self.os_type,
             'file_count': len(self.files),
-            'files': self.files
+            'files': self.files,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> 'FilesystemSnapshot':
         """Deserialize snapshot from dict."""
-        return cls(
-            files=data['files'],
-            timestamp=data['timestamp'],
-            os_type=data['os_type']
-        )
+        return cls(files=data['files'], timestamp=data['timestamp'], os_type=data['os_type'])
 
 
 def get_snapshot_command(os_type: str, root_path: str | None = None) -> str:
@@ -240,24 +236,22 @@ def calculate_diff(before: FilesystemSnapshot, after: FilesystemSnapshot) -> dic
         if timestamp_changes:
             before_mtime = before.files[path]['mtime']
             after_mtime = after.files[path]['mtime']
-            modified.append({
-                'path': path,
-                'size_before': before.files[path]['size'],
-                'size_after': after.files[path]['size'],
-                'mtime_before': before_mtime,
-                'mtime_after': after_mtime,
-                'mtime_before_readable': datetime.fromtimestamp(before_mtime).isoformat(),
-                'mtime_after_readable': datetime.fromtimestamp(after_mtime).isoformat(),
-                'timestamps_before': before_ts,
-                'timestamps_after': after_ts,
-                'timestamp_changes': timestamp_changes,
-            })
+            modified.append(
+                {
+                    'path': path,
+                    'size_before': before.files[path]['size'],
+                    'size_after': after.files[path]['size'],
+                    'mtime_before': before_mtime,
+                    'mtime_after': after_mtime,
+                    'mtime_before_readable': datetime.fromtimestamp(before_mtime).isoformat(),
+                    'mtime_after_readable': datetime.fromtimestamp(after_mtime).isoformat(),
+                    'timestamps_before': before_ts,
+                    'timestamps_after': after_ts,
+                    'timestamp_changes': timestamp_changes,
+                }
+            )
 
-    return {
-        'added': added,
-        'removed': removed,
-        'modified': modified
-    }
+    return {'added': added, 'removed': removed, 'modified': modified}
 
 
 def export_diff_json(diff: dict, output_path: Path, metadata: dict | None = None):
@@ -274,9 +268,9 @@ def export_diff_json(diff: dict, output_path: Path, metadata: dict | None = None
         'summary': {
             'added_count': len(diff['added']),
             'removed_count': len(diff['removed']),
-            'modified_count': len(diff['modified'])
+            'modified_count': len(diff['modified']),
         },
-        'changes': diff
+        'changes': diff,
     }
 
     with open(output_path, 'w', encoding='utf-8') as f:

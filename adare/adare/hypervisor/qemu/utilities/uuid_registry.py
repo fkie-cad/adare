@@ -3,10 +3,15 @@ UUID Registry - VM discovery and lookup operations.
 
 Provides a registry pattern for VM discovery by UUID and name.
 """
+
 import glob
 import json
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from adare.config.configdirectory import QEMU_STATE_DIR
+
+if TYPE_CHECKING:
+    from adare.hypervisor.qemu.vm import QEMUVM
 
 
 class QEMUVMRegistry:
@@ -39,7 +44,7 @@ class QEMUVMRegistry:
             manager = QEMUManager()
 
         # Check if config exists
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+        config_dir = QEMU_STATE_DIR / 'vms'
         config_path = config_dir / f"{vm_name}.json"
 
         if not config_path.exists():
@@ -65,9 +70,8 @@ class QEMUVMRegistry:
             machine=data.get('machine', 'pc'),
             accel=data.get('accel', 'kvm'),
             drive_format=data.get('drive_format', 'qcow2'),
-            hypervisor_config=None  # No hypervisor config for UUID registry recovery
+            hypervisor_config=None,  # No hypervisor config for UUID registry recovery
         )
-
 
     @staticmethod
     def vm_exists(vm_name: str) -> bool:
@@ -77,7 +81,7 @@ class QEMUVMRegistry:
         (ERROR-level) VMNotFoundException on an expected miss — e.g. cleaning up
         a VM a prior boot-retry already removed.
         """
-        config_path = Path.home() / '.adare' / 'qemu' / 'vms' / f"{vm_name}.json"
+        config_path = QEMU_STATE_DIR / 'vms' / f"{vm_name}.json"
         return config_path.exists()
 
     @staticmethod
@@ -96,7 +100,7 @@ class QEMUVMRegistry:
         from adare.config import get_vm_credentials
 
         # Search for all VM config files
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+        config_dir = QEMU_STATE_DIR / 'vms'
         if not config_dir.exists():
             return None
 
@@ -121,7 +125,7 @@ class QEMUVMRegistry:
                         'cpus': data.get('cpus', 2),
                         'ram': data.get('ram', 2048),
                         'disk_path': data.get('disk_path'),
-                        'config_path': config_file
+                        'config_path': config_file,
                     }
             except (OSError, json.JSONDecodeError, KeyError):
                 # Skip invalid config files
@@ -143,7 +147,7 @@ class QEMUVMRegistry:
             VM name if found, None otherwise
         """
         # Search for all VM config files
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+        config_dir = QEMU_STATE_DIR / 'vms'
         if not config_dir.exists():
             return None
 
@@ -176,7 +180,7 @@ class QEMUVMRegistry:
             VM UUID/identifier if found, None otherwise
         """
         # Check if config exists
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+        config_dir = QEMU_STATE_DIR / 'vms'
         config_path = config_dir / f"{vm_name}.json"
 
         if not config_path.exists():
@@ -203,7 +207,7 @@ class QEMUVMRegistry:
             True if VM exists, False otherwise
         """
         # Search for all VM config files
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+        config_dir = QEMU_STATE_DIR / 'vms'
         if not config_dir.exists():
             return False
 

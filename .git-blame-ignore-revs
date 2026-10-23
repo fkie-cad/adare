@@ -1,0 +1,8 @@
+# Bulk mechanical commits that git blame should skip.
+# GitHub/Gitea pick this file up automatically; locally run once:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: apply ruff safe autofixes
+f80bb1212fde435abd685cedb170ce552a30a82b
+# style: apply ruff format across the workspace
+b25ff4fab6d2c265db35d565ebd12c4d866bc2c9

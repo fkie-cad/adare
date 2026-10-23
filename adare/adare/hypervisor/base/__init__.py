@@ -1,6 +1,7 @@
 """
 Abstract base classes for hypervisor implementations.
 """
+
 from .identifier_strategy import (
     HypervisorIdentifierStrategy,
     QEMUIdentifierStrategy,

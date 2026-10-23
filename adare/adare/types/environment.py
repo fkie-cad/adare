@@ -1,14 +1,17 @@
 # external imports
 # configure logging
 import logging
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal
+from urllib.parse import urlparse
 
 import attrs
 import cattrs
 
 from adare.exceptions import DataStructuringError
 from adarelib.helper.yaml import yaml_to_dict
+
+_VIRTUALBOX_DISK_FORMATS = frozenset({'ova', 'ovf', 'vdi', 'vmdk'})
 
 log = logging.getLogger(__name__)
 
@@ -18,6 +21,7 @@ class PostsetupInstallations:
     """
     Class to store information about installations that should be done after boot but before the experiment.
     """
+
     name: str
     command: str
     description: str | None = ''
@@ -61,6 +65,7 @@ class ProvisionCommand:
         timeout_minutes: Per-step wall-clock budget.
         reboot: Reboot the guest and wait for the agent again after this step.
     """
+
     name: str
     command: str = ''
     description: str | None = ''
@@ -78,8 +83,7 @@ class ProvisionCommand:
             raise ValueError(f"provision command '{self.name}' requires a non-empty 'command'")
         if self.timeout_minutes <= 0:
             raise ValueError(
-                f"provision command '{self.name}': timeout_minutes must be > 0 "
-                f"(got {self.timeout_minutes})"
+                f"provision command '{self.name}': timeout_minutes must be > 0 (got {self.timeout_minutes})"
             )
 
 
@@ -105,6 +109,7 @@ class ProvisionStep(ProvisionCommand):
     :func:`adare.backend.vm.provision.expand_provision`, not here, so nothing
     mutates parsed input behind the caller's back.
     """
+
     for_each: list[str] = attrs.Factory(list)
     steps: list[ProvisionCommand] = attrs.Factory(list)
 
@@ -125,8 +130,7 @@ class ProvisionStep(ProvisionCommand):
             )
         if not has_command and not has_steps:
             raise ValueError(
-                f"provision entry '{self.name}' must set either 'command' "
-                "(single step) or 'steps' (a group)"
+                f"provision entry '{self.name}' must set either 'command' (single step) or 'steps' (a group)"
             )
         if self.for_each and not has_steps:
             raise ValueError(
@@ -134,10 +138,7 @@ class ProvisionStep(ProvisionCommand):
                 "for_each replays a group, so wrap the work in 'steps'"
             )
         if has_command and self.timeout_minutes <= 0:
-            raise ValueError(
-                f"provision entry '{self.name}': timeout_minutes must be > 0 "
-                f"(got {self.timeout_minutes})"
-            )
+            raise ValueError(f"provision entry '{self.name}': timeout_minutes must be > 0 (got {self.timeout_minutes})")
 
 
 @attrs.define
@@ -145,6 +146,7 @@ class OsInfo:
     """
     Operating system information for environments.
     """
+
     os: str
     platform: Literal['windows', 'linux']
     distribution: str
@@ -163,6 +165,7 @@ class RecipeParams:
     time. These values participate in the recipe integrity hash, so changing
     any of them yields a new environment identity (a fresh build).
     """
+
     disk_size: str | None = None
     ram_mb: int | None = None
     cpus: int | None = None
@@ -212,8 +215,9 @@ class Recipe:
     enforced instead at the publish / create / consume gates in
     :mod:`adare.services.recipe_contract`, which can produce rich messages.
     """
-    profile: str            # resolves via os_catalog.get_os_definition
-    iso_sha256: str         # expected SHA256 of the ISO (hard-checked at build)
+
+    profile: str  # resolves via os_catalog.get_os_definition
+    iso_sha256: str  # expected SHA256 of the ISO (hard-checked at build)
     # Publisher-hosted ISO: a local path, or an http(s) URL when published.
     # Mutually exclusive with `iso_name`.
     iso: str = ''
@@ -223,7 +227,7 @@ class Recipe:
     # Plain-text download pointer shown to a consumer who lacks the ISO. Plain
     # text ONLY: it is publisher-supplied and is rendered in web UIs.
     iso_notes: str = ''
-    template: str | None = None   # optional Autounattend/autoinstall override
+    template: str | None = None  # optional Autounattend/autoinstall override
     params: RecipeParams = attrs.Factory(RecipeParams)
     # Build-time provisioning, applied once to the built disk (see above).
     provision: list[ProvisionStep] = attrs.Factory(list)
@@ -253,6 +257,7 @@ class EnvironmentMetadata:
             hypervisor_config:
               boot_mode: bios  # Optional: override default UEFI to use BIOS
     """
+
     vm: str | None = None
     os: OsInfo | None = None
 
@@ -292,7 +297,9 @@ class EnvironmentMetadata:
     recipe: Recipe | None = None
 
     # Hypervisor configuration
-    hypervisor: str = "virtualbox"  # Default hypervisor
+    # Omitted -> inferred from the disk (see _infer_hypervisor): VirtualBox for
+    # OVA/VDI/VMDK images, QEMU for everything else, including recipes.
+    hypervisor: str | None = None
     hypervisor_config: dict = attrs.Factory(dict)  # Hypervisor-specific configuration
 
     # Legacy Vagrant-based environment fields (for backward compatibility)
@@ -304,6 +311,14 @@ class EnvironmentMetadata:
             raise ValueError("vm_type 'recipe' requires a 'recipe' block")
         if not self.vm and not self.vagrantbox and self.recipe is None:
             raise ValueError("One of 'vm', 'recipe', or 'vagrantbox' must be specified")
+        if self.hypervisor is None:
+            self.hypervisor = self._infer_hypervisor()
+
+    def _infer_hypervisor(self) -> str:
+        if self.recipe is not None or not self.vm:
+            return "qemu"
+        disk_format = self.vm_format or PurePosixPath(urlparse(self.vm).path).suffix.lstrip('.').lower()
+        return "virtualbox" if disk_format in _VIRTUALBOX_DISK_FORMATS else "qemu"
 
     @property
     def is_vagrant_environment(self) -> bool:
@@ -321,8 +336,9 @@ class EnvironmentMetadata:
         return self.vm is not None or self.recipe is not None
 
 
-def parse_environment_file(environment_file: Path) -> EnvironmentMetadata|None:
-    environment_dict = yaml_to_dict(environment_file)
+def parse_environment_file(environment_file: Path) -> EnvironmentMetadata | None:
+    # An empty file loads as None; structure {} so it fails with a field error.
+    environment_dict = yaml_to_dict(environment_file) or {}
     try:
         environment = cattrs.structure(environment_dict, EnvironmentMetadata)
     except cattrs.BaseValidationError as e:
@@ -332,6 +348,6 @@ def parse_environment_file(environment_file: Path) -> EnvironmentMetadata|None:
             message=f'parsing errors while parsing environment file {environment_file}:{error_msg}',
             possible_solutions=[
                 'fix the structure of the environment file',
-            ]
+            ],
         ) from e
     return environment

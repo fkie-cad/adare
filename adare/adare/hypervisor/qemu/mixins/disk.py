@@ -1,6 +1,7 @@
 """
 Disk Management Mixin - Base disks, overlays, and cleanup operations.
 """
+
 import asyncio
 import logging
 import os
@@ -9,14 +10,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from adare.hypervisor.exceptions import HypervisorException
+from adare.hypervisor.qemu.mixins.configuration import get_qemu_disk_dir
 
 if TYPE_CHECKING:
-    from adare.hypervisor.qemu.vm import QEMUVM
+    from adare.hypervisor.qemu.mixins.host import QEMUVMHost as _Host
+else:
+    _Host = object
 
 log = logging.getLogger(__name__)
 
 
-class DiskManagementMixin:
+class DiskManagementMixin(_Host):
     """
     Mixin for disk management operations.
 
@@ -24,7 +28,7 @@ class DiskManagementMixin:
     Prevents overlay chaining by always using the true base disk as backing file.
     """
 
-    def get_base_disk_path(self: 'QEMUVM') -> str:
+    def get_base_disk_path(self) -> str:
         """
         Get path for immutable base disk.
 
@@ -45,7 +49,7 @@ class DiskManagementMixin:
         current_disk = Path(self.config.disk_path)
         return str(current_disk.parent / f"{current_disk.stem}-base{current_disk.suffix}")
 
-    def _get_true_base_disk(self: 'QEMUVM') -> str:
+    def _get_true_base_disk(self) -> str:
         """
         Get the TRUE base disk path, ignoring any overlay paths in config.
 
@@ -71,8 +75,7 @@ class DiskManagementMixin:
                 log.debug(f"True base disk (external): {external_path}")
                 return str(external_path)
             raise HypervisorException(
-                f"External disk not found: {external_path}\n"
-                f"The original qcow2 file may have been moved or deleted."
+                f"External disk not found: {external_path}\nThe original qcow2 file may have been moved or deleted."
             )
 
         # Priority 2: Managed VM with -base suffix
@@ -134,7 +137,7 @@ class DiskManagementMixin:
         log.debug(f"Stripped overlay suffixes: '{filename_stem}' => '{cleaned}'")
         return cleaned
 
-    def get_overlay_disk_path(self: 'QEMUVM', experiment_id: str) -> str:
+    def get_overlay_disk_path(self, experiment_id: str) -> str:
         """
         Get path for experiment-specific overlay disk.
 
@@ -159,6 +162,16 @@ class DiskManagementMixin:
             Overlay: ADARE-Ubuntu-24.04_exp_01KDK1XE-overlay-01KDKGR211GPRRSC0NGX8GWZMH.qcow2
             (72 characters - well within 255 limit)
         """
+        if self._external_disk_path:
+            # Template disk (possibly the user's own file, shared by concurrent
+            # runs): keep the overlay in managed storage and name it after this
+            # VM (the run instance), never after the template, so neither the name
+            # nor _cleanup_orphaned_overlays can reach another run's overlay.
+            overlay_dir = get_qemu_disk_dir()
+            overlay_name = f"{self.vm_name}-overlay-{experiment_id}.qcow2"
+            if len(overlay_name) > 255:
+                raise HypervisorException(f"Overlay filename exceeds 255 characters: {overlay_name}")
+            return str(overlay_dir / overlay_name)
         # First, try to get the base disk path (normal case)
         base_disk_path = self.get_base_disk_path()
         base_disk = Path(base_disk_path)
@@ -211,12 +224,6 @@ class DiskManagementMixin:
                     f"Base VM name may be too long. Consider using a shorter VM name."
                 )
 
-            # For external VMs, store overlays in managed storage (not next to original file)
-            if self._external_disk_path:
-                overlay_dir = Path.home() / '.adare' / 'qemu' / 'disks'
-                overlay_dir.mkdir(parents=True, exist_ok=True)
-                log.debug(f"Using managed storage for external VM overlay: {overlay_dir}")
-                return str(overlay_dir / overlay_name)
             # Managed VM - store overlay next to base disk
             log.debug(f"Generated overlay name (external case): {overlay_name}")
             return str(current_disk.parent / overlay_name)
@@ -229,9 +236,7 @@ class DiskManagementMixin:
 
         # Validate filename length (ext4 limit: 255 characters)
         if len(overlay_name) > 255:
-            log.warning(
-                f"Fallback overlay name exceeds 255 chars ({len(overlay_name)}): {overlay_name}"
-            )
+            log.warning(f"Fallback overlay name exceeds 255 chars ({len(overlay_name)}): {overlay_name}")
             # Truncate base name to fit within limit
             # 255 - len("-overlay-{26-char-ULID}.qcow2") = 255 - 36 = 219
             max_base_length = 219  # 255 - 36
@@ -243,7 +248,7 @@ class DiskManagementMixin:
         log.debug(f"Generated overlay name (fallback case): {overlay_name}")
         return str(current_disk.parent / overlay_name)
 
-    async def create_overlay_disk(self: 'QEMUVM', experiment_id: str) -> str:
+    async def create_overlay_disk(self, experiment_id: str) -> str:
         """
         Create qcow2 overlay backed by immutable base disk.
 
@@ -298,6 +303,7 @@ class DiskManagementMixin:
 
         # Check available disk space before creating overlay
         import shutil
+
         stat = shutil.disk_usage(overlay_dir)
         min_required_space = 10 * 1024 * 1024 * 1024  # 10GB minimum
         if stat.free < min_required_space:
@@ -315,10 +321,13 @@ class DiskManagementMixin:
         args = [
             qemu_img,
             'create',
-            '-f', 'qcow2',
-            '-F', 'qcow2',  # Backing file format
-            '-b', backing_file,  # Backing file (relative path for libguestfs compatibility)
-            overlay_path      # New overlay
+            '-f',
+            'qcow2',
+            '-F',
+            'qcow2',  # Backing file format
+            '-b',
+            backing_file,  # Backing file (relative path for libguestfs compatibility)
+            overlay_path,  # New overlay
         ]
 
         log.debug(f"Creating overlay disk backed by {backing_file}")
@@ -326,22 +335,18 @@ class DiskManagementMixin:
 
         # Execute qemu-img create
         process = await asyncio.create_subprocess_exec(
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
         stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
-            raise HypervisorException(
-                f"Failed to create overlay disk: {stderr.decode()}"
-            )
+            raise HypervisorException(f"Failed to create overlay disk: {stderr.decode()}")
 
         log.debug(f"Successfully created overlay: {overlay_path}")
         return overlay_path
 
-    async def _cleanup_orphaned_overlays(self: 'QEMUVM', current_experiment_id: str) -> None:
+    async def _cleanup_orphaned_overlays(self, current_experiment_id: str) -> None:
         """
         Clean up orphaned overlay disks from previous crashed runs.
 
@@ -363,11 +368,10 @@ class DiskManagementMixin:
 
             # Determine overlay directory based on VM type
             if self._external_disk_path:
-                # External VM: overlays are in managed storage, not next to base
-                overlay_dir = Path.home() / '.adare' / 'qemu' / 'disks'
-                # External qcow2: use the original filename stem
-                vm_name_stem = Path(self._external_disk_path).stem
-                log.debug(f"Cleaning external VM overlays from managed storage: {overlay_dir}")
+                # Template disk: this VM's own overlays only (named after the VM,
+                # see get_overlay_disk_path) -- other runs share the template.
+                overlay_dir = get_qemu_disk_dir()
+                vm_name_stem = self.vm_name
             else:
                 # Managed VM: overlays are next to base disk
                 overlay_dir = base_path.parent
@@ -410,7 +414,7 @@ class DiskManagementMixin:
             # If we can't determine base disk, log warning but don't fail
             log.warning(f"Could not clean orphaned overlays: {e}")
 
-    async def cleanup_overlay_disk(self: 'QEMUVM', experiment_id: str) -> None:
+    async def cleanup_overlay_disk(self, experiment_id: str) -> None:
         """
         Delete experiment overlay disk.
 
@@ -431,7 +435,7 @@ class DiskManagementMixin:
         else:
             log.debug(f"Overlay already deleted: {overlay_path}")
 
-    async def cleanup_base_disk(self: 'QEMUVM') -> None:
+    async def cleanup_base_disk(self) -> None:
         """
         Reclaim this managed instance's dedicated base disk and NVRAM.
 

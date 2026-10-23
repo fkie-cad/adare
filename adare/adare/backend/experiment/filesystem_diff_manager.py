@@ -99,20 +99,22 @@ class FilesystemDiffManager:
         """
         if not self._is_qemu_vm():
             from adare.exceptions import LoggedException
+
             raise LoggedException(
                 log,
                 f"Host-side diff (--diff-mode=host) requires QEMU hypervisor. "
                 f"Current hypervisor: {self.vm.__class__.__name__ if self.vm else 'unknown'}. "
-                f"Use --diff-mode=guest or switch to QEMU environment."
+                f"Use --diff-mode=guest or switch to QEMU environment.",
             )
 
         if not self._is_virt_diff_available():
             from adare.exceptions import LoggedException
+
             raise LoggedException(
                 log,
                 "Host-side diff requires libguestfs-tools but guestfish not found.\n"
                 "Installation: sudo apt-get install libguestfs-tools\n"
-                "Alternative: Use --diff-mode=guest for VM-based diff."
+                "Alternative: Use --diff-mode=guest for VM-based diff.",
             )
 
     # ------------------------------------------------------------------
@@ -136,14 +138,12 @@ class FilesystemDiffManager:
             snapshot_action = SnapshotFilesystemAction(
                 variable=variable_name,
                 timeout=1200.0,  # 20 minute timeout - large installs (e.g. Kubernetes) add far more files than this project's usual Docker/Podman experiments
-                description="Automatic snapshot for filesystem diff"
+                description="Automatic snapshot for filesystem diff",
             )
 
             # Execute via simple actions executor
             result = await self.action_executor.simple_actions.execute_snapshot_filesystem(
-                snapshot_action,
-                parent_event_id=None,
-                event_emitter=None
+                snapshot_action, parent_event_id=None, event_emitter=None
             )
 
             if not result.success:
@@ -212,7 +212,7 @@ class FilesystemDiffManager:
                 'initial_snapshot_time': initial_snapshot.timestamp,
                 'final_snapshot_time': final_snapshot.timestamp,
                 'os_type': initial_snapshot.os_type,
-                'experiment_run_directory': str(self.experiment_run_directory)
+                'experiment_run_directory': str(self.experiment_run_directory),
             }
 
             # Export JSON

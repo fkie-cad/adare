@@ -44,10 +44,19 @@ def ensure_vm_directories():
     log.info(f"Ensured global VM directory exists: {VMS_DIR}")
 
 
-def load_vm_from_file(project_path: Path, file_path: Path, name: str = None, description: str = '',
-                     os_platform: str = '', os_type: str = '', os_distribution: str = '',
-                     os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
-                     silent: bool = False):
+def load_vm_from_file(
+    project_path: Path,
+    file_path: Path,
+    name: str = None,
+    description: str = '',
+    os_platform: str = '',
+    os_type: str = '',
+    os_distribution: str = '',
+    os_version: str = '',
+    os_language: str = '',
+    os_architecture: str = 'x86_64',
+    silent: bool = False,
+):
     """
     Load a VM from file into the database.
 
@@ -86,7 +95,7 @@ def load_vm_from_file(project_path: Path, file_path: Path, name: str = None, des
         os_version=os_version,
         os_language=os_language,
         os_architecture=os_architecture,
-        silent=silent
+        silent=silent,
     )
 
 

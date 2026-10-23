@@ -52,10 +52,7 @@ def resolve_gui_execution_mode(vm, playbook_settings, cli_override: str | None =
 
     # Validate mode string
     if mode_str not in ('auto', 'agent', 'host'):
-        raise ValueError(
-            f"Invalid gui_execution_mode '{mode_str}'. "
-            f"Must be one of: 'auto', 'agent', 'host'"
-        )
+        raise ValueError(f"Invalid gui_execution_mode '{mode_str}'. Must be one of: 'auto', 'agent', 'host'")
 
     # Handle explicit mode settings
     if mode_str == 'agent':
@@ -91,9 +88,9 @@ def create_gui_executor(
     vm,
     target_resolution_executor,
     experiment_run_id: str | None = None,
-    playbook = None,
+    playbook=None,
     execution_context: dict = None,
-    experiment_run_directory: Path | None = None
+    experiment_run_directory: Path | None = None,
 ) -> AbstractGUIExecutor:
     """
     Create appropriate GUI executor based on execution mode.
@@ -116,6 +113,7 @@ def create_gui_executor(
     """
     if mode == GUIExecutionMode.AGENT:
         from .agent_gui_executor import AgentGUIExecutor
+
         log.debug("Creating AgentGUIExecutor")
         return AgentGUIExecutor(
             websocket_client=websocket_client,
@@ -123,10 +121,11 @@ def create_gui_executor(
             experiment_run_id=experiment_run_id,
             playbook=playbook,
             execution_context=execution_context,
-            experiment_run_directory=experiment_run_directory
+            experiment_run_directory=experiment_run_directory,
         )
     if mode == GUIExecutionMode.HOST:
         from .qemu_host_gui_executor import QEMUHostGUIExecutor
+
         log.debug("Creating QEMUHostGUIExecutor")
         return QEMUHostGUIExecutor(
             vm=vm,
@@ -134,6 +133,6 @@ def create_gui_executor(
             experiment_run_id=experiment_run_id,
             playbook=playbook,
             execution_context=execution_context,
-            experiment_run_directory=experiment_run_directory
+            experiment_run_directory=experiment_run_directory,
         )
     raise ValueError(f"Invalid GUI execution mode: {mode}")

@@ -1,11 +1,33 @@
 """Root-level pytest fixtures for ADARE tests."""
 
+import os
+import shutil
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 import sqlalchemy
 from sqlalchemy.orm import sessionmaker
+
+# Point the appdata directory at a throwaway tree before any adare module is
+# imported: config paths are resolved at import time, and tests must never read
+# or write the developer's real ~/.adare.
+_TEST_HOME = tempfile.mkdtemp(prefix="adare-test-")
+os.environ["ADARE_HOME"] = _TEST_HOME
+
+
+def pytest_unconfigure(config):
+    shutil.rmtree(_TEST_HOME, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def _dispose_db_engines():
+    """Database engines are cached per file for the process; drop them between tests."""
+    yield
+    from adare.database.api.base import dispose_engines
+
+    dispose_engines()
 
 
 @pytest.fixture
@@ -32,6 +54,7 @@ def mock_result_ok():
 
     def _make(data=None, warnings=None):
         return Result.ok(data, warnings=warnings)
+
     return _make
 
 
@@ -42,6 +65,7 @@ def mock_result_fail():
 
     def _make(code="TEST_ERROR", message="Test error", solutions=None, context=None):
         return Result.fail(code, message, solutions=solutions, context=context)
+
     return _make
 
 

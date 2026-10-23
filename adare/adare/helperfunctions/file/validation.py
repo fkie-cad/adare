@@ -6,11 +6,8 @@ from tqdm import tqdm
 
 log = logging.getLogger(__name__)
 
-def validate_tarfile_with_progress(
-    file_path: Path,
-    description: str | None = None,
-    quiet: bool = False
-) -> bool:
+
+def validate_tarfile_with_progress(file_path: Path, description: str | None = None, quiet: bool = False) -> bool:
     """
     Validate if file is a valid tar file with progress indication.
 

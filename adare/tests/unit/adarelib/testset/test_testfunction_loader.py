@@ -1,4 +1,5 @@
 """Tests for TestfunctionLoader thread-safe module loading."""
+
 import threading
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from adarelib.testset.type import Test, TestsetFile
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _create_valid_test_module(tmp_path: Path, name: str = "test_module") -> Path:
     """Create a minimal valid testfunction module file."""
@@ -64,6 +66,7 @@ def _create_syntax_error_module(tmp_path: Path, name: str = "syntax_err") -> Pat
 # TestfunctionLoader.import_basictest_subclasses
 # ---------------------------------------------------------------------------
 
+
 class TestLoaderImport:
     """Tests for TestfunctionLoader.import_basictest_subclasses."""
 
@@ -71,9 +74,7 @@ class TestLoaderImport:
         module_file = _create_valid_test_module(tmp_path)
         loader = TestfunctionLoader()
 
-        result = loader.import_basictest_subclasses(
-            source=[("my_tests", str(module_file))]
-        )
+        result = loader.import_basictest_subclasses(source=[("my_tests", str(module_file))])
 
         assert "my_tests" in result
         assert "dummy_test" in result["my_tests"]
@@ -101,9 +102,7 @@ class TestLoaderImport:
         broken = _create_broken_import_module(tmp_path)
         loader = TestfunctionLoader()
 
-        result = loader.import_basictest_subclasses(
-            source=[("broken", str(broken))]
-        )
+        result = loader.import_basictest_subclasses(source=[("broken", str(broken))])
 
         assert result == {}  # no successful loads
         failures = loader.load_failures
@@ -114,9 +113,7 @@ class TestLoaderImport:
         bad = _create_syntax_error_module(tmp_path)
         loader = TestfunctionLoader()
 
-        result = loader.import_basictest_subclasses(
-            source=[("bad", str(bad))]
-        )
+        result = loader.import_basictest_subclasses(source=[("bad", str(bad))])
 
         assert result == {}
         failures = loader.load_failures
@@ -140,6 +137,7 @@ class TestLoaderImport:
 # ---------------------------------------------------------------------------
 # TestfunctionLoader.load_failures returns a copy
 # ---------------------------------------------------------------------------
+
 
 class TestLoaderFailuresCopy:
     """Test that load_failures returns a defensive copy."""
@@ -169,6 +167,7 @@ class TestLoaderFailuresCopy:
 # ---------------------------------------------------------------------------
 # Instance isolation between loaders
 # ---------------------------------------------------------------------------
+
 
 class TestLoaderIsolation:
     """Failures are isolated between loader instances."""
@@ -209,6 +208,7 @@ class TestLoaderIsolation:
 # ---------------------------------------------------------------------------
 # Thread safety
 # ---------------------------------------------------------------------------
+
 
 class TestLoaderThreadSafety:
     """Concurrent loads must not corrupt state."""
@@ -294,6 +294,7 @@ class TestLoaderThreadSafety:
 # Backward-compatible module-level wrappers
 # ---------------------------------------------------------------------------
 
+
 class TestBackwardCompatWrappers:
     """Module-level functions delegate to _default_loader."""
 
@@ -303,9 +304,7 @@ class TestBackwardCompatWrappers:
         # Reset default loader state
         clear_module_load_failures()
 
-        result = import_basictest_subclasses(
-            source=[("wrapper_test", str(valid))]
-        )
+        result = import_basictest_subclasses(source=[("wrapper_test", str(valid))])
 
         assert "wrapper_test" in result
         assert "dummy_test" in result["wrapper_test"]
@@ -332,6 +331,7 @@ class TestBackwardCompatWrappers:
 # globals() pollution removed
 # ---------------------------------------------------------------------------
 
+
 class TestNoGlobalsPollution:
     """Loading testfunctions must NOT inject class names into the module namespace."""
 
@@ -339,9 +339,7 @@ class TestNoGlobalsPollution:
         valid = _create_valid_test_module(tmp_path)
         loader = TestfunctionLoader()
 
-        result = loader.import_basictest_subclasses(
-            source=[("no_globals", str(valid))]
-        )
+        result = loader.import_basictest_subclasses(source=[("no_globals", str(valid))])
 
         # Verify the class was actually found
         assert "dummy_test" in result["no_globals"]
@@ -355,9 +353,7 @@ class TestNoGlobalsPollution:
         valid = _create_valid_test_module(tmp_path)
 
         # Use the module-level wrapper
-        result = import_basictest_subclasses(
-            source=[("no_globals_compat", str(valid))]
-        )
+        result = import_basictest_subclasses(source=[("no_globals_compat", str(valid))])
 
         assert "dummy_test" in result["no_globals_compat"]
         assert "TestDummy" not in testfunction_module.__dict__, (
@@ -368,6 +364,7 @@ class TestNoGlobalsPollution:
 # ---------------------------------------------------------------------------
 # get_testclass_from_testfunction
 # ---------------------------------------------------------------------------
+
 
 class TestGetTestclass:
     """Tests for get_testclass_from_testfunction lookup."""
@@ -411,6 +408,7 @@ class TestGetTestclass:
 # get_missing_testfunctions
 # ---------------------------------------------------------------------------
 
+
 class TestGetMissingTestfunctions:
     """Tests for get_missing_testfunctions."""
 
@@ -453,6 +451,7 @@ class TestGetMissingTestfunctions:
 # ---------------------------------------------------------------------------
 # _load_single_module (extracted helper)
 # ---------------------------------------------------------------------------
+
 
 class TestLoadSingleModule:
     """Tests for TestfunctionLoader._load_single_module."""

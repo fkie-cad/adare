@@ -28,16 +28,11 @@ def exec_dev_reset_soft(arguments):
     session_id = _resolve_session_id(arguments.session_id)
 
     api = AdareAPI()
-    result = api.devmode.reset_soft(DevResetRequest(
-        session_id=session_id,
-        reset_type='soft'
-    ))
+    result = api.devmode.reset_soft(DevResetRequest(session_id=session_id, reset_type='soft'))
 
     if result.success:
         reset_result = result.data
-        print_success_message(
-            title='Soft reset completed'
-        )
+        print_success_message(title='Soft reset completed')
         print(f"\n{reset_result.message}")
         print(f"Execution Time: {reset_result.execution_time:.2f}s")
     else:
@@ -50,16 +45,11 @@ def exec_dev_reset_hard(arguments):
     session_id = _resolve_session_id(arguments.session_id)
 
     api = AdareAPI()
-    result = api.devmode.reset_hard(DevResetRequest(
-        session_id=session_id,
-        reset_type='hard'
-    ))
+    result = api.devmode.reset_hard(DevResetRequest(session_id=session_id, reset_type='hard'))
 
     if result.success:
         reset_result = result.data
-        print_success_message(
-            title='Hard reset completed'
-        )
+        print_success_message(title='Hard reset completed')
         print(f"\n{reset_result.message}")
         print(f"Execution Time: {reset_result.execution_time:.2f}s")
         print("\nVM has been restored to initial snapshot")
@@ -74,16 +64,12 @@ def exec_dev_checkpoint_create(arguments):
     session_id = _resolve_session_id(arguments.session_id)
 
     api = AdareAPI()
-    result = api.devmode.create_checkpoint(DevCheckpointCreateRequest(
-        session_id=session_id,
-        name=arguments.name,
-        description=arguments.description
-    ))
+    result = api.devmode.create_checkpoint(
+        DevCheckpointCreateRequest(session_id=session_id, name=arguments.name, description=arguments.description)
+    )
 
     if result.success:
-        print_success_message(
-            title=f'Checkpoint "{arguments.name}" created'
-        )
+        print_success_message(title=f'Checkpoint "{arguments.name}" created')
     else:
         handle_api_error(result)
 
@@ -94,15 +80,10 @@ def exec_dev_checkpoint_restore(arguments):
     session_id = _resolve_session_id(arguments.session_id)
 
     api = AdareAPI()
-    result = api.devmode.restore_checkpoint(DevCheckpointRestoreRequest(
-        session_id=session_id,
-        name=arguments.name
-    ))
+    result = api.devmode.restore_checkpoint(DevCheckpointRestoreRequest(session_id=session_id, name=arguments.name))
 
     if result.success:
-        print_success_message(
-            title=f'Checkpoint "{arguments.name}" restored'
-        )
+        print_success_message(title=f'Checkpoint "{arguments.name}" restored')
     else:
         handle_api_error(result)
 
@@ -113,14 +94,17 @@ def exec_dev_checkpoint_list(arguments):
     session_id = _resolve_session_id(arguments.session_id)
 
     api = AdareAPI()
-    result = api.devmode.list_checkpoints(DevCheckpointListRequest(
-        session_id=session_id
-    ))
+    result = api.devmode.list_checkpoints(DevCheckpointListRequest(session_id=session_id))
 
     if result.success:
+        from adare.cli.output import emit, is_structured_output
+
+        if is_structured_output():
+            emit({'session_id': session_id, 'checkpoints': result.data or []})
+            return
         if not result.data:
             print(f"No checkpoints found for session {session_id}")
-            print(f"\nCreate a checkpoint with: adare dev checkpoint-create -s {session_id} <name>")
+            print(f"\nCreate a checkpoint with: adare dev checkpoint create -s {session_id} <name>")
         else:
             # Use Rich table panel for display
             import pandas as pd
@@ -131,14 +115,16 @@ def exec_dev_checkpoint_list(arguments):
             # Convert to DataFrame
             data = []
             for checkpoint in result.data:
-                data.append({
-                    'name': checkpoint.name,
-                    'description': checkpoint.description,
-                    'created_at': checkpoint.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                    'variable_count': checkpoint.variable_count,
-                    'file_size_mb': checkpoint.file_size_mb,
-                    'checkpoint_id': checkpoint.checkpoint_id,
-                })
+                data.append(
+                    {
+                        'name': checkpoint.name,
+                        'description': checkpoint.description,
+                        'created_at': checkpoint.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                        'variable_count': checkpoint.variable_count,
+                        'file_size_mb': checkpoint.file_size_mb,
+                        'checkpoint_id': checkpoint.checkpoint_id,
+                    }
+                )
 
             df = pd.DataFrame(data)
 
@@ -158,15 +144,10 @@ def exec_dev_checkpoint_delete(arguments):
     from adare.core.dto.devmode import DevCheckpointDeleteRequest
 
     api = AdareAPI()
-    result = api.devmode.delete_checkpoint(DevCheckpointDeleteRequest(
-        session_id=session_id,
-        name=arguments.name
-    ))
+    result = api.devmode.delete_checkpoint(DevCheckpointDeleteRequest(session_id=session_id, name=arguments.name))
 
     if result.success:
-        print_success_message(
-            title=f'Checkpoint "{arguments.name}" deleted'
-        )
+        print_success_message(title=f'Checkpoint "{arguments.name}" deleted')
         print("\nCheckpoint and associated snapshot files have been removed")
     else:
         handle_api_error(result)

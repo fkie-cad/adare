@@ -33,9 +33,7 @@ class StageEventCoordinator:
 
             self._stop_event.clear()
             self._worker_thread = threading.Thread(
-                target=self._process_events,
-                daemon=True,
-                name="StageEventCoordinator"
+                target=self._process_events, daemon=True, name="StageEventCoordinator"
             )
             self._worker_thread.start()
             self._started = True
@@ -68,13 +66,7 @@ class StageEventCoordinator:
             log.warning("StageEventCoordinator not started, dropping event")
             return
 
-        event_data = {
-            'type': 'stage',
-            'ulid': ulid,
-            'stage': stage,
-            'stage_id': stage_id,
-            'timestamp': time.time()
-        }
+        event_data = {'type': 'stage', 'ulid': ulid, 'stage': stage, 'stage_id': stage_id, 'timestamp': time.time()}
 
         try:
             self._event_queue.put(event_data, timeout=1.0)
@@ -93,6 +85,7 @@ class StageEventCoordinator:
             True if queue is empty, False if timeout reached
         """
         import time
+
         start_time = time.time()
         while not self._event_queue.empty() and (time.time() - start_time) < timeout:
             time.sleep(0.001)  # 1ms check interval
@@ -116,7 +109,7 @@ class StageEventCoordinator:
             'ulid': ulid,
             'action_event': action_event,
             'action_id': action_id,
-            'timestamp': time.time()
+            'timestamp': time.time(),
         }
 
         try:
@@ -215,20 +208,27 @@ class StageEventCoordinator:
                 log.debug(f"Filtering hidden stage from CLI: {stage.name} ({event['stage_id']})")
                 # Import here to avoid circular dependency
                 from adare.backend.events.pubsub import publish_db
+
                 # Publish ONLY to database for audit trail
-                publish_db(event['ulid'], {
-                    "type": "stage",
-                    "data": stage.to_dict(),
-                    "stage_id": event['stage_id'],
-                })
+                publish_db(
+                    event['ulid'],
+                    {
+                        "type": "stage",
+                        "data": stage.to_dict(),
+                        "stage_id": event['stage_id'],
+                    },
+                )
                 return
 
             # Publish to both CLI and database for visible stages
-            publish_func(event['ulid'], {
-                "type": "stage",
-                "data": stage.to_dict(),
-                "stage_id": event['stage_id'],
-            })
+            publish_func(
+                event['ulid'],
+                {
+                    "type": "stage",
+                    "data": stage.to_dict(),
+                    "stage_id": event['stage_id'],
+                },
+            )
             log.debug(f"Published stage event: {stage.name} ({event['stage_id']})")
         except Exception as e:
             log.error(f"Failed to publish stage event: {e}", exc_info=True)
@@ -242,11 +242,14 @@ class StageEventCoordinator:
             publish_func: Publish function to use
         """
         try:
-            publish_func(event['ulid'], {
-                "type": "action",
-                "data": event['action_event'].to_dict(),
-                "action_id": event['action_id'],
-            })
+            publish_func(
+                event['ulid'],
+                {
+                    "type": "action",
+                    "data": event['action_event'].to_dict(),
+                    "action_id": event['action_id'],
+                },
+            )
             log.debug(f"Published action event: {event['action_event'].action_type} ({event['action_id']})")
         except Exception as e:
             log.error(f"Failed to publish action event: {e}", exc_info=True)

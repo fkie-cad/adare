@@ -6,6 +6,7 @@ Provides validation, hashing, and file management methods for VMs.
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adare.config.configdirectory import VMS_DIR
 from adare.helperfunctions.file.hash import file_sha256_with_progress
@@ -13,13 +14,21 @@ from adare.validators.vm_validators import VMValidatorFactory
 
 from .exceptions import VMLoadError, VMValidationError
 
+if TYPE_CHECKING:
+    from adare.database.api.base import GlobalDatabaseApi as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class VmValidationMixin:
+class VmValidationMixin(_Host):
     """Mixin providing VM file validation and file operation methods."""
 
-    def validate_vm_file(self, file_path: Path, name: str = None, quiet: bool = False, hypervisor: str = 'virtualbox') -> dict:
+    def validate_vm_file(
+        self, file_path: Path, name: str = None, quiet: bool = False, hypervisor: str = 'virtualbox'
+    ) -> dict:
         """
         Validate VM file using hypervisor-specific validator.
 
@@ -47,7 +56,7 @@ class VmValidationMixin:
                 log,
                 f"VM file {file_path} has unsupported extension '{file_ext}' for hypervisor '{hypervisor}'.\n"
                 f"Supported extensions for {hypervisor}: {', '.join(supported)}\n"
-                f"If using QEMU, ensure environment YAML specifies: hypervisor: qemu"
+                f"If using QEMU, ensure environment YAML specifies: hypervisor: qemu",
             )
 
         # Delegate validation to hypervisor-specific validator
@@ -67,9 +76,7 @@ class VmValidationMixin:
             SHA256 hash string
         """
         return file_sha256_with_progress(
-            file_path=file_path,
-            description=f"Calculating hash for {file_path.name}",
-            quiet=quiet
+            file_path=file_path, description=f"Calculating hash for {file_path.name}", quiet=quiet
         )
 
     def _copy_vm_file(self, source_path: Path, project_path: Path, name: str, silent: bool = False) -> Path:
@@ -103,15 +110,14 @@ class VmValidationMixin:
                     # Source and target are the same file, no need to copy
                     log.info(f"VM file already in target location: {target_path}")
                     return target_path
-                raise VMLoadError(log, f"Target VM file {target_path} already exists and is different from source {source_path}")
+                raise VMLoadError(
+                    log, f"Target VM file {target_path} already exists and is different from source {source_path}"
+                )
 
             log.info(f"Copying VM file to {target_path}")
             from adare.helperfunctions.file.copy import copy
-            copy(
-                src=source_path,
-                dst=target_path,
-                silent=silent
-            )
+
+            copy(src=source_path, dst=target_path, silent=silent)
             log.info(f"Successfully copied VM file to {target_path}")
 
             return target_path

@@ -151,10 +151,7 @@ async def _collect_linux_packages(vm) -> list:
     packages = []
 
     # Try dpkg first (Debian/Ubuntu)
-    result = await vm.run_command(
-        "dpkg-query -W -f='${Package} ${Version}\\n' 2>/dev/null | head -500",
-        silent=True
-    )
+    result = await vm.run_command("dpkg-query -W -f='${Package} ${Version}\\n' 2>/dev/null | head -500", silent=True)
     if result.returncode == 0 and result.stdout.strip():
         for line in result.stdout.strip().split('\n'):
             parts = line.strip().split(' ', 1)
@@ -166,8 +163,7 @@ async def _collect_linux_packages(vm) -> list:
 
     # Try rpm (RHEL/Fedora/SUSE)
     result = await vm.run_command(
-        "rpm -qa --queryformat '%{NAME} %{VERSION}-%{RELEASE}\\n' 2>/dev/null | head -500",
-        silent=True
+        "rpm -qa --queryformat '%{NAME} %{VERSION}-%{RELEASE}\\n' 2>/dev/null | head -500", silent=True
     )
     if result.returncode == 0 and result.stdout.strip():
         for line in result.stdout.strip().split('\n'):
@@ -189,7 +185,7 @@ async def _collect_windows_os_info(vm) -> dict:
         '(Get-CimInstance Win32_OperatingSystem).Version; '
         '(Get-CimInstance Win32_OperatingSystem).BuildNumber; '
         '$env:COMPUTERNAME',
-        silent=True
+        silent=True,
     )
     if result.returncode == 0 and result.stdout.strip():
         lines = result.stdout.strip().split('\n')
@@ -214,7 +210,7 @@ async def _collect_windows_packages(vm) -> list:
         '| Where-Object { $_.DisplayName } '
         '| Select-Object -First 500 DisplayName, DisplayVersion '
         '| ForEach-Object { "$($_.DisplayName)|$($_.DisplayVersion)" }',
-        silent=True
+        silent=True,
     )
     if result.returncode == 0 and result.stdout.strip():
         for line in result.stdout.strip().split('\n'):

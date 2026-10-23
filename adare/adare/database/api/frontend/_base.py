@@ -31,6 +31,11 @@ class DataRetrievalBase:
     - Project models: Experiment, ExperimentRun (from project-specific database)
     """
 
+    # Open only inside a `with` block (None otherwise); typed as the APIs because
+    # every query method runs inside one.
+    _global_api: GlobalDatabaseApi
+    _project_api: ProjectDatabaseApi
+
     def __init__(self, project_path: Path = None, require_project: bool = True):
         """
         Initialize DataRetrievalApi with project context.
@@ -44,14 +49,17 @@ class DataRetrievalBase:
         """
         if project_path is None:
             from adare.backend.basics import determine_projectdirectory
+
             project_path = determine_projectdirectory(None, silent=True)
             if project_path is None and require_project:
-                raise ProjectNotFoundError(log, "No current project found. Please run this command from within a project directory.")
+                raise ProjectNotFoundError(
+                    log, "No current project found. Please run this command from within a project directory."
+                )
 
         self.project_path = project_path
         self.require_project = require_project
-        self._global_api = None
-        self._project_api = None
+        self._global_api = None  # type: ignore[assignment]
+        self._project_api = None  # type: ignore[assignment]
 
     def __enter__(self):
         """Context manager entry - start both database sessions."""
@@ -68,8 +76,8 @@ class DataRetrievalBase:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - handle cleanup of both database sessions."""
-        project_exception = None
-        global_exception = None
+        project_exception: SQLAlchemyError | None = None
+        global_exception: SQLAlchemyError | None = None
 
         # Close project database first
         if self._project_api:
@@ -79,7 +87,7 @@ class DataRetrievalBase:
                 project_exception = e
                 log.error(f"Error closing project database: {e}")
             finally:
-                self._project_api = None
+                self._project_api = None  # type: ignore[assignment]
 
         # Close global database second
         if self._global_api:
@@ -89,19 +97,23 @@ class DataRetrievalBase:
                 global_exception = e
                 log.error(f"Error closing global database: {e}")
             finally:
-                self._global_api = None
+                self._global_api = None  # type: ignore[assignment]
 
         # If we had exceptions during cleanup, log them but don't mask the original exception
-        if project_exception or global_exception:
-            if exc_type is None:  # No original exception, raise cleanup exception
-                raise project_exception or global_exception
+        cleanup_exception = project_exception or global_exception
+        if cleanup_exception is not None and exc_type is None:  # no original exception: raise the cleanup one
+            raise cleanup_exception
 
     def _check_project_exists(self, project_name: str):
         if not self._global_api._session.query(Project).filter_by(name=project_name).count():
             raise ProjectNotFoundError(log, f'Project "{project_name}" not found')
 
     def _check_environment_exists_by_name(self, environment_name: str):
-        if not self._global_api._session.query(Environment).filter_by(name=environment_name).count():
+        if (
+            not self._global_api._session.query(Environment)
+            .filter(Environment.name == environment_name, Environment.is_current)
+            .count()
+        ):
             raise EnvironmentNotFoundError(log, f'Environment "{environment_name}" not found')
 
     def _check_environment_exists_by_ulid(self, environment_ulid: str):
@@ -109,9 +121,11 @@ class DataRetrievalBase:
             raise EnvironmentNotFoundError(log, f'Environment with ulid "{environment_ulid}" not found')
 
     def _check_experiment_exists_by_projenvexp(self, project_name: str, environment_name: str, experiment_name: str):
-        if not self._project_api._session.query(Experiment).filter(
-                Experiment.name == experiment_name).count():
-            raise ExperimentNotFoundError(log, f'Experiment "{experiment_name}" not found in project "{project_name}" and environment "{environment_name}"')
+        if not self._project_api._session.query(Experiment).filter(Experiment.name == experiment_name).count():
+            raise ExperimentNotFoundError(
+                log,
+                f'Experiment "{experiment_name}" not found in project "{project_name}" and environment "{environment_name}"',
+            )
 
     def _check_experiment_exists_by_ulid(self, experiment_ulid: str):
         if not self._project_api._session.query(Experiment).filter_by(id=experiment_ulid).count():
@@ -146,6 +160,7 @@ class DataRetrievalBase:
         """
         if current_project_name is None:
             from adare.backend.basics import determine_projectdirectory
+
             if project_path := determine_projectdirectory(None, silent=True):
                 current_project_name = project_path.name
 

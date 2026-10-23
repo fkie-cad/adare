@@ -9,19 +9,22 @@ from typing import Any
 
 class GUIExecutionMode(Enum):
     """GUI automation execution modes."""
+
     AGENT = "agent"  # WebSocket to adarevm agent (pyautogui)
-    HOST = "host"    # Direct hypervisor commands (QMP for QEMU)
+    HOST = "host"  # Direct hypervisor commands (QMP for QEMU)
 
 
 class TestExecutionMode(Enum):
     """Test execution modes."""
+
     AGENT = "agent"  # WebSocket to adarevm agent (tests run inside VM)
-    HOST = "host"    # Tests run on host, files pulled via QGA
+    HOST = "host"  # Tests run on host, files pulled via QGA
 
 
 @dataclass
 class ActionResult:
     """Result of a playbook action execution."""
+
     success: bool
     message: str = ""
     coordinates: tuple[int, int] | None = None
@@ -34,6 +37,7 @@ def serialize_target(target) -> dict[str, Any] | None:
     if not target:
         return None
     from adare.types.actions import converter
+
     return converter.unstructure(target)
 
 
@@ -55,6 +59,7 @@ def get_target_info(target) -> dict[str, Any] | None:
         # Add strategy parameters if available
         if hasattr(target.strategy, '__dict__'):
             import attrs
+
             if attrs.has(target.strategy):
                 strategy_params = attrs.asdict(target.strategy)
                 if strategy_params:

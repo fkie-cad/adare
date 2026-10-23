@@ -19,6 +19,7 @@ extra. If ``python_exe`` (``ADARE_LOCATE_PYTHON``) points at another interpreter
 the server is launched by its **file path** with that interpreter instead
 (``locate_server`` deliberately imports nothing from ``adare``).
 """
+
 from __future__ import annotations
 
 import json
@@ -113,15 +114,16 @@ class LocateGroundingManager:
         log.info('auto-starting LocateAnything grounding: %s', ' '.join(cmd))
         try:
             self.process = subprocess.Popen(  # noqa: S603 (fixed argv, no shell)
-                cmd, stdout=stdout, stderr=stderr, start_new_session=True,
+                cmd,
+                stdout=stdout,
+                stderr=stderr,
+                start_new_session=True,
             )
         except OSError as exc:  # bad ADARE_LOCATE_PYTHON, permissions, etc.
             if self._log_handle:
                 self._log_handle.close()
                 self._log_handle = None
-            raise GroundingUnavailable(
-                f'could not launch grounding server ({cmd[0]}): {exc}'
-            ) from exc
+            raise GroundingUnavailable(f'could not launch grounding server ({cmd[0]}): {exc}') from exc
         self.spawned = True
 
     def _await_health(self) -> None:
@@ -134,8 +136,7 @@ class LocateGroundingManager:
                 raise GroundingUnavailable(
                     f'LocateAnything grounding server exited early (code '
                     f'{self.process.returncode}). Is the grounding backend installed '
-                    f'(uv sync --extra grounding) or ADARE_LOCATE_PYTHON set?'
-                    + self._log_hint()
+                    f'(uv sync --extra grounding) or ADARE_LOCATE_PYTHON set?' + self._log_hint()
                 )
             try:
                 with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310 (localhost)
@@ -174,8 +175,7 @@ class LocateGroundingManager:
     def stop(self) -> None:
         """Tear down the server — only if we spawned it (never a user's server)."""
         if self.process and self.spawned and self.process.poll() is None:
-            log.info('stopping auto-started LocateAnything grounding server (pid=%d)',
-                     self.process.pid)
+            log.info('stopping auto-started LocateAnything grounding server (pid=%d)', self.process.pid)
             self.process.send_signal(signal.SIGTERM)
             try:
                 self.process.wait(timeout=5)

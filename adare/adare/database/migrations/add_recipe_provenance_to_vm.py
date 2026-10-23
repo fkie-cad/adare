@@ -56,9 +56,7 @@ def upgrade(conn) -> None:
 
     # Index on recipe_hash for fast cache lookups (get_vm_by_recipe_hash).
     if 'recipe_hash' in added or 'recipe_hash' in existing:
-        conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_vm_recipe_hash ON vm (recipe_hash)"
-        ))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_vm_recipe_hash ON vm (recipe_hash)"))
 
 
 def run_migration() -> bool:
@@ -68,9 +66,8 @@ def run_migration() -> bool:
     print("Running migration: add_recipe_provenance_to_vm")
 
     try:
-        with VmApi() as api:
-            with api.engine.begin() as conn:
-                upgrade(conn)
+        with VmApi() as api, api.engine.begin() as conn:
+            upgrade(conn)
 
         print("✓ Migration completed successfully!")
         print("\nIMPORTANT:")

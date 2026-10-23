@@ -16,6 +16,7 @@ class ExperimentRunFlowConsoleWidget(VerticalScroll):
     A Textual widget that displays log messages with an animated spinner.
     Uses ConsoleState for thread-safe message storage.
     """
+
     state: ConsoleState
 
     # A reactive tick counter (used to cycle spinner frames)
@@ -98,7 +99,7 @@ class ExperimentRunFlowConsoleWidget(VerticalScroll):
 
         # We could also add duration here if we want parity with Rich console
         if message_object.get('duration'):
-             message = f"{message} ({message_object['duration']:.2f}s)"
+            message = f"{message} ({message_object['duration']:.2f}s)"
 
         return message
 
@@ -171,23 +172,18 @@ class ExperimentRunFlowConsoleWidget(VerticalScroll):
         self._trigger_refresh()
 
     def log_spinner(
-            self,
-            identifier: str,
-            message: str,
-            level: int = 0,
-            spinner: str = "dots",
-            spinner_style: str = "bold blue",
+        self,
+        identifier: str,
+        message: str,
+        level: int = 0,
+        spinner: str = "dots",
+        spinner_style: str = "bold blue",
     ) -> None:
         self.state.log_spinner(identifier, message, level, spinner, spinner_style)
         self._trigger_refresh()
 
     def log_spinner_done(
-            self,
-            identifier: str,
-            status: int,
-            message: str = None,
-            result_status: int = None,
-            duration: float = None
+        self, identifier: str, status: int, message: str = None, result_status: int = None, duration: float = None
     ) -> None:
         self.state.log_spinner_done(identifier, status, message, result_status, duration)
         self._trigger_refresh()
@@ -213,6 +209,7 @@ class FlowWidgetManager:
         self.handlers[experimentrun_ulid] = handler
         # Also register with the backend flowconsolemanager so run.py can find it
         from adare.backend.experiment.print import flowconsolemanager
+
         flowconsolemanager.add_handler(experimentrun_ulid, handler)
 
     def get_handler(self, experimentrun_ulid: str) -> ExperimentRunFlowConsoleWidget:
@@ -223,6 +220,7 @@ class FlowWidgetManager:
             del self.handlers[experimentrun_ulid]
             # Also remove from backend manager
             from adare.backend.experiment.print import flowconsolemanager
+
             flowconsolemanager.remove_handler(experimentrun_ulid)
 
 

@@ -53,7 +53,7 @@ TIMEOUT_SECONDS = 10
 #   ADARE_VLLM_COORD_SPACE=normalized_1000       # coord convention varies by model
 # Ollama Cloud retired the qwen3-vl GUI/computer-use line in 2026-06; gemma4 is a
 # general multimodal model (not coordinate-tuned), so keep `--ground` on for clicks.
-# Run `adare vm gui-doctor` to verify the endpoint and auto-detect the coord space.
+# Run `adare vlm doctor` to verify the endpoint and auto-detect the coord space.
 # Persist a provider without env vars: `adare vlm use ollama-cloud` / `... use local`
 # (env still overrides the saved config for a single run — see _cfg above).
 VLLM_BASE_URL = _cfg('ADARE_VLLM_BASE_URL', 'http://localhost:8000/v1')
@@ -198,21 +198,14 @@ EXPERIMENT_VIDEO = os.environ.get('ADARE_EXPERIMENT_VIDEO', '0').lower() in ('1'
 # (OpenCode / Claude Code / any MCP client) connects here to author playbooks.
 # Distinct from the CV/OCR server's 13109 so both can run against one session.
 GUI_MCP_PORT = int(os.environ.get('ADARE_GUI_MCP_PORT', '13110'))
+
+# Control-plane MCP server (`adare mcp serve --transport http`). Must differ from
+# LOCATE_PORT: both used to default to 13111, so the two could not run together.
+MCP_CONTROL_PORT = int(os.environ.get('ADARE_MCP_PORT', '13112'))
 GUI_MCP_HOST = os.environ.get('ADARE_GUI_MCP_HOST', '127.0.0.1')
 
 # PORTS FOR OAuth2 Redirects
-PORT_OAUTH2_REDIRECT = [
-    13331,
-    13332,
-    13333,
-    13334,
-    13335,
-    14441,
-    14442,
-    14443,
-    14444,
-    14445
-]
+PORT_OAUTH2_REDIRECT = [13331, 13332, 13333, 13334, 13335, 14441, 14442, 14443, 14444, 14445]
 GITEA_CLIENT_ID = '9afe946b-d67f-46ac-8362-4ef479a8e11c'
 GITEA_URL = 'https://adare.click/git/'
 GITEA_API_URL = f'{GITEA_URL}api/v1/'

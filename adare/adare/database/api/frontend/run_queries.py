@@ -1,6 +1,7 @@
 """Mixin for experiment run related queries."""
 
 import logging
+from typing import TYPE_CHECKING
 
 import pandas as pd
 from sqlalchemy.exc import SQLAlchemyError
@@ -19,16 +20,25 @@ from adare.database.models.project_models import (
     Status,
 )
 
+if TYPE_CHECKING:
+    from adare.database.api.frontend._base import DataRetrievalBase as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class RunQueryMixin:
+class RunQueryMixin(_Host):
     """Mixin providing experiment run query methods."""
 
     def get_experiment_runs(self, experiment_ulid: str) -> pd.DataFrame:
         self._check_experiment_exists_by_ulid(experiment_ulid)
         # execute query and return result as pandas dataframe excluding the id column
-        return pd.read_sql(self._project_api._session.query(ExperimentRun).filter_by(experiment_id=experiment_ulid).statement, self._project_api._session.bind).map(str)
+        return pd.read_sql(
+            self._project_api._session.query(ExperimentRun).filter_by(experiment_id=experiment_ulid).statement,
+            self._project_api._session.bind,
+        ).map(str)
 
     def _enrich_run_data(self, data: pd.DataFrame) -> pd.DataFrame:
         # Use bulk loading to avoid N+1 queries
@@ -37,14 +47,23 @@ class RunQueryMixin:
         environment_ids = data['environment_id'].tolist()
 
         # Bulk load all required objects with eager loading
-        runs_dict = {run.id: run for run in self._project_api._session.query(ExperimentRun).filter(ExperimentRun.id.in_(run_ids)).all()}
+        runs_dict = {
+            run.id: run
+            for run in self._project_api._session.query(ExperimentRun).filter(ExperimentRun.id.in_(run_ids)).all()
+        }
 
-        experiments_dict = {exp.id: exp for exp in self._project_api._session.query(Experiment).filter(
-            Experiment.id.in_(experiment_ids)).all()}
+        experiments_dict = {
+            exp.id: exp
+            for exp in self._project_api._session.query(Experiment).filter(Experiment.id.in_(experiment_ids)).all()
+        }
 
-        environments_dict = {env.id: env for env in self._global_api._session.query(Environment).options(
-            joinedload(Environment.vm).joinedload(Vm.osinfo)
-        ).filter(Environment.id.in_(environment_ids)).all()}
+        environments_dict = {
+            env.id: env
+            for env in self._global_api._session.query(Environment)
+            .options(joinedload(Environment.vm).joinedload(Vm.osinfo))
+            .filter(Environment.id.in_(environment_ids))
+            .all()
+        }
 
         # Build result arrays using bulk-loaded data
         experiment_names = []
@@ -86,18 +105,30 @@ class RunQueryMixin:
         # experiment_dotnotation is set during the enrichment loop above (handles unlinked runs)
         data['vm'] = data['object_environment'].apply(lambda obj: obj.vm if obj else None)
         data['vm_name'] = data['object_environment'].apply(lambda obj: obj.vm.name if obj and obj.vm else '')
-        data['osinfo'] = data['object_environment'].apply(lambda obj: str(obj.vm.osinfo) if obj and obj.vm and hasattr(obj.vm, 'osinfo') and obj.vm.osinfo else '')
+        data['osinfo'] = data['object_environment'].apply(
+            lambda obj: str(obj.vm.osinfo) if obj and obj.vm and hasattr(obj.vm, 'osinfo') and obj.vm.osinfo else ''
+        )
         # Add missing timestamp fields
         data['timestamp_start'] = data['object_run'].apply(lambda obj: getattr(obj, 'start_time', '') if obj else '')
         data['timestamp_end'] = data['object_run'].apply(lambda obj: getattr(obj, 'end_time', '') if obj else '')
         # Add published field through sync_metadata if available
-        data['published'] = data['object_run'].apply(lambda obj: obj.sync_metadata.is_synced if obj and hasattr(obj, 'sync_metadata') and obj.sync_metadata else False)
+        data['published'] = data['object_run'].apply(
+            lambda obj: (
+                obj.sync_metadata.is_synced if obj and hasattr(obj, 'sync_metadata') and obj.sync_metadata else False
+            )
+        )
         # Add fake field
         data['fake'] = data['object_run'].apply(lambda obj: getattr(obj, 'fake', False) if obj else False)
         # remove object_run column
         return data.drop(columns=['object_run', 'object_environment'])
 
-    def get_runs(self, experiment_ulid: str = None, project_name: str = None, environment_name: str = None, experiment_name: str = None) -> pd.DataFrame:
+    def get_runs(
+        self,
+        experiment_ulid: str = None,
+        project_name: str = None,
+        environment_name: str = None,
+        experiment_name: str = None,
+    ) -> pd.DataFrame:
         if experiment_ulid:
             return self.get_experiment_runs(experiment_ulid)
 
@@ -109,7 +140,9 @@ class RunQueryMixin:
         # and experiments are stored per-project
 
         if environment_name:
-            query = query.filter(ExperimentRun.experiment.has(Experiment.environments.any(Environment.name == environment_name)))
+            query = query.filter(
+                ExperimentRun.experiment.has(Experiment.environments.any(Environment.name == environment_name))
+            )
 
         if experiment_name:
             query = query.filter(ExperimentRun.experiment.has(Experiment.name == experiment_name))
@@ -119,7 +152,10 @@ class RunQueryMixin:
         return self._enrich_run_data(data)
 
     def get_run(self, run_ulid: str) -> pd.DataFrame:
-        data = pd.read_sql(self._project_api._session.query(ExperimentRun).filter_by(id=run_ulid).statement, self._project_api._session.bind).map(str)
+        data = pd.read_sql(
+            self._project_api._session.query(ExperimentRun).filter_by(id=run_ulid).statement,
+            self._project_api._session.bind,
+        ).map(str)
         return self._enrich_run_data(data)
 
     def get_latest_run_in_project(self, project_name: str = None) -> pd.DataFrame:
@@ -127,6 +163,7 @@ class RunQueryMixin:
         if not project_name:
             from adare.backend.basics import determine_projectdirectory
             from adare.exceptions import NoProjectFoundError
+
             if project_path := determine_projectdirectory(None):
                 project_name = project_path.name
             else:
@@ -143,17 +180,23 @@ class RunQueryMixin:
 
         if data.empty:
             from adare.exceptions import RunNotFoundError
+
             raise RunNotFoundError(log, f'No runs found in project "{project_name}"')
 
         return self._enrich_run_data(data)
 
     def get_run_stages(self, run_ulid: str) -> pd.DataFrame:
         # execute query and return result as pandas dataframe excluding the id column
-        data = pd.read_sql(self._project_api._session.query(StageInRun).filter_by(run_id=run_ulid).statement, self._project_api._session.bind)
+        data = pd.read_sql(
+            self._project_api._session.query(StageInRun).filter_by(run_id=run_ulid).statement,
+            self._project_api._session.bind,
+        )
         # enrich data by adding stage details (such as name, msg, description)
         stages = pd.read_sql(self._project_api._session.query(Stage).statement, self._project_api._session.bind)
         # query hybrid property level and add it to the dataframe
-        stages['level'] = stages['id'].apply(lambda x: self._project_api._session.query(Stage).filter_by(id=x).one().level)
+        stages['level'] = stages['id'].apply(
+            lambda x: self._project_api._session.query(Stage).filter_by(id=x).one().level
+        )
         data = data.merge(stages, left_on='stage_id', right_on='id', suffixes=('', '_stage'))
 
         # Convert status_id to proper integer status values for StatusEnum
@@ -188,17 +231,25 @@ class RunQueryMixin:
         from adare.database.models.project_models import ActionEvent, TestEvent
 
         # Query action events (non-test actions)
-        action_events = self._project_api._session.query(ActionEvent).filter_by(experiment_run_id=run_ulid).filter(
-            ActionEvent.category.in_(['action', 'command'])  # Exclude test category from ActionEvent
-        ).all()
+        action_events = (
+            self._project_api._session.query(ActionEvent)
+            .filter_by(experiment_run_id=run_ulid)
+            .filter(
+                ActionEvent.category.in_(['action', 'command'])  # Exclude test category from ActionEvent
+            )
+            .all()
+        )
 
         # Query test events separately (they are stored in TestEvent model)
         # Include relationships to get hierarchy and result information
         from sqlalchemy.orm import joinedload as jl
-        test_events = self._project_api._session.query(TestEvent).options(
-            jl(TestEvent.result),
-            jl(TestEvent.abstract_test)
-        ).filter_by(experiment_run_id=run_ulid).all()
+
+        test_events = (
+            self._project_api._session.query(TestEvent)
+            .options(jl(TestEvent.result), jl(TestEvent.abstract_test))
+            .filter_by(experiment_run_id=run_ulid)
+            .all()
+        )
 
         def extract_event_data(event, is_test_event=False):
             """Extract data from either ActionEvent or TestEvent"""
@@ -207,6 +258,7 @@ class RunQueryMixin:
             if hasattr(event, 'action_data') and event.action_data:
                 try:
                     import json
+
                     action_data = json.loads(event.action_data)
                 except (json.JSONDecodeError, TypeError):
                     action_data = {}
@@ -231,7 +283,7 @@ class RunQueryMixin:
                 'event_type_specific': getattr(event, 'event_type_specific', None),
                 'display_level': self._compute_display_level(event),
                 'parent_event_id': event.parent_event_id,
-                'data': action_data
+                'data': action_data,
             }
 
         actions_data = []
@@ -246,7 +298,23 @@ class RunQueryMixin:
 
         if not actions_data:
             # Return empty DataFrame with proper structure
-            return pd.DataFrame(columns=['id', 'event_type', 'category', 'success', 'timestamp', 'error', 'action_type', 'action_id', 'event_group_id', 'event_type_specific', 'display_level', 'data', 'result_status'])
+            return pd.DataFrame(
+                columns=[
+                    'id',
+                    'event_type',
+                    'category',
+                    'success',
+                    'timestamp',
+                    'error',
+                    'action_type',
+                    'action_id',
+                    'event_group_id',
+                    'event_type_specific',
+                    'display_level',
+                    'data',
+                    'result_status',
+                ]
+            )
 
         # Create DataFrame and sort by timestamp to ensure proper chronological order
         df = pd.DataFrame(actions_data)
@@ -293,12 +361,13 @@ class RunQueryMixin:
             'event_type_specific': getattr(event, 'event_type_specific', 'test_complete'),
             'display_level': display_level,
             'parent_event_id': event.parent_event_id,
-            'data': action_data
+            'data': action_data,
         }
 
         # Add test result status for test events
         if result_status is not None:
             from adarelib.constants import StatusEnum
+
             if hasattr(result_status, 'name'):
                 status_enum = StatusEnum.from_string(result_status.name)
                 base_data['result_status'] = int(status_enum)

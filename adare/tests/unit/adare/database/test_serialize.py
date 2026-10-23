@@ -30,12 +30,8 @@ from adare.database.api.serialize import RunSerializationError, SerializeApi, st
 from adarelib.constants import StatusEnum
 
 # The pinned payload, shared with the server repo.
-CONTRACT_FIXTURE = (
-    Path(__file__).resolve().parents[4] / 'tests' / 'fixtures' / 'run_publish_payload.json'
-)
-SERVER_FIXTURE_RELATIVE = Path(
-    'adare-server/backend_django/tests/fixtures/run_publish_payload.json'
-)
+CONTRACT_FIXTURE = Path(__file__).resolve().parents[4] / 'tests' / 'fixtures' / 'run_publish_payload.json'
+SERVER_FIXTURE_RELATIVE = Path('adare-server/backend_django/tests/fixtures/run_publish_payload.json')
 
 # Fixed identifiers so the payload is byte-stable across runs.
 RUN_ULID = '01JQRUN0000000000000000000'
@@ -55,9 +51,20 @@ END = datetime(2026, 7, 27, 10, 1, 0, tzinfo=UTC)
 SERVER_CATEGORIES = {'command', 'action', 'test', 'error'}
 # Status names in the server's status fixture (experiments/fixtures/status.yaml).
 SERVER_STATUS_NAMES = {
-    'none', 'success', 'failed', 'warning', 'error', 'running', 'pending',
-    'interrupted', 'finished', 'breakpoint_hit', 'breakpoint_resolved',
-    'test_missing', 'test_failed', 'pause',
+    'none',
+    'success',
+    'failed',
+    'warning',
+    'error',
+    'running',
+    'pending',
+    'interrupted',
+    'finished',
+    'breakpoint_hit',
+    'breakpoint_resolved',
+    'test_missing',
+    'test_failed',
+    'pause',
 }
 
 
@@ -105,7 +112,9 @@ def published_project(tmp_path):
         )
         session.add(experiment)
         apply_remote_identity(
-            session, experiment, SyncMetadata,
+            session,
+            experiment,
+            SyncMetadata,
             remote_ulid=EXP_REMOTE_ULID,
             remote_url='https://adare.example/exp',
             is_published=True,
@@ -121,37 +130,41 @@ def published_project(tmp_path):
         )
         session.add(run)
 
-        session.add(EventFactory.create_event(
-            'action',
-            id=ACTION_EVENT_ULID,
-            event_type='action_event',
-            experiment_run_id=RUN_ULID,
-            timestamp=START,
-            action_type='command',
-            action_id='install-packages',
-            event_group_id='install-packages',
-            event_type_specific='COMMAND_COMPLETE',
-            success=True,
-            execution_time=1234,
-            action_data='{"command": "dir", "returncode": 0}',
-        ))
+        session.add(
+            EventFactory.create_event(
+                'action',
+                id=ACTION_EVENT_ULID,
+                event_type='action_event',
+                experiment_run_id=RUN_ULID,
+                timestamp=START,
+                action_type='command',
+                action_id='install-packages',
+                event_group_id='install-packages',
+                event_type_specific='COMMAND_COMPLETE',
+                success=True,
+                execution_time=1234,
+                action_data='{"command": "dir", "returncode": 0}',
+            )
+        )
         # Result.status is the numeric status id, matching what the running code
         # stores (see EventDbApi.get_or_create_test_result).
         result = ModelResult(status=str(StatusEnum.SUCCESS.value), details='file found')
         session.add(result)
-        session.add(EventFactory.create_event(
-            'test',
-            id=TEST_EVENT_ULID,
-            event_type='test_event',
-            experiment_run_id=RUN_ULID,
-            timestamp=END,
-            event_group_id='file_exists',
-            event_type_specific='TEST_COMPLETE',
-            success=True,
-            execution_time=42,
-            abstract_test=abstract_test,
-            result=result,
-        ))
+        session.add(
+            EventFactory.create_event(
+                'test',
+                id=TEST_EVENT_ULID,
+                event_type='test_event',
+                experiment_run_id=RUN_ULID,
+                timestamp=END,
+                event_group_id='file_exists',
+                event_type_specific='TEST_COMPLETE',
+                success=True,
+                execution_time=42,
+                abstract_test=abstract_test,
+                result=result,
+            )
+        )
         session.commit()
 
     return project
@@ -165,6 +178,7 @@ def payload(published_project, monkeypatch):
     reference manager. The test owns only a project DB, so the lookup is replaced
     with a stand-in carrying the one field the serializer reads.
     """
+
     class _Env:
         remote_ulid = ENV_REMOTE_ULID
 
@@ -185,18 +199,22 @@ def payload(published_project, monkeypatch):
 # status mapping
 # --------------------------------------------------------------------------- #
 
+
 class TestStatusWireName:
     """Statuses must go out as the server's lowercase Status names."""
 
-    @pytest.mark.parametrize('value,expected', [
-        (StatusEnum.FINISHED, 'finished'),
-        (StatusEnum.SUCCESS, 'success'),
-        (StatusEnum.FAILED, 'failed'),
-        (StatusEnum.TEST_MISSING, 'test_missing'),
-        # Result.status returns the numeric status id, as str or int.
-        (3, 'failed'),
-        ('2', 'success'),
-    ])
+    @pytest.mark.parametrize(
+        'value,expected',
+        [
+            (StatusEnum.FINISHED, 'finished'),
+            (StatusEnum.SUCCESS, 'success'),
+            (StatusEnum.FAILED, 'failed'),
+            (StatusEnum.TEST_MISSING, 'test_missing'),
+            # Result.status returns the numeric status id, as str or int.
+            (3, 'failed'),
+            ('2', 'success'),
+        ],
+    )
     def test_maps_to_server_name(self, value, expected):
         assert status_wire_name(value) == expected
 
@@ -217,8 +235,8 @@ class TestStatusWireName:
 # payload shape
 # --------------------------------------------------------------------------- #
 
-class TestRunPayloadShape:
 
+class TestRunPayloadShape:
     def test_statuses_are_server_names_not_ints(self, payload):
         assert payload['status'] == 'finished'
         assert payload['result_status'] == 'success'
@@ -227,9 +245,17 @@ class TestRunPayloadShape:
 
     def test_required_top_level_keys_present(self, payload):
         # Every field views.py reads before it can save the run.
-        for key in ('ulid', 'experiment_ulid', 'environment_ulid', 'status',
-                    'result_status', 'timestamp_start', 'timestamp_end',
-                    'events', 'content_hash'):
+        for key in (
+            'ulid',
+            'experiment_ulid',
+            'environment_ulid',
+            'status',
+            'result_status',
+            'timestamp_start',
+            'timestamp_end',
+            'events',
+            'content_hash',
+        ):
             assert key in payload, key
 
     def test_remote_ulids_are_used_not_local_ones(self, payload):
@@ -238,9 +264,12 @@ class TestRunPayloadShape:
 
     def test_content_hash_is_stable_and_populated(self, payload, published_project, monkeypatch):
         assert len(payload['content_hash']) == 64
+
         class _Env:
             remote_ulid = ENV_REMOTE_ULID
+
         from adare.database import reference_manager as rm
+
         monkeypatch.setattr(rm.reference_manager, 'get_environment_object', lambda _i: _Env())
         with SerializeApi(published_project) as api:
             again, _ = api.serialize_run_by_ulid(RUN_ULID)
@@ -269,8 +298,13 @@ class TestRunPayloadShape:
 
     def test_no_dead_event_types_emitted(self, payload):
         emitted = {e['event_type'] for e in payload['events']}
-        assert not emitted & {'command_event', 'gui_find_event', 'gui_click_event',
-                              'gui_keypress_event', 'gui_idle_event'}
+        assert not emitted & {
+            'command_event',
+            'gui_find_event',
+            'gui_click_event',
+            'gui_keypress_event',
+            'gui_idle_event',
+        }
 
 
 class TestUnpublishedDependenciesFailLoudly:
@@ -281,7 +315,9 @@ class TestUnpublishedDependenciesFailLoudly:
 
         class _Env:
             remote_ulid = ENV_REMOTE_ULID
+
         from adare.database import reference_manager as rm
+
         monkeypatch.setattr(rm.reference_manager, 'get_environment_object', lambda _i: _Env())
 
         with SerializeApi(published_project) as api:
@@ -294,7 +330,9 @@ class TestUnpublishedDependenciesFailLoudly:
     def test_unpublished_environment_raises(self, published_project, monkeypatch):
         class _Env:
             remote_ulid = None
+
         from adare.database import reference_manager as rm
+
         monkeypatch.setattr(rm.reference_manager, 'get_environment_object', lambda _i: _Env())
 
         with SerializeApi(published_project) as api:
@@ -302,9 +340,8 @@ class TestUnpublishedDependenciesFailLoudly:
                 api.serialize_run_by_ulid(RUN_ULID)
 
     def test_missing_run_raises(self, published_project):
-        with SerializeApi(published_project) as api:
-            with pytest.raises(RunSerializationError, match='not found'):
-                api.serialize_run_by_ulid('01JQNOSUCHRUN0000000000000')
+        with SerializeApi(published_project) as api, pytest.raises(RunSerializationError, match='not found'):
+            api.serialize_run_by_ulid('01JQNOSUCHRUN0000000000000')
 
 
 class TestRemoteIdentityPersists:
@@ -327,8 +364,12 @@ class TestRemoteIdentityPersists:
         with SerializeApi(published_project) as api:
             experiment = api._session.query(Experiment).one()
             apply_remote_identity(
-                api._session, experiment, SyncMetadata,
-                remote_ulid=EXP_REMOTE_ULID, remote_url='u', is_published=False,
+                api._session,
+                experiment,
+                SyncMetadata,
+                remote_ulid=EXP_REMOTE_ULID,
+                remote_url='u',
+                is_published=False,
             )
             api._session.commit()
 
@@ -342,8 +383,8 @@ class TestRemoteIdentityPersists:
 # the pinned contract
 # --------------------------------------------------------------------------- #
 
-class TestPinnedContract:
 
+class TestPinnedContract:
     def test_payload_matches_pinned_fixture(self, payload):
         if os.environ.get('ADARE_UPDATE_CONTRACT_FIXTURE'):
             CONTRACT_FIXTURE.parent.mkdir(parents=True, exist_ok=True)
@@ -351,8 +392,7 @@ class TestPinnedContract:
             pytest.skip(f'regenerated {CONTRACT_FIXTURE}; copy it to {SERVER_FIXTURE_RELATIVE}')
 
         assert CONTRACT_FIXTURE.exists(), (
-            f'{CONTRACT_FIXTURE} missing — regenerate with '
-            f'ADARE_UPDATE_CONTRACT_FIXTURE=1'
+            f'{CONTRACT_FIXTURE} missing — regenerate with ADARE_UPDATE_CONTRACT_FIXTURE=1'
         )
         expected = json.loads(CONTRACT_FIXTURE.read_text())
         assert payload == expected, (

@@ -4,6 +4,7 @@ Abstract Hypervisor Manager for thread-safe VM operations.
 All hypervisor implementations must provide a manager that implements
 thread-safe queued operations for VM management.
 """
+
 import logging
 import queue
 import threading
@@ -105,12 +106,7 @@ class AbstractHypervisorManager(ABC):
         pass
 
     @abstractmethod
-    async def import_vm_async(
-        self,
-        vm_file_path: Path,
-        vm_name: str,
-        environment_ulid: str | None = None
-    ):
+    async def import_vm_async(self, vm_file_path: Path, vm_name: str, environment_ulid: str | None = None):
         """
         Import a VM from OVF/OVA file asynchronously.
 

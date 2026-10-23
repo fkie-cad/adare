@@ -111,8 +111,14 @@ Optional Fields
 - **tags**: labels for organization
 - **description**: environment purpose
 - **hypervisor** / **hypervisor_config**: hypervisor selection and per-hypervisor
-  settings (e.g. ``boot_mode: bios``)
-- **vagrantbox**: legacy Vagrant box (backward compatibility)
+  settings (e.g. ``boot_mode: bios``). When omitted, the hypervisor is inferred
+  from the disk: ``virtualbox`` for ``.ova``/``.ovf``/``.vdi``/``.vmdk`` images
+  (or a matching ``vm_format``), ``qemu`` for everything else, including recipes.
+- **vm_sha256**: required for a URL disk; for a local ``path`` disk it is checked
+  on load when present.
+
+A disk-image (non-recipe) environment needs an ``os`` block. ``vagrantbox``-only
+environments are no longer supported and are refused on load.
 
 Managing Environments
 *********************
@@ -128,11 +134,39 @@ Managing Environments
    # Retry only the build-time provisioning stage, reusing the cached OS install
    adare env load config.yml --reprovision
 
+   # Load a CHANGED file as a new version of an existing environment
+   adare env load config.yml --force
+
    # List environments
    adare environment list
 
-   # Delete environment
-   adare environment delete my-environment
+   # Delete environment (all versions)
+   adare env remove my-environment
+
+Environments are global: they are shared by every project, so ``-p`` is not needed
+(and ignored) on the environment commands except ``env verify``.
+
+Environment versions
+====================
+
+An environment's name is its file name (``ubuntu2204.yml`` loads as
+``ubuntu2204``). Loading the same file again is a no-op. Loading a *changed* file
+under an existing name needs ``--force`` and creates a **new version**: the
+previous version is kept (marked superseded), together with every experiment run
+that used it, so past results always resolve to the exact environment file and
+disk they ran against. Name lookups -- ``-e``, ``env list``, experiments
+started afterwards -- use the current version. ``--force`` on an unchanged file
+whose disk is unchanged too adds no version.
+
+An experiment remembers one version per environment name: after a forced reload
+it is still bound to a single environment, so ``adare experiment run`` without
+``-e`` keeps working (it picks the current version).
+
+Several environments may reference the same disk (disks are deduplicated by
+hash). Two environments that disagree about a shared disk's hypervisor or guest
+platform/architecture are refused, and ``--force`` refuses to replace a disk that
+another environment still uses. Each version records the disk hash it was loaded
+against; a run fails clearly if that disk has since been replaced.
 
 Checking that an environment can actually boot
 **********************************************
@@ -154,8 +188,11 @@ before concluding that an environment is usable.
 
 An environment reported as ``MISSING`` can be removed with ``adare env remove``.
 Remove its name from any experiment that lists it first (``adare experiment
-remove-env``): without ``--force``, ``env remove`` refuses to orphan an
-experiment, and with ``--force`` it deletes the orphaned experiments too.
+remove-env``): without ``--force``, ``env remove`` refuses while any version has
+runs or is an experiment's only environment, and also while a registered
+project cannot be checked (its directory is missing or its database unreadable),
+since its runs might use the environment. With ``--force`` it deletes those runs
+and detaches the environment from the experiments (the experiments are kept).
 
 VM Storage Options
 ******************

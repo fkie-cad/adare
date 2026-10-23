@@ -1,6 +1,7 @@
 """
 Configuration Mixin - VM configuration lifecycle (load, save, defaults).
 """
+
 import contextlib
 import json
 import logging
@@ -10,72 +11,47 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from adare.config import DEFAULT_RESOLUTION_WH
+from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.models import QEMUVMConfig
-from adare.hypervisor.qemu.utilities.disk_utils import get_boot_mode_for_os, resolve_boot_mode
+from adare.hypervisor.qemu.utilities.disk_utils import resolve_boot_mode
 
 if TYPE_CHECKING:
-    from adare.hypervisor.qemu.vm import QEMUVM
+    from adare.hypervisor.qemu.mixins.host import QEMUVMHost as _Host
+else:
+    _Host = object
 
 log = logging.getLogger(__name__)
 
 
-# Fixed namespace for deriving a stable per-environment domain UUID (see
-# ``_domain_uuid_for`` below). Generated once via uuid.uuid4() and frozen here --
-# it is a namespace, not a secret, and must never change or every environment's
-# derived UUID (and thus its vTPM identity) would silently shift.
+# Namespace of the per-environment domain UUIDs used before per-run vTPM copies;
+# kept so run_resources.adopt_legacy_tpm can find that shared vTPM state. Must
+# never change.
 _ADARE_VM_UUID_NAMESPACE = uuid.UUID('7c6f6e6e-2e26-4e5a-9f2d-8f6a1a9c8b7e')
-
-
-def _domain_uuid_for(environment_identity: str | None) -> str:
-    """A libvirt domain UUID, stable across runs of the same environment.
-
-    ``vm_name`` (and therefore this VM's own config file) is scoped to the
-    *experiment run*, not the environment -- see ``QEMULifecycleStrategy.
-    prepare_vm_for_experiment``, which mints a fresh instance name per run. A
-    plain ``uuid.uuid4()`` here therefore gave every run of the same environment
-    a different domain UUID, and because swtpm keys its state directory by
-    domain UUID (``~/.config/libvirt/qemu/swtpm/<uuid>/``), KEEP_TPM was
-    preserving a directory the next run's domain never pointed at again -- the
-    vTPM "survived" undefine but was orphaned rather than reused.
-
-    Deriving the UUID from ``environment_identity`` (the environment's stable
-    VM/disk id, not the run-scoped ``vm_name``) instead makes it identical for
-    every run of the same environment, so the same domain UUID -- and thus the
-    same swtpm state directory -- is reused run after run.
-
-    Args:
-        environment_identity: A stable per-environment identifier (e.g. the
-            environment's ``vm_id``). ``None`` for VMs with no environment
-            context (dev-session restore, OVA import, ad-hoc test VMs), which
-            fall back to a random UUID -- the status quo for those paths.
-    """
-    if not environment_identity:
-        return str(uuid.uuid4())
-    return str(uuid.uuid5(_ADARE_VM_UUID_NAMESPACE, environment_identity))
 
 
 # ---------------------------------------------------------------------------
 # Managed QEMU storage locations (single source of truth)
 # ---------------------------------------------------------------------------
 
+
 def get_qemu_disk_dir() -> Path:
     """Directory holding managed disks (base/overlay/nvram): ~/.adare/qemu/disks."""
-    disk_dir = Path.home() / '.adare' / 'qemu' / 'disks'
+    disk_dir = QEMU_STATE_DIR / 'disks'
     disk_dir.mkdir(parents=True, exist_ok=True)
     return disk_dir
 
 
 def get_qemu_runtime_dir() -> Path:
     """Directory holding runtime sockets/pids (QMP/QGA/pid): ~/.adare/qemu/run."""
-    runtime_dir = Path.home() / '.adare' / 'qemu' / 'run'
+    runtime_dir = QEMU_STATE_DIR / 'run'
     runtime_dir.mkdir(parents=True, exist_ok=True)
     return runtime_dir
 
 
 def get_qemu_vm_config_dir() -> Path:
     """Directory holding per-VM config JSON: ~/.adare/qemu/vms."""
-    config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+    config_dir = QEMU_STATE_DIR / 'vms'
     config_dir.mkdir(parents=True, exist_ok=True)
     return config_dir
 
@@ -118,6 +94,7 @@ def get_active_domain_names() -> set[str] | None:
 
     try:
         from adare.config import HYPERVISOR_CONFIGS
+
         libvirt_uri = HYPERVISOR_CONFIGS.get('qemu', {}).get('libvirt_uri', 'qemu:///session')
     except ImportError:
         libvirt_uri = 'qemu:///session'
@@ -197,7 +174,7 @@ def sweep_stale_sockets(runtime_dir: Path | None = None, keep: set[str] | None =
     return removed
 
 
-class ConfigurationMixin:
+class ConfigurationMixin(_Host):
     """
     Mixin for VM configuration operations.
 
@@ -230,17 +207,10 @@ class ConfigurationMixin:
         args = [qemu_img_exe, 'info', '--output=json', str(file_path)]
 
         try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                check=False
-            )
+            result = subprocess.run(args, capture_output=True, text=True, check=False)
 
             if result.returncode != 0:
-                raise HypervisorException(
-                    f"Failed to detect disk format for {file_path}: {result.stderr}"
-                )
+                raise HypervisorException(f"Failed to detect disk format for {file_path}: {result.stderr}")
 
             info = json.loads(result.stdout)
             disk_format = info.get('format', 'unknown')
@@ -249,19 +219,13 @@ class ConfigurationMixin:
             return disk_format
 
         except json.JSONDecodeError as e:
-            raise HypervisorException(
-                f"Failed to parse qemu-img info output: {e}"
-            ) from e
+            raise HypervisorException(f"Failed to parse qemu-img info output: {e}") from e
         except FileNotFoundError:
-            raise HypervisorException(
-                "qemu-img executable not found. Please install QEMU tools."
-            ) from None
+            raise HypervisorException("qemu-img executable not found. Please install QEMU tools.") from None
         except OSError as e:
-            raise HypervisorException(
-                f"Error detecting disk format: {e}"
-            ) from e
+            raise HypervisorException(f"Error detecting disk format: {e}") from e
 
-    def _detect_disk_format(self: 'QEMUVM', file_path: Path) -> str:
+    def _detect_disk_format(self, file_path: Path) -> str:
         """
         Detect disk image format using qemu-img info (instance method wrapper).
 
@@ -277,12 +241,12 @@ class ConfigurationMixin:
         """
         return self._detect_disk_format_static(file_path, self.executables.qemu_img)
 
-    def _get_vm_config_path(self: 'QEMUVM') -> Path:
+    def _get_vm_config_path(self) -> Path:
         """Get path to VM configuration JSON file."""
         # Store VM configs in ~/.adare/qemu/vms/
         return get_qemu_vm_config_dir() / f"{self.vm_name}.json"
 
-    def _load_or_create_vm_config(self: 'QEMUVM') -> QEMUVMConfig:
+    def _load_or_create_vm_config(self) -> QEMUVMConfig:
         """Load VM config from JSON or create new one."""
         config_path = self._get_vm_config_path()
 
@@ -359,10 +323,9 @@ class ConfigurationMixin:
 
             return config
         log.debug(f"Creating new VM config for '{self.vm_name}'")
-        # Create new config. See _domain_uuid_for: deterministic per environment
-        # when we know one, so the domain (and its vTPM state) is reused across
-        # runs rather than re-randomized every time.
-        vm_uuid = _domain_uuid_for(getattr(self, '_environment_identity', None))
+        # A fresh UUID per VM: a run's vTPM is a copy seeded under this UUID
+        # (run_resources.seed_run_tpm), so concurrent runs never share one.
+        vm_uuid = str(uuid.uuid4())
 
         # Determine disk path: use external path if provided, otherwise use managed storage
         if self._external_disk_path:
@@ -435,11 +398,11 @@ class ConfigurationMixin:
         self._save_vm_config_obj(config)
         return config
 
-    def _save_vm_config(self: 'QEMUVM'):
+    def _save_vm_config(self):
         """Save current VM config to JSON file."""
         self._save_vm_config_obj(self.config)
 
-    def _save_vm_config_obj(self: 'QEMUVM', config: QEMUVMConfig):
+    def _save_vm_config_obj(self, config: QEMUVMConfig):
         """
         Save VM config object to JSON file.
 

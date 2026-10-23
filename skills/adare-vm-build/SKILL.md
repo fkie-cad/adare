@@ -11,7 +11,7 @@ from scratch), **environments** (a VM + declarative post-setup software), and
 doctors and image housekeeping.
 
 Pure `adare` CLI + Bash. Auto-loads as a skill in **Claude Code**; portable to any
-agent with a shell (on **OpenCode** see `docs/mcp-clients.md` for skill setup).
+agent with a shell (on **OpenCode** see `docsrc/mcp-clients.md` for skill setup).
 Building a VM is long-running and host-tool-heavy — always start with the doctors. Keep SKILL.md's
 path in view; the deep flag/recipe detail and the hard-won Windows-ARM64
 troubleshooting live in `references/*.md`.
@@ -22,7 +22,7 @@ troubleshooting live in `references/*.md`.
   firmware, swtpm, libvirt Python binding, and on Apple Silicon the wimlib/7z/xorriso
   trio for the Win11-ARM64 legacy-boot workaround). Detect-and-report only; run it
   first and fix any gaps before creating a VM.
-- **`adare vm gui-doctor`** — only if you'll GUI-automate the install (`vm create`
+- **`adare vlm doctor`** — only if you'll GUI-automate the install (`vm create`
   for a manual-install distro, or `env extend --interactive`): confirms the VLM
   endpoint is reachable and detects its coordinate convention.
 
@@ -30,10 +30,10 @@ troubleshooting live in `references/*.md`.
 
 ```sh
 adare vm doctor                        # host QEMU/OVMF/swtpm/wimlib availability
-adare vm gui-doctor                    # VLM preflight (only for GUI-automated installs)
-adare os-profile list                  # available OS targets
-adare os-profile show <name>           # one profile's detail
-adare os-profile add <profile.yml>     # register a custom OS profile
+adare vlm doctor                    # VLM preflight (only for GUI-automated installs)
+adare vm profile list                  # available OS targets
+adare vm profile show <name>           # one profile's detail
+adare vm profile add <profile.yml>     # register a custom OS profile
 ```
 
 ## 2. Create a base VM
@@ -114,13 +114,14 @@ always YAML + a verifiable external artifact, never bytes with no anchor.
 ## 5. Manage images
 
 ```sh
-adare vm list                          # all VMs (aliases: l)
-adare vm info <vm-id>                   # detail for one VM
-adare vm usage                         # instance usage statistics
+adare vm list                          # registered VMs (aliases: l)
+adare vm info <name-or-id>             # detail for a registered VM or an instance
+adare vm usage                         # instances and their usage
 adare vm snapshot list                 # snapshots (snapshot remove <…> to delete one)
 adare vm prune [--force] [--sockets]   # reclaim orphaned base disks (dry-run by default)
-adare vm remove --id <ulid> | --stopped | --all --force | --env <ulid> --force
-adare vm reset --force                 # reset ALL VMs (destructive)
+adare vm remove <name-or-id> [-f] [-y] # registered VM (+ its environments) or one instance
+adare vm remove --stopped | --all --force | --env <ulid> --force   # instances in bulk
+adare vm reset --force                 # remove the instances of ALL VMs (destructive)
 ```
 
 `vm prune` is the GC for orphaned `<name>-base.qcow2`/`-nvram.fd` debris (dry-run

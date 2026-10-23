@@ -28,7 +28,6 @@ class TestClaimAvailableVmInstance:
     """Two racing claims on the same instance: first wins, second loses."""
 
     def test_second_claim_on_same_instance_fails(self):
-        from adare.database.models.global_models import VmInstance
 
         # Simulate SQLite's serialized single-statement UPDATE semantics:
         # the first UPDATE ... WHERE status='available' matches and flips
@@ -95,12 +94,13 @@ class TestAllocateInstanceForExperimentFallsBackOnLostRace:
         new_instance = MagicMock()
         new_instance.instance_name = "vm_exp_new"
 
-        with patch(f"{DB_MODULE}.VmApi", api_cls), \
-             patch.object(manager, "find_available_instance", return_value=available_instance), \
-             patch.object(manager, "sync_instance_states", new=AsyncMock(return_value=0)), \
-             patch.object(manager, "reuse_instance", new=AsyncMock(return_value=None)) as mock_reuse, \
-             patch.object(manager, "create_new_instance", new=AsyncMock(return_value=new_instance)) as mock_create:
-
+        with (
+            patch(f"{DB_MODULE}.VmApi", api_cls),
+            patch.object(manager, "find_available_instance", return_value=available_instance),
+            patch.object(manager, "sync_instance_states", new=AsyncMock(return_value=0)),
+            patch.object(manager, "reuse_instance", new=AsyncMock(return_value=None)) as mock_reuse,
+            patch.object(manager, "create_new_instance", new=AsyncMock(return_value=new_instance)) as mock_create,
+        ):
             result = await manager.allocate_instance_for_experiment("vm-1", "run-1")
 
         mock_reuse.assert_awaited_once_with(available_instance, "run-1")
@@ -285,15 +285,21 @@ class TestActiveWebsocketPortUniqueConstraint:
         session.commit()
 
         first = VmInstance(
-            id=str(ulid.ULID()), vm_id=vm.id, instance_name="inst-1",
-            websocket_port=18765, status="active",
+            id=str(ulid.ULID()),
+            vm_id=vm.id,
+            instance_name="inst-1",
+            websocket_port=18765,
+            status="active",
         )
         session.add(first)
         session.commit()
 
         second = VmInstance(
-            id=str(ulid.ULID()), vm_id=vm.id, instance_name="inst-2",
-            websocket_port=18765, status="active",
+            id=str(ulid.ULID()),
+            vm_id=vm.id,
+            instance_name="inst-2",
+            websocket_port=18765,
+            status="active",
         )
         session.add(second)
 

@@ -8,7 +8,7 @@ import logging
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from adare.types.playbook import (
     CommandAction,
@@ -19,14 +19,21 @@ from adare.types.playbook import (
 
 from .base import ActionResult
 
+if TYPE_CHECKING:
+    from adare.backend.experiment.execution.executor_core import ActionsExecutorCore as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class DataActionsMixin:
+class DataActionsMixin(_Host):
     """Mixin providing data/command action execution methods for SimpleActionsExecutor."""
 
-    async def execute_command(self, action: CommandAction, parent_event_id: str = None,
-                             event_emitter = None) -> ActionResult:
+    async def execute_command(
+        self, action: CommandAction, parent_event_id: str = None, event_emitter=None
+    ) -> ActionResult:
         """Execute command action."""
         try:
             # Get the command (variables already resolved)
@@ -48,6 +55,7 @@ class DataActionsMixin:
             shell_command_to_execute = command
             if shell_command_to_execute.lstrip().startswith(('$', '(')):
                 import base64
+
                 # UTF-16LE encoding is required for PowerShell Base64 commands
                 encoded_cmd = base64.b64encode(shell_command_to_execute.encode('utf-16le')).decode('utf-8')
                 # Use -EncodedCommand to avoid all quoting hell
@@ -61,7 +69,7 @@ class DataActionsMixin:
                 timeout=action.timeout,
                 shell=action.shell,
                 admin=action.admin,
-                websocket_timeout=websocket_timeout
+                websocket_timeout=websocket_timeout,
             )
 
             # Determine command success
@@ -78,6 +86,7 @@ class DataActionsMixin:
                     # Also store in variable registry if available
                     if hasattr(self.playbook, 'variables') and self.playbook.variables:
                         from adarelib.common.variables import Variable
+
                         captured_var = Variable.auto_infer(captured_value)
                         self.playbook.variables.add(action.capture.variable, captured_var)
                         log.info(f"Captured command output to variable '{action.capture.variable}'")
@@ -88,7 +97,7 @@ class DataActionsMixin:
                     return ActionResult(
                         success=False,
                         message=f"Command succeeded but capture failed: {str(capture_error)}",
-                        data=result
+                        data=result,
                     )
 
             # Handle allow_failure: treat failed commands as successful if allowed
@@ -101,19 +110,16 @@ class DataActionsMixin:
                 return ActionResult(
                     success=True,  # Report success to continue execution
                     message=f"Command failed (exit code {result.get('returncode', 'unknown')}) but failure allowed",
-                    data=result
+                    data=result,
                 )
 
-            return ActionResult(
-                success=command_succeeded,
-                message=result.get('message', ''),
-                data=result
-            )
+            return ActionResult(success=command_succeeded, message=result.get('message', ''), data=result)
         except (RuntimeError, OSError, KeyError, ValueError, TypeError) as e:
             return ActionResult(success=False, message=str(e))
 
-    async def execute_save_timestamp(self, action: SaveTimestampAction, parent_event_id: str = None,
-                                    event_emitter = None) -> ActionResult:
+    async def execute_save_timestamp(
+        self, action: SaveTimestampAction, parent_event_id: str = None, event_emitter=None
+    ) -> ActionResult:
         """Save current VM timestamp with timezone metadata to execution context and variable registry."""
         try:
             # Get timestamp from VM (not host) with timezone detection
@@ -129,30 +135,22 @@ class DataActionsMixin:
                 import datetime
 
                 from adarelib.common.variables import Variable, VariableType
+
                 timestamp_dt = datetime.datetime.fromtimestamp(current_timestamp, datetime.UTC)
-                timestamp_var = Variable(
-                    timestamp_dt,
-                    VariableType.TIMESTAMP,
-                    metadata={"timezone": vm_timezone}
-                )
+                timestamp_var = Variable(timestamp_dt, VariableType.TIMESTAMP, metadata={"timezone": vm_timezone})
                 self.playbook.variables.add(action.variable, timestamp_var)
                 log.debug(f"Added timestamp variable '{action.variable}' with timezone '{vm_timezone}'")
 
             log.info(f"Saved timestamp {current_timestamp} to variable {action.variable}")
 
             return ActionResult(
-                success=True,
-                message=f"Timestamp saved to {action.variable}",
-                data={action.variable: current_timestamp}
+                success=True, message=f"Timestamp saved to {action.variable}", data={action.variable: current_timestamp}
             )
         except (RuntimeError, OSError, KeyError, ValueError, TypeError) as e:
             return ActionResult(success=False, message=str(e))
 
     async def execute_save_variable(
-        self,
-        action: SaveVariableAction,
-        parent_event_id: str = None,
-        event_emitter = None
+        self, action: SaveVariableAction, parent_event_id: str = None, event_emitter=None
     ) -> ActionResult:
         """Save a static value or evaluated expression to execution context and variable registry."""
         import jinja2
@@ -173,6 +171,7 @@ class DataActionsMixin:
             # Also save to variable registry if available
             if hasattr(self.playbook, 'variables') and self.playbook.variables:
                 from adarelib.common.variables import Variable
+
                 # Use auto_infer to determine the appropriate VariableType
                 var = Variable.auto_infer(evaluated_value)
                 self.playbook.variables.add(action.name, var)
@@ -183,18 +182,12 @@ class DataActionsMixin:
             return ActionResult(
                 success=True,
                 message=f"Variable '{action.name}' set to: {evaluated_value}",
-                data={action.name: evaluated_value}
+                data={action.name: evaluated_value},
             )
         except jinja2.TemplateError as e:
-            return ActionResult(
-                success=False,
-                message=f"Jinja2 template error: {str(e)}"
-            )
+            return ActionResult(success=False, message=f"Jinja2 template error: {str(e)}")
         except (ValueError, TypeError) as e:
-            return ActionResult(
-                success=False,
-                message=f"Failed to evaluate expression: {str(e)}"
-            )
+            return ActionResult(success=False, message=f"Failed to evaluate expression: {str(e)}")
 
     def _evaluate_jinja_expression(self, expression: str) -> Any:
         """Evaluate a Jinja2 expression using current execution context.
@@ -247,8 +240,7 @@ class DataActionsMixin:
         # Keep as string
         return value
 
-    async def execute_pull(self, action: PullAction, parent_event_id: str = None,
-                          event_emitter = None) -> ActionResult:
+    async def execute_pull(self, action: PullAction, parent_event_id: str = None, event_emitter=None) -> ActionResult:
         """Pull files/directories from VM to host artifacts directory.
 
         Supports:
@@ -258,16 +250,10 @@ class DataActionsMixin:
         """
         try:
             if not self.vm:
-                return ActionResult(
-                    success=False,
-                    message="VM instance not available for pull operation"
-                )
+                return ActionResult(success=False, message="VM instance not available for pull operation")
 
             if not self.experiment_run_directory:
-                return ActionResult(
-                    success=False,
-                    message="Experiment run directory not available"
-                )
+                return ActionResult(success=False, message="Experiment run directory not available")
 
             # Create artifacts directory
             artifacts_dir = Path(self.experiment_run_directory) / "artifacts"
@@ -290,9 +276,7 @@ class DataActionsMixin:
                 log.info(f"Pull {file_idx}/{total_files}: {src_path} (mode: {effective_mode})")
 
                 # Determine destination path
-                dest_path = self._determine_dest_path(
-                    src_path, action.dst, artifacts_dir, total_files, file_idx
-                )
+                dest_path = self._determine_dest_path(src_path, action.dst, artifacts_dir, total_files, file_idx)
 
                 # Execute transfer based on mode
                 if effective_mode == 'websocket':
@@ -300,9 +284,7 @@ class DataActionsMixin:
                         src_path, dest_path, file_idx, total_files, event_emitter
                     )
                 else:  # hypervisor mode
-                    file_result = await self._pull_via_hypervisor(
-                        src_path, dest_path
-                    )
+                    file_result = await self._pull_via_hypervisor(src_path, dest_path)
 
                 results.append(file_result)
                 if not file_result["success"]:
@@ -317,8 +299,7 @@ class DataActionsMixin:
                 message = f"Successfully pulled {total_files} file(s) via {effective_mode}"
             else:
                 message = (
-                    f"Pulled {total_files - len(failed_files)}/{total_files} files. "
-                    f"Failed: {', '.join(failed_files)}"
+                    f"Pulled {total_files - len(failed_files)}/{total_files} files. Failed: {', '.join(failed_files)}"
                 )
 
             return ActionResult(
@@ -330,16 +311,13 @@ class DataActionsMixin:
                     "total_files": total_files,
                     "successful_files": total_files - len(failed_files),
                     "failed_files": failed_files,
-                    "file_results": results
-                }
+                    "file_results": results,
+                },
             )
 
         except (RuntimeError, OSError, ValueError, KeyError) as e:
             log.error(f"Pull operation failed: {e}", exc_info=True)
-            return ActionResult(
-                success=False,
-                message=f"Pull operation failed: {str(e)}"
-            )
+            return ActionResult(success=False, message=f"Pull operation failed: {str(e)}")
 
     async def execute_programmatic_pull(self, src_path: str, description: str = "Programmatic pull") -> ActionResult:
         """
@@ -357,17 +335,14 @@ class DataActionsMixin:
             ActionResult with pull operation details
         """
         # Create a temporary PullAction for the pull operation
-        pull_action = PullAction(
-            src=src_path,
-            description=description
-        )
+        pull_action = PullAction(src=src_path, description=description)
 
         # Execute using the existing execute_pull logic
         return await self.execute_pull(pull_action, parent_event_id=None, event_emitter=None)
 
-    def _determine_dest_path(self, src_path: str, custom_dst: str | None,
-                            artifacts_dir: Path, total_files: int,
-                            file_idx: int) -> Path:
+    def _determine_dest_path(
+        self, src_path: str, custom_dst: str | None, artifacts_dir: Path, total_files: int, file_idx: int
+    ) -> Path:
         """Determine destination path for a file."""
         if custom_dst and total_files == 1:
             # Single file with custom destination
@@ -385,9 +360,9 @@ class DataActionsMixin:
         guest_path_cleaned = guest_path.lstrip('/')
         return artifacts_dir / guest_path_cleaned
 
-    async def _pull_via_websocket(self, src_path: str, dest_path: Path,
-                                  file_idx: int, total_files: int,
-                                  event_emitter) -> dict[str, Any]:
+    async def _pull_via_websocket(
+        self, src_path: str, dest_path: Path, file_idx: int, total_files: int, event_emitter
+    ) -> dict[str, Any]:
         """Pull file via WebSocket with chunked transfer."""
         try:
             # Progress callback for logging
@@ -404,9 +379,7 @@ class DataActionsMixin:
                 )
 
             result = await self.client.pull_file_chunked(
-                guest_path=src_path,
-                host_path=dest_path,
-                progress_callback=progress_callback
+                guest_path=src_path, host_path=dest_path, progress_callback=progress_callback
             )
 
             return {
@@ -415,46 +388,25 @@ class DataActionsMixin:
                 "destination": str(dest_path),
                 "file_size": result["file_size"],
                 "chunks": result["chunks_transferred"],
-                "metadata": result.get("metadata", {})
+                "metadata": result.get("metadata", {}),
             }
 
         except (RuntimeError, OSError, KeyError, ValueError) as e:
             log.error(f"WebSocket pull failed for {src_path}: {e}")
-            return {
-                "success": False,
-                "source": src_path,
-                "error": str(e)
-            }
+            return {"success": False, "source": src_path, "error": str(e)}
 
     async def _pull_via_hypervisor(self, src_path: str, dest_path: Path) -> dict[str, Any]:
         """Pull file via VBoxManage (existing method)."""
         try:
             dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-            success = await self.vm.copy_from_guest(
-                guest_path=src_path,
-                host_path=str(dest_path),
-                recursive=True
-            )
+            success = await self.vm.copy_from_guest(guest_path=src_path, host_path=str(dest_path), recursive=True)
 
             if success:
                 file_size = dest_path.stat().st_size if dest_path.is_file() else 0
-                return {
-                    "success": True,
-                    "source": src_path,
-                    "destination": str(dest_path),
-                    "file_size": file_size
-                }
-            return {
-                "success": False,
-                "source": src_path,
-                "error": "VBoxManage copy_from_guest returned False"
-            }
+                return {"success": True, "source": src_path, "destination": str(dest_path), "file_size": file_size}
+            return {"success": False, "source": src_path, "error": "VBoxManage copy_from_guest returned False"}
 
         except (RuntimeError, OSError, subprocess.SubprocessError) as e:
             log.error(f"Hypervisor pull failed for {src_path}: {e}")
-            return {
-                "success": False,
-                "source": src_path,
-                "error": str(e)
-            }
+            return {"success": False, "source": src_path, "error": str(e)}

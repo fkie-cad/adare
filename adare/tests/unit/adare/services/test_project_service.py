@@ -11,18 +11,21 @@ pytestmark = pytest.mark.unit
 @pytest.fixture
 def service():
     from adare.services.project_service import ProjectService
+
     return ProjectService()
 
 
 @pytest.fixture
 def create_request():
     from adare.core.dto.project import ProjectCreateRequest
+
     return ProjectCreateRequest(name="test-project", path=Path("/tmp/test-project"), description="A test project")
 
 
 @pytest.fixture
 def remove_request():
     from adare.core.dto.project import ProjectRemoveRequest
+
     return ProjectRemoveRequest(path=Path("/tmp/test-project"))
 
 
@@ -34,8 +37,9 @@ class TestProjectServiceCreate:
     @patch("adare.services.project_service.ensure_project_database_exists")
     @patch("adare.services.project_service.fixture_stages")
     @patch("adare.services.project_service.fixture_status")
-    def test_create_success(self, mock_fix_status, mock_fix_stages, mock_ensure_db,
-                            mock_proj_dir_cls, mock_proj_db, service, create_request):
+    def test_create_success(
+        self, mock_fix_status, mock_fix_stages, mock_ensure_db, mock_proj_dir_cls, mock_proj_db, service, create_request
+    ):
         mock_proj_dir = MagicMock()
         mock_proj_dir_cls.return_value = mock_proj_dir
         mock_proj_db.get_project_by_path.return_value = {"id": "01ABCDEF"}
@@ -70,8 +74,7 @@ class TestProjectServiceCreate:
 
     @patch("adare.services.project_service.project_database")
     @patch("adare.services.project_service.ProjectDirectory")
-    def test_create_fails_on_database_error_cleans_up(self, mock_proj_dir_cls, mock_proj_db,
-                                                       service, create_request):
+    def test_create_fails_on_database_error_cleans_up(self, mock_proj_dir_cls, mock_proj_db, service, create_request):
         from adare.database.exceptions import DatabaseProjectCreationError
 
         mock_proj_dir = MagicMock()
@@ -160,7 +163,10 @@ class TestProjectServiceGetByPath:
     @patch("adare.services.project_service.project_database")
     def test_get_by_path_found(self, mock_proj_db, service):
         mock_proj_db.get_project_by_path.return_value = {
-            "id": "01A", "name": "myproj", "path": "/tmp/myproj", "description": "Test"
+            "id": "01A",
+            "name": "myproj",
+            "path": "/tmp/myproj",
+            "description": "Test",
         }
 
         result = service.get_by_path(Path("/tmp/myproj"))

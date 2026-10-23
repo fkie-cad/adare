@@ -18,7 +18,6 @@ log = logging.getLogger(__name__)
 
 
 class WebappLogin:
-
     def __init__(self):
         self.__refresh_session()
         self.__remove_expired_sessions()
@@ -40,6 +39,7 @@ class WebappLogin:
         # session. HTTP/OAuth logic lives in the auth layer (adare.web.login); imported
         # lazily to avoid a circular import at module load.
         from adare.web.login import refresh_session_if_needed
+
         refresh_session_if_needed(username)
 
     def __remove_expired_sessions(self):
@@ -131,10 +131,7 @@ class WebappLogin:
         user_session = self.get_user_session()
         if not user_session:
             raise NotLoggedInError(log, message='user is not logged in')
-        return {
-            'Referer': config_server.WEBSERVER_URL,
-            'Authorization': f'Token {user_session["django_token"]}'
-        }
+        return {'Referer': config_server.WEBSERVER_URL, 'Authorization': f'Token {user_session["django_token"]}'}
 
     def get_gitea_authenticated_request_header(self):
         user_session = self.get_user_session()
@@ -143,10 +140,7 @@ class WebappLogin:
         user_session_token = user_session['gitea_token']
         if not user_session_token:
             return None
-        return {
-            'Referer': config_server.WEBSERVER_URL,
-            'Authorization': f'token {user_session_token}'
-        }
+        return {'Referer': config_server.WEBSERVER_URL, 'Authorization': f'token {user_session_token}'}
 
     def get_django_session(self):
         header = self.get_django_authenticated_request_header()

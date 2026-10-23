@@ -65,14 +65,16 @@ class TestfunctionService:
                 f'Load the testfunction with: adare testfunction load {request.name}',
             ]
 
-            return Result.ok(TestfunctionInfo(
-                id='',  # Not in database yet
-                name=request.name,
-                file_path=request.project_path / 'testfunctions' / request.name,
-                is_published=False,
-                next_steps=next_steps,
-                tip='Testfunctions define test assertions for experiment execution',
-            ))
+            return Result.ok(
+                TestfunctionInfo(
+                    id='',  # Not in database yet
+                    name=request.name,
+                    file_path=request.project_path / 'testfunctions' / request.name,
+                    is_published=False,
+                    next_steps=next_steps,
+                    tip='Testfunctions define test assertions for experiment execution',
+                )
+            )
 
         except TestfunctionMissingFileError as e:
             return Result.from_exception(e)
@@ -88,10 +90,7 @@ class TestfunctionService:
             Result[TestfunctionInfo] with loaded testfunction info on success.
         """
         try:
-            testfunction_id = backend_testfunction_load_global(
-                request.path,
-                force=request.force
-            )
+            testfunction_id = backend_testfunction_load_global(request.path, force=request.force)
 
             # Get testfunction name from path
             name = request.path.stem if request.path.is_file() else request.path.name
@@ -101,14 +100,16 @@ class TestfunctionService:
                 'Reference it in your experiment playbook tests section',
             ]
 
-            return Result.ok(TestfunctionInfo(
-                id=str(testfunction_id) if testfunction_id else '',
-                name=name,
-                file_path=request.path,
-                is_published=False,
-                next_steps=next_steps,
-                tip='Loaded testfunctions are available globally across projects',
-            ))
+            return Result.ok(
+                TestfunctionInfo(
+                    id=str(testfunction_id) if testfunction_id else '',
+                    name=name,
+                    file_path=request.path,
+                    is_published=False,
+                    next_steps=next_steps,
+                    tip='Loaded testfunctions are available globally across projects',
+                )
+            )
 
         except (TestfunctionMissingFileError, TestfunctionDependencyError) as e:
             return Result.from_exception(e)
@@ -136,7 +137,7 @@ class TestfunctionService:
                     solutions=[
                         'Use `adare testfunction list` to see available testfunctions',
                         'Check if the testfunction name is spelled correctly',
-                    ]
+                    ],
                 )
 
             # Get usage info
@@ -149,18 +150,20 @@ class TestfunctionService:
                     solutions=[
                         'Use --force to remove the testfunction and delete associated data',
                         'Remove experiments using this testfunction first',
-                    ]
+                    ],
                 )
 
             # Remove testfunction (this handles cleanup)
             backend_testfunction_remove(name)
 
-            return Result.ok(TestfunctionRemoveResult(
-                name=name,
-                was_removed=True,
-                experiments_affected=len(usage.get('experiments', [])),
-                runs_deleted=len(usage.get('runs', [])),
-            ))
+            return Result.ok(
+                TestfunctionRemoveResult(
+                    name=name,
+                    was_removed=True,
+                    experiments_affected=len(usage.get('experiments', [])),
+                    runs_deleted=len(usage.get('runs', [])),
+                )
+            )
 
         except TestfunctionMissingFileError as e:
             return Result.from_exception(e)
@@ -182,12 +185,14 @@ class TestfunctionService:
                     testfunctions = api.get_testfunctions_by_file(tf_file.id)
 
                     for tf in testfunctions:
-                        items.append(TestfunctionListItem(
-                            id=str(tf.id),
-                            name=tf.name,
-                            dotnotation=f"{tf_file.name}.{tf.name}",
-                            is_published=getattr(tf_file, 'is_published', False),
-                        ))
+                        items.append(
+                            TestfunctionListItem(
+                                id=str(tf.id),
+                                name=tf.name,
+                                dotnotation=f"{tf_file.name}.{tf.name}",
+                                is_published=getattr(tf_file, 'is_published', False),
+                            )
+                        )
 
                 return Result.ok(items)
 
@@ -196,7 +201,7 @@ class TestfunctionService:
             return Result.fail(
                 code="TestfunctionListError",
                 message=f"Failed to list testfunctions: {e}",
-                solutions=['Check database connectivity', 'Try again']
+                solutions=['Check database connectivity', 'Try again'],
             )
 
     def get_usage(self, name: str) -> Result[TestfunctionUsage]:
@@ -212,21 +217,23 @@ class TestfunctionService:
         try:
             usage = testfunction_database.get_testfunction_usage(name)
 
-            return Result.ok(TestfunctionUsage(
-                exists=usage.get('exists', False),
-                testfunction_file_id=usage.get('testfunction_file_id'),
-                can_safely_delete=usage.get('can_safely_delete', True),
-                projects_affected=[p['name'] for p in usage.get('projects_affected', [])],
-                experiments=[e['name'] for e in usage.get('experiments', [])],
-                runs_count=len(usage.get('runs', [])),
-            ))
+            return Result.ok(
+                TestfunctionUsage(
+                    exists=usage.get('exists', False),
+                    testfunction_file_id=usage.get('testfunction_file_id'),
+                    can_safely_delete=usage.get('can_safely_delete', True),
+                    projects_affected=[p['name'] for p in usage.get('projects_affected', [])],
+                    experiments=[e['name'] for e in usage.get('experiments', [])],
+                    runs_count=len(usage.get('runs', [])),
+                )
+            )
 
         except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to get testfunction usage: {e}")
             return Result.fail(
                 code="TestfunctionUsageError",
                 message=f"Failed to get testfunction usage: {e}",
-                solutions=['Check if testfunction exists']
+                solutions=['Check if testfunction exists'],
             )
 
     def exists(self, name: str) -> Result[TestfunctionExistsResult]:
@@ -242,15 +249,17 @@ class TestfunctionService:
         try:
             exists = testfunction_database.testfunction_exists(name)
 
-            return Result.ok(TestfunctionExistsResult(
-                name=name,
-                exists=exists,
-            ))
+            return Result.ok(
+                TestfunctionExistsResult(
+                    name=name,
+                    exists=exists,
+                )
+            )
 
         except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to check testfunction existence: {e}")
             return Result.fail(
                 code="TestfunctionExistsError",
                 message=f"Failed to check testfunction existence: {e}",
-                solutions=['Check database connectivity']
+                solutions=['Check database connectivity'],
             )

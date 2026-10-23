@@ -49,7 +49,9 @@ def _parse_filter(arguments) -> tuple:
             # Full dotnotation: project.environment.experiment
             project, environment, experiment = parts
         else:
-            raise ArgumentsError(log, f'Invalid filter "{arguments.filter}". Expected format: [project][.environment][.experiment]')
+            raise ArgumentsError(
+                log, f'Invalid filter "{arguments.filter}". Expected format: [project][.environment][.experiment]'
+            )
     elif hasattr(arguments, 'project') and arguments.project:
         # Backward compatibility with old --project option
         project = arguments.project
@@ -75,11 +77,7 @@ def exec_show_runs(arguments):
     project, environment, experiment = _parse_filter(arguments)
 
     # Get runs from API
-    result = api.show.list_runs(RunListRequest(
-        project=project,
-        environment=environment,
-        experiment=experiment
-    ))
+    result = api.show.list_runs(RunListRequest(project=project, environment=environment, experiment=experiment))
 
     if not result.success:
         handle_api_error(result)
@@ -94,14 +92,17 @@ def exec_show_runs(arguments):
     else:
         # Rich console output - convert to DataFrame for RunListPanel
         if runs:
-            runs_data = [{
-                'id': run.ulid,
-                'experiment_dotnotation': run.experiment_name,
-                'status': run.status,
-                'result_status': run.result_status,
-                'duration': run.duration_seconds,
-                'fake': run.fake,
-            } for run in runs]
+            runs_data = [
+                {
+                    'id': run.ulid,
+                    'experiment_dotnotation': run.experiment_name,
+                    'status': run.status,
+                    'result_status': run.result_status,
+                    'duration': run.duration_seconds,
+                    'fake': run.fake,
+                }
+                for run in runs
+            ]
             runs_df = pd.DataFrame(runs_data)
         else:
             runs_df = pd.DataFrame()
@@ -134,62 +135,6 @@ def exec_show_run(arguments):
         print_run(result.data.ulid, formatter, output_file, dual_output)
 
 
-def exec_show_testfunctions(arguments):
-    """Show testfunctions in the configured output format."""
-    import pandas as pd
-
-    from adare.frontend.terminal.console import DefaultConsole
-    from adare.frontend.terminal.testfunction_list import TestfunctionTablePanel
-    from adare.run import get_formatter_from_context
-
-    api = AdareAPI()
-    formatter, output_file, dual_output = get_formatter_from_context()
-
-    # Get testfunctions from API
-    file_name = arguments.file_name if hasattr(arguments, 'file_name') else None
-    result = api.show.list_testfunctions(file_name=file_name)
-
-    if not result.success:
-        handle_api_error(result)
-        return
-
-    testfunctions = result.data
-
-    if dual_output or formatter.format_type.value != 'rich':
-        # Structured output (JSON/YAML)
-        tf_list = [tf.to_dict() for tf in testfunctions]
-        formatter.print_or_save({'testfunctions': tf_list}, output_file, dual_output)
-    else:
-        # Rich console output - convert to DataFrame for TestfunctionTablePanel
-        if testfunctions:
-            tf_data = [{
-                'ulid': tf.id,
-                'display_name': tf.display_name,
-                'name': tf.name,
-                'parameters': tf.parameter_count,
-                'file_name': tf.file_name,
-                'description': tf.description,
-            } for tf in testfunctions]
-            tf_df = pd.DataFrame(tf_data)
-        else:
-            tf_df = pd.DataFrame()
-
-        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
-        # the terminal height and silently drops the overflowing rows, which reads
-        # as "those testfunctions do not exist".
-        DefaultConsole().print(TestfunctionTablePanel(tf_df))
-
-
-def exec_show_testfunction(arguments):
-    """Get detailed information about a specific testfunction."""
-    from adare.frontend.terminal.testfunction import print_testfunction
-    from adare.run import get_formatter_from_context
-
-    formatter, output_file, dual_output = get_formatter_from_context()
-    # Use the existing frontend function which handles the display
-    print_testfunction(arguments.dotnotation, None, formatter, output_file, dual_output)
-
-
 def exec_show_experiment(arguments):
     """Get detailed information about a specific experiment."""
     from adare.backend.basics import determine_projectdirectory
@@ -209,8 +154,14 @@ def exec_show_experiment(arguments):
             experiment_name = arguments.name
 
     # Use the existing frontend function which handles the display
-    print_experiment(name=experiment_name, ulid=arguments.ulid, dotnotation=arguments.dotnotation,
-                    formatter=formatter, output_file=output_file, dual_output=dual_output)
+    print_experiment(
+        name=experiment_name,
+        ulid=arguments.ulid,
+        dotnotation=arguments.dotnotation,
+        formatter=formatter,
+        output_file=output_file,
+        dual_output=dual_output,
+    )
 
 
 def exec_show_experiments(arguments):
@@ -245,15 +196,18 @@ def exec_show_experiments(arguments):
     else:
         # Rich console output - convert to DataFrame for ExperimentTablePanel
         if experiments:
-            exp_data = [{
-                'display_name': exp.display_name,
-                'ulid': exp.ulid,
-                'environments_names': ', '.join(exp.environments),
-                'description': exp.description,
-                'tags': ', '.join(exp.tags),
-                'published': str(exp.published),
-                'in_request': str(exp.in_request),
-            } for exp in experiments]
+            exp_data = [
+                {
+                    'display_name': exp.display_name,
+                    'ulid': exp.ulid,
+                    'environments_names': ', '.join(exp.environments),
+                    'description': exp.description,
+                    'tags': ', '.join(exp.tags),
+                    'published': str(exp.published),
+                    'in_request': str(exp.in_request),
+                }
+                for exp in experiments
+            ]
             exp_df = pd.DataFrame(exp_data)
         else:
             exp_df = pd.DataFrame()
@@ -291,11 +245,14 @@ def exec_show_projects(arguments):
     else:
         # Rich console output - convert to DataFrame for ProjectTablePanel
         if projects:
-            proj_data = [{
-                'name': proj.name,
-                'description': proj.description,
-                'created_at': proj.created_at,
-            } for proj in projects]
+            proj_data = [
+                {
+                    'name': proj.name,
+                    'description': proj.description,
+                    'created_at': proj.created_at,
+                }
+                for proj in projects
+            ]
             proj_df = pd.DataFrame(proj_data)
         else:
             proj_df = pd.DataFrame()
@@ -333,18 +290,21 @@ def exec_show_environments(arguments):
     else:
         # Rich console output - convert to DataFrame for EnvironmentTablePanel
         if environments:
-            env_data = [{
-                'id': env.ulid,
-                'display_name': env.display_name,
-                'name': env.name,
-                'description': env.description,
-                'osinfo': env.os_info,
-                'vm_name': env.vm_name,
-                'file': env.file,
-                'published': str(env.published),
-                'in_request': str(env.in_request),
-                'disk_present': env.disk_present,
-            } for env in environments]
+            env_data = [
+                {
+                    'id': env.ulid,
+                    'display_name': env.display_name,
+                    'name': env.name,
+                    'description': env.description,
+                    'osinfo': env.os_info,
+                    'vm_name': env.vm_name,
+                    'file': env.file,
+                    'published': str(env.published),
+                    'in_request': str(env.in_request),
+                    'disk_present': env.disk_present,
+                }
+                for env in environments
+            ]
             env_df = pd.DataFrame(env_data)
         else:
             env_df = pd.DataFrame()
@@ -370,7 +330,7 @@ def exec_remove_run(arguments):
         print_success_message(
             title=f"Successfully removed run {result.data.ulid}",
             location="Database",
-            next_steps=["Run 'adare show runs' to see remaining runs"]
+            next_steps=["Run 'adare runs list' to see remaining runs"],
         )
     else:
         handle_api_error(result)

@@ -4,6 +4,7 @@ Manage Service - Business logic for database and system management operations.
 This service handles database management operations and returns Result[T] objects
 that can be consumed by any frontend (CLI, Web UI, REST API).
 """
+
 import logging
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from adare.core.dto.manage import (
     VmRuntimeRefreshResult,
 )
 from adare.core.result import Result
+from adare.database.api.base import dispose_engines
 from adare.database.init import (
     clean_install_database_system,
     initialize_database_system,
@@ -56,21 +58,23 @@ class ManageService:
         try:
             status = validate_database_integrity()
 
-            return Result.ok(DbStatusResult(
-                global_db_exists=status.get('global_db_exists', False),
-                global_db_accessible=status.get('global_db_accessible', False),
-                global_db_location=Path(status['global_db_location']) if status.get('global_db_location') else None,
-                valid=status.get('valid', False),
-                pending_migrations=status.get('pending_migrations', []),
-                errors=status.get('errors', []),
-            ))
+            return Result.ok(
+                DbStatusResult(
+                    global_db_exists=status.get('global_db_exists', False),
+                    global_db_accessible=status.get('global_db_accessible', False),
+                    global_db_location=Path(status['global_db_location']) if status.get('global_db_location') else None,
+                    valid=status.get('valid', False),
+                    pending_migrations=status.get('pending_migrations', []),
+                    errors=status.get('errors', []),
+                )
+            )
 
         except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to check database status: {e}")
             return Result.fail(
                 code="DbStatusError",
                 message=f"Failed to check database status: {e}",
-                solutions=['Check if database files are accessible']
+                solutions=['Check if database files are accessible'],
             )
 
     def init_db(self) -> Result[DbInitResult]:
@@ -83,18 +87,22 @@ class ManageService:
         try:
             results = initialize_database_system()
 
-            return Result.ok(DbInitResult(
-                global_db_initialized=results.get('global_db_initialized', False),
-                global_db_location=Path(results['global_db_location']) if results.get('global_db_location') else None,
-                errors=results.get('errors', []),
-            ))
+            return Result.ok(
+                DbInitResult(
+                    global_db_initialized=results.get('global_db_initialized', False),
+                    global_db_location=Path(results['global_db_location'])
+                    if results.get('global_db_location')
+                    else None,
+                    errors=results.get('errors', []),
+                )
+            )
 
         except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to initialize database: {e}")
             return Result.fail(
                 code="DbInitError",
                 message=f"Failed to initialize database: {e}",
-                solutions=['Check file system permissions', 'Ensure config directory is writable']
+                solutions=['Check file system permissions', 'Ensure config directory is writable'],
             )
 
     def repair_db(self) -> Result[DbRepairResult]:
@@ -107,18 +115,20 @@ class ManageService:
         try:
             results = repair_database_system()
 
-            return Result.ok(DbRepairResult(
-                repaired=results.get('repaired', False),
-                actions_taken=results.get('actions_taken', []),
-                errors=results.get('errors', []),
-            ))
+            return Result.ok(
+                DbRepairResult(
+                    repaired=results.get('repaired', False),
+                    actions_taken=results.get('actions_taken', []),
+                    errors=results.get('errors', []),
+                )
+            )
 
         except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to repair database: {e}")
             return Result.fail(
                 code="DbRepairError",
                 message=f"Failed to repair database: {e}",
-                solutions=['Try running with elevated permissions', 'Check file system health']
+                solutions=['Try running with elevated permissions', 'Check file system health'],
             )
 
     def migrate_db(self, quiet: bool = False) -> Result[DbMigrateResult]:
@@ -134,11 +144,13 @@ class ManageService:
         try:
             results = migrate_database_system(quiet=quiet)
 
-            return Result.ok(DbMigrateResult(
-                migrated=results.get('migrated', False),
-                applied=results.get('applied', []),
-                errors=results.get('errors', []),
-            ))
+            return Result.ok(
+                DbMigrateResult(
+                    migrated=results.get('migrated', False),
+                    applied=results.get('applied', []),
+                    errors=results.get('errors', []),
+                )
+            )
 
         except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to migrate database: {e}")
@@ -148,8 +160,8 @@ class ManageService:
                 solutions=[
                     'Run "adare --verbose db migrate" for details',
                     'Check file system permissions',
-                    'Ensure no other process is using the database'
-                ]
+                    'Ensure no other process is using the database',
+                ],
             )
 
     def clean_install_db(self, force: bool = False) -> Result[DbCleanInstallResult]:
@@ -169,24 +181,26 @@ class ManageService:
             return Result.fail(
                 code="ConfirmationRequired",
                 message="Clean installation requires confirmation",
-                solutions=['Use force=True to confirm deletion of all data']
+                solutions=['Use force=True to confirm deletion of all data'],
             )
 
         try:
             results = clean_install_database_system()
 
-            return Result.ok(DbCleanInstallResult(
-                installed=results.get('installed', False),
-                actions_taken=results.get('actions_taken', []),
-                errors=results.get('errors', []),
-            ))
+            return Result.ok(
+                DbCleanInstallResult(
+                    installed=results.get('installed', False),
+                    actions_taken=results.get('actions_taken', []),
+                    errors=results.get('errors', []),
+                )
+            )
 
         except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed clean database installation: {e}")
             return Result.fail(
                 code="DbCleanInstallError",
                 message=f"Failed clean database installation: {e}",
-                solutions=['Check file system permissions', 'Ensure no processes are using the database']
+                solutions=['Check file system permissions', 'Ensure no processes are using the database'],
             )
 
     def reset_db(self) -> Result[DbResetResult]:
@@ -200,27 +214,33 @@ class ManageService:
             database_location = get_global_database_location()
 
             if database_location.exists():
+                # Close pooled connections first: Windows cannot delete an open file.
+                dispose_engines()
                 database_location.unlink()
                 # The migration ledger went with the file — forget the cache so
                 # a recreated database gets migrated and stamped again.
                 invalidate_cache()
                 log.info(f'Removed global database: {database_location}')
 
-                return Result.ok(DbResetResult(
-                    was_reset=True,
+                return Result.ok(
+                    DbResetResult(
+                        was_reset=True,
+                        location=database_location,
+                    )
+                )
+            return Result.ok(
+                DbResetResult(
+                    was_reset=False,
                     location=database_location,
-                ))
-            return Result.ok(DbResetResult(
-                was_reset=False,
-                location=database_location,
-            ))
+                )
+            )
 
         except OSError as e:
             log.error(f"Failed to reset database: {e}")
             return Result.fail(
                 code="DbResetError",
                 message=f"Failed to reset database: {e}",
-                solutions=['Check file permissions', 'Ensure database is not in use']
+                solutions=['Check file permissions', 'Ensure database is not in use'],
             )
 
     # =========================================================================
@@ -243,25 +263,27 @@ class ManageService:
             return Result.fail(
                 code="ConfirmationRequired",
                 message="VM reset requires confirmation",
-                solutions=['Use force=True to confirm deletion of all VMs']
+                solutions=['Use force=True to confirm deletion of all VMs'],
             )
 
         try:
             results = clear_all_vms(force=True)
 
-            return Result.ok(VmResetResult(
-                deleted_count=results.get('deleted_count', 0),
-                failed_count=results.get('failed_count', 0),
-                deleted_vms=results.get('deleted_vms', []),
-                failed_vms=results.get('failed_vms', []),
-            ))
+            return Result.ok(
+                VmResetResult(
+                    deleted_count=results.get('deleted_count', 0),
+                    failed_count=results.get('failed_count', 0),
+                    deleted_vms=results.get('deleted_vms', []),
+                    failed_vms=results.get('failed_vms', []),
+                )
+            )
 
         except (OSError, SQLAlchemyError, RuntimeError) as e:
             log.error(f"Failed to reset VMs: {e}")
             return Result.fail(
                 code="VmResetError",
                 message=f"Failed to reset VMs: {e}",
-                solutions=['Check if VMs are in use', 'Try stopping running VMs first']
+                solutions=['Check if VMs are in use', 'Try stopping running VMs first'],
             )
 
     def refresh_vm_runtime(self, project_path: Path | None = None) -> Result[VmRuntimeRefreshResult]:
@@ -290,8 +312,8 @@ class ManageService:
                         message="No project directory found",
                         solutions=[
                             'Run this command from within a project directory',
-                            'Specify a project path explicitly'
-                        ]
+                            'Specify a project path explicitly',
+                        ],
                     )
 
             project_vm_runtime = project_path / 'vm_runtime'
@@ -305,10 +327,12 @@ class ManageService:
             project_dir = ProjectDirectory(project_path)
             project_dir.copy_vm_runtime_files()
 
-            return Result.ok(VmRuntimeRefreshResult(
-                refreshed=True,
-                project_path=project_path,
-            ))
+            return Result.ok(
+                VmRuntimeRefreshResult(
+                    refreshed=True,
+                    project_path=project_path,
+                )
+            )
 
         except NoProjectFoundError as e:
             return Result.from_exception(e)
@@ -317,7 +341,7 @@ class ManageService:
             return Result.fail(
                 code="VmRuntimeRefreshError",
                 message=f"Failed to refresh VM runtime: {e}",
-                solutions=['Check project directory permissions']
+                solutions=['Check project directory permissions'],
             )
 
     def build_vm_runtime_wheels(self, project_path: Path | None = None) -> Result[VmRuntimeBuildResult]:
@@ -335,10 +359,10 @@ class ManageService:
         Returns:
             Result[VmRuntimeBuildResult] with build results.
         """
-        import re
         import subprocess
 
         from adare.backend.basics import determine_projectdirectory
+        from adare.backend.experiment.agent_wheels import build_agent_wheels
         from adare.backend.project.directory import ProjectDirectory
         from adare.exceptions import NoProjectFoundError
 
@@ -352,8 +376,8 @@ class ManageService:
                         message="No project directory found",
                         solutions=[
                             'Run this command from within a project directory',
-                            'Specify a project path explicitly'
-                        ]
+                            'Specify a project path explicitly',
+                        ],
                     )
 
             project_vm_runtime = project_path / 'vm_runtime'
@@ -367,62 +391,18 @@ class ManageService:
                 project_dir = ProjectDirectory(project_path)
                 project_dir.copy_vm_runtime_files()
 
-            # Create wheels directory
-            wheels_dir.mkdir(exist_ok=True)
+            wheels = build_agent_wheels({'adarelib': adarelib_target, 'adarevm': adarevm_target}, wheels_dir)
+            adarelib_wheel, adarevm_wheel = wheels.get('adarelib'), wheels.get('adarevm')
 
-            # Clean old wheels
-            for old_wheel in wheels_dir.glob('*.whl'):
-                old_wheel.unlink()
-                log.info(f"Removed old wheel: {old_wheel.name}")
-
-            # Build adarelib wheel first (it has no path dependencies)
-            log.info("Building adarelib wheel...")
-            subprocess.run(
-                ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
-                cwd=adarelib_target,
-                check=True,
-                capture_output=True
-            )
-
-            # Build adarevm wheel without path dependency
-            log.info("Building adarevm wheel...")
-
-            # Temporarily modify pyproject.toml to use version dependency instead of path
-            adarevm_pyproject = adarevm_target / 'pyproject.toml'
-            original_content = adarevm_pyproject.read_text()
-
-            # Replace workspace source with version dependency for wheel build
-            modified_content = re.sub(
-                r'adarelib\s*=\s*\{\s*workspace\s*=\s*true\s*\}',
-                '',
-                original_content
-            )
-            adarevm_pyproject.write_text(modified_content)
-
-            try:
-                subprocess.run(
-                    ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
-                    cwd=adarevm_target,
-                    check=True,
-                    capture_output=True
+            return Result.ok(
+                VmRuntimeBuildResult(
+                    built=True,
+                    project_path=project_path,
+                    wheels_dir=wheels_dir,
+                    adarelib_wheel=adarelib_wheel.name if adarelib_wheel else None,
+                    adarevm_wheel=adarevm_wheel.name if adarevm_wheel else None,
                 )
-            finally:
-                # Restore original pyproject.toml
-                adarevm_pyproject.write_text(original_content)
-
-            # Find built wheels
-            adarelib_wheels = list(wheels_dir.glob('adarelib-*.whl'))
-            adarevm_wheels = list(wheels_dir.glob('adarevm-*.whl'))
-
-            log.info(f"Wheels built successfully in {wheels_dir}")
-
-            return Result.ok(VmRuntimeBuildResult(
-                built=True,
-                project_path=project_path,
-                wheels_dir=wheels_dir,
-                adarelib_wheel=adarelib_wheels[0].name if adarelib_wheels else None,
-                adarevm_wheel=adarevm_wheels[0].name if adarevm_wheels else None,
-            ))
+            )
 
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.decode() if e.stderr else str(e)
@@ -433,8 +413,8 @@ class ManageService:
                 solutions=[
                     'Ensure uv is installed',
                     'Check that adarelib and adarevm have valid pyproject.toml files',
-                    'Run "adare manage vm-runtime refresh" first to get fresh source files'
-                ]
+                    'Run "adare runtime refresh" first to get fresh source files',
+                ],
             )
         except NoProjectFoundError as e:
             return Result.from_exception(e)
@@ -444,7 +424,7 @@ class ManageService:
                 code="VmRuntimeBuildError",
                 message=f"Required file not found: {e}",
                 solutions=[
-                    'Run "adare manage vm-runtime refresh" first to copy source files',
-                    'Ensure uv is installed and in PATH'
-                ]
+                    'Run "adare runtime refresh" first to copy source files',
+                    'Ensure uv is installed and in PATH',
+                ],
             )

@@ -81,8 +81,7 @@ def _determine_file_log_level(arguments: Any) -> int | None:
     return level_mapping.get(log_level)
 
 
-def _setup_application_logger(console_level: int, file_level: int | None,
-                             logfile: str | None) -> None:
+def _setup_application_logger(console_level: int, file_level: int | None, logfile: str | None) -> None:
     """Setup the main application logger using our custom implementation.
 
     Args:
@@ -90,12 +89,7 @@ def _setup_application_logger(console_level: int, file_level: int | None,
         file_level: File logging level (None if no file logging)
         logfile: Path to log file (None if no file logging)
     """
-    logger.setup_logger(
-        loglevel_console=console_level,
-        loglevel_file=file_level,
-        logfile=logfile,
-        console=True
-    )
+    logger.setup_logger(loglevel_console=console_level, loglevel_file=file_level, logfile=logfile, console=True)
 
 
 def _configure_root_logger(console_level: int) -> None:
@@ -117,10 +111,25 @@ def _configure_root_logger(console_level: int) -> None:
     if current_level == logging.NOTSET or current_level > console_level:
         root_logger.setLevel(console_level)
 
+    # StreamHandler() writes to stderr: logs never mix into stdout data.
     console_handler = logging.StreamHandler()
     console_handler.setLevel(console_level)
     console_handler.setFormatter(ConsoleHandlerFormatter())
+    if console_level > logging.INFO:
+        console_handler.addFilter(_hide_exception_records)
     root_logger.addHandler(console_handler)
+
+
+def _hide_exception_records(record: logging.LogRecord) -> bool:
+    """Drop the log line a ``LoggedException`` emits when it is constructed.
+
+    At the default verbosity the CLI boundary reports that exception once, on
+    stderr; echoing its constructor log line as well printed every error twice.
+    The log file and --verbose/--very-verbose keep the line.
+    """
+    from adare.exceptions import EXCEPTION_LOG_MARKER
+
+    return not getattr(record, EXCEPTION_LOG_MARKER, False)
 
 
 def set_console_log_level(level: int) -> None:

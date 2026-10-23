@@ -41,11 +41,13 @@ def fetch_playbook_from_url(url: str):
     """Fetch and parse playbook from URL."""
     try:
         import httpx
+
         response = httpx.get(url, timeout=30, follow_redirects=True)
         response.raise_for_status()
 
         # Write to temp file and parse
         import tempfile
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
             f.write(response.text)
             temp_path = f.name

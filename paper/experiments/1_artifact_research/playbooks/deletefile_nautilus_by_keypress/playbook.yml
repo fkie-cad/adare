@@ -64,13 +64,29 @@ actions:
       command: "echo 'This is a test file.' > {{ filepath }}"
       shell: true
   - test: testfile_created
-  - click:
-      target:
-        image: "{{ icon_filemanager_taskbar }}"
-      description: "Open Ubuntu File Explorer"
-  - idle:
-      duration: 2.0
-      description: "Wait additional time for File Explorer to open since some systems are slow"
+  # Launch via the GNOME Activities search, not a dock-icon click: on ubuntu1804 the
+  # "nautilus_taskbar.png" match locks onto the LibreOffice Writer dock icon (~0.81)
+  # and opens Writer instead of Files. Same fix as deletefile_nautilus_by_click.
+  - keyboard:
+      key: super
+      description: "Open the GNOME Activities overview"
+  - wait_until:
+      condition:
+        exists:
+          text: "Type to search"
+      description: "Wait for the overview search entry to be ready"
+  - keyboard:
+      text: "Files"
+      description: "Type the file manager's name into the overview search box"
+  - keyboard:
+      key: enter
+      description: "Launch the top (pre-selected) result -- the GNOME file manager (Nautilus)"
+  - wait_until:
+      condition:
+        exists:
+          text: "Documents"
+      timeout: 30.0
+      description: "Wait for the file manager sidebar to be usable"
   - click:
       target:
         text: "Documents"

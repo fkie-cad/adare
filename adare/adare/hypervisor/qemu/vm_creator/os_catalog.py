@@ -1,5 +1,6 @@
 """OS definitions with ISO download URLs and SHA256 hashes."""
 
+import functools
 import logging
 import os
 from dataclasses import dataclass, field
@@ -12,6 +13,10 @@ from adare.config.configdirectory import OS_PROFILES_DIR
 
 log = logging.getLogger(__name__)
 
+# libyaml's C loader parses the ~26 bundled profiles several times faster than
+# the pure-Python SafeLoader; fall back when PyYAML was built without libyaml.
+_YAML_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+
 
 class SetupLevel(IntEnum):
     """VM setup level controlling what gets installed during creation.
@@ -21,6 +26,7 @@ class SetupLevel(IntEnum):
     FULL:  + Python environment (Miniforge x86_64 / native ARM64)
     AGENT: + pre-installed adarevm from wheels (deferred)
     """
+
     BARE = 0
     BASE = 1
     FULL = 2
@@ -39,22 +45,23 @@ def default_host_cpus() -> int:
 @dataclass(frozen=True)
 class OsDefinition:
     """Definition of an OS available for automated VM creation."""
+
     name: str
     display_name: str
-    platform: str           # 'linux' or 'windows'
-    distribution: str       # 'ubuntu', 'windows'
-    version: str            # '24.04', '22.04', '11', '10'
-    iso_url: str            # Direct download URL (empty for Windows - user must supply)
-    iso_sha256: str         # Expected SHA256 hash (empty for Windows)
-    iso_filename: str       # Cached filename
+    platform: str  # 'linux' or 'windows'
+    distribution: str  # 'ubuntu', 'windows'
+    version: str  # '24.04', '22.04', '11', '10'
+    iso_url: str  # Direct download URL (empty for Windows - user must supply)
+    iso_sha256: str  # Expected SHA256 hash (empty for Windows)
+    iso_filename: str  # Cached filename
     default_disk_size: str  # e.g. '60G'
     default_ram_mb: int
     default_cpus: int
     distribution_label: str = ''
     requires_uefi: bool = False
     requires_tpm: bool = False
-    kernel_path_in_iso: str = ''    # Path to vmlinuz inside ISO (Linux only)
-    initrd_path_in_iso: str = ''    # Path to initrd inside ISO (Linux only)
+    kernel_path_in_iso: str = ''  # Path to vmlinuz inside ISO (Linux only)
+    initrd_path_in_iso: str = ''  # Path to initrd inside ISO (Linux only)
     extra_packages: list[str] = field(default_factory=list)
     install_mode: str = 'auto'  # 'auto' (unattended seed file), 'manual'
     #   (interactive window), 'gui-auto' (vision-LLM drives the GUI installer),
@@ -88,12 +95,19 @@ class OsDefinition:
     seed_transport: str = 'cdrom'  # 'cdrom' | 'http'
     # Deterministic, LLM-free GUI-installer playbook (install_mode == 'playbook').
     # Each step is a dict driving the graphical installer via the host-side QMP
-    # GUI executor: {action: tap, coords: [x, y, w, h]} | {action: key, keys: [..]}
-    # | {action: type, text: ..} | {action: wait_stable, settle/min/timeout: ..} |
-    # {action: wait, seconds: ..} | {action: shot, name: ..}. install_steps drive
-    # the installer; verify_steps run after rebooting into the installed disk.
+    # GUI executor: {action: tap, coords: [x, y, w, h]} | {action: click_text,
+    # text: ..} | {action: wait_text, text: .., gone/fail_on/timeout: ..} |
+    # {action: key, keys: [..]} | {action: type, text: ..} | {action: wait_stable,
+    # settle/min/timeout/required: ..} | {action: wait, seconds: ..} |
+    # {action: shot, name: ..}. install_steps drive the installer and must end
+    # with a wait_text on its "done" screen; verify_steps run after rebooting into
+    # the installed disk. See playbook_creator.
     install_steps: list = field(default_factory=list)
     verify_steps: list = field(default_factory=list)
+    # Optional override of the steps that install the guest agent from a text
+    # console after verify_steps (--setup base and up). Empty uses the default
+    # apt bootstrap; see playbook_provision.
+    bootstrap_steps: list = field(default_factory=list)
     # Plain-text pointer telling a human where to obtain this ISO. Populated for
     # the profiles that cannot ship a URL (Windows: the installer is licensed,
     # not redistributable), and used as the fallback `recipe.iso_notes` for a
@@ -333,9 +347,7 @@ KALI_ROLLING = OsDefinition(
 # when given inst.ks=hd:LABEL=OEMDRV:/ks.cfg. inst.text keeps the install
 # unattended; the *installed* system still has the chosen DE.
 
-_KICKSTART_CMDLINE = (
-    'inst.ks=hd:LABEL=OEMDRV:/ks.cfg inst.text console={console}'
-)
+_KICKSTART_CMDLINE = 'inst.ks=hd:LABEL=OEMDRV:/ks.cfg inst.text console={console}'
 
 
 def _fedora_archive_cmdline(release: str, arch: str = 'x86_64') -> str:
@@ -812,7 +824,7 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
             continue
         for yml_file in sorted(profiles_dir.glob('*.yml')):
             try:
-                data = yaml.safe_load(yml_file.read_text())
+                data = yaml.load(yml_file.read_text(), Loader=_YAML_LOADER)
                 if not isinstance(data, dict):
                     log.warning('Skipping %s: not a valid YAML mapping', yml_file)
                     continue
@@ -823,16 +835,22 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     continue
 
                 install_mode = data.get('install_mode', 'auto')
+                if install_mode == 'gui-script':  # renamed to 'playbook' in b499800; keep old copies working
+                    install_mode = 'playbook'
                 if install_mode not in _INSTALL_MODES:
                     log.warning(
                         'Skipping %s: install_mode must be one of %s, got "%s"',
-                        yml_file, ', '.join(sorted(_INSTALL_MODES)), install_mode,
+                        yml_file,
+                        ', '.join(sorted(_INSTALL_MODES)),
+                        install_mode,
                     )
                     continue
 
                 architecture = data.get('architecture', 'x86_64')
                 if architecture not in ('x86_64', 'aarch64'):
-                    log.warning('Skipping %s: architecture must be "x86_64" or "aarch64", got "%s"', yml_file, architecture)
+                    log.warning(
+                        'Skipping %s: architecture must be "x86_64" or "aarch64", got "%s"', yml_file, architecture
+                    )
                     continue
 
                 name = data['name']
@@ -861,13 +879,12 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     architecture=architecture,
                     template=data.get('template', ''),
                     installer=data.get('installer', 'subiquity'),
-                    kernel_cmdline=data.get(
-                        'kernel_cmdline', 'autoinstall console={console} ---'
-                    ),
+                    kernel_cmdline=data.get('kernel_cmdline', 'autoinstall console={console} ---'),
                     seed_label=data.get('seed_label', 'cidata'),
                     seed_transport=data.get('seed_transport', 'cdrom'),
                     install_steps=data.get('install_steps', []),
                     verify_steps=data.get('verify_steps', []),
+                    bootstrap_steps=data.get('bootstrap_steps', []),
                     iso_notes=data.get('iso_notes', ''),
                 )
             except (OSError, yaml.YAMLError, TypeError, ValueError) as e:
@@ -886,13 +903,26 @@ def _build_catalog() -> dict[str, OsDefinition]:
     return catalog
 
 
-OS_CATALOG: dict[str, OsDefinition] = _build_catalog()
+@functools.cache
+def _catalog() -> dict[str, OsDefinition]:
+    """The OS catalog, built on first use rather than at import time.
+
+    Building it parses every YAML profile, which every importer of this module
+    (most of the CLI) used to pay for whether or not it looked up an OS.
+    """
+    return _build_catalog()
 
 
 def reload_catalog() -> None:
     """Reload the OS catalog from built-in definitions and YAML profiles."""
-    global OS_CATALOG
-    OS_CATALOG = _build_catalog()
+    _catalog.cache_clear()
+
+
+def __getattr__(name: str) -> dict[str, OsDefinition]:
+    # Keeps `os_catalog.OS_CATALOG` / `from ... import OS_CATALOG` working.
+    if name == 'OS_CATALOG':
+        return _catalog()
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
 
 
 def get_os_definition(os_name: str) -> OsDefinition:
@@ -907,13 +937,13 @@ def get_os_definition(os_name: str) -> OsDefinition:
     Raises:
         KeyError: If os_name is not in the catalog
     """
-    if os_name not in OS_CATALOG:
-        available = ', '.join(sorted(OS_CATALOG.keys()))
+    catalog = _catalog()
+    if os_name not in catalog:
+        available = ', '.join(sorted(catalog.keys()))
         raise KeyError(
-            f"Unknown OS '{os_name}'. Available: {available}\n"
-            f"Run 'adare os-profile list' to see all profiles."
+            f"Unknown OS '{os_name}'. Available: {available}\nRun 'adare vm profile list' to see all profiles."
         )
-    return OS_CATALOG[os_name]
+    return catalog[os_name]
 
 
 def list_os_definitions() -> list[OsDefinition]:
@@ -922,4 +952,5 @@ def list_os_definitions() -> list[OsDefinition]:
     Read-only convenience for callers (e.g. the webapi) that need to list
     all available profiles rather than look one up.
     """
-    return [OS_CATALOG[name] for name in sorted(OS_CATALOG)]
+    catalog = _catalog()
+    return [catalog[name] for name in sorted(catalog)]

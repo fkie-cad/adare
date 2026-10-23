@@ -1,8 +1,9 @@
 [project]
 name = "adaredepend"
 version = "0.1.0"
-description = ""
-authors = [{name = "Your Name", email = "you@example.com"}]
+description = "ADARE workspace root: host client, guest agent, shared library and CV server"
+authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 
@@ -15,8 +16,6 @@ dependencies = [
 
 [project.scripts]
 adare = "adare.run:main"
-adareexp = "adare.example:main"
-mcp_gui = "adare.mcp_gui:main"
 
 [project.optional-dependencies]
 docs = ["sphinx", "furo", "sphinx-design"]
@@ -39,11 +38,18 @@ test = [
     "pytest-cov>=4.0.0",
     "openpyxl>=3.1.0",
 ]
+# Exact pins: a new ruff/mypy release can add rules or change inference, which
+# would shift the quality-baseline.json counts. Bump deliberately, then
+# `make lint-baseline`.
+lint = [
+    "ruff==0.15.11",
+    "mypy==2.4.0",
+]
 dev = [
+    {include-group = "lint"},
     "sphinx<8.0",
     "furo>=2025.7.1",
     "sphinx-design>=0.6.0",
-    "ruff>=0.15.11",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.3.0",
     "pytest-mock>=3.15.1",
@@ -120,9 +126,26 @@ directory = "htmlcov"
 [tool.ruff]
 target-version = "py313"
 line-length = 120
+extend-exclude = ["paper", "docsrc/build"]
+
+# Code that runs inside guest VMs must stay importable on the guests' Python
+# (adarevm/adarelib declare >=3.10), so pyupgrade must not emit 3.11+ syntax there.
+[tool.ruff.per-file-target-version]
+"adarevm/**/*.py" = "py310"
+"adarelib/**/*.py" = "py310"
+"adare/appdata/testfunctions/**/*.py" = "py310"
+"examples/testfunctions/**/*.py" = "py310"
+
+[tool.ruff.format]
+# The codebase mixes quote styles; preserving them halves the reformat churn.
+quote-style = "preserve"
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "B", "BLE", "S110", "S112", "C901", "I", "UP", "SIM", "RET"]
+# The formatter owns line length; what it can't wrap (strings, comments, URLs) is fine.
+# Legacy violations of the selected rules are budgeted in quality-baseline.json and
+# enforced by scripts/quality_ratchet.py: counts may only go down.
+ignore = ["E501"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15
@@ -134,9 +157,17 @@ known-first-party = ["adare", "adarelib", "adarevm"]
 "**/test_*.py" = ["S"]
 "**/testfunctions/test_*.py" = ["S", "F401", "E402", "I"]
 "**/appdata/testfunctions/**/*.py" = ["I", "F401", "E402"]
+# Scaffold copied to users: the imports are there as a starting point.
+"**/appdata/templates/**/*.py" = ["F401"]
+# Star re-exports kept for backwards compatibility.
+"adare/adare/types/__init__.py" = ["F403", "F405"]
+"adare/adare/logger/__init__.py" = ["F403"]
+"adare/adare/frontend/interactive/dev_server.py" = ["F403"]
 
 [tool.mypy]
 python_version = "3.13"
+# Pinned so `sys.platform` branches type-check the same on macOS and in CI.
+platform = "linux"
 check_untyped_defs = true
 warn_return_any = true
 warn_unused_ignores = true
@@ -144,6 +175,8 @@ disallow_untyped_defs = false
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# core is held at zero errors by `make typecheck`; services new defs must be
+# typed too (its legacy untyped defs are budgeted by the ratchet).
 module = ["adare.core.*", "adare.services.*"]
 disallow_untyped_defs = true
 

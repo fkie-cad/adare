@@ -5,6 +5,7 @@ Decomposes the monolithic generate_domain_xml() into focused methods,
 each responsible for a logical section of the domain XML. PCIBusAllocator
 provides a single source of truth for PCI bus/slot assignments.
 """
+
 import logging
 import os
 import platform
@@ -13,6 +14,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 from xml.dom import minidom
+
+from adare.hypervisor.port_forward import qemu_hostfwd
 
 from .accel import cpu_mode_and_model, native_accel
 from .firmware import create_nvram_for_vm, find_ovmf_firmware
@@ -33,21 +36,21 @@ class PCIBusAllocator:
 
     # Q35 machine type (PCIe-based, multiple buses)
     _Q35_ASSIGNMENTS: dict[str, tuple[int, int]] = {
-        'network': (1, 0),       # bus 1, slot 0
-        'usb': (2, 0),           # bus 2, slot 0
-        'virtio_serial': (3, 0), # bus 3, slot 0
-        'disk': (4, 0),          # bus 4, slot 0
-        'memballoon': (5, 0),    # bus 5, slot 0
+        'network': (1, 0),  # bus 1, slot 0
+        'usb': (2, 0),  # bus 2, slot 0
+        'virtio_serial': (3, 0),  # bus 3, slot 0
+        'disk': (4, 0),  # bus 4, slot 0
+        'memballoon': (5, 0),  # bus 5, slot 0
     }
     _Q35_VIRTIOFS_BASE_BUS = 6  # buses 6+ for virtiofs shares
 
     # PC/i440FX machine type (PCI-based, single bus)
     _PC_ASSIGNMENTS: dict[str, tuple[int, int]] = {
-        'network': (0, 3),       # bus 0, slot 3
-        'disk': (0, 4),          # bus 0, slot 4
-        'virtio_serial': (0, 5), # bus 0, slot 5
-        'memballoon': (0, 6),    # bus 0, slot 6
-        'usb': (0, 7),           # bus 0, slot 7 (qemu-xhci)
+        'network': (0, 3),  # bus 0, slot 3
+        'disk': (0, 4),  # bus 0, slot 4
+        'virtio_serial': (0, 5),  # bus 0, slot 5
+        'memballoon': (0, 6),  # bus 0, slot 6
+        'usb': (0, 7),  # bus 0, slot 7 (qemu-xhci)
     }
     _PC_VIRTIOFS_BASE_SLOT = 8  # slots 8+ for virtiofs shares
 
@@ -358,9 +361,9 @@ class DomainXMLBuilder:
         if not qemu_full_path:
             if self._is_darwin:
                 for candidate in [
-                    f'/opt/local/bin/{qemu_exe}',       # MacPorts
-                    f'/opt/homebrew/bin/{qemu_exe}',     # Homebrew (Apple Silicon)
-                    f'/usr/local/bin/{qemu_exe}',        # Homebrew (Intel)
+                    f'/opt/local/bin/{qemu_exe}',  # MacPorts
+                    f'/opt/homebrew/bin/{qemu_exe}',  # Homebrew (Apple Silicon)
+                    f'/usr/local/bin/{qemu_exe}',  # Homebrew (Intel)
                 ]:
                     if os.path.isfile(candidate):
                         qemu_full_path = candidate
@@ -384,8 +387,14 @@ class DomainXMLBuilder:
         disk = ET.SubElement(self._devices, 'disk', type='file', device='disk')
         aio_mode = 'threads' if self._is_darwin else 'native'
         ET.SubElement(
-            disk, 'driver', name='qemu', type=self._config.drive_format,
-            cache='none', iothread='1', aio=aio_mode, discard='unmap',
+            disk,
+            'driver',
+            name='qemu',
+            type=self._config.drive_format,
+            cache='none',
+            iothread='1',
+            aio=aio_mode,
+            discard='unmap',
         )
         ET.SubElement(disk, 'source', file=self._config.disk_path)
         ET.SubElement(disk, 'target', dev='vda', bus='virtio')
@@ -595,7 +604,9 @@ class DomainXMLBuilder:
         elif self._is_windows and not self._is_darwin:
             model = ET.SubElement(video, 'model', type='virtio', heads='1', primary='yes', vram='262144')
         else:
-            model = ET.SubElement(video, 'model', type='qxl', ram='65536', vram='65536', vgamem='16384', heads='1', primary='yes')
+            model = ET.SubElement(
+                video, 'model', type='qxl', ram='65536', vram='65536', vgamem='16384', heads='1', primary='yes'
+            )
 
         if not self._is_aarch64:  # type='none' doesn't support resolution hints
             rx = getattr(self._config, 'resolution_x', 1920)
@@ -679,7 +690,9 @@ class DomainXMLBuilder:
 
         for idx, share in enumerate(self._virtiofs_shares):
             filesystem = _generate_virtiofs_xml_element(
-                share, self._is_q35, idx,
+                share,
+                self._is_q35,
+                idx,
                 PCIBusAllocator._Q35_VIRTIOFS_BASE_BUS,
                 PCIBusAllocator._PC_VIRTIOFS_BASE_SLOT,
                 self._is_virt,
@@ -734,8 +747,7 @@ class DomainXMLBuilder:
             disk_model = 'nvme' if self._is_windows else 'virtio-blk-pci'
             _add_qemu_arg(
                 qemu_commandline,
-                f'{disk_model},drive=hd0,serial=disk0,bootindex={disk_bootindex},'
-                f'bus=pcie.0,addr=0x1e',
+                f'{disk_model},drive=hd0,serial=disk0,bootindex={disk_bootindex},bus=pcie.0,addr=0x1e',
             )
 
         # aarch64 installer CDROM (libvirt <disk device='cdrom'> is skipped for
@@ -836,17 +848,13 @@ class DomainXMLBuilder:
 
         # Port forwarding (can coexist with SMB on same netdev)
         for _name, rule in self._config.port_forwarding_rules.items():
-            protocol = rule['protocol']
-            host_port = rule['host_port']
-            guest_port = rule['guest_port']
-            host_ip = rule.get('host_ip', '')
-            guest_ip = rule.get('guest_ip', '')
-
-            if host_ip:
-                hostfwd = f"{protocol}:{host_ip}:{host_port}-{guest_ip}:{guest_port}"
-            else:
-                hostfwd = f"{protocol}::{host_port}-:{guest_port}"
-
+            hostfwd = qemu_hostfwd(
+                rule['protocol'],
+                rule['host_port'],
+                rule['guest_port'],
+                rule.get('host_ip', ''),
+                rule.get('guest_ip', ''),
+            )
             netdev_args += f",hostfwd={hostfwd}"
 
         _add_qemu_arg(qemu_commandline, '-netdev')
@@ -888,6 +896,7 @@ class DomainXMLBuilder:
 
 
 # --- Module-level helper functions (kept for backward compatibility) ---
+
 
 def _add_q35_pcie_topology(devices: ET.Element, num_virtiofs_devices: int = 0, extra_buses: int = 0) -> None:
     """Add proper PCIe topology for q35 machines.
@@ -935,7 +944,7 @@ def _add_q35_pcie_topology(devices: ET.Element, num_virtiofs_devices: int = 0, e
             'domain': '0x0000',
             'bus': '0x00',
             'slot': hex(slot_idx),
-            'function': hex(func_idx)
+            'function': hex(func_idx),
         }
 
         if func_idx == 0:
@@ -1003,14 +1012,24 @@ def _generate_virtiofs_xml_element(
     elif is_q35:
         bus = base_bus + index
         ET.SubElement(
-            filesystem, 'address', type='pci', domain='0x0000',
-            bus=f'0x{bus:02x}', slot='0x00', function='0x0',
+            filesystem,
+            'address',
+            type='pci',
+            domain='0x0000',
+            bus=f'0x{bus:02x}',
+            slot='0x00',
+            function='0x0',
         )
     else:
         slot = base_slot + index
         ET.SubElement(
-            filesystem, 'address', type='pci', domain='0x0000',
-            bus='0x00', slot=f'0x{slot:02x}', function='0x0',
+            filesystem,
+            'address',
+            type='pci',
+            domain='0x0000',
+            bus='0x00',
+            slot=f'0x{slot:02x}',
+            function='0x0',
         )
 
     log.debug(f"Generated virtio-fs XML for '{tag}' -> {host_path}")

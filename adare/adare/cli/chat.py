@@ -22,24 +22,24 @@ def exec_chat(arguments):
 
     # Re-read the provider config now (not the import-time constants) so a freshly
     # `adare vlm use`d profile is picked up; env vars still override per the _cfg rule.
-    base_url = getattr(arguments, 'base_url', None) or _cfg(
-        'ADARE_VLLM_BASE_URL', 'http://localhost:8000/v1')
+    base_url = getattr(arguments, 'base_url', None) or _cfg('ADARE_VLLM_BASE_URL', 'http://localhost:8000/v1')
     api_key = _cfg('ADARE_VLLM_API_KEY', 'EMPTY')
-    model = (getattr(arguments, 'model', None)
-             or _cfg('ADARE_CHAT_MODEL', None)
-             or _cfg('ADARE_VLLM_MODEL', 'Qwen/Qwen2-VL-7B-Instruct'))
+    model = (
+        getattr(arguments, 'model', None)
+        or _cfg('ADARE_CHAT_MODEL', None)
+        or _cfg('ADARE_VLLM_MODEL', 'Qwen/Qwen2-VL-7B-Instruct')
+    )
     max_tokens = getattr(arguments, 'max_tokens', None) or DEFAULT_MAX_TOKENS
     tool_protocol = getattr(arguments, 'tool_protocol', None) or 'auto'
 
     try:
         brain = OpenAICompatBrain(
-            base_url=base_url, model=model, api_key=api_key,
-            tool_protocol=tool_protocol, max_tokens=max_tokens)
+            base_url=base_url, model=model, api_key=api_key, tool_protocol=tool_protocol, max_tokens=max_tokens
+        )
     except ValueError as exc:
         print_error_message(
             title='Could not start the chat brain',
-            next_steps=[str(exc),
-                        'Valid --tool-protocol values: native, json, auto'],
+            next_steps=[str(exc), 'Valid --tool-protocol values: native, json, auto'],
         )
         exit(1)
 

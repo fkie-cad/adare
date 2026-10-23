@@ -82,9 +82,8 @@ class DevModeLifecycleMixin:
             resolved_memory = self.vm_memory
             if resolved_memory is None and self.experiment_name:
                 from adare.backend.experiment.run import _playbook_settings_memory
-                resolved_memory = _playbook_settings_memory(
-                    self.project_path, self.experiment_name
-                )
+
+                resolved_memory = _playbook_settings_memory(self.project_path, self.experiment_name)
 
             # 1. Create ExperimentConfig (test mode + preserve snapshot)
             config = ExperimentConfig(
@@ -119,9 +118,7 @@ class DevModeLifecycleMixin:
 
             # 3-5. Wrap preparation steps in parent stage context
             with StageCtxManager(
-                ExperimentPreparationStage(),
-                stage_ulid,
-                event=self.experiment_ctx.user_interrupt_event
+                ExperimentPreparationStage(), stage_ulid, event=self.experiment_ctx.user_interrupt_event
             ):
                 if self.experiment_name:
                     # 3. Setup experiment environment (standard flow)
@@ -170,9 +167,7 @@ class DevModeLifecycleMixin:
 
             # 7-9. Wrap VM setup in parent stage context
             with StageCtxManager(
-                VirtualMachineSetupStage(),
-                stage_ulid,
-                event=self.experiment_ctx.user_interrupt_event
+                VirtualMachineSetupStage(), stage_ulid, event=self.experiment_ctx.user_interrupt_event
             ):
                 # 7. Create and prepare VM
                 await self.vm_manager.create_and_prepare_vm(self.experiment_ctx)
@@ -191,9 +186,7 @@ class DevModeLifecycleMixin:
 
             # 10-11. Software installation happens after VM setup completes
             with StageCtxManager(
-                SoftwareInstallationStage(),
-                stage_ulid,
-                event=self.experiment_ctx.user_interrupt_event
+                SoftwareInstallationStage(), stage_ulid, event=self.experiment_ctx.user_interrupt_event
             ):
                 # 10. Install and run WebSocket server in VM
                 await step_install_and_run_websocket_server(self.experiment_ctx)
@@ -211,8 +204,8 @@ class DevModeLifecycleMixin:
             self.initial_variables = {}
 
             # 13. Create initial snapshot for reset operations
-            #("initial", "Initial VM state for dev mode")
-            #log.info("Initial snapshot created")
+            # ("initial", "Initial VM state for dev mode")
+            # log.info("Initial snapshot created")
 
             # 14. Retrieve and store VM instance ID for cleanup
             try:
@@ -220,9 +213,11 @@ class DevModeLifecycleMixin:
                 from adare.database.models.project_models import ExperimentRun
 
                 with ExperimentApi(self.experiment_ctx.config.project_path) as api:
-                    experiment_run = api._session.query(ExperimentRun).filter(
-                        ExperimentRun.id == self.experiment_ctx.experiment_run_ulid
-                    ).first()
+                    experiment_run = (
+                        api._session.query(ExperimentRun)
+                        .filter(ExperimentRun.id == self.experiment_ctx.experiment_run_ulid)
+                        .first()
+                    )
 
                     if experiment_run and experiment_run.vm_instance_id:
                         self.vm_instance_id = experiment_run.vm_instance_id
@@ -276,14 +271,14 @@ class DevModeLifecycleMixin:
             self.experiment_ctx.experiment_run_ulid,
             "_dev_session",  # Placeholder
             self.experiment_ctx.config.environment_name,
-            self.experiment_ctx.config.project_path
+            self.experiment_ctx.config.project_path,
         )
 
         # Update start timestamp
         experiment_database.update_experiment_run_start(
             self.experiment_ctx.project_directory.path,
             self.experiment_ctx.experiment_run_ulid,
-            self.experiment_ctx.timestamp_start
+            self.experiment_ctx.timestamp_start,
         )
 
         # Resolve environment manually
@@ -296,12 +291,17 @@ class DevModeLifecycleMixin:
 
         # Resolve VM file and platform
         self.experiment_ctx.vm_file = environment_database.get_environment_vm_file(self.experiment_ctx.environment_ulid)
-        self.experiment_ctx.guest_platform = environment_database.get_environment_os(self.experiment_ctx.environment_ulid)
-        self.experiment_ctx.hypervisor_type = environment_database.get_environment_hypervisor(self.experiment_ctx.environment_ulid)
+        self.experiment_ctx.guest_platform = environment_database.get_environment_os(
+            self.experiment_ctx.environment_ulid
+        )
+        self.experiment_ctx.hypervisor_type = environment_database.get_environment_hypervisor(
+            self.experiment_ctx.environment_ulid
+        )
 
         # Fallback parsing if needed
         if not self.experiment_ctx.vm_file or not self.experiment_ctx.guest_platform:
             from adare.types.environment import parse_environment_file
+
             env_meta = parse_environment_file(self.experiment_ctx.environment_file)
             if not self.experiment_ctx.vm_file:
                 self.experiment_ctx.vm_file = Path(env_meta.vm)
@@ -330,11 +330,7 @@ class DevModeLifecycleMixin:
                 )
 
                 stage_ulid = self.console_ulid or self.experiment_ctx.experiment_run_ulid
-                with StageCtxManager(
-                    CleanupShutdownStage(),
-                    stage_ulid,
-                    event=None
-                ):
+                with StageCtxManager(CleanupShutdownStage(), stage_ulid, event=None):
                     # 1. Shutdown WebSocket connection
                     if self.experiment_ctx.client:
                         try:
@@ -348,16 +344,16 @@ class DevModeLifecycleMixin:
                         try:
                             # Check if other sessions are running
                             from adare.database.api.devmode import DevModeApi
+
                             with DevModeApi() as api:
                                 running_sessions = api.list_running_sessions()
                                 # Filter out current session (active or already marked stopped)
-                                other_active_sessions = [
-                                    s for s in running_sessions
-                                    if s.session_id != self.session_id
-                                ]
+                                other_active_sessions = [s for s in running_sessions if s.session_id != self.session_id]
 
                             if other_active_sessions:
-                                log.info(f"Skipping MCP server shutdown - used by {len(other_active_sessions)} other session(s)")
+                                log.info(
+                                    f"Skipping MCP server shutdown - used by {len(other_active_sessions)} other session(s)"
+                                )
                             else:
                                 await step_shutdown_mcp_server(self.experiment_ctx, post_interrupt=True, force=True)
                                 log.debug("MCP server shut down (last session)")
@@ -372,10 +368,12 @@ class DevModeLifecycleMixin:
                         except (HypervisorException, OSError, TimeoutError) as e:
                             log.warning(f"Failed to stop VM: {e}")
 
-                    # 4. Release VM instance for reuse
-                    if self.vm_instance_id:
+                    # 4. Release VM instance for reuse. A QEMU run instance stays
+                    # reserved (port, overlay, checkpoints) until `dev remove`.
+                    if self.vm_instance_id and getattr(self.vm_manager, 'hypervisor_type', None) != 'qemu':
                         try:
                             from adare.backend.vm.commands import release_vm_instance_for_experiment
+
                             await release_vm_instance_for_experiment(self.vm_instance_id)
                             log.info(f"Released VM instance {self.vm_instance_id} for reuse")
                         except (ValueError, OSError) as e:
@@ -419,11 +417,7 @@ class DevModeLifecycleMixin:
                 )
 
                 stage_ulid = self.console_ulid or self.experiment_ctx.experiment_run_ulid
-                with StageCtxManager(
-                    CleanupShutdownStage(),
-                    stage_ulid,
-                    event=None
-                ):
+                with StageCtxManager(CleanupShutdownStage(), stage_ulid, event=None):
                     # 1. Shutdown WebSocket
                     if self.experiment_ctx.client:
                         try:
@@ -437,16 +431,16 @@ class DevModeLifecycleMixin:
                         try:
                             # Check if other sessions are running
                             from adare.database.api.devmode import DevModeApi
+
                             with DevModeApi() as api:
                                 running_sessions = api.list_running_sessions()
                                 # Filter out current session
-                                other_active_sessions = [
-                                    s for s in running_sessions
-                                    if s.session_id != self.session_id
-                                ]
+                                other_active_sessions = [s for s in running_sessions if s.session_id != self.session_id]
 
                             if other_active_sessions:
-                                log.info(f"Skipping MCP server shutdown - used by {len(other_active_sessions)} other session(s)")
+                                log.info(
+                                    f"Skipping MCP server shutdown - used by {len(other_active_sessions)} other session(s)"
+                                )
                             else:
                                 await step_shutdown_mcp_server(self.experiment_ctx, post_interrupt=True, force=True)
                                 log.debug("MCP server shut down (last session)")
@@ -476,7 +470,20 @@ class DevModeLifecycleMixin:
                         # Continue with VM destruction
 
                     # 5. Destroy VM (undefine domain + delete disks)
-                    if self.vm_manager and self.experiment_ctx.vm:
+                    is_qemu = getattr(self.vm_manager, 'hypervisor_type', None) == 'qemu'
+                    if is_qemu and self.experiment_ctx.vm_name:
+                        # Run-scoped instance: domain, overlay, varstore, vTPM copy,
+                        # config and instance row in one go.
+                        from adare.backend.vm.run_instances import remove_qemu_run_instance
+
+                        try:
+                            remove_qemu_run_instance(self.experiment_ctx.vm_name)
+                            log.info(f"VM '{self.experiment_ctx.vm_name}' removed")
+                        except (OSError, DatabaseError) as e:
+                            error_msg = f"VM removal failed: {e}"
+                            log.error(error_msg)
+                            cleanup_failures.append(error_msg)
+                    elif self.vm_manager and self.experiment_ctx.vm:
                         try:
                             result = await vm.destroy(silent=False)
                             if result != 0:
@@ -491,9 +498,10 @@ class DevModeLifecycleMixin:
                             cleanup_failures.append(error_msg)
 
                     # 6. Release VM instance before removal
-                    if self.vm_instance_id:
+                    if self.vm_instance_id and not is_qemu:
                         try:
                             from adare.backend.vm.commands import release_vm_instance_for_experiment
+
                             await release_vm_instance_for_experiment(self.vm_instance_id)
                             log.info(f"Released VM instance {self.vm_instance_id}")
                         except (ValueError, OSError) as e:
@@ -504,6 +512,7 @@ class DevModeLifecycleMixin:
                     # 7. Delete experiment run directory
                     try:
                         import shutil
+
                         run_dir = self.experiment_ctx.experiment_run_directory.path
                         if run_dir.exists():
                             shutil.rmtree(run_dir)

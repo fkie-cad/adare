@@ -26,3 +26,5 @@ class EnvironmentAlreadyExists(LoggedErrorException):
     pass
 
 
+class EnvironmentDiskChanged(LoggedErrorException):
+    """The registered disk no longer has the bytes this environment version was loaded with."""

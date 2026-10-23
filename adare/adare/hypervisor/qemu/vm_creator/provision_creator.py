@@ -57,6 +57,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.console import console, print_section, print_step
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.firmware import create_nvram_for_vm
@@ -136,17 +137,19 @@ class _BuildLog:
         # `platform.platform()` would be more descriptive but shells out to `uname
         # -p`, and a build log has no business spawning a subprocess.
         host = f'{platform.system()} {platform.release()} ({platform.machine()})'
-        self.write(
-            f'\n{"=" * 78}\n'
-            f'provisioning run: {count} command(s)\n'
-            f'disk:  {disk}\n'
-            f'host:  {host}\n'
-            f'{"=" * 78}\n'
-        )
+        self.write(f'\n{"=" * 78}\nprovisioning run: {count} command(s)\ndisk:  {disk}\nhost:  {host}\n{"=" * 78}\n')
 
-    def command(self, index: int, total: int, command: ProvisionCommand,
-                kind: str, returncode: int, elapsed: float,
-                stdout: str, stderr: str) -> None:
+    def command(
+        self,
+        index: int,
+        total: int,
+        command: ProvisionCommand,
+        kind: str,
+        returncode: int,
+        elapsed: float,
+        stdout: str,
+        stderr: str,
+    ) -> None:
         self.write(
             f'\n--- [{index}/{total}] {command.name} ({kind}) ---\n'
             f'interpreter:  {command.shell}\n'
@@ -173,21 +176,32 @@ def _socket_path(kind: str) -> Path:
     ``sun_path`` limit is 104 bytes and a work overlay under ``$TMPDIR`` already
     eats ~49 of them.
     """
-    run_dir = Path.home() / '.adare' / 'qemu' / 'run'
+    run_dir = QEMU_STATE_DIR / 'run'
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir / f'.provision-{os.getpid()}-{kind}.sock'
 
 
-def _boot_with_qga(overlay: Path, nvram: Path | None, os_def: OsDefinition,
-                   ram_mb: int, cpus: int, qmp_sock: Path, qga_sock: Path,
-                   allow_emulation: bool) -> subprocess.Popen:
+def _boot_with_qga(
+    overlay: Path,
+    nvram: Path | None,
+    os_def: OsDefinition,
+    ram_mb: int,
+    cpus: int,
+    qmp_sock: Path,
+    qga_sock: Path,
+    allow_emulation: bool,
+) -> subprocess.Popen:
     """Boot *overlay* with a guest-agent channel and return the running process.
 
     Raises:
         RecipeProvisionError: If QEMU exits immediately.
     """
     cmd = build_post_install_qemu_cmd(
-        overlay, nvram, os_def, ram_mb, cpus,
+        overlay,
+        nvram,
+        os_def,
+        ram_mb,
+        cpus,
         qmp_sock_path=qmp_sock,
         qga_sock_path=qga_sock,
         allow_emulation=allow_emulation,
@@ -202,14 +216,12 @@ def _boot_with_qga(overlay: Path, nvram: Path | None, os_def: OsDefinition,
     if process.poll() is not None:
         stderr = process.stderr.read().decode() if process.stderr else ''
         raise RecipeProvisionError(
-            f'QEMU exited immediately while starting provisioning '
-            f'(code {process.returncode}): {stderr.strip()}'
+            f'QEMU exited immediately while starting provisioning (code {process.returncode}): {stderr.strip()}'
         )
     return process
 
 
-def _pull_log_files(qga_sock: Path, command: ProvisionCommand,
-                    log_dir: Path, build_log: _BuildLog) -> None:
+def _pull_log_files(qga_sock: Path, command: ProvisionCommand, log_dir: Path, build_log: _BuildLog) -> None:
     """Best-effort copy of a failed step's ``log_files`` to the host.
 
     Best-effort on purpose: the step already failed, and losing the installer log
@@ -230,8 +242,9 @@ def _pull_log_files(qga_sock: Path, command: ProvisionCommand,
             log.warning('Could not pull guest log %s: %s', remote, e)
 
 
-def _run_command(qga_sock: Path, command: ProvisionCommand, index: int, total: int,
-                 build_log: _BuildLog, log_dir: Path) -> None:
+def _run_command(
+    qga_sock: Path, command: ProvisionCommand, index: int, total: int, build_log: _BuildLog, log_dir: Path
+) -> None:
     """Run one provision command (and its ``verify``), or raise.
 
     Success is the exit code being in ``allow_exit_codes`` — never "stderr was
@@ -256,15 +269,16 @@ def _run_command(qga_sock: Path, command: ProvisionCommand, index: int, total: i
     started = time.monotonic()
     try:
         returncode, stdout, stderr = qga_exec(
-            qga_sock, command.command, cwd=command.cwd or None,
-            shell=command.shell, timeout=timeout,
+            qga_sock,
+            command.command,
+            cwd=command.cwd or None,
+            shell=command.shell,
+            timeout=timeout,
             progress_callback=_tick,
         )
     except QgaError as e:
         build_log.note(f'[{index}/{total}] {command.name}: guest-exec failed: {e}')
-        raise RecipeProvisionError(
-            f"provision step {index}/{total} '{command.name}' did not complete: {e}"
-        ) from e
+        raise RecipeProvisionError(f"provision step {index}/{total} '{command.name}' did not complete: {e}") from e
 
     elapsed = time.monotonic() - started
     build_log.command(index, total, command, 'command', returncode, elapsed, stdout, stderr)
@@ -285,13 +299,15 @@ def _run_command(qga_sock: Path, command: ProvisionCommand, index: int, total: i
         verify_started = time.monotonic()
         try:
             v_rc, v_out, v_err = qga_exec(
-                qga_sock, command.verify, cwd=command.cwd or None,
-                shell=command.shell, timeout=timeout,
+                qga_sock,
+                command.verify,
+                cwd=command.cwd or None,
+                shell=command.shell,
+                timeout=timeout,
             )
         except QgaError as e:
             raise RecipeProvisionError(
-                f"provision step {index}/{total} '{command.name}': verify did not "
-                f"complete: {e}"
+                f"provision step {index}/{total} '{command.name}': verify did not complete: {e}"
             ) from e
         v_elapsed = time.monotonic() - verify_started
         build_log.command(index, total, command, 'verify', v_rc, v_elapsed, v_out, v_err)
@@ -319,8 +335,7 @@ def _run_command(qga_sock: Path, command: ProvisionCommand, index: int, total: i
         build_log.note(f'[{index}/{total}] {command.name}: rebooted, agent back')
 
 
-def _clean_shutdown(process: subprocess.Popen, qmp_sock: Path,
-                    build_log: _BuildLog) -> None:
+def _clean_shutdown(process: subprocess.Popen, qmp_sock: Path, build_log: _BuildLog) -> None:
     """ACPI-shut the guest down and wait for QEMU to exit, or raise.
 
     A guest that will not shut down cleanly is a HARD failure. Flattening a dirty
@@ -370,6 +385,7 @@ def run_provision(
     allow_emulation: bool = False,
     compress: bool = True,
     deadline_minutes: int = _DEFAULT_DEADLINE_MINUTES,
+    title: str = 'Build-time provisioning (Stage 2/2)',
 ) -> Path:
     """Provision *base_disk* into a standalone *dest_disk*, or raise.
 
@@ -383,6 +399,7 @@ def run_provision(
         commands: Already-expanded provision commands, in execution order.
         build_log_path: Host log file recording every command and its output.
         deadline_minutes: Budget for the whole stage, checked between steps.
+        title: Section heading; the creators' readiness pass reuses this stage.
 
     Returns:
         *dest_disk*.
@@ -405,7 +422,7 @@ def run_provision(
     keep_failed = os.environ.get(KEEP_FAILED_ENV) == '1'
     succeeded = False
 
-    print_section('Build-time provisioning (Stage 2/2)')
+    print_section(title)
     console.print(f'  {total} command(s) to run in the guest.')
     console.print(f'  Host log: [dim]{build_log_path}[/dim]')
 
@@ -418,7 +435,14 @@ def run_provision(
             nvram = Path(create_nvram_for_vm(_WORK_NAME, work_dir, os_def.architecture))
 
         process = _boot_with_qga(
-            overlay, nvram, os_def, ram_mb, cpus, qmp_sock, qga_sock, allow_emulation,
+            overlay,
+            nvram,
+            os_def,
+            ram_mb,
+            cpus,
+            qmp_sock,
+            qga_sock,
+            allow_emulation,
         )
 
         print_step('Waiting for the guest agent...')
@@ -432,9 +456,7 @@ def run_provision(
                 f'  The agent ships with setup_level >= 1 (base) — a recipe with '
                 f'setup_level 0 has no agent to talk to.'
             )
-        print_step(
-            f'  Guest agent ready in {_fmt_duration(time.monotonic() - agent_started)}.'
-        )
+        print_step(f'  Guest agent ready in {_fmt_duration(time.monotonic() - agent_started)}.')
 
         deadline = time.monotonic() + deadline_minutes * 60
         for index, command in enumerate(commands, start=1):
@@ -473,6 +495,5 @@ def run_provision(
             shutil.rmtree(work_dir, ignore_errors=True)
         else:
             console.print(
-                f'  [yellow]{KEEP_FAILED_ENV}=1: keeping the failed overlay for '
-                f'post-mortem:[/yellow] {overlay}'
+                f'  [yellow]{KEEP_FAILED_ENV}=1: keeping the failed overlay for post-mortem:[/yellow] {overlay}'
             )

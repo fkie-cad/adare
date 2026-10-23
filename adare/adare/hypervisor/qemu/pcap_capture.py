@@ -31,7 +31,7 @@ class PcapCaptureConfig:
         return dict(self.paths)
 
     @classmethod
-    def from_dict(cls, data: dict[str, str] | None) -> 'PcapCaptureConfig':
+    def from_dict(cls, data: dict[str, str] | None) -> PcapCaptureConfig:
         return cls(paths=dict(data) if data else {})
 
     def __bool__(self) -> bool:

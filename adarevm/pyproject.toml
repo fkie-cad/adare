@@ -1,8 +1,9 @@
 [project]
 name = "adarevm"
-version = "0.1.1"
-description = ""
+version = "0.2.0"
+description = "ADARE guest agent: runs inside the VM and executes playbooks over WebSocket"
 authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.10"
 
@@ -20,6 +21,17 @@ dependencies = [
 
 [project.scripts]
 adarevm = "adarevm.main:run"
+
+[dependency-groups]
+test = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "--strict-markers"
 
 [tool.uv.sources]
 adarelib = { workspace = true }

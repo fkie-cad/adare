@@ -2,6 +2,7 @@
 VM file validators using Strategy Pattern.
 Each hypervisor has its own validation strategy.
 """
+
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -56,14 +57,9 @@ class VirtualBoxValidator(VMFileValidator):
 
         # Validate OVA format (tar archive)
         if not validate_tarfile_with_progress(
-            file_path=file_path,
-            description=f"Validating OVA format for {file_path.name}",
-            quiet=quiet
+            file_path=file_path, description=f"Validating OVA format for {file_path.name}", quiet=quiet
         ):
-            raise VMValidationError(
-                log,
-                f"VM file {file_path} is not a valid OVA (tar archive) file"
-            )
+            raise VMValidationError(log, f"VM file {file_path} is not a valid OVA (tar archive) file")
 
         log.debug(f"Successfully validated VirtualBox OVA file: {file_path}")
 
@@ -102,10 +98,8 @@ class VMValidatorFactory:
     """Factory to get appropriate validator for hypervisor type."""
 
     # Singleton validator instances (stateless, can be reused)
-    _validators = {
-        'virtualbox': VirtualBoxValidator(),
-        'qemu': QEMUValidator()
-    }
+    _validators = {'virtualbox': VirtualBoxValidator(), 'qemu': QEMUValidator()}
+
     @classmethod
     def get_validator(cls, hypervisor: str) -> VMFileValidator:
         """

@@ -79,10 +79,11 @@ class DevModeSnapshotsMixin:
                             await self.experiment_ctx.client.disconnect()
                             log.debug("WebSocket disconnected")
 
-                        # Restore external snapshot
-                        success = vm.restore_external_snapshot(
+                        # Restore external snapshot (blocking virsh/libvirt work: keep it off the loop)
+                        success = await asyncio.to_thread(
+                            vm.restore_external_snapshot,
                             memory_path=initial_snapshot.memory_file_path,
-                            disk_path=initial_snapshot.disk_file_path
+                            disk_path=initial_snapshot.disk_file_path,
                         )
 
                         if not success:
@@ -96,11 +97,10 @@ class DevModeSnapshotsMixin:
                             from adare.backend.experiment.run import (
                                 step_connect_websocket,
                             )
+
                             stage_ulid = self.console_ulid or self.experiment_ctx.experiment_run_ulid
                             with StageCtxManager(
-                                SoftwareInstallationStage(),
-                                stage_ulid,
-                                event=self.experiment_ctx.user_interrupt_event
+                                SoftwareInstallationStage(), stage_ulid, event=self.experiment_ctx.user_interrupt_event
                             ):
                                 await step_connect_websocket(self.experiment_ctx)
                                 log.debug("WebSocket reconnected")
@@ -115,9 +115,7 @@ class DevModeSnapshotsMixin:
                 # Reset playbook variables (always done, for both QEMU and VirtualBox)
                 if self.playbook_controller:
                     self.playbook_controller.execution_context.clear()
-                    self.playbook_controller.execution_context.update(
-                        initial_snapshot.variable_state.copy()
-                    )
+                    self.playbook_controller.execution_context.update(initial_snapshot.variable_state.copy())
 
                 # Reset counters
                 self.actions_executed = 0
@@ -177,10 +175,11 @@ class DevModeSnapshotsMixin:
                     step_connect_websocket,
                     step_install_and_run_websocket_server,
                 )
+
                 with StageCtxManager(
                     SoftwareInstallationStage(),
                     self.experiment_ctx.experiment_run_ulid,
-                    event=self.experiment_ctx.user_interrupt_event
+                    event=self.experiment_ctx.user_interrupt_event,
                 ):
                     await step_install_and_run_websocket_server(self.experiment_ctx)
                     await step_connect_websocket(self.experiment_ctx)
@@ -189,9 +188,7 @@ class DevModeSnapshotsMixin:
                 # 6. Reset playbook controller state
                 if self.playbook_controller:
                     self.playbook_controller.execution_context.clear()
-                    self.playbook_controller.execution_context.update(
-                        initial_snapshot.variable_state.copy()
-                    )
+                    self.playbook_controller.execution_context.update(initial_snapshot.variable_state.copy())
 
                 # 7. Reset counters
                 self.actions_executed = 0
@@ -230,17 +227,11 @@ class DevModeSnapshotsMixin:
             try:
                 if memory_mb is not None:
                     memory_mb = int(memory_mb)
-                    log.info(
-                        f"Restarting VM with {memory_mb} MB RAM "
-                        f"(was {self.experiment_ctx.config.vm_memory} MB)"
-                    )
+                    log.info(f"Restarting VM with {memory_mb} MB RAM (was {self.experiment_ctx.config.vm_memory} MB)")
                     self.vm_memory = memory_mb
                     self.experiment_ctx.config.vm_memory = memory_mb
                 else:
-                    log.info(
-                        f"Restarting VM at current size "
-                        f"({self.experiment_ctx.config.vm_memory} MB)"
-                    )
+                    log.info(f"Restarting VM at current size ({self.experiment_ctx.config.vm_memory} MB)")
 
                 # 1. Disconnect WebSocket
                 if self.experiment_ctx.client:
@@ -266,10 +257,11 @@ class DevModeSnapshotsMixin:
                     step_connect_websocket,
                     step_install_and_run_websocket_server,
                 )
+
                 with StageCtxManager(
                     SoftwareInstallationStage(),
                     self.experiment_ctx.experiment_run_ulid,
-                    event=self.experiment_ctx.user_interrupt_event
+                    event=self.experiment_ctx.user_interrupt_event,
                 ):
                     await step_install_and_run_websocket_server(self.experiment_ctx)
                     await step_connect_websocket(self.experiment_ctx)
@@ -278,14 +270,10 @@ class DevModeSnapshotsMixin:
                 # 5. A fresh boot invalidates the controller state and counters.
                 if self.playbook_controller:
                     self.playbook_controller.execution_context.clear()
-                    self.playbook_controller.execution_context.update(
-                        self.initial_variables.copy()
-                    )
+                    self.playbook_controller.execution_context.update(self.initial_variables.copy())
                 self.actions_executed = 0
 
-                log.info(
-                    f"VM restart completed at {self.experiment_ctx.config.vm_memory} MB"
-                )
+                log.info(f"VM restart completed at {self.experiment_ctx.config.vm_memory} MB")
                 return Result.ok(None)
 
             except HypervisorException as e:
@@ -395,10 +383,7 @@ class DevModeSnapshotsMixin:
                 log.info(f"Restoring checkpoint: {checkpoint.name}")
 
                 # Find corresponding snapshot in memory (for variable state)
-                snapshot = next(
-                    (s for s in self.snapshots if s.checkpoint_id == checkpoint.checkpoint_id),
-                    None
-                )
+                snapshot = next((s for s in self.snapshots if s.checkpoint_id == checkpoint.checkpoint_id), None)
 
                 # If not in memory, construct from database checkpoint
                 if not snapshot:
@@ -409,7 +394,7 @@ class DevModeSnapshotsMixin:
                         description=checkpoint.description or "",
                         memory_file_path=checkpoint.memory_file_path,
                         disk_file_path=checkpoint.disk_file_path,
-                        checkpoint_id=checkpoint.checkpoint_id
+                        checkpoint_id=checkpoint.checkpoint_id,
                     )
 
                 vm = self.experiment_ctx.vm
@@ -424,14 +409,18 @@ class DevModeSnapshotsMixin:
 
                     # Restore snapshot. QMP internal: loadvm in place (VM keeps
                     # running, agent restored alive). External: destroy/redefine/restore.
-                    success = vm.restore_external_snapshot(
+                    # Blocking virsh/libvirt work, so it runs off the event loop.
+                    success = await asyncio.to_thread(
+                        vm.restore_external_snapshot,
                         memory_path=snapshot.memory_file_path,
-                        disk_path=snapshot.disk_file_path
+                        disk_path=snapshot.disk_file_path,
                     )
 
                     if not success:
                         log.error(f"Failed to restore external snapshot for checkpoint '{name}'")
-                        return Result.fail("SNAPSHOT_RESTORE_FAILED", f"Failed to restore external snapshot for checkpoint '{name}'")
+                        return Result.fail(
+                            "SNAPSHOT_RESTORE_FAILED", f"Failed to restore external snapshot for checkpoint '{name}'"
+                        )
 
                     # Wait for VM to be ready after memory restore
                     # The VM is running after restore, but guest OS needs time to initialize
@@ -450,10 +439,11 @@ class DevModeSnapshotsMixin:
                         step_connect_websocket,
                         step_install_and_run_websocket_server,
                     )
+
                     with StageCtxManager(
                         SoftwareInstallationStage(),
                         self.experiment_ctx.experiment_run_ulid,
-                        event=self.experiment_ctx.user_interrupt_event
+                        event=self.experiment_ctx.user_interrupt_event,
                     ):
                         if not use_qmp_snapshot:
                             await step_install_and_run_websocket_server(self.experiment_ctx)
@@ -480,10 +470,11 @@ class DevModeSnapshotsMixin:
                         step_connect_websocket,
                         step_install_and_run_websocket_server,
                     )
+
                     with StageCtxManager(
                         SoftwareInstallationStage(),
                         self.experiment_ctx.experiment_run_ulid,
-                        event=self.experiment_ctx.user_interrupt_event
+                        event=self.experiment_ctx.user_interrupt_event,
                     ):
                         await step_install_and_run_websocket_server(self.experiment_ctx)
                         await step_connect_websocket(self.experiment_ctx)
@@ -494,9 +485,7 @@ class DevModeSnapshotsMixin:
                 # restore) — mirror the guard used by create_checkpoint above.
                 if self.playbook_controller:
                     self.playbook_controller.execution_context.clear()
-                    self.playbook_controller.execution_context.update(
-                        snapshot.variable_state.copy()
-                    )
+                    self.playbook_controller.execution_context.update(snapshot.variable_state.copy())
 
                 # Reset counters
                 self.actions_executed = 0
@@ -590,12 +579,13 @@ class DevModeSnapshotsMixin:
             memory_file_path = str(snapshot_dir / f"{snapshot_name}_RAM.save")
             disk_file_path = str(snapshot_dir / f"{snapshot_name}_DISK.qcow2")
 
-            # Create external snapshot
-            success = vm.create_external_snapshot(
+            # Create external snapshot (blocking virsh/libvirt work: keep it off the loop)
+            success = await asyncio.to_thread(
+                vm.create_external_snapshot,
                 snapshot_name=snapshot_name,
                 memory_path=memory_file_path,
                 disk_path=disk_file_path,
-                use_quiesce=True
+                use_quiesce=True,
             )
 
             if not success:
@@ -614,7 +604,7 @@ class DevModeSnapshotsMixin:
             with StageCtxManager(
                 SoftwareInstallationStage(),
                 self.experiment_ctx.experiment_run_ulid,
-                event=self.experiment_ctx.user_interrupt_event
+                event=self.experiment_ctx.user_interrupt_event,
             ):
                 if use_qmp_snapshot:
                     log.info("Reconnecting to AdareVM agent (still running) after snapshot")
@@ -631,8 +621,7 @@ class DevModeSnapshotsMixin:
 
         # Save checkpoint to database
         variable_state = (
-            self._make_json_serializable(self.playbook_controller.execution_context)
-            if self.playbook_controller else {}
+            self._make_json_serializable(self.playbook_controller.execution_context) if self.playbook_controller else {}
         )
 
         checkpoint = DevCheckpoint(
@@ -644,7 +633,7 @@ class DevModeSnapshotsMixin:
             disk_file_path=disk_file_path,
             snapshot_name=snapshot_name,
             variable_state=variable_state,
-            created_at=datetime.now()
+            created_at=datetime.now(),
         )
 
         with DevModeApi() as api:
@@ -663,7 +652,7 @@ class DevModeSnapshotsMixin:
             description=description,
             memory_file_path=memory_file_path,
             disk_file_path=disk_file_path,
-            checkpoint_id=checkpoint_id
+            checkpoint_id=checkpoint_id,
         )
         self.snapshots.append(snapshot)
 
@@ -759,7 +748,7 @@ class DevModeSnapshotsMixin:
                     success = vm.delete_external_snapshot(
                         snapshot_name=checkpoint.snapshot_name,
                         memory_path=checkpoint.memory_file_path,
-                        disk_path=checkpoint.disk_file_path
+                        disk_path=checkpoint.disk_file_path,
                     )
                     if success:
                         log.debug(f"Deleted external snapshot: {checkpoint.snapshot_name}")

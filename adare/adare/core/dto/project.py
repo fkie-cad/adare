@@ -4,6 +4,7 @@ Data Transfer Objects for Project domain.
 These DTOs provide type-safe request/response objects for the ProjectService.
 They decouple the API layer from database models and presentation concerns.
 """
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from typing import Any
 @dataclass
 class ProjectCreateRequest:
     """Request DTO for creating a new project."""
+
     name: str
     path: Path
     description: str = ""
@@ -20,6 +22,7 @@ class ProjectCreateRequest:
 @dataclass
 class ProjectRemoveRequest:
     """Request DTO for removing a project."""
+
     path: Path
 
 
@@ -31,6 +34,7 @@ class ProjectInfo:
     Contains the created project info plus presentation data (next_steps, tip)
     that the CLI can use for display without mixing presentation into service logic.
     """
+
     id: str
     name: str
     path: Path
@@ -53,6 +57,7 @@ class ProjectInfo:
 @dataclass
 class ProjectListItem:
     """DTO for a single project in the list view."""
+
     id: str
     name: str
     path: Path
@@ -70,7 +75,7 @@ class ProjectListItem:
         }
 
     @classmethod
-    def from_model(cls, project) -> "ProjectListItem":
+    def from_model(cls, project: Any) -> "ProjectListItem":  # legacy Column-typed model
         """Create from SQLAlchemy Project model."""
         return cls(
             id=project.id,

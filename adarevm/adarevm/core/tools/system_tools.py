@@ -13,12 +13,12 @@ import os
 import platform
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import websockets
 
-from adarevm.automation.shell import execute_on_shell
 from adarelib.websocket.protocol import EventType
+from adarevm.automation.shell import execute_on_shell
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class SystemToolsMixin:
 
         return True  # Default to wheel mode
 
-    def _get_pip_command(self) -> List[str]:
+    def _get_pip_command(self) -> list[str]:
         """Get the appropriate pip command for current environment.
 
         Returns:
@@ -90,18 +90,18 @@ class SystemToolsMixin:
         if platform.system() == "Windows":
             possible_paths = [
                 "C:/adare/vm/adarevm",  # Primary Windows deployment path
-                "C:/adare/vm",           # VM runtime base path
-                "C:/adare",              # Alternative deployment path
+                "C:/adare/vm",  # VM runtime base path
+                "C:/adare",  # Alternative deployment path
                 Path(__file__).parent.parent.parent,  # Development path
-                Path.cwd(),              # Current working directory
+                Path.cwd(),  # Current working directory
             ]
         else:
             possible_paths = [
                 "/adare/vm/adarevm",  # Primary Linux deployment path
-                "/adare/vm",          # VM runtime base path
-                "/adare",             # Alternative deployment path
+                "/adare/vm",  # VM runtime base path
+                "/adare",  # Alternative deployment path
                 Path(__file__).parent.parent.parent,  # Development path
-                Path.cwd(),           # Current working directory
+                Path.cwd(),  # Current working directory
             ]
 
         for path in possible_paths:
@@ -124,13 +124,13 @@ class SystemToolsMixin:
     async def _run_install_command(
         self,
         websocket,
-        cmd: List[str],
+        cmd: list[str],
         installer_label: str,
         dep_count: int,
         cwd: str | None = None,
         final_step: str = "2/2",
         install_verb: str = "install",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Run a dependency installation subprocess with heartbeat and error handling.
 
         Shared logic for both Poetry/uv and pip installers. Handles subprocess
@@ -151,22 +151,19 @@ class SystemToolsMixin:
         log.info(f"Running command: {' '.join(cmd)}" + (f" in directory: {cwd}" if cwd else ""))
         await self.send_event(websocket, EventType.LOG, {"message": f"Command: {' '.join(cmd)}"})
 
-        await self.send_event(websocket, EventType.LOG, {
-            "message": f"Step {final_step}: Installing dependencies (this may take several minutes)..."
-        })
+        await self.send_event(
+            websocket,
+            EventType.LOG,
+            {"message": f"Step {final_step}: Installing dependencies (this may take several minutes)..."},
+        )
 
         # Use asyncio subprocess to avoid blocking the event loop
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=cwd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, cwd=cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
         # Wait for process with periodic heartbeat to keep WebSocket alive
-        stdout_bytes, stderr_bytes = await self._wait_for_process_with_heartbeat(
-            websocket, process, timeout=600.0
-        )
+        stdout_bytes, stderr_bytes = await self._wait_for_process_with_heartbeat(websocket, process, timeout=600.0)
 
         # Decode bytes to string
         stdout = stdout_bytes.decode('utf-8') if stdout_bytes else ""
@@ -185,24 +182,23 @@ class SystemToolsMixin:
                 error_msg += f"\nStdout: {stdout}"
 
             log.error(error_msg)
-            log.error(f"{installer_label} command details - Exit code: {process.returncode}, Stderr: '{stderr}', Stdout: '{stdout}'")
+            log.error(
+                f"{installer_label} command details - Exit code: {process.returncode}, Stderr: '{stderr}', Stdout: '{stdout}'"
+            )
             await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
             return {"status": "error", "message": error_msg}
 
-        await self.send_event(websocket, EventType.LOG, {"message": f"Step {final_step}: Installation completed successfully"})
+        await self.send_event(
+            websocket, EventType.LOG, {"message": f"Step {final_step}: Installation completed successfully"}
+        )
         success_msg = f"Successfully installed all {dep_count} dependencies with {installer_label}"
         log.info(success_msg)
         log.debug(f"{installer_label} output: {stdout}")
         await self.send_event(websocket, EventType.LOG, {"message": success_msg})
 
-        return {
-            "status": "success",
-            "message": success_msg,
-            "installed_count": dep_count,
-            output_key: stdout
-        }
+        return {"status": "success", "message": success_msg, "installed_count": dep_count, output_key: stdout}
 
-    async def _install_dependencies_poetry(self, websocket, dependencies: List[str], prefer_binary: bool = False):
+    async def _install_dependencies_poetry(self, websocket, dependencies: list[str], prefer_binary: bool = False):
         """Install Python dependencies using Poetry/uv (for editable/development installs).
 
         Args:
@@ -210,7 +206,9 @@ class SystemToolsMixin:
             dependencies: List of dependencies to install
             prefer_binary: If True, configure uv for binary-only packages (avoid compilation)
         """
-        await self.send_event(websocket, EventType.LOG, {"message": f"Starting dependency installation: {len(dependencies)} packages"})
+        await self.send_event(
+            websocket, EventType.LOG, {"message": f"Starting dependency installation: {len(dependencies)} packages"}
+        )
 
         try:
             if not dependencies:
@@ -229,13 +227,19 @@ class SystemToolsMixin:
 
             # Step 2: Configure uv for binary-only installation (if requested)
             if prefer_binary:
-                await self.send_event(websocket, EventType.LOG, {"message": f"Step {current_step}/{step_count}: Configuring uv for binary-only installation..."})
+                await self.send_event(
+                    websocket,
+                    EventType.LOG,
+                    {"message": f"Step {current_step}/{step_count}: Configuring uv for binary-only installation..."},
+                )
                 # uv handles binary preference via --only-binary flag during add
                 log.info("Binary-only preference will be applied during uv add")
                 current_step += 1
 
             # Step 2/3: Prepare uv add command
-            await self.send_event(websocket, EventType.LOG, {"message": f"Step {current_step}/{step_count}: Preparing uv command..."})
+            await self.send_event(
+                websocket, EventType.LOG, {"message": f"Step {current_step}/{step_count}: Preparing uv command..."}
+            )
             cmd = ["uv", "add"] + dependencies
             if prefer_binary:
                 cmd.insert(2, "--only-binary")
@@ -244,8 +248,12 @@ class SystemToolsMixin:
             # Step 3/4: Execute installation via shared method
             final_step = f"{step_count}/{step_count}"
             return await self._run_install_command(
-                websocket, cmd, "Poetry", len(dependencies),
-                cwd=project_dir, final_step=final_step,
+                websocket,
+                cmd,
+                "Poetry",
+                len(dependencies),
+                cwd=project_dir,
+                final_step=final_step,
                 install_verb="add",
             )
 
@@ -260,7 +268,7 @@ class SystemToolsMixin:
             await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
             return {"status": "error", "message": error_msg}
 
-    async def _install_dependencies_pip(self, websocket, dependencies: List[str], prefer_binary: bool = False):
+    async def _install_dependencies_pip(self, websocket, dependencies: list[str], prefer_binary: bool = False):
         """Install Python dependencies using pip (for wheel-based installs).
 
         Args:
@@ -268,7 +276,9 @@ class SystemToolsMixin:
             dependencies: List of dependencies to install
             prefer_binary: If True, prefer binary packages (passed as --only-binary :all:)
         """
-        await self.send_event(websocket, EventType.LOG, {"message": f"Starting dependency installation: {len(dependencies)} packages"})
+        await self.send_event(
+            websocket, EventType.LOG, {"message": f"Starting dependency installation: {len(dependencies)} packages"}
+        )
 
         try:
             if not dependencies:
@@ -291,7 +301,10 @@ class SystemToolsMixin:
 
             # Step 2: Execute installation via shared method
             return await self._run_install_command(
-                websocket, cmd, "Pip", len(dependencies),
+                websocket,
+                cmd,
+                "Pip",
+                len(dependencies),
                 final_step="2/2",
             )
 
@@ -306,7 +319,7 @@ class SystemToolsMixin:
             await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
             return {"status": "error", "message": error_msg}
 
-    async def _install_dependencies(self, websocket, dependencies: List[str], prefer_binary: bool = False):
+    async def _install_dependencies(self, websocket, dependencies: list[str], prefer_binary: bool = False):
         """Install Python dependencies using the appropriate package manager.
 
         Routes to Poetry (editable install) or pip (wheel install) based on configured installation mode.
@@ -321,22 +334,20 @@ class SystemToolsMixin:
             log.info("Using Poetry for dependency installation (configured: editable)")
             await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: Poetry (editable)"})
             return await self._install_dependencies_poetry(websocket, dependencies, prefer_binary)
-        elif self.installation_mode == "wheel":
+        if self.installation_mode == "wheel":
             log.info("Using pip for dependency installation (configured: wheel)")
             await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: pip (wheel-based)"})
             return await self._install_dependencies_pip(websocket, dependencies, prefer_binary)
-        else:
-            # Fallback to auto-detection for unknown/legacy values
-            log.warning(f"Unknown installation_mode: {self.installation_mode}, falling back to auto-detection")
-            is_wheel_mode = self._is_wheel_installation()
-            if is_wheel_mode:
-                log.info("Using pip for dependency installation (auto-detected: wheel mode)")
-                await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: pip (auto-detected)"})
-                return await self._install_dependencies_pip(websocket, dependencies, prefer_binary)
-            else:
-                log.info("Using Poetry for dependency installation (auto-detected: editable mode)")
-                await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: Poetry (auto-detected)"})
-                return await self._install_dependencies_poetry(websocket, dependencies, prefer_binary)
+        # Fallback to auto-detection for unknown/legacy values
+        log.warning(f"Unknown installation_mode: {self.installation_mode}, falling back to auto-detection")
+        is_wheel_mode = self._is_wheel_installation()
+        if is_wheel_mode:
+            log.info("Using pip for dependency installation (auto-detected: wheel mode)")
+            await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: pip (auto-detected)"})
+            return await self._install_dependencies_pip(websocket, dependencies, prefer_binary)
+        log.info("Using Poetry for dependency installation (auto-detected: editable mode)")
+        await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: Poetry (auto-detected)"})
+        return await self._install_dependencies_poetry(websocket, dependencies, prefer_binary)
 
     # ------------------------------------------------------------------ #
     # Process management
@@ -375,9 +386,9 @@ class SystemToolsMixin:
 
                     heartbeat_count += 1
                     elapsed = time.time() - start_time
-                    await self.send_event(websocket, EventType.LOG, {
-                        "message": f"Installation in progress... ({elapsed:.0f}s elapsed)"
-                    })
+                    await self.send_event(
+                        websocket, EventType.LOG, {"message": f"Installation in progress... ({elapsed:.0f}s elapsed)"}
+                    )
                     log.debug(f"Sent heartbeat {heartbeat_count} after {elapsed:.1f}s")
 
                 except websockets.exceptions.ConnectionClosed:
@@ -394,10 +405,7 @@ class SystemToolsMixin:
             heartbeat_task = asyncio.create_task(send_heartbeat())
 
             # Wait for process with timeout
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=timeout
-            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
 
             return stdout, stderr
 
@@ -405,10 +413,7 @@ class SystemToolsMixin:
             log.warning("WebSocket disconnected during process wait, continuing in background")
             websocket_alive = False
             # Continue waiting for process even if WebSocket is gone
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=timeout
-            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
             return stdout, stderr
 
         finally:
@@ -424,7 +429,19 @@ class SystemToolsMixin:
     # Shell execution
     # ------------------------------------------------------------------ #
 
-    async def _execute_shell(self, websocket, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = None, inherit_env: bool = True, admin: bool = False, background: bool = False, run_as_user: str = None):
+    async def _execute_shell(
+        self,
+        websocket,
+        shell_command: str,
+        cwd: str = None,
+        env: dict = None,
+        timeout: float = None,
+        shell: bool = None,
+        inherit_env: bool = True,
+        admin: bool = False,
+        background: bool = False,
+        run_as_user: str = None,
+    ):
         """Execute a raw shell command with advanced options."""
         import uuid
 
@@ -433,14 +450,16 @@ class SystemToolsMixin:
         start_time = time.time()
 
         log.info(f"[{command_id}] Executing shell command: {shell_command}")
-        log.debug(f"[{command_id}] Command options - cwd: {cwd}, timeout: {timeout}, shell: {shell}, inherit_env: {inherit_env}, admin: {admin}, background: {background}, run_as_user: {run_as_user}")
+        log.debug(
+            f"[{command_id}] Command options - cwd: {cwd}, timeout: {timeout}, shell: {shell}, inherit_env: {inherit_env}, admin: {admin}, background: {background}, run_as_user: {run_as_user}"
+        )
 
         try:
-            await self.send_event(websocket, EventType.COMMAND_START, {
-                "shell_command": shell_command,
-                "command_id": command_id,
-                "start_time": start_time
-            })
+            await self.send_event(
+                websocket,
+                EventType.COMMAND_START,
+                {"shell_command": shell_command, "command_id": command_id, "start_time": start_time},
+            )
 
             # Prepare options for execute_on_shell
             options = {}
@@ -463,12 +482,12 @@ class SystemToolsMixin:
                 base_env = os.environ.copy()
                 base_env.update(cmd_env)
                 cmd_env = base_env
-                options['inherit_env'] = False # We are manually inheriting
+                options['inherit_env'] = False  # We are manually inheriting
 
             # Append tools paths to PATH
             if self.tools_paths:
                 # Find PATH key (case-insensitive)
-                path_key = next((k for k in cmd_env.keys() if k.lower() == 'path'), 'PATH')
+                path_key = next((k for k in cmd_env if k.lower() == 'path'), 'PATH')
                 current_path = cmd_env.get(path_key, '')
 
                 # Append tool paths using os.pathsep
@@ -480,7 +499,9 @@ class SystemToolsMixin:
 
                 log.debug(f"[{command_id}] Appended tool paths to PATH: {additional_paths}")
 
-            log.info(f"command environment: {cmd_env}")
+            # Never log values: the environment can carry credentials and tokens.
+            if env:
+                log.info(f"[{command_id}] command environment overrides: {sorted(env)}")
 
             options['env'] = cmd_env
 
@@ -505,9 +526,11 @@ class SystemToolsMixin:
                 shell_chars = ['>', '<', '>>', '|', '||', '&&', ';', '`', '$', '*', '?', '~']
 
                 if platform.system().lower() == 'windows':
-                     # Remove chars that are not special in cmd.exe or shouldn't auto-trigger shell
-                     if '$' in shell_chars: shell_chars.remove('$')
-                     if '~' in shell_chars: shell_chars.remove('~')
+                    # Remove chars that are not special in cmd.exe or shouldn't auto-trigger shell
+                    if '$' in shell_chars:
+                        shell_chars.remove('$')
+                    if '~' in shell_chars:
+                        shell_chars.remove('~')
 
                 if any(char in shell_command for char in shell_chars):
                     options['shell'] = True
@@ -516,7 +539,8 @@ class SystemToolsMixin:
             # Execute shell command directly using execute_on_shell
             # When shell=True, pass command as string; otherwise split into list
             # Log command execution start
-            log.debug(f"[{command_id}] Starting shell execution with options: {options}")
+            logged_options = {k: v for k, v in options.items() if k != 'env'}
+            log.debug(f"[{command_id}] Starting shell execution with options: {logged_options}")
 
             if options.get('shell', False):
                 result = await asyncio.to_thread(execute_on_shell, shell_command, **options)
@@ -534,67 +558,79 @@ class SystemToolsMixin:
 
             # Handle background mode response
             if result.get('background'):
-                await self.send_event(websocket, EventType.COMMAND_COMPLETE, {
-                    "shell_command": shell_command,
-                    "command_id": command_id,
-                    "background": True,
-                    "pid": result.get('pid')
-                })
+                await self.send_event(
+                    websocket,
+                    EventType.COMMAND_COMPLETE,
+                    {
+                        "shell_command": shell_command,
+                        "command_id": command_id,
+                        "background": True,
+                        "pid": result.get('pid'),
+                    },
+                )
                 log.info(f"[{command_id}] Background command started with PID {result.get('pid')}: {shell_command}")
                 return {
                     "status": "success",
-                    "message": f"Background command started",
+                    "message": "Background command started",
                     "background": True,
                     "pid": result.get('pid'),
-                    "command_id": command_id
+                    "command_id": command_id,
                 }
 
             # Handle normal mode response
             if result['returncode'] == 0:
-                await self.send_event(websocket, EventType.COMMAND_COMPLETE, {
-                    "shell_command": shell_command,
-                    "command_id": command_id,
-                    "execution_time": execution_time
-                })
-                log.info(f"[{command_id}] Shell command completed successfully in {execution_time:.2f}s: {shell_command}")
+                await self.send_event(
+                    websocket,
+                    EventType.COMMAND_COMPLETE,
+                    {"shell_command": shell_command, "command_id": command_id, "execution_time": execution_time},
+                )
+                log.info(
+                    f"[{command_id}] Shell command completed successfully in {execution_time:.2f}s: {shell_command}"
+                )
                 return {
                     "status": "success",
-                    "message": f"Shell command executed successfully",
+                    "message": "Shell command executed successfully",
                     "returncode": result['returncode'],
                     "stdout": result['stdout'],
                     "command_id": command_id,
-                    "execution_time": execution_time
+                    "execution_time": execution_time,
                 }
-            else:
-                await self.send_event(websocket, EventType.ERROR, {
+            await self.send_event(
+                websocket,
+                EventType.ERROR,
+                {
                     "message": f"Shell command failed: {shell_command}",
                     "command_id": command_id,
-                    "execution_time": execution_time
-                })
-                log.error(f"[{command_id}] Shell command failed with return code {result['returncode']} in {execution_time:.2f}s: {shell_command}")
-                return {
-                    "status": "error",
-                    "message": f"Shell command failed with return code {result['returncode']}",
-                    "returncode": result['returncode'],
-                    "stdout": result['stdout'],
-                    "command_id": command_id,
-                    "execution_time": execution_time
-                }
+                    "execution_time": execution_time,
+                },
+            )
+            log.error(
+                f"[{command_id}] Shell command failed with return code {result['returncode']} in {execution_time:.2f}s: {shell_command}"
+            )
+            return {
+                "status": "error",
+                "message": f"Shell command failed with return code {result['returncode']}",
+                "returncode": result['returncode'],
+                "stdout": result['stdout'],
+                "command_id": command_id,
+                "execution_time": execution_time,
+            }
 
         except Exception as e:
             execution_time = time.time() - start_time
-            log.error(f"[{command_id}] Unexpected shell command error after {execution_time:.2f}s: {shell_command}: {e}")
-            await self.send_event(websocket, EventType.ERROR, {
-                "message": f"Shell command '{shell_command}' failed: {e}",
-                "command_id": command_id,
-                "execution_time": execution_time
-            })
-            return {
-                "status": "error",
-                "message": str(e),
-                "command_id": command_id,
-                "execution_time": execution_time
-            }
+            log.error(
+                f"[{command_id}] Unexpected shell command error after {execution_time:.2f}s: {shell_command}: {e}"
+            )
+            await self.send_event(
+                websocket,
+                EventType.ERROR,
+                {
+                    "message": f"Shell command '{shell_command}' failed: {e}",
+                    "command_id": command_id,
+                    "execution_time": execution_time,
+                },
+            )
+            return {"status": "error", "message": str(e), "command_id": command_id, "execution_time": execution_time}
 
     # ------------------------------------------------------------------ #
     # Status and info
@@ -607,22 +643,17 @@ class SystemToolsMixin:
             "testfunctions_path": str(self.testfunctions_dir) if self.testfunctions_dir else None,
             "variables_count": len(self.current_variables),
             "variables": self.current_variables,
-            "connected_clients": len(self.clients)
+            "connected_clients": len(self.clients),
         }
 
     async def _collect_system_info(self, websocket):
         """Collect comprehensive system information from the guest VM."""
-        from datetime import datetime, timezone
 
         collection_start = time.time()
         log.info("Starting system information collection...")
 
         try:
-            system_info = {
-                'os_info': {},
-                'installed_packages': [],
-                'package_manager': 'unknown'
-            }
+            system_info = {'os_info': {}, 'installed_packages': [], 'package_manager': 'unknown'}
 
             # Detect platform
             guest_platform = platform.system().lower()
@@ -630,7 +661,12 @@ class SystemToolsMixin:
 
             if guest_platform == 'windows':
                 # Use Windows platform functions
-                from adarevm.platforms.windows import get_os_info, get_installed_programs, get_windows_features, get_installed_updates
+                from adarevm.platforms.windows import (
+                    get_installed_programs,
+                    get_installed_updates,
+                    get_os_info,
+                    get_windows_features,
+                )
 
                 # Execute in parallel to avoid blocking for long durations (20s+)
                 try:
@@ -639,11 +675,13 @@ class SystemToolsMixin:
                         asyncio.to_thread(get_installed_programs),
                         asyncio.to_thread(get_windows_features),
                         asyncio.to_thread(get_installed_updates),
-                        return_exceptions=True
+                        return_exceptions=True,
                     )
 
                     # Process results
-                    system_info['os_info'] = results[0] if not isinstance(results[0], Exception) else {"error": str(results[0])}
+                    system_info['os_info'] = (
+                        results[0] if not isinstance(results[0], Exception) else {"error": str(results[0])}
+                    )
                     system_info['installed_programs'] = results[1] if not isinstance(results[1], Exception) else []
                     system_info['windows_features'] = results[2] if not isinstance(results[2], Exception) else []
                     system_info['installed_updates'] = results[3] if not isinstance(results[3], Exception) else []
@@ -660,7 +698,7 @@ class SystemToolsMixin:
 
             else:
                 # Use Linux platform functions
-                from adarevm.platforms.linux import get_os_info, detect_package_manager, get_installed_packages
+                from adarevm.platforms.linux import detect_package_manager, get_installed_packages, get_os_info
 
                 system_info['os_info'] = get_os_info()
 
@@ -675,61 +713,59 @@ class SystemToolsMixin:
             log.info(f"System information collection completed in {collection_time:.2f} seconds")
 
             # Send success event
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"System information collected successfully in {collection_time:.2f}s",
-                "packages_found": len(system_info.get('installed_packages', [])),
-                "os_detected": system_info['os_info'].get('name', 'Unknown')
-            })
+            await self.send_event(
+                websocket,
+                EventType.LOG,
+                {
+                    "message": f"System information collected successfully in {collection_time:.2f}s",
+                    "packages_found": len(system_info.get('installed_packages', [])),
+                    "os_detected": system_info['os_info'].get('name', 'Unknown'),
+                },
+            )
 
-            return {
-                "status": "success",
-                "system_info": system_info,
-                "collection_time": collection_time
-            }
+            return {"status": "success", "system_info": system_info, "collection_time": collection_time}
 
         except Exception as e:
             collection_time = time.time() - collection_start
             log.error(f"System information collection failed after {collection_time:.2f}s: {e}", exc_info=True)
 
-            await self.send_event(websocket, EventType.ERROR, {
-                "message": f"System information collection failed: {str(e)}",
-                "collection_time": collection_time
-            })
+            await self.send_event(
+                websocket,
+                EventType.ERROR,
+                {"message": f"System information collection failed: {str(e)}", "collection_time": collection_time},
+            )
 
-            return {
-                "status": "error",
-                "message": str(e),
-                "collection_time": collection_time
-            }
+            return {"status": "error", "message": str(e), "collection_time": collection_time}
 
     async def _set_screenshot_method(self, websocket, use_maim: bool):
         """Set the screenshot method to use (maim or pyautogui)."""
         log.info(f"Setting screenshot method to: {'maim' if use_maim else 'pyautogui'}")
         try:
             from adarevm.automation.gui import set_screenshot_method
+
             set_screenshot_method(use_maim)
 
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Screenshot method set to: {'maim' if use_maim else 'pyautogui'}"
-            })
+            await self.send_event(
+                websocket,
+                EventType.LOG,
+                {"message": f"Screenshot method set to: {'maim' if use_maim else 'pyautogui'}"},
+            )
 
             return {
                 "status": "success",
                 "message": f"Screenshot method set to: {'maim' if use_maim else 'pyautogui'}",
-                "use_maim": use_maim
+                "use_maim": use_maim,
             }
         except Exception as e:
             log.error(f"Failed to set screenshot method: {e}", exc_info=True)
-            await self.send_event(websocket, EventType.ERROR, {
-                "message": f"Failed to set screenshot method: {e}"
-            })
+            await self.send_event(websocket, EventType.ERROR, {"message": f"Failed to set screenshot method: {e}"})
             return {"status": "error", "message": str(e)}
 
     # ------------------------------------------------------------------ #
     # Command chaining
     # ------------------------------------------------------------------ #
 
-    async def _chain_commands(self, websocket, commands: List[Dict[str, Any]]):
+    async def _chain_commands(self, websocket, commands: list[dict[str, Any]]):
         """Execute multiple commands sequentially in a single request."""
         log.info(f"Chaining {len(commands)} commands")
         results = []
@@ -742,12 +778,8 @@ class SystemToolsMixin:
             log.debug(f"Chain[{i}]: {tool_name}")
 
             if tool_name not in self.tools:
-                 results.append({
-                     "id": cmd_id,
-                     "status": "error",
-                     "message": f"Unknown tool: {tool_name}"
-                 })
-                 continue
+                results.append({"id": cmd_id, "status": "error", "message": f"Unknown tool: {tool_name}"})
+                continue
 
             try:
                 # Execute tool
@@ -763,17 +795,9 @@ class SystemToolsMixin:
 
             except Exception as e:
                 log.error(f"Chain command failed: {tool_name}: {e}", exc_info=True)
-                results.append({
-                    "id": cmd_id,
-                    "status": "error",
-                    "message": str(e)
-                })
+                results.append({"id": cmd_id, "status": "error", "message": str(e)})
 
-        return {
-            "status": "success",
-            "results": results,
-            "count": len(results)
-        }
+        return {"status": "success", "results": results, "count": len(results)}
 
     # ------------------------------------------------------------------ #
     # Timezone helpers
@@ -792,13 +816,9 @@ class SystemToolsMixin:
         try:
             # Use PowerShell to get timezone offset
             import subprocess
+
             ps_command = "[System.TimeZoneInfo]::Local.GetUtcOffset((Get-Date)).ToString()"
-            result = subprocess.run(
-                ["powershell", "-Command", ps_command],
-                capture_output=True,
-                text=True,
-                timeout=5.0
-            )
+            result = subprocess.run(["powershell", "-Command", ps_command], capture_output=True, text=True, timeout=5.0)
 
             if result.returncode == 0:
                 # Parse offset string (format: "HH:MM:SS" or "-HH:MM:SS")
@@ -812,6 +832,7 @@ class SystemToolsMixin:
 
                     # Create timezone offset
                     from datetime import timedelta, timezone
+
                     if is_negative:
                         tz_offset = timezone(timedelta(hours=-hours, minutes=-minutes))
                         tz_string = f"-{hours:02d}:{minutes:02d}"
@@ -841,12 +862,8 @@ class SystemToolsMixin:
         try:
             # Use date command to get timezone offset
             import subprocess
-            result = subprocess.run(
-                ["date", "+%z"],
-                capture_output=True,
-                text=True,
-                timeout=5.0
-            )
+
+            result = subprocess.run(["date", "+%z"], capture_output=True, text=True, timeout=5.0)
 
             if result.returncode == 0:
                 # Parse offset string (format: "+HHMM" or "-HHMM")
@@ -858,6 +875,7 @@ class SystemToolsMixin:
 
                     # Create timezone offset
                     from datetime import timedelta, timezone
+
                     if sign == '-':
                         tz_offset = timezone(timedelta(hours=-hours, minutes=-minutes))
                         tz_string = f"-{hours:02d}:{minutes:02d}"
@@ -900,20 +918,16 @@ class SystemToolsMixin:
         log.info(f"Getting timestamp (use_local={use_local})")
 
         try:
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Retrieving VM timestamp (use_local={use_local})"
-            })
+            await self.send_event(
+                websocket, EventType.LOG, {"message": f"Retrieving VM timestamp (use_local={use_local})"}
+            )
 
             # Get current UTC time
             utc_dt = datetime.now(timezone.utc)
             unix_timestamp = utc_dt.timestamp()
 
             # Prepare response with UTC data
-            response = {
-                "timestamp": unix_timestamp,
-                "timezone": "UTC",
-                "iso_format": utc_dt.isoformat()
-            }
+            response = {"timestamp": unix_timestamp, "timezone": "UTC", "iso_format": utc_dt.isoformat()}
 
             # Detect local timezone if requested
             if use_local:
@@ -936,21 +950,21 @@ class SystemToolsMixin:
                 else:
                     # Fallback to UTC if detection failed
                     log.warning("Local timezone detection failed, falling back to UTC")
-                    await self.send_event(websocket, EventType.LOG, {
-                        "message": "Local timezone detection failed, using UTC"
-                    })
+                    await self.send_event(
+                        websocket, EventType.LOG, {"message": "Local timezone detection failed, using UTC"}
+                    )
 
             log.info(f"Timestamp retrieved: {response}")
 
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Timestamp retrieved successfully (timezone: {response['timezone']})"
-            })
+            await self.send_event(
+                websocket,
+                EventType.LOG,
+                {"message": f"Timestamp retrieved successfully (timezone: {response['timezone']})"},
+            )
 
             return response
 
         except Exception as e:
             log.error(f"Failed to get timestamp: {e}", exc_info=True)
-            await self.send_event(websocket, EventType.ERROR, {
-                "message": f"Timestamp retrieval failed: {e}"
-            })
+            await self.send_event(websocket, EventType.ERROR, {"message": f"Timestamp retrieval failed: {e}"})
             return {"status": "error", "message": str(e)}

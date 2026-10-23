@@ -99,12 +99,7 @@ def get_all_projects() -> list[dict]:
             return []
         # Extract data while session is active
         return [
-            {
-                'id': project.id,
-                'name': project.name,
-                'path': str(project.path),
-                'description': project.description
-            }
+            {'id': project.id, 'name': project.name, 'path': str(project.path), 'description': project.description}
             for project in projects
         ]
 
@@ -146,10 +141,9 @@ def get_project_summary(project_path: Path) -> dict | None:
 def get_global_environment_hashes() -> dict:
     with EnvironmentDbApi() as api:
         # Get all global environments since they are no longer project-specific
-        environments = api.get_environments()
+        environments = api.get_environments(include_superseded=True)
         return {
             environment.file: environment.sha256hash
             for environment in environments
             if environment.file and environment.sha256hash  # Only include environments with file and hash
         }
-

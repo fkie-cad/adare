@@ -44,7 +44,9 @@ def publish_experiment_run(run_ulid: str, project_path: Path):
     response = requests.post(url, headers=header, data={'metadata': json.dumps(data)}, files=files)
 
     if response.status_code != 201:
-        raise ExperimentPublishFailedError(log, f'Publishing experiment run failed with status code {response.status_code} and message {response.text}')
+        raise ExperimentPublishFailedError(
+            log, f'Publishing experiment run failed with status code {response.status_code} and message {response.text}'
+        )
 
     log.info(f'experiment run ({run_ulid}) published successfully.')
     print(f'experiment run ({run_ulid}) published successfully!')

@@ -11,10 +11,11 @@ import base64
 import binascii
 import json
 import logging
+import re
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
@@ -22,6 +23,42 @@ if TYPE_CHECKING:
 from adarelib.websocket.protocol import EventType
 
 log = logging.getLogger(__name__)
+
+_IMPORT_FAILURES = ('ModuleNotFoundError', 'ImportError')
+_MISSING_MODULE = re.compile(r"No module named '([^']+)'")
+
+
+def _installed_adarelib_version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version('adarelib')
+    except PackageNotFoundError:
+        return 'unknown'
+
+
+def load_failure_hints(exception_type: str, exception_message: str) -> list[str]:
+    """Remediation hints for a testfunction collection that failed to import.
+
+    Collections are uploaded fresh for every run, but adarelib is whatever wheel
+    the guest was provisioned with; an import error naming adarelib means that
+    wheel predates an API the collection uses, not a missing third-party package.
+    """
+    if exception_type not in _IMPORT_FAILURES:
+        return []
+    if 'adarelib' in exception_message:
+        return [
+            f"The guest's adarelib {_installed_adarelib_version()} lacks an API this collection uses "
+            '(testfunctions are uploaded fresh, adarelib is installed with the agent)',
+            'Rerun the experiment so the agent wheels are rebuilt and reinstalled, or run `adare runtime build`',
+        ]
+    match = _MISSING_MODULE.search(exception_message)
+    if not match:
+        return []
+    return [
+        f'Install missing dependency: uv add {match.group(1)}',
+        'Or run experiment with dependency auto-installation enabled',
+    ]
 
 
 class TestToolsMixin:
@@ -46,14 +83,14 @@ class TestToolsMixin:
             shutil.unpack_archive(zip_path, self.testfunctions_dir)
             zip_path.unlink()
 
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Testfunctions uploaded to {self.testfunctions_dir}"
-            })
+            await self.send_event(
+                websocket, EventType.LOG, {"message": f"Testfunctions uploaded to {self.testfunctions_dir}"}
+            )
 
             return {
                 "status": "success",
                 "message": f"Testfunctions uploaded to {self.testfunctions_dir}",
-                "path": str(self.testfunctions_dir)
+                "path": str(self.testfunctions_dir),
             }
 
         except binascii.Error as e:
@@ -80,14 +117,12 @@ class TestToolsMixin:
             new_variables = json.loads(variables)
             self.current_variables.update(new_variables)
 
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Set {len(new_variables)} variables"
-            })
+            await self.send_event(websocket, EventType.LOG, {"message": f"Set {len(new_variables)} variables"})
 
             return {
                 "status": "success",
                 "message": f"Set {len(new_variables)} variables",
-                "variables": self.current_variables
+                "variables": self.current_variables,
             }
         except json.JSONDecodeError as e:
             log.error(f"Invalid JSON in variables: {e}")
@@ -98,7 +133,7 @@ class TestToolsMixin:
             await self.send_event(websocket, EventType.ERROR, {"message": f"Variable setting failed: {e}"})
             return {"status": "error", "message": str(e)}
 
-    def _execute_resolved_test_data(self, resolved_test_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_resolved_test_data(self, resolved_test_data: dict[str, Any]) -> dict[str, Any]:
         """Execute a test using pre-resolved test data."""
         log.info(f"CLAUDE: Starting test execution with resolved_test_data: {resolved_test_data}")
 
@@ -109,7 +144,7 @@ class TestToolsMixin:
                 log.error(error_msg)
                 # This is a system error, not a test failure
                 from adarelib.event.event import TestResult
-                from adarelib.constants import StatusEnum
+
                 return TestResult.error([error_msg])
 
             # Check if testfunctions directory is available
@@ -118,23 +153,24 @@ class TestToolsMixin:
                 log.error(error_msg)
                 # This is a system error, not a test failure
                 from adarelib.event.event import TestResult
-                from adarelib.constants import StatusEnum
+
                 return TestResult.error([error_msg])
 
             # Import test function class based on function name
-            from adarelib.testset.testfunction import import_basictest_subclasses, get_testclass_from_testfunction
             from adarelib.event.event import TestResult
-            from adarelib.constants import StatusEnum
+            from adarelib.testset.testfunction import get_testclass_from_testfunction, import_basictest_subclasses
 
             try:
                 # Load testfunctions ONCE per server instance (cached after first test)
                 if self._testfunction_cache is None:
                     log.info("Discovering testfunctions (first test execution)...")
                     import time
+
                     start_time = time.time()
 
                     # Clear any previous load failures before importing
                     from adarelib.testset.testfunction import clear_module_load_failures
+
                     clear_module_load_failures()
 
                     self._testfunction_cache = import_basictest_subclasses(directory=self.testfunctions_dir)
@@ -147,6 +183,7 @@ class TestToolsMixin:
 
                     # Check if any modules failed to load
                     from adarelib.testset.testfunction import get_module_load_failures
+
                     load_failures = get_module_load_failures()
 
                     if load_failures:
@@ -190,27 +227,19 @@ class TestToolsMixin:
                     error_msg = f"Test function '{function_name}' unavailable: {failure.get_user_friendly_message()}"
                     log.error(error_msg)
 
-                    # Extract dependency name for hint
-                    hint_lines = [error_msg]
-                    if failure.exception_type == 'ModuleNotFoundError':
-                        import re
-                        match = re.search(r"No module named '([^']+)'", failure.exception_message)
-                        if match:
-                            dep_name = match.group(1)
-                            hint_lines.append(f"Install missing dependency: uv add {dep_name}")
-                            hint_lines.append(f"Or run experiment with dependency auto-installation enabled")
+                    hints = load_failure_hints(failure.exception_type, failure.exception_message)
+                    return TestResult.error([error_msg, *hints])
+                available_functions = []
+                for coll_name, coll_funcs in supported_tests.items():
+                    for func_name in coll_funcs:
+                        available_functions.append(f"{coll_name}.{func_name}")
 
-                    return TestResult.error(hint_lines)
-                else:
-                    available_functions = []
-                    for coll_name, coll_funcs in supported_tests.items():
-                        for func_name in coll_funcs.keys():
-                            available_functions.append(f"{coll_name}.{func_name}")
-
-                    return TestResult.error([
+                return TestResult.error(
+                    [
                         f"Test function '{function_name}' not found",
-                        f"Available: {', '.join(sorted(available_functions)[:10])}{'...' if len(available_functions) > 10 else ''}"
-                    ])
+                        f"Available: {', '.join(sorted(available_functions)[:10])}{'...' if len(available_functions) > 10 else ''}",
+                    ]
+                )
 
             # Create test instance with required arguments
             test_name = resolved_test_data.get('name', 'unknown_test')
@@ -225,6 +254,7 @@ class TestToolsMixin:
                 if 'parameter' in processed_test_data:
                     # Get parameter class from the test class's type annotations
                     import typing
+
                     type_hints = typing.get_type_hints(test_class)
 
                     if 'parameter' not in type_hints:
@@ -240,7 +270,7 @@ class TestToolsMixin:
                     name=test_name,
                     parameter=parameter_instance,
                     description=test_description,
-                    variable_metadata=variable_metadata
+                    variable_metadata=variable_metadata,
                 )
             except Exception as e:
                 log.error(f"Error creating test instance: {e}", exc_info=True)
@@ -261,11 +291,13 @@ class TestToolsMixin:
             # System-level exception during test setup/teardown
             log.error(f"System error executing resolved test data: {e}")
             from adarelib.event.event import TestResult
+
             return TestResult.execution_error(e, "System error during test execution")
 
     async def _run_test(self, websocket, test_name: str, resolved_test_data: dict):
         """Run a test with pre-resolved test data (variables already substituted)."""
         from adarevm.testing.testset import TestsetExecutionError
+
         log.info(f"Running test: {test_name}")
         log.debug(f"Test '{test_name}' resolved_test_data: {resolved_test_data}")
         try:
@@ -276,6 +308,7 @@ class TestToolsMixin:
 
             # Use TestResultLogger to handle logging and formatting
             from adarevm.testing.result_logger import TestResultLogger
+
             TestResultLogger.log_test_result(test_name, test_result)
             result_data = TestResultLogger.format_result_for_response(test_name, test_result)
 
@@ -286,13 +319,9 @@ class TestToolsMixin:
 
         except TestsetExecutionError as e:
             log.error(f"Test execution error: {test_name}: {e}")
-            await self.send_event(websocket, EventType.TEST_FAILED, {
-                "test_name": test_name, "error": str(e)
-            })
+            await self.send_event(websocket, EventType.TEST_FAILED, {"test_name": test_name, "error": str(e)})
             return {"status": "error", "message": f"Test execution failed: {e}"}
         except Exception as e:
             log.error(f"Unexpected test error: {test_name}: {e}", exc_info=True)
-            await self.send_event(websocket, EventType.TEST_FAILED, {
-                "test_name": test_name, "error": str(e)
-            })
+            await self.send_event(websocket, EventType.TEST_FAILED, {"test_name": test_name, "error": str(e)})
             return {"status": "error", "message": str(e)}

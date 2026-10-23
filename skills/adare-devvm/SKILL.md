@@ -14,7 +14,7 @@ the exploration/debugging counterpart to the productized `adare exp run`
 Pure `adare` CLI + Bash. The one genuinely non-CLI capability — stateful,
 step-by-step live-VM hands for an external harness — is the `dev mcp` server,
 covered as an appendix. Auto-loads as a skill in **Claude Code**; portable to any
-agent with a shell (on **OpenCode** see `docs/mcp-clients.md` for skill setup).
+agent with a shell (on **OpenCode** see `docsrc/mcp-clients.md` for skill setup).
 
 Keep SKILL.md's common path in view; pull `references/*.md` for full flag matrices
 and agent/grounding depth.
@@ -27,7 +27,7 @@ endpoint (`ADARE_VLLM_*`, e.g. Ollama Cloud). Confirm it before driving:
 ```sh
 adare vlm show                 # resolved VLM config + where each value comes from
 adare vlm use [<profile>]      # switch/create a profile (interactive if no arg)
-adare vm gui-doctor            # is the endpoint reachable? which coord space?
+adare vlm doctor            # is the endpoint reachable? which coord space?
 ```
 
 `dev action`, `dev playbook`, checkpoints, and `dev author` (human-step authoring)
@@ -110,7 +110,7 @@ adare dev checkpoint remove <name> -s <id>
 ```sh
 adare dev cv start -s <id> [--debug -o <dir>]    # (re)start the CV server, optionally logging
 adare dev cv stop -s <id>
-adare dev grounding-pull                          # pre-download LocateAnything weights (~7.3 GB)
+adare vlm pull-grounding                          # pre-download LocateAnything weights (~7.3 GB)
 adare dev update-testfunctions -s <id>            # reload test functions into the running VM
 adare vm watch <name>                             # live screen in the browser (view-only; --interactive)
 ```
@@ -145,4 +145,4 @@ claude mcp add --transport http adare-gui http://127.0.0.1:13110/mcp
 ```
 
 OpenCode: a `"type": "remote"` entry pointing at `http://127.0.0.1:13110/mcp`. See
-`docs/mcp-clients.md` for the full client setup.
+`docsrc/mcp-clients.md` for the full client setup.

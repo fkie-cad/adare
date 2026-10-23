@@ -3,12 +3,7 @@ import logging
 
 log = logging.getLogger(__name__)
 
-DTYPE_DEFAULTS = {
-    int: 0,
-    str: '',
-    list: [],
-    dict: {}
-}
+DTYPE_DEFAULTS = {int: 0, str: '', list: [], dict: {}}
 
 
 def get_value_if_missing_key(dictionary: dict, key, dtype=str, default=None):

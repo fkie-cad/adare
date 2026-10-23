@@ -4,6 +4,7 @@ Hypervisor abstraction layer with factory pattern for runtime selection.
 This module provides a factory pattern for creating hypervisor instances,
 allowing different hypervisors (VirtualBox, QEMU, etc.) to be used interchangeably.
 """
+
 import logging
 
 log = logging.getLogger(__name__)
@@ -21,10 +22,7 @@ def register_hypervisor(name: str, manager_class, vm_class):
         manager_class: Hypervisor manager class (implements AbstractHypervisorManager)
         vm_class: VM class (implements AbstractVM)
     """
-    _HYPERVISOR_REGISTRY[name] = {
-        'manager': manager_class,
-        'vm': vm_class
-    }
+    _HYPERVISOR_REGISTRY[name] = {'manager': manager_class, 'vm': vm_class}
     log.debug(f"Registered hypervisor: {name}")
 
 
@@ -103,19 +101,17 @@ def _load_hypervisor_module(hypervisor: str):
     try:
         if hypervisor == 'virtualbox':
             from adare.hypervisor.virtualbox import register as register_virtualbox
+
             register_virtualbox()
         elif hypervisor == 'qemu':
             from adare.hypervisor.qemu import register as register_qemu
+
             register_qemu()
         else:
             raise ValueError(f"Unknown hypervisor: {hypervisor}")
     except ImportError as e:
         log.error(f"Failed to load hypervisor module '{hypervisor}': {e}")
         raise
-
-
-
-
 
 
 __all__ = [

@@ -122,22 +122,14 @@ class EnvironmentPanel:
             Layout(name="osinfo", ratio=1),
         )
 
-        layout["content"]["info"]["general"].update(
-            InfoPanel(self.environment)
-        )
-        layout["content"]["info"]["osinfo"].update(
-            OsInfoPanel(self.environment)
-        )
+        layout["content"]["info"]["general"].update(InfoPanel(self.environment))
+        layout["content"]["info"]["osinfo"].update(OsInfoPanel(self.environment))
         description = self.environment['description'].values[0]
         if description:
-            layout["content"]["description"].update(
-                DescriptionPanel(self.environment['description'].values[0])
-            )
+            layout["content"]["description"].update(DescriptionPanel(self.environment['description'].values[0]))
         else:
             layout["content"]["description"].visible = False
-        layout["tags"].update(
-            TagsText(self.environment['tags'].values[0])
-        )
+        layout["tags"].update(TagsText(self.environment['tags'].values[0]))
 
         return Panel(layout, title=title, border_style="blue", title_align="left")
 
@@ -171,17 +163,21 @@ def _annotate_disk_status(environment: pd.DataFrame) -> None:
     # None where there is nothing local to stat (e.g. a URL-baked environment), so it is
     # reported as unknown rather than as missing.
     environment['disk_path'] = disk_path
-    environment['disk_present'] = (
-        Path(disk_path).is_file()
-        if disk_path and '://' not in disk_path
-        else None
-    )
+    environment['disk_present'] = Path(disk_path).is_file() if disk_path and '://' not in disk_path else None
+
+
+def _tag_list(tags) -> list[str]:
+    """Tags as a list: the DataFrame view stores them as one ", "-joined string."""
+    if isinstance(tags, str):
+        return [tag.strip() for tag in tags.split(',') if tag.strip()]
+    return list(tags) if tags is not None and not isinstance(tags, float) else []
 
 
 def print_environment(environment_name: str, formatter=None, output_file=None, dual_output=False):
     # Get formatter if not provided
     if formatter is None:
         from adare.run import get_formatter_from_context
+
         formatter, output_file, dual_output = get_formatter_from_context()
 
     with DataRetrievalApi() as db:
@@ -191,11 +187,17 @@ def print_environment(environment_name: str, formatter=None, output_file=None, d
 
         # Check if structured output is needed
         if dual_output or formatter.format_type.value != 'rich':
+            env_id = environment['id'].values[0]
+            project_name = environment['project_name'].values[0]
             structured_data = {
                 'name': environment['name'].values[0],
-                'id': environment['id'].values[0],
+                # `ulid` / `project` are the canonical keys shared with `env list`;
+                # `id` / `project_name` are kept as aliases for existing consumers.
+                'ulid': env_id,
+                'project': project_name,
+                'id': env_id,
                 'vm_name': environment['vm_name'].values[0],
-                'project_name': environment['project_name'].values[0],
+                'project_name': project_name,
                 'file': environment['file'].values[0],
                 'disk': {
                     'path': environment['disk_path'].values[0] if 'disk_path' in environment.columns else '',
@@ -203,14 +205,14 @@ def print_environment(environment_name: str, formatter=None, output_file=None, d
                 },
                 'created_at': str(environment['created_at'].values[0]),
                 'description': environment['description'].values[0],
-                'tags': environment['tags'].values[0] if 'tags' in environment.columns else [],
+                'tags': _tag_list(environment['tags'].values[0]) if 'tags' in environment.columns else [],
                 'osinfo': {
                     'os': environment['osinfo_os'].values[0],
                     'distribution': environment['osinfo_distribution'].values[0],
                     'version': environment['osinfo_version'].values[0],
                     'language': environment['osinfo_language'].values[0],
-                    'architecture': environment['osinfo_architecture'].values[0]
-                }
+                    'architecture': environment['osinfo_architecture'].values[0],
+                },
             }
             formatter.print_or_save(structured_data, output_file, dual_output)
 

@@ -47,6 +47,7 @@ class TestHostModeCategoryEnum:
     def test_json_serializable(self):
         """Values can be serialized to JSON strings."""
         import json
+
         for member in HostModeCategory:
             serialized = json.dumps(member.value)
             assert json.loads(serialized) == member.value
@@ -61,6 +62,7 @@ class TestBasicTestHostModeCategory:
 
     def test_classvar_not_instance_attribute(self):
         """host_mode_category is a ClassVar, not an instance attribute."""
+
         # attrs.define excludes ClassVar fields from __init__
         @attrs.define
         class DummyParam(Parameter):
@@ -90,6 +92,7 @@ class TestBasicTestHostModeCategory:
 
     def test_subclass_with_custom_category(self):
         """Subclassing BasicTest with custom category preserves it."""
+
         @attrs.define
         class DummyParam(Parameter):
             dst: str
@@ -109,6 +112,7 @@ class TestBasicTestHostModeCategory:
 
     def test_subclass_inherits_default(self):
         """A subclass without explicit override inherits AGENT_ONLY."""
+
         @attrs.define
         class DummyParam(Parameter):
             dst: str
@@ -124,6 +128,7 @@ class TestBasicTestHostModeCategory:
 
     def test_multiple_subclasses_independent(self):
         """Different subclasses can have different categories without interfering."""
+
         @attrs.define
         class DummyParam(Parameter):
             dst: str
@@ -150,6 +155,7 @@ class TestBasicTestHostModeCategory:
 
     def test_getattr_on_type(self):
         """getattr(type(instance), 'host_mode_category', ...) works correctly."""
+
         @attrs.define
         class DummyParam(Parameter):
             dst: str

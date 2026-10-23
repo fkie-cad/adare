@@ -1,10 +1,10 @@
-from pathlib import Path
-from subprocess import Popen, PIPE, TimeoutExpired
-import platform
 import ctypes
-import os
 import logging
+import os
+import platform
 import uuid
+from pathlib import Path
+from subprocess import PIPE, Popen, TimeoutExpired
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +22,18 @@ def is_admin_windows() -> bool:
         return False
 
 
-def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell: bool = True, env: dict = None, timeout: float = None, inherit_env: bool = True, admin: bool = False, background: bool = False, run_as_user: str = None) -> dict:
+def execute_on_shell(
+    command,
+    cwd: Path = None,
+    shell: bool = False,
+    powershell: bool = True,
+    env: dict = None,
+    timeout: float = None,
+    inherit_env: bool = True,
+    admin: bool = False,
+    background: bool = False,
+    run_as_user: str = None,
+) -> dict:
     """
     Executes a shell command.
     :param command: List of command and arguments, or string when shell=True.
@@ -95,7 +106,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
         else:
             # Use sudo on Linux
             command_str = f"sudo {command_str}"
-            log.info(f"Running command with elevated privileges (sudo)")
+            log.info("Running command with elevated privileges (sudo)")
     elif is_running_elevated and not is_windows:
         # Drop privileges when running with elevated privileges
         target_user = run_as_user if run_as_user else DEFAULT_RUN_AS_USER
@@ -131,8 +142,8 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
     elif not shell and is_windows:
         # Windows CreateProcess does not automatically resolve executable path from 'env' PATH
         # We must manually resolve it if a custom env is provided
-        import shutil
         import shlex
+        import shutil
 
         search_path = None
         if env:
@@ -157,26 +168,26 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
                         # shlex.split should yield the executable as first item.
                         # Ideally, users should pass list for shell=False
                         log.info(f"Resolved executable '{exe_name}' to '{resolved_exe}'")
-                        
-                        # Replace the first part of the original string? 
+
+                        # Replace the first part of the original string?
                         # Or just switch to list mode? subprocess handles list better for shell=False
                         parts[0] = resolved_exe
-                        command = parts # Switch to list mode with full path
+                        command = parts  # Switch to list mode with full path
                     else:
-                         log.debug(f"Could not resolve executable '{exe_name}' in custom PATH")
+                        log.debug(f"Could not resolve executable '{exe_name}' in custom PATH")
             except Exception as e:
                 log.warning(f"Failed to parse command string for path resolution: {e}")
                 command = command_str
 
         elif isinstance(command, list) and command:
-             # List mode is easier
-             exe_name = command[0]
-             resolved_exe = shutil.which(exe_name, path=search_path)
-             if resolved_exe:
-                 log.info(f"Resolved executable '{exe_name}' to '{resolved_exe}'")
-                 command[0] = resolved_exe
-             else:
-                 log.debug(f"Could not resolve executable '{exe_name}' in custom PATH")
+            # List mode is easier
+            exe_name = command[0]
+            resolved_exe = shutil.which(exe_name, path=search_path)
+            if resolved_exe:
+                log.info(f"Resolved executable '{exe_name}' to '{resolved_exe}'")
+                command[0] = resolved_exe
+            else:
+                log.debug(f"Could not resolve executable '{exe_name}' in custom PATH")
     elif isinstance(command, list) and not shell:
         # Linux / shell=True fallback
         command = command
@@ -202,9 +213,10 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
 
     # Start process with detailed logging
     import time
+
     start_time = time.time()
     log.debug(f"Starting process at {start_time}")
-    
+
     try:
         if cwd:
             proc = Popen(command, stdout=PIPE, stderr=PIPE, cwd=cwd, shell=shell, env=process_env)
@@ -216,9 +228,9 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
             # junctions/symlinks to SMB/UNC paths. Copy the executable and its
             # sibling files (.NET runtime DLLs, configs) to a local temp dir
             # and retry. File I/O over SMB works fine — only execution fails.
+            import shlex
             import shutil
             import tempfile
-            import shlex
 
             log.warning(f"Direct execution failed ({e}), copying to local temp for retry")
 
@@ -245,7 +257,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
                 proc = Popen(command, stdout=PIPE, stderr=PIPE, shell=shell, env=process_env)
         else:
             raise
-    
+
     log.debug(f"Process started with PID: {proc.pid}")
 
     # Handle background mode - return immediately without waiting
@@ -271,7 +283,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
                 'stdout': stdout_str,
                 'stderr': stderr_str,
                 'pid': proc.pid,
-                'background': False  # Failed to start, not actually running in background
+                'background': False,  # Failed to start, not actually running in background
             }
 
         # Process still running after grace period - it started successfully
@@ -281,7 +293,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
             'stdout': '',
             'stderr': '',
             'pid': proc.pid,
-            'background': True
+            'background': True,
         }
 
     # Normal mode - wait for completion
@@ -300,7 +312,8 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
         return {
             'returncode': -1,
             'stdout': stdout.decode("utf-8").replace("\r", "") if stdout else "",
-            'stderr': f"Command timed out after {timeout} seconds (killed at {execution_time:.2f}s)\n" + (stderr.decode("utf-8").replace("\r", "") if stderr else "")
+            'stderr': f"Command timed out after {timeout} seconds (killed at {execution_time:.2f}s)\n"
+            + (stderr.decode("utf-8").replace("\r", "") if stderr else ""),
         }
 
     stdout = stdout.decode("utf-8").replace("\r", "")
@@ -308,15 +321,11 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
 
     # Always log stdout (even if empty)
     log.info(f"stdout: {stdout if stdout else ''}")
-    
-    # Always log stderr (even if empty)  
+
+    # Always log stderr (even if empty)
     log.info(f"stderr: {stderr if stderr else ''}")
 
-    ret = {
-        'returncode': proc.returncode,
-        'stdout': stdout,
-        'stderr': stderr
-    }
+    ret = {'returncode': proc.returncode, 'stdout': stdout, 'stderr': stderr}
 
     execution_time = time.time() - start_time
     log.info(f"'{command_str}' exited with return code: {ret['returncode']} (execution time: {execution_time:.2f}s)")

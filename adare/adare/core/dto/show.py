@@ -4,6 +4,7 @@ Show Data Transfer Objects for API layer.
 These DTOs provide type-safe request/response objects for show operations,
 enabling consistent interfaces across CLI, REST API, and Web UI.
 """
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -13,9 +14,11 @@ from typing import Any
 # Request DTOs
 # =============================================================================
 
+
 @dataclass
 class RunListRequest:
     """Request for listing runs with filters."""
+
     project: str | None = None
     environment: str | None = None
     experiment: str | None = None
@@ -24,6 +27,7 @@ class RunListRequest:
 @dataclass
 class RunRemoveRequest:
     """Request to remove a run."""
+
     ulid: str
     project_path: Path | None = None
 
@@ -32,9 +36,11 @@ class RunRemoveRequest:
 # Result DTOs
 # =============================================================================
 
+
 @dataclass
 class RunListItem:
     """Single run item in list."""
+
     ulid: str
     experiment_name: str
     experiment_ulid: str
@@ -72,13 +78,14 @@ class RunListItem:
             'metadata': {
                 'published': self.published,
                 'fake': self.fake,
-            }
+            },
         }
 
 
 @dataclass
 class RunDetail:
     """Detailed run information."""
+
     ulid: str
     experiment_name: str
     experiment_ulid: str
@@ -100,6 +107,7 @@ class RunDetail:
 @dataclass
 class RunRemoveResult:
     """Result of run removal operation."""
+
     removed: bool
     ulid: str
     was_fake: bool = False
@@ -108,6 +116,7 @@ class RunRemoveResult:
 @dataclass
 class ProjectListItem:
     """Single project item in list."""
+
     name: str
     description: str = ""
     created_at: datetime | None = None
@@ -128,6 +137,7 @@ class ProjectListItem:
 @dataclass
 class EnvironmentListItem:
     """Single environment item in list."""
+
     ulid: str
     name: str
     display_name: str
@@ -194,13 +204,14 @@ class EnvironmentListItem:
             'metadata': {
                 'created_at': self.created_at.isoformat() if self.created_at else None,
             },
-            'file': self.file
+            'file': self.file,
         }
 
 
 @dataclass
 class EnvironmentDetail:
     """Detailed environment information."""
+
     ulid: str
     name: str
     display_name: str
@@ -237,6 +248,7 @@ class EnvironmentDetail:
 @dataclass
 class ExperimentListItem:
     """Single experiment item in list."""
+
     ulid: str
     name: str
     display_name: str
@@ -276,13 +288,14 @@ class ExperimentListItem:
                 'created_at': self.created_at.isoformat() if self.created_at else None,
                 'run_count': self.run_count,
                 'last_run': self.last_run.isoformat() if self.last_run else None,
-            }
+            },
         }
 
 
 @dataclass
 class ExperimentDetail:
     """Detailed experiment information."""
+
     ulid: str
     name: str
     display_name: str
@@ -303,6 +316,7 @@ class ExperimentDetail:
 @dataclass
 class TestfunctionListItem:
     """Single testfunction item in list."""
+
     id: str
     name: str
     dotnotation: str
@@ -334,13 +348,14 @@ class TestfunctionListItem:
                 'full_path': self.full_file_path,
                 'sha256': self.file_sha256,
                 'description': self.file_description,
-            }
+            },
         }
 
 
 @dataclass
 class TestfunctionDetail:
     """Detailed testfunction information."""
+
     id: str
     name: str
     dotnotation: str

@@ -1,4 +1,3 @@
-
 import sys
 from pathlib import Path
 
@@ -31,12 +30,7 @@ class TestPixelChangeConstraintParsing:
 
     def test_pixel_change_constraint_all_fields(self):
         """Test initialization with all fields."""
-        constraint = PixelChangeConstraint(
-            above=1.0,
-            below=0.5,
-            strategy='continuous',
-            idle=5.0
-        )
+        constraint = PixelChangeConstraint(above=1.0, below=0.5, strategy='continuous', idle=5.0)
         assert constraint.above == 1.0
         assert constraint.below == 0.5
         assert constraint.strategy == 'continuous'
@@ -46,6 +40,7 @@ class TestPixelChangeConstraintParsing:
         """Test that invalid strategy raises ValueError."""
         with pytest.raises(ValueError, match="PixelChangeConstraint.strategy must be one of"):
             PixelChangeConstraint(strategy='invalid')
+
 
 class TestWaitUntilActionParsing:
     """Tests for WaitUntilAction parsing with nested constraints."""
@@ -58,10 +53,7 @@ class TestWaitUntilActionParsing:
         pixel_constraint = PixelChangeConstraint(above=1.0, idle=2.0)
         skip_options = SkipOptions(pixel_change=pixel_constraint)
 
-        action = WaitUntilAction(
-            condition=condition,
-            skip=skip_options
-        )
+        action = WaitUntilAction(condition=condition, skip=skip_options)
 
         assert action.skip is not None
         assert action.skip.pixel_change is not None

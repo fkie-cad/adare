@@ -80,7 +80,7 @@ class ProjectDirectory(Directory):
     def remove(self):
         try:
             shutil.rmtree(self.path)
-        except FileNotFoundError or OSError as e:
+        except OSError as e:
             raise ProjectDirectoryRemovalError(
                 log,
                 message=f'project directory ({self.path}) removal failed: {e.strerror}',
@@ -89,23 +89,33 @@ class ProjectDirectory(Directory):
     def get_environment_hash(self, environment_file: Path) -> str:
         if not environment_file.relative_to(self.environments):
             raise ValueError(
-                f'environment file {environment_file} is not in environments directory {self.environments}')
+                f'environment file {environment_file} is not in environments directory {self.environments}'
+            )
         return hash_file_sha256(environment_file)
 
     def get_testfunction_hash(self, testfunction_file: Path, requirements_file: Path) -> str:
         if not testfunction_file.relative_to(self.testfunctions):
             raise ValueError(
-                f'testfunction file {testfunction_file} is not in testfunctions directory {self.testfunctions}')
+                f'testfunction file {testfunction_file} is not in testfunctions directory {self.testfunctions}'
+            )
         if not requirements_file.relative_to(self.testfunctions):
             raise ValueError(
-                f'requirements file {requirements_file} is not in testfunctions directory {self.testfunctions}')
+                f'requirements file {requirements_file} is not in testfunctions directory {self.testfunctions}'
+            )
         return combine_hashes([hash_file_sha256(testfunction_file), hash_file_sha256(requirements_file)])
 
     def exists(self) -> bool:
         # check if all project paths exist (environments and vm are global, not checked here)
         return all(
-            [self.path.exists(), self.experiments.exists(),
-             self.shared.exists(), self.vm_runtime.exists(), self.run.exists(), self.adare_config.exists()])
+            [
+                self.path.exists(),
+                self.experiments.exists(),
+                self.shared.exists(),
+                self.vm_runtime.exists(),
+                self.run.exists(),
+                self.adare_config.exists(),
+            ]
+        )
 
     def _create_project_directories(self):
         self.path.mkdir()
@@ -119,7 +129,6 @@ class ProjectDirectory(Directory):
         self.run.mkdir()
         self.adare_config.mkdir()
 
-
     def download_tool(self, url: str, zipped: bool):
         log.info('download tool from url into shared tools directory')
         file = self.shared_tools / Path(url).name
@@ -132,8 +141,6 @@ class ProjectDirectory(Directory):
             shutil.unpack_archive(file, self.shared_tools)
             file.unlink()
         log.info('download of tool was successful')
-
-
 
     def copy_vm_runtime_files(self):
         """Copy adarevm and adarelib to project vm_runtime directory for caching."""

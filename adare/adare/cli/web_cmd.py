@@ -7,6 +7,8 @@ import sys
 
 import click
 
+from adare.cli.output import output_options
+
 logger = logging.getLogger(__name__)
 
 
@@ -77,32 +79,19 @@ def web_start(ctx, port, host, dev, no_browser, spice_port):
     # Auto-provision from the pinned GitHub release if no binary was found by any
     # local tier (env var, ~/.local/bin, dev target, managed cache, PATH).
     if not vs_manager.available:
-        console.print(
-            "[yellow]VirtualSpice binary not found; attempting download...[/yellow]"
-        )
+        console.print("[yellow]VirtualSpice binary not found; attempting download...[/yellow]")
         if _provision_virtualspice(console):
             vs_manager = VirtualSpiceManager(port=spice_port)
 
     if vs_manager.available:
-        console.print(
-            f"[green]Starting VirtualSpice on port {spice_port}...[/green]"
-        )
+        console.print(f"[green]Starting VirtualSpice on port {spice_port}...[/green]")
         if vs_manager.start():
             console.print("[green]VirtualSpice started.[/green]")
         else:
-            console.print(
-                "[yellow]Warning: VirtualSpice failed to start. "
-                "VM features will be unavailable.[/yellow]"
-            )
+            console.print("[yellow]Warning: VirtualSpice failed to start. VM features will be unavailable.[/yellow]")
     else:
-        console.print(
-            "[yellow]VirtualSpice unavailable. "
-            "VM features will be unavailable.[/yellow]"
-        )
-        console.print(
-            "[dim]Set VIRTUALSPICE_BINARY env var, run 'adare web "
-            "install-spice', or build from source.[/dim]"
-        )
+        console.print("[yellow]VirtualSpice unavailable. VM features will be unavailable.[/yellow]")
+        console.print("[dim]Set VIRTUALSPICE_BINARY env var, run 'adare ui install-spice', or build from source.[/dim]")
 
     # Open browser
     if not no_browser:
@@ -112,9 +101,7 @@ def web_start(ctx, port, host, dev, no_browser, spice_port):
         console.print(f"[blue]Opening {url} in browser...[/blue]")
         webbrowser.open(url)
 
-    console.print(
-        f"[green]Starting ADARE web server on {host}:{port}...[/green]"
-    )
+    console.print(f"[green]Starting ADARE web server on {host}:{port}...[/green]")
     if dev:
         console.print("[dim]Development mode: auto-reload enabled[/dim]")
 
@@ -131,10 +118,7 @@ def web_start(ctx, port, host, dev, no_browser, spice_port):
     try:
         import uvicorn
     except ImportError as e:
-        console.print(
-            "[red]Error: uvicorn is required. "
-            "Install with: pip install uvicorn[standard][/red]"
-        )
+        console.print("[red]Error: uvicorn is required. Install with: pip install uvicorn[standard][/red]")
         vs_manager.stop()
         raise SystemExit(1) from e
 
@@ -176,9 +160,7 @@ def web_build():
 
     if web_dir is None:
         console.print("[red]Error: adare-web directory not found.[/red]")
-        console.print(
-            f"[dim]Searched: {', '.join(candidates)}[/dim]"
-        )
+        console.print(f"[dim]Searched: {', '.join(candidates)}[/dim]")
         sys.exit(1)
 
     console.print(f"[blue]Building frontend in {web_dir}...[/blue]")
@@ -212,45 +194,29 @@ def web_build():
     console.print("[green]Build complete.[/green]")
 
 
-@click.command("services")
+@click.command("status")
 @click.option("--port", default=8089, help="FastAPI server port to check")
 @click.option("--spice-port", default=8081, help="VirtualSpice backend port")
+@output_options
 def web_services(port, spice_port):
-    """Show status of ADARE web services (FastAPI, VirtualSpice, frontend build)."""
+    """Show status of the local web UI services (FastAPI, VirtualSpice, frontend build)."""
     import urllib.error
     import urllib.request
 
-    from rich.console import Console
     from rich.table import Table
 
-    console = Console()
-
-    table = Table(title="ADARE Web Services")
-    table.add_column("Service", style="bold")
-    table.add_column("Status")
-    table.add_column("Details")
+    from adare.cli.output import emit
+    from adare.webapi.process_manager import VirtualSpiceManager
 
     # Check FastAPI
     try:
-        urllib.request.urlopen(
-            f"http://127.0.0.1:{port}/api/health", timeout=2
-        )
-        table.add_row("FastAPI", "[green]Running[/green]", f"Port {port}")
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=2)
+        fastapi_running = True
     except (urllib.error.URLError, OSError, TimeoutError):
-        table.add_row("FastAPI", "[red]Stopped[/red]", f"Port {port}")
+        fastapi_running = False
 
     # Check VirtualSpice
-    from adare.webapi.process_manager import VirtualSpiceManager
-
-    vs = VirtualSpiceManager(port=spice_port)
-    if vs.health_check():
-        table.add_row(
-            "VirtualSpice", "[green]Running[/green]", f"Port {spice_port}"
-        )
-    else:
-        table.add_row(
-            "VirtualSpice", "[red]Stopped[/red]", f"Port {spice_port}"
-        )
+    spice_running = bool(VirtualSpiceManager(port=spice_port).health_check())
 
     # Check frontend build
     package_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -259,31 +225,50 @@ def web_services(port, spice_port):
         os.path.join(project_dir, "adare-web", "dist"),
         os.path.join(os.path.dirname(project_dir), "adare-web", "dist"),
     ]
+    found_dist = next((c for c in dist_candidates if os.path.isdir(c)), None)
 
-    found_dist = None
-    for candidate in dist_candidates:
-        if os.path.isdir(candidate):
-            found_dist = candidate
-            break
+    services = [
+        {
+            "service": "fastapi",
+            "status": "running" if fastapi_running else "stopped",
+            "running": fastapi_running,
+            "port": port,
+            "details": f"Port {port}",
+        },
+        {
+            "service": "virtualspice",
+            "status": "running" if spice_running else "stopped",
+            "running": spice_running,
+            "port": spice_port,
+            "details": f"Port {spice_port}",
+        },
+        {
+            "service": "frontend_build",
+            "status": "available" if found_dist else "not_built",
+            "running": bool(found_dist),
+            "port": None,
+            "details": found_dist or "Run: adare ui build",
+        },
+    ]
 
-    if found_dist:
-        table.add_row(
-            "Frontend Build", "[green]Available[/green]", found_dist
-        )
-    else:
-        table.add_row(
-            "Frontend Build",
-            "[yellow]Not built[/yellow]",
-            "Run: adare web build",
-        )
+    def _table():
+        labels = {"fastapi": "FastAPI", "virtualspice": "VirtualSpice", "frontend_build": "Frontend Build"}
+        colours = {"running": "green", "available": "green", "stopped": "red", "not_built": "yellow"}
+        table = Table(title="ADARE Web Services")
+        table.add_column("Service", style="bold")
+        table.add_column("Status")
+        table.add_column("Details")
+        for svc in services:
+            colour = colours[svc["status"]]
+            status = svc["status"].replace("_", " ").capitalize()
+            table.add_row(labels[svc["service"]], f"[{colour}]{status}[/{colour}]", svc["details"])
+        return table
 
-    console.print(table)
+    emit({"services": services}, rich=_table)
 
 
 @click.command("install-spice")
-@click.option(
-    "--force", is_flag=True, help="Re-download even if already cached."
-)
+@click.option("--force", is_flag=True, help="Re-download even if already cached.")
 def web_install_spice(force):
     """Download and verify the VirtualSpice (spice-client) binary."""
     from rich.console import Console
@@ -292,10 +277,7 @@ def web_install_spice(force):
 
     from adare.webapi import virtualspice_release as vsr
 
-    console.print(
-        f"[blue]VirtualSpice {vsr.VIRTUALSPICE_VERSION} "
-        f"({vsr.VIRTUALSPICE_REPO})[/blue]"
-    )
+    console.print(f"[blue]VirtualSpice {vsr.VIRTUALSPICE_VERSION} ({vsr.VIRTUALSPICE_REPO})[/blue]")
     if _provision_virtualspice(console, force=force):
         console.print("[green]Done.[/green]")
     else:
