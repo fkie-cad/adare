@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 import attrs
+from sqlalchemy.exc import SQLAlchemyError
 
 from adare.backend.environment.exceptions import (
     EnvironmentDeletionError,
@@ -21,51 +22,12 @@ from adare.types.environment import EnvironmentMetadata
 log = logging.getLogger(__name__)
 
 
-def _get_environment_or_raise(db, ulid: str, log, not_found_msg: str, fields: list[str] = None):
-    """
-    Get environment or raise exception if not found.
-
-    Args:
-        db: Database API instance
-        ulid: Environment ULID
-        log: Logger instance
-        not_found_msg: Error message if not found
-        fields: Optional list of fields to extract
-
-    Returns:
-        Environment object or dict with requested fields
-    """
+def _get_environment_or_raise(db, ulid: str, log, not_found_msg: str) -> Environment:
+    """Get environment by ULID or raise EnvironmentDoesNotExistInDatabase."""
     environment = db.get_environment_by_ulid(ulid)
     if not environment:
         raise EnvironmentDoesNotExistInDatabase(log, not_found_msg)
-
-    # If no fields specified, return full object (for backward compatibility)
-    if fields is None:
-        return environment
-
-    # Extract requested fields
-    result = {}
-    for field in fields:
-        if field == 'id':
-            result['id'] = environment.id
-        elif field == 'name':
-            result['name'] = environment.name
-        elif field == 'description':
-            result['description'] = environment.description
-        elif field == 'sha256hash':
-            result['sha256hash'] = environment.sha256hash
-        elif field == 'file':
-            result['file'] = environment.file
-        elif field == 'vm_id':
-            result['vm_id'] = environment.vm_id
-        elif field == 'installations':
-            result['installations'] = environment.installations
-        else:
-            log.warning(
-                f'Unknown field requested: {field}. Available: id, name, description, sha256hash, file, vm_id, installations'
-            )
-
-    return result
+    return environment
 
 
 def get_environment_vm_file(environment_ulid: str) -> Path:
@@ -219,12 +181,19 @@ def resolve_environment_identifier(identifier: str, trigger_exception: bool = Tr
         )
 
 
-def _find_environment_references(version_ids: set[str]) -> tuple[dict[Path, int], list[tuple[Path, str]]]:
+def _scan_environment_references(
+    version_ids: set[str], detach: bool
+) -> tuple[dict[Path, int], list[tuple[Path, str]], list[str]]:
     """Scan every registered project for runs and experiments using ``version_ids``.
+
+    With ``detach`` (``--force``) the same pass deletes those runs and drops the
+    ids from experiments (left with no environment, not deleted), so each project
+    database is opened once.
 
     Returns:
         (run count per project path, [(project path, experiment name)] for
-        experiments that use no other environment)
+        experiments that use no other environment, projects that could not be
+        scanned -- their references are unknown)
     """
     from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
     from adare.database.models.global_models import Project
@@ -235,61 +204,40 @@ def _find_environment_references(version_ids: set[str]) -> tuple[dict[Path, int]
 
     runs_per_project: dict[Path, int] = {}
     orphaned: list[tuple[Path, str]] = []
+    unscanned: list[str] = []
     for project_path in project_paths:
         if not project_path.exists():
+            unscanned.append(f'{project_path} (missing)')
             continue
         try:
             with ProjectDatabaseApi(project_path) as project_api:
-                run_count = (
+                runs = (
                     project_api._session.query(ExperimentRun)
                     .filter(ExperimentRun.environment_id.in_(version_ids))
-                    .count()
+                    .all()
                 )
-                if run_count:
-                    runs_per_project[project_path] = run_count
-                for experiment in project_api._session.query(Experiment).all():
-                    env_ids = set(experiment.environment_ids or [])
-                    if env_ids and env_ids <= version_ids:
-                        orphaned.append((project_path, experiment.name))
-        except (OSError, DatabaseError) as e:
-            log.warning(f"Error checking project {project_path}: {e}")
-    return runs_per_project, orphaned
-
-
-def _detach_environment_references(version_ids: set[str], runs_per_project: dict[Path, int]) -> None:
-    """Delete runs of ``version_ids`` and drop the ids from experiments (``--force``)."""
-    from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
-    from adare.database.models.global_models import Project
-    from adare.database.models.project_models import Experiment, ExperimentRun
-
-    with GlobalDatabaseApi() as global_api:
-        project_paths = [Path(project.path) for project in global_api._session.query(Project).all() if project.path]
-
-    for project_path in project_paths:
-        if not project_path.exists():
-            continue
-        try:
-            with ProjectDatabaseApi(project_path) as project_api:
-                if project_path in runs_per_project:
-                    for run in (
-                        project_api._session.query(ExperimentRun)
-                        .filter(ExperimentRun.environment_id.in_(version_ids))
-                        .all()
-                    ):
-                        project_api._session.delete(run)
-                        log.info(f'deleted run {run.id} from project {project_path.name}')
+                if runs:
+                    runs_per_project[project_path] = len(runs)
                 for experiment in project_api._session.query(Experiment).all():
                     env_ids = experiment.environment_ids or []
-                    if any(env_id in version_ids for env_id in env_ids):
+                    if env_ids and set(env_ids) <= version_ids:
+                        orphaned.append((project_path, experiment.name))
+                    if detach and any(env_id in version_ids for env_id in env_ids):
                         # Reassign (not mutate) so SQLAlchemy sees the JSON change.
                         experiment.environment_ids = [env_id for env_id in env_ids if env_id not in version_ids]
                         log.info(f'detached environment from experiment {experiment.name} ({project_path.name})')
-                project_api._session.commit()
-        except (OSError, DatabaseError) as e:
-            log.error(f"Error detaching environment from project {project_path}: {e}")
+                if detach:
+                    for run in runs:
+                        project_api._session.delete(run)
+                        log.info(f'deleted run {run.id} from project {project_path.name}')
+                    project_api._session.commit()
+        except (OSError, DatabaseError, SQLAlchemyError) as e:
+            log.warning(f"Error checking project {project_path}: {e}")
+            unscanned.append(f'{project_path} ({e})')
+    return runs_per_project, orphaned, unscanned
 
 
-def _delete_managed_file(path: Path, managed_dir: Path) -> None:
+def delete_managed_file(path: Path, managed_dir: Path) -> None:
     """Delete ``path`` only if it lives inside ``managed_dir`` (never user files)."""
     try:
         if not path.exists():
@@ -325,35 +273,52 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
         version_ids = {version.id for version in versions}
         vm_ids = {version.vm_id for version in versions if version.vm_id}
 
-    runs_per_project, orphaned = _find_environment_references(version_ids)
+    runs_per_project, orphaned, unscanned = _scan_environment_references(version_ids, detach=force)
     total_runs = sum(runs_per_project.values())
-    if orphaned and not force:
-        experiments_list = ', '.join(f'{exp} (project: {path.name})' for path, exp in orphaned)
-        raise EnvironmentDeletionError(
-            log,
-            f'environment {name} cannot be deleted because these experiments use no other environment: {experiments_list}',
-            possible_solutions=[
-                'run with --force to delete the environment and its runs (the experiments are kept, without an environment)',
-                'add other environments to the experiments first',
-            ],
-        )
-    if total_runs and not force:
-        raise EnvironmentDeletionError(
-            log,
-            f'environment {name} has {total_runs} experiment run(s) across {len(runs_per_project)} project(s), so it cannot be deleted because this would invalidate the results',
-            possible_solutions=['run with --force to delete all runs and the environment'],
-        )
-    if force and (total_runs or orphaned):
-        log.info(f'environment {name}: deleting {total_runs} run(s) and detaching experiments (--force)')
-        _detach_environment_references(version_ids, runs_per_project)
+    if force:
+        if total_runs or orphaned:
+            log.info(f'environment {name}: deleted {total_runs} run(s) and detached experiments (--force)')
+        if unscanned:
+            log.warning(f'environment {name}: could not check projects (--force, deleting anyway): {unscanned}')
+    else:
+        if unscanned:
+            raise EnvironmentDeletionError(
+                log,
+                f'environment {name} cannot be deleted because these projects could not be checked for runs '
+                f'using it: {", ".join(unscanned)}',
+                possible_solutions=[
+                    'make the project available again (or remove it from ADARE) and retry',
+                    'run with --force to delete the environment anyway',
+                ],
+            )
+        if orphaned:
+            experiments_list = ', '.join(f'{exp} (project: {path.name})' for path, exp in orphaned)
+            raise EnvironmentDeletionError(
+                log,
+                f'environment {name} cannot be deleted because these experiments use no other environment: {experiments_list}',
+                possible_solutions=[
+                    'run with --force to delete the environment and its runs (the experiments are kept, without an environment)',
+                    'add other environments to the experiments first',
+                ],
+            )
+        if total_runs:
+            raise EnvironmentDeletionError(
+                log,
+                f'environment {name} has {total_runs} experiment run(s) across {len(runs_per_project)} project(s), so it cannot be deleted because this would invalidate the results',
+                possible_solutions=['run with --force to delete all runs and the environment'],
+            )
 
+    # Exactly the versions that were checked -- one loaded meanwhile was not.
     with EnvironmentDbApi() as db:
-        for version in db.get_environment_versions(name):
+        for version_id in sorted(version_ids):
+            version = db.get_environment_by_ulid(version_id)
+            if version is None:
+                continue
             env_file = Path(version.file) if version.file else None
             db.delete_environment(version)
-            log.info(f'deleted environment {name} version {version.id}')
+            log.info(f'deleted environment {name} version {version_id}')
             if force and env_file:
-                _delete_managed_file(env_file, ENVIRONMENTS_DIR)
+                delete_managed_file(env_file, ENVIRONMENTS_DIR)
 
     if not cleanup_vm:
         return
@@ -363,7 +328,7 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
     for vm_id in vm_ids:
         try:
             with EnvironmentDbApi() as db:
-                if any(env.vm_id == vm_id for env in db.get_environments(include_superseded=True)):
+                if db.is_vm_referenced(vm_id):
                     log.info(f'VM {vm_id} is still used by other environments, skipping cleanup')
                     continue
             with VmApi() as vm_api:
@@ -376,7 +341,7 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
             asyncio.run(vm_commands.delete_vm(vm_id, force=force))
             log.info(f'Deleted VM (hypervisor + database record): {vm_id}')
             if vm_file_path:
-                _delete_managed_file(vm_file_path, VMS_DIR)
+                delete_managed_file(vm_file_path, VMS_DIR)
         except (OSError, DatabaseError, ValueError) as e:
             log.warning(f'Failed to cleanup VM {vm_id}: {e}')
 
@@ -393,7 +358,7 @@ def get_environment_by_ulid(ulid: str, fields: list[str] = None) -> Environment 
     Args:
         ulid: Environment ULID
         fields: Optional list of fields to extract. If None, returns full object.
-                Available fields: 'id', 'name', 'description', 'sha256hash', 'file', 'vm_id', 'installations'
+                Available fields: 'id', 'name', 'description', 'sha256hash', 'file', 'vm_id', 'installations', 'hypervisor'
                 Relationship fields: 'vm_name', 'vm_os_type', 'vm_file_path', 'tags'
 
     Returns:
@@ -461,6 +426,8 @@ def get_environment_by_ulid(ulid: str, fields: list[str] = None) -> Environment 
                     result['vm_id'] = environment.vm_id
                 elif field == 'installations':
                     result['installations'] = environment.installations
+                elif field == 'hypervisor':
+                    result['hypervisor'] = environment.hypervisor
                 # Foreign key fields - safely loaded with eager loading
                 elif field == 'vm_name':
                     result['vm_name'] = environment.vm.name if environment.vm else None
@@ -480,66 +447,11 @@ def get_environment_by_ulid(ulid: str, fields: list[str] = None) -> Environment 
                     result['tags'] = [tag.name for tag in environment.tags] if hasattr(environment, 'tags') else []
                 else:
                     log.warning(
-                        f'Unknown field requested: {field}. Available: id, name, description, sha256hash, file, vm_id, installations, vm_name, vm_os_type, tags'
+                        f'Unknown field requested: {field}. Available: id, name, description, sha256hash, file, vm_id, installations, hypervisor, vm_name, vm_os_type, tags'
                     )
             except AttributeError as e:
                 log.warning(f"Could not access field '{field}': {e}")
                 result[field] = None
-
-        return result
-
-
-def get_environment_by_hash(
-    sha256hash: str, trigger_exception: bool = True, fields: list[str] = None
-) -> Environment | dict | None:
-    """
-    Get environment by hash.
-
-    Args:
-        sha256hash: Environment file hash
-        trigger_exception: Whether to raise exception if not found
-        fields: Optional list of fields to extract
-
-    Returns:
-        Environment: Full object if fields=None
-        dict: Environment data if fields specified
-        None: If environment not found and trigger_exception=False
-    """
-    with EnvironmentDbApi() as db:
-        environment = db.get_environment_by_hash(sha256hash)
-        if not environment:
-            if not trigger_exception:
-                return None
-            raise EnvironmentDoesNotExistInDatabase(
-                log,
-                f'environment with hash {sha256hash} does not exist in the database',
-            )
-
-        # Return full object for backward compatibility
-        if fields is None:
-            return environment
-
-        # Extract requested fields
-        result = {}
-        for field in fields:
-            if field == 'id':
-                result['id'] = environment.id
-            elif field == 'name':
-                result['name'] = environment.name
-            elif field == 'description':
-                result['description'] = environment.description
-            elif field == 'sha256hash':
-                result['sha256hash'] = environment.sha256hash
-            elif field == 'file':
-                result['file'] = environment.file
-            elif field == 'vm_id':
-                result['vm_id'] = environment.vm_id
-            elif field == 'installations':
-                result['installations'] = environment.installations
-            else:
-                log.warning(
-                    f'Unknown field requested: {field}. Available: id, name, description, sha256hash, file, vm_id, installations'
-                )
 
         return result
 
@@ -574,19 +486,7 @@ def sync_environment(ulid: str, remote_ulid: str, remote_url: str, is_published:
 def get_environment_data(ulid: str) -> dict | None:
     """Get full environment data with relationships - convenience function for common case."""
     return get_environment_by_ulid(
-        ulid, fields=['id', 'name', 'description', 'sha256hash', 'file', 'vm_id', 'vm_name', 'vm_os_type']
-    )
-
-
-def get_environment_summary(ulid: str) -> dict | None:
-    """Get basic environment info with key relationships - lighter version."""
-    return get_environment_by_ulid(ulid, fields=['id', 'name', 'description', 'vm_name'])
-
-
-def get_environment_with_vm_details(ulid: str) -> dict | None:
-    """Get environment with comprehensive VM information."""
-    return get_environment_by_ulid(
-        ulid, fields=['id', 'name', 'vm_name', 'vm_os_type', 'vm_file_path', 'vm_description', 'vm_architecture']
+        ulid, fields=['id', 'name', 'description', 'sha256hash', 'file', 'vm_id', 'vm_name', 'vm_os_type', 'hypervisor']
     )
 
 
@@ -604,6 +504,74 @@ def get_environment_path_by_project_and_name(project_path: Path, environment_nam
                 'If not found via list, create or load: adare environment create <name> OR adare environment load <path>',
             ],
         )
+
+
+def get_environment_name_by_file(environment_file: Path) -> str | None:
+    """Name of the environment (any version) registered with managed copy ``environment_file``."""
+    with EnvironmentDbApi() as db:
+        name = (
+            db._session.query(Environment.name)
+            .filter(Environment.file == environment_file.resolve().as_posix())
+            .limit(1)
+            .scalar()
+        )
+        return str(name) if name else None
+
+
+def is_same_version(environment_ulid: str, sha256hash: str, vm_id: str | None) -> bool:
+    """True if registering ``sha256hash`` + ``vm_id`` would duplicate this version.
+
+    Same file bytes, same VM and that VM still has the disk the version pinned.
+    """
+    with EnvironmentDbApi() as db:
+        env = db.get_environment_by_ulid(environment_ulid)
+        if env is None or env.sha256hash != sha256hash or env.vm_id != vm_id:
+            return False
+        return env.vm is None or (env.vm_hash is not None and env.vm_hash == env.vm.hash)
+
+
+def get_run_environment(environment_name: str) -> dict:
+    """The current version of ``environment_name`` with what run setup needs, read in one query.
+
+    Resolving the version once (instead of name -> file and name -> ULID in separate
+    transactions) keeps a concurrent ``env load --force`` from pairing one version's
+    file with another version's ULID.
+
+    Returns:
+        dict with ``ulid``, ``file``, ``vm_file``, ``platform``, ``architecture``,
+        ``hypervisor`` (VM-derived values None when the VM or its osinfo is missing)
+    """
+    from sqlalchemy.orm import joinedload
+
+    from adare.database.models.global_models import Vm
+
+    with EnvironmentDbApi() as db:
+        env = (
+            db._session.query(Environment)
+            .options(joinedload(Environment.vm).joinedload(Vm.osinfo))
+            .filter(Environment.name == environment_name, Environment.is_current)
+            .first()
+        )
+        if env is None:
+            raise EnvironmentDoesNotExistInDatabase(
+                log,
+                f'environment {environment_name} does not exist in the database',
+                possible_solutions=[
+                    f'Check if environment name "{environment_name}" is spelled correctly',
+                    'List available environments with: adare environment list',
+                    'If not found via list, create or load: adare environment create <name> OR adare environment load <path>',
+                ],
+            )
+        vm = env.vm
+        osinfo = vm.osinfo if vm else None
+        return {
+            'ulid': env.id,
+            'file': Path(env.file),
+            'vm_file': Path(vm.file) if vm and vm.file else None,
+            'platform': osinfo.platform if osinfo else None,
+            'architecture': osinfo.architecture if osinfo else None,
+            'hypervisor': env.hypervisor,
+        }
 
 
 def verify_environment_vm(environment_ulid: str) -> None:

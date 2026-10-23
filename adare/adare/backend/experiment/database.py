@@ -491,26 +491,29 @@ def get_experiment_environment_name(project_path: Path, experiment_name: str) ->
         if experiment is None:
             log.error('experiment not found')
             raise ValueError('experiment not found')
-        if len(experiment.environments) == 0:
+        environments = experiment.environments
+        if len(environments) == 0:
             log.error('experiment has no environment')
             raise NoEnvironmentError(
                 log,
                 f'experiment {experiment} has no environment',
             )
-        if len(experiment.environments) > 1:
+        # Several versions of one environment (``env load --force``) are still one
+        # environment; count names, not ids.
+        names = list(dict.fromkeys(str(environment.name) for environment in environments if environment is not None))
+        if len(names) > 1:
             raise MultipleEnvironmentsError(
                 log,
                 f'experiment {experiment} has multiple environments',
                 possible_solutions=['specify the environment with -e <environment>'],
             )
-        environment = experiment.environments[0]
-        if environment is None:
+        if not names:
             raise NoEnvironmentError(
                 log,
                 f'experiment {experiment} references an environment that no longer exists',
                 possible_solutions=['reload the environment with: adare env load <file>'],
             )
-        return str(environment.name)
+        return names[0]
 
 
 def _find_project_path_by_run_ulid(experiment_run_ulid: str) -> Path | None:

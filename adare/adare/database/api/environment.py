@@ -4,6 +4,8 @@ import datetime
 import logging
 from pathlib import Path
 
+from sqlalchemy import exists
+
 # internal imports
 from adare.database.api.base import GlobalDatabaseApi
 from adare.database.models.global_models import Environment, PostSetupInstallation, SyncMetadata, Tag
@@ -38,8 +40,9 @@ class EnvironmentDbApi(GlobalDatabaseApi):
     def get_environment_by_ulid(self, ulid: str) -> Environment:
         return self._session.query(Environment).filter(Environment.id == ulid).first()
 
-    def get_environment_by_hash(self, sha256hash: str) -> Environment:
-        return self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
+    def is_vm_referenced(self, vm_id: str) -> bool:
+        """True if any environment version (current or superseded) uses VM ``vm_id``."""
+        return bool(self._session.query(exists().where(Environment.vm_id == vm_id)).scalar())
 
     def create_environment_version(
         self,

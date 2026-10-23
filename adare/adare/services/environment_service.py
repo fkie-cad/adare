@@ -120,9 +120,7 @@ class EnvironmentService:
                         name=stored_name,
                         description=env_data.get('description', ''),
                         vm_name=env_data.get('vm_name'),
-                        hypervisor=env_data.get('hypervisor', 'virtualbox')
-                        if 'hypervisor' in env_data
-                        else 'virtualbox',
+                        hypervisor=env_data.get('hypervisor') or 'virtualbox',
                         os_platform=env_data.get('vm_os_type'),
                         file_path=Path(env_data['file']) if env_data.get('file') else None,
                         next_steps=next_steps,
