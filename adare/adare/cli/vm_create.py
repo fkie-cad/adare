@@ -71,7 +71,7 @@ def exec_vm_create(arguments):
     # GUI-automation options (gui-auto install mode; --display also playbook).
     gui_record = getattr(arguments, 'record', False)
     gui_relearn = getattr(arguments, 'relearn', False)
-    gui_display = getattr(arguments, 'display', None)
+    gui_display = getattr(arguments, 'display', False)
     gui_template = getattr(arguments, 'template', None)
 
     if setup_level == SetupLevel.AGENT:

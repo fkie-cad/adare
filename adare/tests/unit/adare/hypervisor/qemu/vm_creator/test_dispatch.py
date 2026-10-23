@@ -189,11 +189,12 @@ class TestArgumentForwarding:
         assert 'allow_emulation' not in kwargs
 
     def test_display_reaches_the_playbook_creator(self, calls):
-        _build(_os_def(install_mode='playbook'), gui=GuiBuildOptions(display=False))
-        assert calls[0][1]['display'] is False
+        _build(_os_def(install_mode='playbook'), gui=GuiBuildOptions(display=True))
+        assert calls[0][1]['display'] is True
 
-    def test_gui_auto_hides_the_vm_unless_asked(self, calls):
-        _build(_os_def(install_mode='gui-auto'))
+    @pytest.mark.parametrize('mode', ['gui-auto', 'playbook'])
+    def test_vm_window_is_opt_in(self, calls, mode):
+        _build(_os_def(install_mode=mode))
         assert calls[0][1]['display'] is False
 
     def test_other_creators_get_compress_and_allow_emulation(self, calls):

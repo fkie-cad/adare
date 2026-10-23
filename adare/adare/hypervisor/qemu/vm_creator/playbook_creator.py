@@ -14,16 +14,15 @@ A single self-contained profile is the whole recipe:
     reboots from the installed disk and verify_steps log in + confirm the desktop.
 
 The guest renders at a fixed 1024x768 (``-vga qxl``), so the profiles' pixel
-coordinates are stable across hosts. Input goes over QMP whatever the display,
-so the QEMU window (shown when there is a desktop session, ``--no-display``
-hides it) is only for watching; ``playbook_live`` draws the terminal status.
+coordinates are stable across hosts. Input and screenshots go over QMP, so the
+run is headless; ``--display`` adds a QEMU window to watch it in, and
+``playbook_live`` draws the terminal status.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import os
 import platform
 import socket
 import subprocess
@@ -248,16 +247,6 @@ def _as_list(value) -> list[str]:
     return [value] if isinstance(value, str) else list(value)
 
 
-def _want_window(display: bool | None) -> bool:
-    """``--display``/``--no-display`` decide; by default show the VM whenever
-    there is a desktop session to show it on."""
-    if display is not None:
-        return display
-    if platform.system() == 'Darwin':
-        return True
-    return bool(os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'))
-
-
 def _describe(step: dict) -> str:
     """``click_text 'Next' x2  note`` — the step as one line of (escaped) markup."""
     action = step['action']
@@ -274,9 +263,11 @@ class PlaybookVMCreator(BaseVMCreator):
     # Readied inside its own install session (bootstrap + provision + check).
     readiness_pass = False
 
-    def __init__(self, *args, display: bool | None = None, **kwargs):
+    def __init__(self, *args, display: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
-        self.display = _want_window(display)
+        # Only for watching: a click or keystroke in the window reaches the
+        # installer too, so it is opt-in.
+        self.display = display
 
     def _ensure_iso(self) -> None:
         if self.iso_path is not None:
@@ -835,11 +826,11 @@ def create_playbook_vm(
     force: bool = False,
     vm_dir: Path | None = None,
     setup_level: SetupLevel = SetupLevel.FULL,
-    display: bool | None = None,
+    display: bool = False,
 ) -> Path:
     """Create a VM by replaying the profile's embedded GUI-installer playbook.
 
-    *display* shows the QEMU window (``None``: when a desktop session exists).
+    *display* shows the guest in a QEMU window while it is driven.
     """
     creator = PlaybookVMCreator(
         os_def=os_def,
