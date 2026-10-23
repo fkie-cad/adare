@@ -11,19 +11,27 @@ Supported transfer modes (chosen automatically):
 - QGA: QEMU Guest Agent file operations (macOS fallback)
 """
 
+import asyncio
+import contextlib
 import logging
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
 from adare.config import get_vm_credentials
 from adare.exceptions import LoggedException
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
-from adare.hypervisor.exceptions import GuestAgentTimeoutException, HypervisorException
+from adare.hypervisor.exceptions import (
+    GuestAgentMissingException,
+    GuestAgentTimeoutException,
+    HypervisorException,
+)
 from adare.hypervisor.port_forward import forward_bind_host
 from adare.hypervisor.qemu.accel import resolve_accel
+from adare.hypervisor.qemu.boot_watch import BootScreenWatch
 from adare.hypervisor.qemu.disk_diff import DiskDiffComparator
 from adare.hypervisor.qemu.file_transfer import get_file_transfer_strategy
 from adare.hypervisor.qemu.guestfish_client import GuestfishClient
@@ -322,6 +330,27 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         except ValueError:
             return default
 
+    # A Linux guest whose screen has been still this long when a boot attempt
+    # runs out has finished booting: its agent is missing, not late. Healthy
+    # images reach the agent well inside the first attempt, so only a guest that
+    # already missed it is judged. Windows is left to its retry: a hung Windows
+    # cold boot can freeze on a still screen too, and a retry does fix that one.
+    _AGENT_MISSING_SETTLED_S = 60
+
+    @staticmethod
+    def _boot_screenshot_path(context) -> Path:
+        """Where the frame of a guest that booted without an agent is kept."""
+        from adare.logger.logger import get_current_logfile
+
+        name = f'{context.vm.vm_name}-no-guest-agent.png'
+        run_directory = getattr(context, 'experiment_run_directory', None)
+        if run_directory is not None:
+            return Path(run_directory.path) / name
+        logfile = get_current_logfile()
+        if logfile is not None:
+            return Path(logfile).with_name(f'{Path(logfile).stem}-no-guest-agent.png')
+        return Path(tempfile.gettempdir()) / name
+
     @classmethod
     def _ready_timeout_for_attempt(cls, attempt: int, guest_platform: str | None = None) -> int:
         """Readiness budget for boot attempt ``attempt`` (1-based), doubling each time.
@@ -449,18 +478,32 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 await context.vm.start(stop_event=context.user_interrupt_event, stage_ctx=start_stage)
                 log.debug("VM visible in virt-manager (use 'Open' button to access display)")
 
-            # Stage 2: Wait for guest agent
+            # Stage 2: Wait for guest agent, watching the screen meanwhile so a
+            # guest that booted without an agent is not retried in vain.
+            watch = BootScreenWatch(context.vm) if context.guest_platform == 'linux' else None
             with StageCtxManager(VMGuestAgentWaitStage(), context.experiment_run_ulid, context.user_interrupt_event):
                 log.info(f'Waiting until VM is ready (QEMU Guest Agent), budget {ready_timeout}s')
                 start_wait = time.time()
-                ready = await context.vm.wait_until_fully_booted(
-                    timeout=ready_timeout, stop_event=context.user_interrupt_event, skip_x11_discovery=skip_x11
-                )
+                watch_task = asyncio.create_task(watch.run()) if watch else None
+                try:
+                    ready = await context.vm.wait_until_fully_booted(
+                        timeout=ready_timeout, stop_event=context.user_interrupt_event, skip_x11_discovery=skip_x11
+                    )
+                finally:
+                    if watch_task:
+                        watch_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await watch_task
                 elapsed = time.time() - start_wait
 
             if ready:
                 log.info(f'VM is ready (waited {elapsed:.1f}s, attempt {attempt}/{max_attempts})')
                 break
+            interrupted = context.user_interrupt_event and context.user_interrupt_event.is_set()
+            if watch and not interrupted and watch.settled_for() >= self._AGENT_MISSING_SETTLED_S:
+                settled = watch.settled_for()
+                screenshot = watch.save_last(self._boot_screenshot_path(context))
+                raise GuestAgentMissingException(context.vm.vm_name, ready_timeout, settled, screenshot)
         else:
             raise GuestAgentTimeoutException(context.vm.vm_name, sum(attempt_budgets), attempt_budgets)
 
