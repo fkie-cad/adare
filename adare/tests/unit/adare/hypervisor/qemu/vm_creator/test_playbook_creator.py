@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
+from rich.text import Text
 
 import adare
 from adare.hypervisor.qemu.vm_creator.playbook_creator import PlaybookVMCreationError, PlaybookVMCreator
@@ -149,5 +150,128 @@ class TestProgressOutput:
         with patch('adare.hypervisor.qemu.vm_creator.playbook_creator.print_step') as print_step:
             _creator()._run_steps(q, [{'action': 'wait_stable', 'note': 'boot'}], tmp_path, 'install')
         header, done = (c.args[0] for c in print_step.call_args_list)
-        assert header[2] == ':' and '[install 00] wait_stable  boot' in header
+        # As rendered: an unescaped '[install 00]' would be eaten as a Rich style tag.
+        assert header[2] == ':' and '[install 00] wait_stable  boot' in Text.from_markup(header).plain
         assert done.strip().startswith('done in')
+
+
+MOD = 'adare.hypervisor.qemu.vm_creator.playbook_creator'
+
+
+def _click(step: dict, finds: list) -> tuple[str | None, list[str]]:
+    """Run a click_text step against successive find results; return (outcome, printed)."""
+    q = MagicMock()
+    with (
+        patch.object(PlaybookVMCreator, '_find_text', side_effect=finds),
+        patch.object(PlaybookVMCreator, '_screen_lines', return_value=['Welcome', 'Try Ubuntu']),
+        patch(f'{MOD}.time.sleep'),
+        patch(f'{MOD}.print_step') as print_step,
+    ):
+        outcome = _creator()._click_text(q, {'text': 'English', 'tries': len(finds), **step})
+    return outcome, [c.args[0] for c in print_step.call_args_list]
+
+
+class TestClickText:
+    def test_retries_print_nothing_and_are_counted(self):
+        outcome, printed = _click({}, [None, None, (10, 20)])
+        assert outcome == '2 retries'
+        assert printed == []
+
+    def test_first_try_hit_has_no_outcome(self):
+        assert _click({}, [(10, 20)]) == (None, [])
+
+    def test_optional_text_absent_is_skipped(self):
+        outcome, printed = _click({'optional': True}, [None, None])
+        assert 'skipped' in outcome
+        assert printed == []
+
+    def test_failure_reports_what_was_on_screen(self):
+        with pytest.raises(PlaybookVMCreationError, match=r"not found after 2 tries; screen: Welcome \| Try Ubuntu"):
+            _click({}, [None, None])
+
+    def test_retry_count_reaches_the_done_line(self, tmp_path):
+        with (
+            patch.object(PlaybookVMCreator, '_find_text', side_effect=[None, (10, 20)]),
+            patch(f'{MOD}.time.sleep'),
+            patch(f'{MOD}.print_step') as print_step,
+        ):
+            _creator()._run_steps(MagicMock(), [{'action': 'click_text', 'text': 'English'}], tmp_path, 'install')
+        header, done = (c.args[0] for c in print_step.call_args_list)
+        assert "[install 00] click_text 'English'" in Text.from_markup(header).plain
+        assert done.strip().startswith('done in') and '(1 retry)' in done
+
+
+class TestLiveTerminal:
+    """On a terminal, progress goes to the live block and each step gets one line."""
+
+    @pytest.fixture
+    def on_terminal(self):
+        from adare.hypervisor.qemu.vm_creator.playbook_live import live
+
+        with patch.object(live, '_live', MagicMock()):
+            yield live
+
+    def test_step_prints_one_summary_line(self, on_terminal, tmp_path):
+        steps = [{'action': 'click_text', 'text': 'Next', 'shot': 'lang', 'note': 'Language'}]
+        with (
+            patch.object(PlaybookVMCreator, '_find_text', side_effect=[None, None, (1, 2)]),
+            patch.object(PlaybookVMCreator, '_save_shot') as save_shot,
+            patch(f'{MOD}.time.sleep'),
+            patch(f'{MOD}.print_step') as print_step,
+        ):
+            _creator()._run_steps(MagicMock(), steps, tmp_path, 'install')
+        (line,) = (c.args[0] for c in print_step.call_args_list)
+        assert "[install 00] click_text 'Next'  Language" in Text.from_markup(line).plain
+        assert '2 retries' in line and 'shot install_00_lang.png' in line
+        assert save_shot.call_args.kwargs == {'announce': False}
+
+    def test_failed_step_still_names_the_step(self, on_terminal, tmp_path):
+        with (
+            patch.object(PlaybookVMCreator, '_screen_lines', return_value=['Installing system']),
+            patch.object(PlaybookVMCreator, '_save_shot'),
+            patch(f'{MOD}.print_step') as print_step,
+            pytest.raises(PlaybookVMCreationError),
+        ):
+            _creator()._run_steps(MagicMock(), [{'action': 'wait_text', 'text': 'Done', 'timeout': 0}], tmp_path, 'x')
+        header, failed = (c.args[0] for c in print_step.call_args_list)
+        assert "[x 00] wait_text 'Done'" in Text.from_markup(header).plain and 'failed after' in failed
+
+    def test_heartbeat_updates_the_block_instead_of_printing(self, on_terminal):
+        with patch(f'{MOD}.HEARTBEAT_S', 0), patch(f'{MOD}.print_step') as print_step:
+            _wait_text({'text': 'Restart Now'}, [['Installing system'], ['Restart Now']])
+        print_step.assert_not_called()
+        assert "waiting for 'Restart Now'" in on_terminal._detail
+
+    def test_wait_stable_timeout_is_the_step_outcome(self, on_terminal, tmp_path):
+        q = MagicMock()
+        q.wait_stable.return_value = False
+        with patch(f'{MOD}.print_step') as print_step:
+            _creator()._run_steps(q, [{'action': 'wait_stable', 'timeout': 5}], tmp_path, 'install')
+        (line,) = (c.args[0] for c in print_step.call_args_list)
+        assert 'never settled' in line
+
+    def test_no_block_off_a_terminal(self):
+        from adare.hypervisor.qemu.vm_creator.playbook_live import LiveView
+
+        view = LiveView()
+        with view.session('vm'):
+            assert not view.active
+
+
+class TestVmWindow:
+    @pytest.mark.parametrize('flag', [True, False])
+    def test_flag_wins(self, flag, monkeypatch):
+        from adare.hypervisor.qemu.vm_creator.playbook_creator import _want_window
+
+        monkeypatch.setenv('DISPLAY', ':0')
+        assert _want_window(flag) is flag
+
+    def test_shown_by_default_on_a_desktop(self, monkeypatch):
+        from adare.hypervisor.qemu.vm_creator.playbook_creator import _want_window
+
+        monkeypatch.setattr(f'{MOD}.platform.system', lambda: 'Linux')
+        monkeypatch.delenv('DISPLAY', raising=False)
+        monkeypatch.setenv('WAYLAND_DISPLAY', 'wayland-0')
+        assert _want_window(None) is True
+        monkeypatch.delenv('WAYLAND_DISPLAY')
+        assert _want_window(None) is False

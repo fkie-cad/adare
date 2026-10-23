@@ -104,13 +104,37 @@ class TestBootstrapSteps:
 
 
 class TestLaunch:
-    def _cmd(self, tmp_path, qga_sock):
+    def _launch(self, tmp_path, qga_sock=None, display=False, window_opens=True):
+        creator = _creator()
+        creator.vm_name, creator.display = 'vm', display
         with (
             patch(f'{MOD}.qemu_params_for_arch', return_value={'exe': 'qemu-system-x86_64'}),
+            patch(f'{MOD}.platform.system', return_value='Linux'),
+            patch(f'{MOD}.print_step'),
             patch(f'{MOD}.subprocess.Popen') as popen,
         ):
-            _creator()._launch(tmp_path / 'd.qcow2', None, tmp_path / 'qmp.sock', tmp_path, None, qga_sock=qga_sock)
-        return popen.call_args.args[0]
+            if window_opens:
+                popen.return_value.wait.side_effect = subprocess.TimeoutExpired('qemu', 3)
+            else:
+                popen.return_value.wait.return_value = 1
+            creator._launch(tmp_path / 'd.qcow2', None, tmp_path / 'qmp.sock', tmp_path, None, qga_sock=qga_sock)
+        return creator, [c.args[0] for c in popen.call_args_list]
+
+    def _cmd(self, tmp_path, qga_sock):
+        return self._launch(tmp_path, qga_sock)[1][-1]
+
+    def test_window_is_opened_when_wanted(self, tmp_path):
+        _, cmds = self._launch(tmp_path, display=True)
+        assert len(cmds) == 1 and cmds[0][-2:] == ['-display', 'gtk']
+
+    def test_headless_without_a_window(self, tmp_path):
+        _, cmds = self._launch(tmp_path)
+        assert len(cmds) == 1 and cmds[0][-2:] == ['-display', 'none']
+
+    def test_falls_back_to_headless_when_the_window_cannot_open(self, tmp_path):
+        creator, cmds = self._launch(tmp_path, display=True, window_opens=False)
+        assert [c[-1] for c in cmds] == ['gtk', 'none']
+        assert creator.display is False
 
     def test_provisioning_boot_gets_a_guest_agent_port(self, tmp_path):
         cmd = self._cmd(tmp_path, tmp_path / 'qga.sock')

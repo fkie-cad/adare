@@ -53,11 +53,13 @@ class UnsupportedInstallTarget(DispatchError):
 
 @dataclass(frozen=True)
 class GuiBuildOptions:
-    """Options only the GUI-driven creators (`gui-auto`) accept."""
+    """Options only the GUI-driven creators (`gui-auto`, `playbook`) accept."""
 
     record: bool = False
     relearn: bool = False
-    display: bool = False
+    # None = the creator's default: gui-auto hides the VM, playbook shows it
+    # when there is a desktop session.
+    display: bool | None = None
     template: str | None = None
 
 
@@ -120,7 +122,7 @@ def create_vm_disk(
             iso_path=iso_path,
             record=gui.record,
             relearn=gui.relearn,
-            display=gui.display,
+            display=bool(gui.display),
             template=gui.template,
             **hostable,
         )
@@ -128,7 +130,7 @@ def create_vm_disk(
     if os_def.install_mode == 'playbook':
         from adare.hypervisor.qemu.vm_creator.playbook_creator import create_playbook_vm
 
-        return create_playbook_vm(iso_path=iso_path, **common)
+        return create_playbook_vm(iso_path=iso_path, display=gui.display, **common)
 
     # 2. Seed-file modes, keyed on platform.
     if os_def.platform == 'linux':

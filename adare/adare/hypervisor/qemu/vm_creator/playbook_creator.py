@@ -14,13 +14,17 @@ A single self-contained profile is the whole recipe:
     reboots from the installed disk and verify_steps log in + confirm the desktop.
 
 The guest renders at a fixed 1024x768 (``-vga qxl``), so the profiles' pixel
-coordinates are stable across hosts.
+coordinates are stable across hosts. Input goes over QMP whatever the display,
+so the QEMU window (shown when there is a desktop session, ``--no-display``
+hides it) is only for watching; ``playbook_live`` draws the terminal status.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
+import platform
 import socket
 import subprocess
 import time
@@ -32,6 +36,7 @@ from adare.console import console, print_section, print_step
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
+from adare.hypervisor.qemu.vm_creator.playbook_live import fmt_duration, live
 from adare.hypervisor.qemu.vm_creator.playbook_provision import (
     AUTOLOGIN_CHECK_LINUX,
     bootstrap_steps,
@@ -108,13 +113,12 @@ AGENT_REBOOT_TIMEOUT_S = 600.0
 AUTOLOGIN_TIMEOUT_S = 180.0
 
 
-def _fmt_duration(seconds: float) -> str:
-    m, sec = divmod(int(seconds), 60)
-    return f'{m}m{sec:02d}s' if m else f'{sec}s'
-
-
 class _Heartbeat:
-    """Prints ``waiting for X: elapsed / timeout — detail`` at most every HEARTBEAT_S."""
+    """Reports ``waiting for X: elapsed / timeout — detail``.
+
+    On a terminal it updates the live status block on every beat; elsewhere it
+    prints a line at most every HEARTBEAT_S.
+    """
 
     def __init__(self, what: str, timeout: float):
         self.what = what
@@ -126,11 +130,15 @@ class _Heartbeat:
 
     def beat(self, detail: str = '') -> None:
         now = time.time()
+        line = f'{self.what}: {fmt_duration(now - self.start)} / {fmt_duration(self.timeout)}'
+        line += f' — {detail}' if detail else ''
+        if live.active:
+            live.detail(line)
+            return
         if now - self._last < HEARTBEAT_S:
             return
         self._last = now
-        line = f'    … {self.what}: {_fmt_duration(now - self.start)} / {_fmt_duration(self.timeout)}'
-        print_step(line + (f' — {detail}' if detail else ''))
+        print_step(f'    … {line}')
 
 
 class PlaybookVMCreationError(VMCreationError):
@@ -229,9 +237,8 @@ class _QMP:
             else:
                 stable_since = None
             heartbeat.beat(
-                f'still for {_fmt_duration(time.time() - stable_since)}' if stable_since else 'screen changing'
+                f'still for {fmt_duration(time.time() - stable_since)}' if stable_since else 'screen changing'
             )
-        print_step('[yellow]wait_stable timed out[/yellow]')
         return False
 
 
@@ -241,11 +248,35 @@ def _as_list(value) -> list[str]:
     return [value] if isinstance(value, str) else list(value)
 
 
+def _want_window(display: bool | None) -> bool:
+    """``--display``/``--no-display`` decide; by default show the VM whenever
+    there is a desktop session to show it on."""
+    if display is not None:
+        return display
+    if platform.system() == 'Darwin':
+        return True
+    return bool(os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'))
+
+
+def _describe(step: dict) -> str:
+    """``click_text 'Next' x2  note`` — the step as one line of (escaped) markup."""
+    action = step['action']
+    text = f' {escape(repr(step["text"]))}' if action in ('click_text', 'wait_text') else ''
+    gone = ' gone' if step.get('gone') else ''
+    repeat = int(step.get('repeat', 1))
+    note = step.get('note', '')
+    return f'{action}{text}{gone}' + (f' x{repeat}' if repeat > 1 else '') + (f'  {escape(note)}' if note else '')
+
+
 class PlaybookVMCreator(BaseVMCreator):
     """Create a VM by replaying a profile's embedded GUI-installer playbook."""
 
     # Readied inside its own install session (bootstrap + provision + check).
     readiness_pass = False
+
+    def __init__(self, *args, display: bool | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.display = _want_window(display)
 
     def _ensure_iso(self) -> None:
         if self.iso_path is not None:
@@ -273,18 +304,19 @@ class PlaybookVMCreator(BaseVMCreator):
         # install_steps must end by confirming completion on screen (wait_text on
         # the installer's "done" dialog); a still screen alone proves nothing.
         print_section('GUI installer (deterministic playbook)')
-        proc = self._launch(disk_path, self.iso_path, sock, run_dir, nvram_path)
-        q = None
-        try:
-            q = _QMP(str(sock), ppm)
-            self._run_steps(q, self.os_def.install_steps, run_dir, 'install')
-            # Shut the live session down cleanly so every write to the new
-            # disk is flushed, rather than cutting power under it.
-            self._shutdown(proc, q, grace=120)
-        finally:
-            if q:
-                q.close()
-            self._stop(proc, sock)
+        with live.session(f'{self.vm_name} · installer'):
+            proc = self._launch(disk_path, self.iso_path, sock, run_dir, nvram_path)
+            q = None
+            try:
+                q = _QMP(str(sock), ppm)
+                self._run_steps(q, self.os_def.install_steps, run_dir, 'install')
+                # Shut the live session down cleanly so every write to the new
+                # disk is flushed, rather than cutting power under it.
+                self._shutdown(proc, q, grace=120)
+            finally:
+                if q:
+                    q.close()
+                self._stop(proc, sock)
 
         # ── 2. reboot from the installed disk, verify, make ADARE-ready ───
         # The guest-agent port is there from this boot on, so the agent that
@@ -292,20 +324,21 @@ class PlaybookVMCreator(BaseVMCreator):
         print_section('Booting installed system')
         provision = self.setup_level >= SetupLevel.BASE
         qga_sock = run_dir / 'qga.sock'
-        proc = self._launch(disk_path, None, sock, run_dir, nvram_path, qga_sock=qga_sock if provision else None)
-        if provision:
-            self.make_ready_in_session(proc, sock, qga_sock, run_dir, verify_steps=self.os_def.verify_steps)
-        else:
-            q = None
-            try:
-                q = _QMP(str(sock), ppm)
-                if self.os_def.verify_steps:
-                    self._run_steps(q, self.os_def.verify_steps, run_dir, 'verify')
-                self._shutdown(proc, q, grace=60)
-            finally:
-                if q:
-                    q.close()
-                self._stop(proc, sock)
+        with live.session(f'{self.vm_name} · installed system'):
+            proc = self._launch(disk_path, None, sock, run_dir, nvram_path, qga_sock=qga_sock if provision else None)
+            if provision:
+                self.make_ready_in_session(proc, sock, qga_sock, run_dir, verify_steps=self.os_def.verify_steps)
+            else:
+                q = None
+                try:
+                    q = _QMP(str(sock), ppm)
+                    if self.os_def.verify_steps:
+                        self._run_steps(q, self.os_def.verify_steps, run_dir, 'verify')
+                    self._shutdown(proc, q, grace=60)
+                finally:
+                    if q:
+                        q.close()
+                    self._stop(proc, sock)
         console.print(f'[green]Playbook install complete[/green] — screenshots in {run_dir}')
 
     # -- making the installed desktop ADARE-ready ----------------------------
@@ -320,11 +353,12 @@ class PlaybookVMCreator(BaseVMCreator):
         """
         q = None
         try:
-            q = _QMP(str(qmp_sock), run_dir / '_frame.ppm')
-            if verify_steps:
-                self._run_steps(q, verify_steps, run_dir, 'verify')
-            self._make_adare_ready(q, qga_sock, run_dir)
-            self._shutdown_via_agent(proc, q, qga_sock)
+            with live.session(f'{self.vm_name} · installed system'):
+                q = _QMP(str(qmp_sock), run_dir / '_frame.ppm')
+                if verify_steps:
+                    self._run_steps(q, verify_steps, run_dir, 'verify')
+                self._make_adare_ready(q, qga_sock, run_dir)
+                self._shutdown_via_agent(proc, q, qga_sock)
         finally:
             if q:
                 q.close()
@@ -339,6 +373,7 @@ class PlaybookVMCreator(BaseVMCreator):
         a screenshot of the guest next to the install screenshots.
         """
         print_section('Making the guest ADARE-ready')
+        live.step('\\[bootstrap] installing the guest agent')
         self._run_steps(q, bootstrap_steps(self.os_def), run_dir, 'bootstrap')
         if not self._wait_for_agent(qga_sock, AGENT_BOOTSTRAP_TIMEOUT_S, 'waiting for the guest agent'):
             self._save_shot(q, run_dir / 'bootstrap_FAILED.png')
@@ -350,10 +385,12 @@ class PlaybookVMCreator(BaseVMCreator):
         print_step('    guest agent is up')
 
         for step in provision_steps(self.setup_level, self.os_def.architecture):
-            print_step(f'{time.strftime("%H:%M:%S")} [provision] {step.name}')
+            print_step(f'{time.strftime("%H:%M:%S")} \\[provision] {escape(step.name)}')
+            live.step(f'\\[provision] {escape(step.name)}')
             self._guest_run(q, qga_sock, run_dir, step.name, step.command, step.timeout_minutes * 60.0)
 
-        print_step(f'{time.strftime("%H:%M:%S")} [provision] rebooting to check the result')
+        print_step(f'{time.strftime("%H:%M:%S")} \\[provision] rebooting to check the result')
+        live.step('\\[provision] rebooting to check the result')
         qga_shutdown(qga_sock, 'reboot')
         time.sleep(15)
         if not self._wait_for_agent(qga_sock, AGENT_REBOOT_TIMEOUT_S, 'waiting for the guest agent after reboot'):
@@ -387,7 +424,7 @@ class PlaybookVMCreator(BaseVMCreator):
                 shell='bash',
                 timeout=timeout,
                 progress_callback=lambda _elapsed: heartbeat.beat(),
-                progress_interval=HEARTBEAT_S,
+                progress_interval=5.0 if live.active else HEARTBEAT_S,
             )
         except QgaError as e:
             self._save_shot(q, run_dir / 'provision_FAILED.png')
@@ -425,6 +462,7 @@ class PlaybookVMCreator(BaseVMCreator):
         """Clean OS shutdown through the agent: a logged-in desktop may answer
         the ACPI power button with a dialog instead of powering off."""
         print_step(f'Shutting the guest down (up to {grace:.0f}s)')
+        live.step('shutting the guest down')
         try:
             qga_exec(qga_sock, 'sync', shell='bash', timeout=120)
         except QgaError as e:
@@ -468,8 +506,8 @@ class PlaybookVMCreator(BaseVMCreator):
             f'unix:{sock},server,nowait',
             '-serial',
             f'file:{run_dir / "serial.log"}',
-            '-display',
-            'none',
+            '-name',
+            f'{self.vm_name} - ADARE playbook (watch only, input is automated)'.replace(',', ',,'),
         ]
         if iso_path is not None:
             cmd += ['-cdrom', str(iso_path), '-boot', 'd']
@@ -494,8 +532,37 @@ class PlaybookVMCreator(BaseVMCreator):
             ]
         if sock.exists():
             sock.unlink()
+        if self.display:
+            proc = self._spawn(cmd + ['-display', 'cocoa' if platform.system() == 'Darwin' else 'gtk'], run_dir)
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                live.window = 'VM window open: watch only, the playbook drives mouse and keyboard'
+                return proc
+            # This QEMU has no GTK/Cocoa UI, or the desktop session refused it.
+            print_step(
+                f'[yellow]Could not open the VM window ({escape(self._qemu_log_tail(run_dir))}); '
+                'continuing headless[/yellow]'
+            )
+            self.display = False
+        live.window = f'headless: no VM window (--display to show one); screenshots in {escape(str(run_dir))}'
+        return self._spawn(cmd + ['-display', 'none'], run_dir)
+
+    @staticmethod
+    def _spawn(cmd: list[str], run_dir: Path) -> subprocess.Popen:
+        """Start QEMU with its output in ``qemu.log``; nothing reads a pipe, and
+        a full one (GTK warnings fill it fast) would block QEMU."""
         log.info('playbook qemu: %s', ' '.join(cmd))
-        return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        with open(run_dir / 'qemu.log', 'ab') as out:
+            return subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT)
+
+    @staticmethod
+    def _qemu_log_tail(run_dir: Path) -> str:
+        try:
+            lines = (run_dir / 'qemu.log').read_text(errors='replace').strip().splitlines()
+        except OSError:
+            return 'qemu exited'
+        return lines[-1] if lines else 'qemu exited'
 
     @staticmethod
     def _shutdown(proc, q: _QMP, grace: float) -> None:
@@ -505,6 +572,7 @@ class PlaybookVMCreator(BaseVMCreator):
         after unmounting everything; that is the fallback case and safe to kill.
         """
         print_step(f'Powering the guest down (up to {grace:.0f}s)')
+        live.step('powering the guest down')
         try:
             q.powerdown()
         except (PlaybookVMCreationError, OSError):
@@ -530,35 +598,51 @@ class PlaybookVMCreator(BaseVMCreator):
 
     # -- step engine --------------------------------------------------------
     def _run_steps(self, q: _QMP, steps: list, run_dir: Path, phase: str) -> None:
+        """Run *steps*; one line per step, plus the live block on a terminal.
+
+        On a terminal the line is printed when the step ends, with its duration
+        and outcome (the live block shows it while it runs). Elsewhere it is
+        printed when the step starts and a ``done in`` line follows long steps.
+        """
         for i, step in enumerate(steps):
             action = step['action']
-            note = step.get('note', '')
-            repeat = int(step.get('repeat', 1))
-            print_step(
-                f'{time.strftime("%H:%M:%S")} [{phase} {i:02d}] {action}'
-                + (f' x{repeat}' if repeat > 1 else '')
-                + (f'  {note}' if note else '')
-            )
+            # escape(): Rich would read a bare '[install 07]' as a style tag and drop it.
+            header = f'{time.strftime("%H:%M:%S")} {escape(f"[{phase} {i:02d}]")} {_describe(step)}'
+            live.step(f'{escape(f"[{phase} {i + 1}/{len(steps)}]")} {_describe(step)}')
+            if not live.active:
+                print_step(header)
             started = time.time()
+            outcome = None
             try:
-                for _ in range(repeat):
-                    self._run_step(q, step, action)
+                for _ in range(int(step.get('repeat', 1))):
+                    outcome = self._run_step(q, step, action) or outcome
             except PlaybookVMCreationError as e:
+                if live.active:
+                    print_step(header)
                 # The screen at the moment of failure is what explains it.
-                print_step(f'    [red]failed after {_fmt_duration(time.time() - started)}:[/red] {escape(str(e))}')
+                print_step(f'    [red]failed after {fmt_duration(time.time() - started)}:[/red] {escape(str(e))}')
                 self._save_shot(q, run_dir / f'{phase}_{i:02d}_FAILED.png')
                 raise
-            if action in ('wait_text', 'wait_stable', 'click_text'):
-                print_step(f'    done in {_fmt_duration(time.time() - started)}')
+            took = fmt_duration(time.time() - started) if action in ('wait_text', 'wait_stable', 'click_text') else ''
             name = step.get('shot') or (step.get('name') if action == 'shot' else None)
-            if name:
-                self._save_shot(q, run_dir / f'{phase}_{i:02d}_{name}.png')
+            shot = run_dir / f'{phase}_{i:02d}_{name}.png' if name else None
+            if live.active:
+                if shot:
+                    self._save_shot(q, shot, announce=False)
+                summary = ', '.join(part for part in (took, outcome, shot and f'shot {shot.name}') if part)
+                print_step(header + (f'  [dim]— {summary}[/dim]' if summary else ''))
+                continue
+            if took:
+                print_step(f'    done in {took}' + (f' ({outcome})' if outcome else ''))
+            if shot:
+                self._save_shot(q, shot)
 
-    def _run_step(self, q: _QMP, step: dict, action: str) -> None:
+    def _run_step(self, q: _QMP, step: dict, action: str) -> str | None:
+        """Run one step; returns a note for its summary line (e.g. retries)."""
         if action == 'tap':
             q.tap(*step['coords'])
         elif action == 'click_text':
-            self._click_text(q, step)
+            return self._click_text(q, step)
         elif action == 'wait_text':
             self._wait_text(q, step)
         elif action == 'type':
@@ -574,17 +658,20 @@ class PlaybookVMCreator(BaseVMCreator):
                 poll=float(step.get('poll', 3)),
                 min_elapsed=float(step.get('min', 0)),
             )
-            if not settled and step.get('required', False):
-                raise PlaybookVMCreationError(f'screen never settled within {step.get("timeout", 600)}s')
+            if not settled:
+                if step.get('required', False):
+                    raise PlaybookVMCreationError(f'screen never settled within {step.get("timeout", 600)}s')
+                return '[yellow]screen never settled, continuing[/yellow]'
         elif action == 'shot':
             pass
         else:
             raise PlaybookVMCreationError(f'unknown step action: {action!r}')
-        if action in ('tap', 'key', 'click_text'):
+        if action in ('tap', 'key'):
             time.sleep(float(step.get('pause', 0.4)))
+        return None
 
     # -- CV: locate a control by its on-screen label (ADARE cv-server OCR) ---
-    def _click_text(self, q: _QMP, step: dict) -> None:
+    def _click_text(self, q: _QMP, step: dict) -> str | None:
         """Find ``step['text']`` on screen via OCR and click it.
 
         Robust to window position / resolution / installer version — the button
@@ -599,21 +686,34 @@ class PlaybookVMCreator(BaseVMCreator):
         tries = int(step.get('tries', 10))
         interval = float(step.get('interval', 2.0))
         optional = bool(step.get('optional', False))
+        frame = b''
         for attempt in range(tries):
-            loc = self._find_text(q.dump(), text, mode, which)
+            frame = q.dump()
+            loc = self._find_text(frame, text, mode, which)
             if loc:
                 x, y = loc
                 q.tap(x + dx, y + dy, 1024, 768)
-                return
+                time.sleep(float(step.get('pause', 0.4)))
+                return f'{attempt} {"retry" if attempt == 1 else "retries"}' if attempt else None
+            live.detail(f'{escape(repr(text))} not on screen yet: attempt {attempt + 1}/{tries}, every {interval:g}s')
             if attempt < tries - 1:
-                print_step(f'    {text!r} not on screen yet, retry {attempt + 2}/{tries}')
-            time.sleep(interval)
+                time.sleep(interval)
         if optional:
             # A screen that only appears conditionally (e.g. the Ubuntu 24.04
             # 'installer update available' prompt). Absent -> just move on.
-            print_step(f'    optional text {text!r} not present, skipping')
-            return
-        raise PlaybookVMCreationError(f'on-screen text {text!r} not found after {tries} tries')
+            return 'optional text not on screen, skipped'
+        # What the screen said instead is what explains the failure.
+        raise PlaybookVMCreationError(
+            f'on-screen text {text!r} not found after {tries} tries; screen: {self._screen_summary(frame)}'
+        )
+
+    @classmethod
+    def _screen_summary(cls, frame: bytes) -> str:
+        try:
+            screen = ' | '.join(line.strip() for line in cls._screen_lines(frame) if line.strip())
+        except PlaybookVMCreationError as e:
+            return f'({e})'
+        return (screen[:200] + ('…' if len(screen) > 200 else '')) or '(no text)'
 
     def _wait_text(self, q: _QMP, step: dict) -> None:
         """Block until one of ``step['text']`` is on screen (or, with ``gone: true``,
@@ -656,7 +756,7 @@ class PlaybookVMCreator(BaseVMCreator):
         screen = ' | '.join(line.strip() for line in lines if line.strip())
         screen = escape(screen[:100] + ('…' if len(screen) > 100 else '')) or '(no text)'
         if frozen_for >= STUCK_S:
-            return f'[yellow]screen unchanged for {_fmt_duration(frozen_for)}, may be stuck[/yellow] — {screen}'
+            return f'[yellow]screen unchanged for {fmt_duration(frozen_for)}, may be stuck[/yellow] — {screen}'
         return f'screen: {screen}'
 
     @staticmethod
@@ -704,7 +804,7 @@ class PlaybookVMCreator(BaseVMCreator):
         return int(loc['x']), int(loc['y'])
 
     @staticmethod
-    def _save_shot(q: _QMP, path: Path) -> None:
+    def _save_shot(q: _QMP, path: Path, announce: bool = True) -> None:
         try:
             data = q.dump()
         except PlaybookVMCreationError:
@@ -721,7 +821,8 @@ class PlaybookVMCreator(BaseVMCreator):
             # OSError, as do its write errors. Either way, keep the raw PPM so
             # the frame is not lost.
             path.with_suffix('.ppm').write_bytes(data)
-        print_step(f'    shot -> {path}')
+        if announce:
+            print_step(f'    shot -> {path}')
 
 
 def create_playbook_vm(
@@ -734,8 +835,12 @@ def create_playbook_vm(
     force: bool = False,
     vm_dir: Path | None = None,
     setup_level: SetupLevel = SetupLevel.FULL,
+    display: bool | None = None,
 ) -> Path:
-    """Create a VM by replaying the profile's embedded GUI-installer playbook."""
+    """Create a VM by replaying the profile's embedded GUI-installer playbook.
+
+    *display* shows the QEMU window (``None``: when a desktop session exists).
+    """
     creator = PlaybookVMCreator(
         os_def=os_def,
         vm_name=vm_name,
@@ -746,5 +851,6 @@ def create_playbook_vm(
         vm_dir=vm_dir,
         iso_path=iso_path,
         setup_level=setup_level,
+        display=display,
     )
     return creator.create()
