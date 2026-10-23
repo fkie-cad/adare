@@ -187,34 +187,34 @@ def exec_manage_reset_vm(arguments):
     vm_result = api.vm.list_all()
     if vm_result.success:
         vms = vm_result.data
-        print(f"⚠️  This will delete ALL {len(vms)} VMs from the system!")
+        print(f"⚠️  This will remove the instances of ALL {len(vms)} VMs (the VMs stay registered)!")
 
         if vms:
-            print("\nVMs to be deleted:")
+            print("\nVMs whose instances are removed:")
             for vm in vms[:10]:  # Show max 10 VMs
                 print(f"  - {vm.name} ({vm.id})")
 
             if len(vms) > 10:
                 print(f"  ... and {len(vms) - 10} more")
         else:
-            print("No VMs found to delete")
+            print("No VMs found")
             return
 
         # Ask for confirmation
         if not arguments.force:
-            response = input("\nAre you sure you want to delete all VMs? (yes/no): ").strip().lower()
+            response = input("\nAre you sure you want to remove the instances of all VMs? (yes/no): ").strip().lower()
             if response not in ['yes', 'y']:
                 print("Operation cancelled.")
                 return
 
     # Delete VMs
-    print("\nDeleting VMs...")
+    print("\nRemoving VM instances...")
     result = api.manage.reset_all_vms(force=True)
 
     if result.success:
-        print(f"✅ Successfully deleted: {result.data.deleted_count} VMs")
+        print(f"✅ Removed: {result.data.deleted_count} VM instance(s)")
         if result.data.failed_count > 0:
-            print(f"❌ Failed to delete: {result.data.failed_count} VMs")
+            print(f"❌ Failed to remove: {result.data.failed_count} VM instance(s)")
             for error in result.data.failed_vms[:3]:
                 print(f"  - {error}")
     else:
