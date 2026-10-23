@@ -273,7 +273,13 @@ def exec_vm_create(arguments):
             )
         )
     elif os_def.install_mode == 'manual':
-        tip = 'This VM was installed manually. Configure SSH/guest agent access for full ADARE integration.'
+        tip = (
+            'This VM was installed manually. No guest agent or autologin was added (--setup bare): '
+            'ADARE cannot drive it as it is.'
+            if setup_level == SetupLevel.BARE or os_def.platform != 'linux'
+            else 'This VM was installed manually; ADARE then installed its guest agent and set up autologin, '
+            'unless a warning above says otherwise.'
+        )
     elif setup_level == SetupLevel.BARE:
         tip = 'No guest tools or agent software installed (--setup bare).'
     elif setup_level == SetupLevel.BASE:

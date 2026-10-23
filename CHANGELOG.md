@@ -70,6 +70,13 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   after a reboot the `adare` autologin session must exist (Windows: checks only).
   A failure fails the build and keeps the installed disk;
   `<disk>_readiness.log` has every command. Recipe base disks get it too.
+- Manual Linux installs (`install_mode: manual`) get the same setup as playbook
+  installs after you finish: ADARE logs in as `adare`/`adare` on a text console,
+  installs `qemu-guest-agent` (apt, dnf, zypper or pacman), provisions over the
+  agent and checks it after a reboot; a failure only warns. NixOS gets the
+  `configuration.nix` lines instead. Autologin now also covers LightDM (Mint,
+  elementary) and picks the display manager that is actually enabled.
+  `--setup bare` skips all in-guest setup for every install mode.
 - A Linux guest that boots but whose guest agent never connects now fails after
   the first boot attempt with "guest agent never connected, although the guest
   finished booting" and a screenshot, instead of a bare timeout after three cold

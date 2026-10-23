@@ -247,9 +247,10 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         'setup_level',
         type=click.Choice(['bare', 'base', 'full', 'agent']),
         default=None,
-        help='What to install during creation: bare (OS only), base (+ guest tools), '
-        'full (+ Python env, default), agent (+ pre-installed adarevm, '
-        'not implemented).',
+        help='What ADARE adds to the guest: bare (nothing after the OS install; unattended '
+        'answer files still create the adare user and autologin), base (+ guest agent, '
+        'autologin, no screen lock; checked after a reboot), full (+ Python env, default), '
+        'agent (+ pre-installed adarevm, not implemented).',
     )
     @click.option('--bare', is_flag=True, default=False, help='Deprecated alias for --setup bare.')
     @click.option('--env-name', default=None, help='Environment file name (defaults to VM name)')
