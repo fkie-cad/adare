@@ -44,6 +44,11 @@ two-hour Windows install on every failed MSI. With the base cached, a retry
 only in their provision lists (e.g. the Autopsy solr4 / solr8 environments) share
 **one** Windows base build, and it leaves ``vm create`` untouched.
 
+Stage 1 includes the creators' own ADARE readiness pass (``guest_readiness``):
+agent, autologin and desktop defaults are checked once there, so Stage 2 only
+runs the recipe's own steps. Base disks cached before that pass existed were not
+checked; deleting the entry from ``RECIPE_BASE_CACHE_DIR`` rebuilds it.
+
 Integrity note: OS installs are never bit-reproducible, so the recipe hash is
 anchored on the *inputs*. The produced disk is still hashed per run into
 ``Vm.hash`` for tamper detection.

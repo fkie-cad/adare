@@ -54,6 +54,27 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - `adare vm test` writes a debug log to `./adare-vm-test-<target>-<timestamp>.log`
   and prints its path at the end, failures included. `--log-file` picks the path,
   `--no-log` turns it off, and an existing global `--logfile` is used as is.
+- `adare vm create` for `install_mode: playbook` profiles (Ubuntu 18.04–24.04,
+  Kubuntu 20.04–24.04) now makes the installed desktop ADARE-ready for
+  `--setup base`/`full` (the default): it installs `qemu-guest-agent` from a text
+  console, then over the agent sets passwordless sudo, automatic login, no idle
+  lock/blanking, no first-login wizard and no background apt updates (`full`:
+  `python3-pip` + `uv`), reboots and checks the agent and the autologin session.
+  Any failed step fails the build with a screenshot. Profiles can override the
+  console part with `bootstrap_steps`. Before, these images had no guest agent,
+  so `adare vm test` and experiments waited on it until every boot retry was spent.
+- Every unattended `adare vm create` (autoinstall, preseed, kickstart, AutoYaST,
+  Windows autounattend) ends with a readiness pass for `--setup base`/`full`: the
+  finished disk boots once, the guest agent must answer, Linux desktops get no
+  idle lock/blanking (GNOME, Plasma 5/6, Xfce) and no first-login wizard, and
+  after a reboot the `adare` autologin session must exist (Windows: checks only).
+  A failure fails the build and keeps the installed disk;
+  `<disk>_readiness.log` has every command. Recipe base disks get it too.
+- A Linux guest that boots but whose guest agent never connects now fails after
+  the first boot attempt with "guest agent never connected, although the guest
+  finished booting" and a screenshot, instead of a bare timeout after three cold
+  boots (~19 min). The guest's screen sitting still for a minute is what tells it
+  apart from a slow boot.
 
 ### Changed
 - `env remove` refuses without `--force` when a registered project cannot be

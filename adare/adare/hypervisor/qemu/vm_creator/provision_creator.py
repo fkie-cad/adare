@@ -385,6 +385,7 @@ def run_provision(
     allow_emulation: bool = False,
     compress: bool = True,
     deadline_minutes: int = _DEFAULT_DEADLINE_MINUTES,
+    title: str = 'Build-time provisioning (Stage 2/2)',
 ) -> Path:
     """Provision *base_disk* into a standalone *dest_disk*, or raise.
 
@@ -398,6 +399,7 @@ def run_provision(
         commands: Already-expanded provision commands, in execution order.
         build_log_path: Host log file recording every command and its output.
         deadline_minutes: Budget for the whole stage, checked between steps.
+        title: Section heading; the creators' readiness pass reuses this stage.
 
     Returns:
         *dest_disk*.
@@ -420,7 +422,7 @@ def run_provision(
     keep_failed = os.environ.get(KEEP_FAILED_ENV) == '1'
     succeeded = False
 
-    print_section('Build-time provisioning (Stage 2/2)')
+    print_section(title)
     console.print(f'  {total} command(s) to run in the guest.')
     console.print(f'  Host log: [dim]{build_log_path}[/dim]')
 

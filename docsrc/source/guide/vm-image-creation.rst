@@ -306,6 +306,58 @@ minutes::
 When a step fails, the screen at that moment is saved as
 ``<vm>_playbook/<phase>_<nn>_FAILED.png`` next to the per-step screenshots.
 
+**Making the guest ADARE-ready.** A genuine installer leaves a stock desktop: no
+QEMU guest agent, a login screen on every boot, a screen that locks when idle and
+a first-login welcome wizard. With ``--setup base`` or ``full`` (the default) the
+creator therefore continues after ``verify_steps`` in the same boot, which has a
+guest-agent port:
+
+1. *Bootstrap.* It switches to a text console (Ctrl+Alt+F3), logs in as
+   ``adare`` and installs ``qemu-guest-agent`` with one typed ``apt-get``
+   command, then waits for the agent to answer. This is the only typed part and
+   needs network in the guest. A profile for a non-apt distribution supplies its
+   own ``bootstrap_steps`` (same actions as above).
+2. *Provisioning over the agent*, one command per step, each with its exit code:
+   passwordless sudo, ``cifs-utils`` / ``openssh-server`` / ``curl``, GDM or
+   SDDM automatic login (the release's default session is kept, Wayland
+   included), no idle lock or blanking, no first-login wizard
+   (``gnome-initial-setup``, Plasma Welcome), no background apt updates. ``full``
+   adds ``python3-pip`` and ``uv`` in ``/usr/local/bin``.
+3. *Proof.* It reboots and requires the agent to come back and an automatic-login
+   session for ``adare`` to exist, then shuts the guest down cleanly.
+
+Any failure fails ``vm create`` with a ``bootstrap_FAILED.png`` /
+``provision_FAILED.png`` / ``reboot_FAILED.png`` / ``autologin_FAILED.png``
+screenshot; a working run ends with ``ready_desktop.png``. ``--setup bare`` skips
+all of it and yields the stock install, which ADARE cannot drive.
+
+**Every other creator checks too.** Unattended installs (autoinstall, preseed,
+kickstart, AutoYaST, Windows autounattend) used to report success once their
+installer powered off, without ever booting the result. With ``--setup base`` or
+``full`` they now end with a readiness pass that reuses the recipe build's
+provisioning stage: the finished disk boots on a throwaway overlay with a
+guest-agent channel, and over the agent
+
+* Linux gets what the answer files leave out (no idle lock or blanking for
+  GNOME, Plasma 5/6 and Xfce, no first-login wizard), then reboots and must
+  show an automatic-login session for ``adare``. Autologin itself is checked, not
+  rewritten, since some answer files force an X11 session on purpose;
+* Windows, whose answer files already disable lock, OOBE and updates, reboots
+  and must show ``adare`` logged on at the console.
+
+The guest is then shut down cleanly and the overlay flattened (and compressed)
+into the final disk. If the agent never answers or a check fails, ``vm create``
+fails; the installed disk stays where it is for inspection and
+``<disk>_readiness.log`` records every command. Manual and ``gui-auto`` installs
+skip the pass and say so: what they installed has no guest agent to check with.
+
+An image with no guest agent (``--setup bare``, or built before this provisioning
+existed) does not hang ``adare vm test`` or an experiment through every boot
+retry: when a Linux boot attempt runs out while the guest's screen has been still
+for a minute, the guest has booted and its agent is missing, so the run stops at
+once with that diagnosis and the last frame saved next to the log
+(``<log>-no-guest-agent.png``) or in the run directory.
+
 **Tuning a new installer.** ``scripts/gui-install/`` boots an installer and
 lets you take screenshots and click interactively (``qmp_drive.py shot/tap``) and
 query the CV server's ``find_text``, to read off the labels a playbook needs.

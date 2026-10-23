@@ -32,6 +32,10 @@ class ManualVMCreator(BaseVMCreator):
     the user to perform a manual OS installation.
     """
 
+    # What the user installed is unknown, so there is nothing to check against;
+    # the success message tells them to set up the guest agent themselves.
+    readiness_pass = False
+
     def _ensure_iso(self) -> None:
         """Validate the user-supplied ISO path."""
         if self.iso_path is None:

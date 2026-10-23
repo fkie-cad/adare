@@ -257,24 +257,33 @@ def exec_vm_create(arguments):
     if os_def.install_mode == 'gui-auto':
         tip = (
             'This VM was installed by the GUI agent. The generated playbook can be '
-            'edited and replayed; see the install report for a screenshot walkthrough.'
+            'edited and replayed; see the install report for a screenshot walkthrough. '
+            'It has no guest agent or autologin yet, so ADARE cannot drive it as it is.'
         )
     elif os_def.install_mode == 'playbook':
         tip = (
             'This VM was installed by deterministic playbook replay driven by '
             'cv-server OCR (no vision LLM). The per-step screenshots next to the '
-            'disk show exactly what was clicked.'
+            'disk show exactly what was clicked. '
+            + (
+                'No guest agent, autologin or other ADARE setup was added (--setup bare): '
+                'ADARE cannot drive this VM as it is.'
+                if setup_level == SetupLevel.BARE
+                else 'Guest agent, autologin and no screen lock were set up and checked after a reboot.'
+            )
         )
     elif os_def.install_mode == 'manual':
         tip = 'This VM was installed manually. Configure SSH/guest agent access for full ADARE integration.'
     elif setup_level == SetupLevel.BARE:
         tip = 'No guest tools or agent software installed (--setup bare).'
     elif setup_level == SetupLevel.BASE:
-        tip = 'Guest tools installed. No Python environment (--setup base).'
+        tip = 'Guest tools installed and checked after a reboot. No Python environment (--setup base).'
     elif setup_level == SetupLevel.AGENT:
         tip = 'adarevm agent pre-installed. Ready for immediate experiment execution.'
     else:
-        tip = 'Python environment pre-installed. Ready for experiments.'
+        tip = (
+            'Python environment pre-installed; guest agent and autologin checked after a reboot. Ready for experiments.'
+        )
 
     print_success_message(
         title=f'VM "{final_name}" created successfully!',
