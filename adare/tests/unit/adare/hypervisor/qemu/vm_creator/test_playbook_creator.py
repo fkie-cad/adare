@@ -250,6 +250,22 @@ class TestLiveTerminal:
         (line,) = (c.args[0] for c in print_step.call_args_list)
         assert 'never settled' in line
 
+    def test_spinner_animates_across_redraws(self):
+        from rich.console import Console
+
+        from adare.hypervisor.qemu.vm_creator.playbook_live import LiveView
+
+        clock = iter([0.0, 0.5, 1.0])
+        out = Console(force_terminal=True, color_system=None, width=60, get_time=lambda: next(clock))
+        view = LiveView()
+        view.step('click_text')
+        frames = set()
+        for _ in range(3):
+            with out.capture() as cap:
+                out.print(view)
+            frames.add(cap.get().splitlines()[1].split()[1])  # the spinner glyph on the step line
+        assert len(frames) == 3
+
     def test_no_block_off_a_terminal(self):
         from adare.hypervisor.qemu.vm_creator.playbook_live import LiveView
 

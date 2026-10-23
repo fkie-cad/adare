@@ -40,6 +40,9 @@ class LiveView:
         self.window = ''
         self._step = ''
         self._detail = ''
+        # One spinner for the view's lifetime: it animates from its first
+        # render, so a new one per redraw would stay on its first frame.
+        self._spinner = Spinner('dots', style='cyan')
 
     @property
     def active(self) -> bool:
@@ -79,7 +82,8 @@ class LiveView:
         now = time.time()
         head = Text.from_markup(f'{self._step}  [dim]{fmt_duration(now - self._step_started)}[/dim]')
         head.no_wrap, head.overflow = True, 'ellipsis'
-        lines: list[RenderableType] = [Spinner('dots', text=head, style='cyan')]
+        self._spinner.update(text=head)
+        lines: list[RenderableType] = [self._spinner]
         for markup in (self._detail, self.window):
             if markup:
                 line = Text.from_markup(f'  {markup}', style='dim')
