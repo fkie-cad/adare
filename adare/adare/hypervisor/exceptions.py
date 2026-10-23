@@ -12,6 +12,7 @@ This module defines a comprehensive exception hierarchy following the pattern:
     │   ├── VMStopException
     │   ├── VMAlreadyRunningException
     │   └── GuestAgentTimeoutException
+    │       └── GuestAgentMissingException
     ├── SnapshotOperationException (snapshot operations)
     │   ├── SnapshotNotFoundException
     │   ├── SnapshotCreationException
@@ -37,6 +38,7 @@ Usage:
 """
 
 import logging
+from pathlib import Path
 
 from adare.exceptions import LoggedErrorException
 
@@ -120,18 +122,54 @@ class GuestAgentTimeoutException(VMOperationException):
     like a guest that had been given every chance and was genuinely dead.
     """
 
-    def __init__(self, vm_identifier: str, timeout_seconds: float, attempt_budgets: list[int] | None = None):
-        reason = f"Guest agent did not respond within {timeout_seconds}s"
-        if attempt_budgets:
-            budgets = '/'.join(f'{b}s' for b in attempt_budgets)
-            plural = '' if len(attempt_budgets) == 1 else 's'
-            reason += f" ({len(attempt_budgets)} cold-boot attempt{plural} of {budgets}"
-            if len(attempt_budgets) == 1:
-                reason += "; boot retry is off - unset ADARE_VM_BOOT_ATTEMPTS to restore it"
-            reason += ")"
+    def __init__(
+        self,
+        vm_identifier: str,
+        timeout_seconds: float,
+        attempt_budgets: list[int] | None = None,
+        reason: str | None = None,
+    ):
+        if reason is None:
+            reason = f"Guest agent did not respond within {timeout_seconds}s"
+            if attempt_budgets:
+                budgets = '/'.join(f'{b}s' for b in attempt_budgets)
+                plural = '' if len(attempt_budgets) == 1 else 's'
+                reason += f" ({len(attempt_budgets)} cold-boot attempt{plural} of {budgets}"
+                if len(attempt_budgets) == 1:
+                    reason += "; boot retry is off - unset ADARE_VM_BOOT_ATTEMPTS to restore it"
+                reason += ")"
         super().__init__(vm_identifier, "guest_agent_connect", reason)
         self.timeout_seconds = timeout_seconds
         self.attempt_budgets = list(attempt_budgets) if attempt_budgets else []
+
+
+class GuestAgentMissingException(GuestAgentTimeoutException):
+    """The guest finished booting but its guest agent never connected.
+
+    Raised instead of retrying the cold boot: the screen had stopped changing,
+    so the guest was up and idle, and another boot cannot install an agent the
+    image does not have.
+    """
+
+    def __init__(
+        self,
+        vm_identifier: str,
+        timeout_seconds: float,
+        settled_seconds: float,
+        screenshot: Path | None = None,
+    ):
+        reason = (
+            f"Guest agent never connected, although the guest finished booting: its screen "
+            f"had not changed for {settled_seconds:.0f}s of the {timeout_seconds:.0f}s wait"
+            + (f" (screenshot: {screenshot})" if screenshot else "")
+            + ". The image most likely has no qemu-guest-agent installed or enabled, and "
+            "another boot cannot fix that. Install it in the image (e.g. `adare environment "
+            "extend <env> --interactive`, then `sudo apt install qemu-guest-agent`) or rebuild "
+            "it with `adare vm create` (not `--setup bare`)."
+        )
+        super().__init__(vm_identifier, timeout_seconds, reason=reason)
+        self.settled_seconds = settled_seconds
+        self.screenshot = screenshot
 
 
 # =============================================================================
