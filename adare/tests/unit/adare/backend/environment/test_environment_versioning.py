@@ -198,7 +198,7 @@ class TestEnvironmentDelete:
         _new_version('ubuntu', '1' * 64)
         current = _new_version('ubuntu', '2' * 64)
 
-        with patch.object(env_database, '_find_environment_references', return_value=({}, [])):
+        with patch.object(env_database, '_scan_environment_references', return_value=({}, [], [])):
             env_database.delete_environment(current, cleanup_vm=False)
 
         with EnvironmentDbApi() as db:
@@ -208,12 +208,13 @@ class TestEnvironmentDelete:
         first = _new_version('ubuntu', '1' * 64)
         current = _new_version('ubuntu', '2' * 64)
 
-        def references(version_ids):
+        def references(version_ids, detach):
             assert first in version_ids
-            return {Path('/project'): 3}, []
+            assert not detach
+            return {Path('/project'): 3}, [], []
 
         with (
-            patch.object(env_database, '_find_environment_references', side_effect=references),
+            patch.object(env_database, '_scan_environment_references', side_effect=references),
             pytest.raises(EnvironmentDeletionError, match='3 experiment run'),
         ):
             env_database.delete_environment(current, cleanup_vm=False)

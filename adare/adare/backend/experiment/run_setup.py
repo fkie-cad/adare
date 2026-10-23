@@ -246,26 +246,19 @@ def _resolve_machine_environment(
     """
     machine_ctx = context.machines.setdefault(machine_key, MachineRunCtx())
 
-    machine_ctx.environment_file = environment_database.get_environment_path_by_project_and_name(
-        context.config.project_path, environment_name
-    )
-    machine_ctx.environment_ulid = experiment_database.get_environment_ulid(
-        context.config.project_path, environment_name
-    )
+    # One version, read once: everything below is keyed by its ULID.
+    environment = environment_database.get_run_environment(environment_name)
+    machine_ctx.environment_file = environment['file']
+    machine_ctx.environment_ulid = environment['ulid']
 
     environment_database.verify_environment_vm(machine_ctx.environment_ulid)
 
     # For lazy loading, VM file might not be available yet - will be resolved during VM creation
-    machine_ctx.vm_file = environment_database.get_environment_vm_file(machine_ctx.environment_ulid)
-    machine_ctx.guest_platform = environment_database.get_environment_os(machine_ctx.environment_ulid)
-    machine_ctx.hypervisor_type = environment_database.get_environment_hypervisor(machine_ctx.environment_ulid)
-
-    # Fetch guest architecture from database (via VM osinfo)
-    env_arch_data = environment_database.get_environment_by_ulid(
-        machine_ctx.environment_ulid, fields=['vm_architecture']
-    )
-    if env_arch_data and env_arch_data.get('vm_architecture'):
-        machine_ctx.guest_architecture = env_arch_data['vm_architecture']
+    machine_ctx.vm_file = environment['vm_file']
+    machine_ctx.guest_platform = environment['platform']
+    machine_ctx.hypervisor_type = environment['hypervisor']
+    if environment['architecture']:
+        machine_ctx.guest_architecture = environment['architecture']
 
     # If VM file is not available, get from environment metadata directly
     if not machine_ctx.vm_file or not machine_ctx.guest_platform or not machine_ctx.guest_architecture:

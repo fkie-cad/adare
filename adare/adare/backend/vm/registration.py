@@ -123,6 +123,10 @@ def load_vm_file_for_environment(
         return {'vm_id': existing_vm.id, 'was_existing': True}
 
     _refuse_replacing_shared_disk(vm_path.stem, file_hash, environment_metadata.name)
+    # With --force, create_vm updates a VM of the same name in place. That row
+    # predates this load (superseded versions may reference it), so it must not
+    # count as created -- a failed load would otherwise delete it.
+    same_name = vm_database.get_vm_by_name(vm_path.stem)
 
     # VM doesn't exist or existing VM can't be reused - create new one with file operations
     log.info("Creating new VM entry with file operations...")
@@ -155,4 +159,4 @@ def load_vm_file_for_environment(
     )
 
     log.info(f"VM file loaded into database: {vm.name} (ID: {vm.id})")
-    return {'vm_id': vm.id, 'was_existing': False}
+    return {'vm_id': vm.id, 'was_existing': same_name is not None and same_name.id == vm.id}

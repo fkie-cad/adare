@@ -237,6 +237,20 @@ class ExperimentApi(ProjectDatabaseApi):
 
         return environment_names
 
+    @staticmethod
+    def _environment_names_by_id(environment_ids: list[str]) -> dict[str, str]:
+        """Map environment ids (any version) to their names; unknown ids are left out."""
+        from adare.database.api.base import GlobalDatabaseApi
+        from adare.database.models.global_models import Environment
+
+        with GlobalDatabaseApi() as global_api:
+            rows = (
+                global_api._session.query(Environment.id, Environment.name)
+                .filter(Environment.id.in_(environment_ids))
+                .all()
+            )
+        return {env_id: name for env_id, name in rows}
+
     def update_experiment_environments(self, experiment_ulid: str, new_env_names: list[str], auto_commit: bool = True):
         """Update experiment's environment_ids based on new environment names."""
         experiment = self.get_experiment_by_ulid(experiment_ulid)
@@ -267,20 +281,35 @@ class ExperimentApi(ProjectDatabaseApi):
         """Register an environment id into the experiment's indicator list.
 
         ``environment_ids`` is a *discovery indicator* of where an experiment can
-        run, not a hard gate. Appends ``environment_id`` if not already present and
-        returns ``True`` when a change was made, ``False`` otherwise.
+        run, not a hard gate. It holds one id per environment *name*: versions of
+        the same name (``env load --force``) replace each other, keeping the newest,
+        so a reload never turns one environment into "multiple environments".
+        Returns ``True`` when a change was made, ``False`` otherwise.
         """
         experiment = self.get_experiment_by_ulid(experiment_ulid)
         if not experiment:
             raise ValueError(f"Experiment {experiment_ulid} not found")
 
         current_ids = list(experiment.environment_ids or [])
-        if environment_id in current_ids:
+        names = self._environment_names_by_id([*current_ids, environment_id])
+        name = names.get(environment_id)
+        same_name = [env_id for env_id in current_ids if name is not None and names.get(env_id) == name]
+        # ULIDs sort by creation time: the newest version wins.
+        keep = max([*same_name, environment_id])
+        new_ids: list[str] = []
+        for env_id in current_ids:
+            if env_id in same_name:
+                if keep not in new_ids:
+                    new_ids.append(keep)
+            elif env_id not in new_ids:
+                new_ids.append(env_id)
+        if keep not in new_ids:
+            new_ids.append(keep)
+        if new_ids == current_ids:
             return False
 
-        current_ids.append(environment_id)
         # Reassign a new list so SQLAlchemy detects the change on the JSON column
-        experiment.environment_ids = current_ids
+        experiment.environment_ids = new_ids
 
         if auto_commit:
             self._session.commit()
