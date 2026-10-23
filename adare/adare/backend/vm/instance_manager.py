@@ -466,12 +466,13 @@ class VmInstanceManager:
                 last_used_at=datetime.now(UTC),
             )
 
-    async def cleanup_instance(self, instance_id: str):
+    async def cleanup_instance(self, instance_id: str, force: bool = False):
         """
         Clean up a specific VM instance.
 
         Args:
             instance_id: VM instance ID to cleanup
+            force: Remove the instance even if it is running or paused
 
         Raises:
             InstanceNotFoundException: If instance not found
@@ -487,7 +488,7 @@ class VmInstanceManager:
             # Check actual hypervisor state before removal
             hypervisor_state = self._get_hypervisor_vm_state(instance)
 
-            if hypervisor_state in ["running", "paused"]:
+            if hypervisor_state in ["running", "paused"] and not force:
                 raise InstanceStateException(
                     instance.instance_name,
                     current_state=hypervisor_state,
@@ -960,17 +961,18 @@ async def release_vm_instance(instance_id: str):
     await _instance_manager.release_instance(instance_id)
 
 
-async def cleanup_vm_instance(instance_id: str):
+async def cleanup_vm_instance(instance_id: str, force: bool = False):
     """
     Clean up a specific VM instance.
 
     Args:
         instance_id: VM instance ID to cleanup
+        force: Remove the instance even if it is running or paused
 
     Raises:
         VMError: If instance is actually running in VirtualBox
     """
-    await _instance_manager.cleanup_instance(instance_id)
+    await _instance_manager.cleanup_instance(instance_id, force=force)
 
 
 async def cleanup_old_vm_instances(age_days: int = None):
