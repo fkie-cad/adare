@@ -83,7 +83,7 @@ def print_environment_list(formatter=None, output_file=None, dual_output=False):
     else:
         # Use GlobalDatabaseApi for Rich terminal output (environments are global resources)
         with GlobalDatabaseApi() as db:
-            environments = db._session.query(Environment).all()
+            environments = db._session.query(Environment).filter(Environment.is_current).all()
 
             # Build DataFrame for Rich display
             data = []

@@ -16,7 +16,7 @@ a frozen baked disk. This module orchestrates the recipe flow invoked from
 4. If a VM with the recipe hash already exists and its disk is present, reuse it
    (build cache hit — no rebuild).
 5. Otherwise build in two stages and register the result through
-   :func:`adare.backend.vm.commands.load_vm_file_for_environment`, recording
+   :func:`adare.backend.vm.registration.load_vm_file_for_environment`, recording
    ``build_source='recipe'`` and the provenance columns.
 
 Two-stage build, two-level cache
@@ -934,7 +934,7 @@ def build_or_reuse_recipe_vm(
             force=force or reprovision or stale_record,
         )
 
-    from adare.backend.vm.commands import load_vm_file_for_environment
+    from adare.backend.vm.registration import load_vm_file_for_environment
 
     return load_vm_file_for_environment(
         project_path=project_path,
@@ -970,7 +970,11 @@ def rebuild_recipe_vm_by_id(vm_id: str, force: bool = True) -> str | None:
 
     # Read attributes inside the session (get_environments returns attached objects).
     with EnvironmentDbApi() as db:
-        env_refs = [(env.name, env.file) for env in db.get_environments() if getattr(env, 'vm_id', None) == vm_id]
+        env_refs = [
+            (env.name, env.file)
+            for env in db.get_environments(include_superseded=True)
+            if getattr(env, 'vm_id', None) == vm_id
+        ]
 
     for env_name, env_file_str in env_refs:
         env_file = Path(env_file_str)

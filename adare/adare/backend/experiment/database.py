@@ -273,11 +273,6 @@ def get_environment_ulid(project_path: Path, experiment_name: str):
         )
 
 
-def get_environment_vagrant_box(environment_ulid: str):
-    with EnvironmentDbApi() as api:
-        return api.get_environment_vagrant_box(environment_ulid)
-
-
 def update_experiment_run(experiment_run_ulid: str, experimentrun_directory: ExperimentRunDirectory) -> str:
     """
     Update experiment run with VM-specific data (path, logfiles, status).
@@ -484,9 +479,14 @@ def update_experiment_run_status(project_path: Path, experiment_run_ulid: str, s
         api.update_experiment_run_status(experiment_run_ulid, status)
 
 
-def get_experiment_environment(project_path: Path, environment_name: str, experiment_name: str):
+def get_experiment_environment_name(project_path: Path, experiment_name: str) -> str:
+    """Return the name of the single environment an experiment is bound to.
+
+    The name -- not the stored file path -- is the lookup key: the environment
+    row's ``file`` is the managed copy ``<name>_<hash8>.yml``, whose stem is not
+    the environment name.
+    """
     with ExperimentApi(project_path) as api:
-        # todo: fix
         experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
         if experiment is None:
             log.error('experiment not found')
@@ -503,7 +503,14 @@ def get_experiment_environment(project_path: Path, environment_name: str, experi
                 f'experiment {experiment} has multiple environments',
                 possible_solutions=['specify the environment with -e <environment>'],
             )
-        return Path(experiment.environments[0].file)
+        environment = experiment.environments[0]
+        if environment is None:
+            raise NoEnvironmentError(
+                log,
+                f'experiment {experiment} references an environment that no longer exists',
+                possible_solutions=['reload the environment with: adare env load <file>'],
+            )
+        return str(environment.name)
 
 
 def _find_project_path_by_run_ulid(experiment_run_ulid: str) -> Path | None:

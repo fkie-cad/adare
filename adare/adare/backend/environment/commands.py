@@ -30,6 +30,25 @@ from adare.webappaccess.login import is_logged_in
 log = logging.getLogger(__name__)
 
 
+def _is_managed_copy(path: Path) -> bool:
+    try:
+        return path.resolve().parent == ENVIRONMENTS_DIR.resolve()
+    except OSError:
+        return False
+
+
+def _environment_name_for(environment_file: Path) -> str:
+    """The environment name a file loads as: its stem.
+
+    A managed copy (``<name>_<hash8>.yml`` in ENVIRONMENTS_DIR) loads under its
+    original name, so re-loading a managed copy does not create a second
+    environment called ``<name>_<hash8>``.
+    """
+    if _is_managed_copy(environment_file):
+        return re.sub(r'(_[0-9a-f]{8})+$', '', environment_file.stem)
+    return environment_file.stem
+
+
 def _copy_environment_file(source_path: Path, environment_name: str, file_hash: str) -> Path:
     """
     Copy environment file to managed storage location.
@@ -59,12 +78,7 @@ def _copy_environment_file(source_path: Path, environment_name: str, file_hash: 
         # Only strip when the source actually IS a managed copy, so a user-supplied file
         # legitimately named e.g. "myenv_deadbeef.yml" keeps its name.
         hash_prefix = file_hash[:8]
-        try:
-            is_managed_copy = source_path.resolve().parent == ENVIRONMENTS_DIR.resolve()
-        except OSError:
-            is_managed_copy = False
-        if is_managed_copy:
-            environment_name = re.sub(r'(_[0-9a-f]{8})+$', '', environment_name)
+        environment_name = _environment_name_for(source_path) if _is_managed_copy(source_path) else environment_name
         target_filename = f"{environment_name}_{hash_prefix}{source_path.suffix}"
         target_path = ENVIRONMENTS_DIR / target_filename
 
@@ -205,6 +219,41 @@ def environment_sync(environment_ulid: str):
     log.info(f'environment {environment_ulid} synced')
 
 
+def _validate_loadable(environment_metadata: EnvironmentMetadata, environment_file: Path) -> None:
+    """Reject environment files that parse but cannot produce a runnable VM."""
+    if environment_metadata.is_vagrant_environment and not environment_metadata.is_vm_environment:
+        raise EnvironmentLoadFailed(
+            log,
+            f'{environment_file}: Vagrant environments ("vagrantbox") are no longer supported',
+            possible_solutions=['Reference a disk image with "vm", or build one with a "recipe" block'],
+        )
+    if not environment_metadata.is_recipe_environment and environment_metadata.os is None:
+        raise EnvironmentLoadFailed(
+            log,
+            f'{environment_file}: an "os" block (platform, os, version, ...) is required for a disk-image environment',
+            possible_solutions=['Add the guest OS description, see: adare env create <name>'],
+        )
+
+
+def _verify_local_vm_sha256(vm_path: Path, expected_sha256: str) -> None:
+    """Check a local disk against the environment's declared ``vm_sha256``."""
+    actual_sha256 = cached_file_sha256(
+        vm_path,
+        compute=lambda p: file_sha256_with_progress(p, description=f"Verifying {p.name}", silent=False),
+    )
+    if actual_sha256.lower() != expected_sha256.lower():
+        raise EnvironmentLoadFailed(
+            log,
+            f'VM integrity check failed for {vm_path}: expected vm_sha256 {expected_sha256.lower()} '
+            f'but the file hashes to {actual_sha256}',
+            possible_solutions=[
+                'Verify the "vm_sha256" in the environment file matches the disk',
+                'Check the disk image for corruption or modification',
+            ],
+        )
+    log.info('VM integrity check passed')
+
+
 def environment_load(
     environment: str,
     force: bool = False,
@@ -218,8 +267,10 @@ def environment_load(
 
     Args:
         environment: Environment name or path
-        force: Force reload even if already exists. For a recipe environment this
-            rebuilds both the base disk and the build-time provisioning stage.
+        force: Load a changed file as a new version of an existing environment
+            (the previous version and its runs are kept). For a recipe
+            environment this also rebuilds both the base disk and the
+            build-time provisioning stage.
         no_copy: Keep VM file at original location (local files only)
         iso_override: Recipe only — a file, or a directory to search for the ISO.
             How a consumer supplies the ISO for a BYO (``iso_name``) recipe.
@@ -229,15 +280,10 @@ def environment_load(
             guest architecture does not match the host CPU.
 
     Returns:
-        Tuple of (environment_ulid, created). ``created`` is False only on the
-        silent hash-dedup branch where the .yml is byte-identical to an
-        environment already in the database; True for fresh loads and forced
-        updates.
+        Tuple of (environment_ulid, created). ``created`` is False only when the
+        file is byte-identical to the current version of its environment (and
+        no --force); True for fresh loads and new versions.
     """
-    import time
-
-    start_time = time.time()
-
     # Ensure global environments directory exists
     ENVIRONMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -264,76 +310,47 @@ def environment_load(
                 ],
             )
 
-    # Check for name collision immediately, before ANY expensive operations
-    # Override environment name with filename without extension to match what we do later
-    environment_name = environment_file.stem
+    # The file stem is the environment name (a `name:` key in the file is ignored).
+    environment_name = _environment_name_for(environment_file)
 
-    # Check if environment with this name already exists. Use the non-raising
-    # lookup so a clean "no conflict" result doesn't emit a spurious error log
-    # and transaction-rollback warning.
-    existing_ulid = environment_database.resolve_environment_identifier(environment_name, trigger_exception=False)
-    if existing_ulid:
-        if not force:
-            raise EnvironmentAlreadyExists(
-                log,
-                f"Environment with name '{environment_name}' already exists in the database.",
-                possible_solutions=[
-                    "Use a different filename for your environment",
-                    f"Delete the existing environment: adare env remove {environment_name}",
-                    f"Update the existing environment safely with: adare env load --force {environment_file}",
-                ],
-            )
-        log.info(
-            f"Environment '{environment_name}' already exists, but force=True. Deleting old environment to prevent conflicts..."
-        )
-        try:
-            environment_database.delete_environment(existing_ulid, force=True, cleanup_vm=False)
-            log.info(f"Successfully deleted previous version of '{environment_name}'")
-        except (ValueError, KeyError, OSError) as e:
-            log.warning(f"Failed to delete existing environment '{environment_name}': {e}")
-            # We continue anyway, as the DB update might surely fail later, but maybe we cleared enough
-
-    # Calculate environment file hash with progress bar for better UX
     log.info('Calculating environment file hash...')
     environment_file_sha256 = file_sha256_with_progress(
         environment_file, description=f"Hashing environment file {environment_file.name}", silent=False
     )
     log.info(f'Environment file hash: {environment_file_sha256}')
 
-    # Parse environment metadata to get the name
     environment_metadata: EnvironmentMetadata = parse_environment_file(environment_file)
-    # Override environment name with filename without extension (ignore name in file)
-    environment_name = environment_file.stem
+    environment_metadata.name = environment_name
+    _validate_loadable(environment_metadata, environment_file)
 
-    # Copy environment file to managed storage BEFORE checking if it exists
-    # This ensures the file is always in a safe location under our control
+    # An environment name has one current version. Re-loading the identical file
+    # is a no-op; loading a changed file needs --force and adds a new version --
+    # the old one is kept (superseded) so runs that used it keep resolving.
+    current_ulid = environment_database.resolve_environment_identifier(environment_name, trigger_exception=False)
+    current = (
+        environment_database.get_environment_by_ulid(current_ulid, fields=['id', 'sha256hash'])
+        if current_ulid
+        else None
+    )
+    if current:
+        if current['sha256hash'] == environment_file_sha256 and not force:
+            log.info(f"Environment '{environment_name}' is already loaded from an identical file - nothing to do")
+            return (current['id'], False)
+        if not force:
+            raise EnvironmentAlreadyExists(
+                log,
+                f"Environment '{environment_name}' is already loaded from a different version of this file.",
+                possible_solutions=[
+                    f"Load it as a new version (the old version and its runs are kept): adare env load --force {environment_file}",
+                    "Use a different file name to create a separate environment",
+                ],
+            )
+        log.info(f"Environment '{environment_name}' exists - loading as a new version (--force)")
+
+    # Copy the environment file to managed storage so the loaded bytes stay under our control
     log.info('Copying environment file to managed storage...')
     managed_environment_file = _copy_environment_file(environment_file, environment_name, environment_file_sha256)
     log.info(f'Environment file stored at: {managed_environment_file}')
-
-    # Early check - if environment already exists by hash, skip VM processing entirely.
-    # Ask for the 'id' field explicitly: without ``fields`` this returns the full
-    # Environment object, and callers expect a ULID string.
-    existing_environment = environment_database.get_environment_by_hash(
-        environment_file_sha256, trigger_exception=False, fields=['id']
-    )
-    existing_environment_id = existing_environment['id'] if existing_environment else None
-    if existing_environment_id:
-        if not force:
-            elapsed_time = time.time() - start_time
-            log.info(
-                f'Environment with hash {environment_file_sha256} already exists in database - skipping all VM processing!'
-            )
-            log.info('Optimization: No file copying or VM processing needed!')
-            log.info(f'Total time: {elapsed_time:.1f} seconds (vs potentially minutes for full VM processing)')
-            return (existing_environment_id, False)
-        log.info(f'Environment with hash {environment_file_sha256} exists, but force=True, so updating')
-
-    if not existing_environment_id:
-        log.info(f'Environment with hash {environment_file_sha256} not found, creating new one')
-
-    # Override environment name with filename without extension (ignore name in file)
-    environment_metadata.name = environment_name
 
     # todo: maybe add validation for environment configuration semantic
 
@@ -459,9 +476,11 @@ def environment_load(
                             'Ensure VM file exists in the specified location',
                         ],
                     )
+                if environment_metadata.vm_sha256:
+                    _verify_local_vm_sha256(vm_path, environment_metadata.vm_sha256)
 
             if vm_path.exists():
-                from adare.backend.vm.commands import load_vm_file_for_environment
+                from adare.backend.vm.registration import load_vm_file_for_environment
 
                 log.info(f'Processing VM file during environment load: {vm_path}')
 
@@ -516,12 +535,9 @@ def environment_load(
 
         # Try to create environment - if this fails, cleanup VM if we created it
         # Use the managed file path (in .adare/environments/) instead of the original user file
-        environment_ulid = environment_database.update_environment(
-            None, environment_metadata, managed_environment_file, environment_file_sha256, vm_id=vm_id, force=force
+        environment_ulid = environment_database.register_environment_version(
+            environment_metadata, managed_environment_file, environment_file_sha256, vm_id=vm_id
         )
-        if not environment_ulid:
-            log.error('environment update failed')
-            raise EnvironmentLoadFailed(log, 'Failed to create environment in database')
 
     except (OSError, ValueError, EnvironmentLoadFailed, EnvironmentAlreadyExists) as e:
         # If environment creation failed and we created a new VM, clean it up
@@ -583,48 +599,9 @@ def environment_create(project: Path, environment: str, vm_path: Path = None):
     # Prepare template variables
     template_vars = {'environment': environment}
 
-    # Handle VM loading if --with-vm was provided
-    if vm_path:
-        from rich import print as rprint
-
-        from adare.database.api.project import ProjectDbApi
-        from adare.database.api.vm import load_vm_from_file
-
-        # Get project ID for VM loading
-        project_id = None
-        if project:
-            project_api = ProjectDbApi()
-            project_obj = project_api.get_project_by_directory(project)
-            if project_obj:
-                project_id = project_obj.id
-
-        # Load VM into database
-        vm_name = vm_path.stem
-        rprint(f"[blue]Loading VM into database: {vm_name}[/blue]")
-
-        try:
-            scope = 'project' if project_id else 'global'
-            load_vm_from_file(
-                project_path=project,
-                file_path=vm_path,
-                name=vm_name,
-                description='Loaded via environment create --with-vm',
-                scope=scope,
-                project_id=project_id,
-                silent=False,
-            )
-            rprint(f"[green]VM loaded successfully: {vm_name}[/green]")
-
-            # Use the VM name in the template instead of placeholder
-            template_vars['vm_name'] = vm_name
-
-        except (OSError, ValueError, KeyError) as e:
-            log.error(f'Failed to load VM {vm_name}: {e}')
-            rprint(f"[red]Failed to load VM {vm_name}: {e}[/red]")
-            # Continue with placeholder if VM loading fails
-            template_vars['vm_name'] = None
-    else:
-        template_vars['vm_name'] = None
+    # --with-vm only fills in the disk path; the disk is registered (hashed,
+    # copied) by `adare env load`, the single place disks enter the database.
+    template_vars['vm_name'] = vm_path.resolve().as_posix() if vm_path else None
 
     environment_file_template_content = environment_file_template.read_text()
     environment_file_content = jinja2.Template(environment_file_template_content).render(**template_vars)

@@ -637,6 +637,7 @@ def load_vm_from_file(
     from adare.database.api.vm import load_vm_from_file as db_load_vm
 
     return db_load_vm(
+        project_path=None,  # VMs are global
         file_path=file_path,
         name=name,
         description=description,

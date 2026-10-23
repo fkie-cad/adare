@@ -53,9 +53,9 @@ class StructuredDataApi(EnhancedDatabaseApi):
         """Get all environments as structured EnvironmentInfo objects."""
         # Use eager loading to prevent N+1 queries
         environments = safe_query_all(
-            self._session.query(Environment).options(
-                joinedload(Environment.vm).joinedload(Vm.osinfo), selectinload(Environment.sync_metadata)
-            )
+            self._session.query(Environment)
+            .options(joinedload(Environment.vm).joinedload(Vm.osinfo), selectinload(Environment.sync_metadata))
+            .filter(Environment.is_current)
         )
         result = []
 

@@ -105,6 +105,11 @@ MIGRATIONS: list[Migration] = [
         scope='project',
         module=f'{_PACKAGE}.add_run_artifact_table',
     ),
+    Migration(
+        name='add_environment_versioning',
+        scope='global',
+        module=f'{_PACKAGE}.add_environment_versioning',
+    ),
 ]
 
 # Applied-migration names per database URL. Keeps auto-apply at one SELECT per
