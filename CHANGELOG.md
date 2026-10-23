@@ -56,6 +56,8 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `--no-log` turns it off, and an existing global `--logfile` is used as is.
 
 ### Changed
+- VM snapshots (`SnapshotManager`) are VirtualBox-only; QEMU runs have no
+  instance to snapshot.
 - `adare vm` help separates registered VMs (`list`, `info`, `reset`) from
   instances (`usage`, `remove`, `snapshot`, `prune`); `vm create` no longer
   suggests `--no-copy` for a disk already in managed storage.
@@ -139,6 +141,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Concurrent QEMU runs could delete each other's run files: the crashed-run
+  sweep at run start now scans files before reading instance rows.
+- File-transfer factory tests no longer depend on the host having virtiofsd.
 - `adare vm test` let the guest (as root) build its uv venv and bytecode inside
   the shared `~/.adare/adare`, leaving root-owned files there that made the next
   `make install` fail with `PermissionError`. The guest now keeps its venv in
@@ -204,6 +209,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `pattern` to the shell unquoted, allowing command injection from a playbook.
 
 ### Removed
+- Duplicate libvirt domain teardown: the run path, its signal handler and
+  `vm test` share `run_resources.destroy_run_domain`; dead QEMU branches in the
+  VirtualBox instance preparation and the broken `ensure_vm_available_for_environment`.
 - Dead VM/environment code: template-level snapshot shims, always-true VM
   "verification", the duplicated VirtualBox re-import in the run path (it now
   re-allocates through the normal path), unused environment API helpers and the

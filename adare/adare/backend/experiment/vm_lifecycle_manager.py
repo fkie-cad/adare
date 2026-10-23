@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import shutil
 import subprocess
@@ -12,8 +13,8 @@ from adare.backend.experiment.directory import ExperimentRunDirectory
 from adare.backend.experiment.runctx import ExperimentRunCtx
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.database.exceptions import DatabaseError
+from adare.database.models.global_models import VmInstance
 from adare.exceptions import LoggedException
-from adare.hypervisor.qemu.libvirt_undefine import delete_firmware_state_flags, undefine
 from adare.hypervisor.virtualbox import VirtualBoxVM
 from adare.types.stages import (
     VMDestroyStage,
@@ -26,98 +27,6 @@ from adare.types.stages import (
 )
 
 log = logging.getLogger(__name__)
-
-
-def destroy_domain_by_name(vm_name: str | None) -> bool:
-    """Force-stop and undefine the libvirt domain called ``vm_name``. Best-effort.
-
-    The emergency counterpart to the ordinary teardown at the end of
-    :func:`adare.backend.experiment.run.run_experiment`. That path needs a live
-    ``VMLifecycleManager`` plus a populated run context; this one needs only a name,
-    so it can be called from a signal handler after a second SIGTERM, when the
-    caller has given up on unwinding gracefully and only wants the guest gone.
-
-    ``destroy()`` (not ``shutdown()``) on purpose: a second termination signal means
-    the operator wants out now, and the run overlay is discarded anyway.
-
-    Note this cannot be expressed with the existing reaping helpers in
-    ``hypervisor/qemu/vm_creator/progress.py``: those are ``subprocess.Popen``-shaped,
-    and on the *run* path ADARE never owns the QEMU process — libvirt forks it from
-    ``defineXML`` + ``create()``, so PPID 1 is its normal, healthy state. There is no
-    child to reap; there is only a domain to destroy.
-
-    Idempotent and silent by design — an absent domain, an unreachable libvirtd, or a
-    missing libvirt-python must not turn a shutdown into a traceback.
-
-    Args:
-        vm_name: libvirt domain name. This is the VM *instance* name
-            (``context.vm_name``), which is what ``QEMUVM`` records as
-            ``config.libvirt_domain_name`` when it defines the domain (vm.py).
-            ``None`` is accepted and is a no-op, because a signal can arrive before
-            an instance has been allocated.
-
-    Returns:
-        True if a running domain was destroyed, False in every other case
-        (nothing to do, or the attempt failed).
-    """
-    if not vm_name:
-        return False
-
-    try:
-        import libvirt
-
-        from adare.config import HYPERVISOR_CONFIGS
-        from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
-
-        qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
-        libvirt_uri = qemu_config.get('libvirt_uri', 'qemu:///session')
-
-        conn = libvirt.open(libvirt_uri)
-        if not conn:
-            log.warning(f"Emergency stop: no libvirt connection, cannot destroy '{vm_name}'")
-            return False
-
-        log_file = get_experiment_log_file()
-        destroyed = False
-        try:
-            with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
-                domain = conn.lookupByName(vm_name)
-
-            if domain.isActive():
-                with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
-                    domain.destroy()
-                log.info(f"Emergency stop: destroyed libvirt domain '{vm_name}'")
-                destroyed = True
-            else:
-                log.debug(f"Emergency stop: domain '{vm_name}' is already shut off")
-
-            # Undefining as well keeps `virsh list --all` from filling up with one
-            # stale shut-off entry per interrupted run. The varstore and vTPM are
-            # run-scoped copies, so they go with it; the remaining run files are
-            # reaped by reconcile_instances() once this process has exited.
-            try:
-                with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
-                    undefine(domain, delete_firmware_state_flags())
-            except libvirt.libvirtError as e:
-                log.debug(f"Emergency stop: could not undefine '{vm_name}': {e}")
-
-        except libvirt.libvirtError as e:
-            # Domain absent is the common case (never created, or already cleaned up).
-            log.debug(f"Emergency stop: domain '{vm_name}' not actionable: {e}")
-        finally:
-            try:
-                conn.close()
-            except libvirt.libvirtError:
-                pass
-
-        return destroyed
-
-    except ImportError:
-        log.debug("Emergency stop: libvirt-python not installed; nothing to destroy")
-        return False
-    except OSError as e:
-        log.warning(f"Emergency stop: error destroying domain '{vm_name}': {e}")
-        return False
 
 
 class VMLifecycleManager:
@@ -217,97 +126,32 @@ class VMLifecycleManager:
         if not vm_id:
             raise LoggedException(log, "No VM associated with environment. Did you load the environment properly?")
 
-        # Prepare VM instance for experiment (includes port allocation and VM reuse)
         from adare.backend.vm.commands import ensure_vm_ready_for_experiment
-        from adare.database.api.vm import VmApi
 
-        log.info("Starting VM instance preparation for experiment (with dynamic port allocation)")
-
-        # Use shorter experiment ID for VM instance naming (first 8 chars of ULID)
-        short_experiment_id = context.experiment_run_ulid[:8]
-
-        # Allocate VM instance (allocation and sync stages managed internally)
-        import asyncio
-
-        vm_instance_id = await asyncio.wait_for(
-            ensure_vm_ready_for_experiment(
+        async def allocate() -> VmInstance | None:
+            vm_instance_id = await ensure_vm_ready_for_experiment(
                 vm_id=vm_id,
-                experiment_id=short_experiment_id,  # Use shorter ID for naming
                 environment_ulid=context.environment_ulid,
                 experiment_run_ulid=context.experiment_run_ulid,
                 interrupt_event=context.user_interrupt_event,
                 test_mode=context.test_mode,
                 machine_key=context.machine_key,
-            ),
-            timeout=300,  # 5 minute timeout for VM import operations
-        )
+            )
+            if vm_instance_id is None:
+                log.info("VM instance preparation was interrupted")
+                return None
+            return self._use_instance(context, vm_instance_id)
 
-        log.info(f"VM instance allocation completed successfully, instance_id={vm_instance_id}")
-
-        # Check if VM preparation was interrupted - return early if so
-        if vm_instance_id is None:
-            log.info("VM instance preparation was interrupted - returning early")
+        vm_instance = await asyncio.wait_for(allocate(), timeout=300)  # VirtualBox imports can be slow
+        if vm_instance is None:
             return
 
-        # Get the prepared VM instance from database
-        log.debug(f"Attempting to fetch VM instance with ID: {vm_instance_id}")
-        try:
-            with VmApi() as api:
-                vm_instance = api.get_vm_instance_by_id(vm_instance_id)
-                if not vm_instance:
-                    # Try to debug what instances exist
-                    log.error(f"VM instance {vm_instance_id} not found! Checking database...")
-                    all_instances = api.get_all_vm_instances()
-                    log.error(f"Found {len(all_instances)} total instances in database:")
-                    for inst in all_instances:
-                        log.error(f"  - {inst.id}: {inst.instance_name} (status: {inst.status})")
-
-                    # Check if ID format is correct
-                    log.error(
-                        f"Problematic ID: '{vm_instance_id}' (length: {len(vm_instance_id)}, type: {type(vm_instance_id)})"
-                    )
-
-                    raise LoggedException(log, f"VM instance with ID {vm_instance_id} not found after preparation")
-
-                log.debug(f"Successfully found VM instance: {vm_instance.instance_name}")
-        except LoggedException:
-            raise
-        except (OSError, ValueError, RuntimeError) as e:
-            log.error(f"Error fetching VM instance: {e}")
-            import traceback
-
-            log.debug(f"Fetch VM instance traceback: {traceback.format_exc()}")
-            raise
-
-        # Update experiment run with VM instance ID (the primary machine's, for a
-        # multi-machine run); each machine releases its own via context.vm_instance_id.
-        context.vm_instance_id = vm_instance_id
-        if context.machine_key == getattr(context, 'primary_machine', context.machine_key):
-            experiment_database.update_experiment_run_vm_instance(
-                context.config.project_path, context.experiment_run_ulid, vm_instance_id
-            )
-
-        # Use the instance name and port from the allocated instance
-        context.vm_name = vm_instance.instance_name
-        context.config.websocket_port = vm_instance.websocket_port
-
-        # Validate that the port was properly allocated
-        if context.config.websocket_port is None:
-            raise LoggedException(log, f"VM instance {vm_instance.instance_name} has no websocket port allocated")
-
-        log.info(f"Using VM instance: {context.vm_name} on port {context.config.websocket_port}")
-
-        # Setup VM runtime directory with smart copying
         with StageCtxManager(
             VMRuntimePreparationStage(), context.experiment_run_ulid, event=context.user_interrupt_event
         ):
             await self._ensure_vm_runtime_ready(context)
 
-        # Delegate VM instance creation to hypervisor-specific strategy
         await self.strategy.prepare_vm_for_experiment(context)
-
-        # NOTE: setup_file_transfer() removed from here - now called explicitly in run.py
-        # This makes file transfer operations visible as a dedicated stage in the UI
 
         # VirtualBox: a pooled instance can have vanished from VirtualBox since it
         # was last used. verify_and_cleanup removes such a row; allocate again,
@@ -320,26 +164,9 @@ class VMLifecycleManager:
             ):
                 if not verify_and_cleanup_vm_instance_for_experiment(vm_instance.id, context.experiment_run_ulid):
                     log.info("VM instance was missing from VirtualBox and removed; allocating a new one")
-                    vm_instance_id = await ensure_vm_ready_for_experiment(
-                        vm_id=vm_id,
-                        experiment_id=short_experiment_id,
-                        environment_ulid=context.environment_ulid,
-                        experiment_run_ulid=context.experiment_run_ulid,
-                        interrupt_event=context.user_interrupt_event,
-                        test_mode=context.test_mode,
-                        machine_key=context.machine_key,
-                    )
-                    if vm_instance_id is None:
+                    vm_instance = await allocate()
+                    if vm_instance is None:
                         return
-                    with VmApi() as api:
-                        vm_instance = api.get_vm_instance_by_id(vm_instance_id)
-                    context.vm_instance_id = vm_instance.id
-                    context.vm_name = vm_instance.instance_name
-                    context.config.websocket_port = vm_instance.websocket_port
-                    if context.machine_key == getattr(context, 'primary_machine', context.machine_key):
-                        experiment_database.update_experiment_run_vm_instance(
-                            context.config.project_path, context.experiment_run_ulid, vm_instance.id
-                        )
                 if not vm_instance.vbox_uuid or not VirtualBoxVM.verify_vm_exists_by_uuid(vm_instance.vbox_uuid):
                     raise LoggedException(
                         log, f"VM instance '{context.vm_name}' was not properly prepared - missing from VirtualBox"
@@ -357,6 +184,30 @@ class VMLifecycleManager:
             )
 
         context.timestamp_before_vm_start = datetime.now(UTC)
+
+    @staticmethod
+    def _use_instance(context: ExperimentRunCtx, vm_instance_id: str) -> VmInstance:
+        """Point this machine's context at the allocated instance and record it on the run."""
+        from adare.database.api.vm import VmApi
+
+        with VmApi() as api:
+            vm_instance = api.get_vm_instance_by_id(vm_instance_id)
+        if vm_instance is None:
+            raise LoggedException(log, f"VM instance with ID {vm_instance_id} not found after preparation")
+        if vm_instance.websocket_port is None:
+            raise LoggedException(log, f"VM instance {vm_instance.instance_name} has no websocket port allocated")
+
+        context.vm_instance_id = vm_instance.id
+        context.vm_name = vm_instance.instance_name
+        context.config.websocket_port = vm_instance.websocket_port
+        # The run records the primary machine's instance; every machine releases
+        # its own via context.vm_instance_id.
+        if context.machine_key == context.primary_machine:
+            experiment_database.update_experiment_run_vm_instance(
+                context.config.project_path, context.experiment_run_ulid, vm_instance.id
+            )
+        log.info(f"Using VM instance: {vm_instance.instance_name} on port {vm_instance.websocket_port}")
+        return vm_instance
 
     async def setup_networking(self, context: ExperimentRunCtx):
         """
