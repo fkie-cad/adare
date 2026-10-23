@@ -233,129 +233,73 @@ only the throwaway VM disk. Replay is deterministic; self-heal recovers from
 minor drift but a heavily redesigned installer may need ``--relearn``.
 
 
-Scripted GUI installation (``gui-script``) — deterministic, no model
---------------------------------------------------------------------
+Playbook GUI installation (``playbook``) — deterministic, no model
+-----------------------------------------------------------------
 
-``install_mode: gui-script`` replays a hand-calibrated QMP playbook against the
-installer's GUI. It is the *no-model* sibling of ``gui-auto``: **no vision model,
-no CV server, no** ``ADARE_VLLM_*`` **configuration**, and the same playbook
-produces the same disk on any host with QEMU.
+``install_mode: playbook`` replays a fixed keyboard/mouse playbook embedded in
+the OS profile (``install_steps`` / ``verify_steps``) against the installer's
+GUI. **No vision model and no** ``ADARE_VLLM_*`` **configuration**; buttons are
+found by their on-screen label through the CV server's OCR, so the steps do not
+depend on window position, resolution or minor installer versions.
 
 .. code-block:: bash
 
-   adare vm create ubuntu1804      # ISO auto-downloads (iso_url is baked in)
-   adare vm create ubuntu2004
+   adare vm create ubuntu2204      # ISO auto-downloads (iso_url is baked in)
+   adare vm create kubuntu2404
 
-.. list-table:: ``gui-auto`` vs ``gui-script``
+The creator boots the ISO under raw ``qemu-system`` (``-vga qxl``, 1024x768,
+USB tablet) and drives it over QMP. After ``install_steps`` it powers the live
+session off (ACPI, then a hard stop after a grace period), boots the installed
+disk and runs ``verify_steps``. Steps:
+
+.. list-table::
    :header-rows: 1
-   :widths: 22 39 39
 
-   * -
-     - ``gui-auto``
-     - ``gui-script``
-   * - Targets a screen by
-     - image/text matching (CV), model on miss
-     - fixed pixel coordinates
-   * - Needs a vision model
-     - yes to record or self-heal
-     - never
-   * - Needs the CV server
-     - yes
-     - no
-   * - Waits by
-     - CV target appearing
-     - ``wait_stable`` frame diffing
-   * - Recovers from UI drift
-     - yes (self-heal, re-crop)
-     - no — coords must be recalibrated
-   * - Use it to
-     - **record** a route for a new release
-     - **replay** a route that is already proven
+   * - Action
+     - Does
+   * - ``click_text``
+     - OCR the screen and click a label (``index``, ``dx``/``dy``, ``tries``,
+       ``optional: true`` for screens that only appear sometimes)
+   * - ``wait_text``
+     - Block until any of ``text`` (a string or list) is on screen — or, with
+       ``gone: true``, until none is. Fails on ``timeout`` and as soon as any
+       ``fail_on`` text shows. Case-insensitive substring, one OCR pass per
+       ``interval``
+   * - ``wait_stable``
+     - Wait until the frame stops changing for ``settle`` s (``min`` floor,
+       ``timeout``); a timeout only warns unless ``required: true``
+   * - ``tap`` / ``type`` / ``key`` / ``wait`` / ``shot``
+     - Raw click at coords, keystrokes, sleep, screenshot
 
-**How the waiting works.** The primitive that makes replay robust is
-``wait_stable`` (:mod:`adare.hypervisor.qemu.vm_creator.qmp_replay`): successive
-``screendump`` frames are diffed *as raw bytes* until the screen stops changing
-for a settle period. There is no template matching, no OCR and no model, so a
-step never waits on a fixed sleep that is too short on a slow host or wastefully
-long on a fast one. During the copy phase the progress bar keeps the frame
-changing, so the wait only returns once the installer is genuinely idle on its
-"Installation Complete" dialog. A ``min:`` floor skips the static early-boot
-plymouth screens, which are otherwise perfectly stable before any UI exists.
-
-**Two constraints, both learned by breaking them.** The creator asserts the
-first and the playbooks depend on the second:
-
-- **``-vga qxl``, never ``-vga std``.** The std adapter's tablet applies a 2x
-  coordinate scaling, so absolute clicks land at double the intended offset and
-  the right half of the screen is simply unreachable.
-- **Click buttons with ``tap``, not the keyboard.** ubiquity does not reliably
-  hold keyboard focus at live-session start, and its timezone screen traps focus
-  in the city-entry field. A mouse click both focuses the window and activates
-  the button.
-
-**Playbooks.** They live beside the other templates as
-``qmpinstall_<stem>.yaml`` (override in ``~/.adare/vm-templates/``) and are
-resolved by the same stem lookup ``gui-auto`` uses, so ``template: ubuntu1804``
-keeps per-version isolation — 18.04's and 20.04's ubiquity differ visually and
-must not share a recording. Steps are ``key`` / ``type`` / ``tap`` / ``wait`` /
-``wait_stable`` / ``shot``:
+**Prove completion, don't infer it.** A still screen is what a finished
+installer looks like — but also a crash dialog, an error page or a hung progress
+bar. So every playbook profile ends ``install_steps`` with a ``wait_text`` on the
+installer's "done" screen and lists its failure texts:
 
 .. code-block:: yaml
 
-   vm:
-     ram_mb: 4096
-     cpus: 4
-     disk_size: "60G"
-     vga: qxl
-     firmware: bios
-     frame:            # the frame the tap coords were calibrated at
-       width: 1024
-       height: 768
+   install_steps:
+     # ...
+     - {action: click_text, text: "Continue", note: "start install"}
+     - {action: wait_text, text: "Restart Now", fail_on: ["installer crashed", "unrecoverable error"],
+        timeout: 3600, interval: 10, shot: complete}
 
-   install:
-     - {action: wait_stable, settle: 6, timeout: 360, min: 120, shot: welcome}
-     - {action: tap, coords: [763, 434, 1024, 768], note: "click 'Install Ubuntu'"}
-     - {action: type, text: "adare"}
-     - {action: key, keys: [tab], repeat: 2}
-
-   reboot_from_disk: true
-
-   verify:
+   verify_steps:
      - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
+     - {action: click_text, text: "adare"}          # the greeter is up
+     - {action: type, text: "adare"}
+     - {action: key, keys: [ret]}
+     # the greeter only goes away on a successful login
+     - {action: wait_text, text: "adare", gone: true, fail_on: ["didn't work"], timeout: 120}
+     - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}
 
-Every ``tap`` carries the frame its coordinates belong to, and the creator
-**rejects** a playbook whose coords disagree with the declared ``frame`` or fall
-outside it. A coordinate recorded at another resolution otherwise mis-clicks
-silently, which is far more expensive to diagnose after a 40-minute install. A
-screenshot is written per step (``<vm>_gui-script/``) and stays on by default —
-it is the only useful debugging aid when a click lands wrong.
+A unit test enforces both checks for every ``install_mode: playbook`` profile.
+When a step fails, the screen at that moment is saved as
+``<vm>_playbook/<phase>_<nn>_FAILED.png`` next to the per-step screenshots.
 
-**Calibrating a new playbook.** ``scripts/gui-install/`` is the authoring tool
-and shares this playbook format. Boot the installer with ``--keep-running`` and
-poke at it interactively to read coordinates off the screen:
-
-.. code-block:: bash
-
-   cd scripts/gui-install
-   ./gui_install.py playbooks/ubuntu2004-desktop.yaml \
-       --iso ubuntu-20.04.6-desktop-amd64.iso --vm-dir /vms --keep-running
-   ./qmp_drive.py --sock /tmp/gui-install/qmp.sock shot /tmp/now.png
-   ./qmp_drive.py --sock /tmp/gui-install/qmp.sock tap 924 566 1024 768
-
-Once the coordinates are proven, copy the playbook to
-``adare/adare/hypervisor/qemu/vm_creator/templates/qmpinstall_<stem>.yaml`` and
-flip the profile to ``install_mode: gui-script``.
-
-**Limitations.** Coordinate-fragile by construction: a different guest
-resolution silently mis-clicks, and a redesigned installer needs recalibration
-(there is no self-heal). Use ``gui-auto`` to record a route for a release nobody
-has coordinates for, and ``gui-script`` to replay one that is proven.
-
-.. warning::
-
-   The 18.04 / 20.04 playbooks are **x86_64 desktop** installs and have not been
-   replayed by us on this Apple Silicon host — x86_64 guests cannot be built
-   there (no TCG fallback). See :ref:`replicating-on-x86-64`.
+**Tuning a new installer.** ``scripts/gui-install/`` boots an installer and
+lets you take screenshots and click interactively (``qmp_drive.py shot/tap``) and
+query the CV server's ``find_text``, to read off the labels a playbook needs.
 
 
 Options
@@ -913,7 +857,7 @@ Create a YAML file (e.g. ``my-distro.yml``):
    distribution: ubuntu         # distribution family
    version: '1.0'
    architecture: x86_64         # 'x86_64' or 'aarch64'
-   install_mode: auto           # 'auto', 'manual', 'gui-auto', or 'gui-script'
+   install_mode: auto           # 'auto', 'manual', 'gui-auto', or 'playbook'
 
    # Optional -- omit for manual installs or when using --iso
    iso_url: https://example.com/my-distro.iso
@@ -986,8 +930,9 @@ YAML field reference
      - No
      - ``auto`` (default, unattended answer file), ``manual`` (a human clicks
        through a QEMU window), ``gui-auto`` (a vision-LLM drives the GUI
-       installer and records a playbook), or ``gui-script`` (deterministic QMP
-       playbook replay -- no model, no CV server)
+       installer and records a playbook), or ``playbook`` (deterministic replay of
+       the profile's ``install_steps`` / ``verify_steps`` -- no model, OCR via the
+       CV server)
    * - ``template``
      - No
      - Jinja2 template filename for unattended install (empty = default lookup)
@@ -1182,10 +1127,10 @@ The profiles behind the case studies, and the ISO each one expects:
      - kickstart
      - ``Fedora-Everything-netinst-aarch64-42-1.1.iso``
    * - ``ubuntu1804`` (x86_64)
-     - gui-script
+     - playbook (ubiquity)
      - auto-downloads ``ubuntu-18.04.5-desktop-amd64.iso``
    * - ``ubuntu2004`` (x86_64)
-     - gui-script
+     - playbook (ubiquity)
      - auto-downloads ``ubuntu-20.04.6-desktop-amd64.iso``
    * - ``kubuntu2004`` / ``kubuntu2204`` (x86_64)
      - ubiquity
