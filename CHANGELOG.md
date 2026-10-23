@@ -28,6 +28,14 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- `adare vm create` for `install_mode: playbook` profiles shows the VM in a QEMU
+  window when a desktop session is available (`--no-display` keeps it headless,
+  and a window that cannot open falls back to headless), and draws a live status
+  block in the terminal: current step, elapsed time, OCR attempt or screen text.
+  The scrollback keeps one line per step with its duration, retries and
+  screenshot instead of a line per `click_text` retry. A `click_text` that fails
+  reports the text that was on screen; QEMU's output goes to
+  `<vm>_playbook/qemu.log`.
 - Quality ratchet (`scripts/quality_ratchet.py`, `quality-baseline.json`): ruff
   and mypy violations plus files over 1000 lines are budgeted and may only shrink.
 - CI `lint` job (format, strict mypy on `adare.core`, ratchet), weekly
@@ -181,6 +189,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Playbook VM creation printed its step labels (`[install 25]`, `[provision]`)
+  as Rich markup, so they never appeared in the terminal.
+- Playbook VM creation piped QEMU's output without reading it; a chatty QEMU
+  could fill the pipe and stall.
 - Deleting a VM in the web UI only dropped its database row: instances, QEMU
   templates and the managed disk were left behind, and environments using it
   silently lost their VM. It now tears the VM down fully and refuses a VM that
