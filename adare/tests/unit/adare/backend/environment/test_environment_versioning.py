@@ -265,10 +265,20 @@ class TestDiskPin:
             db._session.commit()
 
         with pytest.raises(env_database.EnvironmentDiskChanged, match='now has disk bbbb'):
-            env_database.verify_environment_disk_pin(env_id)
+            env_database.verify_environment_vm(env_id)
 
     def test_matching_or_unpinned_disk_passes(self, global_db):
         vm_id = _add_vm(file_hash='a' * 64)
         env_id = _new_version('ubuntu', '1' * 64, vm_id=vm_id)  # vm_hash unpinned (pre-migration row)
 
-        env_database.verify_environment_disk_pin(env_id)
+        env_database.verify_environment_vm(env_id)
+
+    def test_run_is_refused_when_environment_and_vm_disagree_on_hypervisor(self, global_db):
+        vm_id = _add_vm()  # registered for qemu
+        env_id = _new_version('ubuntu', '1' * 64, vm_id=vm_id)
+        with EnvironmentDbApi() as db:
+            db.get_environment_by_ulid(env_id).hypervisor = 'virtualbox'
+            db._session.commit()
+
+        with pytest.raises(env_database.EnvironmentDiskChanged, match="registered for 'qemu'"):
+            env_database.verify_environment_vm(env_id)

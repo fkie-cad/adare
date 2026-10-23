@@ -22,7 +22,6 @@ from adare.types.stages import (
     VMSnapshotCreateStage,
     VMSnapshotRestoreStage,
 )
-from adarelib.constants import VMStatus
 
 log = logging.getLogger(__name__)
 
@@ -355,21 +354,6 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
 # ==========================================
 
 
-def verify_vm_status(vm_record, auto_cleanup: bool = False, experiment_context: str = None) -> VMStatus:
-    """
-    DEPRECATED: This function operates on Vm records which no longer track VirtualBox UUIDs.
-    Use VmInstance verification functions instead.
-
-    For VmInstance verification, use instance_manager.verify_vm_instance_status()
-
-    This function now only checks if the Vm model exists in database.
-    """
-    log.warning("verify_vm_status is deprecated - Vm records no longer track VirtualBox state")
-    # Vm records are abstract templates, not concrete VMs
-    # Return IMPORTED to indicate it's just a template
-    return VMStatus.IMPORTED
-
-
 def check_base_snapshot_exists(vbox_uuid: str, snapshot_name: str) -> bool:
     """
     Check if a base snapshot exists for a VM.
@@ -384,30 +368,6 @@ def check_base_snapshot_exists(vbox_uuid: str, snapshot_name: str) -> bool:
     from adare.backend.vm.snapshot_manager import check_snapshot_exists_by_uuid
 
     return check_snapshot_exists_by_uuid(vbox_uuid, snapshot_name)
-
-
-def verify_and_cleanup_vm_for_experiment(vm_id: str, experiment_id: str = None) -> bool:
-    """
-    Verify VM exists and automatically cleanup if missing (experiment context only).
-
-    Args:
-        vm_id: VM database ID to verify
-        experiment_id: Experiment context for logging
-
-    Returns:
-        True if VM exists and is ready, False if VM was missing and cleaned up
-
-    Raises:
-        VMError: If VM verification fails for reasons other than missing VM
-    """
-    # Get VM record from database
-    vm_record = vm_database.get_vm_by_id(vm_id)
-    if not vm_record:
-        raise VMError(log, f"VM with ID {vm_id} not found in database")
-
-    # VM record exists in database - that's all we need to verify
-    # VmInstance records handle the actual VirtualBox state
-    return True
 
 
 def verify_and_cleanup_vm_instance_for_experiment(vm_instance_id: str, experiment_id: str = None) -> bool:
@@ -473,7 +433,6 @@ async def ensure_vm_ready_for_experiment(
     experiment_id: str,
     environment_ulid: str = None,
     experiment_run_ulid: str | None = None,
-    preserve_experiment_snapshot: bool = False,
     interrupt_event: threading.Event | None = None,
     test_mode: bool = False,
     machine_key: str | None = None,
@@ -494,7 +453,6 @@ async def ensure_vm_ready_for_experiment(
         experiment_id: Unique experiment identifier (for instance naming)
         environment_ulid: Environment identifier for context
         experiment_run_ulid: Experiment run ID for stage tracking and instance assignment
-        preserve_experiment_snapshot: Whether to create experiment-specific snapshot
         interrupt_event: Optional event to check for user interruption
         test_mode: Skip VM integrity verification in test/development mode
 
@@ -533,21 +491,6 @@ async def ensure_vm_ready_for_experiment(
         raise VMError(log, f"Source VM with ID {vm_id} not found in database")
     if source_vm.hypervisor == 'qemu':
         return await _prepare_qemu_run_instance(source_vm, experiment_run_ulid, machine_key, interrupt_event, test_mode)
-
-    # Step 0: Verify VM exists and cleanup if missing (experiment-scoped)
-    log.debug("Step 0 - Verifying VM exists and cleaning up if missing")
-    try:
-        vm_is_available = verify_and_cleanup_vm_for_experiment(vm_id, experiment_id)
-        if not vm_is_available:
-            # VM was missing and cleaned up - cannot proceed
-            raise VMError(
-                log,
-                f"VM with ID {vm_id} was missing from VirtualBox and has been removed from database. Cannot proceed with experiment.",
-            )
-        log.debug("VM verification passed - VM is available")
-    except Exception as e:
-        log.error(f"VM verification failed: {e}")
-        raise
 
     # Step 1: Allocate VM instance (reuse existing or create new)
     log.debug(f"Step 1 - Starting VM instance allocation for vm_id={vm_id}")
@@ -933,21 +876,8 @@ def get_vm_info(vm_id: str) -> dict:
     if not vm:
         return None
 
-    # Get snapshot information if available
-    snapshot_info = {}
-    try:
-        from adare.backend.vm.snapshot_manager import SnapshotManager
-        from adare.hypervisor.exceptions import HypervisorException
-    except ImportError as e:
-        log.debug(f"Could not get snapshot info for VM {vm_id}: {e}")
-    else:
-        try:
-            manager = SnapshotManager()
-            snapshot_info = manager.get_snapshot_info(vm)
-        except (VMError, OSError, HypervisorException) as e:
-            # HypervisorException: SnapshotManager builds a VirtualBox manager, which
-            # fails on a QEMU-only host without VBoxManage ("vm info" used to die here).
-            log.debug(f"Could not get snapshot info for VM {vm_id}: {e}")
+    # Registered VMs are templates: snapshots exist only on (VirtualBox) instances.
+    snapshot_info: dict = {}
 
     return {
         'id': vm.id,

@@ -337,7 +337,8 @@ class EnvironmentMetadata:
 
 
 def parse_environment_file(environment_file: Path) -> EnvironmentMetadata | None:
-    environment_dict = yaml_to_dict(environment_file)
+    # An empty file loads as None; structure {} so it fails with a field error.
+    environment_dict = yaml_to_dict(environment_file) or {}
     try:
         environment = cattrs.structure(environment_dict, EnvironmentMetadata)
     except cattrs.BaseValidationError as e:

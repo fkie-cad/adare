@@ -1,18 +1,12 @@
 # external imports
+# configure logging
+import logging
 from pathlib import Path
 
 import cattrs
 
-try:
-    from adare.types.environment import EnvironmentMetadata
-    from adare.types.experiment import ExperimentMetadata
-except ImportError:
-    # Should not happen after consolidation
-    pass
-# configure logging
-import logging
-
 from adare.exceptions import DataStructuringError
+from adare.types.experiment import ExperimentMetadata
 from adarelib.helper.yaml import yaml_to_dict
 
 log = logging.getLogger(__name__)
@@ -36,21 +30,3 @@ def parse_metadata_file(metadata_file: Path) -> ExperimentMetadata:
             ],
         ) from e
     return metadata
-
-
-def parse_environment_file(environment_file: Path) -> EnvironmentMetadata | None:
-    environment_dict = yaml_to_dict(environment_file)
-    # Handle empty YAML files (yaml.safe_load returns None for empty files)
-    environment_dict = environment_dict or {}
-    try:
-        environment = cattrs.structure(environment_dict, EnvironmentMetadata)
-    except cattrs.BaseValidationError as e:
-        error_msg = "\n".join(cattrs.transform_error(e))
-        raise DataStructuringError(
-            log,
-            message=f'parsing errors while parsing environment file {environment_file}:{error_msg}',
-            possible_solutions=[
-                'fix the structure of the environment file',
-            ],
-        ) from e
-    return environment
