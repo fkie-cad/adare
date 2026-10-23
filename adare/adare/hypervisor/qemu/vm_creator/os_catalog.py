@@ -95,10 +95,13 @@ class OsDefinition:
     seed_transport: str = 'cdrom'  # 'cdrom' | 'http'
     # Deterministic, LLM-free GUI-installer playbook (install_mode == 'playbook').
     # Each step is a dict driving the graphical installer via the host-side QMP
-    # GUI executor: {action: tap, coords: [x, y, w, h]} | {action: key, keys: [..]}
-    # | {action: type, text: ..} | {action: wait_stable, settle/min/timeout: ..} |
-    # {action: wait, seconds: ..} | {action: shot, name: ..}. install_steps drive
-    # the installer; verify_steps run after rebooting into the installed disk.
+    # GUI executor: {action: tap, coords: [x, y, w, h]} | {action: click_text,
+    # text: ..} | {action: wait_text, text: .., gone/fail_on/timeout: ..} |
+    # {action: key, keys: [..]} | {action: type, text: ..} | {action: wait_stable,
+    # settle/min/timeout/required: ..} | {action: wait, seconds: ..} |
+    # {action: shot, name: ..}. install_steps drive the installer and must end
+    # with a wait_text on its "done" screen; verify_steps run after rebooting into
+    # the installed disk. See playbook_creator.
     install_steps: list = field(default_factory=list)
     verify_steps: list = field(default_factory=list)
     # Plain-text pointer telling a human where to obtain this ISO. Populated for

@@ -166,7 +166,7 @@ class _QMP:
         with open(self._ppm, 'rb') as fh:
             return fh.read()
 
-    def wait_stable(self, settle=20.0, timeout=600.0, poll=3.0, min_elapsed=0.0):
+    def wait_stable(self, settle=20.0, timeout=600.0, poll=3.0, min_elapsed=0.0) -> bool:
         start = time.time()
         deadline = start + timeout
         prev = self.dump()
@@ -180,10 +180,17 @@ class _QMP:
                 if stable_since is None:
                     stable_since = time.time()
                 elif time.time() - stable_since >= settle and time.time() - start >= min_elapsed:
-                    return
+                    return True
             else:
                 stable_since = None
         print_step('[yellow]wait_stable timed out[/yellow]')
+        return False
+
+
+def _as_list(value) -> list[str]:
+    if value is None:
+        return []
+    return [value] if isinstance(value, str) else list(value)
 
 
 class PlaybookVMCreator(BaseVMCreator):
@@ -212,13 +219,20 @@ class PlaybookVMCreator(BaseVMCreator):
         ppm = run_dir / '_frame.ppm'
 
         # ── 1. boot the installer, replay install_steps ───────────────────
+        # install_steps must end by confirming completion on screen (wait_text on
+        # the installer's "done" dialog); a still screen alone proves nothing.
         print_section('GUI installer (deterministic playbook)')
         proc = self._launch(disk_path, self.iso_path, sock, run_dir, nvram_path)
+        q = None
         try:
             q = _QMP(str(sock), ppm)
             self._run_steps(q, self.os_def.install_steps, run_dir, 'install')
-            q.close()
+            # Shut the live session down cleanly so every write to the new
+            # disk is flushed, rather than cutting power under it.
+            self._shutdown(proc, q, grace=120)
         finally:
+            if q:
+                q.close()
             self._stop(proc, sock)
 
         # ── 2. reboot from the installed disk, verify ─────────────────────
@@ -229,13 +243,7 @@ class PlaybookVMCreator(BaseVMCreator):
             q = _QMP(str(sock), ppm)
             if self.os_def.verify_steps:
                 self._run_steps(q, self.os_def.verify_steps, run_dir, 'verify')
-            q.powerdown()
-            for _ in range(30):
-                if proc.poll() is not None:
-                    break
-                time.sleep(2)
-        except PlaybookVMCreationError:
-            raise
+            self._shutdown(proc, q, grace=60)
         finally:
             if q:
                 q.close()
@@ -290,6 +298,22 @@ class PlaybookVMCreator(BaseVMCreator):
         return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     @staticmethod
+    def _shutdown(proc, q: _QMP, grace: float) -> None:
+        """ACPI power-off, waiting up to ``grace`` s; ``_stop`` kills whatever is left.
+
+        A live session may halt on "remove the installation medium, press ENTER"
+        after unmounting everything; that is the fallback case and safe to kill.
+        """
+        print_step('Powering the guest down')
+        try:
+            q.powerdown()
+        except (PlaybookVMCreationError, OSError):
+            return
+        deadline = time.time() + grace
+        while proc.poll() is None and time.time() < deadline:
+            time.sleep(2)
+
+    @staticmethod
     def _stop(proc, sock):
         if proc and proc.poll() is None:
             proc.terminate()
@@ -309,33 +333,45 @@ class PlaybookVMCreator(BaseVMCreator):
             print_step(
                 f'[{phase} {i:02d}] {action}' + (f' x{repeat}' if repeat > 1 else '') + (f'  {note}' if note else '')
             )
-            for _ in range(repeat):
-                if action == 'tap':
-                    q.tap(*step['coords'])
-                elif action == 'click_text':
-                    self._click_text(q, step)
-                elif action == 'type':
-                    q.type_text(step['text'])
-                elif action == 'key':
-                    q.key(step['keys'], shift=step.get('shift', False))
-                elif action == 'wait':
-                    time.sleep(float(step['seconds']))
-                elif action == 'wait_stable':
-                    q.wait_stable(
-                        settle=float(step.get('settle', 20)),
-                        timeout=float(step.get('timeout', 600)),
-                        poll=float(step.get('poll', 3)),
-                        min_elapsed=float(step.get('min', 0)),
-                    )
-                elif action == 'shot':
-                    pass
-                else:
-                    raise PlaybookVMCreationError(f'unknown step action: {action!r}')
-                if action in ('tap', 'key', 'click_text'):
-                    time.sleep(float(step.get('pause', 0.4)))
+            try:
+                for _ in range(repeat):
+                    self._run_step(q, step, action)
+            except PlaybookVMCreationError:
+                # The screen at the moment of failure is what explains it.
+                self._save_shot(q, run_dir / f'{phase}_{i:02d}_FAILED.png')
+                raise
             name = step.get('shot') or (step.get('name') if action == 'shot' else None)
             if name:
                 self._save_shot(q, run_dir / f'{phase}_{i:02d}_{name}.png')
+
+    def _run_step(self, q: _QMP, step: dict, action: str) -> None:
+        if action == 'tap':
+            q.tap(*step['coords'])
+        elif action == 'click_text':
+            self._click_text(q, step)
+        elif action == 'wait_text':
+            self._wait_text(q, step)
+        elif action == 'type':
+            q.type_text(step['text'])
+        elif action == 'key':
+            q.key(step['keys'], shift=step.get('shift', False))
+        elif action == 'wait':
+            time.sleep(float(step['seconds']))
+        elif action == 'wait_stable':
+            settled = q.wait_stable(
+                settle=float(step.get('settle', 20)),
+                timeout=float(step.get('timeout', 600)),
+                poll=float(step.get('poll', 3)),
+                min_elapsed=float(step.get('min', 0)),
+            )
+            if not settled and step.get('required', False):
+                raise PlaybookVMCreationError(f'screen never settled within {step.get("timeout", 600)}s')
+        elif action == 'shot':
+            pass
+        else:
+            raise PlaybookVMCreationError(f'unknown step action: {action!r}')
+        if action in ('tap', 'key', 'click_text'):
+            time.sleep(float(step.get('pause', 0.4)))
 
     # -- CV: locate a control by its on-screen label (ADARE cv-server OCR) ---
     def _click_text(self, q: _QMP, step: dict) -> None:
@@ -367,19 +403,64 @@ class PlaybookVMCreator(BaseVMCreator):
             return
         raise PlaybookVMCreationError(f'on-screen text {text!r} not found after {tries} tries')
 
+    def _wait_text(self, q: _QMP, step: dict) -> None:
+        """Block until one of ``step['text']`` is on screen (or, with ``gone: true``,
+        until none is), failing on timeout or as soon as a ``fail_on`` text shows.
+
+        This is how a playbook proves a phase finished — e.g. that the installer
+        reached its "Restart Now" dialog — instead of trusting a still screen,
+        which an error dialog or a hung progress bar also produces. Matching is
+        case-insensitive substring against every OCR line, one OCR pass per poll.
+        """
+        wanted = [t.lower() for t in _as_list(step['text'])]
+        fail_on = [t.lower() for t in _as_list(step.get('fail_on'))]
+        gone = bool(step.get('gone', False))
+        timeout = float(step.get('timeout', 600))
+        interval = float(step.get('interval', 5))
+        deadline = time.time() + timeout
+        while True:
+            lines = [line.lower() for line in self._screen_lines(q.dump())]
+            failed = next((f for f in fail_on if any(f in line for line in lines)), None)
+            if failed:
+                raise PlaybookVMCreationError(f'failure text {failed!r} on screen')
+            present = any(w in line for w in wanted for line in lines)
+            if present != gone:
+                return
+            if time.time() >= deadline:
+                state = 'still on screen' if gone else 'never appeared'
+                raise PlaybookVMCreationError(f'text {step["text"]!r} {state} after {timeout:.0f}s')
+            time.sleep(interval)
+
     @staticmethod
-    def _find_text(ppm_bytes: bytes, text: str, mode: str, which: int) -> tuple[int, int] | None:
-        import asyncio
+    def _png_b64(ppm_bytes: bytes) -> str:
         import base64
         import io
 
-        from adare_cv_server import server as cv
         from PIL import Image
 
         buf = io.BytesIO()
         Image.open(io.BytesIO(ppm_bytes)).save(buf, 'PNG')
-        b64 = base64.b64encode(buf.getvalue()).decode()
-        result = asyncio.run(cv.find_text(text=text, screenshot_base64=b64, match_mode=mode))
+        return base64.b64encode(buf.getvalue()).decode()
+
+    @classmethod
+    def _screen_lines(cls, ppm_bytes: bytes) -> list[str]:
+        import asyncio
+
+        from adare_cv_server import server as cv
+
+        result = asyncio.run(cv.get_all_text(screenshot_base64=cls._png_b64(ppm_bytes)))
+        if 'error' in result:
+            # An empty read would otherwise satisfy a `gone: true` wait.
+            raise PlaybookVMCreationError(f'OCR failed: {result["error"]}')
+        return [str(item.get('text', '')) for item in result.get('all_text', [])]
+
+    @classmethod
+    def _find_text(cls, ppm_bytes: bytes, text: str, mode: str, which: int) -> tuple[int, int] | None:
+        import asyncio
+
+        from adare_cv_server import server as cv
+
+        result = asyncio.run(cv.find_text(text=text, screenshot_base64=cls._png_b64(ppm_bytes), match_mode=mode))
         locs = result.get('locations', [])
         if not locs:
             return None
