@@ -1,7 +1,7 @@
 # Vision agent & authoring — reference
 
 Two vision-driven paths. Both need a configured VLM (`ADARE_VLLM_*`; check with
-`adare vlm show` / `adare vm gui-doctor`). The **authoring** path (`author`/
+`adare vlm show` / `adare vlm doctor`). The **authoring** path (`author`/
 `author-ai`) is owned by the `adare-playbook` skill; this reference focuses on the
 live **agent** and the grounding backend.
 
@@ -54,8 +54,8 @@ tighter for glyphs), which makes a recorded (image-target) playbook more robust 
 replay. It does **not** change where the live agent clicks or how fast it runs.
 
 ```sh
-adare dev grounding-pull                 # pre-download weights (~7.3 GB) up front
-adare dev grounding-pull --model <hf-id-or-path>
+adare vlm pull-grounding                 # pre-download weights (~7.3 GB) up front
+adare vlm pull-grounding --model <hf-id-or-path>
 ```
 
 Needs the grounding backend (`uv sync --extra grounding`), an `HF_TOKEN`, and the

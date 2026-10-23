@@ -60,9 +60,9 @@ adare exp diff <exp> -e <env>
 ## 3. Inspect
 
 ```sh
-adare run list                                 # all runs
-adare run list --filter <project[.env[.exp]]> # dotnotation filter
-adare run info [<ulid>]                        # run detail (latest if no ULID)
+adare runs list                                 # all runs
+adare runs list --filter <project[.env[.exp]]> # dotnotation filter
+adare runs info [<ulid>]                        # run detail (latest if no ULID)
 adare exp info <name>                           # experiment detail (-u ULID | -d dotnotation)
 ```
 
@@ -90,7 +90,7 @@ See `references/sharing.md` for the subcommand args and the external-send cautio
 
 ```sh
 adare exp clean <exp>                          # delete this experiment's fake (test) runs
-adare run remove <ulid>                        # delete one run
+adare runs remove <ulid>                        # delete one run
 adare exp remove <exp> [--force] [--keep-files]  # delete experiment (+runs); --force if it has prod runs
 ```
 

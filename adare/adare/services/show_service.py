@@ -203,7 +203,7 @@ class ShowService:
                 return Result.fail(
                     code="RunNotFoundError",
                     message=f"Run with ULID {ulid} not found",
-                    solutions=['Use `adare run list` to find valid run ULIDs'],
+                    solutions=['Use `adare runs list` to find valid run ULIDs'],
                 )
 
             detail = RunDetail(
@@ -253,7 +253,7 @@ class ShowService:
                 return Result.fail(
                     code="RunNotFoundError",
                     message=f"Run with ULID {ulid} not found",
-                    solutions=['Use `adare run list` to find valid run ULIDs'],
+                    solutions=['Use `adare runs list` to find valid run ULIDs'],
                 )
             return Result.ok(matches[0])
         except (FileNotFoundError, OSError) as e:
@@ -284,7 +284,7 @@ class ShowService:
                 return Result.fail(
                     code="ArgumentsError",
                     message="No run ULID provided",
-                    solutions=['Use `adare run list` to find the ULID of the run to remove'],
+                    solutions=['Use `adare runs list` to find the ULID of the run to remove'],
                 )
 
             # Get project path for database context
@@ -303,7 +303,7 @@ class ShowService:
                     return Result.fail(
                         code="RunNotFoundError",
                         message=f"Run with ULID {request.ulid} not found",
-                        solutions=['Use `adare run list` to find valid run ULIDs'],
+                        solutions=['Use `adare runs list` to find valid run ULIDs'],
                     )
 
                 was_fake = run.fake

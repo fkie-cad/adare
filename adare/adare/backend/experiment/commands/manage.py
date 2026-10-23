@@ -382,7 +382,7 @@ def publish_run_command(project_directory: Path, run_ulid: str):
             raise ExperimentRunNotFoundError(
                 log,
                 f'Experiment run {run_ulid} not found in project database.',
-                possible_solutions=['Check the run ULID', 'List runs with: adare run list'],
+                possible_solutions=['Check the run ULID', 'List runs with: adare runs list'],
             )
 
         experiment = run.experiment

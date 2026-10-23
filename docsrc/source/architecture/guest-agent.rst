@@ -202,7 +202,7 @@ Agent Lifecycle
    ``Tool`` enum). The host refuses any other protocol version, reinstalls the
    agent once if it meets an older one (e.g. a dev session restored from an old
    snapshot), and only calls tools the agent advertised. The token is redacted
-   from host logs; ``adare ws action`` and ``adare icons dump-all`` take it via
+   from host logs; ``adare debug ws action`` and ``adare icons dump-all`` take it via
    ``--token`` or ``ADARE_AGENT_TOKEN``.
 
    Before the agent is installed, a setup command opens port 18765 in the

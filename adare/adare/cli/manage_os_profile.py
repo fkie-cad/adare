@@ -1,4 +1,4 @@
-"""CLI handlers for `adare os-profile` commands."""
+"""CLI handlers for `adare vm profile` commands."""
 
 import logging
 import shutil
@@ -60,7 +60,7 @@ def exec_os_profile_show(arguments):
         fail(
             'OS_PROFILE_NOT_FOUND',
             f"Unknown OS profile: '{name}'",
-            ['Run: adare os-profile list', f'Available: {", ".join(sorted(OS_CATALOG.keys()))}'],
+            ['Run: adare vm profile list', f'Available: {", ".join(sorted(OS_CATALOG.keys()))}'],
             exit_code=EXIT_NOT_FOUND,
         )
 
@@ -247,7 +247,7 @@ def exec_os_profile_add(arguments):
         location=str(dest),
         next_steps=[
             f'Create a VM: adare vm create {name}',
-            'List profiles: adare os-profile list',
+            'List profiles: adare vm profile list',
         ],
     )
 
@@ -261,7 +261,7 @@ def exec_os_profile_remove(arguments):
         print_error_message(
             title=f'No custom profile found: {name}',
             next_steps=[
-                'Run: adare os-profile list',
+                'Run: adare vm profile list',
                 'Only custom profiles can be removed (not built-in ones)',
             ],
         )
@@ -272,5 +272,5 @@ def exec_os_profile_remove(arguments):
 
     print_success_message(
         title=f'OS profile "{name}" removed successfully',
-        next_steps=['Run: adare os-profile list'],
+        next_steps=['Run: adare vm profile list'],
     )

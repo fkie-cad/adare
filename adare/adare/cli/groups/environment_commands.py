@@ -56,6 +56,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def load(environment, project, force, no_copy, iso, reprovision, allow_emulation):
         """Load an environment.
 
+        \b
         ENVIRONMENT can be:
         - Simple name: ubuntu24
         - Relative path: environments/ubuntu24.yml
@@ -93,6 +94,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def create(name, project, with_vm):
         """Create an environment.
 
+        \b
         NAME can be:
         - Simple name: ubuntu24
         - Relative path: environments/ubuntu24
@@ -313,6 +315,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def remove(identifier, force):
         """Remove an environment, including all of its versions.
 
+        \b
         IDENTIFIER can be:
         - Environment name: ubuntu24
         - Environment ULID: 01K72Q25GDNHWMEZB97N9RDPG0

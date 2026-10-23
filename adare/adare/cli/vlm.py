@@ -36,7 +36,7 @@ _DEFAULTS = {
 _PRESETS = {
     # Ollama Cloud retired the qwen3-vl (GUI/computer-use) line in 2026-06; gemma4
     # is a general multimodal model, so keep `--ground` on for reliable clicking.
-    # Coord space kept at normalized_1000; run `gui-doctor` to confirm for gemma4.
+    # Coord space kept at normalized_1000; run `adare vlm doctor` to confirm for gemma4.
     'ollama-cloud': {
         _BASE_URL: 'https://ollama.com/v1',
         _MODEL: 'gemma4:31b',
@@ -408,7 +408,7 @@ def _activated_message(name, created=False):
     print_success_message(
         title=f"{verb} profile '{name}'",
         location=str(userconfig.path()),
-        next_steps=[_summary(values), 'Verify the endpoint: adare vm gui-doctor', 'See all: adare vlm list'],
+        next_steps=[_summary(values), 'Verify the endpoint: adare vlm doctor', 'See all: adare vlm list'],
     )
 
 
@@ -429,10 +429,10 @@ def _maybe_verify(values, skip):
         console.print(f'[yellow]⚠ could not reach the endpoint / token rejected[/yellow]: {message}')
         console.print(
             '[yellow]  The profile was saved anyway — fix the key/URL and re-run '
-            '`adare vlm create`, or run `adare vm gui-doctor`.[/yellow]'
+            '`adare vlm create`, or run `adare vlm doctor`.[/yellow]'
         )
     else:  # None — could not run the check
-        console.print(f'[dim]token check skipped: {message} (verify later with `adare vm gui-doctor`)[/dim]')
+        console.print(f'[dim]token check skipped: {message} (verify later with `adare vlm doctor`)[/dim]')
 
 
 def _verify_profile(values):

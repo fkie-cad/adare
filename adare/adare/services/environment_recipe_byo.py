@@ -112,7 +112,7 @@ def recipe_byo(
         return Result.fail(
             code='UnknownOsProfileError',
             message=f'Recipe profile {recipe.profile!r} is not a known OS profile.',
-            solutions=['Run: adare os-profile list'],
+            solutions=['Run: adare vm profile list'],
         )
 
     if os_def.platform != 'windows':

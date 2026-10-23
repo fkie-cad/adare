@@ -37,7 +37,7 @@ def _grounding_next_steps(msg: str) -> list[str]:
     """
     if 'not ready within' in msg:
         return [
-            'Pre-warm the weights once, then rerun: adare dev grounding-pull',
+            'Pre-warm the weights once, then rerun: adare vlm pull-grounding',
             'Or allow more load time: ADARE_LOCATE_START_TIMEOUT=900 adare dev agent ...',
             'Read the server log named above to see how far the load got',
             'Or drop --ground to run without element grounding',
@@ -105,7 +105,7 @@ class GuiAgentMixin:
                 str(exc),
                 [
                     'Verify ADARE_VLLM_BASE_URL / ADARE_VLLM_API_KEY / ADARE_VLLM_MODEL',
-                    'Run the preflight: adare vm gui-doctor',
+                    'Run the preflight: adare vlm doctor',
                 ],
             )
         except AgentError as exc:

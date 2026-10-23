@@ -44,7 +44,7 @@ _CODE_ALIASES = (('TEST_FUNCTION', 'TESTFUNCTION'),)
 _DEFAULT_HINTS = {
     'ENVIRONMENT_NOT_FOUND': 'Run `adare env list` to see available environments',
     'EXPERIMENT_NOT_FOUND': 'Run `adare experiment list` to see available experiments',
-    'RUN_NOT_FOUND': 'Run `adare run list` to see available runs',
+    'RUN_NOT_FOUND': 'Run `adare runs list` to see available runs',
     'PROJECT_NOT_FOUND': 'Run `adare project list` to see available projects',
     'VM_NOT_FOUND': 'Run `adare vm list` to see available VMs and instances',
     'TESTFUNCTION_NOT_FOUND': 'Run `adare test list` to see available testfunctions',
