@@ -240,6 +240,18 @@ def qga_exec(
     raise QgaError(f'Timeout waiting for guest command (pid {pid}) after {timeout:.0f}s')
 
 
+def qga_shutdown(sock_path: Path, mode: str = 'powerdown') -> None:
+    """Ask the guest to shut down cleanly (``powerdown`` / ``reboot`` / ``halt``).
+
+    The guest tears down the agent as part of shutting down, so the request
+    itself often gets no reply. That is success, not failure.
+    """
+    try:
+        _command(sock_path, 'guest-shutdown', {'mode': mode}, timeout=5.0)
+    except QgaError as e:
+        log.debug('guest-shutdown(%s) returned no clean reply (expected): %s', mode, e)
+
+
 def qga_reboot(sock_path: Path, ready_timeout: float = 900.0) -> None:
     """Reboot the guest via ``guest-shutdown`` mode ``reboot`` and wait for the agent.
 
@@ -256,12 +268,7 @@ def qga_reboot(sock_path: Path, ready_timeout: float = 900.0) -> None:
     Raises:
         QgaError: If the agent does not come back within *ready_timeout*.
     """
-    # The guest tears down the agent as part of shutting down, so the request
-    # itself often gets no reply. That is success, not failure.
-    try:
-        _command(sock_path, 'guest-shutdown', {'mode': 'reboot'}, timeout=5.0)
-    except QgaError as e:
-        log.debug('guest-shutdown(reboot) returned no clean reply (expected): %s', e)
+    qga_shutdown(sock_path, 'reboot')
 
     time.sleep(15.0)
     if not qga_wait_ready(sock_path, timeout=ready_timeout):

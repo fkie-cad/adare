@@ -68,6 +68,11 @@ def _template_stems(os_def: OsDefinition, override: str | None) -> list[str]:
 class GUIVMCreator(BaseVMCreator):
     """Create a VM by driving its GUI installer with a vision-LLM agent."""
 
+    # Like a playbook install it yields a stock desktop without a guest agent,
+    # and it has no console bootstrap, so the pass could only fail. The success
+    # message says the VM is not ADARE-ready.
+    readiness_pass = False
+
     def __init__(
         self,
         *args,
