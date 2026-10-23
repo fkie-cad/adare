@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import click
 
+from adare.cli.deprecated import deprecated_alias
 from adare.cli.errors import report_exception
 from adare.cli.output import FORMAT_CHOICES, FORMAT_ENV_VAR, output_options
 from adare.cli.output import get_formatter_from_context as _get_formatter_from_context
@@ -213,55 +214,6 @@ def db_clean_install(force):
 
 
 # ------------------------------
-# OS Profile commands (was: manage os-profile)
-# ------------------------------
-@cli.group(name='os-profile', cls=AliasedGroup)
-def os_profile():
-    """OS profile management for VM creation."""
-
-
-@os_profile.command(name='list')
-@output_options
-def os_profile_list():
-    """List all available OS profiles."""
-    from adare.cli.manage_os_profile import exec_os_profile_list
-
-    exec_with_error_printing(exec_os_profile_list, SimpleNamespace())
-
-
-@os_profile.command(name='add')
-@click.argument('profile_file', type=click.Path(exists=True))
-def os_profile_add(profile_file):
-    """Add a custom OS profile from a YAML file."""
-    from adare.cli.manage_os_profile import exec_os_profile_add
-
-    exec_with_error_printing(exec_os_profile_add, SimpleNamespace(profile_file=profile_file))
-
-
-@os_profile.command(name='show')
-@output_options
-@click.argument('name')
-def os_profile_show(name):
-    """Show detailed information about an OS profile."""
-    from adare.cli.manage_os_profile import exec_os_profile_show
-
-    exec_with_error_printing(exec_os_profile_show, SimpleNamespace(name=name))
-
-
-@os_profile.command(name='remove')
-@click.argument('name')
-def os_profile_remove(name):
-    """Remove a custom OS profile."""
-    from adare.cli.manage_os_profile import exec_os_profile_remove
-
-    exec_with_error_printing(exec_os_profile_remove, SimpleNamespace(name=name))
-
-
-os_profile.add_alias('l', 'list')
-os_profile.add_alias('rm', 'remove')
-
-
-# ------------------------------
 # Windows icon library commands
 # ------------------------------
 @cli.group(cls=AliasedGroup)
@@ -390,14 +342,14 @@ register_experiment_commands(cli, AliasedGroup, exec_with_error_printing)
 # ------------------------------
 from adare.cli.groups.dev_commands import register as register_dev_commands
 
-register_dev_commands(cli, AliasedGroup, exec_with_error_printing)
+dev = register_dev_commands(cli, AliasedGroup, exec_with_error_printing)
 
 # ------------------------------
 # VLM provider config (cli/groups/vlm_commands.py)
 # ------------------------------
 from adare.cli.groups.vlm_commands import register as register_vlm_commands
 
-register_vlm_commands(cli, AliasedGroup, exec_with_error_printing)
+vlm = register_vlm_commands(cli, AliasedGroup, exec_with_error_printing)
 
 
 # ------------------------------
@@ -414,6 +366,7 @@ def test():
 def test_create(name, project):
     """Create a new testfunction.
 
+    \b
     NAME can be:
     - Simple name: my_test
     - Relative path: testfunctions/my_test
@@ -450,6 +403,7 @@ def test_remove(name, project):
 def load(name, force):
     """Load a testfunction.
 
+    \b
     NAME can be:
     - Testfunction name from appdata: standard, json, csv
     - Absolute path: /path/to/testfunction
@@ -634,18 +588,18 @@ test.add_alias('v', 'versions')
 # ------------------------------
 from adare.cli.groups.vm_commands import register as register_vm_commands
 
-register_vm_commands(cli, AliasedGroup, exec_with_error_printing)
+vm = register_vm_commands(cli, AliasedGroup, exec_with_error_printing)
 
 
 # ------------------------------
 # Run management commands
 # ------------------------------
-@cli.group(cls=AliasedGroup)
-def run():
-    """Experiment run management commands."""
+@cli.group(name='runs', cls=AliasedGroup)
+def runs():
+    """Experiment runs: list, inspect and remove them (start one with `adare experiment run`)."""
 
 
-@run.command(name='list')
+@runs.command(name='list')
 @output_options
 @click.option('--filter', help='Filter by dotnotation: [project][.environment][.experiment]')
 def list_runs(filter):
@@ -656,7 +610,7 @@ def list_runs(filter):
     exec_with_error_printing(exec_show_runs, args)
 
 
-@run.command(name='info')
+@runs.command(name='info')
 @output_options
 @click.argument('ulid', required=False)
 def run_info(ulid):
@@ -667,7 +621,7 @@ def run_info(ulid):
     exec_with_error_printing(exec_show_run, args)
 
 
-@run.command(name='remove')
+@runs.command(name='remove')
 @click.argument('ulid', required=True)
 def run_remove(ulid):
     """Remove a single experiment run by its ULID."""
@@ -678,8 +632,8 @@ def run_remove(ulid):
 
 
 # Add aliases for run commands
-run.add_alias('l', 'list')
-run.add_alias('rm', 'remove')
+runs.add_alias('l', 'list')
+runs.add_alias('rm', 'remove')
 
 # ------------------------------
 # Web interface commands (extracted to cli/groups/web_commands.py)
@@ -688,7 +642,18 @@ from adare.cli.groups.web_commands import register as register_web_commands
 
 web = register_web_commands(cli, AliasedGroup, exec_with_error_printing)
 
-# Web UI commands (start, build, services)
+
+# ------------------------------
+# Local web UI (start, status, build, install-spice)
+# ------------------------------
+@cli.group(name='ui', cls=AliasedGroup)
+def ui():
+    """Local web UI: start it, check its services, build the frontend.
+
+    The shared ADARE Web platform (login, publish, download) is `adare web`.
+    """
+
+
 from adare.cli.web_cmd import (
     web_build,
     web_install_spice,
@@ -696,10 +661,10 @@ from adare.cli.web_cmd import (
     web_start,
 )
 
-web.add_command(web_start, "start")
-web.add_command(web_build, "build")
-web.add_command(web_services, "services")
-web.add_command(web_install_spice, "install-spice")
+ui.add_command(web_start, 'start')
+ui.add_command(web_services, 'status')
+ui.add_command(web_build, 'build')
+ui.add_command(web_install_spice, 'install-spice')
 
 
 # ------------------------------
@@ -728,10 +693,12 @@ def mcp_serve(transport, host, port):
     `adare dev mcp`. Point Claude Code / Claude Desktop at it and drive ADARE
     conversationally.
 
+    \b
     Examples:
         adare mcp serve                       # stdio (for a client to launch)
         adare mcp serve --transport http --port 13112
 
+    \b
     Client setup (Claude Code / OpenCode) and the playbook fix loop:
         docsrc/mcp-clients.md   ·   skill: .claude/skills/adare-playbook/SKILL.md
         Claude Code: claude mcp add adare -- adare mcp serve
@@ -743,9 +710,14 @@ def mcp_serve(transport, host, port):
 
 
 # ------------------------------
-# CV Server testing commands (was: dev mcp)
+# Debugging tools (cv, ws)
 # ------------------------------
-@cli.group(cls=AliasedGroup)
+@cli.group(name='debug', cls=AliasedGroup)
+def debug():
+    """Low-level debugging: CV detection on screenshots, raw guest-agent actions."""
+
+
+@debug.group(cls=AliasedGroup)
 def cv():
     """CV server testing commands for icon/text recognition."""
 
@@ -819,7 +791,7 @@ def cv_get_all_text(screenshot, format, host, port):
 # ------------------------------
 # WebSocket commands (was: dev ws)
 # ------------------------------
-@cli.group(cls=AliasedGroup)
+@debug.group(cls=AliasedGroup)
 def ws():
     """WebSocket adarevm interaction commands."""
 
@@ -846,9 +818,10 @@ def action(
 
     ACTION_FILE: Path to YAML file containing actions to execute
 
+    \b
     Examples:
-        adare ws action test.yml --host 192.168.1.100 --port 18765
-        adare ws action test.yml --vm-instance my-vm-instance
+        adare debug ws action test.yml --host 192.168.1.100 --port 18765
+        adare debug ws action test.yml --vm-instance my-vm-instance
     """
     from adare.cli.ws import exec_ws_action
 
@@ -878,34 +851,11 @@ def ws_create_example(output_file):
 
 
 # ------------------------------
-# Web Server commands
+# Skills for AI coding agents
 # ------------------------------
-@cli.group(name='server', cls=AliasedGroup)
-def server():
-    """ADARE web server for dev mode session control."""
-
-
-@server.command()
-@click.option('--port', type=int, default=8089, help='Server port (default: 8089)')
-@click.option('--host', default='127.0.0.1', help='Server host (default: 127.0.0.1)')
-@click.option('--dev', is_flag=True, help='Run in development mode with auto-reload')
-def start(port, host, dev):
-    """Start the ADARE web server."""
-    from adare.cli.webserver import exec_webserver_start
-
-    args = SimpleNamespace(port=port, host=host, dev=dev)
-    exec_with_error_printing(exec_webserver_start, args)
-
-
-# ------------------------------
-# Chat — embedded agentic REPL
-# ------------------------------
-@cli.group(name='agent', cls=AliasedGroup)
-def agent():
-    """Set up AI coding agents (Claude Code, OpenCode) to drive ADARE.
-
-    Not the GUI vision agent: that is `adare dev agent`.
-    """
+@cli.group(name='skills', cls=AliasedGroup)
+def skills():
+    """Install ADARE's workflow skills for AI coding agents (Claude Code, OpenCode)."""
 
 
 _agent_client_option = click.option(
@@ -917,7 +867,7 @@ _agent_client_option = click.option(
 )
 
 
-@agent.command(name='setup')
+@skills.command(name='install')
 @output_options
 @_agent_client_option
 @click.option(
@@ -930,7 +880,7 @@ _agent_client_option = click.option(
 @click.option('--copy', is_flag=True, help='Copy the skills instead of symlinking (e.g. on Windows)')
 @click.option('--force', is_flag=True, help='Re-point skill symlinks that currently point elsewhere')
 @click.option('--dry-run', is_flag=True, help='Show what would change without touching anything')
-def agent_setup(client, scope, copy, force, dry_run):
+def skills_install(client, scope, copy, force, dry_run):
     """Install ADARE's workflow skills for your coding agent(s).
 
     Symlinks every skills/adare-* skill so edits to the source propagate. Real
@@ -938,8 +888,8 @@ def agent_setup(client, scope, copy, force, dry_run):
 
     \b
     Examples:
-      adare agent setup --dry-run
-      adare agent setup --client claude --scope all
+      adare skills install --dry-run
+      adare skills install --client claude --scope all
     """
     from adare.cli.agent import exec_agent_setup
 
@@ -947,11 +897,11 @@ def agent_setup(client, scope, copy, force, dry_run):
     exec_with_error_printing(exec_agent_setup, args)
 
 
-@agent.command(name='status')
+@skills.command(name='status')
 @output_options
 @_agent_client_option
 @click.option('--scope', type=click.Choice(['user', 'project', 'all']), default='all', show_default=True)
-def agent_status(client, scope):
+def skills_status(client, scope):
     """Show where ADARE's skills are installed and whether the links are current."""
     from adare.cli.agent import exec_agent_status
 
@@ -959,6 +909,12 @@ def agent_status(client, scope):
     exec_with_error_printing(exec_agent_status, args)
 
 
+skills.add_alias('setup', 'install')
+
+
+# ------------------------------
+# Chat — embedded agentic REPL
+# ------------------------------
 @cli.command(name='chat')
 @click.option('--model', default=None, help='Chat model id (default: $ADARE_CHAT_MODEL, else the vlm model)')
 @click.option('--base-url', default=None, help='OpenAI-compatible endpoint (default: the active `adare vlm` provider)')
@@ -984,6 +940,7 @@ def cli_chat(model, base_url, tool_protocol, max_tokens):
     auto` tries native function-calling and falls back to a JSON-in-text contract
     when the endpoint rejects it.
 
+    \b
     Example:
         adare vlm use ollama-cloud
         adare chat
@@ -1008,11 +965,17 @@ def cli_status():
 
 
 # ------------------------------
-# Help commands
+# Moved commands keep working under their old names: hidden, with a pointer on stderr.
 # ------------------------------
-@cli.group()
-def help():
-    """Show help for special options."""
+cli.add_command(deprecated_alias(vm.commands['profile'], 'os-profile', 'adare vm profile'))
+vm.add_command(deprecated_alias(vlm.commands['doctor'], 'gui-doctor', 'adare vlm doctor'))
+dev.add_command(deprecated_alias(vlm.commands['pull-grounding'], 'grounding-pull', 'adare vlm pull-grounding'))
+cli.add_command(deprecated_alias(runs, 'run', 'adare runs'))
+cli.add_command(deprecated_alias(skills, 'agent', 'adare skills'))
+cli.add_command(deprecated_alias(cv, 'cv', 'adare debug cv'))
+cli.add_command(deprecated_alias(ws, 'ws', 'adare debug ws'))
+for _old, _new in (('start', 'start'), ('services', 'status'), ('build', 'build'), ('install-spice', 'install-spice')):
+    web.add_command(deprecated_alias(ui.commands[_new], _old, f'adare ui {_new}'))
 
 
 def main():

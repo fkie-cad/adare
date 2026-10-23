@@ -91,9 +91,7 @@ def web_start(ctx, port, host, dev, no_browser, spice_port):
             console.print("[yellow]Warning: VirtualSpice failed to start. VM features will be unavailable.[/yellow]")
     else:
         console.print("[yellow]VirtualSpice unavailable. VM features will be unavailable.[/yellow]")
-        console.print(
-            "[dim]Set VIRTUALSPICE_BINARY env var, run 'adare web install-spice', or build from source.[/dim]"
-        )
+        console.print("[dim]Set VIRTUALSPICE_BINARY env var, run 'adare ui install-spice', or build from source.[/dim]")
 
     # Open browser
     if not no_browser:
@@ -196,12 +194,12 @@ def web_build():
     console.print("[green]Build complete.[/green]")
 
 
-@click.command("services")
+@click.command("status")
 @click.option("--port", default=8089, help="FastAPI server port to check")
 @click.option("--spice-port", default=8081, help="VirtualSpice backend port")
 @output_options
 def web_services(port, spice_port):
-    """Show status of ADARE web services (FastAPI, VirtualSpice, frontend build)."""
+    """Show status of the local web UI services (FastAPI, VirtualSpice, frontend build)."""
     import urllib.error
     import urllib.request
 
@@ -249,7 +247,7 @@ def web_services(port, spice_port):
             "status": "available" if found_dist else "not_built",
             "running": bool(found_dist),
             "port": None,
-            "details": found_dist or "Run: adare web build",
+            "details": found_dist or "Run: adare ui build",
         },
     ]
 

@@ -27,6 +27,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def create(experiment, project):
         """Create a new experiment skeleton.
 
+        \b
         EXPERIMENT can be:
         - Simple name: test_csv
         - Relative path: experiments/test_csv
@@ -44,6 +45,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def load(experiment, environment, force, project):
         """Load an experiment.
 
+        \b
         EXPERIMENT can be:
         - Simple name: test_csv
         - Relative path: experiments/test_csv
@@ -119,7 +121,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         default=False,
         help='Allow QEMU TCG software emulation when the environment guest architecture does not match the host CPU (slow; hardware acceleration is used otherwise). Also honored via hypervisor_config.allow_emulation in the environment YAML.',
     )
-    @click.option('--project', help='Name of the project')
+    @click.option('--project', '-p', help='Name of the project')
     @click.pass_context
     def run(
         ctx,
@@ -146,11 +148,13 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         By default, runs in TEST mode (creates fake runs, skips integrity checks, allows modifications).
         Use --production/--prod for real production runs with full integrity validation.
 
+        \b
         EXPERIMENT can be:
         - Simple name: test_csv
         - Relative path: experiments/test_csv
         - Relative path: ./experiments/test_csv
 
+        \b
         ENVIRONMENT can be:
         - Simple name: ubuntu24
         - Relative path: environments/ubuntu24.yml
@@ -194,7 +198,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @experiment.command(name='list')
     @output_options
     def list_experiments():
-        """List all experiments in an environment."""
+        """List all experiments across all projects."""
         from adare.cli.show import exec_show_experiments
 
         args = SimpleNamespace()
@@ -208,6 +212,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def info(name, ulid, dotnotation):
         """Show detailed information about a specific experiment.
 
+        \b
         Usage:
         - adare experiment info NAME (find experiment by name in current project)
         - adare experiment info -u ULID (find experiment by ULID)
@@ -245,14 +250,17 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         This command permanently deletes the experiment, all its runs (both productive
         and fake), and optionally the experiment directory. Use with caution!
 
+        \b
         By default, the command will:
         - Fail if the experiment has productive runs (use --force to override)
         - Delete the experiment directory from filesystem (use --keep-files to preserve)
 
+        \b
         EXPERIMENT can be:
         - Simple name: test_csv
         - Relative path: experiments/test_csv
 
+        \b
         Examples:
         - adare experiment remove test_csv (fails if has runs)
         - adare experiment remove test_csv --force (removes with all runs)
@@ -274,6 +282,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         EXPERIMENT_PATTERN can be an exact name or glob pattern (e.g., test_*, *_linux).
         ENVIRONMENTS are the environment names to add.
 
+        \b
         Examples:
         - adare experiment add-env "test_*" ubuntu24
         - adare experiment add-env "*_linux" ubuntu22 ubuntu24
@@ -297,6 +306,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         EXPERIMENT_PATTERN can be an exact name or glob pattern (e.g., test_*, *_linux).
         ENVIRONMENTS are the environment names to remove.
 
+        \b
         Examples:
         - adare experiment remove-env "win_*" ubuntu22
         - adare experiment remove-env "*_test" old_env
@@ -328,6 +338,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         SOURCE_EXPERIMENT is the name of the experiment to clone from.
         TARGET_EXPERIMENT is the name for the new cloned experiment.
 
+        \b
         Examples:
         - adare experiment clone firefox_test firefox_test_v2
         - adare experiment clone prod_exp dev_exp -e ubuntu22 -e debian12
@@ -362,6 +373,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         ULID is the published experiment's ULID.
 
+        \b
         Examples:
         - adare experiment replicate 01HXYZ...
         - adare experiment replicate 01HXYZ... -e ubuntu24 --production
@@ -394,6 +406,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         Diff mode is designed for visual comparison between different OS/software versions.
         It runs experiments in QEMU with GUI mode without agent installation.
 
+        \b
         Features:
         - QEMU only (no agent installation)
         - Executes visual actions only (click, keyboard, screenshot)
@@ -403,6 +416,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         EXPERIMENT is the experiment name.
 
+        \b
         Examples:
         - adare experiment diff test_csv -e ubuntu24
         - adare experiment diff firefox_test -e windows11 --project myproject

@@ -89,7 +89,7 @@ def _open_watch_for_session(session_id: str) -> None:
         resolve_vm_uuid,
     )
 
-    # ADARE web server port (default of `adare web start`); the in-app viewer is
+    # ADARE web server port (default of `adare ui start`); the in-app viewer is
     # served here, so the live view opens same-origin, not on VirtualSpice's :8081.
     ADARE_WEB_PORT = 8089
 
@@ -101,7 +101,7 @@ def _open_watch_for_session(session_id: str) -> None:
 
     uuid = resolve_vm_uuid(vm_name, spice_port=DEFAULT_SPICE_PORT)
     if uuid is None:
-        print(f"\n⚠ --watch: could not open a live view for '{vm_name}'. Is VirtualSpice running (adare web start)?")
+        print(f"\n⚠ --watch: could not open a live view for '{vm_name}'. Is VirtualSpice running (adare ui start)?")
         return
 
     url = f"http://127.0.0.1:{ADARE_WEB_PORT}/vm/watch?name={quote(vm_name)}&view_only=true"

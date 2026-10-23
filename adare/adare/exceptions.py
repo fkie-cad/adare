@@ -158,7 +158,7 @@ class RunNotFoundError(LoggedErrorException):
             log,
             f'Experiment run "{run_ulid}" not found',
             possible_solutions=[
-                'Use `adare run list` to list available experiment runs',
+                'Use `adare runs list` to list available experiment runs',
                 'Check if the run ULID is correct',
                 'Make sure the experiment run was completed successfully',
             ],

@@ -173,7 +173,7 @@ coordinate convention:
 
 .. code-block:: bash
 
-   adare vm gui-doctor
+   adare vlm doctor
 
 **Driving an existing environment / authoring experiments.** The same agent can
 drive an *already-installed* environment to author reusable automation. Bring the
@@ -250,7 +250,7 @@ minor drift but a heavily redesigned installer may need ``--relearn``.
 
 
 Playbook GUI installation (``playbook``) — deterministic, no model
------------------------------------------------------------------
+------------------------------------------------------------------
 
 ``install_mode: playbook`` replays a fixed keyboard/mouse playbook embedded in
 the OS profile (``install_steps`` / ``verify_steps``) against the installer's
@@ -935,14 +935,14 @@ Listing profiles
 
 .. code-block:: bash
 
-   adare os-profile list
+   adare vm profile list
 
 Showing profile details
 -----------------------
 
 .. code-block:: bash
 
-   adare os-profile show ubuntu2404
+   adare vm profile show ubuntu2404
 
 Adding a custom profile
 -----------------------
@@ -989,14 +989,14 @@ Then add it:
 
 .. code-block:: bash
 
-   adare os-profile add my-distro.yml
+   adare vm profile add my-distro.yml
 
 Removing a custom profile
 --------------------------
 
 .. code-block:: bash
 
-   adare os-profile remove my-distro
+   adare vm profile remove my-distro
 
 YAML field reference
 --------------------
@@ -1185,7 +1185,7 @@ experiment run against it.
    ship **untested**. They cannot be built on an Apple Silicon host: the guest
    architecture is guarded for non-aarch64 guests and QEMU is invoked as
    ``qemu-system-<host arch>`` with ``accel=hvf``, and ADARE deliberately has no
-   TCG fallback. A green ``adare os-profile list`` row is *not* a verification —
+   TCG fallback. A green ``adare vm profile list`` row is *not* a verification —
    treat these as recipes for replication on Intel/AMD hosts.
 
 Paper-replication profiles
@@ -1548,7 +1548,7 @@ Field reference:
 - ``schema`` (required, integer) -- Metadata schema version. Currently ``1``.
   Loading a template with an unknown schema raises an explicit error.
 - ``id`` (required, string) -- Stable identifier surfaced in
-  ``adare os-profile show``. Independent of filename.
+  ``adare vm profile show``. Independent of filename.
 - ``description`` (string) -- Human-readable summary.
 - ``maintainer`` (string) -- Name or handle responsible for the template.
 - ``revision`` (string) -- Free-form revision marker (date, version, etc.).
@@ -1589,7 +1589,7 @@ Writing a custom template
 
    .. code-block:: bash
 
-      adare os-profile add my-ubuntu.yml
+      adare vm profile add my-ubuntu.yml
       adare vm create my-ubuntu
 
 

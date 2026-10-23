@@ -130,7 +130,7 @@ def _effective_os_def(recipe: Recipe) -> OsDefinition:
             log,
             f"recipe profile '{recipe.profile}' is not a known OS profile: {e}",
             possible_solutions=[
-                'Run: adare os-profile list',
+                'Run: adare vm profile list',
                 'Fix the "profile" field in the recipe block',
             ],
         ) from e

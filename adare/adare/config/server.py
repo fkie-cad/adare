@@ -53,7 +53,7 @@ TIMEOUT_SECONDS = 10
 #   ADARE_VLLM_COORD_SPACE=normalized_1000       # coord convention varies by model
 # Ollama Cloud retired the qwen3-vl GUI/computer-use line in 2026-06; gemma4 is a
 # general multimodal model (not coordinate-tuned), so keep `--ground` on for clicks.
-# Run `adare vm gui-doctor` to verify the endpoint and auto-detect the coord space.
+# Run `adare vlm doctor` to verify the endpoint and auto-detect the coord space.
 # Persist a provider without env vars: `adare vlm use ollama-cloud` / `... use local`
 # (env still overrides the saved config for a single run — see _cfg above).
 VLLM_BASE_URL = _cfg('ADARE_VLLM_BASE_URL', 'http://localhost:8000/v1')

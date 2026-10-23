@@ -12,7 +12,7 @@ used for the Win11-ARM64 legacy-boot workaround. **Detect-and-report only — ne
 installs anything, always exits 0.** Run it before any `vm create`.
 
 ```sh
-adare vm gui-doctor
+adare vlm doctor
 ```
 
 Preflights the vision-LLM used for GUI automation (`ADARE_VLLM_*`): confirms the
@@ -64,6 +64,6 @@ adare vm watch <name> --interactive      # allow input
 ```
 
 Opens VirtualSpice's display page pointed at the VM (requires VirtualSpice running,
-started by `adare web start`). Toggle view-only/interactive live from VirtualSpice's
+started by `adare ui start`). Toggle view-only/interactive live from VirtualSpice's
 own toolbar either way. For driving a session VM rather than just watching, see
 `adare-devvm`.

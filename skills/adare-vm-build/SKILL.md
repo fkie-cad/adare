@@ -22,7 +22,7 @@ troubleshooting live in `references/*.md`.
   firmware, swtpm, libvirt Python binding, and on Apple Silicon the wimlib/7z/xorriso
   trio for the Win11-ARM64 legacy-boot workaround). Detect-and-report only; run it
   first and fix any gaps before creating a VM.
-- **`adare vm gui-doctor`** — only if you'll GUI-automate the install (`vm create`
+- **`adare vlm doctor`** — only if you'll GUI-automate the install (`vm create`
   for a manual-install distro, or `env extend --interactive`): confirms the VLM
   endpoint is reachable and detects its coordinate convention.
 
@@ -30,10 +30,10 @@ troubleshooting live in `references/*.md`.
 
 ```sh
 adare vm doctor                        # host QEMU/OVMF/swtpm/wimlib availability
-adare vm gui-doctor                    # VLM preflight (only for GUI-automated installs)
-adare os-profile list                  # available OS targets
-adare os-profile show <name>           # one profile's detail
-adare os-profile add <profile.yml>     # register a custom OS profile
+adare vlm doctor                    # VLM preflight (only for GUI-automated installs)
+adare vm profile list                  # available OS targets
+adare vm profile show <name>           # one profile's detail
+adare vm profile add <profile.yml>     # register a custom OS profile
 ```
 
 ## 2. Create a base VM

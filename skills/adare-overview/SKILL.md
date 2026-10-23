@@ -73,4 +73,4 @@ Claude Code and OpenCode should use the CLI plus these skills. `adare mcp serve`
 exposes the same lifecycle as tools for hosts without a shell. `adare dev mcp -s <id>`
 gives step-by-step VM control (screenshot/click/type, record → replay). Both have
 `testfunction_search` / `list_testfunctions(query=…)` for picking assertions. Setup:
-`adare agent setup --help`.
+`adare skills install --help`.

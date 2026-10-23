@@ -334,7 +334,7 @@ WITH-LocateAnything run, partial completion accepted as an honest finding.
 ### Setup (env-only, no adare code change)
 - Vision model: `ADARE_VLLM_BASE_URL=http://localhost:11434/v1`,
   `ADARE_VLLM_MODEL=qwen3-vl:32b-instruct`, `ADARE_VLLM_COORD_SPACE=normalized_1000`,
-  `ADARE_VLLM_API_KEY=ollama`. `adare vm gui-doctor` confirmed the endpoint and
+  `ADARE_VLLM_API_KEY=ollama`. `adare vlm doctor` confirmed the endpoint and
   auto-detected `normalized_1000` (model returned (734,312) vs target (740,250) —
   6px normalized error).
 - Grounding sidecar: **new stdlib-only HTTP adapter**

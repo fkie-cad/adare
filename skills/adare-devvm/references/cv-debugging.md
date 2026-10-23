@@ -9,7 +9,7 @@ stopping the server.
 ## Icon matching
 
 ```sh
-adare cv test-icon --icon <icon.png> --screenshot <shot.png> \
+adare debug cv test-icon --icon <icon.png> --screenshot <shot.png> \
   [--output marked.png] [--threshold 0.6] [--host localhost] [--port 13109] [--mcplog log]
 ```
 
@@ -20,7 +20,7 @@ if a real match is being missed; raise it if you get false hits.
 ## Text matching
 
 ```sh
-adare cv test-text "<text>" --screenshot <shot.png> [--format json|csv] [--host …] [--port …]
+adare debug cv test-text "<text>" --screenshot <shot.png> [--format json|csv] [--host …] [--port …]
 ```
 
 Finds occurrences of the text string and prints their coordinates. Use this to check
@@ -32,7 +32,7 @@ two places makes a `text:` target ambiguous).
 ## Dump all detected text
 
 ```sh
-adare cv get-all-text --screenshot <shot.png> [--format json|csv]
+adare debug cv get-all-text --screenshot <shot.png> [--format json|csv]
 ```
 
 Runs OCR over the whole screenshot and returns every detected string with its

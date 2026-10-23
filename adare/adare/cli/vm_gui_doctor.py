@@ -1,4 +1,4 @@
-"""CLI handler for `adare vm gui-doctor` — vision-LLM preflight for GUI automation.
+"""CLI handler for `adare vlm doctor` — vision-LLM preflight for GUI automation.
 
 Confirms the configured vLLM endpoint (ADARE_VLLM_*; e.g. Ollama Cloud) is
 reachable and — the important part — detects which coordinate convention the

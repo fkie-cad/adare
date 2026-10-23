@@ -3,10 +3,10 @@
 ## Runs
 
 ```sh
-adare run list                                   # every run
-adare run list --filter <dotnotation>            # filter (see below)
-adare run info [<ULID>]                           # run detail; latest run if ULID omitted
-adare run remove <ULID>                           # delete one run (destructive)
+adare runs list                                   # every run
+adare runs list --filter <dotnotation>            # filter (see below)
+adare runs info [<ULID>]                           # run detail; latest run if ULID omitted
+adare runs remove <ULID>                           # delete one run (destructive)
 ```
 
 ### Dotnotation filter

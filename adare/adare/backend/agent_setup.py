@@ -1,4 +1,4 @@
-"""Install ADARE's workflow skills for AI coding agents (``adare agent setup/status``).
+"""Install ADARE's workflow skills for AI coding agents (``adare skills install/status``).
 
 The tracked ``skills/adare-*`` directories are the single source. They are
 symlinked (or copied) into each agent's skill directory. Existing entries are

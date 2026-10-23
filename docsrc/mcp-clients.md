@@ -54,13 +54,13 @@ Claude Code auto-loads skills from `.claude/skills/` (this project) and
 `skills/` directory; install it into both locations with the make target:
 
 ```sh
-adare agent setup --client claude --scope all   # or, from a checkout: make install-skills
-adare agent status                              # where each skill is linked, stale links
+adare skills install --client claude --scope all  # or, from a checkout: make install-skills
+adare skills status                               # where each skill is linked, stale links
 ```
 
 Both symlink each `skills/adare-*` into `.claude/skills/` **and** `~/.claude/skills/`,
 so `skills/` stays the single version-controlled source and edits propagate
-everywhere. `adare agent setup` never touches real directories and only re-points
+everywhere. `adare skills install` never touches real directories and only re-points
 links that point elsewhere with `--force` (`--dry-run` shows the plan). Undo with
 `rm ~/.claude/skills/adare-* .claude/skills/adare-*`.
 
@@ -89,7 +89,7 @@ Native OpenCode has no Anthropic-style skills. Pick one:
    It scans `.opencode/skills/`, `~/.opencode/skills/`,
    `~/.config/opencode/skills/` — **not** `.claude/skills/`. Point it at ours:
    ```sh
-   adare agent setup --client opencode            # ~/.config/opencode/skills
+   adare skills install --client opencode         # ~/.config/opencode/skills
    ```
 2. **Plugin-free — `AGENTS.md` lazy `@`-references** (OpenCode's native rules file).
    A short always-in-context index that the model reads on demand, reusing the same

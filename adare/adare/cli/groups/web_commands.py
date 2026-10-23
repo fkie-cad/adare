@@ -11,14 +11,17 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     # ------------------------------
     # Web interface commands
     # ------------------------------
-    @cli.group()
+    @cli.group(cls=AliasedGroup)
     def web():
-        """Web interface commands."""
+        """ADARE Web platform: log in, download, publish and submit shared work.
+
+        The local web UI is `adare ui`.
+        """
         pass
 
     @web.command()
     def login():
-        """Login to the web interface."""
+        """Login to the ADARE Web platform."""
         from adare.cli.web import exec_web_login
 
         args = SimpleNamespace()
@@ -26,7 +29,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @web.command()
     def logout():
-        """Logout from the web interface."""
+        """Logout from the ADARE Web platform."""
         from adare.cli.web import exec_web_logout
 
         args = SimpleNamespace()
@@ -124,7 +127,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @web.command()
     @click.option('--project', '-p', help='Name of the project')
     def sync(project):
-        """Sync all environments and experiments with the web interface."""
+        """Sync all environments and experiments with the ADARE Web platform."""
         from adare.cli.web import exec_web_sync
 
         args = SimpleNamespace(project=project)

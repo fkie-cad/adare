@@ -10,7 +10,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @cli.group(name='vlm', cls=AliasedGroup)
     def vlm():
-        """Configure the GUI-automation vision-LLM (used by `dev agent`/`record`/`author`)."""
+        """Configure and check the GUI-automation vision-LLM and grounding model (`dev agent`, `vm create --record`)."""
         pass
 
     @vlm.command()
@@ -36,6 +36,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         An env var (ADARE_VLLM_*) still overrides the active profile for one run.
 
+        \b
         Examples:
             adare vlm use                                  # interactive picker
             adare vlm use cloud-235b                       # activate a saved profile
@@ -80,9 +81,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         exec_with_error_printing(exec_vlm_save, SimpleNamespace(name=name, no_activate=no_activate))
 
-    @vlm.command(name='rm')
+    @vlm.command(name='remove')
     @click.argument('name')
-    def rm(name):
+    def remove(name):
         """Delete the profile NAME."""
         from adare.cli.vlm import exec_vlm_remove
 
@@ -96,6 +97,39 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         exec_with_error_printing(exec_vlm_show, SimpleNamespace())
 
-    # Convenience aliases.
+    @vlm.command(name='doctor')
+    @output_options(structured=False)
+    def doctor():
+        """Preflight the active VLM: is the endpoint reachable, which coordinate space?
+
+        Confirms the endpoint (e.g. Ollama Cloud) is reachable and detects which
+        coordinate convention the model returns, recommending ADARE_VLLM_COORD_SPACE.
+        """
+        from adare.cli.vm_gui_doctor import exec_vm_gui_doctor
+
+        exec_with_error_printing(exec_vm_gui_doctor, SimpleNamespace())
+
+    @vlm.command(name='pull-grounding')
+    @click.option(
+        '--model',
+        default=None,
+        help='HF id or local path (default: ADARE_LOCATE_MODEL_PATH or nvidia/LocateAnything-3B)',
+    )
+    def pull_grounding(model):
+        """Pre-download the LocateAnything grounding weights (~7.3 GB).
+
+        Pays the cold-download cost up front instead of on the first
+        `adare dev agent --ground` run. Needs the grounding backend
+        (`uv sync --extra grounding`), an HF_TOKEN and the accepted NVIDIA
+        license. Skipped if the configured model is already a local directory.
+        """
+        from adare.cli.dev import exec_dev_grounding_pull
+
+        exec_with_error_printing(exec_dev_grounding_pull, SimpleNamespace(model=model))
+
+    # Convenience aliases (`ls` predates the `l` used by the other groups).
+    vlm.add_alias('l', 'list')
     vlm.add_alias('ls', 'list')
-    vlm.add_alias('remove', 'rm')
+    vlm.add_alias('rm', 'remove')
+
+    return vlm

@@ -154,7 +154,7 @@ def exec_vm_watch(arguments):
 
     from adare.webapi.vm_watch import DEFAULT_SPICE_PORT, resolve_vm_uuid
 
-    # ADARE web server port (default of `adare web start`); the in-app viewer is
+    # ADARE web server port (default of `adare ui start`); the in-app viewer is
     # served here, so the live view opens same-origin, not on VirtualSpice's :8081.
     ADARE_WEB_PORT = 8089
 
@@ -166,7 +166,7 @@ def exec_vm_watch(arguments):
         print_error_message(
             title=f"Could not open a live view for '{name}'",
             next_steps=[
-                "Is VirtualSpice running?  Start it with:  adare web start",
+                "Is VirtualSpice running?  Start it with:  adare ui start",
                 f"Is the VM running?  Check:  adare vm list  (name must match '{name}')",
             ],
         )

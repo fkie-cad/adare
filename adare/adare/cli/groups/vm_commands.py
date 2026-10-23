@@ -145,7 +145,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         NAME is the VM/instance name (run 'adare vm list' to see names). Opens
         VirtualSpice's standalone display page pointed at that VM. Requires
-        VirtualSpice to be running (started by 'adare web start').
+        VirtualSpice to be running (started by 'adare ui start').
 
         \b
         Examples:
@@ -178,10 +178,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def test(target, platform, verbose, keep_vm, remove_vm, log_file, no_log):
         """Test ADARE compatibility of a VM.
 
+        \b
         TARGET may be either:
         - a path to an .ova/.ovf file (VirtualBox OVA import test), or
         - the name of a registered VM (run 'adare vm list' to see names).
 
+        \b
         The command validates the VM by:
         - Preparing the VM (OVA import, or a QEMU overlay off the base disk)
         - Setting up shared directories and mounting them
@@ -364,7 +366,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     ):
         """Create a new ADARE-ready VM from scratch.
 
-        OS_NAME is the target OS. Run `adare os-profile list` to see all entries.
+        OS_NAME is the target OS. Run `adare vm profile list` to see all entries.
 
         \b
         Common targets:
@@ -434,18 +436,45 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         )
         exec_with_error_printing(exec_vm_create, args)
 
-    @vm.command(name='gui-doctor')
-    @output_options(structured=False)
-    def vm_gui_doctor():
-        """Preflight the vision-LLM used for GUI automation (ADARE_VLLM_*).
+    # ------------------------------
+    # OS profiles (the OS_NAME targets of `vm create`)
+    # ------------------------------
+    @vm.group(name='profile', cls=AliasedGroup)
+    def profile():
+        """OS profiles: the OS_NAME targets `adare vm create` can install."""
 
-        Confirms the endpoint (e.g. Ollama Cloud) is reachable and detects which
-        coordinate convention the model returns, recommending ADARE_VLLM_COORD_SPACE.
-        """
-        from adare.cli.vm_gui_doctor import exec_vm_gui_doctor
+    @profile.command(name='list')
+    @output_options
+    def profile_list():
+        """List all available OS profiles."""
+        from adare.cli.manage_os_profile import exec_os_profile_list
 
-        args = SimpleNamespace()
-        exec_with_error_printing(exec_vm_gui_doctor, args)
+        exec_with_error_printing(exec_os_profile_list, SimpleNamespace())
+
+    @profile.command(name='add')
+    @click.argument('profile_file', type=click.Path(exists=True))
+    def profile_add(profile_file):
+        """Add a custom OS profile from a YAML file."""
+        from adare.cli.manage_os_profile import exec_os_profile_add
+
+        exec_with_error_printing(exec_os_profile_add, SimpleNamespace(profile_file=profile_file))
+
+    @profile.command(name='show')
+    @output_options
+    @click.argument('name')
+    def profile_show(name):
+        """Show detailed information about an OS profile."""
+        from adare.cli.manage_os_profile import exec_os_profile_show
+
+        exec_with_error_printing(exec_os_profile_show, SimpleNamespace(name=name))
+
+    @profile.command(name='remove')
+    @click.argument('name')
+    def profile_remove(name):
+        """Remove a custom OS profile."""
+        from adare.cli.manage_os_profile import exec_os_profile_remove
+
+        exec_with_error_printing(exec_os_profile_remove, SimpleNamespace(name=name))
 
     @vm.command(name='doctor')
     @output_options
@@ -478,5 +507,8 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     # Add aliases for snapshot commands
     snapshot.add_alias('l', 'list')
     snapshot.add_alias('rm', 'remove')
+
+    profile.add_alias('l', 'list')
+    profile.add_alias('rm', 'remove')
 
     return vm

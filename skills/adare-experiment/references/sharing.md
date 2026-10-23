@@ -64,6 +64,6 @@ operation — know what's local vs remote before running it.
 
 ## Related
 
-- `adare web start` / `adare web services` / `adare web build` belong to the local
+- `adare ui start` / `adare ui status` / `adare ui build` belong to the local
   web UI (FastAPI + VirtualSpice), not to sharing — see `adare-devvm` for the live
   screen viewer (`vm watch` / `dev start --watch`).
