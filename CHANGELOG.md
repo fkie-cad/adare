@@ -28,10 +28,11 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
-- `adare vm create` for `install_mode: playbook` profiles shows the VM in a QEMU
-  window when a desktop session is available (`--no-display` keeps it headless,
-  and a window that cannot open falls back to headless), and draws a live status
+- `adare vm create` for `install_mode: playbook` profiles draws a live status
   block in the terminal: current step, elapsed time, OCR attempt or screen text.
+  `--display` now also applies to playbook installs and shows the VM in a QEMU
+  window to watch (headless stays the default; a window that cannot open falls
+  back to headless).
   The scrollback keeps one line per step with its duration, retries and
   screenshot instead of a line per `click_text` retry. A `click_text` that fails
   reports the text that was on screen; QEMU's output goes to

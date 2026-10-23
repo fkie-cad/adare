@@ -311,13 +311,12 @@ installer's "done" screen and lists its failure texts:
 
 A unit test enforces both checks for every ``install_mode: playbook`` profile.
 
-**Watching a run.** When a desktop session is available (``DISPLAY`` /
-``WAYLAND_DISPLAY`` set, or macOS) the VM is shown in a QEMU window while the
-playbook drives it; ``--no-display`` keeps it headless. If the window cannot be
-opened (a QEMU without GTK, a refused session) the run continues headless with
-a warning. The window is for watching only — the playbook sends every click and
-key over QMP, and a click of yours lands in the installer too. QEMU's own output
-goes to ``<vm>_playbook/qemu.log``.
+**Watching a run.** The VM runs headless: the playbook sends every click and key
+and reads every screen over QMP, so it needs no window. ``--display`` shows the
+VM in a QEMU window to watch it in — watch only, since a click or keystroke of
+yours lands in the installer too. If the window cannot be opened (a QEMU
+without GTK, no desktop session) the run continues headless with a warning.
+QEMU's own output goes to ``<vm>_playbook/qemu.log``.
 
 In a terminal, a status block at the bottom shows the current step, how long it
 has run, what it is waiting for (OCR attempt ``7/25``, elapsed / timeout and the
@@ -330,7 +329,7 @@ keeps one line per finished step with its duration, retries and screenshot::
    ╭─ ubuntu2404 · installer · 21m07s ──────────────────────────────────────╮
    │ ⠋ [install 27/58] click_text 'Restart Now'  4s                         │
    │   'Restart Now' not on screen yet: attempt 3/10, every 2s              │
-   │   VM window open: watch only, the playbook drives mouse and keyboard   │
+   │   headless: no VM window (--display to show one); screenshots in …     │
    ╰────────────────────────────────────────────────────────────────────────╯
 
 Off a terminal (CI, output redirected to a file) there is no status block: each
@@ -442,8 +441,8 @@ Options
      - GUI-auto only: record a fresh playbook with the vision agent even if a cached one exists.
    * - ``--relearn``
      - GUI-auto only: discard the cached playbook and re-record from scratch.
-   * - ``--display`` / ``--no-display``
-     - Show the VM window while the installer is driven. Playbook installs show it by default when a desktop session is available; GUI-auto hides it unless ``--display`` is given (and then leaves it up on failure for inspection).
+   * - ``--display``
+     - GUI-auto and playbook: show the VM in a window while the installer is driven (watch only). GUI-auto also leaves it up on failure for inspection.
    * - ``--template NAME``
      - GUI-auto only: explicit goal/spec template name (default: ``gui_<distribution>``).
 
