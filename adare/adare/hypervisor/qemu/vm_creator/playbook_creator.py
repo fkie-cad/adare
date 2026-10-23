@@ -26,6 +26,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from rich.markup import escape
+
 from adare.console import console, print_section, print_step
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
@@ -87,6 +89,37 @@ def _char_to_keys(ch: str) -> tuple[list[str], bool]:
     if ch in _SHIFTED:
         return [_SHIFTED[ch]], True
     raise ValueError(f'unmapped character {ch!r}')
+
+
+# A long wait prints a progress line this often, so it never looks hung.
+HEARTBEAT_S = 60.0
+# A wait_text whose frame has not changed this long is flagged as possibly stuck.
+STUCK_S = 600.0
+
+
+def _fmt_duration(seconds: float) -> str:
+    m, sec = divmod(int(seconds), 60)
+    return f'{m}m{sec:02d}s' if m else f'{sec}s'
+
+
+class _Heartbeat:
+    """Prints ``waiting for X: elapsed / timeout — detail`` at most every HEARTBEAT_S."""
+
+    def __init__(self, what: str, timeout: float):
+        self.what = what
+        self.timeout = timeout
+        self.start = self._last = time.time()
+
+    def elapsed(self) -> float:
+        return time.time() - self.start
+
+    def beat(self, detail: str = '') -> None:
+        now = time.time()
+        if now - self._last < HEARTBEAT_S:
+            return
+        self._last = now
+        line = f'    … {self.what}: {_fmt_duration(now - self.start)} / {_fmt_duration(self.timeout)}'
+        print_step(line + (f' — {detail}' if detail else ''))
 
 
 class PlaybookVMCreationError(VMCreationError):
@@ -169,6 +202,7 @@ class _QMP:
     def wait_stable(self, settle=20.0, timeout=600.0, poll=3.0, min_elapsed=0.0) -> bool:
         start = time.time()
         deadline = start + timeout
+        heartbeat = _Heartbeat(f'waiting for the screen to settle {settle:.0f}s', timeout)
         prev = self.dump()
         stable_since = None
         while time.time() < deadline:
@@ -183,6 +217,9 @@ class _QMP:
                     return True
             else:
                 stable_since = None
+            heartbeat.beat(
+                f'still for {_fmt_duration(time.time() - stable_since)}' if stable_since else 'screen changing'
+            )
         print_step('[yellow]wait_stable timed out[/yellow]')
         return False
 
@@ -304,14 +341,18 @@ class PlaybookVMCreator(BaseVMCreator):
         A live session may halt on "remove the installation medium, press ENTER"
         after unmounting everything; that is the fallback case and safe to kill.
         """
-        print_step('Powering the guest down')
+        print_step(f'Powering the guest down (up to {grace:.0f}s)')
         try:
             q.powerdown()
         except (PlaybookVMCreationError, OSError):
             return
+        heartbeat = _Heartbeat('waiting for the guest to power off', grace)
         deadline = time.time() + grace
         while proc.poll() is None and time.time() < deadline:
             time.sleep(2)
+            heartbeat.beat()
+        if proc.poll() is None:
+            print_step(f'    guest still running after {grace:.0f}s, stopping qemu')
 
     @staticmethod
     def _stop(proc, sock):
@@ -331,15 +372,21 @@ class PlaybookVMCreator(BaseVMCreator):
             note = step.get('note', '')
             repeat = int(step.get('repeat', 1))
             print_step(
-                f'[{phase} {i:02d}] {action}' + (f' x{repeat}' if repeat > 1 else '') + (f'  {note}' if note else '')
+                f'{time.strftime("%H:%M:%S")} [{phase} {i:02d}] {action}'
+                + (f' x{repeat}' if repeat > 1 else '')
+                + (f'  {note}' if note else '')
             )
+            started = time.time()
             try:
                 for _ in range(repeat):
                     self._run_step(q, step, action)
-            except PlaybookVMCreationError:
+            except PlaybookVMCreationError as e:
                 # The screen at the moment of failure is what explains it.
+                print_step(f'    [red]failed after {_fmt_duration(time.time() - started)}:[/red] {escape(str(e))}')
                 self._save_shot(q, run_dir / f'{phase}_{i:02d}_FAILED.png')
                 raise
+            if action in ('wait_text', 'wait_stable', 'click_text'):
+                print_step(f'    done in {_fmt_duration(time.time() - started)}')
             name = step.get('shot') or (step.get('name') if action == 'shot' else None)
             if name:
                 self._save_shot(q, run_dir / f'{phase}_{i:02d}_{name}.png')
@@ -395,6 +442,8 @@ class PlaybookVMCreator(BaseVMCreator):
                 x, y = loc
                 q.tap(x + dx, y + dy, 1024, 768)
                 return
+            if attempt < tries - 1:
+                print_step(f'    {text!r} not on screen yet, retry {attempt + 2}/{tries}')
             time.sleep(interval)
         if optional:
             # A screen that only appears conditionally (e.g. the Ubuntu 24.04
@@ -418,8 +467,14 @@ class PlaybookVMCreator(BaseVMCreator):
         timeout = float(step.get('timeout', 600))
         interval = float(step.get('interval', 5))
         deadline = time.time() + timeout
+        heartbeat = _Heartbeat(f'waiting for {step["text"]!r}' + (' to go away' if gone else ''), timeout)
+        prev_frame, frozen_since = None, time.time()
         while True:
-            lines = [line.lower() for line in self._screen_lines(q.dump())]
+            frame = q.dump()
+            if frame != prev_frame:
+                prev_frame, frozen_since = frame, time.time()
+            raw = self._screen_lines(frame)
+            lines = [line.lower() for line in raw]
             failed = next((f for f in fail_on if any(f in line for line in lines)), None)
             if failed:
                 raise PlaybookVMCreationError(f'failure text {failed!r} on screen')
@@ -429,7 +484,17 @@ class PlaybookVMCreator(BaseVMCreator):
             if time.time() >= deadline:
                 state = 'still on screen' if gone else 'never appeared'
                 raise PlaybookVMCreationError(f'text {step["text"]!r} {state} after {timeout:.0f}s')
+            heartbeat.beat(self._progress_detail(raw, time.time() - frozen_since))
             time.sleep(interval)
+
+    @staticmethod
+    def _progress_detail(lines: list[str], frozen_for: float) -> str:
+        """What the screen says now, plus a warning once it stopped changing."""
+        screen = ' | '.join(line.strip() for line in lines if line.strip())
+        screen = escape(screen[:100] + ('…' if len(screen) > 100 else '')) or '(no text)'
+        if frozen_for >= STUCK_S:
+            return f'[yellow]screen unchanged for {_fmt_duration(frozen_for)}, may be stuck[/yellow] — {screen}'
+        return f'screen: {screen}'
 
     @staticmethod
     def _png_b64(ppm_bytes: bytes) -> str:
