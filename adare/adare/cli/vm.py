@@ -464,6 +464,23 @@ def _live_recipe_base_hashes() -> set[str]:
     return hashes
 
 
+def _print_reconcile_report(report, dry_run: bool) -> None:
+    import click
+
+    verb = 'Would remove' if dry_run else 'Removed'
+    sections = [
+        (f'{verb} crashed QEMU runs', report.removed_runs),
+        (f'{"Would release" if dry_run else "Released"} instances of crashed runs', report.released_instances),
+        (f'{verb} pooled QEMU instances (replaced by per-run overlays)', report.removed_pooled_qemu),
+        (f'{verb} run files without an instance', report.orphaned_run_files),
+    ]
+    for title, names in sections:
+        if names:
+            click.echo(f"\n{title}:")
+            for name in names:
+                click.echo(f"                {name}")
+
+
 def exec_vm_prune(arguments):
     """Reclaim orphaned QEMU base disks / NVRAM (and optionally dead sockets).
 
@@ -476,6 +493,8 @@ def exec_vm_prune(arguments):
     """
     import click
 
+    from adare.backend.vm.database import run_blocking
+    from adare.backend.vm.run_instances import reconcile_instances
     from adare.config.configdirectory import RECIPE_BASE_CACHE_DIR
     from adare.database.api.vm import VmApi
     from adare.hypervisor.qemu.mixins.configuration import (
@@ -485,6 +504,9 @@ def exec_vm_prune(arguments):
 
     dry_run = getattr(arguments, 'dry_run', True)
     include_sockets = getattr(arguments, 'sockets', False)
+
+    # 0. Instances: crashed runs, run files without a row, pooled QEMU leftovers.
+    _print_reconcile_report(run_blocking(reconcile_instances(dry_run=dry_run)), dry_run)
 
     # 1. Referenced set: every registered VM + instance name from the DB.
     referenced: set[str] = set()

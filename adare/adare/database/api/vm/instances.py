@@ -6,6 +6,7 @@ or previously-run copies of VM templates.
 """
 
 import logging
+import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -53,6 +54,7 @@ class VmInstanceMixin(_Host):
             current_experiment_run_id=experiment_run_id,
             websocket_port=websocket_port,
             status=status,
+            owner_pid=os.getpid() if status == 'active' else None,
             created_at=datetime.now(UTC),
             last_used_at=datetime.now(UTC),
         )
@@ -221,6 +223,7 @@ class VmInstanceMixin(_Host):
                             'status': 'active',
                             'current_experiment_run_id': experiment_run_id,
                             'websocket_port': websocket_port,
+                            'owner_pid': os.getpid(),
                             'last_used_at': datetime.now(UTC),
                         },
                         synchronize_session=False,

@@ -12,8 +12,9 @@ from adare.backend.experiment import agent_wheels
 from adare.backend.experiment.directory import ExperimentRunDirectory
 from adare.backend.experiment.runctx import ExperimentRunCtx
 from adare.backend.experiment.stagectxmanager import StageCtxManager
+from adare.database.exceptions import DatabaseError
 from adare.exceptions import LoggedException
-from adare.hypervisor.qemu.libvirt_undefine import keep_firmware_state_flags, undefine
+from adare.hypervisor.qemu.libvirt_undefine import delete_firmware_state_flags, undefine
 from adare.hypervisor.virtualbox import VirtualBoxVM
 from adare.types.stages import (
     VMDestroyStage,
@@ -28,42 +29,6 @@ from adare.types.stages import (
 )
 
 log = logging.getLogger(__name__)
-
-
-def _undefine_keeping_firmware_state(domain) -> None:
-    """Undefine a libvirt domain while preserving its UEFI NVRAM varstore and vTPM.
-
-    libvirt refuses a flagless ``undefine()`` on a domain that declares ``<nvram/>``
-    ("Cannot undefine domain with NVRAM/varstore"), which is every UEFI guest and
-    therefore every aarch64 guest. That refusal used to leave the domain defined but
-    shut off forever, one stale entry per run in ``virsh list --all``.
-
-    ``KEEP_NVRAM`` rather than ``NVRAM`` because the varstore is INSTANCE-scoped, not
-    run-scoped: ``libvirt_xml_builder`` points ``<nvram/>`` at
-    ``<disk_dir>/<instance_name>-nvram.fd`` (``firmware.get_nvram_path_for_vm``), beside
-    the instance's base disk, and the caller of this function releases that instance for
-    reuse by the next experiment. The file carries the guest's UEFI boot entries -
-    including the aarch64 Shell-boot pre-population from
-    ``firmware._prepare_nvram_for_shell_boot`` - so deleting it here would silently reset
-    a reusable instance's firmware state. Only ``QEMUVM.cleanup_base_disk()``, on
-    instance removal, may delete it.
-
-    For a BIOS domain with no ``<nvram/>`` the flag is inert, so x86 guests are
-    unaffected.
-
-    ``KEEP_TPM`` is here for the same instance-scoped reason, and matters more than it
-    looks: without it libvirt DELETES the emulated TPM state on undefine, so the next
-    run manufactures a factory-fresh vTPM and the Windows guest re-provisions its TPM
-    on every single cold boot. See ``hypervisor/qemu/libvirt_undefine`` for the full
-    reasoning.
-
-    Args:
-        domain: libvirt virDomain object to undefine
-
-    Raises:
-        libvirt.libvirtError: Propagated to the caller, which decides how to report it
-    """
-    undefine(domain, keep_firmware_state_flags())
 
 
 def destroy_domain_by_name(vm_name: str | None) -> bool:
@@ -130,12 +95,12 @@ def destroy_domain_by_name(vm_name: str | None) -> bool:
                 log.debug(f"Emergency stop: domain '{vm_name}' is already shut off")
 
             # Undefining as well keeps `virsh list --all` from filling up with one
-            # stale shut-off entry per interrupted run. KEEP_NVRAM because the
-            # varstore is instance-scoped and the instance is reused — see
-            # _undefine_keeping_firmware_state.
+            # stale shut-off entry per interrupted run. The varstore and vTPM are
+            # run-scoped copies, so they go with it; the remaining run files are
+            # reaped by reconcile_instances() once this process has exited.
             try:
                 with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
-                    _undefine_keeping_firmware_state(domain)
+                    undefine(domain, delete_firmware_state_flags())
             except libvirt.libvirtError as e:
                 log.debug(f"Emergency stop: could not undefine '{vm_name}': {e}")
 
@@ -275,7 +240,8 @@ class VMLifecycleManager:
                 experiment_run_ulid=context.experiment_run_ulid,
                 preserve_experiment_snapshot=context.config.preserve_snapshot,
                 interrupt_event=context.user_interrupt_event,
-                test_mode=context.test_mode,  # NEW: Pass test mode from context
+                test_mode=context.test_mode,
+                machine_key=context.machine_key,
             ),
             timeout=300,  # 5 minute timeout for VM import operations
         )
@@ -317,10 +283,13 @@ class VMLifecycleManager:
             log.debug(f"Fetch VM instance traceback: {traceback.format_exc()}")
             raise
 
-        # Update experiment run with VM instance ID
-        experiment_database.update_experiment_run_vm_instance(
-            context.config.project_path, context.experiment_run_ulid, vm_instance_id
-        )
+        # Update experiment run with VM instance ID (the primary machine's, for a
+        # multi-machine run); each machine releases its own via context.vm_instance_id.
+        context.vm_instance_id = vm_instance_id
+        if context.machine_key == getattr(context, 'primary_machine', context.machine_key):
+            experiment_database.update_experiment_run_vm_instance(
+                context.config.project_path, context.experiment_run_ulid, vm_instance_id
+            )
 
         # Use the instance name and port from the allocated instance
         context.vm_name = vm_instance.instance_name
@@ -388,6 +357,7 @@ class VMLifecycleManager:
 
                         # Update context with new instance information
                         vm_instance = new_vm_instance
+                        context.vm_instance_id = vm_instance.id
                         context.vm_name = vm_instance.instance_name
                         context.config.websocket_port = vm_instance.websocket_port
 
@@ -947,76 +917,41 @@ class VMLifecycleManager:
             # Hypervisor-specific cleanup (port forwarding, etc.)
             await self.strategy.cleanup_vm(context, post_interrupt)
 
-            # QEMU-specific: Cleanup experiment overlay disk
-            # This deletes the overlay, leaving the immutable base disk intact
-            if context.vm and hasattr(context.vm, 'cleanup_overlay_disk'):
-                experiment_id = context.experiment_run_ulid or 'default'
-                try:
-                    await context.vm.cleanup_overlay_disk(experiment_id)
-                    log.info(f"Cleaned up QEMU overlay for experiment {experiment_id}")
-                except (OSError, RuntimeError) as e:
-                    log.warning(f"Failed to cleanup overlay disk: {e}")
+            if self.hypervisor_type == 'qemu':
+                # The run's domain, overlay, UEFI vars, vTPM copy, config and
+                # instance row all go; the environment disk is never touched.
+                await self._remove_qemu_run(context)
+            else:
+                log.info('Releasing VM instance for reuse by future experiments')
+                await self._release_vm_instance(context)
 
-            # QEMU-specific: Undefine libvirt domain to prevent stale disk path references
-            # This ensures the domain doesn't persist with references to deleted overlay
-            if context.vm and hasattr(context.vm, '_libvirt_domain'):
-                try:
-                    import libvirt
+    async def _remove_qemu_run(self, context: ExperimentRunCtx) -> None:
+        from adare.backend.vm.run_instances import remove_qemu_run_instance
 
-                    if context.vm._libvirt_domain:
-                        try:
-                            # Only undefine if domain is not running
-                            state, _ = context.vm._libvirt_domain.state()
-                            if state == libvirt.VIR_DOMAIN_SHUTOFF:
-                                _undefine_keeping_firmware_state(context.vm._libvirt_domain)
-                                log.info(f"Undefined libvirt domain '{context.vm.vm_name}'")
-                            else:
-                                log.warning(
-                                    f"Cannot undefine domain '{context.vm.vm_name}' - "
-                                    f"still running (state: {state}). Domain will be undefined on next start."
-                                )
-                        except libvirt.libvirtError as e:
-                            # A domain that is already gone is the normal case; anything
-                            # else means the definition just leaked and stays visible in
-                            # `virsh list --all` forever, so do not bury it at debug.
-                            if e.get_error_code() == libvirt.VIR_ERR_NO_DOMAIN:
-                                log.debug(f"Domain already undefined: {e}")
-                            else:
-                                log.warning(
-                                    f"Could not undefine domain '{context.vm.vm_name}' - its "
-                                    f"definition will leak (see `virsh list --all`): {e}"
-                                )
-                        finally:
-                            # Always clear cached domain object to force redefinition
-                            context.vm._libvirt_domain = None
-                            log.debug(f"Cleared libvirt domain cache for '{context.vm.vm_name}'")
-                except (OSError, RuntimeError, ImportError) as e:
-                    log.warning(f"Failed to cleanup libvirt domain: {e}")
-
-            # Release VM instance for reuse by other experiments
-            log.info('Releasing VM instance for reuse by future experiments')
-            await self._release_vm_instance(context)
+        if context.vm is not None:
+            context.vm._libvirt_domain = None  # stale after the domain is undefined below
+        instance_name = context.vm_name
+        if not instance_name:
+            log.warning('No run instance recorded - nothing to remove')
+            return
+        try:
+            remove_qemu_run_instance(instance_name)
+        except (OSError, DatabaseError) as e:
+            # reconcile_instances() reaps whatever is left once this process is gone.
+            log.error(f"Failed to remove run instance {instance_name}: {e}")
 
     async def _release_vm_instance(self, context: ExperimentRunCtx):
-        """Release the VM instance used by this experiment."""
+        """Return this machine's pooled (VirtualBox) instance to the pool."""
+        from adare.backend.vm.commands import release_vm_instance_for_experiment
+
+        instance_id = context.vm_instance_id
+        if not instance_id:
+            log.warning("No VM instance recorded for this machine - cannot release")
+            return
         try:
-            # Get the VM instance ID from the experiment run
-            from adare.database.api.experiment import ExperimentApi
-            from adare.database.models.project_models import ExperimentRun
-
-            with ExperimentApi(context.config.project_path) as api:
-                experiment_run = (
-                    api._session.query(ExperimentRun).filter(ExperimentRun.id == context.experiment_run_ulid).first()
-                )
-
-            if experiment_run and experiment_run.vm_instance_id:
-                from adare.backend.vm.commands import release_vm_instance_for_experiment
-
-                await release_vm_instance_for_experiment(experiment_run.vm_instance_id)
-                log.info(f"Released VM instance {experiment_run.vm_instance_id} for reuse")
-            else:
-                log.warning("No VM instance ID found in experiment run - cannot release")
-        except (OSError, ValueError, RuntimeError) as e:
+            await release_vm_instance_for_experiment(instance_id)
+            log.info(f"Released VM instance {instance_id} for reuse")
+        except (OSError, ValueError, RuntimeError, DatabaseError) as e:
             log.error(f"Failed to release VM instance: {e}")
 
     async def _create_experiment_snapshot(self, context: ExperimentRunCtx, event: threading.Event):

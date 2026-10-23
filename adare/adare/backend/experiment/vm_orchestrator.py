@@ -37,6 +37,7 @@ _MACHINE_SCOPED_ATTRS = frozenset(
         'vm',
         'vm_file',
         'vm_name',
+        'vm_instance_id',
         'client',
         'mcp_server',
         'adarevm',
@@ -109,6 +110,8 @@ class _MachineContextView:
         return self._parent_context.machines[self._machine_key]
 
     def __getattr__(self, name):
+        if name == 'machine_key':
+            return self._machine_key
         if name in _MACHINE_SCOPED_ATTRS:
             return getattr(self._machine_ctx(), name)
         if name == 'config':

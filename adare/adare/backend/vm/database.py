@@ -365,7 +365,7 @@ def get_vm_summary(vm_id: str = None, name: str = None, file_hash: str = None) -
     return None
 
 
-def _run_blocking(coro):
+def run_blocking(coro):
     """Run a coroutine to completion from sync code, even if the caller's thread has a running event loop."""
     try:
         asyncio.get_running_loop()
@@ -469,19 +469,15 @@ def get_vms_by_environment(environment_ulid: str) -> list:
         return []
 
 
-def delete_all_vms(force: bool = False) -> dict:
+def _remove_instances_of(vms: list) -> dict:
+    """Remove every instance (hypervisor VM + row) of ``vms``; the VM registrations stay.
+
+    A VM's registration is what its environments run on -- removing it is
+    `adare env remove` / `adare vm reset`, not instance cleanup.
     """
-    Delete all VMs from the database and VirtualBox.
+    from adare.backend.vm.instance_manager import cleanup_vm_instance
 
-    Args:
-        force: If True, force deletion even if VMs are in use
-
-    Returns:
-        Dictionary with deletion results
-    """
-    from adare.backend.vm.snapshot_manager import SnapshotManager
-
-    results = {
+    results: dict = {
         'deleted_count': 0,
         'failed_count': 0,
         'skipped_count': 0,
@@ -489,117 +485,31 @@ def delete_all_vms(force: bool = False) -> dict:
         'failed_vms': [],
         'skipped_vms': [],
     }
-
-    try:
-        all_vms = get_all_vms()
-        log.info(f"Found {len(all_vms)} VMs to delete")
-
-        SnapshotManager()
-
-        for vm in all_vms:
+    for vm in vms:
+        with VmApi() as api:
+            instances = api.get_vm_instances_for_vm(vm.id)
+        for instance in instances:
             try:
-                # Delete associated VmInstance records - they will handle VirtualBox cleanup
-                # VmInstances track actual VirtualBox VMs, not the abstract Vm model
-                from adare.database.api.vm import VmApi
-
-                with VmApi() as api:
-                    instances = api.get_vm_instances_for_vm(vm.id)
-                    if instances:
-                        log.info(f"Found {len(instances)} instances for VM '{vm.name}'")
-                        from adare.backend.vm.instance_manager import cleanup_vm_instance
-
-                        for instance in instances:
-                            try:
-                                _run_blocking(cleanup_vm_instance(instance.id, force=True))
-                                log.info(f"Deleted VM instance: {instance.instance_name}")
-                            except Exception as inst_error:  # noqa: BLE001 - best-effort per-instance cleanup in batch deletion
-                                log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
-
-                # Delete from database (cascade will remove instances)
-                delete_vm(vm.id)
-                results['deleted_count'] += 1
-                results['deleted_vms'].append(vm.name)
-                log.info(f"Successfully deleted VM: {vm.name}")
-
-            except Exception as e:  # noqa: BLE001 - per-VM cleanup must not abort remaining VMs
+                run_blocking(cleanup_vm_instance(instance.id, force=True))
+            except Exception as e:  # noqa: BLE001 - best-effort per-instance cleanup in batch removal
                 results['failed_count'] += 1
-                results['failed_vms'].append(f"{vm.name}: {str(e)}")
-                log.error(f"Failed to delete VM '{vm.name}': {e}")
+                results['failed_vms'].append(f"{instance.instance_name}: {e}")
+                log.error(f"Failed to remove instance {instance.instance_name}: {e}")
+                continue
+            results['deleted_count'] += 1
+            results['deleted_vms'].append(instance.instance_name)
+            log.info(f"Removed VM instance: {instance.instance_name}")
+    return results
 
-        log.info(f"VM cleanup completed - deleted: {results['deleted_count']}, failed: {results['failed_count']}")
-        return results
 
-    except (OSError, DatabaseError) as e:
-        log.error(f"Error during VM cleanup: {e}")
-        results['failed_count'] += len(results.get('deleted_vms', [])) + len(results.get('failed_vms', []))
-        return results
+def delete_all_vms(force: bool = False) -> dict:
+    """Remove the instances of every VM (``adare vm remove --all --force``)."""
+    return _remove_instances_of(get_all_vms())
 
 
 def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dict:
-    """
-    Delete all VMs associated with a specific environment.
-
-    Args:
-        environment_ulid: Environment ULID
-        force: If True, force deletion even if VMs are in use
-
-    Returns:
-        Dictionary with deletion results
-    """
-    results = {
-        'deleted_count': 0,
-        'failed_count': 0,
-        'skipped_count': 0,
-        'deleted_vms': [],
-        'failed_vms': [],
-        'skipped_vms': [],
-    }
-
-    try:
-        vms = get_vms_by_environment(environment_ulid)
-        if not vms:
-            log.info(f"No VMs found for environment {environment_ulid}")
-            return results
-
-        log.info(f"Found {len(vms)} VMs for environment {environment_ulid}")
-
-        for vm in vms:
-            try:
-                # Delete associated VmInstance records - they will handle VirtualBox cleanup
-                from adare.database.api.vm import VmApi
-
-                with VmApi() as api:
-                    instances = api.get_vm_instances_for_vm(vm.id)
-                    if instances:
-                        log.info(f"Found {len(instances)} instances for VM '{vm.name}'")
-                        from adare.backend.vm.instance_manager import cleanup_vm_instance
-
-                        for instance in instances:
-                            try:
-                                _run_blocking(cleanup_vm_instance(instance.id, force=True))
-                                log.info(f"Deleted VM instance: {instance.instance_name}")
-                            except Exception as inst_error:  # noqa: BLE001 - best-effort per-instance cleanup in batch deletion
-                                log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
-
-                # Delete from database
-                delete_vm(vm.id)
-                results['deleted_count'] += 1
-                results['deleted_vms'].append(vm.name)
-                log.info(f"Successfully deleted VM: {vm.name}")
-
-            except Exception as e:  # noqa: BLE001 - per-VM cleanup must not abort remaining VMs
-                results['failed_count'] += 1
-                results['failed_vms'].append(f"{vm.name}: {str(e)}")
-                log.error(f"Failed to delete VM '{vm.name}': {e}")
-
-        log.info(
-            f"Environment VM cleanup completed - deleted: {results['deleted_count']}, failed: {results['failed_count']}"
-        )
-        return results
-
-    except (OSError, DatabaseError) as e:
-        log.error(f"Error during environment VM cleanup: {e}")
-        return results
+    """Remove the instances of an environment's VM (``adare vm remove --env``)."""
+    return _remove_instances_of(get_vms_by_environment(environment_ulid))
 
 
 def load_vm_from_file(

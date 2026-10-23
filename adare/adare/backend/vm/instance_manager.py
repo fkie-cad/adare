@@ -13,8 +13,9 @@ Uses:
 import asyncio
 import logging
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 from sqlalchemy.exc import IntegrityError
 
@@ -128,37 +129,6 @@ class VmInstanceManager:
 
             return False
 
-    async def cleanup_oldest_error_instance(self, vm_id: str) -> bool:
-        """
-        Clean up the oldest instance in 'error' state for a VM.
-
-        This helps recover capacity occupied by broken instances.
-
-        Args:
-            vm_id: Source VM ID
-
-        Returns:
-            True if an instance was cleaned up
-        """
-        from adare.database.api.vm import VmApi
-
-        with VmApi() as api:
-            instances = api.get_vm_instances_for_vm(vm_id, status='error')
-
-            if instances:
-                # Find oldest error instance
-                oldest = min(instances, key=lambda x: x.last_used_at)
-                log.info(f"Cleaning up oldest error instance: {oldest.instance_name}")
-
-                # Clean up hypervisor VM
-                await self._cleanup_hypervisor_instance(oldest)
-
-                # Delete from database
-                api.delete_vm_instance(oldest.id)
-                return True
-
-            return False
-
     async def create_new_instance(self, vm_id: str, experiment_run_id: str) -> VmInstance:
         """
         Create a new VM instance for an experiment.
@@ -189,11 +159,6 @@ class VmInstanceManager:
 
                 # First try to cleanup oldest available instance
                 cleanup_success = await self.cleanup_oldest_available_instance(vm_id)
-
-                if not cleanup_success:
-                    # If no available instances, try to cleanup error instances
-                    log.info("No available instances to cleanup, checking for error instances")
-                    cleanup_success = await self.cleanup_oldest_error_instance(vm_id)
 
                 if not cleanup_success:
                     # If still no room, we're at capacity
@@ -463,6 +428,7 @@ class VmInstanceManager:
                 status='available',
                 current_experiment_run_id=None,
                 websocket_port=None,  # Clear port so it can be reallocated
+                owner_pid=None,
                 last_used_at=datetime.now(UTC),
             )
 
@@ -505,29 +471,6 @@ class VmInstanceManager:
 
             # Delete from database
             api.delete_vm_instance(instance_id)
-
-    async def cleanup_old_instances(self, age_days: int = None):
-        """
-        Clean up old available instances based on age.
-
-        Args:
-            age_days: Age threshold in days (default: CLEANUP_AGE_DAYS)
-        """
-        from adare.database.api.vm import VmApi
-
-        if age_days is None:
-            age_days = self.CLEANUP_AGE_DAYS
-
-        cutoff_date = datetime.now(UTC) - timedelta(days=age_days)
-
-        with VmApi() as api:
-            old_instances = api.get_old_vm_instances(cutoff_date, status='available')
-
-            for instance in old_instances:
-                log.info(
-                    f"Cleaning up old instance: {instance.instance_name} (age: {(datetime.now(UTC) - instance.last_used_at).days} days)"
-                )
-                await self.cleanup_instance(instance.id)
 
     async def remove_all_instances(self):
         """
@@ -702,11 +645,6 @@ class VmInstanceManager:
         log.debug(f"{vm.hypervisor} state for {instance.instance_name}: {state}")
         return state
 
-    # Keep old method name as alias for backward compatibility
-    def _get_virtualbox_vm_state(self, instance: VmInstance) -> str:
-        """Alias for _get_hypervisor_vm_state for backward compatibility."""
-        return self._get_hypervisor_vm_state(instance)
-
     async def _check_instance_state_async(self, instance: VmInstance) -> tuple[str, str, str]:
         """
         Asynchronously check hypervisor state for a single instance.
@@ -749,15 +687,21 @@ class VmInstanceManager:
         Returns:
             Number of instances updated
         """
-        log.info(f"===== PARALLEL VERSION EXECUTING ===== vm_id={vm_id}")
         log.debug(f"Syncing instance states for vm_id={vm_id}")
         from adare.database.api.vm import VmApi
 
         updated_count = 0
 
         with VmApi() as api:
-            # Get all instances for this VM
-            instances = api.get_vm_instances_for_vm(vm_id)
+            # Rows held by a live process (this one or another `adare`) are in
+            # use or still being set up -- their hypervisor state says nothing yet.
+            from adare.backend.vm.run_instances import pid_alive
+
+            instances = [
+                instance
+                for instance in api.get_vm_instances_for_vm(vm_id)
+                if not (instance.status == 'active' and pid_alive(cast(int | None, instance.owner_pid)))
+            ]
             log.debug(f"Found {len(instances)} instances to sync for vm_id={vm_id}")
 
             if not instances:
@@ -819,7 +763,14 @@ class VmInstanceManager:
 
             # Apply all updates in batch
             for instance_id, new_status in updates_to_apply:
-                api.update_vm_instance(instance_id, status=new_status, last_used_at=datetime.now(UTC))
+                api.update_vm_instance(
+                    instance_id,
+                    status=new_status,
+                    current_experiment_run_id=None,
+                    websocket_port=None,
+                    owner_pid=None,
+                    last_used_at=datetime.now(UTC),
+                )
                 updated_count += 1
                 log.info(f"Updated instance {instance_id} status to {new_status}")
 
@@ -902,6 +853,18 @@ class VmInstanceManager:
 
     async def _cleanup_qemu_vm(self, instance: VmInstance):
         """Clean up QEMU/libvirt VM for an instance."""
+        from adare.hypervisor.qemu import run_resources
+
+        instance_name = str(instance.instance_name)
+        if '_run_' in instance_name:
+            # Run-scoped instance: no disk copy of its own, only name-keyed run files.
+            run_resources.destroy_run_domain(instance_name)
+            run_resources.remove_run_files(instance_name)
+            return
+        # Pooled instance from before per-run overlays. Its domain carries the
+        # environment's shared vTPM, which removal would delete -- keep it as
+        # the environment's vTPM template first.
+        run_resources.adopt_legacy_tpm(str(instance.vm_id))
         try:
             from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
 
@@ -926,11 +889,6 @@ class VmInstanceManager:
             log.info(f"Cleaned up QEMU VM: {instance.instance_name}")
         except ImportError:
             log.warning("QEMU module not available for cleanup")
-
-    # Keep old method name as alias for backward compatibility
-    async def _cleanup_virtualbox_instance(self, instance: VmInstance):
-        """Alias for _cleanup_hypervisor_instance for backward compatibility."""
-        await self._cleanup_hypervisor_instance(instance)
 
 
 # Global instance for system-wide VM instance management
@@ -973,16 +931,6 @@ async def cleanup_vm_instance(instance_id: str, force: bool = False):
         VMError: If instance is actually running in VirtualBox
     """
     await _instance_manager.cleanup_instance(instance_id, force=force)
-
-
-async def cleanup_old_vm_instances(age_days: int = None):
-    """
-    Clean up old available VM instances.
-
-    Args:
-        age_days: Age threshold in days
-    """
-    await _instance_manager.cleanup_old_instances(age_days)
 
 
 async def remove_all_instances():

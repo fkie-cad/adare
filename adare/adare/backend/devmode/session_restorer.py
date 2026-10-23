@@ -96,12 +96,15 @@ async def restore_infrastructure_context(session: DevModeSession, db_session: De
             if db_session.overlay_disk_path:
                 session.experiment_ctx.vm_file = Path(db_session.overlay_disk_path)
                 log.debug(f"Restored overlay disk path: {db_session.overlay_disk_path}")
-            else:
-                # Fallback for old sessions without overlay_disk_path (unsafe!)
-                log.warning(
-                    f"Session {session.session_id} missing overlay_disk_path field. "
-                    f"Using base disk as fallback (UNSAFE - base disk may be deleted!)"
+            elif session.experiment_ctx.hypervisor_type == 'qemu':
+                # Booting the environment disk itself would write into the
+                # read-only template every run overlays.
+                log.error(
+                    f"Session {session.session_id} has no recorded overlay disk and cannot be restored; "
+                    f"remove it with: adare dev remove {session.session_id}"
                 )
+                return False
+            else:
                 session.experiment_ctx.vm_file = environment_database.get_environment_vm_file(environment_ulid)
 
         except EnvironmentDoesNotExistInDatabase as e:

@@ -13,6 +13,7 @@ from adare.backend.vm import database as vm_database
 from adare.backend.vm.exceptions import VMError
 from adare.backend.vm.manager import VMFileManager
 from adare.database.exceptions import DatabaseError
+from adare.helperfunctions.digest_cache import fresh_cached_sha256, record_file_sha256
 from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 from adare.types.environment import EnvironmentMetadata
 from adare.types.stages import (
@@ -26,8 +27,21 @@ from adarelib.constants import VMStatus
 log = logging.getLogger(__name__)
 
 
+def _integrity_cache_file(vm_file_path: Path) -> Path:
+    """Where the run-time integrity check caches a disk's verified digest."""
+    import hashlib
+
+    from adare.config.configdirectory import STATE_DIR
+
+    key = hashlib.sha256(str(vm_file_path.resolve()).encode()).hexdigest()
+    return STATE_DIR / 'disk-digests' / f'{key}.json'
+
+
 async def verify_vm_integrity(
-    vm_id: str, experiment_run_ulid: str = None, interrupt_event: threading.Event | None = None, test_mode: bool = False
+    vm_id: str,
+    experiment_run_ulid: str | None = None,
+    interrupt_event: threading.Event | None = None,
+    test_mode: bool = False,
 ) -> None:
     """
     Verify VM file integrity before import/use.
@@ -124,13 +138,25 @@ async def verify_vm_integrity(
                 ],
             )
 
-        try:
-            current_hash = await vm_manager.calculate_file_hash_async(
-                vm_file_path, silent=True, interrupt_event=interrupt_event
-            )
-        except InterruptedError:
-            log.info(f"VM integrity verification interrupted by user for {vm_record.name}")
-            return  # Return gracefully, let the stage manager handle the interruption status
+        # Full hash only when the disk changed since it was last verified; the
+        # cache entry lives in ADARE's state directory (never beside a user's
+        # --no-copy disk) and is keyed by size/mtime/ctime/inode -- ctime cannot
+        # be set back after an in-place edit.
+        cache_file = _integrity_cache_file(vm_file_path)
+        current_hash = fresh_cached_sha256(vm_file_path, cache_file)
+        if current_hash is None:
+            stat_before = vm_file_path.stat()
+            try:
+                current_hash = await vm_manager.calculate_file_hash_async(
+                    vm_file_path, silent=True, interrupt_event=interrupt_event
+                )
+            except InterruptedError:
+                log.info(f"VM integrity verification interrupted by user for {vm_record.name}")
+                return  # Return gracefully, let the stage manager handle the interruption status
+            if current_hash == vm_record.hash:
+                record_file_sha256(vm_file_path, current_hash, cache_file=cache_file, st=stat_before)
+        else:
+            log.info(f"VM disk unchanged since its last full verification: {vm_record.name}")
 
         if current_hash != vm_record.hash:
             from adare.backend.experiment.exceptions import ExperimentIntegrityError
@@ -310,7 +336,12 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
                             raise VMError(log, f"Failed to delete VM instance: {inst_error}") from inst_error
 
         # Delete from database (cascade will remove instances)
-        return vm_database.delete_vm(vm_id)
+        deleted = vm_database.delete_vm(vm_id)
+        if deleted and getattr(vm, 'hypervisor', None) == 'qemu':
+            from adare.hypervisor.qemu.run_resources import remove_vm_templates
+
+            remove_vm_templates(str(vm_id), str(getattr(vm, 'hash', '')))
+        return deleted
 
     except (VMError, OSError, DatabaseError) as e:
         if not force:
@@ -445,9 +476,15 @@ async def ensure_vm_ready_for_experiment(
     preserve_experiment_snapshot: bool = False,
     interrupt_event: threading.Event | None = None,
     test_mode: bool = False,
-) -> str:
+    machine_key: str | None = None,
+) -> str | None:
     """
-    OPTIMIZED VM preparation using instance management for concurrent experiments!
+    Prepare the VM instance an experiment run boots.
+
+    QEMU: a run-scoped instance (port reservation + name) whose disk is a
+    throwaway overlay on the read-only environment disk, created later by the
+    lifecycle strategy -- nothing is copied here. VirtualBox: a pooled instance,
+    reused and restored to its base snapshot, or imported on first use.
 
     This function now uses the VM instance system to support multiple concurrent
     experiments with the same environment, including smart reuse and dynamic port allocation.
@@ -487,6 +524,15 @@ async def ensure_vm_ready_for_experiment(
     if interrupt_event and interrupt_event.is_set():
         log.info("VM preparation cancelled before starting due to interrupt")
         return None
+
+    from adare.database.api.vm import VmApi
+
+    with VmApi() as vm_api:
+        source_vm = vm_api.get_vm_by_id(vm_id)
+    if not source_vm:
+        raise VMError(log, f"Source VM with ID {vm_id} not found in database")
+    if source_vm.hypervisor == 'qemu':
+        return await _prepare_qemu_run_instance(source_vm, experiment_run_ulid, machine_key, interrupt_event, test_mode)
 
     # Step 0: Verify VM exists and cleanup if missing (experiment-scoped)
     log.debug("Step 0 - Verifying VM exists and cleaning up if missing")
@@ -529,10 +575,6 @@ async def ensure_vm_ready_for_experiment(
         raise
 
     # Step 2: Ensure source VM is ready in VirtualBox (if this is a new instance)
-    source_vm = vm_database.get_vm_by_id(vm_id)
-    if not source_vm:
-        raise VMError(log, f"Source VM with ID {vm_id} not found in database")
-
     # Detect hypervisor type to skip VirtualBox-specific snapshot operations for QEMU
     is_qemu = source_vm.hypervisor == 'qemu'
     log.debug(f"Source VM hypervisor: {source_vm.hypervisor} (is_qemu={is_qemu})")
@@ -667,6 +709,33 @@ async def ensure_vm_ready_for_experiment(
 
     log.info(f"Returning VM instance ID: {vm_instance.id}")
     return vm_instance.id  # Return instance ID, not source VM ID
+
+
+async def _prepare_qemu_run_instance(
+    source_vm,
+    experiment_run_ulid: str | None,
+    machine_key: str | None,
+    interrupt_event: threading.Event | None,
+    test_mode: bool,
+) -> str | None:
+    """Verify the environment disk and reserve this run's QEMU instance."""
+    import ulid
+
+    from adare.backend.vm.run_instances import allocate_qemu_run_instance, reconcile_instances
+
+    # Crashed runs leave rows (holding ports) and run files behind; reap them first.
+    report = await reconcile_instances()
+    if not report.empty:
+        log.info(f"Reclaimed leftovers of crashed runs: {report}")
+
+    await verify_vm_integrity(str(source_vm.id), experiment_run_ulid, interrupt_event, test_mode=test_mode)
+    if interrupt_event and interrupt_event.is_set():
+        log.info("VM integrity verification was interrupted")
+        return None
+
+    instance = allocate_qemu_run_instance(source_vm, experiment_run_ulid or str(ulid.ULID()), machine_key)
+    instance_id: str = instance.id
+    return instance_id
 
 
 async def _import_vm_instance(vm_instance, source_vm, environment_ulid: str = None):

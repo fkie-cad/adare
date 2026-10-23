@@ -431,6 +431,10 @@ class VmInstance(SerializerMixin, GlobalBase):
     # Experiment tracking
     current_experiment_run_id = Column(String, nullable=True, index=True)
     websocket_port = Column(Integer, nullable=True, index=True)
+    # PID of the process that holds this instance while it is active. Lets
+    # reconciliation tell a crashed run's leftover row from one a live process
+    # (possibly another `adare` invocation) is still setting up.
+    owner_pid = Column(Integer, nullable=True)
 
     # Instance lifecycle - uses enum for database-level constraint
     status = Column(VmInstanceStatusType, nullable=False, default='active', index=True)
@@ -489,6 +493,7 @@ class VmInstance(SerializerMixin, GlobalBase):
         """Mark instance as available for reuse."""
         self.status = 'available'
         self.current_experiment_run_id = None
+        self.owner_pid = None
         self.last_used_at = func.now()
 
     def mark_active(self, experiment_run_id: str):

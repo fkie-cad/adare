@@ -118,3 +118,45 @@ def test_unwritable_sidecar_is_not_fatal(tmp_path, monkeypatch):
     assert cached_file_sha256(iso) == hashlib.sha256(b'installer').hexdigest()
     assert not sidecar_path(iso).exists()
     assert not (tmp_path / 'os.iso.sha256.tmp').exists()
+
+
+def test_ctime_change_alone_invalidates(tmp_path):
+    """An in-place edit can restore size and mtime (utime), but not ctime."""
+    disk = tmp_path / 'disk.qcow2'
+    disk.write_bytes(b'original')
+    compute = _CountingHash()
+    cached_file_sha256(disk, compute=compute)
+    sidecar = sidecar_path(disk)
+    entry = json.loads(sidecar.read_text())
+    entry['ctime_ns'] -= 1_000_000_000  # the file's ctime moved on since it was cached
+    sidecar.write_text(json.dumps(entry))
+
+    cached_file_sha256(disk, compute=compute)
+
+    assert compute.calls == 2
+
+
+def test_external_cache_file_leaves_the_files_directory_alone(tmp_path):
+    user_dir = tmp_path / 'evidence'
+    user_dir.mkdir()
+    disk = user_dir / 'disk.qcow2'
+    disk.write_bytes(b'bytes')
+    cache_file = tmp_path / 'state' / 'digests' / 'disk.json'
+
+    digest = cached_file_sha256(disk, cache_file=cache_file)
+
+    assert sorted(p.name for p in user_dir.iterdir()) == ['disk.qcow2']
+    assert digest_cache.fresh_cached_sha256(disk, cache_file) == digest
+    disk.write_bytes(b'changed')
+    assert digest_cache.fresh_cached_sha256(disk, cache_file) is None
+
+
+def test_record_with_pre_hash_stat_does_not_bless_a_concurrent_change(tmp_path):
+    disk = tmp_path / 'disk.qcow2'
+    disk.write_bytes(b'v1')
+    stat_before = disk.stat()
+    disk.write_bytes(b'v2, longer')  # changed while "hashing"
+
+    record_file_sha256(disk, hashlib.sha256(b'v1').hexdigest(), st=stat_before)
+
+    assert digest_cache.fresh_cached_sha256(disk) is None

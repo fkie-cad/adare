@@ -6,6 +6,8 @@ and OS info entries.
 """
 
 import logging
+import os
+import stat
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +25,22 @@ else:
 
 
 log = logging.getLogger(__name__)
+
+
+def _make_read_only(path: Path) -> None:
+    """Drop write permission on a managed disk copy: it is only ever a backing file.
+
+    POSIX only -- there, deleting the file later needs write access to the
+    directory, not the file. On Windows a read-only file cannot be deleted, so
+    managed disks stay writable there.
+    """
+    if os.name != 'posix':
+        return
+    try:
+        mode = path.stat().st_mode
+        path.chmod(mode & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+    except OSError as e:
+        log.warning(f"Could not make managed disk read-only {path}: {e}")
 
 
 class VmCrudMixin(_Host):
@@ -206,6 +224,7 @@ class VmCrudMixin(_Host):
         else:
             # Copy VM file to storage location
             target_file_path = self._copy_vm_file(file_path, project_path, name, silent=silent)
+            _make_read_only(target_file_path)
 
         # Create both OsInfo and VM in same transaction to prevent orphaned records
         try:
