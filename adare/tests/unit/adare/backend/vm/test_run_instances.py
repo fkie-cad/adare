@@ -80,7 +80,11 @@ class TestReconcile:
             patch('adare.backend.vm.instance_manager.cleanup_vm_instance', new_callable=AsyncMock) as cleanup,
             patch('adare.backend.vm.instance_manager.release_vm_instance', new_callable=AsyncMock) as release,
             patch('adare.hypervisor.qemu.run_resources.remove_run_files') as remove_files,
-            patch.object(run_instances, '_orphaned_run_names', return_value={'ubuntu_run_ORPHANED'}),
+            patch.object(
+                run_instances,
+                '_run_names_on_disk',
+                return_value={'ubuntu_run_ORPHANED', 'ubuntu_run_LIVE0001', 'ubuntu_run_DEVSESSN'},
+            ),
         ):
             yield {'remove_run': remove_run, 'cleanup': cleanup, 'release': release, 'remove_files': remove_files}
 
@@ -103,6 +107,27 @@ class TestReconcile:
         hooks['remove_run'].assert_called_once_with('ubuntu_run_CRASHED1')
         hooks['remove_files'].assert_called_once_with('ubuntu_run_ORPHANED')
         assert hooks['cleanup'].await_count == 1 and hooks['release'].await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_files_of_a_run_that_starts_mid_reconcile_are_kept(self, global_db, hooks):
+        qemu = _vm('ubuntu')
+        _instance(qemu, 'ubuntu_run_CRASHED1', owner_pid=DEAD_PID, port=18765)
+        on_disk = {'ubuntu_run_CRASHED1'}
+
+        def a_run_starts_while_we_clean_up(_name):
+            # Removing the crashed run is slow; meanwhile another run inserts its
+            # row and creates its files. Neither the row read nor the file scan
+            # may see one without the other.
+            _instance(qemu, 'ubuntu_run_STARTING', owner_pid=os.getpid(), port=18770)
+            on_disk.add('ubuntu_run_STARTING')
+
+        hooks['remove_run'].side_effect = a_run_starts_while_we_clean_up
+        with patch.object(run_instances, '_run_names_on_disk', side_effect=lambda: set(on_disk)):
+            report = await run_instances.reconcile_instances()
+
+        assert report.removed_runs == ['ubuntu_run_CRASHED1']
+        assert report.orphaned_run_files == []
+        hooks['remove_files'].assert_not_called()
 
     @pytest.mark.asyncio
     async def test_dry_run_changes_nothing(self, global_db, hooks):

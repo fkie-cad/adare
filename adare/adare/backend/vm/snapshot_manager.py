@@ -12,8 +12,6 @@ from typing import Optional
 from adare.backend.vm.exceptions import VMError
 from adare.database.api.vm import VmApi
 from adare.hypervisor.exceptions import VMNotFoundException
-from adare.hypervisor.qemu.manager import QEMUManager
-from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
 from adare.hypervisor.virtualbox.manager import VirtualBoxManager
 from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 
@@ -56,10 +54,6 @@ class SnapshotManager:
             log.error(f"Failed to get VM object: {e}")
             return None
 
-        # Ensure QEMU VMs are stopped
-        if not self._ensure_vm_stopped_for_qemu(vm_obj, vm_instance, "experiment snapshot creation"):
-            return None
-
         try:
             # Create experiment snapshot
             result = vm_obj.create_snapshot(snapshot_name=snapshot_name, description=description, silent=silent)
@@ -90,90 +84,45 @@ class SnapshotManager:
 
     # Instance-specific snapshot methods
 
-    def _get_vm_object(self, vm_instance):
-        """
-        Get appropriate VM object (VirtualBoxVM or QEMUVM) based on hypervisor type.
+    def _get_vm_object(self, vm_instance) -> VirtualBoxVM:
+        """The VirtualBox VM behind a pooled instance.
 
-        Args:
-            vm_instance: VmInstance database record with vm relationship
-
-        Returns:
-            VirtualBoxVM or QEMUVM instance configured for the VM
+        Snapshots are VirtualBox-only: a QEMU run boots a throwaway overlay and
+        keeps no instance to snapshot.
 
         Raises:
-            VMError: If hypervisor unsupported or VM not found
-            VMNotFoundException: If VM doesn't exist in hypervisor
+            VMError: If the instance is not a VirtualBox one or is gone from VirtualBox
         """
         from adare.config import get_vm_credentials
 
-        # Get hypervisor type from source VM
-        hypervisor = vm_instance.vm.hypervisor
-
-        if hypervisor == 'virtualbox':
-            # VirtualBox: use vbox_uuid to get VM
-            if not vm_instance.vbox_uuid:
-                raise VMError(log, f"VirtualBox VM instance '{vm_instance.instance_name}' has no vbox_uuid")
-
-            vm_name = self._get_vm_name_by_uuid(vm_instance.vbox_uuid)
-            if not vm_name:
-                raise VMError(log, f"VirtualBox VM with UUID {vm_instance.vbox_uuid} not found")
-
-            platform = (
-                getattr(vm_instance.vm.osinfo, 'platform', 'linux')
-                if hasattr(vm_instance.vm, 'osinfo') and vm_instance.vm.osinfo
-                else 'linux'
+        if vm_instance.vm.hypervisor != 'virtualbox':
+            raise VMError(
+                log,
+                f"Snapshots are VirtualBox-only; '{vm_instance.instance_name}' is a "
+                f"{vm_instance.vm.hypervisor} instance",
             )
-            username, password = get_vm_credentials(platform)
+        if not vm_instance.vbox_uuid:
+            raise VMError(log, f"VirtualBox VM instance '{vm_instance.instance_name}' has no vbox_uuid")
 
-            return VirtualBoxVM(
-                vm_name=vm_name,
-                guest_os=platform,
-                manager=self.vbox_manager,
-                username=username,
-                password=password,
-                executables=self.vbox_manager.executables,
-            )
+        vm_name = self._get_vm_name_by_uuid(vm_instance.vbox_uuid)
+        if not vm_name:
+            raise VMError(log, f"VirtualBox VM with UUID {vm_instance.vbox_uuid} not found")
 
-        if hypervisor == 'qemu':
-            # QEMU: use instance_name to load VM config
-            try:
-                return QEMUVMRegistry.get_vm_by_name(vm_name=vm_instance.instance_name, manager=QEMUManager())
-            except VMNotFoundException as e:
-                raise VMError(log, f"QEMU VM instance '{vm_instance.instance_name}' not found: {e}") from e
+        platform = (
+            getattr(vm_instance.vm.osinfo, 'platform', 'linux')
+            if hasattr(vm_instance.vm, 'osinfo') and vm_instance.vm.osinfo
+            else 'linux'
+        )
+        username, password = get_vm_credentials(platform)
 
-        else:
-            raise VMError(log, f"Unsupported hypervisor: {hypervisor}")
-
-    def _ensure_vm_stopped_for_qemu(self, vm_obj, vm_instance, operation_name: str) -> bool:
-        """
-        Ensure QEMU VM is stopped before snapshot operation.
-        VirtualBox VMs can snapshot while running, so this only affects QEMU.
-
-        Args:
-            vm_obj: QEMUVM or VirtualBoxVM instance
-            vm_instance: VmInstance database record
-            operation_name: Name of operation for error messages
-
-        Returns:
-            True if VM is in correct state, False if operation should abort
-        """
-        hypervisor = vm_instance.vm.hypervisor
-
-        if hypervisor != 'qemu':
-            return True  # VirtualBox: no state check needed
-
-        try:
-            state = vm_obj.get_state()
-            if state != 'poweroff':
-                log.error(
-                    f"QEMU VM must be stopped for {operation_name}. "
-                    f"Current state: {state}. Stop the VM instance {vm_instance.instance_name} first"
-                )
-                return False
-            return True
-        except OSError as e:
-            log.error(f"Error checking VM state for {operation_name}: {e}")
-            return False
+        return VirtualBoxVM(
+            vm_name=vm_name,
+            guest_os=platform,
+            manager=self.vbox_manager,
+            username=username,
+            password=password,
+            executables=self.vbox_manager.executables,
+        )
 
     def create_base_snapshot_for_instance(
         self, vm_instance, snapshot_name: str = None, description: str = None, silent: bool = False
@@ -202,10 +151,6 @@ class SnapshotManager:
             vm_obj = self._get_vm_object(vm_instance)
         except (VMError, VMNotFoundException) as e:
             log.error(f"Failed to get VM object: {e}")
-            return False
-
-        # Ensure QEMU VMs are stopped
-        if not self._ensure_vm_stopped_for_qemu(vm_obj, vm_instance, "snapshot creation"):
             return False
 
         try:
@@ -264,10 +209,6 @@ class SnapshotManager:
             vm_obj = self._get_vm_object(vm_instance)
         except (VMError, VMNotFoundException) as e:
             log.error(f"Failed to get VM object: {e}")
-            return False
-
-        # Ensure QEMU VMs are stopped
-        if not self._ensure_vm_stopped_for_qemu(vm_obj, vm_instance, "snapshot restore"):
             return False
 
         try:
@@ -366,10 +307,6 @@ class SnapshotManager:
             vm_obj = self._get_vm_object(vm_instance)
         except (VMError, VMNotFoundException) as e:
             log.error(f"Failed to get VM object: {e}")
-            return False
-
-        # Ensure QEMU VMs are stopped
-        if not self._ensure_vm_stopped_for_qemu(vm_obj, vm_instance, "snapshot deletion"):
             return False
 
         try:

@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 from adare.exceptions import LoggedException
-from adare.hypervisor.qemu.libvirt_undefine import delete_firmware_state_flags, undefine
+from adare.hypervisor.exceptions import HypervisorException
 
 log = logging.getLogger(__name__)
 
@@ -168,7 +168,6 @@ async def setup_qemu_share_for_test(context):
     Other modes (qga, libguestfs) are not wired for the DB-free compat test.
     """
     from adare.config.configdirectory import ADARE_DIR
-    from adare.hypervisor.exceptions import HypervisorException
     from adare.hypervisor.qemu.file_transfer import detect_file_transfer_mode
 
     is_windows = 'windows' in context.guest_platform.lower()
@@ -269,11 +268,10 @@ class _CleanupFailed(Exception):
 
 
 async def _cleanup_registered_test_vm(context, keep_vm: bool = False, flow_console=None, stage_id: str | None = None):
-    """Stop the test VM and remove its transient overlay + libvirt domain.
+    """Stop the test VM and remove its libvirt domain and run files.
 
-    Replicates the overlay + libvirt-undefine parts of the QEMU cleanup in
-    vm_lifecycle_manager (NOT _release_vm_instance, which touches the
-    VmInstance DB table). The immutable base disk is left untouched.
+    The test VM has no VmInstance row, so this is the file/domain half of an
+    experiment run's teardown. The read-only template disk is left untouched.
     """
 
     def _update_message(message: str) -> None:
@@ -302,16 +300,14 @@ async def _cleanup_registered_test_vm(context, keep_vm: bool = False, flow_conso
 
     log.info("Cleaning up QEMU test resources...")
 
-    # Intentionally broad `except Exception` on every step below: best-effort
-    # cleanup must not abort the remaining steps, and each failure is surfaced
-    # to the flow console (never swallowed). Mirrors the shutdown precedent
-    # in run.py (~L430).
+    # Every step is best-effort: a failure is surfaced to the flow console and
+    # the remaining steps still run.
     _update_message("Disconnecting WebSocket…")
     try:
         if context.client:
             await asyncio.wait_for(context.client.disconnect(), timeout=10)
             log.info("WebSocket client disconnected")
-    except Exception as e:
+    except TimeoutError as e:
         _surface_error("disconnect", "Disconnecting WebSocket", e)
 
     if not context.vm:
@@ -319,15 +315,12 @@ async def _cleanup_registered_test_vm(context, keep_vm: bool = False, flow_conso
             raise _CleanupFailed(cleanup_errors)
         return
 
-    # Stop the VM with a hard poweroff — ephemeral test VMs don't need a
-    # graceful ACPI shutdown (the overlay is discarded, the base disk is
-    # untouched). force=True calls dom.destroy() immediately and leaves the
-    # domain SHUTOFF so the undefine below still succeeds.
+    # Hard poweroff: the overlay is discarded, so no graceful ACPI shutdown.
     _update_message("Stopping VM…")
     try:
         await context.vm.stop(force=True)
         log.info("Test VM stopped")
-    except Exception as e:
+    except (HypervisorException, OSError, RuntimeError) as e:
         _surface_error("stop", "Stopping VM", e)
 
     if keep_vm:
@@ -338,60 +331,24 @@ async def _cleanup_registered_test_vm(context, keep_vm: bool = False, flow_conso
             raise _CleanupFailed(cleanup_errors)
         return
 
-    # Delete the experiment overlay, leaving the immutable base disk intact
-    _update_message("Cleaning up overlay disk…")
-    if hasattr(context.vm, 'cleanup_overlay_disk'):
-        experiment_id = context.experiment_run_ulid or 'default'
-        try:
-            await context.vm.cleanup_overlay_disk(experiment_id)
-            log.info(f"Cleaned up QEMU overlay for test {experiment_id}")
-        except Exception as e:
-            _surface_error("overlay", "Cleaning up overlay disk", e)
+    # Like an experiment run's teardown: the domain (with its varstore and vTPM
+    # copy), then every file keyed by the run's name -- overlay included. The
+    # read-only template is never touched.
+    _update_message("Removing test VM…")
+    from adare.hypervisor.qemu.run_resources import destroy_run_domain, remove_run_files
 
-    # Undefine the transient libvirt domain to avoid stale disk references
-    _update_message("Undefining libvirt domain…")
-    if hasattr(context.vm, '_libvirt_domain'):
-        try:
-            import libvirt
-
-            if context.vm._libvirt_domain:
-                try:
-                    state, _ = context.vm._libvirt_domain.state()
-                    if state == libvirt.VIR_DOMAIN_SHUTOFF:
-                        # UEFI guests (e.g. win11arm2) carry an NVRAM varstore;
-                        # a bare undefine() is rejected for those. Mirror the
-                        # flags used in QEMUVM.remove() (vm.py), which also take
-                        # the emulated TPM state so it is not left orphaned.
-                        undefine(
-                            context.vm._libvirt_domain,
-                            delete_firmware_state_flags(),
-                        )
-                        log.info(f"Undefined libvirt domain '{context.vm.vm_name}'")
-                    else:
-                        log.warning(f"Cannot undefine domain '{context.vm.vm_name}' - still running (state: {state}).")
-                except libvirt.libvirtError as e:
-                    _surface_error("undefine", "Undefining libvirt domain", e)
-                finally:
-                    context.vm._libvirt_domain = None
-        except Exception as e:
-            _surface_error("undefine", "Undefining libvirt domain", e)
-
-    # The test VM's remaining run files (config, varstore, sockets) -- all keyed by its name.
-    from adare.hypervisor.qemu.run_resources import remove_run_files
-
+    context.vm._libvirt_domain = None  # stale once the domain is undefined
+    destroy_run_domain(context.vm.vm_name)
     remove_run_files(context.vm.vm_name)
 
     # Remove the temporary SMB share directory staged for the test (if any)
     _update_message("Removing temp SMB share…")
     smb_dir = getattr(context, '_test_smb_dir', None)
-    try:
-        if smb_dir:
-            import shutil
+    if smb_dir:
+        import shutil
 
-            shutil.rmtree(smb_dir, ignore_errors=True)
-            log.debug(f"Removed test SMB share directory: {smb_dir}")
-    except Exception as e:
-        _surface_error("smb", "Removing temp SMB share", e)
+        shutil.rmtree(smb_dir, ignore_errors=True)
+        log.debug(f"Removed test SMB share directory: {smb_dir}")
 
     if cleanup_errors:
         log.warning(f"VM test cleanup completed with {len(cleanup_errors)} error(s)")
