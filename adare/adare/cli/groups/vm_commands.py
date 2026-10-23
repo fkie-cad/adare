@@ -324,10 +324,10 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         help='GUI-auto: discard the cached playbook and re-record from scratch.',
     )
     @click.option(
-        '--display',
-        is_flag=True,
-        default=False,
-        help='GUI-auto: show the VM window while the agent drives the installer.',
+        '--display/--no-display',
+        default=None,
+        help='Show the VM window while the installer is driven. Playbook installs show it by default '
+        'when a desktop session is available; gui-auto hides it unless --display is given.',
     )
     @click.option(
         '--template', default=None, help='GUI-auto: explicit goal/spec template name (default: gui_<distribution>).'

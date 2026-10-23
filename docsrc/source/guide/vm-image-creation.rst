@@ -311,16 +311,34 @@ installer's "done" screen and lists its failure texts:
 
 A unit test enforces both checks for every ``install_mode: playbook`` profile.
 
-**Watching a run.** Each step prints a timestamp when it starts and its duration
-when it ends; a long wait prints a line every minute with elapsed / timeout and
-the text currently on screen, and warns once the screen has not changed for 10
-minutes::
+**Watching a run.** When a desktop session is available (``DISPLAY`` /
+``WAYLAND_DISPLAY`` set, or macOS) the VM is shown in a QEMU window while the
+playbook drives it; ``--no-display`` keeps it headless. If the window cannot be
+opened (a QEMU without GTK, a refused session) the run continues headless with
+a warning. The window is for watching only — the playbook sends every click and
+key over QMP, and a click of yours lands in the installer too. QEMU's own output
+goes to ``<vm>_playbook/qemu.log``.
 
-   > 14:02:11 [install 25] wait_text  wait for install
-   >     … waiting for 'Restart Now': 5m00s / 60m00s — screen: Installing system | Copying files…
-   >     … waiting for 'Restart Now': 16m00s / 60m00s — screen unchanged for 10m00s, may be stuck — …
+In a terminal, a status block at the bottom shows the current step, how long it
+has run, what it is waiting for (OCR attempt ``7/25``, elapsed / timeout and the
+text currently on screen, a warning once the screen has not changed for 10
+minutes) and whether the VM window is open. It redraws in place; the scrollback
+keeps one line per finished step with its duration, retries and screenshot::
+
+   > 14:01:52 [install 02] click_text 'English'  — 16s, 7 retries, shot install_02_language.png
+   > 14:02:11 [install 25] wait_text 'Restart Now'  wait for install  — 18m40s, shot install_25_complete.png
+   ╭─ ubuntu2404 · installer · 21m07s ──────────────────────────────────────╮
+   │ ⠋ [install 27/58] click_text 'Restart Now'  4s                         │
+   │   'Restart Now' not on screen yet: attempt 3/10, every 2s              │
+   │   VM window open: watch only, the playbook drives mouse and keyboard   │
+   ╰────────────────────────────────────────────────────────────────────────╯
+
+Off a terminal (CI, output redirected to a file) there is no status block: each
+step prints a line when it starts and a ``done in`` line with its retries when
+it ends, and a long wait prints a progress line every minute.
 When a step fails, the screen at that moment is saved as
-``<vm>_playbook/<phase>_<nn>_FAILED.png`` next to the per-step screenshots.
+``<vm>_playbook/<phase>_<nn>_FAILED.png`` next to the per-step screenshots, and a
+``click_text`` that never found its label says what text was on screen instead.
 
 **Making the guest ADARE-ready.** A genuine installer leaves a stock desktop: no
 QEMU guest agent, a login screen on every boot, a screen that locks when idle and
@@ -424,8 +442,8 @@ Options
      - GUI-auto only: record a fresh playbook with the vision agent even if a cached one exists.
    * - ``--relearn``
      - GUI-auto only: discard the cached playbook and re-record from scratch.
-   * - ``--display``
-     - GUI-auto only: show the VM window while the agent drives the installer (and leave it up on failure for inspection).
+   * - ``--display`` / ``--no-display``
+     - Show the VM window while the installer is driven. Playbook installs show it by default when a desktop session is available; GUI-auto hides it unless ``--display`` is given (and then leaves it up on failure for inspection).
    * - ``--template NAME``
      - GUI-auto only: explicit goal/spec template name (default: ``gui_<distribution>``).
 
