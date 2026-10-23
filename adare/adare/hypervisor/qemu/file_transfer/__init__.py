@@ -8,6 +8,7 @@ strategy based on available tools and platform:
 - Libguestfs (fallback): offline disk manipulation via guestfish
 - QGA (macOS fallback): QEMU Guest Agent file operations
 """
+
 import logging
 import os
 import platform
@@ -45,7 +46,8 @@ def _guestfish_appliance_available() -> bool:
     try:
         result = subprocess.run(
             ['guestfish', '--version'],
-            capture_output=True, timeout=10,
+            capture_output=True,
+            timeout=10,
         )
         if result.returncode != 0:
             log.warning(
@@ -99,7 +101,8 @@ def _get_qemu_expected_smbd_path() -> str | None:
     try:
         result = subprocess.run(
             ['strings', qemu_bin],
-            capture_output=True, timeout=30,
+            capture_output=True,
+            timeout=30,
         )
         if result.returncode != 0:
             return None
@@ -174,16 +177,13 @@ def _smbd_available() -> bool:
             f"Falling back to QGA file transfer."
         )
     else:
-        log.info(
-            "No Samba smbd found. Install samba for faster file transfer: "
-            "brew install samba"
-        )
+        log.info("No Samba smbd found. Install samba for faster file transfer: brew install samba")
     return False
 
 
 _VIRTIOFSD_KNOWN_PATHS = (
-    '/usr/lib/qemu/virtiofsd',       # Debian/Ubuntu qemu-system-common
-    '/usr/libexec/virtiofsd',        # Fedora/RHEL, upstream default
+    '/usr/lib/qemu/virtiofsd',  # Debian/Ubuntu qemu-system-common
+    '/usr/libexec/virtiofsd',  # Fedora/RHEL, upstream default
     '/usr/lib/virtiofsd',
     '/usr/local/libexec/virtiofsd',
 )

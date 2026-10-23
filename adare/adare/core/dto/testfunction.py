@@ -4,6 +4,7 @@ Testfunction Data Transfer Objects for API layer.
 These DTOs provide type-safe request/response objects for testfunction operations,
 enabling consistent interfaces across CLI, REST API, and Web UI.
 """
+
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -11,9 +12,11 @@ from pathlib import Path
 # Testfunction Request DTOs
 # =============================================================================
 
+
 @dataclass
 class TestfunctionCreateRequest:
     """Request to create a new testfunction."""
+
     project_path: Path
     name: str
 
@@ -21,6 +24,7 @@ class TestfunctionCreateRequest:
 @dataclass
 class TestfunctionLoadRequest:
     """Request to load a testfunction."""
+
     path: Path  # Path to testfunction (file or directory)
     force: bool = False
 
@@ -28,6 +32,7 @@ class TestfunctionLoadRequest:
 @dataclass
 class TestfunctionRemoveRequest:
     """Request to remove a testfunction."""
+
     name: str
     force: bool = False
 
@@ -36,9 +41,11 @@ class TestfunctionRemoveRequest:
 # Testfunction Response DTOs
 # =============================================================================
 
+
 @dataclass
 class TestfunctionInfo:
     """Detailed testfunction information."""
+
     id: str
     name: str
     file_path: Path | None
@@ -53,6 +60,7 @@ class TestfunctionInfo:
 @dataclass
 class TestfunctionListItem:
     """Testfunction item for listing (lighter than TestfunctionInfo)."""
+
     id: str
     name: str
     dotnotation: str
@@ -62,6 +70,7 @@ class TestfunctionListItem:
 @dataclass
 class TestfunctionUsage:
     """Usage information for a testfunction."""
+
     exists: bool
     testfunction_file_id: int | None
     can_safely_delete: bool
@@ -73,6 +82,7 @@ class TestfunctionUsage:
 @dataclass
 class TestfunctionRemoveResult:
     """Result of removing a testfunction."""
+
     name: str
     was_removed: bool
     experiments_affected: int = 0
@@ -82,5 +92,6 @@ class TestfunctionRemoveResult:
 @dataclass
 class TestfunctionExistsResult:
     """Result of checking if testfunction exists."""
+
     name: str
     exists: bool

@@ -21,11 +21,13 @@ log = logging.getLogger(__name__)
 
 class GlobalResourceNotFoundError(DatabaseError):
     """Raised when a referenced global resource cannot be found."""
+
     pass
 
 
 class InvalidReferenceError(DatabaseError):
     """Raised when a reference is invalid or malformed."""
+
     pass
 
 
@@ -85,10 +87,7 @@ class ReferenceManager:
             # Evict oldest 20% of entries if cache too large
             if len(self._cache) > self._max_cache_size:
                 num_to_evict = int(self._max_cache_size * 0.2)
-                sorted_keys = sorted(
-                    self._cache_timestamps.keys(),
-                    key=lambda k: self._cache_timestamps[k]
-                )
+                sorted_keys = sorted(self._cache_timestamps.keys(), key=lambda k: self._cache_timestamps[k])
                 for key in sorted_keys[:num_to_evict]:
                     del self._cache[key]
                     del self._cache_timestamps[key]
@@ -195,7 +194,7 @@ class ReferenceManager:
                         'name': environment.name,
                         'description': environment.description,
                         'vm_id': environment.vm_id,
-                        'file': environment.file
+                        'file': environment.file,
                     }
                 return None
         except Exception as e:
@@ -222,7 +221,7 @@ class ReferenceManager:
                         'name': vm.name,
                         'description': vm.description,
                         'file': vm.file,
-                        'hash': vm.hash
+                        'hash': vm.hash,
                     }
                 return None
         except Exception as e:
@@ -248,7 +247,7 @@ class ReferenceManager:
                         'id': testfunction.id,
                         'name': testfunction.name,
                         'description': testfunction.description,
-                        'dotnotation': testfunction.dotnotation
+                        'dotnotation': testfunction.dotnotation,
                     }
                 return None
         except Exception as e:
@@ -301,9 +300,13 @@ class ReferenceManager:
         try:
             with self._get_global_api() as api:
                 from sqlalchemy.orm import joinedload
-                testfunction = api._session.query(TestFunction).options(
-                    joinedload(TestFunction.file)
-                ).filter(TestFunction.id == testfunction_id).first()
+
+                testfunction = (
+                    api._session.query(TestFunction)
+                    .options(joinedload(TestFunction.file))
+                    .filter(TestFunction.id == testfunction_id)
+                    .first()
+                )
 
                 if testfunction:
                     # Access the file relationship to ensure it's loaded
@@ -334,6 +337,7 @@ class ReferenceManager:
         try:
             with self._get_global_api() as api:
                 from adare.database.models.global_models import TestParameter
+
                 parameter = api.get_by_ulid(TestParameter, parameter_id)
                 if parameter:
                     api.expunge(parameter)  # Detach from session
@@ -391,9 +395,11 @@ class ReferenceManager:
                         project_path = Path(project.path)
                         with ProjectDatabaseApi(project_path) as project_api:
                             # Check if any experiment runs reference this environment
-                            runs = project_api._session.query(ExperimentRun).filter(
-                                ExperimentRun.environment_id == environment_id
-                            ).all()
+                            runs = (
+                                project_api._session.query(ExperimentRun)
+                                .filter(ExperimentRun.environment_id == environment_id)
+                                .all()
+                            )
                             if runs:
                                 projects.append(project.path)
                     except Exception as e:
@@ -418,9 +424,7 @@ class ReferenceManager:
         try:
             with self._get_global_api() as api:
                 # Find environments that use this VM
-                environments = api._session.query(Environment).filter(
-                    Environment.vm_id == vm_id
-                ).all()
+                environments = api._session.query(Environment).filter(Environment.vm_id == vm_id).all()
 
                 # For each environment, find projects that use it
                 for env in environments:
@@ -456,9 +460,12 @@ class ReferenceManager:
                         with ProjectDatabaseApi(project_path) as project_api:
                             # Check if any abstract tests reference this test function
                             from adare.database.models.project_models import AbstractTest
-                            tests = project_api._session.query(AbstractTest).filter(
-                                AbstractTest.testfunction_id == testfunction_id
-                            ).all()
+
+                            tests = (
+                                project_api._session.query(AbstractTest)
+                                .filter(AbstractTest.testfunction_id == testfunction_id)
+                                .all()
+                            )
                             if tests:
                                 projects.append(project.path)
                     except Exception as e:
@@ -480,12 +487,7 @@ class ReferenceManager:
         Returns:
             Dictionary with validation results
         """
-        results = {
-            'valid': True,
-            'missing_environments': [],
-            'missing_testfunctions': [],
-            'errors': []
-        }
+        results = {'valid': True, 'missing_environments': [], 'missing_testfunctions': [], 'errors': []}
 
         try:
             with ProjectDatabaseApi(project_path) as project_api:
@@ -530,7 +532,7 @@ class ReferenceManager:
             'missing_environments': set(),
             'missing_testfunctions': set(),
             'invalid_experiments': [],
-            'errors': []
+            'errors': [],
         }
 
         try:
@@ -574,10 +576,9 @@ class ReferenceManager:
 
         try:
             from adare.database.models.global_models import VmInstance
+
             with self._get_global_api() as api:
-                vm_instance = api._session.query(VmInstance).filter(
-                    VmInstance.id == vm_instance_id
-                ).first()
+                vm_instance = api._session.query(VmInstance).filter(VmInstance.id == vm_instance_id).first()
 
                 if vm_instance:
                     api.expunge(vm_instance)  # Detach from session

@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import click
 
+from adare.cli.output import output_options
+
 
 def register(cli, AliasedGroup, exec_with_error_printing):
     """Register dev mode commands with the CLI."""
@@ -17,25 +19,38 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @dev.command()
     @click.option('-e', '--environment', required=True, help='Environment name')
     @click.option('--project', '-p', help='Project name/path')
-    @click.option('--name', 'name', default=None,
-                  help='Human-friendly session label, selectable later via -s <name>')
-    @click.option('--gui-mode', type=click.Choice(['auto', 'agent', 'host']),
-                  help='GUI execution mode: auto (default), agent (WebSocket), or host (QMP for QEMU)')
-    @click.option('--test-mode', type=click.Choice(['auto', 'agent', 'host']),
-                  help='Test execution mode: auto (default), agent (WebSocket), or host (QGA for QEMU)')
+    @click.option('--name', 'name', default=None, help='Human-friendly session label, selectable later via -s <name>')
+    @click.option(
+        '--gui-mode',
+        type=click.Choice(['auto', 'agent', 'host']),
+        help='GUI execution mode: auto (default), agent (WebSocket), or host (QMP for QEMU)',
+    )
+    @click.option(
+        '--test-mode',
+        type=click.Choice(['auto', 'agent', 'host']),
+        help='Test execution mode: auto (default), agent (WebSocket), or host (QGA for QEMU)',
+    )
     @click.option('--vm-memory', type=int, help='VM RAM in MB (default: 4096 for Linux, 8192 for Windows)')
     @click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
     @click.option('--shared-dir', multiple=True, help='Shared directories in format HOST_PATH:VM_PATH')
     @click.option('--debug-screenshots', is_flag=True, help='Save screenshots for debugging')
-    @click.option('--reuse', is_flag=True,
-                  help='Attach to the most-recent running session for this project instead of booting a new VM')
-    @click.option('--watch', is_flag=True,
-                  help="Open the session VM's live screen (read-only) in the browser via "
-                       'VirtualSpice once it is up. Needs VirtualSpice running (adare web start).')
-    def start(environment, project, name, gui_mode, test_mode, vm_memory, vm_cpus,
-              shared_dir, debug_screenshots, reuse, watch):
+    @click.option(
+        '--reuse',
+        is_flag=True,
+        help='Attach to the most-recent running session for this project instead of booting a new VM',
+    )
+    @click.option(
+        '--watch',
+        is_flag=True,
+        help="Open the session VM's live screen (read-only) in the browser via "
+        'VirtualSpice once it is up. Needs VirtualSpice running (adare ui start).',
+    )
+    def start(
+        environment, project, name, gui_mode, test_mode, vm_memory, vm_cpus, shared_dir, debug_screenshots, reuse, watch
+    ):
         """Start a new dev mode session."""
         from adare.cli.dev import exec_dev_start
+
         args = SimpleNamespace(
             environment=environment,
             project=project,
@@ -47,29 +62,27 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             shared_dir=shared_dir,
             debug_screenshots=debug_screenshots,
             reuse=reuse,
-            watch=watch
+            watch=watch,
         )
         exec_with_error_printing(exec_dev_start, args)
 
     @dev.command()
     @click.argument('session_id', required=False)
     @click.option('--project', '-p', help='Project name/path')
-
     def resume(session_id, project):
         """Resume a stopped dev mode session.
 
         If SESSION_ID is provided, resumes that specific session.
         If SESSION_ID is omitted, resumes the most recently stopped session.
 
+        \b
         Examples:
             adare dev resume                      # Resume most recent stopped session
             adare dev resume 01K72Q...            # Resume specific session by ID
         """
         from adare.cli.dev import exec_dev_resume
-        args = SimpleNamespace(
-            session_id=session_id,
-            project=project
-        )
+
+        args = SimpleNamespace(session_id=session_id, project=project)
         exec_with_error_printing(exec_dev_resume, args)
 
     @dev.command()
@@ -78,8 +91,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     # takes it positionally — so the bare form has to work, or the CLI contradicts
     # its own instructions with "Got unexpected extra argument".
     @click.argument('session_id_arg', required=False, metavar='[SESSION_ID]')
-    @click.option('-s', '--session', 'session_id', default=None,
-                  help='Session id or name (auto-detected if only one running)')
+    @click.option(
+        '-s', '--session', 'session_id', default=None, help='Session id or name (auto-detected if only one running)'
+    )
     @click.option('--rm', is_flag=True, help='Remove all resources (VM, snapshots, database entries)')
     @click.option('--all', 'all_sessions', is_flag=True, help='Stop every running session')
     @click.option('-y', '--yes', is_flag=True, help='Skip the confirmation prompt (with --all)')
@@ -94,14 +108,13 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         With --all: Stops every running session (confirms first unless --yes).
         """
         from adare.cli.dev import exec_dev_stop
+
         if session_id and session_id_arg and session_id != session_id_arg:
             raise click.UsageError(
-                f'two different sessions given: {session_id_arg!r} positionally and '
-                f'{session_id!r} via -s. Pass one.'
+                f'two different sessions given: {session_id_arg!r} positionally and {session_id!r} via -s. Pass one.'
             )
         args = SimpleNamespace(
-            session_id=session_id or session_id_arg, remove_resources=rm,
-            all_sessions=all_sessions, yes=yes
+            session_id=session_id or session_id_arg, remove_resources=rm, all_sessions=all_sessions, yes=yes
         )
         exec_with_error_printing(exec_dev_stop, args)
 
@@ -110,14 +123,17 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def remove(session_id):
         """Remove a dev mode session and all resources (alias for 'stop --rm')."""
         from adare.cli.dev import exec_dev_stop
+
         args = SimpleNamespace(session_id=session_id, remove_resources=True)
         exec_with_error_printing(exec_dev_stop, args)
 
     @dev.command()
+    @output_options
     @click.option('--project', '-p', help='Filter by project')
     def list(project):
         """List active dev mode sessions."""
         from adare.cli.dev import exec_dev_list
+
         args = SimpleNamespace(project=project)
         exec_with_error_printing(exec_dev_list, args)
 
@@ -129,12 +145,8 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def action(session_id, action_file, action_yaml, stdin):
         """Execute a single action."""
         from adare.cli.dev import exec_dev_action
-        args = SimpleNamespace(
-            session_id=session_id,
-            action_file=action_file,
-            action_yaml=action_yaml,
-            stdin=stdin
-        )
+
+        args = SimpleNamespace(session_id=session_id, action_file=action_file, action_yaml=action_yaml, stdin=stdin)
         exec_with_error_printing(exec_dev_action, args)
 
     @dev.command()
@@ -143,17 +155,15 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('-u', '--url', help='Playbook URL')
     @click.option('--stdin', is_flag=True, help='Read from stdin')
     @click.option('--restore', is_flag=True, help='Restore to initial checkpoint before execution')
-    @click.option('--indices', help='Select specific action indices to execute (e.g. 1-3,5,7-9,S-5,7,23-E). S=start, E=end')
+    @click.option(
+        '--indices', help='Select specific action indices to execute (e.g. 1-3,5,7-9,S-5,7,23-E). S=start, E=end'
+    )
     def playbook(session_id, playbook_file, url, stdin, restore, indices):
         """Execute a playbook."""
         from adare.cli.dev import exec_dev_playbook
+
         args = SimpleNamespace(
-            session_id=session_id,
-            playbook_file=playbook_file,
-            url=url,
-            stdin=stdin,
-            restore=restore,
-            indices=indices
+            session_id=session_id, playbook_file=playbook_file, url=url, stdin=stdin, restore=restore, indices=indices
         )
         exec_with_error_printing(exec_dev_playbook, args)
 
@@ -169,11 +179,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def dev_cv_start(session_id, debug, debug_output):
         """Start/Restart CV server with logging options."""
         from adare.cli.dev import exec_dev_cv_start
+
         args = SimpleNamespace(
-            session_id=session_id,
-            debug=debug is True,
-            no_debug=debug is False,
-            debug_output=debug_output
+            session_id=session_id, debug=debug is True, no_debug=debug is False, debug_output=debug_output
         )
         exec_with_error_printing(exec_dev_cv_start, args)
 
@@ -182,9 +190,8 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def dev_cv_stop(session_id):
         """Stop CV server."""
         from adare.cli.dev import exec_dev_cv_stop
-        args = SimpleNamespace(
-            session_id=session_id
-        )
+
+        args = SimpleNamespace(session_id=session_id)
         exec_with_error_printing(exec_dev_cv_stop, args)
 
     @dev.group()
@@ -197,6 +204,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def reset_soft(session_id):
         """Soft reset: Reset variables only (<1 second)."""
         from adare.cli.dev import exec_dev_reset_soft
+
         args = SimpleNamespace(session_id=session_id)
         exec_with_error_printing(exec_dev_reset_soft, args)
 
@@ -205,6 +213,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def reset_hard(session_id):
         """Hard reset: Full VM restore (10-30 seconds)."""
         from adare.cli.dev import exec_dev_reset_hard
+
         args = SimpleNamespace(session_id=session_id)
         exec_with_error_printing(exec_dev_reset_hard, args)
 
@@ -220,6 +229,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def checkpoint_create(session_id, name, description):
         """Create a named checkpoint (live snapshot)."""
         from adare.cli.dev import exec_dev_checkpoint_create
+
         args = SimpleNamespace(session_id=session_id, name=name, description=description)
         exec_with_error_printing(exec_dev_checkpoint_create, args)
 
@@ -229,14 +239,17 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def checkpoint_restore(session_id, name):
         """Restore to a named checkpoint."""
         from adare.cli.dev import exec_dev_checkpoint_restore
+
         args = SimpleNamespace(session_id=session_id, name=name)
         exec_with_error_printing(exec_dev_checkpoint_restore, args)
 
     @checkpoint.command(name='list')
+    @output_options
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
     def checkpoint_list(session_id):
         """List available checkpoints."""
         from adare.cli.dev import exec_dev_checkpoint_list
+
         args = SimpleNamespace(session_id=session_id)
         exec_with_error_printing(exec_dev_checkpoint_list, args)
 
@@ -246,14 +259,17 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def checkpoint_remove(session_id, name):
         """Remove a checkpoint."""
         from adare.cli.dev import exec_dev_checkpoint_delete
+
         args = SimpleNamespace(session_id=session_id, name=name)
         exec_with_error_printing(exec_dev_checkpoint_delete, args)
 
     @dev.command()
+    @output_options
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
     def state(session_id):
         """Show session state (variables, stats, snapshots)."""
         from adare.cli.dev import exec_dev_state
+
         args = SimpleNamespace(session_id=session_id)
         exec_with_error_printing(exec_dev_state, args)
 
@@ -262,67 +278,127 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def cleanup(project):
         """Cleanup stale sessions."""
         from adare.cli.dev import exec_dev_cleanup
+
         args = SimpleNamespace(project=project)
         exec_with_error_printing(exec_dev_cleanup, args)
 
     @dev.command()
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
-    @click.option('-e', '--environment', 'environment', default=None, metavar='NAME',
-                  help='Boot a fresh VM from this environment, drive it, then tear it down. '
-                       'Self-contained — no prior `adare dev start` needed. Mutually '
-                       'exclusive with -s/--session.')
-    @click.option('--keep', 'keep', is_flag=True,
-                  help='With -e, leave the booted VM/session running afterwards instead of '
-                       'tearing it down (prints how to drive it again / stop it).')
-    @click.option('--verify/--no-verify', 'verify', default=True,
-                  help='After recording a playbook (-o or --as-experiment), validate it by '
-                       'replaying it on the VM from a pre-run baseline checkpoint '
-                       '(default: on). The playbook is always parse-checked regardless. '
-                       'No-op for a bare drive that records nothing.')
+    @click.option(
+        '-e',
+        '--environment',
+        'environment',
+        default=None,
+        metavar='NAME',
+        help='Boot a fresh VM from this environment, drive it, then tear it down. '
+        'Self-contained — no prior `adare dev start` needed. Mutually '
+        'exclusive with -s/--session.',
+    )
+    @click.option(
+        '--keep',
+        'keep',
+        is_flag=True,
+        help='With -e, leave the booted VM/session running afterwards instead of '
+        'tearing it down (prints how to drive it again / stop it).',
+    )
+    @click.option(
+        '--verify/--no-verify',
+        'verify',
+        default=True,
+        help='After recording a playbook (-o or --as-experiment), validate it by '
+        'replaying it on the VM from a pre-run baseline checkpoint '
+        '(default: on). The playbook is always parse-checked regardless. '
+        'No-op for a bare drive that records nothing.',
+    )
     @click.option('--goal', help='Natural-language goal for the agent to accomplish')
     @click.option('--goal-file', type=click.Path(exists=True), help='Read the goal from a file')
     @click.option('-o', '--out', 'output', type=click.Path(), help='Record a replayable playbook to this path')
     @click.option('--max-steps', type=int, default=None, help='Override the agent step budget')
     @click.option('--stall-limit', type=int, default=None, help='Override the agent stall budget')
-    @click.option('--step', '--interactive', 'interactive', is_flag=True,
-                  help='Pause before each action to approve / skip / stop')
-    @click.option('--plan/--no-plan', 'planning', default=None,
-                  help='Iterative plan/verify/backtrack mode (default: ADARE_AGENT_PLAN). '
-                       'Decomposes a terse goal into sub-goals, checkpoints the VM before '
-                       'each, verifies with an independent checker, and resets to retry on a '
-                       'dead end — building a playbook from only the verified sub-goals.')
-    @click.option('--ground/--no-ground', 'grounding', default=None,
-                  help='Auto-start the LocateAnything grounding server for this run '
-                       '(default: ADARE_LOCATE_AUTOSTART). Clicks are grounded to the true '
-                       'element box and the server is torn down at run end. Attaches to '
-                       'ADARE_LOCATE_URL if set instead of spawning. Needs the grounding '
-                       'backend: `uv sync --extra grounding` or ADARE_LOCATE_PYTHON.')
-    @click.option('--progress/--no-progress', 'progress', default=None,
-                  help='Show a live per-step table while the agent runs '
-                       '(default: on when stdout is a TTY).')
-    @click.option('--reasoning/--no-reasoning', 'reasoning', default=True,
-                  help='Show the model\'s per-step reasoning in a "chat" panel below the '
-                       'progress table (default: on). Use global --verbose/--very-verbose to '
-                       'also stream grounding + decision-repair logs live; the full per-step '
-                       'reasoning + raw reply is always saved to the run\'s steps/step_NNN.json '
-                       'and install_report.md.')
-    @click.option('--video/--no-video', 'video', default=None,
-                  help='Record the whole run to <run_dir>/run.mp4 via ffmpeg '
-                       '(default: ADARE_AGENT_VIDEO; off). Needs the ffmpeg binary.')
-    @click.option('--video-backend', 'video_backend', default=None,
-                  type=click.Choice(['screendump', 'spice']),
-                  help='How --video captures frames (default: ADARE_AGENT_VIDEO_BACKEND; '
-                       '"screendump"). "spice" connects directly to the VM\'s SPICE display '
-                       'for real push-driven frames (higher fps/quality) but needs the '
-                       'SpiceClientGLib bindings and is mutually exclusive with a live '
-                       'browser viewer on the same VM.')
-    @click.option('--as-experiment', 'as_experiment', default=None, metavar='NAME',
-                  help='Scaffold experiments/NAME/ and record the run into it '
-                       '(playbook.yml + img/ crops + metadata.yml). Files only — no DB '
-                       'load; run `adare experiment load NAME` later. Excludes -o/--out.')
-    def agent(session_id, environment, keep, verify, goal, goal_file, output, max_steps,
-              stall_limit, interactive, planning, grounding, progress, reasoning, video,
-              video_backend, as_experiment):
+    @click.option(
+        '--step', '--interactive', 'interactive', is_flag=True, help='Pause before each action to approve / skip / stop'
+    )
+    @click.option(
+        '--plan/--no-plan',
+        'planning',
+        default=None,
+        help='Iterative plan/verify/backtrack mode (default: ADARE_AGENT_PLAN). '
+        'Decomposes a terse goal into sub-goals, checkpoints the VM before '
+        'each, verifies with an independent checker, and resets to retry on a '
+        'dead end — building a playbook from only the verified sub-goals.',
+    )
+    @click.option(
+        '--ground/--no-ground',
+        'grounding',
+        default=None,
+        help='Auto-start the LocateAnything grounding server for this run '
+        '(default: ADARE_LOCATE_AUTOSTART). Clicks are grounded to the true '
+        'element box and the server is torn down at run end. Attaches to '
+        'ADARE_LOCATE_URL if set instead of spawning. Needs the grounding '
+        'backend: `uv sync --extra grounding` or ADARE_LOCATE_PYTHON.',
+    )
+    @click.option(
+        '--progress/--no-progress',
+        'progress',
+        default=None,
+        help='Show a live per-step table while the agent runs (default: on when stdout is a TTY).',
+    )
+    @click.option(
+        '--reasoning/--no-reasoning',
+        'reasoning',
+        default=True,
+        help='Show the model\'s per-step reasoning in a "chat" panel below the '
+        'progress table (default: on). Use global --verbose/--very-verbose to '
+        'also stream grounding + decision-repair logs live; the full per-step '
+        'reasoning + raw reply is always saved to the run\'s steps/step_NNN.json '
+        'and install_report.md.',
+    )
+    @click.option(
+        '--video/--no-video',
+        'video',
+        default=None,
+        help='Record the whole run to <run_dir>/run.mp4 via ffmpeg '
+        '(default: ADARE_AGENT_VIDEO; off). Needs the ffmpeg binary.',
+    )
+    @click.option(
+        '--video-backend',
+        'video_backend',
+        default=None,
+        type=click.Choice(['screendump', 'spice']),
+        help='How --video captures frames (default: ADARE_AGENT_VIDEO_BACKEND; '
+        '"screendump"). "spice" connects directly to the VM\'s SPICE display '
+        'for real push-driven frames (higher fps/quality) but needs the '
+        'SpiceClientGLib bindings and is mutually exclusive with a live '
+        'browser viewer on the same VM.',
+    )
+    @click.option(
+        '--as-experiment',
+        'as_experiment',
+        default=None,
+        metavar='NAME',
+        help='Scaffold experiments/NAME/ and record the run into it '
+        '(playbook.yml + img/ crops + metadata.yml). Files only — no DB '
+        'load; run `adare experiment load NAME` later. Excludes -o/--out.',
+    )
+    def agent(
+        session_id,
+        environment,
+        keep,
+        verify,
+        goal,
+        goal_file,
+        output,
+        max_steps,
+        stall_limit,
+        interactive,
+        planning,
+        grounding,
+        progress,
+        reasoning,
+        video,
+        video_backend,
+        as_experiment,
+    ):
         """Drive a VM toward a goal with the vision-LLM GUI agent.
 
         Uses the configured vLLM endpoint (ADARE_VLLM_*; works with Ollama Cloud).
@@ -331,6 +407,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         --as-experiment, records a reusable playbook; --verify (default) then
         replays it on the VM to validate it.
 
+        \b
         Examples:
             adare dev agent -s <id> --goal "open the Files app and go to Documents"
             adare dev agent -s <id> --goal "..." -o experiments/files.play.yaml
@@ -338,6 +415,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             adare dev agent -e ubuntu2510-libre --goal "..." --as-experiment demo_invoice6 --ground --video
         """
         from adare.cli.dev import exec_dev_agent
+
         args = SimpleNamespace(
             session_id=session_id,
             environment=environment,
@@ -359,28 +437,19 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         )
         exec_with_error_printing(exec_dev_agent, args)
 
-    @dev.command(name='grounding-pull')
-    @click.option('--model', default=None,
-                  help='HF id or local path (default: ADARE_LOCATE_MODEL_PATH or '
-                       'nvidia/LocateAnything-3B)')
-    def grounding_pull(model):
-        """Pre-download the LocateAnything grounding weights (~7.3 GB).
-
-        Pays the cold-download cost up front instead of on the first
-        `adare dev agent --ground` run. Needs the grounding backend
-        (`uv sync --extra grounding`), an HF_TOKEN and the accepted NVIDIA
-        license. Skipped if the configured model is already a local directory.
-        """
-        from adare.cli.dev import exec_dev_grounding_pull
-        args = SimpleNamespace(model=model)
-        exec_with_error_printing(exec_dev_grounding_pull, args)
-
     @dev.command()
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
-    @click.option('--script-file', type=click.Path(exists=True), help='Read text steps from a file (one action per line)')
+    @click.option(
+        '--script-file', type=click.Path(exists=True), help='Read text steps from a file (one action per line)'
+    )
     @click.option('-o', '--out', 'output', type=click.Path(), help='Record the authored playbook to this path')
-    @click.option('-i', '--interactive', 'interactive', is_flag=True,
-                  help='Author step-by-step in a REPL (used when no --script-file)')
+    @click.option(
+        '-i',
+        '--interactive',
+        'interactive',
+        is_flag=True,
+        help='Author step-by-step in a REPL (used when no --script-file)',
+    )
     def author(session_id, script_file, output, interactive):
         """Author a playbook from human text steps — no VLM planner.
 
@@ -389,11 +458,13 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         identical in shape to an agent-recorded one. Use `click @x,y ...` to place
         a click by hand when no grounding backend is available.
 
+        \b
         Examples:
             adare dev author -s <id> --script-file steps.txt -o report.play.yaml
             adare dev author -s <id> --interactive -o report.play.yaml
         """
         from adare.cli.dev import exec_dev_author
+
         args = SimpleNamespace(
             session_id=session_id,
             script_file=script_file,
@@ -405,13 +476,18 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @dev.command(name='author-ai')
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
     @click.option('--goal', required=True, help='Natural-language task the authored playbook must accomplish')
-    @click.option('--models', default=None,
-                  help='Comma-separated Ollama Cloud vision models, in preference order '
-                       '(default: the harness DEFAULT_MODELS)')
+    @click.option(
+        '--models',
+        default=None,
+        help='Comma-separated Ollama Cloud vision models, in preference order (default: the harness DEFAULT_MODELS)',
+    )
     @click.option('--rounds', type=int, default=3, help='Max author/repair rounds per model')
-    @click.option('--replay', is_flag=True,
-                  help='Verify each valid playbook by replaying it live on the session VM '
-                       '(serialized), repairing on failure. Off = author + validate only.')
+    @click.option(
+        '--replay',
+        is_flag=True,
+        help='Verify each valid playbook by replaying it live on the session VM '
+        '(serialized), repairing on failure. Off = author + validate only.',
+    )
     @click.option('--os-key', default='linux', help='Replay OS key / CV grounding profile (default: linux)')
     @click.option('-o', '--out', 'output', type=click.Path(), help='Write the best authored playbook YAML to this path')
     def author_ai(session_id, goal, models, rounds, replay, os_key, output):
@@ -422,11 +498,13 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         real schema and, with --replay, verifies it live on the VM and repairs
         on failure, picking the best model. See vlm/authoring/FLOW.md.
 
+        \b
         Examples:
             adare dev author-ai -s <id> --goal "open the File menu"
             adare dev author-ai -s <id> --goal "type a sentence in Writer and save" --replay -o report.play.yaml
         """
         from adare.cli.dev import exec_dev_author_ai
+
         args = SimpleNamespace(
             session_id=session_id,
             goal=goal,
@@ -442,7 +520,13 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
     @click.option('--host', default=None, help='Bind host (default: ADARE_GUI_MCP_HOST or 127.0.0.1)')
     @click.option('--port', type=int, default=None, help='Bind port (default: ADARE_GUI_MCP_PORT or 13110)')
-    @click.option('-o', '--out-dir', 'output_dir', type=click.Path(), help='Directory for recorded playbooks (default: project dir)')
+    @click.option(
+        '-o',
+        '--out-dir',
+        'output_dir',
+        type=click.Path(),
+        help='Directory for recorded playbooks (default: project dir)',
+    )
     def mcp(session_id, host, port, output_dir):
         """Serve the session VM as a GUI-automation MCP server (blocking).
 
@@ -452,14 +536,16 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         replay is deterministic with no LLM. See the MCP authoring guide for
         harness connection snippets.
 
+        \b
         Example:
             adare dev mcp -s <id> --port 13110
 
-        Client setup (Claude Code / OpenCode): docs/mcp-clients.md
+        Client setup (Claude Code / OpenCode): docsrc/mcp-clients.md
             Claude Code: claude mcp add --transport http adare-gui \\
                 http://127.0.0.1:13110/mcp
         """
         from adare.cli.dev import exec_dev_mcp
+
         args = SimpleNamespace(
             session_id=session_id,
             host=host,
@@ -473,7 +559,6 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     dev.add_alias('res', 'reset')
     dev.add_alias('cp', 'checkpoint')
 
-
     @dev.command(name='update-testfunctions')
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
     def update_testfunctions(session_id):
@@ -483,9 +568,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         The adarevm agent will extract them to a new location and use them for subsequent tests.
         """
         from adare.cli.dev import exec_dev_update_testfunctions
+
         args = SimpleNamespace(session_id=session_id)
         exec_with_error_printing(exec_dev_update_testfunctions, args)
-
 
     @dev.command(name='playbook-batch')
     @click.argument('playbook_patterns', nargs=-1, required=True)
@@ -495,6 +580,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def playbook_batch(session_id, playbook_patterns, checkpoint_name, timeout):
         """Execute multiple playbooks with checkpoint restoration.
 
+        \b
         Supports both explicit paths and glob patterns:
         - adare dev playbook-batch playbook1.yml playbook2.yml
         - adare dev playbook-batch experiments/*/playbook.yml
@@ -504,11 +590,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         to this checkpoint after each playbook completes.
         """
         from adare.cli.dev import exec_dev_playbook_batch
+
         args = SimpleNamespace(
             session_id=session_id,
             playbook_patterns=list(playbook_patterns),
             checkpoint_name=checkpoint_name,
-            timeout=timeout
+            timeout=timeout,
         )
         exec_with_error_printing(exec_dev_playbook_batch, args)
 

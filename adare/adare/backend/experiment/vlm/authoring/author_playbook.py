@@ -29,7 +29,6 @@ import argparse
 import json
 import logging
 import re
-import socket
 import subprocess
 import sys
 import tempfile
@@ -65,15 +64,21 @@ class OllamaError(Exception):
 # these specifically (never a bare ``Exception``) so validate() can report them.
 def _validation_error_types() -> tuple[type[BaseException], ...]:
     types: list[type[BaseException]] = [
-        ValueError, KeyError, TypeError, AttributeError, ImportError,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        ImportError,
     ]
     try:
         import yaml
+
         types.append(yaml.YAMLError)
     except ImportError:  # pragma: no cover - yaml is a hard dep of the repo
         pass
     try:
         import cattrs.errors
+
         types.append(cattrs.errors.BaseValidationError)
     except ImportError:  # pragma: no cover
         pass
@@ -127,16 +132,22 @@ class PromptTemplate:
     def load(cls, prompt_path: str | Path = DEFAULT_PROMPT) -> PromptTemplate:
         sections = _parse_prompt_sections(Path(prompt_path).read_text())
         system = sections.get('SYSTEM PROMPT', '')
-        user = _strip_blockquote(sections.get('USER MESSAGE (SENT ALONGSIDE THE ATTACHED SCREENSHOT)',
-                                              sections.get('USER MESSAGE', '')))
-        repair = _strip_blockquote(sections.get('REPAIR MESSAGE (APPENDED ON A RE-AUTHOR ROUND AFTER A FAILURE)',
-                                                sections.get('REPAIR MESSAGE', '')))
+        user = _strip_blockquote(
+            sections.get('USER MESSAGE (SENT ALONGSIDE THE ATTACHED SCREENSHOT)', sections.get('USER MESSAGE', ''))
+        )
+        repair = _strip_blockquote(
+            sections.get(
+                'REPAIR MESSAGE (APPENDED ON A RE-AUTHOR ROUND AFTER A FAILURE)', sections.get('REPAIR MESSAGE', '')
+            )
+        )
         if not system:
             raise AuthoringError(f'No "## SYSTEM PROMPT" section in {prompt_path}')
         if not user:
-            user = ('The attached image is the current screen (1920x1080). Author the '
-                    'UI-action playbook that accomplishes the GOAL. Output only one '
-                    '```yaml block.')
+            user = (
+                'The attached image is the current screen (1920x1080). Author the '
+                'UI-action playbook that accomplishes the GOAL. Output only one '
+                '```yaml block.'
+            )
         if not repair:
             repair = 'Your previous playbook FAILED:\n```\n{prior_failure}\n```\nFix the cause. Output only one ```yaml block.'
         return cls(system=system, user=user, repair=repair)
@@ -205,7 +216,7 @@ def ollama_chat(
             body = resp.read().decode('utf-8')
     except urllib.error.HTTPError as exc:
         raise OllamaError(f'Ollama HTTP {exc.code}: {exc.reason}') from exc
-    except (urllib.error.URLError, socket.timeout, TimeoutError) as exc:
+    except (urllib.error.URLError, TimeoutError) as exc:
         raise OllamaError(f'Ollama request failed ({model}): {exc}') from exc
 
     try:
@@ -260,6 +271,7 @@ def _format_validation_error(exc: BaseException) -> str:
     try:
         import cattrs
         import cattrs.errors
+
         if isinstance(exc, cattrs.errors.BaseValidationError):
             lines = cattrs.transform_error(exc)
             if lines:
@@ -349,14 +361,13 @@ def screenshot(
     if session_id:
         cmd += ['-s', session_id]
     log.info('Capturing screenshot via one-action playbook: %s', ' '.join(cmd))
-    proc = subprocess.run(cmd, input=one_action, capture_output=True, text=True,
-                          timeout=timeout, check=False)
+    proc = subprocess.run(cmd, input=one_action, capture_output=True, text=True, timeout=timeout, check=False)
     if proc.returncode != 0:
-        raise RuntimeError(f'screenshot playbook failed (rc={proc.returncode}):\n'
-                           f'{(proc.stdout + proc.stderr)[-800:]}')
+        raise RuntimeError(f'screenshot playbook failed (rc={proc.returncode}):\n{(proc.stdout + proc.stderr)[-800:]}')
 
-    candidates = [p for p in root.rglob('reporting/screenshots/*.png')
-                  if p not in existing or p.stat().st_mtime > existing[p]]
+    candidates = [
+        p for p in root.rglob('reporting/screenshots/*.png') if p not in existing or p.stat().st_mtime > existing[p]
+    ]
     if not candidates:
         raise RuntimeError(f'No new screenshot found under {root}/**/reporting/screenshots/')
     newest = max(candidates, key=lambda p: p.stat().st_mtime)
@@ -446,9 +457,16 @@ def author_verify_repair_loop(
         prior_failure: str | None = None
         for rnd in range(1, rounds + 1):
             try:
-                yaml_text = author(model, goal, screenshot_b64, schema,
-                                   template=template, prior_failure=prior_failure,
-                                   host=host, read_timeout=read_timeout)
+                yaml_text = author(
+                    model,
+                    goal,
+                    screenshot_b64,
+                    schema,
+                    template=template,
+                    prior_failure=prior_failure,
+                    host=host,
+                    read_timeout=read_timeout,
+                )
             except (OllamaError, AuthoringError) as exc:
                 log.warning('[%s round %d] author failed: %s', model, rnd, exc)
                 outcome.rounds.append(RoundResult(model, rnd, False, False, False, str(exc)))
@@ -456,8 +474,7 @@ def author_verify_repair_loop(
                 continue
 
             ok, err = validate(yaml_text)
-            log.info('[%s round %d] validate: %s%s', model, rnd,
-                     'OK' if ok else 'FAIL', f' ({err})' if err else '')
+            log.info('[%s round %d] validate: %s%s', model, rnd, 'OK' if ok else 'FAIL', f' ({err})' if err else '')
             if not ok:
                 outcome.rounds.append(RoundResult(model, rnd, False, False, False, err, yaml_text))
                 prior_failure = err
@@ -473,8 +490,9 @@ def author_verify_repair_loop(
 
             replay_ok, replay_out = replay_cb(yaml_text)
             log.info('[%s round %d] replay: %s', model, rnd, 'PASS' if replay_ok else 'FAIL')
-            outcome.rounds.append(RoundResult(model, rnd, True, True, replay_ok,
-                                              None if replay_ok else replay_out, yaml_text))
+            outcome.rounds.append(
+                RoundResult(model, rnd, True, True, replay_ok, None if replay_ok else replay_out, yaml_text)
+            )
             if replay_ok:
                 outcome.best_yaml, outcome.best_model, outcome.best_passing = yaml_text, model, True
                 return outcome  # valid + passing: done
@@ -492,16 +510,23 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         description='LLM-authored UI-action playbook harness (Ollama Cloud + ADARE).',
     )
     parser.add_argument('--goal', required=True, help='Natural-language task the playbook must accomplish')
-    parser.add_argument('--models', default=','.join(DEFAULT_MODELS),
-                        help='Comma-separated Ollama Cloud model tags, in preference order')
+    parser.add_argument(
+        '--models',
+        default=','.join(DEFAULT_MODELS),
+        help='Comma-separated Ollama Cloud model tags, in preference order',
+    )
     parser.add_argument('--rounds', type=int, default=3, help='Max author/repair rounds per model')
     parser.add_argument('--schema', default=str(DEFAULT_SCHEMA), help='Path to schema_spec.md')
     parser.add_argument('--prompt', default=str(DEFAULT_PROMPT), help='Path to authoring_prompt.md')
     parser.add_argument('--screenshot', help='Inject a screenshot PNG (skips live capture)')
     parser.add_argument('--out', help='Write the best playbook YAML to this path')
     parser.add_argument('--host', default=OLLAMA_HOST, help='Ollama daemon base URL')
-    parser.add_argument('--read-timeout', type=float, default=OLLAMA_READ_TIMEOUT,
-                        help='HTTP read timeout for cloud reasoning (seconds)')
+    parser.add_argument(
+        '--read-timeout',
+        type=float,
+        default=OLLAMA_READ_TIMEOUT,
+        help='HTTP read timeout for cloud reasoning (seconds)',
+    )
     # Live VM options (ignored under --dry-run)
     parser.add_argument('--environment', help='Environment to boot a dev session (--boot)')
     parser.add_argument('--project', help='Project name/path for the dev session')
@@ -509,8 +534,9 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument('--boot', action='store_true', help='Boot a dev session first')
     parser.add_argument('--replay', action='store_true', help='Verify each valid playbook by replaying it live')
     parser.add_argument('--search-root', help='Root to locate captured screenshots (default: cwd)')
-    parser.add_argument('--dry-run', action='store_true',
-                        help='Skip all VM steps; requires --screenshot. Author + validate only.')
+    parser.add_argument(
+        '--dry-run', action='store_true', help='Skip all VM steps; requires --screenshot. Author + validate only.'
+    )
     parser.add_argument('-v', '--verbose', action='store_true', help='Debug logging')
     return parser
 
@@ -544,6 +570,7 @@ def main(argv: list[str] | None = None) -> int:
 
     replay_cb = None
     if args.replay and not args.dry_run:
+
         def replay_cb(playbook_yaml: str):  # noqa: E306 - small closure
             with tempfile.NamedTemporaryFile('w', suffix='.yml', delete=False) as handle:
                 handle.write(playbook_yaml)
@@ -554,16 +581,21 @@ def main(argv: list[str] | None = None) -> int:
                 Path(path).unlink(missing_ok=True)
 
     outcome = author_verify_repair_loop(
-        args.goal, models, args.rounds, screenshot_b64, schema,
-        template=template, replay_cb=replay_cb,
-        host=args.host, read_timeout=args.read_timeout,
+        args.goal,
+        models,
+        args.rounds,
+        screenshot_b64,
+        schema,
+        template=template,
+        replay_cb=replay_cb,
+        host=args.host,
+        read_timeout=args.read_timeout,
     )
 
     print('\n=== authoring summary ===')
     for r in outcome.rounds:
         flags = f"valid={r.valid} replayed={r.replayed} passing={r.passing}"
-        print(f'  {r.model} round {r.round}: {flags}'
-              + (f' | {r.error}' if r.error else ''))
+        print(f'  {r.model} round {r.round}: {flags}' + (f' | {r.error}' if r.error else ''))
     print(f'best model: {outcome.best_model}  passing: {outcome.best_passing}')
 
     if outcome.best_yaml and args.out:

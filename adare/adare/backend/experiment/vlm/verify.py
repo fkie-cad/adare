@@ -31,8 +31,7 @@ class CheckResult:
         self.checks.append({'name': name, 'kind': kind, 'passed': passed, 'reason': reason})
 
     def to_markdown(self) -> str:
-        lines = ['## Acceptance checks', '',
-                 f'**Overall:** {"PASS" if self.passed else "FAIL"}', '']
+        lines = ['## Acceptance checks', '', f'**Overall:** {"PASS" if self.passed else "FAIL"}', '']
         for c in self.checks:
             mark = '✅' if c['passed'] else '❌'
             lines.append(f'- {mark} [{c["kind"]}] {c["name"]}: {c["reason"]}')
@@ -56,8 +55,7 @@ async def _visual_check(
         f'Look at the screenshot and decide whether this is TRUE: "{statement}".\n'
         'Reply with a single JSON object: {"pass": true|false, "reason": "<short>"}'
     )
-    messages = [{'role': 'user', 'content': [
-        client.text_content(prompt), client.image_content(b64)]}]
+    messages = [{'role': 'user', 'content': [client.text_content(prompt), client.image_content(b64)]}]
     try:
         reply = await client.chat(messages, temperature=0.0, max_tokens=200)
         obj = _extract_json_object(reply)
@@ -73,8 +71,7 @@ def _structural_checks(vm, spec: dict[str, Any], disk_path: Path | None, result:
     except (OSError, RuntimeError) as exc:
         result.add('vm_running', 'structural', False, f'get_state failed: {exc}')
     else:
-        result.add('vm_running', 'structural', state == 'running',
-                   f'domain state = {state}')
+        result.add('vm_running', 'structural', state == 'running', f'domain state = {state}')
 
     # Disk must have grown past a floor (installer actually wrote data).
     min_bytes = spec.get('min_disk_bytes')
@@ -84,8 +81,9 @@ def _structural_checks(vm, spec: dict[str, Any], disk_path: Path | None, result:
         except OSError as exc:
             result.add('disk_grew', 'structural', False, f'stat failed: {exc}')
         else:
-            result.add('disk_grew', 'structural', size >= int(min_bytes),
-                       f'disk size {size} bytes (floor {int(min_bytes)})')
+            result.add(
+                'disk_grew', 'structural', size >= int(min_bytes), f'disk size {size} bytes (floor {int(min_bytes)})'
+            )
 
 
 async def run_acceptance_checks(
@@ -111,8 +109,7 @@ async def run_acceptance_checks(
     visual = acceptance_spec.get('visual') or []
     if visual:
         if client is None:
-            result.add('visual', 'visual', False,
-                       'no vLLM client available for visual acceptance checks')
+            result.add('visual', 'visual', False, 'no vLLM client available for visual acceptance checks')
         else:
             executor = QEMUHostGUIExecutor(vm=vm)
             for statement in visual:

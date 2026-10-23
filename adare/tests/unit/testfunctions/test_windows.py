@@ -33,6 +33,7 @@ RegistryValueMatchesParameter = windows_module.registry_value_matches._parameter
 
 # Import test helpers
 import importlib.util
+
 helpers_path = Path(__file__).parent / "helpers.py"
 spec = importlib.util.spec_from_file_location("helpers", helpers_path)
 helpers = importlib.util.module_from_spec(spec)
@@ -46,6 +47,7 @@ assert_test_error = helpers.assert_test_error
 # ============================================================================
 # Mock winreg module
 # ============================================================================
+
 
 class MockWinreg:
     """Mock winreg module for testing on non-Windows platforms."""
@@ -88,6 +90,7 @@ class MockWinreg:
 # RegistryKeyExists Tests
 # ============================================================================
 
+
 class TestRegistryKeyExists:
     """Tests for RegistryKeyExists testfunction."""
 
@@ -104,7 +107,7 @@ class TestRegistryKeyExists:
             name="test_key_exists",
             parameter=RegistryKeyExistsParameter(
                 key_path=r"HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion"
-            )
+            ),
         )
         result = test.test()
 
@@ -123,10 +126,7 @@ class TestRegistryKeyExists:
         mock_winreg.CloseKey = MagicMock()
 
         test = RegistryKeyExists(
-            name="test_key_exists",
-            parameter=RegistryKeyExistsParameter(
-                key_path=r"HKLM\Software\Microsoft"
-            )
+            name="test_key_exists", parameter=RegistryKeyExistsParameter(key_path=r"HKLM\Software\Microsoft")
         )
         result = test.test()
 
@@ -143,10 +143,7 @@ class TestRegistryKeyExists:
         mock_winreg.CloseKey = MagicMock()
 
         test = RegistryKeyExists(
-            name="test_key_exists",
-            parameter=RegistryKeyExistsParameter(
-                key_path=r"HKEY_CURRENT_USER\Software\Classes"
-            )
+            name="test_key_exists", parameter=RegistryKeyExistsParameter(key_path=r"HKEY_CURRENT_USER\Software\Classes")
         )
         result = test.test()
 
@@ -162,10 +159,7 @@ class TestRegistryKeyExists:
         mock_winreg.CloseKey = MagicMock()
 
         test = RegistryKeyExists(
-            name="test_key_exists",
-            parameter=RegistryKeyExistsParameter(
-                key_path="HKLM/Software/Microsoft/Windows"
-            )
+            name="test_key_exists", parameter=RegistryKeyExistsParameter(key_path="HKLM/Software/Microsoft/Windows")
         )
         result = test.test()
 
@@ -181,10 +175,7 @@ class TestRegistryKeyExists:
         mock_winreg.OpenKey = MagicMock(side_effect=FileNotFoundError("Key not found"))
 
         test = RegistryKeyExists(
-            name="test_key_exists",
-            parameter=RegistryKeyExistsParameter(
-                key_path=r"HKLM\Software\NonExistent\Key"
-            )
+            name="test_key_exists", parameter=RegistryKeyExistsParameter(key_path=r"HKLM\Software\NonExistent\Key")
         )
         result = test.test()
 
@@ -199,10 +190,7 @@ class TestRegistryKeyExists:
         mock_winreg.OpenKey = MagicMock(side_effect=PermissionError("Access denied"))
 
         test = RegistryKeyExists(
-            name="test_key_exists",
-            parameter=RegistryKeyExistsParameter(
-                key_path=r"HKLM\Software\Restricted"
-            )
+            name="test_key_exists", parameter=RegistryKeyExistsParameter(key_path=r"HKLM\Software\Restricted")
         )
         result = test.test()
 
@@ -215,10 +203,7 @@ class TestRegistryKeyExists:
     def test_registry_key_exists_error_invalid_hive(self, mock_winreg, mock_platform):
         """Test execution error with invalid registry hive."""
         test = RegistryKeyExists(
-            name="test_key_exists",
-            parameter=RegistryKeyExistsParameter(
-                key_path=r"INVALID_HIVE\Software\Test"
-            )
+            name="test_key_exists", parameter=RegistryKeyExistsParameter(key_path=r"INVALID_HIVE\Software\Test")
         )
         result = test.test()
 
@@ -231,10 +216,7 @@ class TestRegistryKeyExists:
     def test_registry_key_exists_error_invalid_path_format(self, mock_winreg, mock_platform):
         """Test execution error with invalid path format."""
         test = RegistryKeyExists(
-            name="test_key_exists",
-            parameter=RegistryKeyExistsParameter(
-                key_path="InvalidPathWithoutBackslash"
-            )
+            name="test_key_exists", parameter=RegistryKeyExistsParameter(key_path="InvalidPathWithoutBackslash")
         )
         result = test.test()
 
@@ -245,10 +227,7 @@ class TestRegistryKeyExists:
     def test_registry_key_exists_error_non_windows(self, mock_platform):
         """Test execution error when run on non-Windows platform."""
         test = RegistryKeyExists(
-            name="test_key_exists",
-            parameter=RegistryKeyExistsParameter(
-                key_path=r"HKLM\Software\Test"
-            )
+            name="test_key_exists", parameter=RegistryKeyExistsParameter(key_path=r"HKLM\Software\Test")
         )
         result = test.test()
 
@@ -277,10 +256,8 @@ class TestRegistryKeyExists:
         try:
             test = RegistryKeyExists(
                 name="test_key_exists",
-                parameter=RegistryKeyExistsParameter(
-                    key_path=r"HKLM\Software\{{VAR1}}"
-                ),
-                variable_metadata=variable_metadata_simple
+                parameter=RegistryKeyExistsParameter(key_path=r"HKLM\Software\{{VAR1}}"),
+                variable_metadata=variable_metadata_simple,
             )
             result = test.test()
         finally:
@@ -299,11 +276,16 @@ class TestRegistryKeyExists:
     def test_registry_key_exists_all_hives(self, mock_winreg, mock_platform):
         """Test all supported registry hives and abbreviations."""
         hives = [
-            "HKEY_CLASSES_ROOT", "HKCR",
-            "HKEY_CURRENT_USER", "HKCU",
-            "HKEY_LOCAL_MACHINE", "HKLM",
-            "HKEY_USERS", "HKU",
-            "HKEY_CURRENT_CONFIG", "HKCC"
+            "HKEY_CLASSES_ROOT",
+            "HKCR",
+            "HKEY_CURRENT_USER",
+            "HKCU",
+            "HKEY_LOCAL_MACHINE",
+            "HKLM",
+            "HKEY_USERS",
+            "HKU",
+            "HKEY_CURRENT_CONFIG",
+            "HKCC",
         ]
 
         mock_key = MagicMock()
@@ -312,10 +294,7 @@ class TestRegistryKeyExists:
 
         for hive in hives:
             test = RegistryKeyExists(
-                name=f"test_{hive}",
-                parameter=RegistryKeyExistsParameter(
-                    key_path=f"{hive}\\Software\\Test"
-                )
+                name=f"test_{hive}", parameter=RegistryKeyExistsParameter(key_path=f"{hive}\\Software\\Test")
             )
             result = test.test()
             assert_test_success(result)
@@ -324,6 +303,7 @@ class TestRegistryKeyExists:
 # ============================================================================
 # RegistryValueMatches Tests
 # ============================================================================
+
 
 class TestRegistryValueMatches:
     """Tests for RegistryValueMatches testfunction."""
@@ -341,10 +321,8 @@ class TestRegistryValueMatches:
         test = RegistryValueMatches(
             name="test_value_matches",
             parameter=RegistryValueMatchesParameter(
-                key_path=r"HKLM\Software\Test",
-                value_name="TestName",
-                expected_value="TestValue"
-            )
+                key_path=r"HKLM\Software\Test", value_name="TestName", expected_value="TestValue"
+            ),
         )
         result = test.test()
 
@@ -367,10 +345,8 @@ class TestRegistryValueMatches:
         test = RegistryValueMatches(
             name="test_value_matches",
             parameter=RegistryValueMatchesParameter(
-                key_path=r"HKLM\Software\Test",
-                value_name="DwordValue",
-                expected_value=1
-            )
+                key_path=r"HKLM\Software\Test", value_name="DwordValue", expected_value=1
+            ),
         )
         result = test.test()
 
@@ -390,11 +366,8 @@ class TestRegistryValueMatches:
         test = RegistryValueMatches(
             name="test_value_matches",
             parameter=RegistryValueMatchesParameter(
-                key_path=r"HKLM\Software\Test",
-                value_name="TestName",
-                expected_value="TestValue",
-                value_type="REG_SZ"
-            )
+                key_path=r"HKLM\Software\Test", value_name="TestName", expected_value="TestValue", value_type="REG_SZ"
+            ),
         )
         result = test.test()
 
@@ -413,10 +386,8 @@ class TestRegistryValueMatches:
         test = RegistryValueMatches(
             name="test_value_matches",
             parameter=RegistryValueMatchesParameter(
-                key_path=r"HKLM\Software\Test",
-                value_name="TestName",
-                expected_value="ExpectedValue"
-            )
+                key_path=r"HKLM\Software\Test", value_name="TestName", expected_value="ExpectedValue"
+            ),
         )
         result = test.test()
 
@@ -441,8 +412,8 @@ class TestRegistryValueMatches:
                 key_path=r"HKLM\Software\Test",
                 value_name="TestName",
                 expected_value="TestValue",
-                value_type="REG_DWORD"  # Expecting DWORD but got SZ
-            )
+                value_type="REG_DWORD",  # Expecting DWORD but got SZ
+            ),
         )
         result = test.test()
 
@@ -461,10 +432,8 @@ class TestRegistryValueMatches:
         test = RegistryValueMatches(
             name="test_value_matches",
             parameter=RegistryValueMatchesParameter(
-                key_path=r"HKLM\Software\NonExistent",
-                value_name="TestName",
-                expected_value="TestValue"
-            )
+                key_path=r"HKLM\Software\NonExistent", value_name="TestName", expected_value="TestValue"
+            ),
         )
         result = test.test()
 
@@ -484,10 +453,8 @@ class TestRegistryValueMatches:
         test = RegistryValueMatches(
             name="test_value_matches",
             parameter=RegistryValueMatchesParameter(
-                key_path=r"HKLM\Software\Test",
-                value_name="NonExistentValue",
-                expected_value="TestValue"
-            )
+                key_path=r"HKLM\Software\Test", value_name="NonExistentValue", expected_value="TestValue"
+            ),
         )
         result = test.test()
 
@@ -507,10 +474,8 @@ class TestRegistryValueMatches:
         test = RegistryValueMatches(
             name="test_value_matches",
             parameter=RegistryValueMatchesParameter(
-                key_path=r"HKLM\Software\Restricted",
-                value_name="SecureValue",
-                expected_value="TestValue"
-            )
+                key_path=r"HKLM\Software\Restricted", value_name="SecureValue", expected_value="TestValue"
+            ),
         )
         result = test.test()
 
@@ -520,7 +485,9 @@ class TestRegistryValueMatches:
     @patch('platform.system', return_value='Windows')
     @patch.object(windows_module, 'WINREG_AVAILABLE', True)
     @patch.object(windows_module, 'winreg', new_callable=lambda: MockWinreg)
-    def test_registry_value_matches_with_placeholder_key_path(self, mock_winreg, mock_platform, variable_metadata_simple):
+    def test_registry_value_matches_with_placeholder_key_path(
+        self, mock_winreg, mock_platform, variable_metadata_simple
+    ):
         """Test registry value match with placeholder in key path."""
         mock_key = MagicMock()
         mock_winreg.OpenKey = MagicMock(return_value=mock_key)
@@ -541,11 +508,9 @@ class TestRegistryValueMatches:
             test = RegistryValueMatches(
                 name="test_value_matches",
                 parameter=RegistryValueMatchesParameter(
-                    key_path=r"HKLM\Software\{{VAR1}}",
-                    value_name="TestName",
-                    expected_value="TestValue"
+                    key_path=r"HKLM\Software\{{VAR1}}", value_name="TestName", expected_value="TestValue"
                 ),
-                variable_metadata=variable_metadata_simple
+                variable_metadata=variable_metadata_simple,
             )
             result = test.test()
 
@@ -561,7 +526,9 @@ class TestRegistryValueMatches:
     @patch('platform.system', return_value='Windows')
     @patch.object(windows_module, 'WINREG_AVAILABLE', True)
     @patch.object(windows_module, 'winreg', new_callable=lambda: MockWinreg)
-    def test_registry_value_matches_with_placeholder_value_name(self, mock_winreg, mock_platform, variable_metadata_simple):
+    def test_registry_value_matches_with_placeholder_value_name(
+        self, mock_winreg, mock_platform, variable_metadata_simple
+    ):
         """Test registry value match with placeholder in value name."""
         mock_key = MagicMock()
         mock_winreg.OpenKey = MagicMock(return_value=mock_key)
@@ -582,11 +549,9 @@ class TestRegistryValueMatches:
             test = RegistryValueMatches(
                 name="test_value_matches",
                 parameter=RegistryValueMatchesParameter(
-                    key_path=r"HKLM\Software\Test",
-                    value_name="{{VAR1}}",
-                    expected_value="TestValue"
+                    key_path=r"HKLM\Software\Test", value_name="{{VAR1}}", expected_value="TestValue"
                 ),
-                variable_metadata=variable_metadata_simple
+                variable_metadata=variable_metadata_simple,
             )
             result = test.test()
 
@@ -602,7 +567,9 @@ class TestRegistryValueMatches:
     @patch('platform.system', return_value='Windows')
     @patch.object(windows_module, 'WINREG_AVAILABLE', True)
     @patch.object(windows_module, 'winreg', new_callable=lambda: MockWinreg)
-    def test_registry_value_matches_with_placeholder_expected_value(self, mock_winreg, mock_platform, variable_metadata_simple):
+    def test_registry_value_matches_with_placeholder_expected_value(
+        self, mock_winreg, mock_platform, variable_metadata_simple
+    ):
         """Test registry value match with placeholder in expected value."""
         mock_key = MagicMock()
         mock_winreg.OpenKey = MagicMock(return_value=mock_key)
@@ -623,11 +590,9 @@ class TestRegistryValueMatches:
             test = RegistryValueMatches(
                 name="test_value_matches",
                 parameter=RegistryValueMatchesParameter(
-                    key_path=r"HKLM\Software\Test",
-                    value_name="TestName",
-                    expected_value="{{VAR1}}"
+                    key_path=r"HKLM\Software\Test", value_name="TestName", expected_value="{{VAR1}}"
                 ),
-                variable_metadata=variable_metadata_simple
+                variable_metadata=variable_metadata_simple,
             )
             result = test.test()
 
@@ -650,10 +615,8 @@ class TestRegistryValueMatches:
         test = RegistryValueMatches(
             name="test_value_matches",
             parameter=RegistryValueMatchesParameter(
-                key_path="HKLM/Software/Test",
-                value_name="TestName",
-                expected_value="TestValue"
-            )
+                key_path="HKLM/Software/Test", value_name="TestName", expected_value="TestValue"
+            ),
         )
         result = test.test()
 
@@ -681,11 +644,8 @@ class TestRegistryValueMatches:
             test = RegistryValueMatches(
                 name=f"test_{type_name}",
                 parameter=RegistryValueMatchesParameter(
-                    key_path=r"HKLM\Software\Test",
-                    value_name="Value",
-                    expected_value=test_value,
-                    value_type=type_name
-                )
+                    key_path=r"HKLM\Software\Test", value_name="Value", expected_value=test_value, value_type=type_name
+                ),
             )
             result = test.test()
             assert_test_success(result)
@@ -696,10 +656,8 @@ class TestRegistryValueMatches:
         test = RegistryValueMatches(
             name="test_value_matches",
             parameter=RegistryValueMatchesParameter(
-                key_path=r"HKLM\Software\Test",
-                value_name="TestName",
-                expected_value="TestValue"
-            )
+                key_path=r"HKLM\Software\Test", value_name="TestName", expected_value="TestValue"
+            ),
         )
         result = test.test()
 
@@ -714,10 +672,8 @@ class TestRegistryValueMatches:
         test = RegistryValueMatches(
             name="test_value_matches",
             parameter=RegistryValueMatchesParameter(
-                key_path=r"INVALID_HIVE\Software\Test",
-                value_name="TestName",
-                expected_value="TestValue"
-            )
+                key_path=r"INVALID_HIVE\Software\Test", value_name="TestName", expected_value="TestValue"
+            ),
         )
         result = test.test()
 
@@ -730,11 +686,16 @@ class TestRegistryValueMatches:
     def test_registry_value_matches_all_hives(self, mock_winreg, mock_platform):
         """Test registry value match with all supported hives."""
         hives = [
-            "HKEY_CLASSES_ROOT", "HKCR",
-            "HKEY_CURRENT_USER", "HKCU",
-            "HKEY_LOCAL_MACHINE", "HKLM",
-            "HKEY_USERS", "HKU",
-            "HKEY_CURRENT_CONFIG", "HKCC"
+            "HKEY_CLASSES_ROOT",
+            "HKCR",
+            "HKEY_CURRENT_USER",
+            "HKCU",
+            "HKEY_LOCAL_MACHINE",
+            "HKLM",
+            "HKEY_USERS",
+            "HKU",
+            "HKEY_CURRENT_CONFIG",
+            "HKCC",
         ]
 
         mock_key = MagicMock()
@@ -746,10 +707,8 @@ class TestRegistryValueMatches:
             test = RegistryValueMatches(
                 name=f"test_{hive}",
                 parameter=RegistryValueMatchesParameter(
-                    key_path=f"{hive}\\Software\\Test",
-                    value_name="TestName",
-                    expected_value="TestValue"
-                )
+                    key_path=f"{hive}\\Software\\Test", value_name="TestName", expected_value="TestValue"
+                ),
             )
             result = test.test()
             assert_test_success(result)

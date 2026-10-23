@@ -16,7 +16,7 @@ to `adare-playbook`; for *interactive* click-by-click VM work, `adare-devvm`.)
 
 Auto-loads as a skill in **Claude Code**; the workflow is pure CLI + Bash, so it's
 portable to any agent with a shell (on **OpenCode** load it via the `opencode-skills`
-plugin or an `AGENTS.md` reference — see `docs/mcp-clients.md`). Keep SKILL.md's common
+plugin or an `AGENTS.md` reference — see `docsrc/mcp-clients.md`). Keep SKILL.md's common
 path in view; load `references/*.md` for full flag matrices and web-sharing depth.
 
 ## 1. Set up
@@ -60,9 +60,9 @@ adare exp diff <exp> -e <env>
 ## 3. Inspect
 
 ```sh
-adare run list                                 # all runs
-adare run list --filter <project[.env[.exp]]> # dotnotation filter
-adare run info [<ulid>]                        # run detail (latest if no ULID)
+adare runs list                                 # all runs
+adare runs list --filter <project[.env[.exp]]> # dotnotation filter
+adare runs info [<ulid>]                        # run detail (latest if no ULID)
 adare exp info <name>                           # experiment detail (-u ULID | -d dotnotation)
 ```
 
@@ -90,7 +90,7 @@ See `references/sharing.md` for the subcommand args and the external-send cautio
 
 ```sh
 adare exp clean <exp>                          # delete this experiment's fake (test) runs
-adare run remove <ulid>                        # delete one run
+adare runs remove <ulid>                        # delete one run
 adare exp remove <exp> [--force] [--keep-files]  # delete experiment (+runs); --force if it has prod runs
 ```
 
@@ -118,4 +118,4 @@ and deletes the directory unless `--keep-files`. Treat both as destructive — t
 You don't need MCP here — every command above is the CLI you're already running.
 The control-plane server (`adare mcp serve`, stdio) mirrors this whole lifecycle as
 MCP tools for **non-CLI hosts** (Claude Desktop / web) and the embedded `adare chat`
-brain. See `docs/mcp-clients.md` and the `adare-playbook` skill's MCP appendix.
+brain. See `docsrc/mcp-clients.md` and the `adare-playbook` skill's MCP appendix.

@@ -49,11 +49,7 @@ def build_display_path(uuid: str, name: str, view_only: bool) -> str:
 
     Callers prepend the origin (e.g. ``http://<host>:8081``).
     """
-    return (
-        f"/display.html?vmId={uuid}"
-        f"&name={quote(name)}"
-        f"&viewOnly={'1' if view_only else '0'}"
-    )
+    return f"/display.html?vmId={uuid}&name={quote(name)}&viewOnly={'1' if view_only else '0'}"
 
 
 @router.get("/api/vm-watch-url")

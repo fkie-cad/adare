@@ -12,6 +12,7 @@ sync callable invoked from that worker thread — hops each event back onto the
 server loop via ``run_coroutine_threadsafe`` so ``ws_manager`` (which lives on
 the server loop) can broadcast it.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -36,6 +37,7 @@ _RUN_DIRS: dict[str, Path] = {}
 
 class AgentRunBody(BaseModel):
     """Body for POST .../agent/run."""
+
     goal: str
     max_steps: int | None = None
     stall_limit: int | None = None
@@ -87,9 +89,7 @@ async def run_agent(session_id: str, body: AgentRunBody):
                 return
             data = _step_frame(event)
             if data is not None:
-                asyncio.run_coroutine_threadsafe(
-                    ws_manager.send_agent_step(session_id, data), loop
-                )
+                asyncio.run_coroutine_threadsafe(ws_manager.send_agent_step(session_id, data), loop)
         except (ValueError, RuntimeError, TypeError, KeyError, OSError) as exc:
             logger.debug("agent event sink error (ignored): %s", exc)
 
@@ -98,18 +98,16 @@ async def run_agent(session_id: str, body: AgentRunBody):
         goal=body.goal,
         max_steps=body.max_steps,
         stall_limit=body.stall_limit,
-        interactive=False,       # no stdin gate in the server
+        interactive=False,  # no stdin gate in the server
         planning=body.planning,
         grounding=body.grounding,
-        progress=False,          # no rich Live display headless
+        progress=False,  # no rich Live display headless
         video=body.video,
     )
 
     await ws_manager.send_agent_status(session_id, "running")
 
-    task = asyncio.create_task(
-        asyncio.to_thread(AdareAPI().devmode.run_gui_agent, dto, sink)
-    )
+    task = asyncio.create_task(asyncio.to_thread(AdareAPI().devmode.run_gui_agent, dto, sink))
 
     def _on_done(finished: asyncio.Task) -> None:
         # Use .exception()/.result() (never a bare `except Exception`) so an
@@ -117,30 +115,24 @@ async def run_agent(session_id: str, body: AgentRunBody):
         exc = finished.exception()
         if exc is not None:
             logger.warning("agent run for %s crashed: %s", session_id, exc)
-            asyncio.run_coroutine_threadsafe(
-                ws_manager.send_agent_status(session_id, "failed", str(exc)), loop
-            )
+            asyncio.run_coroutine_threadsafe(ws_manager.send_agent_status(session_id, "failed", str(exc)), loop)
             return
         result = finished.result()
         if not result.success:
             msg = result.error.message if result.error else "agent run failed"
-            asyncio.run_coroutine_threadsafe(
-                ws_manager.send_agent_status(session_id, "failed", msg), loop
-            )
+            asyncio.run_coroutine_threadsafe(ws_manager.send_agent_status(session_id, "failed", msg), loop)
             return
         data = result.data
         state = "finished" if (data and data.success) else "failed"
         summary = (data.summary or data.reason) if data else ""
-        asyncio.run_coroutine_threadsafe(
-            ws_manager.send_agent_status(session_id, state, summary), loop
-        )
+        asyncio.run_coroutine_threadsafe(ws_manager.send_agent_status(session_id, state, summary), loop)
 
     task.add_done_callback(_on_done)
     return {"started": True}
 
 
 @router.get("/{session_id}/agent/steps/{index}.png")
-async def agent_step_image(session_id: str, index: int):
+def agent_step_image(session_id: str, index: int):
     """Serve the annotated ``step_NNN.png`` written by the latest run."""
     run_dir = _RUN_DIRS.get(session_id)
     if run_dir is None:

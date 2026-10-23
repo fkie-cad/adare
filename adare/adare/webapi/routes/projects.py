@@ -1,4 +1,5 @@
 """Project management endpoints."""
+
 import logging
 from pathlib import Path
 
@@ -14,8 +15,10 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 # ---- Pydantic request models ----
 
+
 class ProjectCreateBody(BaseModel):
     """Request body for creating a project."""
+
     name: str
     path: str
     description: str = ""
@@ -23,29 +26,32 @@ class ProjectCreateBody(BaseModel):
 
 # ---- Helpers ----
 
+
 def _api():
     from adare.api import AdareAPI
+
     return AdareAPI()
 
 
 # ---- Endpoints ----
 
+
 @router.get("")
-async def list_projects():
+def list_projects():
     """List all registered projects."""
     result = _api().project.list_all()
     return result_to_response(result)
 
 
 @router.get("/{path:path}")
-async def get_project(path: str):
+def get_project(path: str):
     """Get a project by its filesystem path."""
     result = _api().project.get_by_path(path)
     return result_to_response(result)
 
 
 @router.post("")
-async def create_project(body: ProjectCreateBody):
+def create_project(body: ProjectCreateBody):
     """Create a new project."""
     from adare.core.dto.project import ProjectCreateRequest
 
@@ -59,7 +65,7 @@ async def create_project(body: ProjectCreateBody):
 
 
 @router.delete("/{name}")
-async def remove_project(name: str, path: str | None = None):
+def remove_project(name: str, path: str | None = None):
     """Remove a project by name.
 
     The underlying service requires the project path. If *path* is not supplied

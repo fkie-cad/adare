@@ -16,7 +16,7 @@ a frozen baked disk. This module orchestrates the recipe flow invoked from
 4. If a VM with the recipe hash already exists and its disk is present, reuse it
    (build cache hit — no rebuild).
 5. Otherwise build in two stages and register the result through
-   :func:`adare.backend.vm.commands.load_vm_file_for_environment`, recording
+   :func:`adare.backend.vm.registration.load_vm_file_for_environment`, recording
    ``build_source='recipe'`` and the provenance columns.
 
 Two-stage build, two-level cache
@@ -43,6 +43,11 @@ two-hour Windows install on every failed MSI. With the base cached, a retry
 (``--reprovision``) re-overlays in seconds. It also lets two recipes that differ
 only in their provision lists (e.g. the Autopsy solr4 / solr8 environments) share
 **one** Windows base build, and it leaves ``vm create`` untouched.
+
+Stage 1 includes the creators' own ADARE readiness pass (``guest_readiness``):
+agent, autologin and desktop defaults are checked once there, so Stage 2 only
+runs the recipe's own steps. Base disks cached before that pass existed were not
+checked; deleting the entry from ``RECIPE_BASE_CACHE_DIR`` rebuilds it.
 
 Integrity note: OS installs are never bit-reproducible, so the recipe hash is
 anchored on the *inputs*. The produced disk is still hashed per run into
@@ -87,6 +92,7 @@ from adare.config.configdirectory import (
     VMS_DIR,
 )
 from adare.console import console, print_section, print_step
+from adare.helperfunctions.digest_cache import record_file_sha256
 from adare.helperfunctions.file.lock import exclusive_lock
 from adare.helperfunctions.hash import hash_file_sha256, hash_recipe, hash_string_sha256
 from adare.helperfunctions.web.download import download
@@ -108,10 +114,7 @@ log = logging.getLogger(__name__)
 
 # Built-in template directory (shared by both creators). Autounattend templates
 # for Windows are keyed by profile name when no explicit override is given.
-_BUILTIN_TEMPLATES_DIR = (
-    Path(__file__).parent.parent.parent
-    / 'hypervisor' / 'qemu' / 'vm_creator' / 'templates'
-)
+_BUILTIN_TEMPLATES_DIR = Path(__file__).parent.parent.parent / 'hypervisor' / 'qemu' / 'vm_creator' / 'templates'
 _AUTOUNATTEND_MAP = {
     'windows11': 'autounattend_win11.xml',
     'windows10': 'autounattend_win10.xml',
@@ -127,7 +130,7 @@ def _effective_os_def(recipe: Recipe) -> OsDefinition:
             log,
             f"recipe profile '{recipe.profile}' is not a known OS profile: {e}",
             possible_solutions=[
-                'Run: adare os-profile list',
+                'Run: adare vm profile list',
                 'Fix the "profile" field in the recipe block',
             ],
         ) from e
@@ -154,6 +157,7 @@ def _resolve_answer_template(os_def: OsDefinition) -> Path | None:
         elif os_def.install_mode != 'manual':
             # Linux auto installs resolve via the autoinstall discovery map.
             from adare.hypervisor.qemu.vm_creator.autoinstall import resolve_template
+
             template_name = resolve_template(os_def)
 
     if not template_name:
@@ -183,9 +187,9 @@ def _answer_file_hash(os_def: OsDefinition) -> str:
     return hash_string_sha256(f'no-template:{os_def.template or os_def.name}')
 
 
-def _recipe_identity(recipe: Recipe, os_def: OsDefinition,
-                     postsetupinstallations: list,
-                     provision_commands: list[ProvisionCommand] = ()) -> dict:
+def _recipe_identity(
+    recipe: Recipe, os_def: OsDefinition, postsetupinstallations: list, provision_commands: list[ProvisionCommand] = ()
+) -> dict:
     """Build the order-insensitive identity dict for the recipe hash.
 
     Uses the *declared* params (``None`` where unset) rather than host-resolved
@@ -277,7 +281,9 @@ def compute_recipe_hash(environment_metadata: EnvironmentMetadata) -> str:
         iso_sha256=normalized_iso_sha256(recipe.iso_sha256),
         answer_file_hash=_answer_file_hash(os_def),
         identity=_recipe_identity(
-            recipe, os_def, environment_metadata.postsetupinstallations,
+            recipe,
+            os_def,
+            environment_metadata.postsetupinstallations,
             _expanded_provision(recipe, os_def),
         ),
     )
@@ -299,7 +305,9 @@ def compute_base_hash(environment_metadata: EnvironmentMetadata) -> str:
         iso_sha256=normalized_iso_sha256(recipe.iso_sha256),
         answer_file_hash=_answer_file_hash(os_def),
         identity=_recipe_identity(
-            recipe, os_def, environment_metadata.postsetupinstallations,
+            recipe,
+            os_def,
+            environment_metadata.postsetupinstallations,
         ),
     )
 
@@ -335,7 +343,9 @@ def resolve_iso_from_url(url: str) -> Path:
 
     try:
         log.info(f"Downloading ISO from URL: {url}")
-        download(url, cached_file_path, quiet=False)
+        # Digest computed while streaming; caching it lets `_verify_iso` skip a
+        # second multi-GB read.
+        record_file_sha256(cached_file_path, download(url, cached_file_path, quiet=False))
 
         if not cached_file_path.exists() or cached_file_path.stat().st_size == 0:
             raise EnvironmentLoadFailed(
@@ -361,8 +371,7 @@ def resolve_iso_from_url(url: str) -> Path:
         ) from e
 
 
-def _check_consumer_contract(recipe: Recipe, environment_metadata: EnvironmentMetadata,
-                             os_def: OsDefinition) -> None:
+def _check_consumer_contract(recipe: Recipe, environment_metadata: EnvironmentMetadata, os_def: OsDefinition) -> None:
     """Gate 5 — the authoritative consume-side ISO contract check.
 
     Resolves ``recipe.profile`` against *this* host's catalog, so a recipe that
@@ -374,22 +383,24 @@ def _check_consumer_contract(recipe: Recipe, environment_metadata: EnvironmentMe
     consumer, and a non-canonical digest is harmless here because every consumer of
     ``iso_sha256`` normalizes on read. Only the publish gate insists on both.
     """
-    declared_platform = (
-        environment_metadata.os.platform if environment_metadata.os is not None else None
-    )
+    declared_platform = environment_metadata.os.platform if environment_metadata.os is not None else None
     try:
         check_recipe_publish_contract(
-            recipe, declared_platform, publishing=False,
+            recipe,
+            declared_platform,
+            publishing=False,
         )
     except RecipeContractError as e:
         raise EnvironmentLoadFailed(
-            log, str(e), possible_solutions=e.possible_solutions,
+            log,
+            str(e),
+            possible_solutions=e.possible_solutions,
         ) from e
 
 
-def _resolve_iso_path(recipe: Recipe, base_dir: Path | None,
-                      os_def: OsDefinition,
-                      iso_override: Path | None = None) -> Path:
+def _resolve_iso_path(
+    recipe: Recipe, base_dir: Path | None, os_def: OsDefinition, iso_override: Path | None = None
+) -> Path:
     """Resolve the declared ISO source to a local path.
 
     Delegates to :mod:`adare.backend.vm.recipe_iso`: the URL/path form downloads
@@ -427,16 +438,18 @@ def _synthesize_os(environment_metadata: EnvironmentMetadata, os_def: OsDefiniti
 
 def _setup_level(recipe: Recipe) -> SetupLevel:
     """Resolve the recipe's declared setup level (default FULL)."""
-    return (
-        SetupLevel(recipe.params.setup_level)
-        if recipe.params.setup_level is not None
-        else SetupLevel.FULL
-    )
+    return SetupLevel(recipe.params.setup_level) if recipe.params.setup_level is not None else SetupLevel.FULL
 
 
-def _build_disk(os_def: OsDefinition, recipe: Recipe, iso_path: Path,
-                vm_name: str, force: bool, vm_dir: Path | None = None,
-                allow_emulation: bool = False) -> Path:
+def _build_disk(
+    os_def: OsDefinition,
+    recipe: Recipe,
+    iso_path: Path,
+    vm_name: str,
+    force: bool,
+    vm_dir: Path | None = None,
+    allow_emulation: bool = False,
+) -> Path:
     """Build the disk image using the existing creator machinery.
 
     Creator selection is delegated to :func:`vm_creator.dispatch.create_vm_disk`,
@@ -468,9 +481,9 @@ def _build_disk(os_def: OsDefinition, recipe: Recipe, iso_path: Path,
         ) from e
 
 
-def _preflight_provision(recipe: Recipe, os_def: OsDefinition,
-                         commands: list[ProvisionCommand],
-                         base_exists: bool) -> None:
+def _preflight_provision(
+    recipe: Recipe, os_def: OsDefinition, commands: list[ProvisionCommand], base_exists: bool
+) -> None:
     """Fail before any build starts if provisioning cannot possibly work.
 
     The point is that a mistake costs seconds, not a two-hour Windows install
@@ -526,7 +539,7 @@ def _preflight_provision(recipe: Recipe, os_def: OsDefinition,
         (path for path in (VMS_DIR, VMS_DIR.parent, Path.home()) if path.is_dir()),
         Path.home(),
     )
-    free_gb = shutil.disk_usage(probe_dir).free / (1024 ** 3)
+    free_gb = shutil.disk_usage(probe_dir).free / (1024**3)
     if free_gb < needed_gb:
         raise EnvironmentLoadFailed(
             log,
@@ -565,15 +578,11 @@ def _cached_base_is_usable(base_path: Path, may_discard: bool) -> bool:
                 f'  [yellow]Discarding an unusable cached base disk[/yellow] '
                 f'({size} bytes — no OS install could fit): {base_path}'
             )
-            log.warning('Discarding truncated recipe base disk %s (%d bytes)',
-                        base_path, size)
+            log.warning('Discarding truncated recipe base disk %s (%d bytes)', base_path, size)
             base_path.unlink()
         return False
 
-    console.print(
-        f'  [green]Recipe base cache hit — reusing {base_path}[/green] '
-        f'({size / (1024 ** 3):.1f} GB)'
-    )
+    console.print(f'  [green]Recipe base cache hit — reusing {base_path}[/green] ({size / (1024**3):.1f} GB)')
     console.print('  [dim]Skipping the OS install entirely.[/dim]')
     return True
 
@@ -606,9 +615,15 @@ def _discard_stale_partial_builds(base_name: str) -> None:
             log.info('Removed a leftover partial base build artifact: %s', leftover)
 
 
-def _install_base_disk(os_def: OsDefinition, recipe: Recipe, iso_path: Path,
-                       base_name: str, base_path: Path, force: bool,
-                       allow_emulation: bool) -> Path:
+def _install_base_disk(
+    os_def: OsDefinition,
+    recipe: Recipe,
+    iso_path: Path,
+    base_name: str,
+    base_path: Path,
+    force: bool,
+    allow_emulation: bool,
+) -> Path:
     """Run the OS install for *base_name* and publish it at *base_path*.
 
     **Must be called with the cache-key lock held** (see :func:`_build_base_disk`).
@@ -642,8 +657,13 @@ def _install_base_disk(os_def: OsDefinition, recipe: Recipe, iso_path: Path,
     # path, so its "already exists — use --force" guard costs a legitimate rebuild
     # nothing and stays armed as a second line of defence if this ever runs unlocked.
     built = _build_disk(
-        os_def, recipe, iso_path, partial_name, force=force,
-        vm_dir=RECIPE_BASE_CACHE_DIR, allow_emulation=allow_emulation,
+        os_def,
+        recipe,
+        iso_path,
+        partial_name,
+        force=force,
+        vm_dir=RECIPE_BASE_CACHE_DIR,
+        allow_emulation=allow_emulation,
     )
     # Same directory, therefore the same filesystem, therefore atomic: a reader
     # either sees no cache entry or sees a complete one.
@@ -656,9 +676,14 @@ def _install_base_disk(os_def: OsDefinition, recipe: Recipe, iso_path: Path,
     return base_path
 
 
-def _build_base_disk(environment_metadata: EnvironmentMetadata, os_def: OsDefinition,
-                     iso_path: Path, base_hash: str, force: bool,
-                     allow_emulation: bool) -> Path:
+def _build_base_disk(
+    environment_metadata: EnvironmentMetadata,
+    os_def: OsDefinition,
+    iso_path: Path,
+    base_hash: str,
+    force: bool,
+    allow_emulation: bool,
+) -> Path:
     """Stage 1 — return the cached base disk, building it only if absent.
 
     Cached by ``base_hash`` in :data:`RECIPE_BASE_CACHE_DIR`, keyed on the recipe
@@ -727,26 +752,27 @@ def _build_base_disk(environment_metadata: EnvironmentMetadata, os_def: OsDefini
     RECIPE_BASE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     def _announce_wait() -> None:
-        console.print(
-            f'  [yellow]Another ADARE process is already building this base disk'
-            f'[/yellow]: {base_name}'
-        )
+        console.print(f'  [yellow]Another ADARE process is already building this base disk[/yellow]: {base_name}')
         console.print(
             '  [dim]Waiting for it to finish — it will then be reused as a cache '
             'hit, not installed twice. This can take as long as an OS install.[/dim]'
         )
 
-    with exclusive_lock(RECIPE_BASE_CACHE_DIR / f'{base_name}.lock',
-                        on_contention=_announce_wait):
+    with exclusive_lock(RECIPE_BASE_CACHE_DIR / f'{base_name}.lock', on_contention=_announce_wait):
         if not force and _cached_base_is_usable(base_path, may_discard=True):
             return base_path
-        return _install_base_disk(os_def, recipe, iso_path, base_name, base_path,
-                                  force, allow_emulation)
+        return _install_base_disk(os_def, recipe, iso_path, base_name, base_path, force, allow_emulation)
 
 
-def _provision_disk(base_path: Path, os_def: OsDefinition, recipe: Recipe,
-                    commands: list[ProvisionCommand], recipe_hash: str,
-                    allow_emulation: bool, force: bool) -> Path:
+def _provision_disk(
+    base_path: Path,
+    os_def: OsDefinition,
+    recipe: Recipe,
+    commands: list[ProvisionCommand],
+    recipe_hash: str,
+    allow_emulation: bool,
+    force: bool,
+) -> Path:
     """Stage 2 — provision *base_path* into the final recipe disk.
 
     Returns the flattened standalone disk. Raises rather than returning a
@@ -765,8 +791,7 @@ def _provision_disk(base_path: Path, os_def: OsDefinition, recipe: Recipe,
         if not force:
             raise EnvironmentLoadFailed(
                 log,
-                f'a provisioned recipe disk already exists at {dest_path} but no VM '
-                f'record references it',
+                f'a provisioned recipe disk already exists at {dest_path} but no VM record references it',
                 possible_solutions=[
                     'Rebuild over it: adare env load <env> --force',
                     'Or remove the orphaned file',
@@ -799,8 +824,7 @@ def _provision_disk(base_path: Path, os_def: OsDefinition, recipe: Recipe,
             f'build-time provisioning failed, so no environment was created: {e}',
             possible_solutions=[
                 'Read the build log named in the message above',
-                'Retry provisioning only (the base OS install is cached): '
-                'adare env load <env> --reprovision',
+                'Retry provisioning only (the base OS install is cached): adare env load <env> --reprovision',
                 'Keep the failed overlay for post-mortem: '
                 'ADARE_KEEP_FAILED_PROVISION=1 adare env load <env> --reprovision',
                 'If one for_each item is at fault, bisect the list',
@@ -808,13 +832,15 @@ def _provision_disk(base_path: Path, os_def: OsDefinition, recipe: Recipe,
         ) from e
 
 
-def build_or_reuse_recipe_vm(environment_metadata: EnvironmentMetadata,
-                             project_path: Path | None = None,
-                             base_dir: Path | None = None,
-                             force: bool = False,
-                             reprovision: bool = False,
-                             iso_override: Path | None = None,
-                             allow_emulation: bool = False) -> dict:
+def build_or_reuse_recipe_vm(
+    environment_metadata: EnvironmentMetadata,
+    project_path: Path | None = None,
+    base_dir: Path | None = None,
+    force: bool = False,
+    reprovision: bool = False,
+    iso_override: Path | None = None,
+    allow_emulation: bool = False,
+) -> dict:
     """Build (or reuse a cached) disk for a recipe environment.
 
     Args:
@@ -877,9 +903,7 @@ def build_or_reuse_recipe_vm(environment_metadata: EnvironmentMetadata,
         )
         stale_record = True
 
-    base_candidate = RECIPE_BASE_CACHE_DIR / (
-        f'{recipe.profile}-recipebase-{base_hash[:12]}.qcow2'
-    )
+    base_candidate = RECIPE_BASE_CACHE_DIR / (f'{recipe.profile}-recipebase-{base_hash[:12]}.qcow2')
     _preflight_provision(recipe, os_def, commands, base_exists=base_candidate.is_file())
 
     if not commands:
@@ -888,21 +912,35 @@ def build_or_reuse_recipe_vm(environment_metadata: EnvironmentMetadata,
         vm_name = f'{recipe.profile}-{recipe_hash[:12]}'
         log.info(f'Building recipe disk (profile={recipe.profile}, name={vm_name})')
         disk_path = _build_disk(
-            os_def, recipe, iso_path, vm_name, force=force or stale_record,
+            os_def,
+            recipe,
+            iso_path,
+            vm_name,
+            force=force or stale_record,
             allow_emulation=allow_emulation,
         )
     else:
         # `--force` rebuilds the base too; `--reprovision` explicitly keeps it.
         base_path = _build_base_disk(
-            environment_metadata, os_def, iso_path, base_hash,
-            force=force and not reprovision, allow_emulation=allow_emulation,
+            environment_metadata,
+            os_def,
+            iso_path,
+            base_hash,
+            force=force and not reprovision,
+            allow_emulation=allow_emulation,
         )
         disk_path = _provision_disk(
-            base_path, os_def, recipe, commands, recipe_hash,
-            allow_emulation=allow_emulation, force=force or reprovision or stale_record,
+            base_path,
+            os_def,
+            recipe,
+            commands,
+            recipe_hash,
+            allow_emulation=allow_emulation,
+            force=force or reprovision or stale_record,
         )
 
-    from adare.backend.vm.commands import load_vm_file_for_environment
+    from adare.backend.vm.registration import load_vm_file_for_environment
+
     return load_vm_file_for_environment(
         project_path=project_path,
         vm_path=disk_path,
@@ -939,7 +977,7 @@ def rebuild_recipe_vm_by_id(vm_id: str, force: bool = True) -> str | None:
     with EnvironmentDbApi() as db:
         env_refs = [
             (env.name, env.file)
-            for env in db.get_environments()
+            for env in db.get_environments(include_superseded=True)
             if getattr(env, 'vm_id', None) == vm_id
         ]
 
@@ -952,7 +990,9 @@ def rebuild_recipe_vm_by_id(vm_id: str, force: bool = True) -> str | None:
             continue
         log.info(f"Rebuilding recipe VM '{vm_record.name}' from environment '{env_name}'")
         result = build_or_reuse_recipe_vm(
-            metadata, base_dir=env_file.parent, force=force,
+            metadata,
+            base_dir=env_file.parent,
+            force=force,
         )
         return result.get('vm_id')
 

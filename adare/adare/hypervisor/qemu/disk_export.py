@@ -20,10 +20,10 @@ SUPPORTED_FORMATS = ('raw', 'vmdk')
 
 
 def export_disk_image(
-        overlay_disk_path: Path | str,
-        dest_path: Path | str,
-        fmt: str = 'raw',
-        qemu_img_exe: str = 'qemu-img',
+    overlay_disk_path: Path | str,
+    dest_path: Path | str,
+    fmt: str = 'raw',
+    qemu_img_exe: str = 'qemu-img',
 ) -> Path:
     """Convert a qcow2 overlay into a self-contained ``fmt`` image at ``dest_path``.
 

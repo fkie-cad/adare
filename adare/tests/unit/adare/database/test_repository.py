@@ -47,7 +47,6 @@ def repo():
 
 
 class TestRepositoryFindById:
-
     def test_find_by_id_returns_entity(self, repo):
         uid = _ulid()
         repo.save(id=uid, name="test")
@@ -61,7 +60,6 @@ class TestRepositoryFindById:
 
 
 class TestRepositorySave:
-
     def test_save_creates_entity(self, repo):
         entity = repo.save(name="created")
         assert entity.id is not None
@@ -74,7 +72,6 @@ class TestRepositorySave:
 
 
 class TestRepositoryFindAll:
-
     def test_find_all_returns_entities(self, repo):
         repo.save(name="a", category="cat1")
         repo.save(name="b", category="cat2")
@@ -99,7 +96,6 @@ class TestRepositoryFindAll:
 
 
 class TestRepositoryCount:
-
     def test_count_all(self, repo):
         repo.save(name="a")
         repo.save(name="b")
@@ -114,7 +110,6 @@ class TestRepositoryCount:
 
 
 class TestRepositoryDeleteById:
-
     def test_delete_by_id(self, repo):
         entity = repo.save(name="to-delete")
         repo._session.flush()
@@ -125,21 +120,14 @@ class TestRepositoryDeleteById:
 
 
 class TestRepositoryFindOrCreate:
-
     def test_find_or_create_creates(self, repo):
-        entity, created = repo.find_or_create(
-            filters={"name": "new-item"},
-            defaults={"category": "new"}
-        )
+        entity, created = repo.find_or_create(filters={"name": "new-item"}, defaults={"category": "new"})
         assert created is True
         assert entity.name == "new-item"
 
     def test_find_or_create_finds_existing(self, repo):
         repo.save(id=_ulid(), name="existing", category="old")
         repo._session.flush()
-        entity, created = repo.find_or_create(
-            filters={"name": "existing"},
-            defaults={"category": "new"}
-        )
+        entity, created = repo.find_or_create(filters={"name": "existing"}, defaults={"category": "new"})
         assert created is False
         assert entity.category == "old"

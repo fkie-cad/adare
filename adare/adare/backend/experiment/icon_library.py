@@ -112,8 +112,7 @@ class IconLibrary:
         """Load and validate the icon registry YAML."""
         if not self.registry_path.is_file():
             raise IconRegistryError(
-                f"Icon registry not found at {self.registry_path}. "
-                f"Ensure appdata/icon-library.yml is installed."
+                f"Icon registry not found at {self.registry_path}. Ensure appdata/icon-library.yml is installed."
             )
         try:
             data = yaml.safe_load(self.registry_path.read_text(encoding="utf-8"))
@@ -121,9 +120,7 @@ class IconLibrary:
             raise IconRegistryError(f"Failed to read icon registry {self.registry_path}: {exc}") from exc
 
         if not isinstance(data, dict) or "icons" not in data:
-            raise IconRegistryError(
-                f"Icon registry {self.registry_path} must be a mapping with an 'icons' key"
-            )
+            raise IconRegistryError(f"Icon registry {self.registry_path} must be a mapping with an 'icons' key")
         icons = data["icons"]
         if not isinstance(icons, dict):
             raise IconRegistryError(f"'icons' in {self.registry_path} must be a mapping")
@@ -145,9 +142,7 @@ class IconLibrary:
                 if suggestions
                 else f"Run `adare icons list` to see all {len(self.terms())} terms."
             )
-            raise UnknownIconTerm(
-                f"Icon term '{term}' is not defined in {self.registry_path.name}. {hint}"
-            )
+            raise UnknownIconTerm(f"Icon term '{term}' is not defined in {self.registry_path.name}. {hint}")
         if not isinstance(spec, dict) or not spec:
             raise IconRegistryError(f"Icon term '{term}' has an invalid spec: {spec!r}")
         return spec

@@ -30,6 +30,7 @@ def _use_shared_folder_mode() -> bool:
     Must match the logic in file_transfer/__init__.py:detect_file_transfer_mode().
     """
     import shutil
+
     libguestfs_env = os.environ.get('QEMU_LIBGUESTFS', '').lower()
     if libguestfs_env in ('true', '1', 'yes'):
         return False
@@ -39,6 +40,7 @@ def _use_shared_folder_mode() -> bool:
 @dataclass
 class EnvironmentInfo:
     """Information about the detected Python environment in the VM."""
+
     use_conda: bool
     conda_env_exists: bool
     miniforge_path: str | None
@@ -49,6 +51,7 @@ class EnvironmentInfo:
 @dataclass
 class SetupCommand:
     """A setup command with its admin requirement."""
+
     command: str
     requires_admin: bool
 
@@ -56,6 +59,7 @@ class SetupCommand:
 @dataclass
 class CommandSet:
     """Collection of commands needed to set up and run adarevm."""
+
     setup_commands: list[SetupCommand]  # Setup commands with admin flags
     install_command: str
     run_command: str
@@ -73,9 +77,11 @@ class AgentCommandBuilder(ABC):
         websocket_port: int,
         skip_xhost: bool = False,
         hypervisor_type: str = 'virtualbox',
-        installation_mode: str = "wheel"
+        installation_mode: str = "wheel",
+        agent_token: str | None = None,
     ):
         self.wheels_dir = wheels_dir
+        self.agent_token = agent_token
         self.shared_folders = shared_folders
         self.websocket_port = websocket_port
         self.skip_xhost = skip_xhost
@@ -137,8 +143,10 @@ class AgentCommandBuilder(ABC):
             "tools_paths": [project_tools, experiment_tools],
             "data_paths": [project_data, experiment_data],
             "logfile": log_path,
-            "installation_mode": self.installation_mode
+            "installation_mode": self.installation_mode,
         }
+        if self.agent_token:
+            config["agent_token"] = self.agent_token
         return json.dumps(config)
 
     async def build_commands(self, env_info: EnvironmentInfo, vm, stop_event: threading.Event) -> CommandSet:
@@ -155,7 +163,7 @@ class AgentCommandBuilder(ABC):
             install_command=install_command,
             run_command=run_command,
             run_cwd=run_cwd,
-            skip_installation=skip_installation
+            skip_installation=skip_installation,
         )
 
     async def _check_skip_installation(self, env_info: EnvironmentInfo, vm, stop_event: threading.Event) -> bool:
@@ -165,12 +173,13 @@ class AgentCommandBuilder(ABC):
 
         try:
             from adare.backend.experiment.agent_installer import should_skip_installation
+
             return await should_skip_installation(
                 wheels_dir=self.wheels_dir,
                 vm=vm,
                 use_conda=env_info.use_conda,
                 platform=env_info.platform,
-                stop_event=stop_event
+                stop_event=stop_event,
             )
         except (OSError, TimeoutError, RuntimeError, ValueError) as e:
             log.warning(f"Version check failed: {e}, proceeding with installation")
@@ -208,15 +217,12 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
         #     requires_admin=False
         # ))
 
-
-
         # Mount VirtualBox shared folders temporarily (no admin needed)
         # Note: QEMU virtio-fs mounting is handled in lifecycle.py:_mount_virtiofs_windows()
         if self.hypervisor_type == 'virtualbox':
-            commands.append(SetupCommand(
-                command=r'net use Z: \\vboxsvr\adare; net use Z: /delete',
-                requires_admin=False
-            ))
+            commands.append(
+                SetupCommand(command=r'net use Z: \\vboxsvr\adare; net use Z: /delete', requires_admin=False)
+            )
 
         # Write config.json to run directory (User-level, no admin needed)
         # SKIP for QEMU virtio-fs mode: Host already writes this file to the shared directory
@@ -230,10 +236,12 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
 
             # Ensure directory exists and write file
             # Using PowerShell to write file with UTF8 encoding
-            commands.append(SetupCommand(
-                command=f"New-Item -ItemType Directory -Force -Path '{base_path}\\run' | Out-Null; Set-Content -Path '{base_path}\\run\\config.json' -Value '{config_content_safe}' -Encoding UTF8",
-                requires_admin=False
-            ))
+            commands.append(
+                SetupCommand(
+                    command=f"New-Item -ItemType Directory -Force -Path '{base_path}\\run' | Out-Null; Set-Content -Path '{base_path}\\run\\config.json' -Value '{config_content_safe}' -Encoding UTF8",
+                    requires_admin=False,
+                )
+            )
 
         return commands
 
@@ -250,10 +258,13 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
         and all-users install paths (C:\\Program Files\\Python311).
         """
         import re
-        default_python = "python" # Fallback to python as requested by user
+
+        default_python = "python"  # Fallback to python as requested by user
 
         if not vm or not hasattr(vm, '_cached_guest_path') or not vm._cached_guest_path:
-            log.warning("Python not found in guest PATH — falling back to bare 'python'. On ARM64 VMs this likely means Python installation failed; recreate the VM to use the updated template.")
+            log.warning(
+                "Python not found in guest PATH — falling back to bare 'python'. On ARM64 VMs this likely means Python installation failed; recreate the VM to use the updated template."
+            )
             return default_python
 
         # Parse PATH entries
@@ -276,7 +287,8 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
         and all-users install paths (C:\\Program Files\\Python311\\Scripts).
         """
         import re
-        default_adarevm = "adarevm" # Fallback
+
+        default_adarevm = "adarevm"  # Fallback
 
         if not vm or not hasattr(vm, '_cached_guest_path') or not vm._cached_guest_path:
             return default_adarevm
@@ -443,37 +455,36 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
             # Open the agent's WebSocket port before anything tries to connect to it.
             # See _FIREWALLD_OPEN_AGENT_PORT for why this is needed and why it is
             # runtime-only.
-            SetupCommand(
-                command=self._FIREWALLD_OPEN_AGENT_PORT,
-                requires_admin=True
-            ),
+            SetupCommand(command=self._FIREWALLD_OPEN_AGENT_PORT, requires_admin=True),
             # Add project-wide tools to PATH (user bashrc)
             # Ensure /home/adare exists and has correct ownership before modifying .bashrc (QGA runs as root)
             SetupCommand(
                 command="(grep -qxF \"export PATH=\\$PATH:/adare/project_shared/tools\" /home/adare/.bashrc || echo \"export PATH=\\$PATH:/adare/project_shared/tools\" >> /home/adare/.bashrc)",
-                requires_admin=False
+                requires_admin=False,
             ),
             # Add experiment-specific tools to PATH (user bashrc)
             # Ensure /home/adare exists and has correct ownership before modifying .bashrc (QGA runs as root)
             SetupCommand(
                 command="(grep -qxF \"export PATH=\\$PATH:/adare/shared/tools\" /home/adare/.bashrc || echo \"export PATH=\\$PATH:/adare/shared/tools\" >> /home/adare/.bashrc)",
-                requires_admin=False
+                requires_admin=False,
             ),
             # Add ~/.local/bin to PATH for installations (user bashrc)
             # Ensure /home/adare exists and has correct ownership before modifying .bashrc (QGA runs as root)
             SetupCommand(
                 command="(grep -qxF \"export PATH=\\\"\\$HOME/.local/bin:\\$PATH\\\"\" /home/adare/.bashrc || echo \"export PATH=\\\"\\$HOME/.local/bin:\\$PATH\\\"\" >> /home/adare/.bashrc)",
-                requires_admin=False
-            )
+                requires_admin=False,
+            ),
         ]
 
         # Write config.json to run directory
         # SKIP for QEMU virtio-fs mode: Host already writes this file to the shared directory
         if not (self.hypervisor_type == 'qemu' and _use_shared_folder_mode()):
-            commands.append(SetupCommand(
-                command=f"mkdir -p /adare/run && echo '{self._build_config_file_payload()}' > /adare/run/config.json",
-                requires_admin=False
-            ))
+            commands.append(
+                SetupCommand(
+                    command=f"mkdir -p /adare/run && echo '{self._build_config_file_payload()}' > /adare/run/config.json",
+                    requires_admin=False,
+                )
+            )
 
         return commands
 
@@ -573,6 +584,7 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
 
 # Environment Detection Helpers
 
+
 def _extract_python_path_from_cached_path(cached_path: str | None) -> str | None:
     """Extract Python executable path from cached guest PATH.
 
@@ -590,6 +602,7 @@ def _extract_python_path_from_cached_path(cached_path: str | None) -> str | None
         return None
 
     import re
+
     # Split PATH by semicolon and look for Python directory (not Scripts)
     for entry in cached_path.split(';'):
         entry = entry.strip().rstrip('\\')
@@ -625,10 +638,7 @@ async def _detect_windows_environment(vm, stop_event: threading.Event) -> Enviro
         if 'env_exists' in conda_env_result.stdout:
             log.info(f"Using Miniforge conda environment 'pyadare' for VM '{vm.vm_name}'")
             return EnvironmentInfo(
-                use_conda=True,
-                conda_env_exists=True,
-                miniforge_path=miniforge_path,
-                platform='windows'
+                use_conda=True, conda_env_exists=True, miniforge_path=miniforge_path, platform='windows'
             )
         # Attempt to create pyadare env as recovery
         python_version = '3.11' if getattr(vm, 'architecture', None) == 'aarch64' else '3.10'
@@ -642,15 +652,9 @@ async def _detect_windows_environment(vm, stop_event: threading.Event) -> Enviro
         if create_result.returncode == 0:
             log.info(f"Successfully created 'pyadare' conda environment for VM '{vm.vm_name}'")
             return EnvironmentInfo(
-                use_conda=True,
-                conda_env_exists=True,
-                miniforge_path=miniforge_path,
-                platform='windows'
+                use_conda=True, conda_env_exists=True, miniforge_path=miniforge_path, platform='windows'
             )
-        log.error(
-            f"Failed to create 'pyadare' conda environment for VM '{vm.vm_name}': "
-            f"{create_result.stderr}"
-        )
+        log.error(f"Failed to create 'pyadare' conda environment for VM '{vm.vm_name}': {create_result.stderr}")
 
     # Fallback to system Python (non-conda) - pip/py must be in PATH
     # No pre-check needed - if pip isn't available, install will fail with clear error
@@ -660,7 +664,7 @@ async def _detect_windows_environment(vm, stop_event: threading.Event) -> Enviro
         conda_env_exists=False,
         miniforge_path=None,
         platform='windows',
-        python_exe_path=None  # Not needed - pip/py are in PATH
+        python_exe_path=None,  # Not needed - pip/py are in PATH
     )
 
 
@@ -678,18 +682,12 @@ async def _detect_linux_environment(vm, stop_event: threading.Event) -> Environm
         if 'env_exists' in conda_env_result.stdout:
             log.info(f"Using Miniforge conda environment 'pyadare' for VM '{vm.vm_name}'")
             return EnvironmentInfo(
-                use_conda=True,
-                conda_env_exists=True,
-                miniforge_path='/home/adare/.miniforge3',
-                platform='linux'
+                use_conda=True, conda_env_exists=True, miniforge_path='/home/adare/.miniforge3', platform='linux'
             )
-        log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to system Python")
+        log.warning(
+            f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to system Python"
+        )
 
     # Fallback to system Python (non-conda)
     log.info(f"Using system Python (non-conda) for VM '{vm.vm_name}'")
-    return EnvironmentInfo(
-        use_conda=False,
-        conda_env_exists=False,
-        miniforge_path=None,
-        platform='linux'
-    )
+    return EnvironmentInfo(use_conda=False, conda_env_exists=False, miniforge_path=None, platform='linux')

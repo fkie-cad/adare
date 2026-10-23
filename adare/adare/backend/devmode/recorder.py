@@ -1,4 +1,3 @@
-
 import asyncio
 import contextlib
 import logging
@@ -23,6 +22,7 @@ from adare.types.playbook import (
 
 log = logging.getLogger(__name__)
 
+
 class SessionRecorder:
     """
     Records QEMU session user interactions by tracing input events.
@@ -45,15 +45,14 @@ class SessionRecorder:
         self._last_event_time = 0.0
 
         # State tracking for aggregating raw events into actions
-        self._pending_click = None # Stores potential click start
-        self._pressed_keys = set() # Track keys currently down
+        self._pending_click = None  # Stores potential click start
+        self._pressed_keys = set()  # Track keys currently down
 
         # Mouse tracking
         self._current_x = 0
         self._current_y = 0
-        self._max_x = 32767 # QEMU Tablet default
+        self._max_x = 32767  # QEMU Tablet default
         self._max_y = 32767
-
 
         # Regex for parsing QEMU trace log format (log backend)
         # Format example: 26428@1737803621.577968:input_event_key_qcode con 0 qcode 30 (a) down true
@@ -71,7 +70,9 @@ class SessionRecorder:
         # 1. Enable QEMU Tracing
         success = await self.vm.enable_input_tracing()
         if not success:
-            raise RuntimeError("Failed to enable QEMU input tracing. Ensure QEMU is built with 'log' trace backend support.")
+            raise RuntimeError(
+                "Failed to enable QEMU input tracing. Ensure QEMU is built with 'log' trace backend support."
+            )
 
         # 2. Start log tailing task
         self.is_recording = True
@@ -112,8 +113,8 @@ class SessionRecorder:
             settings=Settings(
                 idle=0.5,
                 screenshot={"enabled": True},
-                gui_execution_mode="host" # We recorded on host, so replay on host
-            )
+                gui_execution_mode="host",  # We recorded on host, so replay on host
+            ),
         )
 
         # Convert to dict manually to ensure clean YAML, or use adarelib serialization
@@ -122,49 +123,27 @@ class SessionRecorder:
         # TODO: Use adarelib's proper YAML dumper if available,
         # but for now we'll construct a clean dict structure to match the parser's expectations.
 
-        data = {
-            "settings": {
-                "idle": 0.5,
-                "gui_execution_mode": "host"
-            },
-            "actions": []
-        }
+        data = {"settings": {"idle": 0.5, "gui_execution_mode": "host"}, "actions": []}
 
         for action in self._actions:
             if isinstance(action, ClickAction):
                 act = {
                     "click": {
-                        "target": {
-                            "position": action.target.position
-                        },
+                        "target": {"position": action.target.position},
                         "type": action.type,
-                        "description": action.description
+                        "description": action.description,
                     }
                 }
             elif isinstance(action, KeyboardAction):
-                act = {
-                    "keyboard": {
-                        "key": action.key,
-                        "description": action.description
-                    }
-                }
+                act = {"keyboard": {"key": action.key, "description": action.description}}
                 if action.text:
                     act["keyboard"]["text"] = action.text
                     del act["keyboard"]["key"]
 
             elif isinstance(action, ScreenshotAction):
-                act = {
-                    "screenshot": {
-                        "description": action.description
-                    }
-                }
+                act = {"screenshot": {"description": action.description}}
             elif isinstance(action, IdleAction):
-                act = {
-                    "idle": {
-                        "duration": action.duration,
-                        "description": action.description
-                    }
-                }
+                act = {"idle": {"duration": action.duration, "description": action.description}}
             else:
                 continue
 
@@ -185,12 +164,12 @@ class SessionRecorder:
         # Open file and seek to end
         try:
             with open(log_file_path) as f:
-                f.seek(0, 2) # Seek to end
+                f.seek(0, 2)  # Seek to end
 
                 while self.is_recording:
                     line = f.readline()
                     if not line:
-                        await asyncio.sleep(0.05) # Small sleep to prevent tight loop
+                        await asyncio.sleep(0.05)  # Small sleep to prevent tight loop
                         continue
 
                     # log.debug(f"Read line: {line.strip()}")
@@ -199,16 +178,14 @@ class SessionRecorder:
             log.error(f"Error in record loop: {e}", exc_info=True)
             # Re-raise or keep going? If loop breaks, recording stops effectively
 
-
     async def _process_log_line(self, line: str):
         """Parse raw log line and convert to events."""
         match = self._log_pattern.match(line.strip())
         if not match:
-             # log.debug(f"Regex fail for line: {line.strip()}")
+            # log.debug(f"Regex fail for line: {line.strip()}")
             return
 
         timestamp_str, event_name, args_str = match.groups()
-
 
         # timestamp = float(timestamp_str) # TODO: Use if needed for precise timing
 
@@ -228,8 +205,10 @@ class SessionRecorder:
         # Simplistic parsing
         is_down = "down true" in args
         button = "left"  # Default
-        if "(right)" in args: button = "right"
-        elif "(middle)" in args: button = "middle"
+        if "(right)" in args:
+            button = "right"
+        elif "(middle)" in args:
+            button = "middle"
 
         if is_down:
             # Record time since last action
@@ -239,11 +218,8 @@ class SessionRecorder:
             # Capture screenshot BEFORE action
             await self._add_screenshot()
 
-            self._pending_click = {
-                "button": button,
-                "start": time.time()
-            }
-        else: # Up
+            self._pending_click = {"button": button, "start": time.time()}
+        else:  # Up
             if self._pending_click and self._pending_click["button"] == button:
                 # Completed click
                 try:
@@ -251,16 +227,16 @@ class SessionRecorder:
                     height = getattr(self.vm, '_screen_height', 1080) or 1080
 
                     # Ensure they are ints
-                    if not isinstance(width, (int, float)): width = 1920
-                    if not isinstance(height, (int, float)): height = 1080
+                    if not isinstance(width, (int, float)):
+                        width = 1920
+                    if not isinstance(height, (int, float)):
+                        height = 1080
 
                     x_pixel = int((self._current_x / self._max_x) * width)
                     y_pixel = int((self._current_y / self._max_y) * height)
 
                     action = ClickAction(
-                        target=Target(position=[x_pixel, y_pixel]),
-                        type=button,
-                        description=f"Click {button}"
+                        target=Target(position=[x_pixel, y_pixel]), type=button, description=f"Click {button}"
                     )
                     self._actions.append(action)
                     log.info(f"Recorded Click: {button} at {x_pixel},{y_pixel}")
@@ -270,9 +246,6 @@ class SessionRecorder:
                     self._pending_click = None
 
     # We need to track abs events to know WHERE the click happened
-
-
-
 
     async def _process_log_line(self, line: str):
         """Parse raw log line and convert to events."""
@@ -296,7 +269,8 @@ class SessionRecorder:
         try:
             # simplistic extraction
             val_match = re.search(r'value (\d+)', args)
-            if not val_match: return
+            if not val_match:
+                return
             value = int(val_match.group(1))
 
             if "axis 0 (x)" in args:
@@ -306,8 +280,6 @@ class SessionRecorder:
         except (ValueError, AttributeError):
             pass
 
-
-
     async def _handle_key_event(self, event_name: str, args: str):
         """Handle keyboard event.
         Args: "con 0 qcode 30 (a) down true"
@@ -316,7 +288,8 @@ class SessionRecorder:
 
         # Extract key name "30 (a)" -> "a"
         key_match = re.search(r'\((\w+)\)', args)
-        if not key_match: return
+        if not key_match:
+            return
         key = key_match.group(1)
 
         if is_down:
@@ -325,17 +298,14 @@ class SessionRecorder:
             # Map QMP key names to pyautogui names if needed
             # For now use as-is
 
-            action = KeyboardAction(
-                key=key,
-                description=f"Press {key}"
-            )
+            action = KeyboardAction(key=key, description=f"Press {key}")
             self._actions.append(action)
 
     async def _add_idle(self):
         """Add idle action based on time elapsed."""
         now = time.time()
         duration = now - self._last_event_time
-        if duration > 1.0: # Ignore tiny delays
+        if duration > 1.0:  # Ignore tiny delays
             self._actions.append(IdleAction(duration=round(duration, 2)))
         self._last_event_time = now
 

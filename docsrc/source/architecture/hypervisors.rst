@@ -127,76 +127,66 @@ configuration, SMB share paths, and network port forwarding.
 
 .. _instance-firmware-state:
 
-Instance-scoped firmware state
+Per-run VMs and firmware state
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-ADARE undefines and redefines the same domain constantly -- the XML is rebuilt on
-every start, and a cold-boot retry destroys and restarts the domain -- while the VM
-*instance* behind it is long-lived and reused across runs. Two pieces of guest state
-live outside the disk image and are governed by undefine **flags** rather than by the
-run overlay, so both are easy to reset by accident:
+Every QEMU experiment run gets its own throwaway VM on top of the environment's
+disk, which is never written (``adare.hypervisor.qemu.run_resources``):
 
 .. list-table::
    :header-rows: 1
-   :widths: 22 38 40
+   :widths: 28 38 34
 
-   * - State
+   * - Piece
      - Where it lives
-     - libvirt default on undefine
+     - Lifetime
+   * - Template disk
+     - The registered disk (read-only managed copy, or the ``--no-copy`` file);
+       non-qcow2 disks are converted once to ``~/.adare/qemu/templates/<hash16>.qcow2``
+     - As long as the VM is registered
+   * - Run overlay
+     - ``~/.adare/qemu/disks/<run>-overlay-<run-ulid>.qcow2`` (backing: template)
+     - The run
    * - UEFI NVRAM varstore
-     - ``<disk_dir>/<instance>-nvram.fd``
-     - Refuses the undefine outright
-   * - Emulated TPM (swtpm)
-     - ``~/.config/libvirt/qemu/swtpm/<domain-uuid>/``
-     - Depends on ``persistent_state`` (see below)
+     - ``~/.adare/qemu/disks/<run>-nvram.fd``
+     - The run
+   * - Domain config
+     - ``~/.adare/qemu/vms/<run>.json`` (random domain UUID)
+     - The run
+   * - vTPM template
+     - ``~/.adare/qemu/tpm-templates/<vm-id>/tpm2/``
+     - As long as the VM is registered
+   * - Run vTPM
+     - ``~/.config/libvirt/qemu/swtpm/<run-domain-uuid>/tpm2/`` (copy of the template)
+     - The run
 
-``adare.hypervisor.qemu.libvirt_undefine`` centralises the policy:
-``keep_firmware_state_flags()`` (``KEEP_NVRAM | KEEP_TPM``) for anything that will
-redefine the domain, and ``delete_firmware_state_flags()`` for genuine instance
-removal, so neither file outlives the instance it belonged to.
+``<run>`` is the run's instance name (``<vm>_run_<ulid-tail>[_<machine>]``). Its
+``VmInstance`` row exists only while the run does: it reserves the websocket port
+and records the owning process (``owner_pid``). Runs of one environment are
+therefore independent -- none sees another's disk or TPM changes -- and can run
+concurrently; the template is only ever opened read-only as a backing file.
 
-The TPM half needs two more pieces to actually work, and is worth spelling out
-because each piece failing silently looks like a plausible success:
+**vTPM.** Windows guests get a TPM 2.0 (swtpm). Each environment has one vTPM
+*template*, manufactured once with ``swtpm_setup`` (EK + certificates), or adopted
+from the vTPM all runs shared before per-run copies; every run boots a copy of it
+under its own domain UUID. So the TPM identity (EK, certificates) is the same in
+every run -- TPM-derived artifacts stay comparable -- but no run inherits another
+run's TPM changes. ``persistent_state='yes'`` on the ``<backend>`` element keeps
+the run's copy across the redefines within one run (every start, every cold-boot
+retry, ``KEEP_NVRAM | KEEP_TPM``); removing the run's domain deletes it
+(``NVRAM | TPM``, see ``adare.hypervisor.qemu.libvirt_undefine``).
 
-1. **``persistent_state='yes'`` on the TPM backend element**
-   (``<backend type='emulator' version='2.0' persistent_state='yes'/>``,
-   ``libvirt_xml_builder._add_tpm``). Without it -- libvirt's default -- the
-   swtpm state is treated as ephemeral and is **deleted on any undefine no
-   matter which undefineFlags are passed**, so ``KEEP_TPM`` is a no-op. This was
-   ADARE's actual behaviour before this attribute was added: Windows 11 requires
-   a TPM, so every Windows domain declares
-   ``<tpm model='tpm-tis'><backend type='emulator'/>``, and every cold boot --
-   including every cold-boot retry -- got a **brand-new vTPM** (new EK, new SRK,
-   cleared owner auth) because ``swtpm_setup`` manufactures one on every define.
-   With ``persistent_state='yes'`` set, the state survives undefine by default,
-   and ``KEEP_TPM``/``TPM`` behave as the table implies.
-2. **A domain UUID that is stable across runs of the same environment.** swtpm
-   keys the state directory by domain UUID, and ADARE undefines/redefines a
-   *run-scoped* ``vm_name`` -- a fresh instance name is minted per experiment
-   run (``QEMULifecycleStrategy.prepare_vm_for_experiment``). A UUID picked with
-   plain ``uuid.uuid4()`` at config-creation time therefore differed on every
-   run even with ``KEEP_TPM`` correctly applied: the state was "kept" under a
-   UUID the next run's domain never pointed at again, which is an orphan, not a
-   reused vTPM. ``ConfigurationMixin._domain_uuid_for`` derives the UUID from
-   the environment's own stable id instead, so every run of the same
-   environment gets the same domain UUID and therefore the same swtpm state
-   directory.
+**Clean-up.** The end of a run removes the domain, every file above marked "The
+run", and the instance row. A run that crashes leaves them behind; the next QEMU
+run and ``adare vm prune`` reap them (``adare.backend.vm.run_instances.
+reconcile_instances``): rows whose owning process is gone, run files without a
+row, and pooled instances from before per-run VMs (each a full disk copy). Dev
+sessions keep their run until ``adare dev remove``.
 
-Both matter: persistent_state alone still orphans one swtpm directory per run;
-a stable UUID alone still gets the state deleted on every undefine. Get either
-wrong and the failure is invisible except in
-``~/.cache/libvirt/qemu/log/<domain>-swtpm.log``, where a repeated
-``Starting vTPM manufacturing`` line is the tell -- one per boot attempt --
-or by counting ``~/.config/libvirt/qemu/swtpm/`` directories against removed
-Windows VMs.
-
-An irreproducible-per-boot vTPM is wrong for two independent reasons:
-
-* **Reproducibility.** Every TPM-derived artifact (owner auth, TPM-bound keys, PCR
-  measurements, ``Get-Tpm`` output) differs between runs and does not match the
-  sealed base image -- irreproducible by construction, in a framework whose purpose
-  is reproducible artifacts.
-* **Fidelity.** A real machine has exactly one TPM for its lifetime.
+**Integrity.** Before a run the template's SHA256 is checked against the hash
+recorded at ``env load``. The digest is cached in ``~/.adare/state/disk-digests/``
+keyed by size, mtime, ctime and inode, so the full hash is only recomputed when the
+file changed (ctime cannot be set back after an edit).
 
 VM Creator
 ----------
@@ -228,8 +218,9 @@ VM Lifecycle
 
 Regardless of hypervisor, an experiment run follows this lifecycle:
 
-1. **Prepare** -- create or look up the VM instance, allocate ports and
-   instance name.
+1. **Prepare** -- verify the environment disk, reserve the instance (port and
+   name) and, on QEMU, create the run's overlay, varstore and vTPM copy; on
+   VirtualBox, reuse a pooled instance restored to its base snapshot.
 2. **Setup networking** -- configure port forwarding for the WebSocket
    agent connection.
 3. **Setup file transfer** -- prepare the mechanism for getting files

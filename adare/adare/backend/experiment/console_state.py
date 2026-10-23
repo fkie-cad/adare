@@ -7,6 +7,7 @@ from adarelib.constants import StatusEnum
 
 log = logging.getLogger(__name__)
 
+
 class ConsoleState:
     """
     Shared state for experiment console logging.
@@ -29,7 +30,7 @@ class ConsoleState:
         duration: float | None = None,
         start_time: datetime | None = None,
         result_status: int | None = None,
-        is_experiment_timer: bool = False
+        is_experiment_timer: bool = False,
     ) -> dict[str, Any]:
         return {
             "message": message,
@@ -40,10 +41,17 @@ class ConsoleState:
             "duration": duration,
             "start_time": start_time,
             "result_status": result_status,
-            "is_experiment_timer": is_experiment_timer
+            "is_experiment_timer": is_experiment_timer,
         }
 
-    def log_message(self, identifier: str, message: str, level: int = 0, status: int = StatusEnum.NONE, duration: float | None = None) -> None:
+    def log_message(
+        self,
+        identifier: str,
+        message: str,
+        level: int = 0,
+        status: int = StatusEnum.NONE,
+        duration: float | None = None,
+    ) -> None:
         """Generic log method."""
         with self._lock:
             self.messages[identifier] = self._get_default_message_structure(
@@ -77,7 +85,15 @@ class ConsoleState:
                 message=f'ULID: {ulid}', level=level, status=StatusEnum.NONE
             )
 
-    def log_spinner(self, identifier: str, message: str, level: int = 0, spinner: str = 'dots', spinner_style: str = 'bold blue', start_time: datetime = None) -> None:
+    def log_spinner(
+        self,
+        identifier: str,
+        message: str,
+        level: int = 0,
+        spinner: str = 'dots',
+        spinner_style: str = 'bold blue',
+        start_time: datetime = None,
+    ) -> None:
         with self._lock:
             self.messages[identifier] = self._get_default_message_structure(
                 message=message,
@@ -85,10 +101,12 @@ class ConsoleState:
                 status=StatusEnum.NONE,
                 spinner=spinner,
                 spinner_style=spinner_style,
-                start_time=start_time
+                start_time=start_time,
             )
 
-    def log_spinner_done(self, identifier: str, status: int, message: str = None, result_status: int = None, duration: float = None) -> None:
+    def log_spinner_done(
+        self, identifier: str, status: int, message: str = None, result_status: int = None, duration: float = None
+    ) -> None:
         with self._lock:
             if identifier not in self.messages:
                 log.warning(f"Attempted to update non-existent spinner message: {identifier}")
@@ -124,7 +142,7 @@ class ConsoleState:
                 level=0,
                 status=StatusEnum.NONE,
                 start_time=self.experiment_start_time,
-                is_experiment_timer=True
+                is_experiment_timer=True,
             )
 
     def finish_experiment_timer(self, success: bool = True):
@@ -138,11 +156,9 @@ class ConsoleState:
                 timer_msg['start_time'] = None
 
     def log_multi_experiment_summary(self, content: str):
-         with self._lock:
+        with self._lock:
             self.messages['MULTI_EXPERIMENT_SUMMARY'] = self._get_default_message_structure(
-                message=content,
-                level=0,
-                status=StatusEnum.NONE
+                message=content, level=0, status=StatusEnum.NONE
             )
 
     def get_snapshot(self) -> dict[str, dict[str, Any]]:

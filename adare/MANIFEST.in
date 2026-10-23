@@ -1,5 +1,0 @@
-prune **/*.egg-info
-prune **/.idea
-prune **/venv
-prune **/build
-prune **/dist

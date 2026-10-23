@@ -61,6 +61,7 @@ class StageCtxManager(contextlib.AbstractContextManager):
         elif exc_type is not None:
             # An exception occurred during stage execution (only if not interrupted)
             from adare.exceptions import LoggedErrorException
+
             if issubclass(exc_type, LoggedErrorException):
                 # This is an expected experiment error (guest OS issues, etc.)
                 self.stage.status = StatusEnum.FAILED
@@ -87,6 +88,7 @@ class StageCtxManager(contextlib.AbstractContextManager):
         """Wait for the event processing queue to drain before completing parent stage."""
         try:
             from adare.backend.events.coordinator import get_stage_coordinator
+
             coordinator = get_stage_coordinator()
             if coordinator:
                 # Use the proper public method to wait for queue drain

@@ -26,4 +26,3 @@ def exec_gui(arguments):
     run_gui(port=port)
 
     print('webapp closed')
-

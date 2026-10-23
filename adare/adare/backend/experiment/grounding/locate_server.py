@@ -22,8 +22,11 @@ the process manager. Run directly:
 
     python -m adare.backend.experiment.grounding.locate_server --port 13111
 
-License: **NVIDIA LocateAnything is non-commercial** — local testing only.
+License: **not MIT.** The worker code is adapted from NVIDIA's LocateAnything demo
+(huggingface.co/spaces/nvidia/LocateAnything, no open-source license) and the model
+is NVIDIA non-commercial — local testing only. See THIRD_PARTY_NOTICES.md.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -99,8 +102,7 @@ def _ensure_decord_importable() -> None:
 
     def _unavailable(*_args, **_kwargs):
         raise NotImplementedError(
-            'decord is a stub on this platform (no macOS-arm64 wheel); ADARE '
-            'grounds still images, not video.'
+            'decord is a stub on this platform (no macOS-arm64 wheel); ADARE grounds still images, not video.'
         )
 
     stub.VideoReader = _unavailable
@@ -138,7 +140,9 @@ class LocateAnythingWorker:
         self.processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
         self.model = (
             AutoModel.from_pretrained(
-                model_path, dtype=self.dtype, trust_remote_code=True,
+                model_path,
+                dtype=self.dtype,
+                trust_remote_code=True,
                 _attn_implementation='sdpa',
             )
             .to(self.device)
@@ -146,22 +150,30 @@ class LocateAnythingWorker:
         )
         log.info('worker ready on %s', self.device)
 
-    def predict(self, image, question: str, mode: str = 'hybrid',
-                max_new_tokens: int = 2048, temperature: float = 0.7,
-                top_p: float = 0.9, repetition_penalty: float = 1.1) -> str:
+    def predict(
+        self,
+        image,
+        question: str,
+        mode: str = 'hybrid',
+        max_new_tokens: int = 2048,
+        temperature: float = 0.7,
+        top_p: float = 0.9,
+        repetition_penalty: float = 1.1,
+    ) -> str:
         import torch
 
-        messages = [{'role': 'user', 'content': [
-            {'type': 'image', 'image': image},
-            {'type': 'text', 'text': question},
-        ]}]
-        text = self.processor.py_apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+        messages = [
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'image', 'image': image},
+                    {'type': 'text', 'text': question},
+                ],
+            }
+        ]
+        text = self.processor.py_apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         images, videos = self.processor.process_vision_info(messages)
-        inputs = self.processor(
-            text=[text], images=images, videos=videos, return_tensors='pt'
-        ).to(self.device)
+        inputs = self.processor(text=[text], images=images, videos=videos, return_tensors='pt').to(self.device)
 
         do_sample = temperature is not None and temperature > 0
         with torch.no_grad():
@@ -237,11 +249,13 @@ def _locate(prompt: str, image, mode: str) -> list[dict]:
     answer = get_worker().predict(image, _BUILD(prompt), mode=mode)
     dets = []
     for label, x1, y1, x2, y2 in parse_output(answer, w, h):
-        dets.append({
-            'label': label or prompt,
-            'box': [x1, y1, x2, y2],
-            'center': [(x1 + x2) / 2, (y1 + y2) / 2],
-        })
+        dets.append(
+            {
+                'label': label or prompt,
+                'box': [x1, y1, x2, y2],
+                'center': [(x1 + x2) / 2, (y1 + y2) / 2],
+            }
+        )
     return dets
 
 
@@ -304,9 +318,12 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--host', default='127.0.0.1')
     ap.add_argument('--port', type=int, default=13111)
-    ap.add_argument('--model', default=None,
-                    help='HF id or local path (default: ADARE_LOCATE_MODEL_PATH or '
-                         f'{DEFAULT_MODEL}). Use a local path + HF_HUB_OFFLINE=1 for offline.')
+    ap.add_argument(
+        '--model',
+        default=None,
+        help='HF id or local path (default: ADARE_LOCATE_MODEL_PATH or '
+        f'{DEFAULT_MODEL}). Use a local path + HF_HUB_OFFLINE=1 for offline.',
+    )
     args = ap.parse_args(argv)
 
     global _MODEL_PATH
@@ -324,8 +341,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    log.info('LocateAnything grounding server on http://%s:%d (model=%s, loading in background)',
-             args.host, args.port, _MODEL_PATH)
+    log.info(
+        'LocateAnything grounding server on http://%s:%d (model=%s, loading in background)',
+        args.host,
+        args.port,
+        _MODEL_PATH,
+    )
 
     # Bind the port first (above), then load the model once in the background so
     # /health can answer immediately while the weights load. Failures are

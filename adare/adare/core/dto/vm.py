@@ -4,6 +4,7 @@ VM Data Transfer Objects for API layer.
 These DTOs provide type-safe request/response objects for VM operations,
 enabling consistent interfaces across CLI, REST API, and Web UI.
 """
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -12,9 +13,11 @@ from pathlib import Path
 # VM Request DTOs
 # =============================================================================
 
+
 @dataclass
 class VmLoadRequest:
     """Request to load a VM from file."""
+
     file_path: Path
     name: str | None = None
     description: str = ""
@@ -30,6 +33,7 @@ class VmLoadRequest:
 @dataclass
 class VmDeleteRequest:
     """Request to delete a VM."""
+
     vm_id: str
     force: bool = False
 
@@ -38,9 +42,11 @@ class VmDeleteRequest:
 # VM Response DTOs
 # =============================================================================
 
+
 @dataclass
 class VmInfo:
     """Detailed VM information."""
+
     id: str
     name: str
     file_path: str
@@ -63,6 +69,7 @@ class VmInfo:
 @dataclass
 class VmListItem:
     """VM item for listing (lighter than VmInfo)."""
+
     id: str
     name: str
     description: str
@@ -76,9 +83,11 @@ class VmListItem:
 # VM Instance Request DTOs
 # =============================================================================
 
+
 @dataclass
 class VmInstanceRemoveRequest:
     """Request to remove VM instance(s)."""
+
     instance_id: str | None = None  # Specific instance ULID
     all_stopped: bool = False  # Remove all stopped instances
     experiment_id: str | None = None  # Remove instances for specific experiment
@@ -88,9 +97,11 @@ class VmInstanceRemoveRequest:
 # VM Instance Response DTOs
 # =============================================================================
 
+
 @dataclass
 class VmInstanceInfo:
     """Detailed VM instance information."""
+
     id: str
     vm_id: str
     vm_name: str
@@ -108,6 +119,7 @@ class VmInstanceInfo:
 @dataclass
 class VmInstanceListItem:
     """VM instance item for listing (lighter than VmInstanceInfo)."""
+
     id: str
     vm_name: str
     instance_name: str
@@ -119,6 +131,7 @@ class VmInstanceListItem:
 @dataclass
 class VmInstanceUsage:
     """VM instance usage statistics."""
+
     total_instances: int
     active_instances: int
     available_instances: int
@@ -130,9 +143,11 @@ class VmInstanceUsage:
 # VM Snapshot DTOs
 # =============================================================================
 
+
 @dataclass
 class VmSnapshotInfo:
     """VM snapshot information."""
+
     id: str
     name: str
     snapshot_type: str  # base, experiment, backup
@@ -146,6 +161,7 @@ class VmSnapshotInfo:
 @dataclass
 class VmSnapshotDeleteRequest:
     """Request to delete a VM snapshot."""
+
     instance_id: str
     snapshot_name: str
 
@@ -154,9 +170,11 @@ class VmSnapshotDeleteRequest:
 # VM Clear/Cleanup DTOs
 # =============================================================================
 
+
 @dataclass
 class VmClearResult:
     """Result of clearing VMs."""
+
     deleted_count: int
     deleted_vms: list[str]
     failed_count: int
@@ -166,6 +184,7 @@ class VmClearResult:
 @dataclass
 class VmInstanceCleanupResult:
     """Result of cleaning up VM instances."""
+
     removed_count: int
     removed_instances: list[str]
     failed_count: int
@@ -176,9 +195,11 @@ class VmInstanceCleanupResult:
 # VM Test DTOs
 # =============================================================================
 
+
 @dataclass
 class VmTestRequest:
     """Request to test OVA file compatibility with ADARE."""
+
     ova_file_path: Path
     guest_platform: str  # 'windows' or 'linux'
     verbose: bool = False
@@ -188,6 +209,7 @@ class VmTestRequest:
 @dataclass
 class VmRegisteredTestRequest:
     """Request to test a registered VM's compatibility with ADARE."""
+
     vm_name: str
     disk_path: str
     guest_platform: str  # 'windows' or 'linux'
@@ -200,6 +222,7 @@ class VmRegisteredTestRequest:
 @dataclass
 class VmTestResult:
     """Result of VM compatibility test."""
+
     success: bool
     ova_file: str
     guest_platform: str

@@ -25,6 +25,7 @@ def get_experiment_log_file() -> str | None:
         Path to experiment log file or None if not available
     """
     from adare.logger.logger import get_current_logfile
+
     return get_current_logfile()
 
 

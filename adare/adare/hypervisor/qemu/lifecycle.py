@@ -10,18 +10,28 @@ Supported transfer modes (chosen automatically):
 - Libguestfs: offline guestfish disk access (fallback on Linux)
 - QGA: QEMU Guest Agent file operations (macOS fallback)
 """
+
+import asyncio
+import contextlib
 import logging
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
 from adare.config import get_vm_credentials
 from adare.exceptions import LoggedException
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
-from adare.hypervisor.exceptions import GuestAgentTimeoutException, HypervisorException
+from adare.hypervisor.exceptions import (
+    GuestAgentMissingException,
+    GuestAgentTimeoutException,
+    HypervisorException,
+)
+from adare.hypervisor.port_forward import forward_bind_host
 from adare.hypervisor.qemu.accel import resolve_accel
+from adare.hypervisor.qemu.boot_watch import BootScreenWatch
 from adare.hypervisor.qemu.disk_diff import DiskDiffComparator
 from adare.hypervisor.qemu.file_transfer import get_file_transfer_strategy
 from adare.hypervisor.qemu.guestfish_client import GuestfishClient
@@ -53,79 +63,33 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         self.disk_diff = DiskDiffComparator(self.guestfish)
         self.file_transfer = get_file_transfer_strategy(self.guestfish)
 
-    def _validate_external_disk_writable(self, disk_path: Path) -> None:
-        """
-        Validate that external disk path is writable (required for snapshots).
-
-        Args:
-            disk_path: Path to external disk image
-
-        Raises:
-            HypervisorException: If disk is not writable
-        """
-        import os
-
-        # Check if file exists (for existing qcow2)
-        if disk_path.exists():
-            # Test write permission
-            if not os.access(disk_path, os.W_OK):
-                raise HypervisorException(
-                    f"External disk is not writable: {disk_path}\n"
-                    f"QEMU requires write access to disk for snapshot operations.\n"
-                    f"Please ensure the file has write permissions."
-                )
-            log.debug(f"Validated write access to external disk: {disk_path}")
-        else:
-            # File doesn't exist yet (will be created by conversion)
-            # Check parent directory is writable
-            parent_dir = disk_path.parent
-            if not parent_dir.exists():
-                raise HypervisorException(
-                    f"Parent directory does not exist: {parent_dir}\n"
-                    f"Cannot create converted qcow2 file."
-                )
-            if not os.access(parent_dir, os.W_OK):
-                raise HypervisorException(
-                    f"Parent directory is not writable: {parent_dir}\n"
-                    f"Cannot create converted qcow2 file for external VM.\n"
-                    f"Please ensure directory has write permissions."
-                )
-            log.debug(f"Validated write access to parent directory: {parent_dir}")
-
     async def prepare_vm_for_experiment(self, context):
         """
-        Create QEMU VM instance and allocate resources.
+        Define this run's QEMU VM: a throwaway overlay on the environment's disk.
 
-        Supports both managed and external (--no-copy) disk images.
-        For external disks: detects format and uses in-place if qcow2, or determines conversion path.
+        The environment disk (or its one-time qcow2 conversion) is the read-only
+        backing *template* of every run; this run gets its own overlay, UEFI
+        varstore, domain config, random domain UUID and a copy of the
+        environment's vTPM template -- all removed again at cleanup (see
+        :mod:`adare.hypervisor.qemu.run_resources`).
 
         Args:
-            context: ExperimentRunCtx with vm_name and guest_platform already set
+            context: ExperimentRunCtx with vm_name (the run instance) and guest_platform set
         """
         from adare.backend.environment import database as environment_database
-        from adare.backend.vm.commands import _is_vm_managed
         from adare.database.api.vm import VmApi
+        from adare.hypervisor.qemu.run_resources import resolve_template_disk, seed_run_tpm
         from adare.hypervisor.qemu.vm import QEMUVM
 
-        # Query database for source VM to get disk path and architecture
         env_data = environment_database.get_environment_by_ulid(
-            context.environment_ulid,
-            fields=['vm_id', 'vm_architecture']
+            context.environment_ulid, fields=['vm_id', 'vm_architecture']
         )
-
         if not env_data or not env_data.get('vm_id'):
-            raise HypervisorException(
-                "No VM associated with environment. Run 'adare environment load' first."
-            )
-
-        # Get source VM file path from database
+            raise HypervisorException("No VM associated with environment. Run 'adare environment load' first.")
         with VmApi() as api:
             source_vm = api.get_vm_by_id(env_data['vm_id'])
-
         if not source_vm:
             raise HypervisorException("Source VM not found in database")
-
-        source_vm_path = Path(source_vm.file)
 
         # Load environment metadata for hypervisor config
         from adare.types.environment import parse_environment_file
@@ -139,48 +103,24 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 log.warning(f"Could not load environment metadata: {e}")
                 # Continue without hypervisor config (will use auto-detection)
 
-        # Determine if this is an external VM (--no-copy mode)
-        is_external = not _is_vm_managed(source_vm_path)
+        from adare.backend.experiment.stagectxmanager import StageCtxManager
+        from adare.types.stages import VMDiskConversionStage, VMDiskOverlayCreationStage, VMDiskPreparationStage
 
-        # Determine disk path for QEMU VM
-        disk_path = None  # None = use managed storage (default behavior)
-
-        if is_external:
-            log.debug(f"External VM detected (--no-copy mode): {source_vm_path}")
-
-            # Detect file format
-            try:
-                detected_format = QEMUVM._detect_disk_format_static(
-                    source_vm_path,
-                    self.qemu_manager.executables.qemu_img
+        with StageCtxManager(VMDiskPreparationStage(), context.experiment_run_ulid, context.user_interrupt_event):
+            with StageCtxManager(
+                VMDiskConversionStage(), context.experiment_run_ulid, context.user_interrupt_event
+            ) as template_stage:
+                template_disk = resolve_template_disk(
+                    Path(source_vm.file), source_vm.hash, self.qemu_manager.executables.qemu_img
                 )
-                log.debug(f"Detected format: {detected_format}")
-            except HypervisorException as e:
-                log.warning(f"Could not detect format: {e}")
-                detected_format = 'unknown'
-
-            if detected_format == 'qcow2':
-                # Already qcow2 - use directly
-                log.debug("Source is qcow2 format, will use directly without conversion")
-                disk_path = str(source_vm_path.resolve())
-            elif detected_format in ['ova', 'vmdk', 'vdi', 'raw', 'unknown']:
-                # Non-qcow2 format - need to convert in-place
-                log.debug(f"Source is {detected_format} format, will convert to qcow2 in-place")
-                converted_path = source_vm_path.parent / f"{source_vm_path.stem}_adare_converted.qcow2"
-                disk_path = str(converted_path.resolve())
-            else:
-                log.warning(f"Unknown format {detected_format}, treating as non-qcow2")
-                converted_path = source_vm_path.parent / f"{source_vm_path.stem}_adare_converted.qcow2"
-                disk_path = str(converted_path.resolve())
-
-            # Validate write permissions for external disk path
-            self._validate_external_disk_writable(Path(disk_path))
-        else:
-            log.debug("Managed VM detected, using managed storage")
+                template_stage.stage.sub_msg = f"Template: {template_disk.name}"
+                template_stage.set_status(template_stage.stage.status)
+            disk_path = str(template_disk.resolve())
 
         # Determine guest architecture
-        vm_architecture = (env_data.get('vm_architecture') if env_data else None) or \
-                          getattr(context, 'guest_architecture', None)
+        vm_architecture = (env_data.get('vm_architecture') if env_data else None) or getattr(
+            context, 'guest_architecture', None
+        )
         if not vm_architecture:
             vm_architecture = 'x86_64'
             log.warning("Guest architecture not set in environment — defaulting to x86_64")
@@ -188,7 +128,8 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         # Opt-in cross-arch emulation: CLI flag OR a persisted environment setting.
         allow_emulation = getattr(context.config, 'allow_emulation', False) or (
             bool(environment_metadata.hypervisor_config.get('allow_emulation', False))
-            if environment_metadata else False
+            if environment_metadata
+            else False
         )
         vm_accel = resolve_accel(vm_architecture, allow_emulation)
 
@@ -212,13 +153,14 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             architecture=vm_architecture,
             resolution=context.config.vm_display_resolution,
             hypervisor_config=environment_metadata.hypervisor_config if environment_metadata else None,
-            # Stable per-environment id so a first-time config creation derives a
-            # deterministic domain UUID (see ConfigurationMixin._domain_uuid_for)
-            # instead of a fresh random one per run -- see docsrc hypervisors.rst
-            # "Instance-scoped firmware state" for why that matters for the vTPM.
-            environment_identity=env_data.get('vm_id') if env_data else None,
         )
         log.debug(f"Created QEMU VM instance: {context.vm_name}")
+
+        # The run boots a copy of the environment's vTPM under its own (random)
+        # domain UUID, so concurrent runs never share TPM state and no run sees
+        # another's TPM changes.
+        if 'windows' in context.vm.config.guest_os.lower() and shutil.which('swtpm'):
+            seed_run_tpm(source_vm.id, context.vm.config.uuid)
 
         # Configure VM logging paths for experiment run
         log_file = get_experiment_log_file()
@@ -242,12 +184,9 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         from adare.hypervisor.qemu.pcap_capture import PcapCaptureConfig, resolve_net0_pcap_path
 
-        # QEMUVMConfig persists across runs of the same VM (loaded from
-        # ~/.adare/qemu/vms/<vm_name>.json), so pcap_paths must be reassigned
-        # unconditionally every run -- otherwise a prior run's entry (pointing
-        # at that run's now-cleaned-up directory) survives into a later run
-        # where capture wasn't requested, and QEMU fails to boot trying to
-        # open a filter-dump file that no longer exists.
+        # Set unconditionally: a restored dev session reloads its persisted
+        # config (~/.adare/qemu/vms/<vm_name>.json), whose pcap entry may point
+        # at a directory that no longer exists.
         pcap_config = PcapCaptureConfig()
         if capture_pcap_enabled and context.experiment_run_directory:
             pcap_path = resolve_net0_pcap_path(context.experiment_run_directory, context.vm_name)
@@ -256,119 +195,17 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         context.vm.config.pcap_paths = pcap_config.to_dict()
         context.vm._save_vm_config()
 
-        # Create experiment overlay backed by immutable base disk
-        # This ensures libguestfs operations don't modify the base disk,
-        # preserving hash integrity for forensic validation
-        from adare.backend.experiment.stagectxmanager import StageCtxManager
-        from adare.types.stages import (
-            VMDiskConversionStage,
-            VMDiskFormatDetectionStage,
-            VMDiskOverlayCreationStage,
-            VMDiskPreparationStage,
-        )
-
+        # The run overlay: every guest write (and every libguestfs injection) lands here.
         experiment_id = context.experiment_run_ulid or 'default'
-
-        # Wrap entire disk preparation with parent stage
-        with StageCtxManager(
-            VMDiskPreparationStage(),
-            context.experiment_run_ulid,
-            context.user_interrupt_event
-        ):
-
-            # Step 1: Format detection (for external VMs only)
-            if is_external:
-                with StageCtxManager(
-                    VMDiskFormatDetectionStage(),
-                    context.experiment_run_ulid,
-                    context.user_interrupt_event
-                ) as detect_stage:
-                    # Detection already happened at lines 518-526, just update stage message
-                    detect_stage.stage.sub_msg = f"Detected: {detected_format}"
-                    detect_stage.set_status(detect_stage.stage.status)
-                    log.debug(f"Format detection stage: {detected_format}")
-
-            # Step 2: Conversion (only if needed)
-            if is_external and detected_format == 'qcow2':
-                # External qcow2 - use directly without conversion
-                log.debug("Skipping conversion - external qcow2 will be used as base")
-                if not source_vm_path.exists():
-                    raise HypervisorException(f"External qcow2 file not found: {source_vm_path}")
-                # _get_true_base_disk() will return external path directly
-            elif is_external and detected_format != 'qcow2':
-                # External non-qcow2 - convert to qcow2
-                base_disk_path = context.vm.get_base_disk_path()
-                if not Path(base_disk_path).exists():
-                    with StageCtxManager(
-                        VMDiskConversionStage(),
-                        context.experiment_run_ulid,
-                        context.user_interrupt_event
-                    ) as conv_stage:
-                        conv_stage.stage.sub_msg = f"Converting {detected_format} → qcow2"
-                        conv_stage.set_status(conv_stage.stage.status)
-
-                        log.debug(f"Converting {detected_format} to qcow2 base disk...")
-                        return_code, message = await context.vm.create_from_ovf_or_ova(
-                            source_vm_path,
-                            silent=False,
-                            try_extract=True
-                        )
-
-                        if return_code != 0:
-                            raise HypervisorException(f"Failed to convert VM disk: {message}")
-
-                        log.debug("Conversion to base disk completed successfully")
-
-            # Step 3: Create overlay disk (always happens)
-            with StageCtxManager(
-                VMDiskOverlayCreationStage(),
-                context.experiment_run_ulid,
-                context.user_interrupt_event
-            ):
-                try:
-                    overlay_path = await context.vm.create_overlay_disk(experiment_id)
-
-                    # Update VM config to use overlay (not base)
-                    # This ensures all disk operations (especially libguestfs) write to overlay
-                    context.vm.config.disk_path = overlay_path
-                    log.debug(f"Using overlay disk for experiment: {overlay_path}")
-
-                    # Validate overlay was created successfully
-                    if not Path(overlay_path).exists():
-                        raise HypervisorException(
-                            f"Overlay disk creation reported success but file not found: {overlay_path}\n"
-                            f"This indicates a race condition or filesystem issue."
-                        )
-                    log.debug(f"Verified overlay exists: {overlay_path}")
-
-                    # Log base disk location for reference
-                    if Path(context.vm.config.disk_path).exists():
-                        base_info = "external qcow2"
-                    else:
-                        base_info = context.vm.get_base_disk_path()
-                    log.debug(f"Base disk preserved for integrity checks: {base_info}")
-
-                    # Cleanup orphaned overlays from old naming scheme
-                    # Old overlays have chained names like: VM-name-overlay-{ULID1}-overlay-{ULID2}.qcow2
-                    try:
-                        disk_dir = Path(overlay_path).parent
-                        base_disk_path = Path(context.vm.get_base_disk_path())
-
-                        for orphan in disk_dir.glob('*-overlay-*-overlay-*.qcow2'):
-                            # Only delete if it's not the current overlay or base disk
-                            if orphan != Path(overlay_path) and orphan != base_disk_path:
-                                log.debug(f"Cleaning up orphaned overlay: {orphan.name}")
-                                orphan.unlink()
-                    except OSError as e:
-                        log.warning(f"Failed to cleanup orphaned overlays: {e}")
-
-                except (subprocess.CalledProcessError, OSError, HypervisorException) as e:
-                    raise HypervisorException(
-                        f"Failed to create overlay disk: {e}\n"
-                        f"Overlay creation failed. Ensure base disk exists and is accessible.\n"
-                        f"VM: {context.vm_name}, External: {is_external}"
-                    ) from e
-
+        with StageCtxManager(VMDiskOverlayCreationStage(), context.experiment_run_ulid, context.user_interrupt_event):
+            try:
+                overlay_path = await context.vm.create_overlay_disk(experiment_id)
+            except (subprocess.CalledProcessError, OSError) as e:
+                raise HypervisorException(f"Failed to create overlay on {disk_path}: {e}") from e
+            if not Path(overlay_path).exists():
+                raise HypervisorException(f"Overlay creation reported success but {overlay_path} is missing")
+            context.vm.config.disk_path = overlay_path
+            log.debug(f"Run overlay {overlay_path} on template {disk_path}")
 
     async def setup_file_transfer(self, context):
         """
@@ -397,11 +234,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         log.info("Setting up port forwarding for WebSocket communication")
 
         # Clean up any existing 'adarevm' port forwarding rule first
-        await context.vm.remove_port_forwarding(
-            name='adarevm',
-            stop_event=context.user_interrupt_event,
-            silent=True
-        )
+        await context.vm.remove_port_forwarding(name='adarevm', stop_event=context.user_interrupt_event, silent=True)
 
         # Add port forwarding: host uses allocated unique port, guest always uses 18765
         if context.config.websocket_port is None:
@@ -412,11 +245,11 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             protocol='tcp',
             host_port=context.config.websocket_port,
             guest_port=18765,
+            host_ip=forward_bind_host(),
             stop_event=context.user_interrupt_event,
-            silent=False
+            silent=False,
         )
         log.info(f'Added port forwarding for websocket server: host:{context.config.websocket_port} -> guest:18765')
-
 
     _DEFAULT_BOOT_ATTEMPTS = 3
 
@@ -441,8 +274,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             attempts = max(1, int(raw))
         except ValueError:
             log.warning(
-                f"ADARE_VM_BOOT_ATTEMPTS={raw!r} is not an integer; "
-                f"using the default {cls._DEFAULT_BOOT_ATTEMPTS}"
+                f"ADARE_VM_BOOT_ATTEMPTS={raw!r} is not an integer; using the default {cls._DEFAULT_BOOT_ATTEMPTS}"
             )
             return cls._DEFAULT_BOOT_ATTEMPTS
 
@@ -455,8 +287,8 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                     "large fraction of the time, and this run will fail on the first "
                     "such hang instead of retrying it. Unset the variable unless you "
                     "are deliberately measuring the single-attempt success rate."
-                    if attempts == 1 else
-                    ". Windows cold-boot hangs will be retried fewer times."
+                    if attempts == 1
+                    else ". Windows cold-boot hangs will be retried fewer times."
                 )
             )
         return attempts
@@ -498,6 +330,27 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         except ValueError:
             return default
 
+    # A Linux guest whose screen has been still this long when a boot attempt
+    # runs out has finished booting: its agent is missing, not late. Healthy
+    # images reach the agent well inside the first attempt, so only a guest that
+    # already missed it is judged. Windows is left to its retry: a hung Windows
+    # cold boot can freeze on a still screen too, and a retry does fix that one.
+    _AGENT_MISSING_SETTLED_S = 60
+
+    @staticmethod
+    def _boot_screenshot_path(context) -> Path:
+        """Where the frame of a guest that booted without an agent is kept."""
+        from adare.logger.logger import get_current_logfile
+
+        name = f'{context.vm.vm_name}-no-guest-agent.png'
+        run_directory = getattr(context, 'experiment_run_directory', None)
+        if run_directory is not None:
+            return Path(run_directory.path) / name
+        logfile = get_current_logfile()
+        if logfile is not None:
+            return Path(logfile).with_name(f'{Path(logfile).stem}-no-guest-agent.png')
+        return Path(tempfile.gettempdir()) / name
+
     @classmethod
     def _ready_timeout_for_attempt(cls, attempt: int, guest_platform: str | None = None) -> int:
         """Readiness budget for boot attempt ``attempt`` (1-based), doubling each time.
@@ -515,7 +368,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         budget = cls._ready_timeout(guest_platform) * (2 ** (attempt - 1))
         return min(budget, cls._READY_TIMEOUT_CAP)
 
-    async def _reset_vm_for_boot_retry(self, context):
+    async def _reset_vm_for_boot_retry(self, context, rerun_file_transfer: bool = True):
         """Return the VM to a clean, independent cold-boot state between boot attempts.
 
         A hard-killed / hung Windows guest can leave the overlay filesystem in a
@@ -527,7 +380,11 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
           2. discard the dirtied overlay,
           3. recreate a fresh overlay from the immutable base,
           4. re-run any pre-boot file transfer (re-injects for libguestfs;
-             cheap / no-op for QGA and virtiofs).
+             cheap / no-op for QGA and virtiofs). Skipped when
+             ``rerun_file_transfer`` is False: callers that configured their
+             shares on the VM config themselves (``adare vm test``) have no
+             experiment run directory for the strategy to build shares from,
+             and their config survives the overlay swap.
 
         NVRAM (UEFI vars, incl. the aarch64 shell-boot entry) is intentionally
         preserved — the boot-hang state lives in the guest filesystem, not UEFI.
@@ -551,12 +408,14 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             log.warning(f"Could not recreate overlay for boot retry (booting existing overlay): {e}")
 
         # 4. Re-run pre-boot file transfer so the fresh overlay carries any injected files.
+        if not rerun_file_transfer:
+            return
         try:
             await self.file_transfer.setup(context)
         except (HypervisorException, OSError) as e:
             log.warning(f"Re-running pre-boot file transfer during boot retry failed (continuing): {e}")
 
-    async def start_and_initialize_vm(self, context):
+    async def start_and_initialize_vm(self, context, rerun_file_transfer_on_retry: bool = True):
         """
         Start QEMU VM via libvirt and perform post-boot file transfer.
 
@@ -575,6 +434,9 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         Args:
             context: ExperimentRunCtx containing VM
+            rerun_file_transfer_on_retry: Re-run the strategy's pre-boot setup
+                when a boot attempt is retried. Pass False when the caller set up
+                the shares itself instead of through ``setup_file_transfer``.
         """
         from adare.backend.experiment.execution.base import GUIExecutionMode
         from adare.backend.experiment.execution.gui_executor_factory import resolve_gui_execution_mode
@@ -584,13 +446,14 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         max_attempts = self._boot_attempts()
         # Budget escalates per attempt; total is what a full exhaustion costs.
         attempt_budgets = [
-            self._ready_timeout_for_attempt(a, context.guest_platform)
-            for a in range(1, max_attempts + 1)
+            self._ready_timeout_for_attempt(a, context.guest_platform) for a in range(1, max_attempts + 1)
         ]
 
-        playbook_settings = context.playbook.settings if context.playbook and hasattr(context.playbook, 'settings') else None
+        playbook_settings = (
+            context.playbook.settings if context.playbook and hasattr(context.playbook, 'settings') else None
+        )
         gui_mode = resolve_gui_execution_mode(context.vm, playbook_settings)
-        skip_x11 = (gui_mode == GUIExecutionMode.HOST)
+        skip_x11 = gui_mode == GUIExecutionMode.HOST
 
         for attempt in range(1, max_attempts + 1):
             if context.user_interrupt_event and context.user_interrupt_event.is_set():
@@ -605,40 +468,44 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                     f"agent in {attempt_budgets[attempt - 2]}s; tearing down and retrying "
                     f"(attempt {attempt}/{max_attempts}, budget {ready_timeout}s)"
                 )
-                await self._reset_vm_for_boot_retry(context)
+                await self._reset_vm_for_boot_retry(context, rerun_file_transfer=rerun_file_transfer_on_retry)
 
             # Stage 1: Start VM
             with StageCtxManager(
-                VMStartStage(),
-                context.experiment_run_ulid,
-                context.user_interrupt_event
+                VMStartStage(), context.experiment_run_ulid, context.user_interrupt_event
             ) as start_stage:
                 log.info(f"Starting VM '{context.vm.vm_name}' via libvirt (attempt {attempt}/{max_attempts})")
                 await context.vm.start(stop_event=context.user_interrupt_event, stage_ctx=start_stage)
                 log.debug("VM visible in virt-manager (use 'Open' button to access display)")
 
-            # Stage 2: Wait for guest agent
-            with StageCtxManager(
-                VMGuestAgentWaitStage(),
-                context.experiment_run_ulid,
-                context.user_interrupt_event
-            ):
+            # Stage 2: Wait for guest agent, watching the screen meanwhile so a
+            # guest that booted without an agent is not retried in vain.
+            watch = BootScreenWatch(context.vm) if context.guest_platform == 'linux' else None
+            with StageCtxManager(VMGuestAgentWaitStage(), context.experiment_run_ulid, context.user_interrupt_event):
                 log.info(f'Waiting until VM is ready (QEMU Guest Agent), budget {ready_timeout}s')
                 start_wait = time.time()
-                ready = await context.vm.wait_until_fully_booted(
-                    timeout=ready_timeout,
-                    stop_event=context.user_interrupt_event,
-                    skip_x11_discovery=skip_x11
-                )
+                watch_task = asyncio.create_task(watch.run()) if watch else None
+                try:
+                    ready = await context.vm.wait_until_fully_booted(
+                        timeout=ready_timeout, stop_event=context.user_interrupt_event, skip_x11_discovery=skip_x11
+                    )
+                finally:
+                    if watch_task:
+                        watch_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await watch_task
                 elapsed = time.time() - start_wait
 
             if ready:
                 log.info(f'VM is ready (waited {elapsed:.1f}s, attempt {attempt}/{max_attempts})')
                 break
+            interrupted = context.user_interrupt_event and context.user_interrupt_event.is_set()
+            if watch and not interrupted and watch.settled_for() >= self._AGENT_MISSING_SETTLED_S:
+                settled = watch.settled_for()
+                screenshot = watch.save_last(self._boot_screenshot_path(context))
+                raise GuestAgentMissingException(context.vm.vm_name, ready_timeout, settled, screenshot)
         else:
-            raise GuestAgentTimeoutException(
-                context.vm.vm_name, sum(attempt_budgets), attempt_budgets
-            )
+            raise GuestAgentTimeoutException(context.vm.vm_name, sum(attempt_budgets), attempt_budgets)
 
         # Repair guest networking before anything depends on it. ADARE pins the
         # NIC to a PCI address that renames the interface away from the name the
@@ -730,11 +597,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         if context.vm:
             event = None if post_interrupt else context.user_interrupt_event
             log.info('Cleaning up port forwarding rules before VM instance release')
-            await context.vm.remove_port_forwarding(
-                name='adarevm',
-                stop_event=event,
-                silent=True
-            )
+            await context.vm.remove_port_forwarding(name='adarevm', stop_event=event, silent=True)
 
         # Cleanup file transfer resources (e.g. SMB temp directory)
         if hasattr(self.file_transfer, 'cleanup'):
@@ -743,11 +606,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         log.debug("QEMU VM cleanup completed")
 
     def compare_disk_images_with_virt_diff(
-        self,
-        base_disk_path: str,
-        overlay_disk_path: str,
-        all: bool = False,
-        extract_dir: Path | None = None
+        self, base_disk_path: str, overlay_disk_path: str, all: bool = False, extract_dir: Path | None = None
     ) -> dict[str, list[dict]] | None:
         """Compare base and overlay disks using manual virt-ls diff.
 
@@ -764,6 +623,4 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             Diff dict: {added: [...], removed: [...], modified: [...]}
             None on failure
         """
-        return self.disk_diff.compare(
-            base_disk_path, overlay_disk_path, extract_dir
-        )
+        return self.disk_diff.compare(base_disk_path, overlay_disk_path, extract_dir)

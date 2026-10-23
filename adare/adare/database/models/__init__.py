@@ -1,8 +1,3 @@
-from sqlalchemy.orm import declarative_base
-
-# Legacy base for backward compatibility
-Base = declarative_base()
-
 # Import all models to ensure they're registered
 
 # Import new model structures
@@ -26,6 +21,9 @@ from .global_models import (
     Vm,
     VmSnapshot,
 )
+
+# Login session models live in the global database
+from .login import Token, UserSession
 from .project_models import (
     AbstractTest,
     ActionExecution,
@@ -50,11 +48,12 @@ from .project_models import (
 from .project_models import Tag as ProjectTag
 
 __all__ = [
-    "Base",
     "DevCheckpoint",
     "DevSession",
     "Environment",
     "GlobalBase",
+    "Token",
+    "UserSession",
     "OsInfo",
     "PostSetupInstallation",
     "Project",

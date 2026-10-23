@@ -6,6 +6,7 @@ Files are copied before boot and artifacts retrieved after shutdown.
 This is the fallback mode when virtiofsd is unavailable on Linux,
 or when explicitly requested via QEMU_LIBGUESTFS=true.
 """
+
 import contextlib
 import json as json_module
 import logging
@@ -18,6 +19,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from adare.backend.experiment.agent_token import ensure_agent_token
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
 from adare.hypervisor.qemu.file_transfer.shares import build_config_json, check_shared_dir
@@ -104,10 +106,7 @@ class LibguestfsStrategy(FileTransferStrategy):
             log.info("Stopping VM for libguestfs file transfer")
             await context.vm.stop()
         elif vm_state != "poweroff":
-            raise HypervisorException(
-                f"VM in unexpected state '{vm_state}'. "
-                f"Expected 'poweroff' or 'running'."
-            )
+            raise HypervisorException(f"VM in unexpected state '{vm_state}'. Expected 'poweroff' or 'running'.")
 
         # Disable virtiofs in config to prevent snapshot migration errors
         context.vm.config.virtiofs_enabled = False
@@ -118,10 +117,7 @@ class LibguestfsStrategy(FileTransferStrategy):
         disk_path = context.vm.config.disk_path
 
         if not Path(disk_path).exists():
-            raise HypervisorException(
-                f"Disk image not found: {disk_path}\n"
-                "Ensure VM overlay was created successfully."
-            )
+            raise HypervisorException(f"Disk image not found: {disk_path}\nEnsure VM overlay was created successfully.")
 
         log.debug(f"Preparing to copy files to disk: {disk_path}")
         self._validate_overlay_chain(disk_path)
@@ -135,15 +131,18 @@ class LibguestfsStrategy(FileTransferStrategy):
             is_windows=is_windows,
             file_transfer_mode='libguestfs',
             installation_mode=context.config.installation_mode,
+            agent_token=ensure_agent_token(context),
         )
         with open(run_dir / 'config.json', 'w') as f:
             json_module.dump(config_data, f, indent=2)
         log.debug(f"Wrote config.json to {run_dir / 'config.json'}")
 
-        files_to_copy.append({
-            'source': str(run_dir / 'config.json'),
-            'dest': 'run/config.json',
-        })
+        files_to_copy.append(
+            {
+                'source': str(run_dir / 'config.json'),
+                'dest': 'run/config.json',
+            }
+        )
 
         log.info(f"Transferring {len(files_to_copy)} files to VM disk via libguestfs")
 
@@ -212,10 +211,7 @@ class LibguestfsStrategy(FileTransferStrategy):
             },
         ]
 
-        log.info(
-            "Retrieving artifacts and logs in single guestfish session "
-            "(batched operation)"
-        )
+        log.info("Retrieving artifacts and logs in single guestfish session (batched operation)")
 
         results = self._batch_retrieve_files_from_disk(disk_path, retrieval_specs)
 
@@ -264,16 +260,11 @@ class LibguestfsStrategy(FileTransferStrategy):
                 return
 
             backing_file = disk_info['backing-filename']
-            log.debug(
-                f"Overlay disk detected with backing file: {backing_file}"
-            )
+            log.debug(f"Overlay disk detected with backing file: {backing_file}")
 
             # Resolve relative paths
             disk_dir = Path(disk_path).parent
-            backing_path = (
-                Path(backing_file) if Path(backing_file).is_absolute()
-                else disk_dir / backing_file
-            )
+            backing_path = Path(backing_file) if Path(backing_file).is_absolute() else disk_dir / backing_file
 
             if not backing_path.exists():
                 log.warning(
@@ -334,15 +325,10 @@ class LibguestfsStrategy(FileTransferStrategy):
             if result.returncode == 0:
                 disk_info = json_module.loads(result.stdout)
                 if 'backing-filename' in disk_info:
-                    log.info(
-                        f"Disk is overlay, backing file: "
-                        f"{disk_info['backing-filename']}"
-                    )
+                    log.info(f"Disk is overlay, backing file: {disk_info['backing-filename']}")
                 else:
                     log.info("Disk is standalone (no backing file)")
-                log.debug(
-                    f"Disk format: {disk_info.get('format', 'unknown')}"
-                )
+                log.debug(f"Disk format: {disk_info.get('format', 'unknown')}")
         except (json_module.JSONDecodeError, FileNotFoundError, subprocess.SubprocessError) as e:
             log.warning(f"Failed to inspect disk: {e}")
 
@@ -364,20 +350,15 @@ class LibguestfsStrategy(FileTransferStrategy):
         """
         if not Path(disk_path).exists():
             raise HypervisorException(
-                f"VM disk not found at {disk_path}. "
-                f"Ensure the VM has been created before transferring files."
+                f"VM disk not found at {disk_path}. Ensure the VM has been created before transferring files."
             )
 
         for file_spec in files_to_copy:
             source_path = Path(file_spec['source'])
             if not source_path.exists():
-                raise HypervisorException(
-                    f"Source file/directory not found: {source_path}"
-                )
+                raise HypervisorException(f"Source file/directory not found: {source_path}")
 
-        log.info(
-            f"Mounting guest disk {disk_path} via guestfish for file transfer"
-        )
+        log.info(f"Mounting guest disk {disk_path} via guestfish for file transfer")
 
         commands: list[str] = []
 
@@ -427,19 +408,17 @@ class LibguestfsStrategy(FileTransferStrategy):
             # The run directory is the only read-write location in the guest and
             # may be written by a non-root user; the shares stay 0755/0644.
             commands.extend(['chmod', '0777', f'{target_base_dir}/run', ':'])
-            commands.extend(
-                ['chmod', '0777', f'{target_base_dir}/run/logs', ':']
-            )
-            commands.extend(
-                ['chmod', '0777', f'{target_base_dir}/run/artifacts', ':']
-            )
+            commands.extend(['chmod', '0777', f'{target_base_dir}/run/logs', ':'])
+            commands.extend(['chmod', '0777', f'{target_base_dir}/run/artifacts', ':'])
 
             # Remove trailing colon
             if commands and commands[-1] == ':':
                 commands = commands[:-1]
 
             returncode, stdout, stderr = self.guestfish.run_command(
-                disk_path, commands, readonly=False,
+                disk_path,
+                commands,
+                readonly=False,
             )
         finally:
             if tar_fd is not None:
@@ -451,26 +430,13 @@ class LibguestfsStrategy(FileTransferStrategy):
         if returncode != 0:
             headline, host_solutions = _classify_libguestfs_failure(stderr)
             file_transfer_solutions = [
-                (
-                    "For Windows VMs: disable Fast Startup in "
-                    "Control Panel > Power Options"
-                ),
-                (
-                    "Ensure the VM was shut down cleanly "
-                    "(not hibernated or forced off)"
-                ),
-                (
-                    "Inspect the disk: "
-                    f"guestfish --ro --format=qcow2 -a {disk_path} "
-                    ": run : list-filesystems"
-                ),
+                ("For Windows VMs: disable Fast Startup in Control Panel > Power Options"),
+                ("Ensure the VM was shut down cleanly (not hibernated or forced off)"),
+                (f"Inspect the disk: guestfish --ro --format=qcow2 -a {disk_path} : run : list-filesystems"),
                 f"Check backing file: qemu-img info {disk_path}",
             ]
             raise HypervisorException(
-                f"{headline}\n\n"
-                f"Failed to copy files to guest disk.\n"
-                f"Guestfish error: {stderr}\n"
-                f"Disk: {disk_path}",
+                f"{headline}\n\nFailed to copy files to guest disk.\nGuestfish error: {stderr}\nDisk: {disk_path}",
                 possible_solutions=host_solutions + file_transfer_solutions,
             )
 
@@ -496,34 +462,27 @@ class LibguestfsStrategy(FileTransferStrategy):
         if not Path(disk_path).exists():
             raise HypervisorException(f"VM disk not found at {disk_path}")
 
-        log.info(
-            f"Starting batched retrieval of {len(retrieval_specs)} "
-            f"paths via single guestfish session"
-        )
+        log.info(f"Starting batched retrieval of {len(retrieval_specs)} paths via single guestfish session")
 
         # Create host destination directories
         for spec in retrieval_specs:
             try:
                 spec['host_path'].parent.mkdir(parents=True, exist_ok=True)
             except OSError as e:
-                log.warning(
-                    f"Failed to create directory {spec['host_path'].parent}: {e}"
-                )
+                log.warning(f"Failed to create directory {spec['host_path'].parent}: {e}")
 
         # Detect root filesystem once
         try:
             root_device, _ = self.guestfish.detect_root_filesystem(disk_path)
-            log.debug(
-                f"Using root filesystem for batch retrieval: "
-                f"{root_device}"
-            )
+            log.debug(f"Using root filesystem for batch retrieval: {root_device}")
         except HypervisorException:
             log.error("Failed to detect root filesystem")
             raise
 
         # Build script
         script_content = self._generate_retrieval_script(
-            root_device, retrieval_specs,
+            root_device,
+            retrieval_specs,
         )
 
         if not script_content:
@@ -536,7 +495,8 @@ class LibguestfsStrategy(FileTransferStrategy):
         script_path = None
         try:
             script_fd, script_path = tempfile.mkstemp(
-                suffix='.guestfish', text=True,
+                suffix='.guestfish',
+                text=True,
             )
             with os.fdopen(script_fd, 'w') as f:
                 f.write(script_content)
@@ -545,33 +505,32 @@ class LibguestfsStrategy(FileTransferStrategy):
             log.debug(f"Wrote guestfish script to {script_path}")
 
             cmd = [
-                'guestfish', '--ro', '--format=qcow2',
-                '-a', disk_path, '-f', script_path,
+                'guestfish',
+                '--ro',
+                '--format=qcow2',
+                '-a',
+                disk_path,
+                '-f',
+                script_path,
             ]
 
             log.debug(f"Executing: {' '.join(cmd)}")
 
             result = subprocess.run(
-                cmd, capture_output=True, text=True, check=False,
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
             )
 
             if result.returncode != 0:
-                if (
-                    'could not' in result.stderr.lower()
-                    or 'cannot' in result.stderr.lower()
-                ):
+                if 'could not' in result.stderr.lower() or 'cannot' in result.stderr.lower():
                     log.error(
                         f"Guestfish failed to mount disk: {result.stderr}\n"
                         f"This may indicate a corrupted overlay backing chain."
                     )
-                    raise HypervisorException(
-                        f"Failed to mount guest disk via guestfish: "
-                        f"{result.stderr}"
-                    )
-                log.debug(
-                    f"Guestfish completed with returncode "
-                    f"{result.returncode}: {result.stderr}"
-                )
+                    raise HypervisorException(f"Failed to mount guest disk via guestfish: {result.stderr}")
+                log.debug(f"Guestfish completed with returncode {result.returncode}: {result.stderr}")
 
             # Analyse which files were actually created
             results: dict[str, list[str]] = {'retrieved': [], 'missing': []}
@@ -582,9 +541,7 @@ class LibguestfsStrategy(FileTransferStrategy):
                 optional = spec['optional']
 
                 if spec['type'] == 'directory':
-                    quirky_path = (
-                        host_path.parent / Path(spec['guest_path']).name
-                    )
+                    quirky_path = host_path.parent / Path(spec['guest_path']).name
                     if quirky_path.exists():
                         if quirky_path != host_path:
                             if host_path.exists():
@@ -597,28 +554,19 @@ class LibguestfsStrategy(FileTransferStrategy):
                         results['missing'].append(name)
                         if optional:
                             log.info(
-                                f"Optional path {name} not found in guest "
-                                f"(normal if experiment didn't produce it)"
+                                f"Optional path {name} not found in guest (normal if experiment didn't produce it)"
                             )
                         else:
-                            log.warning(
-                                f"Required path {name} not found in guest: "
-                                f"{spec['guest_path']}"
-                            )
+                            log.warning(f"Required path {name} not found in guest: {spec['guest_path']}")
                 else:
                     if host_path.exists():
                         results['retrieved'].append(name)
                     else:
                         results['missing'].append(name)
                         if optional:
-                            log.debug(
-                                f"Optional file {name} not found in guest"
-                            )
+                            log.debug(f"Optional file {name} not found in guest")
                         else:
-                            log.warning(
-                                f"Required file {name} not found in guest: "
-                                f"{spec['guest_path']}"
-                            )
+                            log.warning(f"Required file {name} not found in guest: {spec['guest_path']}")
 
             return results
 
@@ -630,9 +578,7 @@ class LibguestfsStrategy(FileTransferStrategy):
                 try:
                     Path(script_path).unlink()
                 except OSError as e:
-                    log.warning(
-                        f"Failed to clean up temp script {script_path}: {e}"
-                    )
+                    log.warning(f"Failed to clean up temp script {script_path}: {e}")
 
     def _generate_retrieval_script(
         self,
@@ -662,9 +608,7 @@ class LibguestfsStrategy(FileTransferStrategy):
             if file_type == 'file':
                 script_lines.append(f"{prefix}download {guest_path} {host_path}")
             elif file_type == 'directory':
-                script_lines.append(
-                    f"{prefix}copy-out {guest_path} {host_path.parent}"
-                )
+                script_lines.append(f"{prefix}copy-out {guest_path} {host_path.parent}")
 
         if len(script_lines) <= 2:  # Only run and mount
             return ""
@@ -692,77 +636,77 @@ def _build_file_transfer_manifest(context: Any) -> list[dict[str, str]]:
     files_to_copy: list[dict[str, str]] = []
 
     if context.experiment_directory:
-        files_to_copy.append({
-            'source': str(context.experiment_directory.playbookfile),
-            'dest': 'playbook.yml',
-        })
+        files_to_copy.append(
+            {
+                'source': str(context.experiment_directory.playbookfile),
+                'dest': 'playbook.yml',
+            }
+        )
 
     if wheels_available:
         log.info("Using wheel installation mode for QEMU - copying wheels")
         adarelib_wheel = adarelib_wheels[0]
         adarevm_wheel = adarevm_wheels[0]
-        files_to_copy.extend([
-            {
-                'source': str(adarevm_wheel),
-                'dest': f'vm/wheels/{adarevm_wheel.name}',
-            },
-            {
-                'source': str(adarelib_wheel),
-                'dest': f'vm/wheels/{adarelib_wheel.name}',
-            },
-        ])
-    else:
-        log.info(
-            "Using editable installation mode for QEMU (no wheels found)"
+        files_to_copy.extend(
+            [
+                {
+                    'source': str(adarevm_wheel),
+                    'dest': f'vm/wheels/{adarevm_wheel.name}',
+                },
+                {
+                    'source': str(adarelib_wheel),
+                    'dest': f'vm/wheels/{adarelib_wheel.name}',
+                },
+            ]
         )
+    else:
+        log.info("Using editable installation mode for QEMU (no wheels found)")
         adarelib_src = context.project_directory.vm_runtime / 'adarelib'
         adarevm_src = context.project_directory.vm_runtime / 'adarevm'
 
         if not adarelib_src.exists():
             raise HypervisorException(
-                f"adarelib source not found at {adarelib_src}. "
-                f"Run 'adare experiment load' first."
+                f"adarelib source not found at {adarelib_src}. Run 'adare experiment load' first."
             )
         if not adarevm_src.exists():
-            raise HypervisorException(
-                f"adarevm source not found at {adarevm_src}. "
-                f"Run 'adare experiment load' first."
-            )
+            raise HypervisorException(f"adarevm source not found at {adarevm_src}. Run 'adare experiment load' first.")
 
-        files_to_copy.extend([
-            {'source': str(adarevm_src), 'dest': 'vm/adarevm'},
-            {'source': str(adarelib_src), 'dest': 'vm/adarelib'},
-        ])
+        files_to_copy.extend(
+            [
+                {'source': str(adarevm_src), 'dest': 'vm/adarevm'},
+                {'source': str(adarelib_src), 'dest': 'vm/adarelib'},
+            ]
+        )
 
     # Project-level shared directory
     if check_shared_dir(context.project_directory.shared, 'project_shared'):
-        files_to_copy.append({
-            'source': str(context.project_directory.shared),
-            'dest': 'project_shared',
-        })
+        files_to_copy.append(
+            {
+                'source': str(context.project_directory.shared),
+                'dest': 'project_shared',
+            }
+        )
 
     # Experiment-level shared directory
-    if (
-        context.experiment_directory
-        and check_shared_dir(context.experiment_directory.shared, 'shared')
-    ):
-        files_to_copy.append({
-            'source': str(context.experiment_directory.shared),
-            'dest': 'shared',
-        })
+    if context.experiment_directory and check_shared_dir(context.experiment_directory.shared, 'shared'):
+        files_to_copy.append(
+            {
+                'source': str(context.experiment_directory.shared),
+                'dest': 'shared',
+            }
+        )
 
     # User-defined shared directories (fallback copy)
-    if (
-        hasattr(context.config, 'shared_directories')
-        and context.config.shared_directories
-    ):
+    if hasattr(context.config, 'shared_directories') and context.config.shared_directories:
         for _name, details in context.config.shared_directories.items():
             host_path = details.get('host')
             vm_path = details.get('vm')
             if host_path and vm_path:
-                files_to_copy.append({
-                    'source': str(host_path),
-                    'dest': str(vm_path),
-                })
+                files_to_copy.append(
+                    {
+                        'source': str(host_path),
+                        'dest': str(vm_path),
+                    }
+                )
 
     return files_to_copy

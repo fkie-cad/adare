@@ -22,6 +22,7 @@ def mock_dependencies():
 
     return client, target_resolver
 
+
 @pytest.mark.asyncio
 async def test_cache_storage_and_retrieval(mock_dependencies):
     client, target_resolver = mock_dependencies
@@ -44,6 +45,7 @@ async def test_cache_storage_and_retrieval(mock_dependencies):
     assert cached_result.coordinates == (100, 200)
     assert cached_path == "path/to/screenshot.png"
     assert age < 1.0
+
 
 @pytest.mark.asyncio
 async def test_resolve_uses_cache_automatically(mock_dependencies):
@@ -72,6 +74,7 @@ async def test_resolve_uses_cache_automatically(mock_dependencies):
     # Verify we didn't take a new screenshot either
     client.screenshot.assert_not_called()
 
+
 @pytest.mark.asyncio
 async def test_resolve_opt_out_with_use_cache_false(mock_dependencies):
     """Explicit use_cache: false forces fresh detection even though the
@@ -98,6 +101,7 @@ async def test_resolve_opt_out_with_use_cache_false(mock_dependencies):
     # 3. Verify the cache was bypassed and fresh detection ran
     assert result == (350, 450)
     target_resolver.resolve_target.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_resolve_skips_stale_cache(mock_dependencies):

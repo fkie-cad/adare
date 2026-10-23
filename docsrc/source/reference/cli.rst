@@ -4,6 +4,9 @@ CLI Reference
 
 Complete reference for the ADARE command-line interface. The CLI provides access to all framework functionality including project management, environment configuration, experiment execution, VM lifecycle management, and web platform integration.
 
+Every command also documents itself: ``adare <group> --help`` lists a group's
+commands, ``adare <group> <command> --help`` shows all options and examples.
+
 .. contents:: Quick Navigation
    :local:
    :depth: 2
@@ -15,10 +18,35 @@ All ADARE commands support the following global options:
 
 * ``--logfile PATH`` - Path to logfile for detailed logging
 * ``--verbose`` - Verbose output (loglevel=INFO)
-* ``--very-verbose`` - Very verbose output (loglevel=DEBUG)  
+* ``--very-verbose`` - Very verbose output (loglevel=DEBUG; also prints tracebacks on errors)
 * ``--log-level LEVEL`` - Specific log level for logfile
+* ``--output-format``/``--format [rich|plain|json|yaml]`` - Output format for commands that print data
+* ``--output-file PATH`` - Also save the structured result to a file
 * ``--version`` - Show version information
 * ``--help`` - Show help message
+
+Output, errors and exit codes
+=============================
+
+Every read-only ``list``/``info``/``show``/``status`` command also accepts
+``--json`` and ``--format [rich|plain|json|yaml]`` *after* the subcommand
+(``adare env list --json``). Precedence: subcommand flag > global ``--format`` >
+``ADARE_FORMAT`` environment variable > auto (``rich`` on a terminal, ``plain``
+tab-separated text when stdout is piped). stdout carries only data; logs,
+progress, warnings and errors go to stderr. Errors are one concise message
+(``{"error": {...}}`` in json mode). Exit codes: ``0`` ok, ``1`` error,
+``2`` usage error, ``3`` not found. Details: :doc:`output-formats`.
+
+Projects and aliases
+====================
+
+Commands that work on a project use the project in the current directory, or the
+one named with ``-p, --project`` (a name or a path). Environments, VMs and
+testfunctions are global and need no project.
+
+Group aliases: ``exp`` = ``experiment``, ``environment`` = ``env``,
+``tf``/``testfunction`` = ``test``. Within groups, ``l`` = ``list`` and
+``rm`` = ``remove`` wherever both exist.
 
 Command Groups
 **************
@@ -26,13 +54,13 @@ Command Groups
 Project Management
 ==================
 
-Projects are top-level containers that organize environments and provide shared resources.
+Projects are top-level containers that organize experiments and their runs.
 
 ``adare project create <name>``
   Create a new project with the specified name. Creates a directory structure with shared resources like tools and templates.
-  
+
   Options:
-    * ``--description TEXT`` - Description of the project
+    * ``-d, --description TEXT`` - Description of the project
 
 ``adare project remove <name>``
   Remove an existing project and all its contents.
@@ -40,50 +68,85 @@ Projects are top-level containers that organize environments and provide shared 
 ``adare project list``
   List all available projects in the system.
 
-Environment Management  
+``adare status``
+  Quick overview: current project, active dev sessions, VM count and database status.
+
+Environment Management
 ======================
 
-Environments define virtual machine configurations and contain experiments that run on the same VM setup.
+Environments describe the VM an experiment runs on. They are global (shared by
+all projects) and versioned.
 
-``adare environment create <name>``
-  Create a new environment within the current project.
-  
-  Options:
-    * ``--project TEXT`` - Name of the project (if not in project directory)
-    * ``--with-vm PATH`` - VM file path (OVA) to load automatically during creation
-
-``adare environment load <environment>``
-  Load an environment from a YAML configuration file.
+``adare env create <name>``
+  Create a new environment descriptor (YAML).
 
   Options:
-    * ``--project TEXT`` - Name of the project
-    * ``--force`` - Force update of the environment
-    * ``--no-copy`` - Keep VM file at original location instead of copying to managed storage.
-      Useful for very large VMs. **Important:** The VM file must remain at its original path.
-      Only works with local files (URLs are always downloaded).
+    * ``--with-vm PATH`` - Disk image to reference in the new environment file (registered by ``adare env load``)
 
-``adare environment delete <ulid>``
-  Delete an environment by its ULID.
-  
+``adare env load <environment>``
+  Register an environment from its YAML descriptor. A baked environment's disk is
+  copied into managed storage; a recipe environment's disk is built here from the
+  declared inputs.
+
   Options:
-    * ``--force`` - Force deletion without confirmation
+    * ``-f, --force`` - Load a changed file as a new version (old version and its runs are kept);
+      for a recipe environment this also rebuilds the disk
+    * ``--no-copy`` - Keep the VM file at its original location instead of copying it
+      to managed storage. Useful for very large VMs. **Important:** the VM file must
+      remain at its original path. Only works with local files (URLs are always downloaded).
+    * ``--iso PATH`` - Recipe: installer ISO (or a directory to search), e.g. for a consumer-supplied ("BYO") recipe
+    * ``--reprovision`` - Recipe: keep the cached base disk but re-run provisioning (retry after a failed step)
+    * ``--allow-emulation`` - Allow QEMU TCG software emulation for a foreign guest architecture (slow)
 
-``adare environment example [name]``
-  Create an example environment (default: win11test) with sample configuration.
-  
+``adare env extend <source>``
+  Extend an environment (or VM) into a new environment that reuses the same base
+  disk. ``source`` is an environment name, environment ULID or VM name.
+  Declarative mode (default) adds post-setup installs on top of the source's;
+  interactive mode (``--interactive``, QEMU only) boots an overlay in a GUI window
+  for manual installs and stores the result as a new base VM + environment.
+  Alias: ``ext``.
+
   Options:
-    * ``--project TEXT`` - Name of the project
+    * ``-n, --name TEXT`` - Name for the new environment (required)
+    * ``-i, --install TEXT`` - Post-setup install as ``name:command`` (repeatable)
+    * ``--from-file PATH`` - YAML file with post-setup installations to add
+    * ``--interactive/--manual`` - Boot the base in a GUI window for manual customization
+    * ``--console`` - With ``--interactive``: also open a REPL that records typed commands as installs
+    * ``-d, --description TEXT``, ``-t, --tag TEXT`` - Metadata for the new environment
+    * ``-f, --force`` - Overwrite if the new name already exists
 
-``adare environment list``
-  List all environments in the current project. The **disk** column reports the
+``adare env list``
+  List all environments (current versions). The **disk** column reports the
   backing disk of each environment's registered VM: ``ok``, ``MISSING`` (registered
   but the disk is gone, so a run will fail at VM setup), or ``-`` (nothing local to
   check). Note this is not the *file path* column, which is the environment's YAML
   descriptor and outlives the disk it points at.
 
-``adare environment info <dotnotation>``
-  Show detailed information about a specific environment using dotnotation (project.environment).
-  Includes a **disk** row with the backing disk path and whether it is present.
+``adare env info <name>``
+  Show detailed information about an environment, including a **disk** row with
+  the backing disk path and whether it is present.
+
+``adare env remove <name-or-ulid>``
+  Remove an environment, including all of its versions. Without ``--force``,
+  removal fails while any version has experiment runs or is the only environment
+  of an experiment; with ``--force`` those runs are deleted and the experiments are
+  kept, without this environment.
+
+``adare env verify <name>``
+  Verify an environment by running the built-in ``verify_vm`` experiment on it.
+
+``adare env publish-prepare <name>``
+  Prepare a local baked environment for sharing: hashes the local disk and
+  rewrites the descriptor to reference the hosted URL plus its sha256.
+
+  Options:
+    * ``--vm-url TEXT`` - Published http(s) URL where the disk is hosted (required)
+    * ``--verify-url`` - Download the URL and confirm it hash-matches the local disk
+    * ``--compress`` - qcow2 only: zstd-compress into a ``<name>-published.qcow2`` sibling first
+
+``adare env recipe-byo <name>``
+  Turn a Windows recipe environment's local ISO path into a consumer-supplied ISO
+  (``iso_name`` + ``iso_notes``), so it can be published without rehosting the ISO.
 
 Experiment Management
 =====================
@@ -91,18 +154,17 @@ Experiment Management
 Experiments contain the actual test automation logic using YAML-based playbooks.
 
 ``adare experiment create <experiment>``
-  Create a new experiment skeleton with template files (playbook.yaml, testset.yml, metadata.yml).
-  
-  Options:
-    * ``--project TEXT`` - Name of the project
+  Create a new experiment skeleton with template files.
+
+``adare experiment example [name]``
+  Create the example experiment with a complete playbook and test configuration.
 
 ``adare experiment load <experiment>``
-  Load an experiment configuration.
-  
+  Load an experiment configuration into the project database.
+
   Options:
-    * ``--environment TEXT`` - Name of the environment  
-    * ``--force`` - Force update of the experiment
-    * ``--project TEXT`` - Name of the project
+    * ``-e, --environment TEXT`` - Name of the environment
+    * ``-f, --force`` - Force update of the experiment
 
 .. _test-mode-development:
 
@@ -110,11 +172,16 @@ Experiments contain the actual test automation logic using YAML-based playbooks.
   Execute an experiment in the specified environment. By default runs in test mode.
 
   Options:
-    * ``--environment TEXT`` - Name of the environment (if not specified, runs on all configured environments)
-    * ``--production`` - Run in production mode with strict integrity checks (default: test mode)
+    * ``-e, --environment TEXT`` - Name of the environment (if not specified, runs on all configured environments)
+    * ``--production, --prod`` - Run in production mode with strict integrity checks (default: test mode)
     * ``--debug-screenshots`` - Save screenshots to experiment run directory for debugging
-    * ``--preserve-snapshot`` - Create experiment snapshot for preservation (default: only reset to base)
-    * ``--project TEXT`` - Name of the project
+    * ``-s, --preserve-snapshot`` - VirtualBox: snapshot the final VM state (QEMU runs are discarded; use ``--export-disk-image``)
+    * ``--vm-memory INTEGER``, ``--vm-cpus INTEGER`` - VM resources
+    * ``--gui-mode [auto|agent|host]``, ``--test-mode [auto|agent|host]`` - Run GUI actions / tests through the guest agent or from the host (QMP/QGA, QEMU only)
+    * ``--diff/--no-diff``, ``--diff-mode [auto|guest|host]`` - Filesystem diff (overrides the playbook setting)
+    * ``--export-disk-image``, ``--capture-pcap``, ``--export-memory-dump`` - Forensic artifacts (overrides the playbook setting)
+    * ``--no-runlog`` - Do not save the adare log to the run directory
+    * ``--allow-emulation`` - Allow QEMU TCG software emulation for a foreign guest architecture (slow)
 
 **Batch Execution with Glob Patterns**
 
@@ -167,35 +234,93 @@ By default, experiments run in **test mode** which is ideal for development:
   * Use only when ready for production data collection
 
 **Workflow**: Develop and test in default test mode, then use ``--production`` only when ready for final data collection.
+For interactive development against a live VM, use :ref:`dev mode <cli-dev-mode>`.
 
-``adare experiment develop <experiment>``
-  Run an experiment in development/test mode for iterative development.
-  
+``adare experiment diff <experiment>``
+  Run an experiment in visual diff mode for manual side-by-side comparison
+  between OS/software versions: QEMU only, visual actions only, no database
+  records. Not to be confused with ``experiment run --diff`` (filesystem diff).
+
   Options:
-    * ``--environment TEXT`` - Name of the environment (required)
-    * ``--project TEXT`` - Name of the project
+    * ``-e, --environment TEXT`` - QEMU-based environment (required)
 
-``adare experiment dev <experiment>``
-  Interactive development is now done via ``adare dev start``. See :doc:`/guide/dev-mode` for usage.
+``adare experiment replicate <ulid>``
+  Download a published experiment bundle and run it end to end (experiment,
+  testfunction sets, environment and VM disk).
 
-``adare experiment example [name]``
-  Create an example experiment (default: TrashBinDeleteFile) with complete playbook and test configuration.
-  
   Options:
-    * ``--project TEXT`` - Name of the project
+    * ``-e, --environment TEXT`` - Environment to use (required if the bundle has more than one)
+    * ``--production, --prod`` - Run in production mode
+    * ``--skip-run`` - Download and load only
 
 ``adare experiment list``
-  List all experiments in the current environment.
-
-  Options:
-    * ``--tags TEXT, -t TEXT`` - Filter by tags (comma-separated, e.g. ``tool:Autopsy,goal:tool-test``)
+  List all experiments across all projects. Alias: ``l``.
 
 ``adare experiment info [name]``
   Show detailed information about a specific experiment.
-  
+
   Options:
-    * ``--ulid TEXT`` - Find experiment by ULID
-    * ``--dotnotation TEXT`` - Find by dotnotation (project.environment.experiment)
+    * ``-u, --ulid TEXT`` - Find experiment by ULID
+    * ``-d, --dotnotation TEXT`` - Find by dotnotation (project.environment.experiment)
+
+``adare experiment clone <source> <target>``
+  Copy an experiment to create a variation.
+
+  Options:
+    * ``-e, --environments TEXT`` - Override environments for the clone (repeatable)
+
+``adare experiment add-env <pattern> <environments...>`` / ``adare experiment remove-env <pattern> <environments...>``
+  Add environments to, or remove them from, every experiment matching the name or
+  glob pattern. ``remove-env`` alias: ``rm-env``.
+
+  Options:
+    * ``-f, --force`` - Proceed even if an experiment would be left without environments
+
+``adare experiment clean <experiment>``
+  Delete all fake (test-mode) runs of an experiment.
+
+``adare experiment remove <experiment>``
+  Remove an experiment, all its runs and (unless ``--keep-files``) its directory.
+  Alias: ``rm``.
+
+  Options:
+    * ``-f, --force`` - Remove even if the experiment has production runs
+    * ``--keep-files`` - Keep the experiment directory (only remove from the database)
+
+**Playbook Sub-commands (adare experiment playbook)**
+
+``adare experiment playbook show <experiment>``
+  Print an experiment's playbook YAML (from disk, falling back to the database). Alias: ``cat``.
+
+``adare experiment playbook validate <file>``
+  Statically validate a playbook YAML file (parse + schema, no VM).
+
+``adare experiment playbook set <experiment> <file>``
+  Validate a playbook file, write it as the experiment's ``playbook.yml`` and
+  re-ingest the project database.
+
+  Options:
+    * ``--no-backup`` - Do not back up the existing playbook.yml to ``.bak``
+
+Run Management
+==============
+
+``adare runs`` views and manages the history and results of experiment runs;
+``adare experiment run`` is what starts one.
+
+``adare runs list``
+  List all experiment runs with filtering capabilities. Alias: ``l``.
+
+  Options:
+    * ``--filter TEXT`` - Filter by dotnotation: [project][.environment][.experiment]
+
+``adare runs info <ulid>``
+  Show detailed information about a specific experiment run, including results and logs.
+
+``adare runs remove <ulid>``
+  Remove a single experiment run. Alias: ``rm``.
+
+.. _cli-dev-mode:
 
 Development Mode
 ================
@@ -210,25 +335,26 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
 
   Options:
     * ``-e, --environment TEXT`` - Environment name (required)
-    * ``--project, -p TEXT`` - Project name or path
-    * ``--gui-mode [auto|agent|host]`` - GUI execution mode (default: auto)
+    * ``-p, --project TEXT`` - Project name or path
+    * ``--name TEXT`` - Human-friendly session label, selectable later via ``-s <name>``
+    * ``--gui-mode [auto|agent|host]``, ``--test-mode [auto|agent|host]`` - Execution modes (default: auto)
     * ``--vm-memory INTEGER`` - VM RAM in MB (default: 4096 Linux, 8192 Windows)
     * ``--vm-cpus INTEGER`` - VM CPU count (default: 4)
     * ``--shared-dir TEXT`` - Shared directories in format ``HOST_PATH:VM_PATH`` (repeatable)
     * ``--debug-screenshots`` - Save screenshots for debugging
+    * ``--reuse`` - Attach to the most recent running session of the project instead of booting a new VM
+    * ``--watch`` - Open the VM's live screen in the browser (needs ``adare ui start``)
 
-``adare dev stop``
+``adare dev stop [session_id]``
   Stop a running dev mode session. Shuts down the VM but preserves all resources for later resumption.
 
   Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
+    * ``-s, --session TEXT`` - Session ID or name (alternative to the positional argument)
     * ``--rm`` - Remove all resources (VM, snapshots, database entries) permanently
+    * ``--all`` - Stop every running session (confirms first unless ``-y, --yes``)
 
 ``adare dev remove``
   Remove a dev mode session and all associated resources. Alias for ``adare dev stop --rm``.
-
-  Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
 
 ``adare dev resume [session_id]``
   Resume a previously stopped session. If no session ID is given, resumes the most recently stopped session.
@@ -237,16 +363,13 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
     * ``--project, -p TEXT`` - Project name or path
 
 ``adare dev list``
-  List all dev mode sessions with their status, experiment, and environment.
+  List all dev mode sessions with their status, experiment, and environment. Alias: ``l``.
 
   Options:
     * ``--project, -p TEXT`` - Filter by project
 
 ``adare dev state``
   Show detailed session state including variables, execution statistics, and available checkpoints.
-
-  Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
 
 ``adare dev cleanup``
   Remove stale sessions that are no longer valid (e.g., orphaned database entries).
@@ -260,7 +383,6 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
   Execute a single action in the running VM session.
 
   Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
     * ``-i, --input PATH`` - Action YAML file
     * ``-y, --yaml TEXT`` - Inline YAML string
     * ``--stdin`` - Read action YAML from stdin
@@ -269,7 +391,6 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
   Execute a playbook (or selected actions from it) in the running VM session.
 
   Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
     * ``-f, --file PATH`` - Playbook YAML file
     * ``-u, --url TEXT`` - Playbook URL
     * ``--stdin`` - Read playbook from stdin
@@ -280,50 +401,73 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
   Execute multiple playbooks with automatic checkpoint restoration between each. Supports glob patterns.
 
   Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
     * ``--checkpoint-name TEXT`` - Base checkpoint name (default: batch_base)
     * ``--timeout INTEGER`` - Checkpoint restore timeout in seconds (default: 120)
 
-**Reset Commands**
+**Playbook Authoring**
+
+``adare dev agent``
+  Drive a VM toward a natural-language goal with the vision-LLM GUI agent
+  (configured with ``adare vlm``). Attach to a session with ``-s`` or boot a
+  fresh VM from an environment with ``-e``. With ``-o`` or ``--as-experiment`` the
+  run is recorded as a replayable playbook and, by default, verified by replay.
+  Not to be confused with ``adare agent`` (coding-agent skills).
+
+  Options:
+    * ``--goal TEXT`` / ``--goal-file PATH`` - The goal
+    * ``-e, --environment NAME`` - Boot a fresh VM, drive it, tear it down (``--keep`` to leave it running)
+    * ``-o, --out PATH`` / ``--as-experiment NAME`` - Record the playbook to a file / scaffold an experiment
+    * ``--plan`` - Decompose the goal into verified sub-goals with checkpoint backtracking
+    * ``--ground`` - Auto-start the LocateAnything grounding server for precise clicks
+    * ``--step, --interactive`` - Approve each action before it runs
+    * ``--video`` - Record the run to ``run.mp4``
+
+``adare dev author``
+  Author a playbook from human-written text steps (no LLM planner); LocateAnything
+  grounds described clicks.
+
+  Options:
+    * ``--script-file PATH`` - Text steps, one action per line
+    * ``-i, --interactive`` - Author step by step in a REPL
+    * ``-o, --out PATH`` - Where to write the playbook
+
+``adare dev author-ai``
+  Let a cloud vision model author an ``actions:`` playbook for ``--goal`` from the
+  current screen; ``--replay`` verifies it live and repairs failures.
+
+``adare dev mcp``
+  Serve the session VM as a GUI-automation MCP server (blocking) so an external
+  MCP client can author playbooks. Session-scoped; for the whole ADARE lifecycle
+  use ``adare mcp serve``.
+
+  Options:
+    * ``--host TEXT``, ``--port INTEGER`` - Bind address (default: 127.0.0.1:13110)
+    * ``-o, --out-dir PATH`` - Directory for recorded playbooks
+
+**Reset Commands** (alias: ``res``)
 
 ``adare dev reset soft``
   Soft reset: clear session variables only. Fast (less than one second).
 
-  Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
-
 ``adare dev reset hard``
   Hard reset: full VM restore to the initial snapshot. Slower (10-30 seconds).
 
-  Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
-
-**Checkpoint Management**
+**Checkpoint Management** (alias: ``cp``)
 
 ``adare dev checkpoint create <name>``
   Create a named checkpoint (live VM snapshot) that captures the current VM state and session variables.
 
   Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
     * ``-d, --description TEXT`` - Checkpoint description
 
 ``adare dev checkpoint restore <name>``
   Restore the VM and session state to a previously created checkpoint.
 
-  Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
-
 ``adare dev checkpoint list``
   List all available checkpoints for the session.
 
-  Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
-
 ``adare dev checkpoint remove <name>``
   Remove a checkpoint and its associated snapshot files.
-
-  Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
 
 **CV Server Management**
 
@@ -331,116 +475,277 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
   Start or restart the CV (computer vision) server for GUI automation with optional debug logging.
 
   Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
-    * ``--debug / --no-debug`` - Enable or disable CV debug logging (default: keep existing)
+    * ``--debug`` - Enable CV debug logging
     * ``-o, --debug-output PATH`` - Directory for debug screenshots
 
 ``adare dev cv stop``
   Stop the CV server.
-
-  Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
 
 **Testfunction Update**
 
 ``adare dev update-testfunctions``
   Reload test functions in the running VM. Packages current test files from the host and uploads them to the VM.
 
-  Options:
-    * ``-s, --session TEXT`` - Session ID (auto-detected if only one running)
-
-For workflow patterns and tips, see :doc:`/guide/dev-mode`.
+All commands in this group that act on a session take ``-s, --session TEXT``
+(auto-detected if only one session is running). For workflow patterns and tips,
+see :doc:`/guide/dev-mode`.
 
 Testfunction Management
 ========================
 
-Testfunctions are reusable test components that can be shared across experiments.
+Testfunctions are reusable assertions that a playbook's ``tests:`` block calls by
+dotnotation (``<collection>.<function>``; a bare name means ``standard.<name>``).
+``adare test`` is aliased as ``adare tf`` and ``adare testfunction``.
 
-``adare testfunction create <name>``
-  Create a new testfunction with template structure.
-  
+The discovery commands (``list``, ``search``, ``info``, ``catalog``) read the
+collection sources directly. They need no project and no database, include the
+host-native ``visual`` collection, and show exact per-function types, defaults and
+parameter docs (from the function's ``Args:`` docstring). When stdout is piped they
+print tab-separated text; use ``--json`` for structured output.
+
+``adare test search "<goal>"``
+  Find the testfunction for a goal, e.g. ``"deleted file is gone"``. Ranks by name,
+  summary and parameter docs with synonyms (deleted/gone/removed, registry/hive, ...).
+  Each result includes a ready-to-paste ``tests:`` example. Alias: ``find``.
+
   Options:
-    * ``--project TEXT`` - Name of the project
+    * ``--collection/--set TEXT``, ``--category TEXT``, ``--os [windows|linux|any]`` - Filters
+    * ``--limit, -n INTEGER`` - Maximum results (default 8)
 
-``adare testfunction remove <name>``
-  Remove an existing testfunction.
-  
+``adare test list``
+  List every testfunction with its parameters (optional ones marked ``?``).
+  Collections bundled with ADARE but not yet synced are flagged. Aliases: ``l``, ``ls``.
+
   Options:
-    * ``--project TEXT`` - Name of the project
+    * ``--collection/--set TEXT``, ``--category TEXT``, ``--os [windows|linux|any]`` - Filters
+    * ``--full`` - Structured output with every field (default: compact)
 
-``adare testfunction load <name>``
-  Load a testfunction into the current project.
-  
+``adare test info <dotnotation>``
+  Signature, parameter types/defaults/docs, the current installed version and an
+  example ``tests:`` entry. Unknown names suggest close matches.
+
   Options:
-    * ``--project TEXT`` - Name of the project
+    * ``--example`` - Print only the ``tests:`` YAML block
 
-``adare testfunction list``
-  List all available testfunctions.
-  
+``adare test catalog``
+  Export the catalog of the collections bundled with ADARE (machine-independent,
+  ignores local collections).
+
   Options:
-    * ``--project TEXT`` - Name of the project
+    * ``--markdown`` - Render a Markdown reference (used for the agent skill reference)
 
-``adare testfunction show``
-  Show testfunctions with optional filtering.
-  
+``adare test create <name>``
+  Create a new testfunction collection from a template.
+
   Options:
-    * ``--file-name TEXT`` - Filter by file name
+    * ``--project, -p TEXT`` - Name of the project
 
-``adare testfunction info <dotnotation>``
-  Show detailed information about a specific testfunction using dotnotation.
+``adare test validate <path>``
+  Offline contract check of a collection directory or ``.py`` file. Warns (without
+  failing) when a function or parameter lacks documentation.
+
+``adare test dry-run <collection>.<function>``
+  Execute one ``FILE_BASED``/``FILE_CONTENT`` testfunction against a local sample.
+
+  Options:
+    * ``--param, -P TEXT`` - Parameter as ``key=value`` (repeatable)
+    * ``--file, -f TEXT`` - Local sample file used as the ``dst`` parameter
+    * ``--path TEXT`` - Collection dir/.py to load
+
+``adare test load <name>``
+  Register a collection in the global database.
+
+  Options:
+    * ``--force, -f`` - Overwrite a testfunction used in experiments (deletes the associated runs)
+
+``adare test sync``
+  Hash-based create/update of all bundled collections (``visual`` is host-native and never synced).
+
+``adare test versions <collection>[.<function>]``
+  Version history of a collection or one function. Editing only a docstring does
+  not bump a function's version. Alias: ``v``.
+
+``adare test remove <name>``
+  Remove a collection file. Alias: ``rm``.
 
 Virtual Machine Management
 ==========================
 
-VM commands provide lifecycle management for virtual machines used in experiments.
+ADARE knows two kinds of VM:
+
+* **Registered VMs** are the disks environments run on. ``adare env load``
+  registers them; ``adare vm list`` shows them.
+* **VM instances** are what experiment runs boot from a registered VM: on QEMU
+  one throwaway instance per run, on VirtualBox a reusable pool.
+  ``adare vm usage`` shows them.
+
+``info`` and ``remove`` take either kind, by name or ID, and detect which it is.
+
+**Creating and checking VMs**
+
+``adare vm create <os_name>``
+  Create a new ADARE-ready VM (QEMU) from scratch: unattended install, GUI-automated
+  install, or manual install depending on the OS profile. ``adare vm profile list``
+  shows every target. See :doc:`../guide/vm-image-creation` for the full guide.
+
+  Options (selection):
+    * ``--iso PATH`` - Installer ISO (required for Windows)
+    * ``--name TEXT``, ``--disk-size TEXT``, ``--ram INTEGER``, ``--cpus INTEGER`` - VM shape
+    * ``--setup [bare|base|full|agent]`` - What ADARE adds to the guest (default: full)
+    * ``--recipe/--no-recipe`` - Emit a declarative recipe environment instead of a baked disk
+    * ``--byo-iso`` - Recipe, Windows only: consumers supply the ISO themselves
+    * ``--interactive`` - Boot the VM after install for manual software installation
+    * ``--record``, ``--relearn`` - GUI-automated installs: re-record the install playbook with the vision agent
+    * ``--display`` - Show the installer in a window (watch only)
+    * ``--arch [x86_64|aarch64]``, ``--allow-emulation`` - Cross-architecture installs
+
+``adare vm profile list`` / ``show <name>`` / ``add <file.yml>`` / ``remove <name>``
+  Manage the OS profiles ``vm create`` can install: list the built-in and custom
+  ones, show one, or add/remove a custom profile. Aliases: ``l``, ``rm``.
+
+``adare vm test <target>``
+  Test ADARE compatibility of an ``.ova``/``.ovf`` file or a registered VM: prepare
+  it, mount shared directories, start adarevm, take a screenshot and click.
+
+  Options:
+    * ``-p, --platform [linux|windows]`` - Required for OVA files; auto-derived for registered VMs
+    * ``--keep-vm`` / ``--remove-vm`` - What to do with the test VM afterwards
+    * ``--log-file FILE`` / ``--no-log`` - Debug log location
+
+``adare vm doctor``
+  Report which system tools VM creation needs are available (qemu, OVMF, swtpm,
+  libvirt binding, ...). Never installs anything.
+
+``adare vm watch <name>``
+  Watch a running VM's live screen in the browser via VirtualSpice (needs ``adare ui start``).
+
+  Options:
+    * ``--view-only/--interactive`` - Read-only view (default) or allow input
+
+**Registered VMs and instances**
 
 ``adare vm list``
-  List all VMs currently managed by ADARE, including their status and associated environments.
+  List registered VMs. Alias: ``l``.
 
-``adare vm info <vm_id>``
-  Get detailed information about a specific VM, including snapshots and configuration.
+``adare vm info <name-or-id>``
+  Show a registered VM or a VM instance.
 
-``adare vm delete <vm_id>``
-  Delete a specific VM from the system.
-  
+``adare vm usage``
+  Show VM instances (running experiment runs; VirtualBox pool) and their usage.
+
+``adare vm remove <name-or-id>``
+  Remove a registered VM or a VM instance. Alias: ``rm``.
+
+  A registered VM is the disk environments run on, so removing it also removes
+  those environments, every version -- the same end state as
+  ``adare env remove``. The command lists what goes (environments, stopped
+  instances, runs, the disk) and asks first. It refuses:
+
+  * while an instance of the VM is running (an experiment run or dev session uses it);
+  * when an environment on it also has versions on another VM -- removing the
+    environment would take that VM along; use ``adare env remove`` for that;
+  * without ``--force``, when runs used its environments (as ``adare env remove``).
+
+  Disks inside ADARE's managed storage are deleted; disks elsewhere are kept.
+
   Options:
-    * ``--force`` - Force deletion even if VM is in use
+    * ``-f, --force`` - Instance: remove it even if running. Registered VM: also
+      delete the runs that used its environments (experiments are kept, detached)
+    * ``-y, --yes`` - Skip the confirmation prompt (required when stdin is not a terminal)
 
-``adare vm delete-snapshot <vm_id> <snapshot_name>``
-  Delete a specific snapshot from a VM while preserving the VM itself.
+``adare vm remove --stopped | --experiment <id> | --all --force | --env <ulid> --force``
+  Remove instances in bulk: all stopped ones, those of an experiment, all of
+  them (running too), or those of an environment's VM. Registered VMs stay.
 
-**VM Cleanup Sub-commands (adare vm clear)**
+``adare vm prune``
+  Reclaim what crashed runs left behind (instances, run files, orphaned base
+  disks, stale recipe caches). Dry run unless ``--force``. Also lists registered
+  VMs no environment uses; those are never deleted by prune -- remove one with
+  ``adare vm remove <name>``.
 
-``adare vm clear all``
-  Clear ALL VMs from the system.
-  
   Options:
-    * ``--force`` - Force deletion of all VMs (required for confirmation)
+    * ``--sockets`` - Also reap dead QMP/QGA sockets
 
-``adare vm clear environment <environment_ulid>``
-  Clear all VMs associated with a specific environment.
-  
+``adare vm reset``
+  Remove the instances of every VM, running or not. Registered VMs stay.
+
   Options:
-    * ``--force`` - Force deletion of environment VMs (required for confirmation)
+    * ``-f, --force`` - Skip the confirmation prompt
 
-Run Management
-==============
+``adare vm snapshot list`` / ``adare vm snapshot remove <instance_id> <snapshot_name>``
+  List or delete a VM instance's snapshots (VirtualBox). ``list`` takes
+  ``-i, --instance`` to show one instance.
 
-Commands for viewing and managing experiment run history and results.
-
-``adare run list``
-  List all experiment runs with filtering capabilities.
-  
-  Options:
-    * ``--filter TEXT`` - Filter by dotnotation: [project][.environment][.experiment]
-
-``adare run info <ulid>``
-  Show detailed information about a specific experiment run, including results and logs.
-
-Web Platform Integration
+Vision-LLM Configuration
 ========================
 
-Commands for integrating with the ADARE Web platform for sharing experiments and results.
+``adare vlm`` configures the OpenAI-compatible vision-LLM endpoint used for GUI
+automation (``adare dev agent``, GUI-automated ``vm create`` installs) and by
+``adare chat``. Settings are saved as named profiles; an ``ADARE_VLLM_*``
+environment variable still overrides the active profile for a single run.
+
+``adare vlm use [target]``
+  Switch profile: with no argument an interactive picker; with a profile name,
+  activate it; with a preset (``ollama-cloud``, ``local``), create and activate one.
+
+  Options:
+    * ``--api-key TEXT``, ``--base-url TEXT``, ``--model TEXT``, ``--name TEXT`` - Preset overrides
+    * ``--no-verify`` - Skip the live endpoint/token check
+
+``adare vlm create``
+  Create a profile with a guided menu (provider, endpoint, model, coordinate space, key, name).
+
+``adare vlm list`` / ``adare vlm show``
+  List saved profiles (active one marked) / show the resolved config and where each
+  value comes from. ``list`` aliases: ``l``, ``ls``.
+
+``adare vlm save <name>``
+  Snapshot the currently effective config as a profile (``--no-activate`` to keep the current one active).
+
+``adare vlm remove <name>``
+  Delete a profile. Alias: ``rm``.
+
+``adare vlm doctor``
+  Preflight the active VLM: checks the endpoint is reachable and detects which
+  coordinate convention the model answers in, recommending ``ADARE_VLLM_COORD_SPACE``.
+
+``adare vlm pull-grounding``
+  Pre-download the LocateAnything grounding weights (~7.3 GB) used by
+  ``adare dev agent --ground``, instead of paying the download on the first run.
+  Needs ``uv sync --extra grounding``, an ``HF_TOKEN`` and the accepted NVIDIA license.
+
+  Options:
+    * ``--model TEXT`` - HF id or local path (default: ``ADARE_LOCATE_MODEL_PATH`` or ``nvidia/LocateAnything-3B``)
+
+Local Web UI
+============
+
+``adare ui`` runs the local web UI (FastAPI + VirtualSpice), which also serves
+the live VM viewer used by ``adare vm watch`` and ``adare dev start --watch``.
+
+``adare ui start``
+  Start the ADARE web UI (FastAPI + VirtualSpice) and open it in the browser.
+
+  Options:
+    * ``--port INTEGER``, ``--host TEXT`` - Bind address
+    * ``--spice-port INTEGER`` - VirtualSpice backend port
+    * ``--dev`` - Development mode with auto-reload
+    * ``--no-browser`` - Don't open the browser
+
+``adare ui status``
+  Show the status of the local web services (FastAPI, VirtualSpice, frontend build).
+
+``adare ui build``
+  Build the web frontend (``pnpm build`` in ``adare-web``).
+
+``adare ui install-spice``
+  Download and verify the VirtualSpice binary (``--force`` to re-download).
+
+ADARE Web Platform
+==================
+
+``adare web`` talks to the shared ADARE Web platform: log in, download, publish
+and submit experiments, testfunctions and environments.
 
 ``adare web login``
   Login to the ADARE Web platform to access shared experiments and upload results.
@@ -449,7 +754,7 @@ Commands for integrating with the ADARE Web platform for sharing experiments and
   Logout from the ADARE Web platform.
 
 ``adare web status``
-  Show current login status and connection to the web platform.
+  Show the current login status on the web platform.
 
 **Web Download Sub-commands (adare web download)**
 
@@ -467,6 +772,7 @@ Commands for integrating with the ADARE Web platform for sharing experiments and
 
 ``adare web download bundle <ulid>``
   Download an experiment bundle (experiment plus all dependencies) from the web platform.
+  ``adare experiment replicate`` downloads a bundle and runs it in one step.
 
   Options:
     * ``--project, -p TEXT`` - Name of the project
@@ -514,38 +820,89 @@ Commands for integrating with the ADARE Web platform for sharing experiments and
   Synchronize all environments and experiments with the web platform.
 
   Options:
-    * ``--project TEXT`` - Name of the project
+    * ``--project, -p TEXT`` - Name of the project
 
-MCP Server Testing
-==================
+AI Assistants
+=============
 
-Commands for testing MCP (Model Control Protocol) server functionality used for GUI automation.
+``adare skills install``
+  Install ADARE's workflow skills (``skills/adare-*``) for AI coding agents by
+  symlinking them into the agent's skill directories. Real directories are never
+  touched; symlinks that point elsewhere are only re-pointed with ``--force``.
+  Alias: ``setup``.
 
-``adare mcp test-icon``
-  Test MCP server icon finding functionality by searching for an icon in a screenshot.
-  
-  Automatically starts MCP server, finds icon matches, prints coordinates, and stops the server. Optionally saves a marked image showing found locations.
-  
   Options:
-    * ``--icon PATH`` - Path to icon image file (required)
-    * ``--screenshot PATH`` - Path to screenshot image file (required)
-    * ``--output PATH`` - Path to save marked image with found locations (optional)
-    * ``--host TEXT`` - MCP server host (default: localhost)
-    * ``--port INTEGER`` - MCP server port (default: 13109)
+    * ``--client [claude|opencode|all]`` - Target agent(s) (default: all)
+    * ``--scope [user|project|all]`` - ``user`` = ``~/.claude/skills`` and
+      ``~/.config/opencode/skills``; ``project`` = ``.claude/skills`` and
+      ``.opencode/skills`` in the current directory (default: user)
+    * ``--copy`` - Copy instead of symlink
+    * ``--force`` - Re-point symlinks that point elsewhere
+    * ``--dry-run`` - Show what would change
+
+``adare skills status``
+  Show where the skills are installed and whether each link is current
+  (``ok``, ``missing``, ``stale``, ``foreign-link``, ``conflict``).
+
+``adare mcp serve``
+  Serve the whole ADARE lifecycle (projects, environments, experiments, runs, VMs,
+  dev sessions, playbook authoring) as MCP tools. Register it with Claude Code via
+  ``claude mcp add adare -- adare mcp serve``.
+
+  Options:
+    * ``--transport [stdio|http]`` - stdio (default; the client launches the process) or http
+    * ``--host TEXT``, ``--port INTEGER`` - HTTP bind address (default: 127.0.0.1:13112)
+
+``adare chat``
+  Control ADARE conversationally in an embedded agentic REPL, using the endpoint
+  configured with ``adare vlm`` and the same tools ``adare mcp serve`` exposes.
+
+  Options:
+    * ``--model TEXT`` - Chat model (default: ``$ADARE_CHAT_MODEL``, else the vlm model)
+    * ``--base-url TEXT`` - OpenAI-compatible endpoint (default: the active vlm profile)
+    * ``--tool-protocol [native|json|auto]`` - Tool-call protocol (default: auto)
+
+``adare tui``
+  Open the Textual terminal UI.
+
+Debugging Tools
+===============
+
+``adare debug`` holds low-level tools for testing GUI detection and the guest
+agent directly.
+
+``adare debug cv test-icon``
+  Start a CV server, find an icon in a screenshot, print the coordinates of all
+  matches and stop the server.
+
+  Options:
+    * ``--icon PATH``, ``--screenshot PATH`` - Inputs (required)
+    * ``--output PATH`` - Save a marked image showing the found locations
     * ``--threshold FLOAT`` - Match threshold 0.0-1.0 (default: 0.6)
+    * ``--host TEXT``, ``--port INTEGER`` - CV server address (default: localhost:13109)
+    * ``--mcplog PATH`` - Save the CV server log
 
-``adare mcp test-text <text>``
-  Test MCP server text finding functionality by searching for text in a screenshot.
-  
-  Automatically starts MCP server, finds text matches, prints coordinates, and stops the server.
-  
-  Arguments:
-    * ``text`` - The text string to search for in the screenshot
-  
+``adare debug cv test-text <text>``
+  Same for a text string, using OCR.
+
+``adare debug cv get-all-text``
+  Print all text OCR detects in a screenshot, with coordinates and confidence.
+
   Options:
-    * ``--screenshot PATH`` - Path to screenshot image file (required)
-    * ``--host TEXT`` - MCP server host (default: localhost)
-    * ``--port INTEGER`` - MCP server port (default: 13109)
+    * ``--screenshot PATH`` - Screenshot (required)
+    * ``--format TEXT`` - ``json`` (default) or ``csv``
+
+``adare debug ws action <file>``
+  Execute the actions in a YAML file on a running adarevm over WebSocket.
+
+  Options:
+    * ``--host TEXT``, ``--port INTEGER`` - adarevm address (default: 127.0.0.1:18765)
+    * ``--vm-instance TEXT`` - Look up the port from a VM instance name
+    * ``--token TEXT`` - Agent token (``agent_token`` in the run's config.json)
+    * ``--continue-on-error`` - Keep going after a failed action
+
+``adare debug ws example <file>``
+  Write an example action YAML file.
 
 Icon Library
 ============
@@ -609,14 +966,8 @@ database is opened -- see :doc:`../architecture/database-migrations`.
   Options:
     * ``--force``, ``-f`` - Skip the confirmation prompt
 
-VMs and runtime
----------------
-
-``adare vm reset``
-  Reset all VMs in the system (use with caution).
-
-  Options:
-    * ``--force``, ``-f`` - Force reset of all VMs (required for confirmation)
+VM runtime
+----------
 
 ``adare runtime refresh``
   Refresh the VM runtime files in the current project.
@@ -625,8 +976,35 @@ VMs and runtime
   Build fresh VM runtime wheels (``adarelib``, ``adarevm``) for the current
   project.
 
-Help Commands
-=============
+Moved Commands
+==============
 
-``adare help``
-  Show help for special options and advanced usage patterns.
+These commands moved; the old names still work (hidden from ``--help``) and
+print a pointer to the new name on stderr. They will be removed in a future release.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Old
+     - New
+   * - ``adare run list|info|remove``
+     - ``adare runs list|info|remove``
+   * - ``adare agent setup|status``
+     - ``adare skills install|status``
+   * - ``adare web start|build|install-spice``
+     - ``adare ui start|build|install-spice``
+   * - ``adare web services``
+     - ``adare ui status``
+   * - ``adare cv ...`` / ``adare ws ...``
+     - ``adare debug cv ...`` / ``adare debug ws ...``
+   * - ``adare os-profile ...``
+     - ``adare vm profile ...``
+   * - ``adare vm gui-doctor``
+     - ``adare vlm doctor``
+   * - ``adare dev grounding-pull``
+     - ``adare vlm pull-grounding``
+   * - ``adare test show -n <collection>``
+     - ``adare test list --collection <collection>``
+
+``adare server start`` and ``adare help`` were removed: the former duplicated
+``adare web start`` (now ``adare ui start``) and failed to start, the latter had no subcommands.

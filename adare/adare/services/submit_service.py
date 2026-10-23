@@ -2,6 +2,7 @@
 Submit Service - Business logic for submitting experiments, testfunctions, and environments
 to the shared Gitea repository via pull requests.
 """
+
 import logging
 from datetime import datetime
 
@@ -25,15 +26,18 @@ class SubmitService:
 
         try:
             files = export_experiment_for_submission(
-                request.project_path, request.name,
+                request.project_path,
+                request.name,
                 check_dependencies=not request.skip_dependency_check,
             )
             pr = self._create_pr('experiment', request.name, files, action=request.action)
-            return Result.ok(SubmitResult(
-                pr_url=pr['html_url'],
-                pr_number=pr['number'],
-                message=f"PR #{pr['number']} created for experiment '{request.name}'"
-            ))
+            return Result.ok(
+                SubmitResult(
+                    pr_url=pr['html_url'],
+                    pr_number=pr['number'],
+                    message=f"PR #{pr['number']} created for experiment '{request.name}'",
+                )
+            )
         except ExperimentSubmissionError as e:
             return Result.fail(
                 code="UnresolvableDependency",
@@ -42,28 +46,21 @@ class SubmitService:
                     'Submit and merge the missing testfunction sets / environments first',
                     'Inspect what the server has registered at '
                     'https://adare.click/api/testfunction/ and /api/environment/',
-                    'Override the check with: adare web submit experiment <name> '
-                    '--skip-dependency-check',
-                ]
+                    'Override the check with: adare web submit experiment <name> --skip-dependency-check',
+                ],
             )
         except FileNotFoundError as e:
             return Result.fail(
-                code="FileNotFound",
-                message=str(e),
-                solutions=['Verify the experiment exists in your project']
+                code="FileNotFound", message=str(e), solutions=['Verify the experiment exists in your project']
             )
         except NotLoggedInError as e:
-            return Result.fail(
-                code="NotLoggedIn",
-                message=str(e),
-                solutions=['Run "adare web login" first']
-            )
+            return Result.fail(code="NotLoggedIn", message=str(e), solutions=['Run "adare web login" first'])
         except (RuntimeError, requests.HTTPError, requests.ConnectionError) as e:
             log.error(f"Failed to submit experiment: {e}")
             return Result.fail(
                 code="SubmitError",
                 message=f"Failed to submit experiment: {e}",
-                solutions=['Check your internet connection', 'Verify you are logged in']
+                solutions=['Check your internet connection', 'Verify you are logged in'],
             )
 
     def submit_testfunction(self, request: SubmitRequest) -> Result[SubmitResult]:
@@ -75,29 +72,25 @@ class SubmitService:
         try:
             files = export_testfunction_for_submission(request.project_path, request.name)
             pr = self._create_pr('testfunction', request.name, files, action=request.action)
-            return Result.ok(SubmitResult(
-                pr_url=pr['html_url'],
-                pr_number=pr['number'],
-                message=f"PR #{pr['number']} created for testfunction '{request.name}'"
-            ))
+            return Result.ok(
+                SubmitResult(
+                    pr_url=pr['html_url'],
+                    pr_number=pr['number'],
+                    message=f"PR #{pr['number']} created for testfunction '{request.name}'",
+                )
+            )
         except FileNotFoundError as e:
             return Result.fail(
-                code="FileNotFound",
-                message=str(e),
-                solutions=['Verify the testfunction exists in your project']
+                code="FileNotFound", message=str(e), solutions=['Verify the testfunction exists in your project']
             )
         except NotLoggedInError as e:
-            return Result.fail(
-                code="NotLoggedIn",
-                message=str(e),
-                solutions=['Run "adare web login" first']
-            )
+            return Result.fail(code="NotLoggedIn", message=str(e), solutions=['Run "adare web login" first'])
         except (RuntimeError, requests.HTTPError, requests.ConnectionError) as e:
             log.error(f"Failed to submit testfunction: {e}")
             return Result.fail(
                 code="SubmitError",
                 message=f"Failed to submit testfunction: {e}",
-                solutions=['Check your internet connection', 'Verify you are logged in']
+                solutions=['Check your internet connection', 'Verify you are logged in'],
             )
 
     def submit_environment(self, request: SubmitRequest) -> Result[SubmitResult]:
@@ -112,11 +105,13 @@ class SubmitService:
         try:
             files = export_environment_for_submission(request.project_path, request.name)
             pr = self._create_pr('environment', request.name, files, action=request.action)
-            return Result.ok(SubmitResult(
-                pr_url=pr['html_url'],
-                pr_number=pr['number'],
-                message=f"PR #{pr['number']} created for environment '{request.name}'"
-            ))
+            return Result.ok(
+                SubmitResult(
+                    pr_url=pr['html_url'],
+                    pr_number=pr['number'],
+                    message=f"PR #{pr['number']} created for environment '{request.name}'",
+                )
+            )
         except EnvironmentSubmissionError as e:
             return Result.fail(
                 code="InvalidEnvironment",
@@ -126,26 +121,20 @@ class SubmitService:
                     'Ensure vm_sha256 (and iso_sha256 for recipes) is a 64-hex digest',
                     'Convert a local env with: adare environment publish-prepare '
                     '<name> --vm-url <url> --vm-format <fmt>',
-                ]
+                ],
             )
         except FileNotFoundError as e:
             return Result.fail(
-                code="FileNotFound",
-                message=str(e),
-                solutions=['Verify the environment exists in your project']
+                code="FileNotFound", message=str(e), solutions=['Verify the environment exists in your project']
             )
         except NotLoggedInError as e:
-            return Result.fail(
-                code="NotLoggedIn",
-                message=str(e),
-                solutions=['Run "adare web login" first']
-            )
+            return Result.fail(code="NotLoggedIn", message=str(e), solutions=['Run "adare web login" first'])
         except (RuntimeError, requests.HTTPError, requests.ConnectionError) as e:
             log.error(f"Failed to submit environment: {e}")
             return Result.fail(
                 code="SubmitError",
                 message=f"Failed to submit environment: {e}",
-                solutions=['Check your internet connection', 'Verify you are logged in']
+                solutions=['Check your internet connection', 'Verify you are logged in'],
             )
 
     def precheck_submission(self, entity_type: str, name: str) -> "Result[dict]":
@@ -166,8 +155,10 @@ class SubmitService:
             header = WebappLogin().get_django_authenticated_request_header()
             url = f'{config_server.API_URL}submit/precheck/'
             response = requests.post(
-                url, json={'entity_type': entity_type, 'name': name},
-                headers=header, timeout=config_server.TIMEOUT_SECONDS,
+                url,
+                json={'entity_type': entity_type, 'name': name},
+                headers=header,
+                timeout=config_server.TIMEOUT_SECONDS,
             )
             response.raise_for_status()
             return Result.ok(response.json())
@@ -185,8 +176,7 @@ class SubmitService:
                 solutions=['Check your internet connection', 'Verify you are logged in'],
             )
 
-    def _create_pr(self, entity_type: str, name: str, files: dict[str, bytes],
-                   action: str = 'create') -> dict:
+    def _create_pr(self, entity_type: str, name: str, files: dict[str, bytes], action: str = 'create') -> dict:
         """Create a branch, upload files, and open a ``action`` PR in the shared repo."""
         import adare.config.server as config_server
         from adare.webappaccess.exceptions import NotLoggedInError
@@ -214,7 +204,9 @@ class SubmitService:
         # prefix (branch names carry no action, so prefix-matching only a create
         # avoids mistaking a create branch for a modify).
         existing_pr = client.find_open_pull_request(
-            owner, repo, title=title,
+            owner,
+            repo,
+            title=title,
             head_prefix=head_prefix if action == 'create' else None,
         )
         if existing_pr:
@@ -228,8 +220,7 @@ class SubmitService:
 
         for filepath, content in files.items():
             success = client.create_or_update_file(
-                owner, repo, filepath, content, branch_name,
-                message=f'[{entity_type} {action}] Add {filepath}'
+                owner, repo, filepath, content, branch_name, message=f'[{entity_type} {action}] Add {filepath}'
             )
             if not success:
                 raise RuntimeError(f'Failed to upload {filepath}')
@@ -238,7 +229,8 @@ class SubmitService:
             return existing_pr
 
         return client.create_pull_request(
-            owner, repo,
+            owner,
+            repo,
             title=title,
             head=branch_name,
             body=f'Automated submission ({action}) of {entity_type} `{name}` via ADARE CLI.',

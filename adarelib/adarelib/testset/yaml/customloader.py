@@ -1,7 +1,9 @@
 import yaml
-from .customtags import YamlRegexString, YamlRegexStringAll, YamlString, YamlTimestamp, YamlPath
 
 from adarelib.constants import StatusEnum
+
+from .customtags import YamlPath, YamlRegexString, YamlRegexStringAll, YamlString, YamlTimestamp
+
 #
 # list of custom tags
 YAML_CUSTOM_TAGS = [YamlRegexString, YamlRegexStringAll, YamlTimestamp, YamlString, YamlPath]

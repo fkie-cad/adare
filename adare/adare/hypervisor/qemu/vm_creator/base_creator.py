@@ -15,7 +15,9 @@ from adare.console import console, print_section, print_step, print_vm_config_pa
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.firmware import create_nvram_for_vm, get_nvram_path_for_vm
 from adare.hypervisor.qemu.vm_creator.disk_helpers import (
-    DiskCompressionError, compress_qcow2_zstd, create_qcow2_disk,
+    DiskCompressionError,
+    compress_qcow2_zstd,
+    create_qcow2_disk,
 )
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel, default_host_cpus
 from adare.hypervisor.qemu.vm_creator.prerequisites import check_prerequisites
@@ -44,8 +46,14 @@ class BaseVMCreator(ABC):
         3. Ensure ISO availability
         4. Create disk image (and optional NVRAM)
         5. Run installation
-        6. Print success / clean up on failure
+        6. Readiness pass (see guest_readiness) for --setup base and up
+        7. Print success / clean up on failure
+
+    ``readiness_pass`` is off for creators that make the guest ready themselves
+    (playbook) or cannot (manual, gui-auto).
     """
+
+    readiness_pass = True
 
     def __init__(
         self,
@@ -91,10 +99,26 @@ class BaseVMCreator(ABC):
             self._cleanup_on_failure(disk_path, nvram_path)
             raise
         self._validate_disk_after_install(disk_path)
-        if self.compress:
+        if self.readiness_pass and self.setup_level >= SetupLevel.BASE:
+            # Flattens (and compresses) into a new disk; the install is kept on failure.
+            disk_path = self._make_guest_ready(disk_path)
+        elif self.compress:
             disk_path = self._compress_disk(disk_path)
         self._print_success(disk_path)
         return disk_path
+
+    def _make_guest_ready(self, disk_path: Path) -> Path:
+        from adare.hypervisor.qemu.vm_creator.guest_readiness import make_guest_ready
+
+        return make_guest_ready(
+            disk_path,
+            self.os_def,
+            self.setup_level,
+            self.ram_mb,
+            self.cpus,
+            allow_emulation=self.allow_emulation,
+            compress=self.compress,
+        )
 
     # ── Abstract hooks ───────────────────────────────────────────────
 
@@ -129,13 +153,16 @@ class BaseVMCreator(ABC):
 
     def _print_config_panel(self) -> None:
         """Print a Rich panel summarising the VM configuration."""
-        print_vm_config_panel(f'VM Creation: {self.vm_name}', [
-            ('OS', self.os_def.display_name),
-            ('Architecture', self.os_def.architecture),
-            ('Disk', self.disk_size),
-            ('RAM', f'{self.ram_mb} MB'),
-            ('CPUs', str(self.cpus)),
-        ])
+        print_vm_config_panel(
+            f'VM Creation: {self.vm_name}',
+            [
+                ('OS', self.os_def.display_name),
+                ('Architecture', self.os_def.architecture),
+                ('Disk', self.disk_size),
+                ('RAM', f'{self.ram_mb} MB'),
+                ('CPUs', str(self.cpus)),
+            ],
+        )
 
     def _check_prerequisites(self) -> None:
         """Verify that the host has all required tools and resources."""
@@ -185,9 +212,13 @@ class BaseVMCreator(ABC):
         needs_uefi = self.os_def.requires_uefi or self.os_def.architecture == 'aarch64'
         nvram_path = None
         if needs_uefi:
-            nvram_path = Path(create_nvram_for_vm(
-                self.vm_name, target_dir, self.os_def.architecture,
-            ))
+            nvram_path = Path(
+                create_nvram_for_vm(
+                    self.vm_name,
+                    target_dir,
+                    self.os_def.architecture,
+                )
+            )
 
         return disk_path, nvram_path
 
@@ -233,10 +264,7 @@ class BaseVMCreator(ABC):
         compressed_size = tmp_path.stat().st_size
         os.replace(tmp_path, disk_path)
         saved_pct = 100 * (1 - compressed_size / original_size)
-        print_step(
-            f'Compressed disk image (zstd): [dim]{disk_path}[/dim] '
-            f'({saved_pct:.0f}% smaller)'
-        )
+        print_step(f'Compressed disk image (zstd): [dim]{disk_path}[/dim] ({saved_pct:.0f}% smaller)')
         return disk_path
 
     def _cleanup_on_failure(self, disk_path: Path, nvram_path: Path | None) -> None:

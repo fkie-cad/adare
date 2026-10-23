@@ -153,13 +153,13 @@ Managing Experiments
 .. code-block:: bash
 
    # Copy experiment for modification
-   adare experiment copy my-experiment my-experiment-v2
+   adare experiment clone my-experiment my-experiment-v2
 
    # Remove experiment
    adare experiment remove my-experiment
 
-   # Develop interactively
-   adare experiment develop my-experiment -e ubuntu24043
+   # Develop interactively against a live VM
+   adare dev start -e ubuntu24043
 
 Best Practices
 **************

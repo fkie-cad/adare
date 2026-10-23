@@ -53,7 +53,7 @@ class UnsupportedInstallTarget(DispatchError):
 
 @dataclass(frozen=True)
 class GuiBuildOptions:
-    """Options only the GUI-driven creators (`gui-auto`) accept."""
+    """Options only the GUI-driven creators (`gui-auto`, `playbook`) accept."""
 
     record: bool = False
     relearn: bool = False
@@ -100,7 +100,8 @@ def create_vm_disk(
     # 1. install_mode wins over platform.
     if os_def.install_mode == 'manual':
         _require_iso(
-            iso_path, os_def,
+            iso_path,
+            os_def,
             title=f'ISO required for manual install of {os_def.display_name}',
         )
         from adare.hypervisor.qemu.vm_creator.manual_creator import create_manual_vm
@@ -109,7 +110,8 @@ def create_vm_disk(
 
     if os_def.install_mode == 'gui-auto':
         _require_iso(
-            iso_path, os_def,
+            iso_path,
+            os_def,
             title=f'ISO required for GUI-automated install of {os_def.display_name}',
         )
         from adare.hypervisor.qemu.vm_creator.gui_creator import create_gui_vm
@@ -126,7 +128,7 @@ def create_vm_disk(
     if os_def.install_mode == 'playbook':
         from adare.hypervisor.qemu.vm_creator.playbook_creator import create_playbook_vm
 
-        return create_playbook_vm(iso_path=iso_path, **common)
+        return create_playbook_vm(iso_path=iso_path, display=gui.display, **common)
 
     # 2. Seed-file modes, keyed on platform.
     if os_def.platform == 'linux':
@@ -136,7 +138,8 @@ def create_vm_disk(
 
     if os_def.platform == 'windows':
         _require_iso(
-            iso_path, os_def,
+            iso_path,
+            os_def,
             title=f'Windows ISO required for {os_def.display_name}',
             extra_steps=['Download from Microsoft (requires a valid license)'],
         )
@@ -146,12 +149,13 @@ def create_vm_disk(
 
     raise UnsupportedInstallTarget(
         title=f'Unsupported platform: {os_def.platform}',
-        next_steps=['Pick a profile with platform linux or windows: adare vm profiles'],
+        next_steps=['Pick a profile with platform linux or windows: adare vm profile list'],
     )
 
 
-def _require_iso(iso_path: Path | None, os_def: OsDefinition, *, title: str,
-                 extra_steps: list[str] | None = None) -> None:
+def _require_iso(
+    iso_path: Path | None, os_def: OsDefinition, *, title: str, extra_steps: list[str] | None = None
+) -> None:
     if iso_path is not None:
         return
     raise InstallerIsoRequired(

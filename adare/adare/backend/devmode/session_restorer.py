@@ -23,10 +23,7 @@ from adare.database.models.devsession import DevSession
 log = logging.getLogger(__name__)
 
 
-async def restore_infrastructure_context(
-    session: DevModeSession,
-    db_session: DevSession
-) -> bool:
+async def restore_infrastructure_context(session: DevModeSession, db_session: DevSession) -> bool:
     """
     Restore underlying infrastructure context (VM, directories, config).
 
@@ -55,7 +52,7 @@ async def restore_infrastructure_context(
             disable_printing=True,
             gui_mode_override=session.gui_mode,
             vm_memory=session.vm_memory or 4096,
-            vm_cpus=session.vm_cpus or 4
+            vm_cpus=session.vm_cpus or 4,
         )
 
         # 2. Initialize ExperimentRunCtx (fake mode - no new VM creation)
@@ -78,26 +75,20 @@ async def restore_infrastructure_context(
 
         # 3. Setup directories
         session.experiment_ctx.project_directory = ProjectDirectory(config.project_path)
-        session.experiment_ctx.experiment_directory = ExperimentDirectory(
-            config.project_path,
-            config.experiment_name
-        )
+        session.experiment_ctx.experiment_directory = ExperimentDirectory(config.project_path, config.experiment_name)
 
         # 4. Get environment metadata
         from adare.backend.environment import database as environment_database
         from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
 
         try:
-            environment_ulid = environment_database.resolve_environment_identifier(
-                config.environment_name
-            )
+            environment_ulid = environment_database.resolve_environment_identifier(config.environment_name)
 
             session.experiment_ctx.environment_ulid = environment_ulid
             session.experiment_ctx.guest_platform = environment_database.get_environment_os(environment_ulid)
             session.experiment_ctx.hypervisor_type = environment_database.get_environment_hypervisor(environment_ulid)
             session.experiment_ctx.environment_file = environment_database.get_environment_path_by_project_and_name(
-                config.project_path,
-                config.environment_name
+                config.project_path, config.environment_name
             )
 
             # CRITICAL: Restore overlay path from database, not base disk path
@@ -105,12 +96,15 @@ async def restore_infrastructure_context(
             if db_session.overlay_disk_path:
                 session.experiment_ctx.vm_file = Path(db_session.overlay_disk_path)
                 log.debug(f"Restored overlay disk path: {db_session.overlay_disk_path}")
-            else:
-                # Fallback for old sessions without overlay_disk_path (unsafe!)
-                log.warning(
-                    f"Session {session.session_id} missing overlay_disk_path field. "
-                    f"Using base disk as fallback (UNSAFE - base disk may be deleted!)"
+            elif session.experiment_ctx.hypervisor_type == 'qemu':
+                # Booting the environment disk itself would write into the
+                # read-only template every run overlays.
+                log.error(
+                    f"Session {session.session_id} has no recorded overlay disk and cannot be restored; "
+                    f"remove it with: adare dev remove {session.session_id}"
                 )
+                return False
+            else:
                 session.experiment_ctx.vm_file = environment_database.get_environment_vm_file(environment_ulid)
 
         except EnvironmentDoesNotExistInDatabase as e:
@@ -143,7 +137,7 @@ async def restore_infrastructure_context(
                 password=password,
                 executables=qemu_manager.executables,
                 disk_path=str(session.experiment_ctx.vm_file) if session.experiment_ctx.vm_file else None,
-                hypervisor_config=None  # No hypervisor config for dev mode restoration
+                hypervisor_config=None,  # No hypervisor config for dev mode restoration
             )
 
             log.debug(f"Attached to existing QEMU VM: {vm_name}")
@@ -155,7 +149,7 @@ async def restore_infrastructure_context(
             session.experiment_ctx.vm = VirtualBoxVM(
                 name=vm_name,
                 disk_path=session.experiment_ctx.vm_file,
-                base_snapshot_name=None  # Will query from VM
+                base_snapshot_name=None,  # Will query from VM
             )
 
             log.debug(f"Attached to existing VirtualBox VM: {vm_name}")
@@ -168,6 +162,7 @@ async def restore_infrastructure_context(
 
         # Restore websocket_port from VM instance database
         from adare.database.api.vm import VmApi
+
         try:
             with VmApi() as vm_api:
                 vm_instance = vm_api.get_vm_instance_by_name(vm_name)
@@ -207,16 +202,16 @@ async def restore_infrastructure_context(
                 # Fall through to recreation logic below
 
         # Fallback: Recreate run directory if no stored path or path doesn't exist
-        if not hasattr(session.experiment_ctx, 'experiment_run_directory') or session.experiment_ctx.experiment_run_directory is None:
+        if (
+            not hasattr(session.experiment_ctx, 'experiment_run_directory')
+            or session.experiment_ctx.experiment_run_directory is None
+        ):
             log.info("Creating new run directory (fallback)")
 
             # Ensure experiment_name is never None
             experiment_name = session.experiment_ctx.config.experiment_name or "_dev_session"
 
-            run_dir = ExperimentRunDirectory(
-                session.experiment_ctx.project_directory,
-                experiment_name
-            )
+            run_dir = ExperimentRunDirectory(session.experiment_ctx.project_directory, experiment_name)
             run_dir.create()
             session.experiment_ctx.experiment_run_directory = run_dir
             session.run_directory_path = run_dir.path
@@ -234,9 +229,7 @@ async def restore_infrastructure_context(
 
 
 async def restore_application_context(
-    session: DevModeSession,
-    console_ulid: str | None = None,
-    should_start_vm: bool = False
+    session: DevModeSession, console_ulid: str | None = None, should_start_vm: bool = False
 ) -> bool:
     """
     Restore application-layer context (playbooks, controllers, WebSocket).
@@ -263,6 +256,7 @@ async def restore_application_context(
         playbook_path = session.experiment_ctx.experiment_directory.playbookfile
         if playbook_path.exists():
             from adare.types.playbook import parse_playbook
+
             session.experiment_ctx.playbook = parse_playbook(playbook_path)
             log.debug(f"Loaded playbook from {playbook_path}")
         else:
@@ -285,9 +279,7 @@ async def restore_application_context(
             # longer owns, which is how a foreign run's server used to die.
             # A recorded PID additionally entitles us to stop that surviving server
             # even though we have no Popen handle for it.
-            recorded_port, recorded_pid = load_cv_state(
-                session.experiment_ctx.experiment_run_directory.path
-            )
+            recorded_port, recorded_pid = load_cv_state(session.experiment_ctx.experiment_run_directory.path)
             if recorded_port is None:
                 recorded_port = find_free_cv_port()
                 log.info(f"No recorded CV port for this session; allocated {recorded_port}")
@@ -295,8 +287,7 @@ async def restore_application_context(
                 log.info(f"Reclaiming this session's CV port {recorded_port} (pid={recorded_pid})")
 
             session.experiment_ctx.mcp_server = MCPServerManager(
-                server_port=recorded_port,
-                log_file=session.experiment_ctx.experiment_run_directory.mcp_gui_log_file
+                server_port=recorded_port, log_file=session.experiment_ctx.experiment_run_directory.mcp_gui_log_file
             )
             session.experiment_ctx.mcp_server.known_server_pid = recorded_pid
 
@@ -333,7 +324,7 @@ async def restore_application_context(
             vm_os=vm_os,
             vm_user=vm_user,
             test_mode=True,
-            config=session.experiment_ctx.config
+            config=session.experiment_ctx.config,
         )
 
         log.debug("Recreated PlaybookController")
@@ -348,6 +339,7 @@ async def restore_application_context(
 
             # Force QEMU_LIBGUESTFS=true for dev mode
             import os
+
             os.environ['QEMU_LIBGUESTFS'] = 'true'
 
             # Import required step functions
@@ -366,18 +358,14 @@ async def restore_application_context(
             try:
                 # Start VM
                 with StageCtxManager(
-                    VirtualMachineSetupStage(),
-                    stage_ulid,
-                    event=session.experiment_ctx.user_interrupt_event
+                    VirtualMachineSetupStage(), stage_ulid, event=session.experiment_ctx.user_interrupt_event
                 ):
                     await session.vm_manager.start_vm(session.experiment_ctx)
                     log.info("VM started successfully")
 
                 # Install WebSocket server and connect
                 with StageCtxManager(
-                    SoftwareInstallationStage(),
-                    stage_ulid,
-                    event=session.experiment_ctx.user_interrupt_event
+                    SoftwareInstallationStage(), stage_ulid, event=session.experiment_ctx.user_interrupt_event
                 ):
                     await step_install_and_run_websocket_server(session.experiment_ctx)
                     log.info("AdareVM WebSocket server installed")
@@ -399,7 +387,7 @@ async def restore_application_context(
         # or just set current time if re-running)
         # Assuming caller tracks this, or we just set it to now if not available
         if not session.started_at:
-             session.started_at = datetime.now()
+            session.started_at = datetime.now()
 
         log.info(f"Successfully restored dev session application context {session.session_id}")
         return True
@@ -410,10 +398,7 @@ async def restore_application_context(
 
 
 async def restore_context(
-    session: DevModeSession,
-    db_session: DevSession,
-    console_ulid: str | None = None,
-    should_start_vm: bool = False
+    session: DevModeSession, db_session: DevSession, console_ulid: str | None = None, should_start_vm: bool = False
 ) -> bool:
     """
     Restore complete session context (infrastructure + application).
@@ -466,7 +451,9 @@ async def _restore_snapshots(session: DevModeSession) -> None:
             files_exist = True
             if session.experiment_ctx.hypervisor_type == 'qemu':
                 if checkpoint.memory_file_path and not os.path.exists(checkpoint.memory_file_path):
-                    log.warning(f"Memory file missing for checkpoint '{checkpoint.name}': {checkpoint.memory_file_path}")
+                    log.warning(
+                        f"Memory file missing for checkpoint '{checkpoint.name}': {checkpoint.memory_file_path}"
+                    )
                     files_exist = False
                 if checkpoint.disk_file_path and not os.path.exists(checkpoint.disk_file_path):
                     log.warning(f"Disk file missing for checkpoint '{checkpoint.name}': {checkpoint.disk_file_path}")
@@ -484,7 +471,7 @@ async def _restore_snapshots(session: DevModeSession) -> None:
                 description=checkpoint.description or "",
                 memory_file_path=checkpoint.memory_file_path,
                 disk_file_path=checkpoint.disk_file_path,
-                checkpoint_id=checkpoint.checkpoint_id
+                checkpoint_id=checkpoint.checkpoint_id,
             )
             session.snapshots.append(snapshot)
 

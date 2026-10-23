@@ -1,10 +1,10 @@
-import subprocess
 import dataclasses
-import re
-from PIL import ImageDraw
-
 import logging
+import re
+import subprocess
+
 log = logging.getLogger(__name__)
+
 
 @dataclasses.dataclass
 class Window:
@@ -15,15 +15,18 @@ class Window:
     width: int
     height: int
     hidden: bool = dataclasses.field(default=False)
-    shadow: tuple[int,int,int,int] = dataclasses.field(default_factory=lambda: (0, 0, 0, 0))
+    shadow: tuple[int, int, int, int] = dataclasses.field(default_factory=lambda: (0, 0, 0, 0))
     identifiers: list[str] = dataclasses.field(default_factory=list)
     non_visible_areas: list[tuple[int, int, int, int]] = dataclasses.field(default_factory=list)
 
     @property
     def rect(self):
-        return (self.x + self.shadow[0], self.y + self.shadow[1],
-                self.width - self.shadow[0] - self.shadow[2],
-                self.height - self.shadow[1] - self.shadow[3])
+        return (
+            self.x + self.shadow[0],
+            self.y + self.shadow[1],
+            self.width - self.shadow[0] - self.shadow[2],
+            self.height - self.shadow[1] - self.shadow[3],
+        )
 
 
 def is_desktop_window(window_id):
@@ -43,6 +46,7 @@ def get_window_stacking():
     window_ids = [int(window_id, 16) for window_id in window_ids]
     window_ids.reverse()
     return window_ids
+
 
 def get_window_info(window_id):
     command = ["xwininfo", "-id", str(window_id)]
@@ -70,14 +74,26 @@ def get_window_info(window_id):
         # GTK applications may have frame extents that we need to account for
         gtk_frame_extents = output.split("_GTK_FRAME_EXTENTS(CARDINAL) = ")[1].split('\n')[0].split(', ')
         shadow = tuple(int(extent) for extent in gtk_frame_extents)
-    return Window(id=window_id, name=name, x=x, y=y, width=width, height=height, hidden=hidden, shadow=shadow, identifiers=[])
+    return Window(
+        id=window_id, name=name, x=x, y=y, width=width, height=height, hidden=hidden, shadow=shadow, identifiers=[]
+    )
 
 
 def rect_intersection(a, b, consider_shadow=True):
     """Returns the intersection rectangle of a and b, or None if they don't overlap."""
     if consider_shadow:
-        ax1, ay1, ax2, ay2 = a.x + a.shadow[0], a.y + a.shadow[1], a.x + a.width - a.shadow[2], a.y + a.height - a.shadow[3]
-        bx1, by1, bx2, by2 = b.x + b.shadow[0], b.y + b.shadow[1], b.x + b.width - b.shadow[2], b.y + b.height - b.shadow[3]
+        ax1, ay1, ax2, ay2 = (
+            a.x + a.shadow[0],
+            a.y + a.shadow[1],
+            a.x + a.width - a.shadow[2],
+            a.y + a.height - a.shadow[3],
+        )
+        bx1, by1, bx2, by2 = (
+            b.x + b.shadow[0],
+            b.y + b.shadow[1],
+            b.x + b.width - b.shadow[2],
+            b.y + b.height - b.shadow[3],
+        )
     else:
         ax1, ay1, ax2, ay2 = a.x, a.y, a.x + a.width, a.y + a.height
         bx1, by1, bx2, by2 = b.x, b.y, b.x + b.width, b.y + b.height
@@ -133,7 +149,6 @@ def subtract_rect(base, cut):
     return result
 
 
-
 def calculate_overlap(windows: list[Window]):
     for i, window in enumerate(windows):
         full_rect = window.rect
@@ -165,9 +180,7 @@ def calculate_overlap(windows: list[Window]):
 
 def get_windows_by_search_string(search_string: str) -> list[Window]:
     try:
-        window_ids = subprocess.check_output(
-            ["xdotool", "search", "--any", search_string]
-        ).decode().splitlines()
+        window_ids = subprocess.check_output(["xdotool", "search", "--any", search_string]).decode().splitlines()
     except subprocess.CalledProcessError:
         log.warning(f"No windows found matching: {search_string}")
         return []
@@ -177,12 +190,8 @@ def get_windows_by_search_string(search_string: str) -> list[Window]:
 
     for window_id in window_ids:
         try:
-            xwininfo_output = subprocess.check_output([
-                "xwininfo", "-id", str(window_id)
-            ]).decode()
-            xprop_output = subprocess.check_output([
-                "xprop", "-id", str(window_id)
-            ]).decode()
+            xwininfo_output = subprocess.check_output(["xwininfo", "-id", str(window_id)]).decode()
+            xprop_output = subprocess.check_output(["xprop", "-id", str(window_id)]).decode()
         except subprocess.CalledProcessError:
             log.warning(f"Failed to get window info for ID {window_id}")
             continue
@@ -197,8 +206,9 @@ def get_windows_by_search_string(search_string: str) -> list[Window]:
             continue
 
         # Filter based on negative position
-        if re.search(r"Absolute upper-left X:\s*-\d+", xwininfo_output) or \
-           re.search(r"Absolute upper-left Y:\s*-\d+", xwininfo_output):
+        if re.search(r"Absolute upper-left X:\s*-\d+", xwininfo_output) or re.search(
+            r"Absolute upper-left Y:\s*-\d+", xwininfo_output
+        ):
             log.debug(f"Window {window_id} is off-screen, skipping.")
             continue
 
@@ -231,14 +241,14 @@ def get_visible_windows():
     calculate_overlap(visible_windows)
     filtered_windows = []
     for window in visible_windows:
-        if not window.non_visible_areas or not all(
-            (area == window.rect) for area in window.non_visible_areas
-        ):
+        if not window.non_visible_areas or not all((area == window.rect) for area in window.non_visible_areas):
             filtered_windows.append(window)
     for window in filtered_windows:
-        log.info(f"Window ID: {window.id}, Name: {window.name}, "
-              f"Position: ({window.x}, {window.y}), Size: ({window.width}x{window.height}), "
-              f"Non-visible areas: {window.non_visible_areas}")
+        log.info(
+            f"Window ID: {window.id}, Name: {window.name}, "
+            f"Position: ({window.x}, {window.y}), Size: ({window.width}x{window.height}), "
+            f"Non-visible areas: {window.non_visible_areas}"
+        )
     return filtered_windows
 
 
@@ -250,7 +260,7 @@ def get_os_info():
 
     try:
         # Get OS release info
-        with open('/etc/os-release', 'r') as f:
+        with open('/etc/os-release') as f:
             for line in f:
                 line = line.strip()
                 if '=' in line:
@@ -286,8 +296,8 @@ def get_os_info():
 
 def detect_package_manager():
     """Detect which package manager is available, preferring dpkg for Debian and rpm for RedHat."""
-    import subprocess
     import os
+    import subprocess
 
     # Check for Debian-based systems first
     if os.path.exists('/etc/debian_version'):
@@ -347,8 +357,7 @@ def get_installed_packages(manager=None):
                 packages = _parse_pacman_output(result.stdout)
 
         elif manager == 'zypper':
-            result = subprocess.run(['zypper', 'search', '--installed-only'],
-                                  capture_output=True, text=True)
+            result = subprocess.run(['zypper', 'search', '--installed-only'], capture_output=True, text=True)
             if result.returncode == 0:
                 packages = _parse_zypper_output(result.stdout)
 
@@ -411,4 +420,3 @@ def _parse_zypper_output(output):
                 package_info['version'] = parts[1]
             packages.append(package_info)
     return packages
-

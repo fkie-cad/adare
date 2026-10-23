@@ -42,9 +42,7 @@ class IconToolsMixin:
         """
         from adarevm.platforms.windows_icons import WindowsIconError, extract_icon_png
 
-        await self.send_event(websocket, EventType.LOG, {
-            "message": f"Extracting icon for spec: {spec}"
-        })
+        await self.send_event(websocket, EventType.LOG, {"message": f"Extracting icon for spec: {spec}"})
 
         try:
             encoded = extract_icon_png(spec, size=size)
@@ -52,14 +50,10 @@ class IconToolsMixin:
             # Surface the specific failure to the host, then re-raise so the
             # server reports success=False (see AdareVMServer.handle_tool_call).
             log.error(f"Icon extraction failed for spec {spec}: {exc}")
-            await self.send_event(websocket, EventType.ERROR, {
-                "message": f"Icon extraction failed: {exc}"
-            })
+            await self.send_event(websocket, EventType.ERROR, {"message": f"Icon extraction failed: {exc}"})
             raise
 
-        await self.send_event(websocket, EventType.LOG, {
-            "message": f"Extracted icon ({len(encoded)} base64 chars)"
-        })
+        await self.send_event(websocket, EventType.LOG, {"message": f"Extracted icon ({len(encoded)} base64 chars)"})
         return {
             "format": "png",
             "encoding": "base64",

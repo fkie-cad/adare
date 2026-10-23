@@ -7,57 +7,12 @@ from typing import Union
 from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
+from adarelib.testset.compare import PLACEHOLDER_ERRORS, compare_with_single_placeholder, get_nested_value
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
-
-
-def _get_nested_value(data, key_path):
-    """Navigate nested dictionary using dot notation with wildcard support
-
-    Supports:
-    - [*] for all array elements (e.g., "users[*].name")
-    - * for all object keys (e.g., "config.*.enabled")
-
-    Returns:
-    - For exact paths: (value, True) or (None, False)
-    - For wildcard paths: (list_of_values, True) or ([], False)
-    """
-    keys = key_path.split('.')
-    current_values = [data]  # Start with data wrapped in list for consistent handling
-
-    for key in keys:
-        next_values = []
-
-        for current in current_values:
-            if key == '*':
-                # Wildcard for all keys in dict
-                if isinstance(current, dict):
-                    next_values.extend(current.values())
-            elif key.endswith('[*]'):
-                # Array wildcard (e.g., "users[*]")
-                base_key = key[:-3]  # Remove '[*]'
-                if isinstance(current, dict) and base_key in current:
-                    array_value = current[base_key]
-                    if isinstance(array_value, list):
-                        next_values.extend(array_value)
-            elif isinstance(current, dict) and key in current:
-                # Regular key access
-                next_values.append(current[key])
-
-        if not next_values:
-            # No matching values found
-            return [], False
-
-        current_values = next_values
-
-    # If we have multiple values, it was a wildcard match
-    if len(current_values) > 1:
-        return current_values, True
-    if len(current_values) == 1:
-        return current_values[0], True
-    return None, False
 
 
 def _compare_values(ctx, actual_value, expected_value, regex_match=False):
@@ -66,6 +21,7 @@ def _compare_values(ctx, actual_value, expected_value, regex_match=False):
     # Check for YamlRegexString objects (!re syntax) - handle like placeholder system
     try:
         from adarelib.testset.yaml.customtags import YamlRegexString
+
         if isinstance(expected_value, YamlRegexString):
             try:
                 pattern = re.compile(expected_value.string)
@@ -97,15 +53,7 @@ def _compare_values(ctx, actual_value, expected_value, regex_match=False):
             return False, f'expected "{expected_value}", got "{actual_value}"'
     else:
         # Has placeholders - use placeholder system (handles regex and timestamp with tolerance)
-        placeholder_names = ctx.get_placeholders(expected_str)
-        if len(placeholder_names) == 1:
-            placeholder_name = placeholder_names[0]
-            try:
-                return ctx.compare_with_placeholder(placeholder_name, str(actual_value))
-            except Exception as e:
-                return False, f"placeholder comparison error: {e}"
-        else:
-            return False, f"expected 1 placeholder for single value comparison, got {len(placeholder_names)}"
+        return compare_with_single_placeholder(ctx, expected_str, str(actual_value))
 
 
 def _handle_wildcard_matching(ctx, values, expected_value, wildcard_mode, key_path, regex_match=False):
@@ -134,29 +82,37 @@ def _handle_wildcard_matching(ctx, values, expected_value, wildcard_mode, key_pa
             match_details = [f"element[{i}]: {val}" for i, val, _ in matches[:3]]  # Show first 3 matches
             if len(matches) > 3:
                 match_details.append(f"... and {len(matches) - 3} more matches")
-            return TestResult.success([
-                f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: any)',
-                f'matching values: {", ".join(match_details)}'
-            ])
-        return TestResult.failed([
-            f'wildcard path "{key_path}" matched 0/{len(values)} values (mode: any)',
-            f'expected: "{expected_value}"',
-            f'got values: {[val for _, val, _ in non_matches[:5]]}'  # Show first 5 non-matches
-        ])
+            return TestResult.success(
+                [
+                    f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: any)',
+                    f'matching values: {", ".join(match_details)}',
+                ]
+            )
+        return TestResult.failed(
+            [
+                f'wildcard path "{key_path}" matched 0/{len(values)} values (mode: any)',
+                f'expected: "{expected_value}"',
+                f'got values: {[val for _, val, _ in non_matches[:5]]}',  # Show first 5 non-matches
+            ]
+        )
     # wildcard_mode == 'all'
     if not non_matches:
-        return TestResult.success([
-            f'wildcard path "{key_path}" matched all {len(values)} values (mode: all)',
-            f'all values equal: "{expected_value}"'
-        ])
+        return TestResult.success(
+            [
+                f'wildcard path "{key_path}" matched all {len(values)} values (mode: all)',
+                f'all values equal: "{expected_value}"',
+            ]
+        )
     non_match_details = [f"element[{i}]: {val}" for i, val, _ in non_matches[:3]]  # Show first 3 non-matches
     if len(non_matches) > 3:
         non_match_details.append(f"... and {len(non_matches) - 3} more non-matches")
-    return TestResult.failed([
-        f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: all)',
-        f'expected: "{expected_value}"',
-        f'non-matching values: {", ".join(non_match_details)}'
-    ])
+    return TestResult.failed(
+        [
+            f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: all)',
+            f'expected: "{expected_value}"',
+            f'non-matching values: {", ".join(non_match_details)}',
+        ]
+    )
 
 
 @testfunction(
@@ -165,33 +121,47 @@ def _handle_wildcard_matching(ctx, values, expected_value, wildcard_mode, key_pa
     category=HostModeCategory.FILE_CONTENT,
 )
 def contains_key(ctx, dst: str, key_path: str):
+    """Pass when ``key_path`` resolves to at least one value in JSON file ``dst`` (``null`` counts).
+
+    Use for: checking a settings/config file gained a key. To also check the value use
+    json.value_matches.
+
+    Args:
+        dst: Guest path to the JSON file; a glob must match exactly one path. A missing file
+            or invalid JSON fails. Read with the guest's default encoding.
+        key_path: Dot path from the root object, e.g. ``user.profile.name``. ``*`` expands
+            all values of an object (``config.*.enabled``), ``name[*]`` all elements of array
+            ``name`` (``users[*].email``). No numeric indexes; keys containing ``.`` and
+            top-level arrays cannot be addressed.
+
+    Example:
+        function: json.contains_key
+        parameter:
+          dst: /home/user/.config/Code/User/settings.json
+          key_path: editor.fontSize
+    """
+    dst_path, status = ctx.resolve_globfilepath(dst)
+    if not dst_path:
+        return TestResult.failed([f'JSON file {dst} not found ({status})'])
+
+    log.debug(f'dst file {dst_path} will be used for test contains_key')
+
     try:
-        dst_path, status = ctx.resolve_globfilepath(dst)
-        if not dst_path:
-            return TestResult.failed([f'JSON file {dst} not found ({status})'])
+        with open(dst_path) as f:
+            data = json.load(f)
 
-        log.debug(f'dst file {dst_path} will be used for test contains_key')
+        value, exists = get_nested_value(data, key_path)
 
-        try:
-            with open(dst_path) as f:
-                data = json.load(f)
+        if exists:
+            return TestResult.success([f'key path "{key_path}" exists with value: {value}'])
+        return TestResult.failed([f'key path "{key_path}" does not exist'])
 
-            value, exists = _get_nested_value(data, key_path)
-
-            if exists:
-                return TestResult.success([f'key path "{key_path}" exists with value: {value}'])
-            return TestResult.failed([f'key path "{key_path}" does not exist'])
-
-        except json.JSONDecodeError as e:
-            return TestResult.failed([f"Invalid JSON in file {dst_path}: {e}"])
-        except FileNotFoundError:
-            return TestResult.failed([f'JSON file {dst_path} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read JSON file {dst_path}")
-
-    except Exception as e:
-        log.error(f"Unexpected error in JSON contains key test: {e}", exc_info=True)
-        return TestResult.execution_error(e, "Unexpected error in JSON contains key test")
+    except json.JSONDecodeError as e:
+        return TestResult.failed([f"Invalid JSON in file {dst_path}: {e}"])
+    except FileNotFoundError:
+        return TestResult.failed([f'JSON file {dst_path} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read JSON file {dst_path}")
 
 
 @testfunction(
@@ -199,47 +169,78 @@ def contains_key(ctx, dst: str, key_path: str):
     description='tests if JSON value at key path matches expected value using placeholders (supports wildcards [*] and * with any/all modes)',
     category=HostModeCategory.FILE_CONTENT,
 )
-def value_matches(ctx, dst: str, key_path: str, expected_value: str | int | float | bool | None = None, regex_match: bool = False, wildcard_mode: str = "any"):
+def value_matches(
+    ctx,
+    dst: str,
+    key_path: str,
+    expected_value: str | int | float | bool | None = None,
+    regex_match: bool = False,
+    wildcard_mode: str = "any",
+):
+    """Pass when the JSON value at ``key_path`` in ``dst`` equals (or matches) ``expected_value``.
+
+    Use for: asserting a setting/field value. If the path yields several values (a wildcard,
+    or a JSON array value, whose elements are then compared one by one) ``wildcard_mode``
+    decides; a one-element array is unwrapped. Whole arrays cannot be compared.
+
+    Args:
+        dst: Guest path to the JSON file; a glob must match exactly one path. A missing file,
+            invalid JSON or unresolvable path fails.
+        key_path: Dot path from the root object, e.g. ``user.profile.name``. ``*`` expands
+            all values of an object (``config.*.enabled``), ``name[*]`` all elements of array
+            ``name`` (``users[*].email``). No numeric indexes; keys containing ``.`` and
+            top-level arrays cannot be addressed.
+        expected_value: Compared with Python ``==``, which is type-sensitive (``5`` != ``"5"``;
+            ``null`` needs ``None``/``null``). A ``!re``/``!timestamp`` tag compares ``str(value)`` by type.
+        regex_match: Treat a string ``expected_value`` as a regex searched (``re.search``,
+            unanchored) in ``str(value)``.
+        wildcard_mode: ``any`` (default): one value must match; ``all``: every value must
+            match. Other values are an execution error (checked only for multiple values).
+
+    Example:
+        function: json.value_matches
+        parameter:
+          dst: /home/user/.mozilla/firefox/profile/sessionstore.json
+          key_path: windows[*].tabs[*].title
+          expected_value: Example Domain
+    """
+    dst_path, status = ctx.resolve_globfilepath(dst)
+    if not dst_path:
+        return TestResult.failed([f'JSON file {dst} not found ({status})'])
+
+    log.debug(f'dst file {dst_path} will be used for test value_matches')
+
     try:
-        dst_path, status = ctx.resolve_globfilepath(dst)
-        if not dst_path:
-            return TestResult.failed([f'JSON file {dst} not found ({status})'])
+        with open(dst_path) as f:
+            data = json.load(f)
 
-        log.debug(f'dst file {dst_path} will be used for test value_matches')
+        value, exists = get_nested_value(data, key_path)
 
-        try:
-            with open(dst_path) as f:
-                data = json.load(f)
+        if not exists:
+            return TestResult.failed([f'key path "{key_path}" does not exist'])
 
-            value, exists = _get_nested_value(data, key_path)
+        # Handle wildcard mode - check if we have multiple values
+        if isinstance(value, list) and len(value) > 1:
+            # Multiple values from wildcard matching
+            return _handle_wildcard_matching(
+                ctx, value, expected_value, wildcard_mode, key_path, regex_match=regex_match
+            )
+        if isinstance(value, list) and len(value) == 1:
+            # Single value from wildcard (treat as regular match)
+            value = value[0]
 
-            if not exists:
-                return TestResult.failed([f'key path "{key_path}" does not exist'])
+        # Regular single value matching using unified comparison
+        is_match, message = _compare_values(ctx, value, expected_value, regex_match=regex_match)
+        if is_match:
+            return TestResult.success([message])
+        return TestResult.failed([message])
 
-            # Handle wildcard mode - check if we have multiple values
-            if isinstance(value, list) and len(value) > 1:
-                # Multiple values from wildcard matching
-                return _handle_wildcard_matching(ctx, value, expected_value, wildcard_mode, key_path, regex_match=regex_match)
-            if isinstance(value, list) and len(value) == 1:
-                # Single value from wildcard (treat as regular match)
-                value = value[0]
-
-            # Regular single value matching using unified comparison
-            is_match, message = _compare_values(ctx, value, expected_value, regex_match=regex_match)
-            if is_match:
-                return TestResult.success([message])
-            return TestResult.failed([message])
-
-        except json.JSONDecodeError as e:
-            return TestResult.failed([f"Invalid JSON in file {dst_path}: {e}"])
-        except FileNotFoundError:
-            return TestResult.failed([f'JSON file {dst_path} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read JSON file {dst_path}")
-
-    except Exception as e:
-        log.error(f"Unexpected error in JSON value matches test: {e}", exc_info=True)
-        return TestResult.execution_error(e, "Unexpected error in JSON value matches test")
+    except json.JSONDecodeError as e:
+        return TestResult.failed([f"Invalid JSON in file {dst_path}: {e}"])
+    except FileNotFoundError:
+        return TestResult.failed([f'JSON file {dst_path} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read JSON file {dst_path}")
 
 
 @testfunction(
@@ -248,53 +249,67 @@ def value_matches(ctx, dst: str, key_path: str, expected_value: str | int | floa
     category=HostModeCategory.FILE_CONTENT,
 )
 def array_contains(ctx, dst: str, array_path: str, expected_element: str | int | float | bool | dict | list = None):
+    """Pass when the JSON array at ``array_path`` in ``dst`` contains ``expected_element``.
+
+    Use for: checking a list (recent files, bookmarks, accounts) includes an entry.
+
+    Args:
+        dst: Guest path to the JSON file; a glob must match exactly one path. A missing file,
+            invalid JSON, unresolvable path or non-array value fails.
+        array_path: Dot path to the array (same syntax as json.value_matches ``key_path``);
+            a wildcard yielding several values is treated as the array of those values.
+        expected_element: Element tested with Python ``in`` (type-sensitive; dicts and lists
+            must match exactly). A ``!re``/``!timestamp`` tag passes if any element's ``str()`` matches.
+
+    Example:
+        function: json.array_contains
+        parameter:
+          dst: /home/user/.config/app/recent.json
+          array_path: recent_files
+          expected_element: /home/user/Documents/report.odt
+    """
+    dst_path, status = ctx.resolve_globfilepath(dst)
+    if not dst_path:
+        return TestResult.failed([f'JSON file {dst} not found ({status})'])
+
+    log.debug(f'dst file {dst_path} will be used for test array_contains')
+
     try:
-        dst_path, status = ctx.resolve_globfilepath(dst)
-        if not dst_path:
-            return TestResult.failed([f'JSON file {dst} not found ({status})'])
+        with open(dst_path) as f:
+            data = json.load(f)
 
-        log.debug(f'dst file {dst_path} will be used for test array_contains')
+        array, exists = get_nested_value(data, array_path)
 
-        try:
-            with open(dst_path) as f:
-                data = json.load(f)
+        if not exists:
+            return TestResult.failed([f'array path "{array_path}" does not exist'])
 
-            array, exists = _get_nested_value(data, array_path)
+        if not isinstance(array, list):
+            return TestResult.failed([f'path "{array_path}" is not an array, got {type(array).__name__}'])
 
-            if not exists:
-                return TestResult.failed([f'array path "{array_path}" does not exist'])
+        # Check if expected_element has placeholders for regex/timestamp tolerance
+        expected_str = str(expected_element)
+        if ctx.has_placeholders(expected_str):
+            # Use placeholder comparison for each array element
+            placeholder_names = ctx.get_placeholders(expected_str)
+            if len(placeholder_names) == 1:
+                placeholder_name = placeholder_names[0]
+                for i, element in enumerate(array):
+                    try:
+                        success, message = ctx.compare_with_placeholder(placeholder_name, str(element))
+                        if success:
+                            return TestResult.success([f'array element [{i}] matches placeholder: {message}'])
+                    except PLACEHOLDER_ERRORS:
+                        continue  # Try next element
+                return TestResult.failed([f'no array element matches placeholder "{placeholder_name}"'])
+            return TestResult.failed([f'expected 1 placeholder for array comparison, got {len(placeholder_names)}'])
+        # Regular direct comparison
+        if expected_element in array:
+            return TestResult.success([f'array contains expected element: {expected_element}'])
+        return TestResult.failed([f'array does not contain expected element: {expected_element}'])
 
-            if not isinstance(array, list):
-                return TestResult.failed([f'path "{array_path}" is not an array, got {type(array).__name__}'])
-
-            # Check if expected_element has placeholders for regex/timestamp tolerance
-            expected_str = str(expected_element)
-            if ctx.has_placeholders(expected_str):
-                # Use placeholder comparison for each array element
-                placeholder_names = ctx.get_placeholders(expected_str)
-                if len(placeholder_names) == 1:
-                    placeholder_name = placeholder_names[0]
-                    for i, element in enumerate(array):
-                        try:
-                            success, message = ctx.compare_with_placeholder(placeholder_name, str(element))
-                            if success:
-                                return TestResult.success([f'array element [{i}] matches placeholder: {message}'])
-                        except Exception:
-                            continue  # Try next element
-                    return TestResult.failed([f'no array element matches placeholder "{placeholder_name}"'])
-                return TestResult.failed([f'expected 1 placeholder for array comparison, got {len(placeholder_names)}'])
-            # Regular direct comparison
-            if expected_element in array:
-                return TestResult.success([f'array contains expected element: {expected_element}'])
-            return TestResult.failed([f'array does not contain expected element: {expected_element}'])
-
-        except json.JSONDecodeError as e:
-            return TestResult.failed([f"Invalid JSON in file {dst_path}: {e}"])
-        except FileNotFoundError:
-            return TestResult.failed([f'JSON file {dst_path} does not exist'])
-        except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read JSON file {dst_path}")
-
-    except Exception as e:
-        log.error(f"Unexpected error in JSON array contains test: {e}", exc_info=True)
-        return TestResult.execution_error(e, "Unexpected error in JSON array contains test")
+    except json.JSONDecodeError as e:
+        return TestResult.failed([f"Invalid JSON in file {dst_path}: {e}"])
+    except FileNotFoundError:
+        return TestResult.failed([f'JSON file {dst_path} does not exist'])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read JSON file {dst_path}")

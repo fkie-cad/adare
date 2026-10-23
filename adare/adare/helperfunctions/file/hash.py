@@ -10,13 +10,14 @@ from tqdm import tqdm
 
 log = logging.getLogger(__name__)
 
+_CHUNK_SIZE = 1024 * 1024  # 1 MiB: these files are multi-GB disks and ISOs
 
 
 def file_sha256_with_progress(
     file_path: Path,
     description: str | None = None,
     silent: bool = False,
-    interrupt_event: threading.Event | None = None
+    interrupt_event: threading.Event | None = None,
 ) -> str:
     """
     Calculate SHA256 hash of file with progress bar.
@@ -35,13 +36,16 @@ def file_sha256_with_progress(
     """
     if silent:
         log.debug(f'Calculating hash for {file_path} in silent mode')
-        hash_sha256 = hashlib.sha256()
         with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                if interrupt_event and interrupt_event.is_set():
-                    raise InterruptedError(f"Hash calculation interrupted by user for {file_path}")
-                hash_sha256.update(chunk)
-        result = hash_sha256.hexdigest()
+            if interrupt_event is None:
+                result = hashlib.file_digest(f, 'sha256').hexdigest()
+            else:
+                hash_sha256 = hashlib.sha256()
+                for chunk in iter(lambda: f.read(_CHUNK_SIZE), b""):
+                    if interrupt_event.is_set():
+                        raise InterruptedError(f"Hash calculation interrupted by user for {file_path}")
+                    hash_sha256.update(chunk)
+                result = hash_sha256.hexdigest()
         log.debug(f'Hash calculation completed for {file_path}')
         return result
 
@@ -52,14 +56,17 @@ def file_sha256_with_progress(
     log.debug(f'Calculating hash for {file_path} with progress bar')
 
     hash_sha256 = hashlib.sha256()
-    with open(file_path, "rb") as f, tqdm(
-        desc=desc,
-        total=file_size,
-        unit='iB',
-        unit_scale=True,
-        unit_divisor=1024,
-    ) as bar:
-        chunk_size = 64 * 1024  # 64KB chunks
+    with (
+        open(file_path, "rb") as f,
+        tqdm(
+            desc=desc,
+            total=file_size,
+            unit='iB',
+            unit_scale=True,
+            unit_divisor=1024,
+        ) as bar,
+    ):
+        chunk_size = _CHUNK_SIZE
         while True:
             if interrupt_event and interrupt_event.is_set():
                 raise InterruptedError(f"Hash calculation interrupted by user for {file_path}")
@@ -78,7 +85,7 @@ async def file_sha256_with_progress_async(
     file_path: Path,
     description: str | None = None,
     silent: bool = False,
-    interrupt_event: threading.Event | None = None
+    interrupt_event: threading.Event | None = None,
 ) -> str:
     """
     Calculate SHA256 hash of file with progress bar (async version).
@@ -95,16 +102,12 @@ async def file_sha256_with_progress_async(
     Raises:
         InterruptedError: If interrupt_event is set during calculation
     """
+
     def _calculate_hash():
         return file_sha256_with_progress(
-            file_path=file_path,
-            description=description,
-            silent=silent,
-            interrupt_event=interrupt_event
+            file_path=file_path, description=description, silent=silent, interrupt_event=interrupt_event
         )
 
     # Run the hash calculation in a thread pool to avoid blocking the event loop
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _calculate_hash)
-
-

@@ -2,26 +2,26 @@
 # configure logging
 import logging
 from datetime import UTC, datetime
-from pathlib import Path
 
-# internal imports
-import adare.config.database as config_database
-from adare.database.api.database import DatabaseApi
+from adare.database.api.base import GlobalDatabaseApi
 from adare.database.exceptions import TokenExpired
-from adare.database.models.login import Base as BaseLogin
 from adare.database.models.login import Token, UserSession
 
 log = logging.getLogger(__name__)
 
 
-class UserSessionApi(DatabaseApi):
-    """Database API for managing authenticated user sessions and their tokens."""
+class UserSessionApi(GlobalDatabaseApi):
+    """Database API for managing authenticated user sessions and their tokens (global database)."""
 
-    def __init__(self, db_path: Path = config_database.get_database_location()):
-        super().__init__(db_path)
-        BaseLogin.metadata.create_all(self.engine)
-
-    def add_user_session(self, username: str, gitea_token: str, gitea_token_expiration: datetime, gitea_refresh_token: str, django_token: str, django_token_expiration: datetime):
+    def add_user_session(
+        self,
+        username: str,
+        gitea_token: str,
+        gitea_token_expiration: datetime,
+        gitea_refresh_token: str,
+        django_token: str,
+        django_token_expiration: datetime,
+    ):
         """Create a new user session, replacing any existing session for the user."""
         if self.get_user_session(username):
             self.remove_user_session(username)
@@ -33,7 +33,11 @@ class UserSessionApi(DatabaseApi):
         if gitea_refresh_token:
             gitea_refresh = Token(token=gitea_refresh_token)
             self._session.add(gitea_refresh)
-            self._session.add(UserSession(username=username, gitea_token=gitea, django_token=django, gitea_refresh_token=gitea_refresh))
+            self._session.add(
+                UserSession(
+                    username=username, gitea_token=gitea, django_token=django, gitea_refresh_token=gitea_refresh
+                )
+            )
         else:
             self._session.add(UserSession(username=username, gitea_token=gitea, django_token=django))
         self._session.commit()
@@ -41,11 +45,7 @@ class UserSessionApi(DatabaseApi):
 
     def remove_user_session(self, username: str):
         """Remove a user session and its associated tokens."""
-        if (
-            user_session := self._session.query(UserSession)
-            .filter_by(username=username)
-            .first()
-        ):
+        if user_session := self._session.query(UserSession).filter_by(username=username).first():
             if user_session.gitea_token:
                 self._session.delete(user_session.gitea_token)
             if user_session.django_token:
@@ -80,7 +80,15 @@ class UserSessionApi(DatabaseApi):
             query = query.filter_by(username=username)
         return query.first()
 
-    def update_session_tokens(self, username: str, gitea_token: str, gitea_token_expiration: datetime, gitea_refresh_token: str, django_token: str, django_token_expiration: datetime):
+    def update_session_tokens(
+        self,
+        username: str,
+        gitea_token: str,
+        gitea_token_expiration: datetime,
+        gitea_refresh_token: str,
+        django_token: str,
+        django_token_expiration: datetime,
+    ):
         """Update the tokens of an existing session in place (used after a token refresh).
 
         Advancing the stored expirations here means the subsequent time-based pruning no
@@ -129,4 +137,3 @@ class UserSessionApi(DatabaseApi):
         if not user_session.gitea_token or not user_session.django_token:
             raise TokenExpired(log, f'gitea or django token for user {user_session.username} expired')
         return user_session
-

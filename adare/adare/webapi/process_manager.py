@@ -93,9 +93,7 @@ class VirtualSpiceManager:
             logger.warning("VirtualSpice binary not found at %s", self.binary_path)
             return False
         except PermissionError:
-            logger.warning(
-                "Permission denied when starting VirtualSpice at %s", self.binary_path
-            )
+            logger.warning("Permission denied when starting VirtualSpice at %s", self.binary_path)
             return False
 
     def stop(self):
@@ -123,9 +121,7 @@ class VirtualSpiceManager:
         import urllib.request
 
         try:
-            req = urllib.request.urlopen(
-                f"http://127.0.0.1:{self.port}/api/system/info", timeout=2
-            )
+            req = urllib.request.urlopen(f"http://127.0.0.1:{self.port}/api/system/info", timeout=2)
             return req.status == 200
         except (urllib.error.URLError, OSError, TimeoutError):
             return False

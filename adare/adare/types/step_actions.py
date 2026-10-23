@@ -16,6 +16,7 @@ class FindAction:
     This represents the step that resolves a target (image/text) to screen coordinates.
     Used for event tracking of target resolution steps.
     """
+
     description: str = ""
     target_info: dict[str, Any] | None = None
 
@@ -27,5 +28,6 @@ class ExecuteAction:
     This represents the step that performs the actual interaction (click, drag, etc.)
     at coordinates resolved by FindAction. Used for event tracking of execution steps.
     """
+
     description: str = ""
     coordinates: tuple[int, int] | None = None

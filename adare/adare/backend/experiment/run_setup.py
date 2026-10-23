@@ -41,7 +41,9 @@ from adare.types.stages import (
 log = logging.getLogger(__name__)
 
 
-def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDirectory, copy_existing: bool = True, file_log_level: int = logging.INFO):
+def _ensure_and_copy_adare_log_to_run_directory(
+    run_directory: ExperimentRunDirectory, copy_existing: bool = True, file_log_level: int = logging.INFO
+):
     """Ensure a log file exists and copy it to the experiment run directory.
 
     If no log file is currently active (e.g., when --logfile is not specified),
@@ -108,9 +110,7 @@ def __cleanup_experiment_run(experiment_run_directory: ExperimentRunDirectory):
 def step_initialize(context: ExperimentRunCtx, fake: bool = False, run_ulid: str = None):
     # Initialize experiment run in database (using optional specific ULID if provided)
     context.experiment_run_ulid = experiment_database.initialize_experiment_run(
-        context.config.project_path,
-        fake,
-        id=run_ulid
+        context.config.project_path, fake, id=run_ulid
     )
     context.timestamp_start = datetime.now(UTC)
     context.timestamp_before_vm_start = datetime.now(UTC)
@@ -134,7 +134,9 @@ def _apply_playbook_resolution(context: ExperimentRunCtx):
 
 def step_setup_experiment_environment(context: ExperimentRunCtx):
     """Consolidated step: Setup directories, validate playbook, and resolve environment."""
-    with StageCtxManager(SetupExperimentEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+    with StageCtxManager(
+        SetupExperimentEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event
+    ):
         # Setup directories
         context.project_directory = ProjectDirectory(context.config.project_path)
         context.experiment_directory = ExperimentDirectory(context.config.project_path, context.config.experiment_name)
@@ -146,27 +148,31 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
             context.experiment_run_ulid,
             context.config.experiment_name,
             context.config.environment_name,
-            context.config.project_path
+            context.config.project_path,
         )
         log.info(f'set base experiment info for run {context.experiment_run_ulid}')
 
         # Set experiment start timestamp early to ensure it's persisted even if interrupted
-        experiment_database.update_experiment_run_start(context.project_directory.path, context.experiment_run_ulid, context.timestamp_start)
+        experiment_database.update_experiment_run_start(
+            context.project_directory.path, context.experiment_run_ulid, context.timestamp_start
+        )
         log.info(f'set experiment start timestamp for run {context.experiment_run_ulid}')
 
         # Validate playbook
         try:
             experiment_id = experiment_database.get_experiment_by_project_and_name(
-                context.config.project_path,
-                context.config.experiment_name
+                context.config.project_path, context.config.experiment_name
             )
             if not experiment_id:
                 # Fallback to file-based parsing for new/untracked experiments
                 log.info("Experiment not found in database, falling back to file-based parsing")
                 from adare.types.playbook import parse_playbook
+
                 playbook_path = context.experiment_directory.path / "playbook.yml"
                 if not playbook_path.exists():
-                    log.warning("No playbook.yml found - experiment cannot run GUI actions (experiment may be incomplete)")
+                    log.warning(
+                        "No playbook.yml found - experiment cannot run GUI actions (experiment may be incomplete)"
+                    )
                     return
                 # Get VM OS and user for automatic variables
                 context.playbook = parse_playbook(playbook_path)
@@ -176,6 +182,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
 
             # Load from database (pre-validated)
             from adare.database.api.playbook import PlaybookApi
+
             with PlaybookApi(context.project_directory.path) as playbook_api:
                 try:
                     log.info(f"Loading pre-validated playbook from database for experiment {experiment_id}")
@@ -185,9 +192,12 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                     # Fallback to file parsing if database doesn't have the content
                     log.warning(f"Database playbook load failed: {e}, falling back to file parsing")
                     from adare.types.playbook import parse_playbook
+
                     playbook_path = context.experiment_directory.path / "playbook.yml"
                     if not playbook_path.exists():
-                        log.warning("No playbook.yml found - experiment cannot run GUI actions (experiment may be incomplete)")
+                        log.warning(
+                            "No playbook.yml found - experiment cannot run GUI actions (experiment may be incomplete)"
+                        )
                         return
                     context.playbook = parse_playbook(playbook_path)
                     log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
@@ -218,16 +228,16 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
             if context.config.environment_name:
                 environment_name = context.config.environment_name
             else:
-                environment_file = experiment_database.get_experiment_environment(
-                    context.config.project_path, context.config.environment_name, context.config.experiment_name
+                environment_name = experiment_database.get_experiment_environment_name(
+                    context.config.project_path, context.config.experiment_name
                 )
-                # update environment_name based on file stem
-                environment_name = environment_file.stem
                 context.config.environment_name = environment_name
             _resolve_machine_environment(context, context.primary_machine, environment_name)
 
 
-def _resolve_machine_environment(context: ExperimentRunCtx, machine_key: str | None, environment_name: str) -> MachineRunCtx:
+def _resolve_machine_environment(
+    context: ExperimentRunCtx, machine_key: str | None, environment_name: str
+) -> MachineRunCtx:
     """Resolve one machine's environment metadata (VM file, guest OS/arch, hypervisor).
 
     Populates and returns the ``MachineRunCtx`` for ``machine_key`` in
@@ -236,26 +246,24 @@ def _resolve_machine_environment(context: ExperimentRunCtx, machine_key: str | N
     """
     machine_ctx = context.machines.setdefault(machine_key, MachineRunCtx())
 
-    machine_ctx.environment_file = environment_database.get_environment_path_by_project_and_name(
-        context.config.project_path, environment_name
-    )
-    machine_ctx.environment_ulid = experiment_database.get_environment_ulid(context.config.project_path, environment_name)
+    # One version, read once: everything below is keyed by its ULID.
+    environment = environment_database.get_run_environment(environment_name)
+    machine_ctx.environment_file = environment['file']
+    machine_ctx.environment_ulid = environment['ulid']
+
+    environment_database.verify_environment_vm(machine_ctx.environment_ulid)
 
     # For lazy loading, VM file might not be available yet - will be resolved during VM creation
-    machine_ctx.vm_file = environment_database.get_environment_vm_file(machine_ctx.environment_ulid)
-    machine_ctx.guest_platform = environment_database.get_environment_os(machine_ctx.environment_ulid)
-    machine_ctx.hypervisor_type = environment_database.get_environment_hypervisor(machine_ctx.environment_ulid)
-
-    # Fetch guest architecture from database (via VM osinfo)
-    env_arch_data = environment_database.get_environment_by_ulid(
-        machine_ctx.environment_ulid, fields=['vm_architecture']
-    )
-    if env_arch_data and env_arch_data.get('vm_architecture'):
-        machine_ctx.guest_architecture = env_arch_data['vm_architecture']
+    machine_ctx.vm_file = environment['vm_file']
+    machine_ctx.guest_platform = environment['platform']
+    machine_ctx.hypervisor_type = environment['hypervisor']
+    if environment['architecture']:
+        machine_ctx.guest_architecture = environment['architecture']
 
     # If VM file is not available, get from environment metadata directly
     if not machine_ctx.vm_file or not machine_ctx.guest_platform or not machine_ctx.guest_architecture:
         from adare.types.environment import parse_environment_file
+
         environment_metadata = parse_environment_file(machine_ctx.environment_file)
         if not machine_ctx.vm_file:
             machine_ctx.vm_file = Path(environment_metadata.vm)
@@ -264,13 +272,17 @@ def _resolve_machine_environment(context: ExperimentRunCtx, machine_key: str | N
         if not machine_ctx.guest_architecture and hasattr(environment_metadata.os, 'architecture'):
             machine_ctx.guest_architecture = environment_metadata.os.architecture
 
-    log.info(f'found environment {environment_name} for machine {machine_key!r} (hypervisor: {machine_ctx.hypervisor_type})')
+    log.info(
+        f'found environment {environment_name} for machine {machine_key!r} (hypervisor: {machine_ctx.hypervisor_type})'
+    )
     return machine_ctx
 
 
 def step_validate_integrity(context: ExperimentRunCtx):
     """Consolidated step: Check experiment and project integrity."""
-    with StageCtxManager(ValidateIntegrityStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
+    with StageCtxManager(
+        ValidateIntegrityStage(), context.experiment_run_ulid, event=context.user_interrupt_event
+    ) as stage_ctx:
         # Skip integrity checks in test mode to allow development
         if context.test_mode:
             stage_ctx.stage.sub_msg = "SKIPPED - Development/Test Mode"
@@ -299,7 +311,9 @@ def step_validate_integrity(context: ExperimentRunCtx):
             context.config.project_path, context.config.environment_name, context.config.experiment_name
         )
         testfunction_files_names = ",".join([file.name for file in testfunction_files])
-        log.info(f'experiment {context.config.experiment_name} uses the following testfunction files: {testfunction_files_names}')
+        log.info(
+            f'experiment {context.config.experiment_name} uses the following testfunction files: {testfunction_files_names}'
+        )
         validator.check_project(
             environments=[context.environment_file],
             testfunctions=testfunction_files,
@@ -340,6 +354,7 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
         # VALIDATE: Ensure logs directory was created
         if not run_dir.log_directory.exists():
             from adare.exceptions import LoggedException
+
             raise LoggedException(log, message=f"Failed to create logs directory: {run_dir.log_directory}")
 
         log.info(f"Run directory created: {run_dir.path}")
@@ -382,10 +397,7 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
             cv_port = find_free_cv_port()
 
             view.mcp_server = MCPServerManager(
-                server_port=cv_port,
-                log_file=log_file,
-                debug=context.config.dev_mode,
-                debug_output_dir=debug_output_dir
+                server_port=cv_port, log_file=log_file, debug=context.config.dev_mode, debug_output_dir=debug_output_dir
             )
             log.info(f"CV/OCR server for machine {machine_key!r} will use port {cv_port}")
 
@@ -402,9 +414,7 @@ def _resolve_and_store_test_execution_mode(context: ExperimentRunCtx):
     try:
         playbook_settings = getattr(context.playbook, 'settings', None) if context.playbook else None
         mode = resolve_test_execution_mode(
-            vm=context.vm,
-            playbook_settings=playbook_settings,
-            cli_override=context.config.test_mode_override
+            vm=context.vm, playbook_settings=playbook_settings, cli_override=context.config.test_mode_override
         )
         context.test_execution_mode = mode.value
         log.info(f"Test execution mode resolved to: {mode.value}")
@@ -439,13 +449,16 @@ async def _run_per_machine_installations(context: ExperimentRunCtx, install_fn):
     the "Installing environment software" row never appears for empty environments.
     """
     pending = [
-        (key, view) for key, view in _machine_views(context)
+        (key, view)
+        for key, view in _machine_views(context)
         if environment_database.get_environment_installations(context.machines[key].environment_ulid)
     ]
     if not pending:
         log.info("No environment installations to execute; skipping stage")
         return
-    with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
+    with StageCtxManager(
+        InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event
+    ) as stage_ctx:
         for _key, view in pending:
             await install_fn(view, stage_ctx)
 
@@ -453,6 +466,7 @@ async def _run_per_machine_installations(context: ExperimentRunCtx, install_fn):
 async def step_execute_installations_via_qga(context: ExperimentRunCtx):
     """Execute environment installations via QGA guest-exec (no WebSocket needed)."""
     from adare.backend.experiment.agent_lifecycle import execute_installations_via_qga
+
     await _run_per_machine_installations(context, execute_installations_via_qga)
 
 
@@ -463,20 +477,52 @@ async def step_install_and_run_websocket_server(context: ExperimentRunCtx):
 
 
 async def step_connect_websocket(context: ExperimentRunCtx):
-    from adare.backend.experiment.agent_lifecycle import connect_websocket
-    with StageCtxManager(ConnectToVMStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
+    from adare.backend.experiment.agent_lifecycle import connect_websocket, stop_agent
+    from adare.backend.experiment.exceptions import AgentAuthenticationError, AgentProtocolMismatchError
+    from adare.backend.experiment.websocket_client import AgentAuthError, AgentProtocolError
+
+    with StageCtxManager(
+        ConnectToVMStage(), context.experiment_run_ulid, event=context.user_interrupt_event
+    ) as stage_ctx:
         for _key, view in _machine_views(context):
-            await connect_websocket(view, stage_ctx)
+            try:
+                try:
+                    await connect_websocket(view, stage_ctx)
+                except AgentProtocolError as e:
+                    # An agent from before the current protocol (e.g. a dev session
+                    # restored from an older snapshot): replace it once, then retry.
+                    log.warning(f"{e}; reinstalling the guest agent")
+                    await stop_agent(view, context.user_interrupt_event)
+                    await install_and_run_adare_vm(view, stop_event=context.user_interrupt_event, force_install=True)
+                    await connect_websocket(view, stage_ctx)
+            except AgentProtocolError as e:
+                raise AgentProtocolMismatchError(
+                    log,
+                    f"The guest agent is still incompatible after reinstalling it: {e}",
+                    [
+                        'Restart the VM (or start a fresh dev session) so no old adarevm keeps the port',
+                        'Rebuild the agent wheels with `adare runtime build` and run again',
+                    ],
+                ) from e
+            except AgentAuthError as e:
+                raise AgentAuthenticationError(
+                    log,
+                    str(e),
+                    ["The run's config.json and the running agent disagree; restart the VM or the dev session"],
+                ) from e
 
 
 async def step_execute_installations(context: ExperimentRunCtx):
     from adare.backend.experiment.agent_lifecycle import execute_installations_via_websocket
+
     await _run_per_machine_installations(context, execute_installations_via_websocket)
 
 
 async def step_start_mcp_server(context: ExperimentRunCtx):
     """Start the MCP GUI server(s) for target detection -- one per machine."""
-    with StageCtxManager(StartComputerVisionServerStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+    with StageCtxManager(
+        StartComputerVisionServerStage(), context.experiment_run_ulid, event=context.user_interrupt_event
+    ):
         for machine_key, view in _machine_views(context):
             log.info(f"Starting MCP GUI server for machine {machine_key!r}...")
 
@@ -489,6 +535,7 @@ async def step_start_mcp_server(context: ExperimentRunCtx):
                 # so dev start, dev resume and production runs all record it identically.
                 if context.experiment_run_directory is not None:
                     from adare.backend.experiment.mcp_server_manager import save_cv_state
+
                     save_cv_state(
                         context.experiment_run_directory.path,
                         view.mcp_server.server_port,
@@ -497,7 +544,11 @@ async def step_start_mcp_server(context: ExperimentRunCtx):
                     )
             else:
                 from adare.exceptions import LoggedException
-                raise LoggedException(log, f"MCP GUI server failed to start for machine {machine_key!r} - cannot proceed without target detection capabilities")
+
+                raise LoggedException(
+                    log,
+                    f"MCP GUI server failed to start for machine {machine_key!r} - cannot proceed without target detection capabilities",
+                )
 
 
 async def step_execute_experiment(context: ExperimentRunCtx):
@@ -514,7 +565,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             experiment_dir=context.experiment_directory.path,
             project_dir=context.project_directory.path,
             playbook=context.playbook,
-            variable_resolver=None
+            variable_resolver=None,
         )
         if is_host_test_mode:
             log.info("Host test mode: skipping testfunction dependency installation in VM (dependencies run on host)")
@@ -535,8 +586,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         experiment_id = None
         try:
             experiment_id = experiment_database.get_experiment_by_project_and_name(
-                context.config.project_path,
-                context.config.experiment_name
+                context.config.project_path, context.config.experiment_name
             )
             if experiment_id:
                 log.debug(f"Found experiment {experiment_id} for execution tracking")
@@ -547,6 +597,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
 
         # Get VM credentials for automatic variables
         from adare.config import get_vm_credentials
+
         vm_os = context.guest_platform if context.guest_platform else None
         vm_user = None
         if vm_os:
@@ -569,6 +620,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         machines_spec = getattr(context.playbook, 'machines', None) if context.playbook else None
         if machines_spec and len(machines_spec) > 1:
             from adare.backend.experiment.action_executor import MachineHandles
+
             machine_handles = {}
             for machine_key in machines_spec:
                 machine_ctx = context.machines[machine_key]
@@ -581,7 +633,9 @@ async def step_execute_experiment(context: ExperimentRunCtx):
                     client=machine_ctx.client,
                     vm_os=machine_vm_os,
                     vm_user=machine_vm_user,
-                    mcp_gui_url=machine_ctx.mcp_server.server_url if machine_ctx.mcp_server else "http://localhost:13109/mcp",
+                    mcp_gui_url=machine_ctx.mcp_server.server_url
+                    if machine_ctx.mcp_server
+                    else "http://localhost:13109/mcp",
                 )
             controller_kwargs['machines'] = machine_handles
 
@@ -621,7 +675,9 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             controller._guest_to_host_test_executor.cleanup()
 
         if result.success:
-            log.info(f"Experiment completed successfully: {result.successful_actions}/{result.total_actions} actions succeeded")
+            log.info(
+                f"Experiment completed successfully: {result.successful_actions}/{result.total_actions} actions succeeded"
+            )
         else:
             log.error(f"Experiment failed: {result.error_message}")
             log.error(f"Action results: {result.successful_actions}/{result.total_actions} succeeded")
@@ -661,11 +717,12 @@ def _setup_guest_to_host_test_executor(controller, vm, playbook, vm_os: str):
         ok, issues = GuestToHostTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
         if not ok:
             from adare.exceptions import LoggedException
+
             issue_list = '\n  - '.join(issues)
             raise LoggedException(
                 log,
                 f"Host-mode test validation failed. The following tests cannot run in host mode:\n  - {issue_list}\n"
-                f"Use --test-mode agent to run these tests via the in-guest agent instead."
+                f"Use --test-mode agent to run these tests via the in-guest agent instead.",
             )
         log.info(f"Host mode: pre-flight validation passed for {len(playbook_tests)} tests")
 
@@ -719,20 +776,20 @@ async def _collect_machine_system_info(context: ExperimentRunCtx, machine_key, v
 
     if is_host_test_mode and view.vm:
         from adare.backend.experiment.system_info_collector import collect_system_info_via_qga
+
         success = await collect_system_info_via_qga(
-            vm=view.vm,
-            guest_platform=view.guest_platform,
-            output_file=output_file
+            vm=view.vm, guest_platform=view.guest_platform, output_file=output_file
         )
     elif view.client:
         from adare.backend.experiment.system_info_collector import collect_system_info
+
         success = await collect_system_info(
-            websocket_client=view.client,
-            guest_platform=view.guest_platform,
-            output_file=output_file
+            websocket_client=view.client, guest_platform=view.guest_platform, output_file=output_file
         )
     else:
-        log.warning(f"Neither WebSocket client nor VM available for machine {machine_key!r} - skipping system info collection")
+        log.warning(
+            f"Neither WebSocket client nor VM available for machine {machine_key!r} - skipping system info collection"
+        )
         return
 
     if success:
@@ -745,7 +802,9 @@ def step_finalize(context: ExperimentRunCtx, post_interrupt: bool = False):
     event = None if post_interrupt else context.user_interrupt_event
     with StageCtxManager(FinalizeStage(), context.experiment_run_ulid, event=event):
         timestamp_end = datetime.now(UTC)
-        experiment_database.update_experiment_run_end(context.project_directory.path, context.experiment_run_ulid, timestamp_end)
+        experiment_database.update_experiment_run_end(
+            context.project_directory.path, context.experiment_run_ulid, timestamp_end
+        )
 
         # The run actually executed against this environment: register it as a
         # "can run here" indicator on the experiment (DB + metadata.yml). This is
@@ -758,7 +817,9 @@ def step_finalize(context: ExperimentRunCtx, post_interrupt: bool = False):
 
         duration_total = timestamp_end - context.timestamp_start
         duration_vm = timestamp_end - context.timestamp_before_vm_start
-        log.info(f"Experiment run {context.experiment_run_ulid} finished after {duration_total} seconds (vm run time: {duration_vm})")
+        log.info(
+            f"Experiment run {context.experiment_run_ulid} finished after {duration_total} seconds (vm run time: {duration_vm})"
+        )
         __cleanup_experiment_run(context.experiment_run_directory)
 
 

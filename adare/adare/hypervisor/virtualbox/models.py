@@ -3,6 +3,7 @@ VirtualBox-specific data models.
 
 Extends base hypervisor models with VirtualBox-specific format conversion.
 """
+
 import logging
 from dataclasses import dataclass
 
@@ -53,7 +54,7 @@ class PortForwardingRule(BasePortForwardingRule):
             host_ip=host_ip,
             host_port=int(host_port_str) if host_port_str.isdigit() else 0,
             guest_ip=guest_ip,
-            guest_port=int(guest_port_str) if guest_port_str.isdigit() else 0
+            guest_port=int(guest_port_str) if guest_port_str.isdigit() else 0,
         )
 
 

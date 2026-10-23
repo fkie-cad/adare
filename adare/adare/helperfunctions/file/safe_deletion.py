@@ -17,7 +17,7 @@ def safe_rm_tree(path: str) -> int:
     try:
         shutil.rmtree(path)
         return 0
-    except PermissionError or OSError as e:
+    except OSError as e:
         log.warning(f'{path} could not be deleted caused by the following exception')
         log.warning(e, exc_info=True)
         raise

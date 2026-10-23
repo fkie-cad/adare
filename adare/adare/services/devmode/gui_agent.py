@@ -37,7 +37,7 @@ def _grounding_next_steps(msg: str) -> list[str]:
     """
     if 'not ready within' in msg:
         return [
-            'Pre-warm the weights once, then rerun: adare dev grounding pull',
+            'Pre-warm the weights once, then rerun: adare vlm pull-grounding',
             'Or allow more load time: ADARE_LOCATE_START_TIMEOUT=900 adare dev agent ...',
             'Read the server log named above to see how far the load got',
             'Or drop --ground to run without element grounding',
@@ -54,7 +54,9 @@ class GuiAgentMixin:
     """Adds vision-LLM GUI-agent execution to :class:`DevModeService`."""
 
     def run_gui_agent(
-        self, request: DevGuiAgentRequest, event_sink=None,
+        self,
+        request: DevGuiAgentRequest,
+        event_sink=None,
     ) -> Result[DevGuiAgentResult]:
         """Drive the session VM toward ``request.goal`` with the vision agent.
 
@@ -77,37 +79,49 @@ class GuiAgentMixin:
             return Result.ok(result)
         except GroundingUnavailable as exc:  # --ground could not start (checked before RuntimeError)
             return Result.fail(
-                'GROUNDING_ERROR', str(exc),
+                'GROUNDING_ERROR',
+                str(exc),
                 _grounding_next_steps(str(exc)),
             )
         except VideoUnavailable as exc:  # --video needs ffmpeg (checked before RuntimeError)
             return Result.fail(
-                'VIDEO_ERROR', str(exc),
-                ['Install ffmpeg (e.g. `brew install ffmpeg` / `apt install ffmpeg`)',
-                 'Or point ADARE_FFMPEG at the ffmpeg binary',
-                 'Or drop --video to run without recording the session'],
+                'VIDEO_ERROR',
+                str(exc),
+                [
+                    'Install ffmpeg (e.g. `brew install ffmpeg` / `apt install ffmpeg`)',
+                    'Or point ADARE_FFMPEG at the ffmpeg binary',
+                    'Or drop --video to run without recording the session',
+                ],
             )
         except RuntimeError as exc:  # session/VM not found
             return Result.fail(
-                'SESSION_NOT_FOUND', str(exc),
-                ['Check active sessions with: adare dev list',
-                 'Start one with: adare dev start -e <environment>'],
+                'SESSION_NOT_FOUND',
+                str(exc),
+                ['Check active sessions with: adare dev list', 'Start one with: adare dev start -e <environment>'],
             )
         except VLMError as exc:
             return Result.fail(
-                'VLM_ERROR', str(exc),
-                ['Verify ADARE_VLLM_BASE_URL / ADARE_VLLM_API_KEY / ADARE_VLLM_MODEL',
-                 'Run the preflight: adare vm gui-doctor'],
+                'VLM_ERROR',
+                str(exc),
+                [
+                    'Verify ADARE_VLLM_BASE_URL / ADARE_VLLM_API_KEY / ADARE_VLLM_MODEL',
+                    'Run the preflight: adare vlm doctor',
+                ],
             )
         except AgentError as exc:
             return Result.fail(
-                'AGENT_ERROR', str(exc),
-                ['The agent hit a budget or stall limit — inspect the screenshot report',
-                 'Try a clearer --goal or raise --max-steps'],
+                'AGENT_ERROR',
+                str(exc),
+                [
+                    'The agent hit a budget or stall limit — inspect the screenshot report',
+                    'Try a clearer --goal or raise --max-steps',
+                ],
             )
 
     async def _run_gui_agent_async(
-        self, request: DevGuiAgentRequest, event_sink=None,
+        self,
+        request: DevGuiAgentRequest,
+        event_sink=None,
     ) -> DevGuiAgentResult:
         from adare.backend.experiment.execution.qemu_host_gui_executor import QEMUHostGUIExecutor
         from adare.backend.experiment.execution.qemu_video_recorder import QemuVideoRecorder
@@ -153,18 +167,16 @@ class GuiAgentMixin:
 
         session = await self._manager.get_or_restore_session(request.session_id)
         if not session:
-            raise RuntimeError(
-                f"Dev session '{request.session_id}' not found or could not be restored"
-            )
+            raise RuntimeError(f"Dev session '{request.session_id}' not found or could not be restored")
         ctx = session.experiment_ctx
         vm = getattr(ctx, 'vm', None) if ctx else None
         if vm is None:
-            raise RuntimeError(
-                f"Dev session '{request.session_id}' has no running VM"
-            )
+            raise RuntimeError(f"Dev session '{request.session_id}' has no running VM")
 
         client = VLMClient(
-            base_url=VLLM_BASE_URL, model=VLLM_MODEL, api_key=VLLM_API_KEY,
+            base_url=VLLM_BASE_URL,
+            model=VLLM_MODEL,
+            api_key=VLLM_API_KEY,
             timeout=VLLM_TIMEOUT,
         )
         executor = QEMUHostGUIExecutor(vm=vm)
@@ -175,8 +187,8 @@ class GuiAgentMixin:
         repair_client = None
         if AGENT_REPAIR_MODEL:
             repair_client = VLMClient(
-                base_url=VLLM_BASE_URL, model=AGENT_REPAIR_MODEL, api_key=VLLM_API_KEY,
-                timeout=VLLM_TIMEOUT)
+                base_url=VLLM_BASE_URL, model=AGENT_REPAIR_MODEL, api_key=VLLM_API_KEY, timeout=VLLM_TIMEOUT
+            )
             log.info('Decision-repair model enabled: %s', AGENT_REPAIR_MODEL)
 
         recorder, run_dir = self._setup_recorder(request, ctx, PlaybookRecorder)
@@ -201,6 +213,7 @@ class GuiAgentMixin:
                 from adare.backend.experiment.execution.spice_video_recorder import (
                     SpiceVideoRecorder,
                 )
+
                 SpiceVideoRecorder.ensure_ffmpeg(FFMPEG)
                 SpiceVideoRecorder.ensure_spice_client()
             else:
@@ -209,6 +222,7 @@ class GuiAgentMixin:
         # one so per-step screenshots are persisted for the browser to fetch.
         if (want_video or event_sink is not None) and run_dir is None:
             import tempfile
+
             run_dir = Path(tempfile.gettempdir()) / f'adare_agent_run_{request.session_id[:8]}'
 
         # Tell the sink where step_NNN.png files will land, so an image endpoint
@@ -230,6 +244,7 @@ class GuiAgentMixin:
         # recorder's actions are reset (keeping the persisted vm_memory).
         async def restart_vm(memory_mb: int | None = None) -> str:
             from adare.backend.experiment.vlm.exceptions import AgentError
+
             res = await session.restart_with_memory(memory_mb)
             if not res.success:
                 reason = res.error.message if res.error else 'unknown error'
@@ -244,8 +259,12 @@ class GuiAgentMixin:
             return f'VM restarted at {working_mb} MB'
 
         agent = GuiAgent(
-            executor, client, request.goal,
-            recorder=recorder, run_dir=run_dir, coord_space=VLLM_COORD_SPACE,
+            executor,
+            client,
+            request.goal,
+            recorder=recorder,
+            run_dir=run_dir,
+            coord_space=VLLM_COORD_SPACE,
             locate_client=locate_client,
             locate_click=LOCATE_CLICK,
             locate_crop_margin=LOCATE_CROP_MARGIN,
@@ -267,8 +286,8 @@ class GuiAgentMixin:
         sinks = []
         if effective_progress:
             from adare.console import console
-            reporter = AgentProgressReporter(
-                request.goal, console=console, show_reasoning=request.reasoning)
+
+            reporter = AgentProgressReporter(request.goal, console=console, show_reasoning=request.reasoning)
             sinks.append(reporter.on_event)
         if event_sink is not None:
             sinks.append(event_sink)
@@ -285,11 +304,10 @@ class GuiAgentMixin:
                 from adare.backend.experiment.execution.spice_video_recorder import (
                     SpiceVideoRecorder,
                 )
-                video_recorder = SpiceVideoRecorder(
-                    vm, run_dir / 'run.mp4', fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
+
+                video_recorder = SpiceVideoRecorder(vm, run_dir / 'run.mp4', fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
             else:
-                video_recorder = QemuVideoRecorder(
-                    vm, run_dir / 'run.mp4', fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
+                video_recorder = QemuVideoRecorder(vm, run_dir / 'run.mp4', fps=AGENT_VIDEO_FPS, ffmpeg=FFMPEG)
 
         # Cooperative graceful Ctrl-C: SIGINT flips the agent's stop flag AND
         # cancels the in-flight run task, so a step blocked on a slow VLM call,
@@ -312,8 +330,7 @@ class GuiAgentMixin:
             sigint_count += 1
             agent.request_stop()
             if sigint_count == 1:
-                print('\nInterrupting — finishing the current step and saving the '
-                      'playbook/report ...')
+                print('\nInterrupting — finishing the current step and saving the playbook/report ...')
                 main_task.cancel()
             else:
                 print('\nForced exit (cleanup was still in progress).')
@@ -331,20 +348,24 @@ class GuiAgentMixin:
         try:
             if video_recorder is not None:
                 await video_recorder.start()
-            with (reporter or nullcontext()):
+            with reporter or nullcontext():
                 if planning:
                     res = await self._run_planning_agent(
-                        session, agent, request,
+                        session,
+                        agent,
+                        request,
                         planner_client=VLMClient(
                             base_url=AGENT_PLANNER_BASE_URL or VLLM_BASE_URL,
                             model=AGENT_PLANNER_MODEL or VLLM_MODEL,
                             api_key=AGENT_PLANNER_API_KEY or VLLM_API_KEY,
-                            timeout=VLLM_TIMEOUT),
+                            timeout=VLLM_TIMEOUT,
+                        ),
                         checker_client=VLMClient(
                             base_url=AGENT_CHECKER_BASE_URL or VLLM_BASE_URL,
                             model=AGENT_CHECKER_MODEL or VLLM_MODEL,
                             api_key=AGENT_CHECKER_API_KEY or VLLM_API_KEY,
-                            timeout=VLLM_TIMEOUT),
+                            timeout=VLLM_TIMEOUT,
+                        ),
                         run_acceptance_checks=run_acceptance_checks,
                         planning_agent_cls=PlanningAgent,
                         host_executor_cls=QEMUHostGUIExecutor,
@@ -431,6 +452,7 @@ class GuiAgentMixin:
             from adare.backend.experiment.grounding.locate_process_manager import (
                 LocateGroundingManager,
             )
+
             locate_manager = LocateGroundingManager(
                 port=LOCATE_PORT,
                 model_path=LOCATE_MODEL_PATH or None,
@@ -441,6 +463,7 @@ class GuiAgentMixin:
             locate_url = locate_manager.start()
 
         from adare.backend.experiment.grounding import LocateAnythingClient
+
         locate_client = LocateAnythingClient(locate_url, mode=LOCATE_MODE)
         log.info('LocateAnything grounding enabled via %s', locate_url)
         return locate_client, locate_manager
@@ -489,18 +512,21 @@ class GuiAgentMixin:
 
         async def verify(statement: str) -> tuple[bool, str]:
             result = await run_acceptance_checks(
-                session.experiment_ctx.vm, {'visual': [statement]},
+                session.experiment_ctx.vm,
+                {'visual': [statement]},
                 client=checker_client,
             )
-            reason = '; '.join(
-                c['reason'] for c in result.checks if not c['passed']
-            ) or 'all checks passed'
+            reason = '; '.join(c['reason'] for c in result.checks if not c['passed']) or 'all checks passed'
             return result.passed, reason
 
         planner = planning_agent_cls(
-            agent, planner_client,
-            checkpoint=checkpoint, restore=restore, verify=verify,
-            retry_limit=retry_limit, replan_limit=replan_limit,
+            agent,
+            planner_client,
+            checkpoint=checkpoint,
+            restore=restore,
+            verify=verify,
+            retry_limit=retry_limit,
+            replan_limit=replan_limit,
             subgoal_max_steps=subgoal_max_steps,
             subgoal_stall_limit=subgoal_stall_limit,
         )
@@ -517,13 +543,14 @@ class GuiAgentMixin:
             return Result.ok(result)
         except RuntimeError as exc:  # session/VM not found
             return Result.fail(
-                'SESSION_NOT_FOUND', str(exc),
-                ['Check active sessions with: adare dev list',
-                 'Start one with: adare dev start -e <environment>'],
+                'SESSION_NOT_FOUND',
+                str(exc),
+                ['Check active sessions with: adare dev list', 'Start one with: adare dev start -e <environment>'],
             )
         except AgentError as exc:
             return Result.fail(
-                'AGENT_ERROR', str(exc),
+                'AGENT_ERROR',
+                str(exc),
                 ['Inspect the step screenshots under the run directory'],
             )
 
@@ -541,9 +568,7 @@ class GuiAgentMixin:
 
         session = await self._manager.get_or_restore_session(request.session_id)
         if not session:
-            raise RuntimeError(
-                f"Dev session '{request.session_id}' not found or could not be restored"
-            )
+            raise RuntimeError(f"Dev session '{request.session_id}' not found or could not be restored")
         ctx = session.experiment_ctx
         vm = getattr(ctx, 'vm', None) if ctx else None
         if vm is None:
@@ -554,11 +579,14 @@ class GuiAgentMixin:
         locate_client = None
         if LOCATE_URL:
             from adare.backend.experiment.grounding import LocateAnythingClient
+
             locate_client = LocateAnythingClient(LOCATE_URL, mode=LOCATE_MODE)
             log.info('LocateAnything grounding enabled via %s', LOCATE_URL)
         else:
-            log.warning('ADARE_LOCATE_URL is not set — described clicks cannot be '
-                        'grounded; use `click @x,y ...` for explicit coordinates')
+            log.warning(
+                'ADARE_LOCATE_URL is not set — described clicks cannot be '
+                'grounded; use `click @x,y ...` for explicit coordinates'
+            )
 
         recorder = None
         run_dir: Path | None = None
@@ -570,9 +598,13 @@ class GuiAgentMixin:
             run_dir = Path(ctx.experiment_run_directory.path) / 'gui_author'
 
         driver = TextAuthorDriver(
-            executor, recorder=recorder, run_dir=run_dir,
-            locate_client=locate_client, coord_space=VLLM_COORD_SPACE,
-            locate_crop_margin=LOCATE_CROP_MARGIN, locate_crop_min=LOCATE_CROP_MIN,
+            executor,
+            recorder=recorder,
+            run_dir=run_dir,
+            locate_client=locate_client,
+            coord_space=VLLM_COORD_SPACE,
+            locate_crop_margin=LOCATE_CROP_MARGIN,
+            locate_crop_min=LOCATE_CROP_MIN,
         )
 
         if request.script:

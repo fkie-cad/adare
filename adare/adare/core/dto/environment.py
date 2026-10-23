@@ -3,6 +3,7 @@ Data Transfer Objects for Environment domain.
 
 These DTOs provide type-safe request/response objects for the EnvironmentService.
 """
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from typing import Any
 @dataclass
 class EnvironmentLoadRequest:
     """Request DTO for loading an environment from YAML file."""
+
     environment: str  # Path or name
     force: bool = False
     no_copy: bool = False
@@ -33,6 +35,7 @@ class EnvironmentCreateRequest:
     `http(s)` URL + sha256 (the web variant's publish-ready BYO-URL model). See
     `is_recipe`.
     """
+
     project_path: Path
     name: str
     vm_path: Path | None = None
@@ -75,6 +78,7 @@ class EnvironmentCreateRequest:
 @dataclass
 class EnvironmentDeleteRequest:
     """Request DTO for deleting an environment."""
+
     identifier: str  # Name or ULID
     force: bool = False
 
@@ -90,6 +94,7 @@ class EnvironmentExtendRequest:
     `console` additionally opens the recording REPL, and the Mode-B-only fields
     (`ram`, `cpus`, `disk_name`) tune the boot window and flattened disk name.
     """
+
     source: str  # Environment name/ULID or VM name
     name: str  # Name for the new environment (must be unique)
     installs: list[tuple[str, str]] = field(default_factory=list)  # (name, command) from --install
@@ -119,6 +124,7 @@ class EnvironmentInfo:
 
     Contains full environment details including VM and OS information.
     """
+
     id: str
     name: str
     description: str
@@ -151,6 +157,7 @@ class EnvironmentInfo:
 @dataclass
 class EnvironmentListItem:
     """DTO for a single environment in the list view."""
+
     id: str
     name: str
     description: str
@@ -170,7 +177,7 @@ class EnvironmentListItem:
         }
 
     @classmethod
-    def from_model(cls, env) -> "EnvironmentListItem":
+    def from_model(cls, env: Any) -> "EnvironmentListItem":  # legacy Column-typed model
         """Create from SQLAlchemy Environment model."""
         vm_name = None
         if hasattr(env, 'vm') and env.vm:

@@ -1,14 +1,15 @@
 """Feature matching algorithms for icon detection."""
 
 import logging
-from typing import List, Tuple, Optional
-import numpy as np
+from pathlib import Path
+
 import cv2
+import numpy as np
 from sklearn.cluster import DBSCAN
 
 from .constants import CVConstants
-from .image_processing import ImageDecoder, FeatureMatchingResult, HomographyCalculator, non_maximum_suppression
-from .exceptions import FeatureMatchingError, ImageDecodingError, HomographyCalculationError
+from .exceptions import HomographyCalculationError, ImageDecodingError
+from .image_processing import FeatureMatchingResult, HomographyCalculator, ImageDecoder, non_maximum_suppression
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class SIFTMatcher:
         screenshot_bytes: bytes,
         icon_bytes: bytes,
         min_matches: int = CVConstants.SIFT_MIN_MATCHES,
-        ratio_threshold: float = CVConstants.SIFT_RATIO_THRESHOLD
+        ratio_threshold: float = CVConstants.SIFT_RATIO_THRESHOLD,
     ) -> FeatureMatchingResult:
         """Find icon locations using SIFT feature matching - scale invariant."""
         log.info(f"SIFT detection starting with min_matches={min_matches}, ratio_threshold={ratio_threshold}")
@@ -86,7 +87,7 @@ class SIFTMatcher:
         return FeatureMatchingResult([], [], "sift")
 
     @staticmethod
-    def _apply_ratio_test(matches: List, ratio_threshold: float) -> List:
+    def _apply_ratio_test(matches: list, ratio_threshold: float) -> list:
         """Apply Lowe's ratio test to filter good matches."""
         good_matches = []
         for match_pair in matches:
@@ -106,10 +107,12 @@ class ORBMatcher:
         icon_bytes: bytes,
         min_matches: int = CVConstants.ORB_MIN_MATCHES,
         max_matches: int = CVConstants.ORB_MAX_MATCHES,
-        distance_threshold: float = CVConstants.ORB_DISTANCE_THRESHOLD
+        distance_threshold: float = CVConstants.ORB_DISTANCE_THRESHOLD,
     ) -> FeatureMatchingResult:
         """Find multiple icon locations using ORB feature matching."""
-        log.info(f"ORB detection starting with min_matches={min_matches}, max_matches={max_matches}, distance_threshold={distance_threshold}")
+        log.info(
+            f"ORB detection starting with min_matches={min_matches}, max_matches={max_matches}, distance_threshold={distance_threshold}"
+        )
 
         # Decode images
         decoded = ImageDecoder.decode_images(screenshot_bytes, icon_bytes)
@@ -182,11 +185,11 @@ class ORBMatcher:
             scaleFactor=CVConstants.ORB_SCALE_FACTOR,
             nlevels=nlevels,
             edgeThreshold=edgeThreshold,
-            patchSize=CVConstants.ORB_PATCH_SIZE
+            patchSize=CVConstants.ORB_PATCH_SIZE,
         )
 
     @staticmethod
-    def _match_and_filter_features(des1: np.ndarray, des2: np.ndarray, distance_threshold: float) -> List:
+    def _match_and_filter_features(des1: np.ndarray, des2: np.ndarray, distance_threshold: float) -> list:
         """Match features and filter by distance threshold."""
         matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
         matches = matcher.match(des1, des2)
@@ -199,12 +202,12 @@ class ORBMatcher:
     def _find_multiple_instances(
         src_pts: np.ndarray,
         dst_pts: np.ndarray,
-        good_matches: List,
-        icon_shape: Tuple[int, int],
+        good_matches: list,
+        icon_shape: tuple[int, int],
         min_matches: int,
         max_matches: int,
-        screenshot_shape: Tuple[int, int]
-    ) -> Tuple[List[Tuple[int, int]], List[float]]:
+        screenshot_shape: tuple[int, int],
+    ) -> tuple[list[tuple[int, int]], list[float]]:
         """Find multiple icon instances using clustering."""
         try:
             # Determine clustering strategy
@@ -225,7 +228,7 @@ class ORBMatcher:
             valid_similarities = []
 
             for label in unique_labels:
-                cluster_mask = (labels == label)
+                cluster_mask = labels == label
                 cluster_src = src_pts[cluster_mask]
                 cluster_dst = dst_pts[cluster_mask]
                 cluster_matches = [good_matches[i] for i, mask in enumerate(cluster_mask) if mask]
@@ -258,10 +261,10 @@ class ORBMatcher:
     def _process_cluster(
         cluster_src: np.ndarray,
         cluster_dst: np.ndarray,
-        cluster_matches: List,
-        icon_shape: Tuple[int, int],
-        screenshot_shape: Tuple[int, int]
-    ) -> Tuple[Optional[Tuple[int, int]], float]:
+        cluster_matches: list,
+        icon_shape: tuple[int, int],
+        screenshot_shape: tuple[int, int],
+    ) -> tuple[tuple[int, int] | None, float]:
         """Process a single cluster to find icon center and similarity."""
         if len(cluster_src) >= CVConstants.MIN_HOMOGRAPHY_POINTS:
             # Use homography for larger clusters
@@ -270,13 +273,15 @@ class ORBMatcher:
                 cluster_dst.reshape(-1, 1, 2),
                 icon_shape,
                 CVConstants.ORB_HOMOGRAPHY_THRESHOLD,
-                screenshot_shape
+                screenshot_shape,
             )
 
             if center is not None:
                 avg_distance = float(np.mean([m.distance for m in cluster_matches]))
                 similarity = max(0.0, 1.0 - (avg_distance / CVConstants.ORB_MAX_DISTANCE_NORMALIZE))
-                log.info(f"ORB cluster match at {center} with {len(cluster_src)} features, similarity: {similarity:.3f}")
+                log.info(
+                    f"ORB cluster match at {center} with {len(cluster_src)} features, similarity: {similarity:.3f}"
+                )
                 return center, similarity
 
         elif len(cluster_src) >= 2:
@@ -305,7 +310,7 @@ class TemplateMatcher:
         screenshot_bytes: bytes,
         icon_bytes: bytes,
         threshold: float = CVConstants.DEFAULT_TEMPLATE_THRESHOLD,
-        icon_mask: Optional[np.ndarray] = None
+        icon_mask: np.ndarray | None = None,
     ) -> FeatureMatchingResult:
         """Find best icon location using template matching.
 
@@ -337,8 +342,10 @@ class TemplateMatcher:
             # Check minimum opaque pixel count
             opaque_count = np.sum(icon_mask > 0)
             if opaque_count < CVConstants.MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_PIXELS_ABSOLUTE:
-                log.warning(f"Template matching skipped - mask too sparse "
-                           f"({opaque_count} opaque pixels < {CVConstants.MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_PIXELS_ABSOLUTE})")
+                log.warning(
+                    f"Template matching skipped - mask too sparse "
+                    f"({opaque_count} opaque pixels < {CVConstants.MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_PIXELS_ABSOLUTE})"
+                )
                 return FeatureMatchingResult([], [], "template")
 
             # Check variance in opaque region
@@ -349,8 +356,10 @@ class TemplateMatcher:
                 std_dev = np.sqrt(variance)
 
                 if std_dev < CVConstants.MULTISCALE_TEMPLATE_MIN_STD_DEV:
-                    log.warning(f"Template matching skipped - masked region too uniform "
-                               f"(std_dev: {std_dev:.1f} < {CVConstants.MULTISCALE_TEMPLATE_MIN_STD_DEV})")
+                    log.warning(
+                        f"Template matching skipped - masked region too uniform "
+                        f"(std_dev: {std_dev:.1f} < {CVConstants.MULTISCALE_TEMPLATE_MIN_STD_DEV})"
+                    )
                     return FeatureMatchingResult([], [], "template")
 
         # Template matching with optional mask
@@ -361,8 +370,9 @@ class TemplateMatcher:
 
         # Validate results for inf/nan (edge case with masked matching)
         if np.isinf(max_val) or np.isnan(max_val):
-            log.warning(f"Template matching failed - invalid similarity "
-                       f"(inf/nan detected, likely edge case with masked region)")
+            log.warning(
+                "Template matching failed - invalid similarity (inf/nan detected, likely edge case with masked region)"
+            )
             return FeatureMatchingResult([], [], "template")
 
         log.info(f"Template matching best similarity: {max_val:.3f} at {max_loc}")
@@ -377,20 +387,18 @@ class TemplateMatcher:
                 center_y = int(y + icon_h // 2)
 
                 if icon_mask is not None:
-                    log.info(f"Template matching used mask "
-                            f"(ignored {np.sum(icon_mask == 0)} transparent pixels)")
+                    log.info(f"Template matching used mask (ignored {np.sum(icon_mask == 0)} transparent pixels)")
 
-                log.info(f"Template matching found best match at ({center_x}, {center_y}) with similarity {max_val:.3f}")
-                return FeatureMatchingResult(
-                    [(center_x, center_y)], [float(max_val)], "template",
-                    scales=[1.0], sizes=[(icon_w, icon_h)]
+                log.info(
+                    f"Template matching found best match at ({center_x}, {center_y}) with similarity {max_val:.3f}"
                 )
-            else:
-                log.warning(f"Best match at ({x}, {y}) would extend outside bounds, no match")
-                return FeatureMatchingResult([], [], "template")
-        else:
-            log.info(f"Best similarity {max_val:.3f} below threshold {threshold}, no match")
+                return FeatureMatchingResult(
+                    [(center_x, center_y)], [float(max_val)], "template", scales=[1.0], sizes=[(icon_w, icon_h)]
+                )
+            log.warning(f"Best match at ({x}, {y}) would extend outside bounds, no match")
             return FeatureMatchingResult([], [], "template")
+        log.info(f"Best similarity {max_val:.3f} below threshold {threshold}, no match")
+        return FeatureMatchingResult([], [], "template")
 
 
 class CannyEdgeMatcher:
@@ -406,10 +414,10 @@ class CannyEdgeMatcher:
     making it ideal for UI icons that may appear in different color schemes.
     """
 
-    _debug_output_dir: Optional[any] = None  # Class variable for debug output directory
+    _debug_output_dir: str | Path | None = None  # Class variable for debug output directory
 
     @classmethod
-    def set_debug_output_dir(cls, output_dir: any) -> None:
+    def set_debug_output_dir(cls, output_dir: str | Path) -> None:
         """Set directory for saving debug images."""
         cls._debug_output_dir = output_dir
 
@@ -453,16 +461,8 @@ class CannyEdgeMatcher:
             icon_gray = cv2.cvtColor(icon_img, cv2.COLOR_BGR2GRAY)
 
             # Preprocess: Gaussian blur to reduce noise
-            screenshot_blurred = cv2.GaussianBlur(
-                screenshot_gray,
-                CVConstants.CANNY_EDGE_BLUR_KERNEL,
-                0
-            )
-            icon_blurred = cv2.GaussianBlur(
-                icon_gray,
-                CVConstants.CANNY_EDGE_BLUR_KERNEL,
-                0
-            )
+            screenshot_blurred = cv2.GaussianBlur(screenshot_gray, CVConstants.CANNY_EDGE_BLUR_KERNEL, 0)
+            icon_blurred = cv2.GaussianBlur(icon_gray, CVConstants.CANNY_EDGE_BLUR_KERNEL, 0)
 
             # Apply Canny edge detection with auto-thresholding
             screenshot_edges = CannyEdgeMatcher._apply_canny_auto(screenshot_blurred)
@@ -472,28 +472,22 @@ class CannyEdgeMatcher:
             if CVConstants.CANNY_EDGE_DILATE_ITERATIONS > 0:
                 kernel = np.ones((3, 3), np.uint8)
                 screenshot_edges = cv2.dilate(
-                    screenshot_edges,
-                    kernel,
-                    iterations=CVConstants.CANNY_EDGE_DILATE_ITERATIONS
+                    screenshot_edges, kernel, iterations=CVConstants.CANNY_EDGE_DILATE_ITERATIONS
                 )
-                icon_edges = cv2.dilate(
-                    icon_edges,
-                    kernel,
-                    iterations=CVConstants.CANNY_EDGE_DILATE_ITERATIONS
-                )
+                icon_edges = cv2.dilate(icon_edges, kernel, iterations=CVConstants.CANNY_EDGE_DILATE_ITERATIONS)
 
             # Get dimensions
             screenshot_h, screenshot_w = screenshot_edges.shape
             icon_h, icon_w = icon_edges.shape
 
-            log.info(f"Canny edge detection - Screenshot: {screenshot_w}x{screenshot_h}, "
-                    f"Icon: {icon_w}x{icon_h}")
+            log.info(f"Canny edge detection - Screenshot: {screenshot_w}x{screenshot_h}, Icon: {icon_w}x{icon_h}")
 
             # Check if icon edges are too sparse (not enough structure for matching)
             icon_edge_density = np.sum(icon_edges > 0) / (icon_w * icon_h)
             if icon_edge_density < 0.05:  # Less than 5% edge pixels
-                log.info(f"Canny edge matching skipped - icon edges too sparse "
-                        f"(density: {icon_edge_density:.3f} < 0.05)")
+                log.info(
+                    f"Canny edge matching skipped - icon edges too sparse (density: {icon_edge_density:.3f} < 0.05)"
+                )
                 return FeatureMatchingResult([], [], "canny_edge")
 
             # Generate scale list (fine steps below 1.0x, coarse steps above)
@@ -515,8 +509,10 @@ class CannyEdgeMatcher:
                 scales.append(current_scale)
                 current_scale += scale_step_coarse
 
-            log.info(f"Canny edge multi-scale matching - testing {len(scales)} scales "
-                    f"from {min_scale}x to {max_scale}x (fine: {scale_step_fine}, coarse: {scale_step_coarse})")
+            log.info(
+                f"Canny edge multi-scale matching - testing {len(scales)} scales "
+                f"from {min_scale}x to {max_scale}x (fine: {scale_step_fine}, coarse: {scale_step_coarse})"
+            )
 
             # Multi-scale template matching - collect ALL matches above threshold
             all_matches = []  # List of {location, similarity, scale, size}
@@ -530,37 +526,28 @@ class CannyEdgeMatcher:
 
                 # Skip if scaled icon is too small
                 if new_w < min_icon_size or new_h < min_icon_size:
-                    log.info(f"Skipping scale {scale:.2f}x - icon would be {new_w}x{new_h} "
-                            f"(below minimum {min_icon_size}x{min_icon_size})")
+                    log.info(
+                        f"Skipping scale {scale:.2f}x - icon would be {new_w}x{new_h} "
+                        f"(below minimum {min_icon_size}x{min_icon_size})"
+                    )
                     continue
 
                 # Skip if resized icon is larger than screenshot
                 if new_h > screenshot_h or new_w > screenshot_w:
-                    log.info(f"Skipping scale {scale:.2f}x - icon would be {new_w}x{new_h}, "
-                            f"screenshot is {screenshot_w}x{screenshot_h}")
+                    log.info(
+                        f"Skipping scale {scale:.2f}x - icon would be {new_w}x{new_h}, "
+                        f"screenshot is {screenshot_w}x{screenshot_h}"
+                    )
                     continue
 
                 # Resize icon edges
-                resized_icon_edges = cv2.resize(
-                    icon_edges,
-                    (new_w, new_h),
-                    interpolation=cv2.INTER_LINEAR
-                )
+                resized_icon_edges = cv2.resize(icon_edges, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
 
                 # Re-threshold to ensure binary edge map after resize
-                _, resized_icon_edges = cv2.threshold(
-                    resized_icon_edges,
-                    128,
-                    255,
-                    cv2.THRESH_BINARY
-                )
+                _, resized_icon_edges = cv2.threshold(resized_icon_edges, 128, 255, cv2.THRESH_BINARY)
 
                 # Template matching on edge maps
-                result = cv2.matchTemplate(
-                    screenshot_edges,
-                    resized_icon_edges,
-                    cv2.TM_CCOEFF_NORMED
-                )
+                result = cv2.matchTemplate(screenshot_edges, resized_icon_edges, cv2.TM_CCOEFF_NORMED)
 
                 # Find ALL locations where similarity >= fallback_threshold
                 match_locations = np.where(result >= fallback_threshold)
@@ -579,28 +566,33 @@ class CannyEdgeMatcher:
                         center_x = int(x_idx + new_w // 2)
                         center_y = int(y_idx + new_h // 2)
 
-                        all_matches.append({
-                            'location': (center_x, center_y),
-                            'similarity': float(similarity),
-                            'scale': scale,
-                            'size': (new_w, new_h)  # Size in screenshot coordinates
-                        })
+                        all_matches.append(
+                            {
+                                'location': (center_x, center_y),
+                                'similarity': float(similarity),
+                                'scale': scale,
+                                'size': (new_w, new_h),  # Size in screenshot coordinates
+                            }
+                        )
 
-                        log.info(f"Canny edge match at scale {scale:.2f}x ({new_w}x{new_h} pix.): "
-                                f"similarity {similarity:.3f} at ({center_x}, {center_y})")
+                        log.info(
+                            f"Canny edge match at scale {scale:.2f}x ({new_w}x{new_h} pix.): "
+                            f"similarity {similarity:.3f} at ({center_x}, {center_y})"
+                        )
 
                 # Early termination only for EXACT matches (>0.95)
                 best_in_scale = np.max(result) if result.size > 0 else -1
                 if best_in_scale > 0.95:
                     best_scale_found = scale  # Track scale for debug
                     early_termination_occurred = True
-                    log.info(f"Early termination at scale {scale:.2f}x - "
-                            f"found exact match ({best_in_scale:.3f})")
+                    log.info(f"Early termination at scale {scale:.2f}x - found exact match ({best_in_scale:.3f})")
                     break
 
             if not all_matches:
-                log.info(f"Stage 0 (Canny edge) - no matches above fallback threshold "
-                        f"{fallback_threshold}, continuing to Stage 1")
+                log.info(
+                    f"Stage 0 (Canny edge) - no matches above fallback threshold "
+                    f"{fallback_threshold}, continuing to Stage 1"
+                )
                 return FeatureMatchingResult([], [], "canny_edge")
 
             # Apply NMS to remove overlapping duplicates
@@ -610,10 +602,7 @@ class CannyEdgeMatcher:
             scales = [m['scale'] for m in all_matches]
 
             # Create lookup dict for scales/sizes by location
-            match_metadata = {
-                loc: {'scale': scale, 'size': size}
-                for loc, scale, size in zip(locations, scales, sizes)
-            }
+            match_metadata = {loc: {'scale': scale, 'size': size} for loc, scale, size in zip(locations, scales, sizes)}
 
             filtered_locations, filtered_similarities = non_maximum_suppression(
                 locations, similarities, sizes, overlap_threshold=CVConstants.NMS_OVERLAP_THRESHOLD
@@ -631,7 +620,7 @@ class CannyEdgeMatcher:
             sorted_matches = sorted(
                 zip(filtered_locations, filtered_similarities, filtered_scales, filtered_sizes),
                 key=lambda x: x[1],
-                reverse=True
+                reverse=True,
             )
 
             final_locations = [m[0] for m in sorted_matches]
@@ -648,15 +637,20 @@ class CannyEdgeMatcher:
             # Determine success level
             best_similarity = final_similarities[0]
             if best_similarity >= threshold:
-                log.info(f"Stage 0 (Canny edge) found {len(final_locations)} matches "
-                        f"(best: {best_similarity:.3f} >= threshold {threshold})")
+                log.info(
+                    f"Stage 0 (Canny edge) found {len(final_locations)} matches "
+                    f"(best: {best_similarity:.3f} >= threshold {threshold})"
+                )
             else:
-                log.info(f"Stage 0 (Canny edge) found {len(final_locations)} matches "
-                        f"(best: {best_similarity:.3f} >= fallback {fallback_threshold})")
+                log.info(
+                    f"Stage 0 (Canny edge) found {len(final_locations)} matches "
+                    f"(best: {best_similarity:.3f} >= fallback {fallback_threshold})"
+                )
 
             # Save debug visualizations if enabled
             if CannyEdgeMatcher._debug_output_dir:
                 from datetime import datetime
+
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
                 CannyEdgeMatcher._save_debug_images(
                     screenshot_edges=screenshot_edges,
@@ -667,12 +661,11 @@ class CannyEdgeMatcher:
                     icon_bgr=icon_img,
                     best_scale=best_scale_found,
                     timestamp=timestamp,
-                    early_termination=early_termination_occurred
+                    early_termination=early_termination_occurred,
                 )
 
             return FeatureMatchingResult(
-                final_locations, final_similarities, "canny_edge",
-                scales=final_scales, sizes=final_sizes
+                final_locations, final_similarities, "canny_edge", scales=final_scales, sizes=final_sizes
             )
 
         except Exception as e:
@@ -712,13 +705,13 @@ class CannyEdgeMatcher:
         cls,
         screenshot_edges: np.ndarray,
         icon_edges: np.ndarray,
-        final_locations: List[Tuple[int, int]],
-        final_similarities: List[float],
+        final_locations: list[tuple[int, int]],
+        final_similarities: list[float],
         screenshot_bgr: np.ndarray,
         icon_bgr: np.ndarray,
         best_scale: float,
         timestamp: str,
-        early_termination: bool
+        early_termination: bool,
     ) -> None:
         """Save Canny edge debug visualizations if debug dir is set.
 
@@ -745,7 +738,6 @@ class CannyEdgeMatcher:
 
         try:
             from .constants import DebugConstants
-            from pathlib import Path
 
             # Ensure output directory exists
             output_dir = Path(cls._debug_output_dir)
@@ -779,11 +771,7 @@ class CannyEdgeMatcher:
 
                 # Draw green box
                 cv2.rectangle(
-                    annotated,
-                    (x1, y1),
-                    (x2, y2),
-                    DebugConstants.MATCH_BOX_COLOR,
-                    DebugConstants.MATCH_BOX_THICKNESS
+                    annotated, (x1, y1), (x2, y2), DebugConstants.MATCH_BOX_COLOR, DebugConstants.MATCH_BOX_THICKNESS
                 )
 
                 # Draw similarity score above box
@@ -795,31 +783,19 @@ class CannyEdgeMatcher:
                     DebugConstants.TEXT_FONT,
                     DebugConstants.TEXT_SCALE,
                     DebugConstants.TEXT_COLOR,
-                    DebugConstants.TEXT_THICKNESS
+                    DebugConstants.TEXT_THICKNESS,
                 )
 
             # Add summary in top-left corner
             summary_text = f"Stage 0: {len(final_locations)} matches found"
             cv2.putText(
-                annotated,
-                summary_text,
-                (10, 30),
-                DebugConstants.TEXT_FONT,
-                0.7,
-                DebugConstants.SUMMARY_COLOR,
-                2
+                annotated, summary_text, (10, 30), DebugConstants.TEXT_FONT, 0.7, DebugConstants.SUMMARY_COLOR, 2
             )
 
             # Add early termination indicator if applicable
             if early_termination:
                 cv2.putText(
-                    annotated,
-                    "EARLY TERM",
-                    (10, 60),
-                    DebugConstants.TEXT_FONT,
-                    0.7,
-                    DebugConstants.EARLY_TERM_COLOR,
-                    2
+                    annotated, "EARLY TERM", (10, 60), DebugConstants.TEXT_FONT, 0.7, DebugConstants.EARLY_TERM_COLOR, 2
                 )
 
             matches_path = output_dir / f"canny_matches_{timestamp}.png"
@@ -842,24 +818,11 @@ class CannyEdgeMatcher:
 
             if scaled_w > 0 and scaled_h > 0:
                 # Resize icon
-                scaled_icon_bgr = cv2.resize(
-                    icon_bgr,
-                    (scaled_w, scaled_h),
-                    interpolation=cv2.INTER_LINEAR
-                )
+                scaled_icon_bgr = cv2.resize(icon_bgr, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
 
                 # Resize and re-threshold edges
-                scaled_icon_edges = cv2.resize(
-                    icon_edges,
-                    (scaled_w, scaled_h),
-                    interpolation=cv2.INTER_LINEAR
-                )
-                _, scaled_icon_edges = cv2.threshold(
-                    scaled_icon_edges,
-                    128,
-                    255,
-                    cv2.THRESH_BINARY
-                )
+                scaled_icon_edges = cv2.resize(icon_edges, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
+                _, scaled_icon_edges = cv2.threshold(scaled_icon_edges, 128, 255, cv2.THRESH_BINARY)
 
                 # Create overlay: green edges on original icon
                 overlay = scaled_icon_bgr.copy()
@@ -895,7 +858,7 @@ class MultiScaleTemplateMatcher:
         scale_step_fine: float = CVConstants.MULTISCALE_TEMPLATE_SCALE_STEP_FINE,
         scale_step_coarse: float = CVConstants.MULTISCALE_TEMPLATE_SCALE_STEP_COARSE,
         min_icon_size: int = CVConstants.MULTISCALE_TEMPLATE_MIN_ICON_SIZE,
-        icon_mask: Optional[np.ndarray] = None
+        icon_mask: np.ndarray | None = None,
     ) -> FeatureMatchingResult:
         """Multi-scale template matching in grayscale with extended scale range.
 
@@ -927,10 +890,12 @@ class MultiScaleTemplateMatcher:
             Scales producing icons smaller than min_icon_size are automatically skipped.
             Use narrower scale_range (e.g., 0.8-1.2) for faster DPI-only detection.
         """
-        log.info(f"Multi-scale template matching starting with threshold={threshold}, "
-                f"fallback_threshold={fallback_threshold}, scale_range={scale_range}, "
-                f"scale_step_fine={scale_step_fine}, scale_step_coarse={scale_step_coarse}, "
-                f"min_icon_size={min_icon_size}")
+        log.info(
+            f"Multi-scale template matching starting with threshold={threshold}, "
+            f"fallback_threshold={fallback_threshold}, scale_range={scale_range}, "
+            f"scale_step_fine={scale_step_fine}, scale_step_coarse={scale_step_coarse}, "
+            f"min_icon_size={min_icon_size}"
+        )
 
         # Decode and convert to grayscale
         decoded = ImageDecoder.decode_images(screenshot_bytes, icon_bytes)
@@ -956,8 +921,10 @@ class MultiScaleTemplateMatcher:
         # Combine and deduplicate (remove duplicate 1.0)
         all_scales = np.unique(np.concatenate([scales_below_1, scales_above_1]))
 
-        log.info(f"Testing {len(all_scales)} scales (fine: {len(scales_below_1)}, "
-                f"coarse: {len(scales_above_1)}, total unique: {len(all_scales)})")
+        log.info(
+            f"Testing {len(all_scales)} scales (fine: {len(scales_below_1)}, "
+            f"coarse: {len(scales_above_1)}, total unique: {len(all_scales)})"
+        )
         log.info(f"Scale range: {all_scales[0]:.2f}x to {all_scales[-1]:.2f}x")
 
         scales = all_scales
@@ -971,19 +938,25 @@ class MultiScaleTemplateMatcher:
             # Special case for 1.0x scale - always test original size
             if scale == 1.0:
                 if new_w < min_icon_size or new_h < min_icon_size:
-                    log.warning(f"Icon at 1.0x scale ({new_w}x{new_h}) is below minimum "
-                               f"({min_icon_size}x{min_icon_size}), but testing anyway (original size)")
+                    log.warning(
+                        f"Icon at 1.0x scale ({new_w}x{new_h}) is below minimum "
+                        f"({min_icon_size}x{min_icon_size}), but testing anyway (original size)"
+                    )
                 # Skip size checks and proceed to template matching
             # Skip if scaled icon is too small (< min_icon_size x min_icon_size)
             elif new_w < min_icon_size or new_h < min_icon_size:
-                log.info(f"Skipping scale {scale:.2f}x - icon would be {new_w}x{new_h} "
-                        f"(below minimum {min_icon_size}x{min_icon_size})")
+                log.info(
+                    f"Skipping scale {scale:.2f}x - icon would be {new_w}x{new_h} "
+                    f"(below minimum {min_icon_size}x{min_icon_size})"
+                )
                 continue
 
             # Skip if resized icon is larger than screenshot
             if new_h > screenshot_h or new_w > screenshot_w:
-                log.info(f"Skipping scale {scale:.2f}x - icon would be {new_w}x{new_h}, "
-                        f"screenshot is {screenshot_w}x{screenshot_h}")
+                log.info(
+                    f"Skipping scale {scale:.2f}x - icon would be {new_w}x{new_h}, "
+                    f"screenshot is {screenshot_w}x{screenshot_h}"
+                )
                 continue
 
             resized_icon = cv2.resize(icon_gray, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
@@ -1006,13 +979,15 @@ class MultiScaleTemplateMatcher:
                 # Adaptive threshold: max(absolute minimum, ratio-based minimum)
                 min_opaque_pixels = max(
                     CVConstants.MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_PIXELS_ABSOLUTE,
-                    int(CVConstants.MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_RATIO * total_pixels)
+                    int(CVConstants.MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_RATIO * total_pixels),
                 )
 
                 if opaque_count < min_opaque_pixels:
-                    log.info(f"Skipping scale {scale:.2f}x ({new_w}x{new_h} pix.) - mask too sparse "
-                            f"({opaque_count}/{total_pixels} opaque pixels, "
-                            f"need >= {min_opaque_pixels} [{CVConstants.MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_RATIO*100:.0f}% ratio])")
+                    log.info(
+                        f"Skipping scale {scale:.2f}x ({new_w}x{new_h} pix.) - mask too sparse "
+                        f"({opaque_count}/{total_pixels} opaque pixels, "
+                        f"need >= {min_opaque_pixels} [{CVConstants.MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_RATIO * 100:.0f}% ratio])"
+                    )
                     continue
 
                 # Check 2: Texture complexity in opaque region (prevent uniform/flat regions)
@@ -1024,16 +999,20 @@ class MultiScaleTemplateMatcher:
                     # Check if icon is too flat/uniform for reliable matching
                     # Flat icons typically have std_dev < 5-10
                     if std_dev < CVConstants.MULTISCALE_TEMPLATE_MIN_STD_DEV:
-                        log.info(f"Skipping scale {scale:.2f}x ({new_w}x{new_h} pix.) - masked region too uniform "
-                                f"(std_dev: {std_dev:.1f} < {CVConstants.MULTISCALE_TEMPLATE_MIN_STD_DEV}, "
-                                f"opaque: {opaque_count}/{total_pixels} pixels)")
+                        log.info(
+                            f"Skipping scale {scale:.2f}x ({new_w}x{new_h} pix.) - masked region too uniform "
+                            f"(std_dev: {std_dev:.1f} < {CVConstants.MULTISCALE_TEMPLATE_MIN_STD_DEV}, "
+                            f"opaque: {opaque_count}/{total_pixels} pixels)"
+                        )
                         continue
 
                 # Check 3: Prevent degenerate masks (ratio too low)
                 opaque_ratio = opaque_count / total_pixels
                 if opaque_ratio < CVConstants.MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_RATIO_DEGENERATE:
-                    log.info(f"Skipping scale {scale:.2f}x ({new_w}x{new_h} pix.) - mask nearly empty "
-                            f"({opaque_ratio*100:.1f}% opaque, need >= {CVConstants.MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_RATIO_DEGENERATE*100:.0f}%)")
+                    log.info(
+                        f"Skipping scale {scale:.2f}x ({new_w}x{new_h} pix.) - mask nearly empty "
+                        f"({opaque_ratio * 100:.1f}% opaque, need >= {CVConstants.MULTISCALE_TEMPLATE_MIN_MASK_OPAQUE_RATIO_DEGENERATE * 100:.0f}%)"
+                    )
                     continue
 
             # Template matching with optional mask
@@ -1050,16 +1029,20 @@ class MultiScaleTemplateMatcher:
                 nan_count = np.sum(np.isnan(result))
                 total_positions = result.size
 
-                log.warning(f"Skipping scale {scale:.2f}x ({new_w}x{new_h} pix.) - all positions invalid "
-                           f"({inf_count} inf, {nan_count} nan out of {total_positions} positions)")
+                log.warning(
+                    f"Skipping scale {scale:.2f}x ({new_w}x{new_h} pix.) - all positions invalid "
+                    f"({inf_count} inf, {nan_count} nan out of {total_positions} positions)"
+                )
                 continue
 
             # Log if partial inf/nan occurred (for debugging)
             invalid_count = result.size - len(valid_values)
             if invalid_count > 0:
                 invalid_pct = (invalid_count / result.size) * 100
-                log.info(f"Scale {scale:.2f}x ({new_w}x{new_h} pix.) had {invalid_count}/{result.size} invalid positions "
-                        f"({invalid_pct:.1f}%, ignored)")
+                log.info(
+                    f"Scale {scale:.2f}x ({new_w}x{new_h} pix.) had {invalid_count}/{result.size} invalid positions "
+                    f"({invalid_pct:.1f}%, ignored)"
+                )
 
             # Find ALL locations where similarity >= fallback_threshold (among valid positions)
             # Create a filtered result with valid values only
@@ -1077,33 +1060,40 @@ class MultiScaleTemplateMatcher:
                     center_x = int(x_idx + icon_w // 2)
                     center_y = int(y_idx + icon_h // 2)
 
-                    all_matches.append({
-                        'location': (center_x, center_y),
-                        'similarity': float(similarity),
-                        'scale': scale,
-                        'size': (new_w, new_h)  # Size in screenshot coordinates
-                    })
+                    all_matches.append(
+                        {
+                            'location': (center_x, center_y),
+                            'similarity': float(similarity),
+                            'scale': scale,
+                            'size': (new_w, new_h),  # Size in screenshot coordinates
+                        }
+                    )
 
-                    log.info(f"Multi-scale template match at scale {scale:.2f}x ({new_w}x{new_h} pix.): "
-                            f"similarity {similarity:.3f} at ({center_x}, {center_y})")
+                    log.info(
+                        f"Multi-scale template match at scale {scale:.2f}x ({new_w}x{new_h} pix.): "
+                        f"similarity {similarity:.3f} at ({center_x}, {center_y})"
+                    )
 
             # Early termination only for EXACT matches (>0.95)
             best_in_scale = np.max(valid_values) if len(valid_values) > 0 else -1
             if best_in_scale > 0.95:
-                log.info(f"Early termination at scale {scale:.2f}x - "
-                        f"found exact match ({best_in_scale:.3f})")
+                log.info(f"Early termination at scale {scale:.2f}x - found exact match ({best_in_scale:.3f})")
                 break
 
         # Log mask usage for debugging (counts refer to original icon, not scaled)
         if icon_mask is not None:
             original_transparent = np.sum(icon_mask == 0)
             original_total = icon_mask.size
-            log.info(f"Multi-scale matching used mask "
-                    f"(original icon: {original_transparent}/{original_total} transparent pixels)")
+            log.info(
+                f"Multi-scale matching used mask "
+                f"(original icon: {original_transparent}/{original_total} transparent pixels)"
+            )
 
         if not all_matches:
-            log.info(f"Stage 1 (multi-scale template) - no matches above fallback threshold "
-                    f"{fallback_threshold}, continuing to ORB/SIFT")
+            log.info(
+                f"Stage 1 (multi-scale template) - no matches above fallback threshold "
+                f"{fallback_threshold}, continuing to ORB/SIFT"
+            )
             return FeatureMatchingResult([], [], "multiscale_template")
 
         # Apply NMS to remove overlapping duplicates
@@ -1113,10 +1103,7 @@ class MultiScaleTemplateMatcher:
         scales = [m['scale'] for m in all_matches]
 
         # Create lookup dict for scales/sizes by location
-        match_metadata = {
-            loc: {'scale': scale, 'size': size}
-            for loc, scale, size in zip(locations, scales, sizes)
-        }
+        match_metadata = {loc: {'scale': scale, 'size': size} for loc, scale, size in zip(locations, scales, sizes)}
 
         filtered_locations, filtered_similarities = non_maximum_suppression(
             locations, similarities, sizes, overlap_threshold=CVConstants.NMS_OVERLAP_THRESHOLD
@@ -1134,7 +1121,7 @@ class MultiScaleTemplateMatcher:
         sorted_matches = sorted(
             zip(filtered_locations, filtered_similarities, filtered_scales, filtered_sizes),
             key=lambda x: x[1],
-            reverse=True
+            reverse=True,
         )
 
         final_locations = [m[0] for m in sorted_matches]
@@ -1145,13 +1132,16 @@ class MultiScaleTemplateMatcher:
         # Determine success level
         best_similarity = final_similarities[0]
         if best_similarity >= threshold:
-            log.info(f"Stage 1 (multi-scale template) found {len(final_locations)} matches "
-                    f"(best: {best_similarity:.3f} >= threshold {threshold})")
+            log.info(
+                f"Stage 1 (multi-scale template) found {len(final_locations)} matches "
+                f"(best: {best_similarity:.3f} >= threshold {threshold})"
+            )
         else:
-            log.info(f"Stage 1 (multi-scale template) found {len(final_locations)} matches "
-                    f"(best: {best_similarity:.3f} >= fallback {fallback_threshold})")
+            log.info(
+                f"Stage 1 (multi-scale template) found {len(final_locations)} matches "
+                f"(best: {best_similarity:.3f} >= fallback {fallback_threshold})"
+            )
 
         return FeatureMatchingResult(
-            final_locations, final_similarities, "multiscale_template",
-            scales=final_scales, sizes=final_sizes
+            final_locations, final_similarities, "multiscale_template", scales=final_scales, sizes=final_sizes
         )

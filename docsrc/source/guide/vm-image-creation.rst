@@ -80,6 +80,22 @@ For OSes without a built-in unattended template, use a custom profile with
 The VM boots the live ISO in a window and waits for you to click through the
 graphical installer. (Manual mode drives QEMU directly and writes no seed file.)
 
+**Create the user** ``adare`` **with password** ``adare`` (an administrator / sudo
+account): ADARE's runtime logs in with it. With ``--setup base`` or ``full`` (the
+default), once you shut the installer down, ADARE boots the installed disk
+headless and sets a Linux guest up exactly like a playbook install (see
+*Making the guest ADARE-ready* below): it logs in on a text console, installs
+``qemu-guest-agent`` with one command that covers apt, dnf, zypper and pacman,
+then over the agent sets passwordless sudo, autologin for the enabled display
+manager (GDM, SDDM or LightDM), no screen lock, no welcome wizard and no
+background updates, and checks the agent and the autologin session after a
+reboot. Screenshots go to ``<vm>_setup/`` next to the disk.
+
+Because the install itself is your work, a failure here only **warns**, with
+what to fix; the disk is kept. NixOS installs nothing imperatively, so for it
+ADARE prints the ``configuration.nix`` lines to add instead. Windows manual
+installs and ``--setup bare`` skip the setup entirely.
+
 
 GUI-automated installation (record once, replay deterministically)
 ------------------------------------------------------------------
@@ -157,7 +173,7 @@ coordinate convention:
 
 .. code-block:: bash
 
-   adare vm gui-doctor
+   adare vlm doctor
 
 **Driving an existing environment / authoring experiments.** The same agent can
 drive an *already-installed* environment to author reusable automation. Bring the
@@ -233,129 +249,157 @@ only the throwaway VM disk. Replay is deterministic; self-heal recovers from
 minor drift but a heavily redesigned installer may need ``--relearn``.
 
 
-Scripted GUI installation (``gui-script``) — deterministic, no model
---------------------------------------------------------------------
+Playbook GUI installation (``playbook``) — deterministic, no model
+------------------------------------------------------------------
 
-``install_mode: gui-script`` replays a hand-calibrated QMP playbook against the
-installer's GUI. It is the *no-model* sibling of ``gui-auto``: **no vision model,
-no CV server, no** ``ADARE_VLLM_*`` **configuration**, and the same playbook
-produces the same disk on any host with QEMU.
+``install_mode: playbook`` replays a fixed keyboard/mouse playbook embedded in
+the OS profile (``install_steps`` / ``verify_steps``) against the installer's
+GUI. **No vision model and no** ``ADARE_VLLM_*`` **configuration**; buttons are
+found by their on-screen label through the CV server's OCR, so the steps do not
+depend on window position, resolution or minor installer versions.
 
 .. code-block:: bash
 
-   adare vm create ubuntu1804      # ISO auto-downloads (iso_url is baked in)
-   adare vm create ubuntu2004
+   adare vm create ubuntu2204      # ISO auto-downloads (iso_url is baked in)
+   adare vm create kubuntu2404
 
-.. list-table:: ``gui-auto`` vs ``gui-script``
+The creator boots the ISO under raw ``qemu-system`` (``-vga qxl``, 1024x768,
+USB tablet) and drives it over QMP. After ``install_steps`` it powers the live
+session off (ACPI, then a hard stop after a grace period), boots the installed
+disk and runs ``verify_steps``. Steps:
+
+.. list-table::
    :header-rows: 1
-   :widths: 22 39 39
 
-   * -
-     - ``gui-auto``
-     - ``gui-script``
-   * - Targets a screen by
-     - image/text matching (CV), model on miss
-     - fixed pixel coordinates
-   * - Needs a vision model
-     - yes to record or self-heal
-     - never
-   * - Needs the CV server
-     - yes
-     - no
-   * - Waits by
-     - CV target appearing
-     - ``wait_stable`` frame diffing
-   * - Recovers from UI drift
-     - yes (self-heal, re-crop)
-     - no — coords must be recalibrated
-   * - Use it to
-     - **record** a route for a new release
-     - **replay** a route that is already proven
+   * - Action
+     - Does
+   * - ``click_text``
+     - OCR the screen and click a label (``index``, ``dx``/``dy``, ``tries``,
+       ``optional: true`` for screens that only appear sometimes)
+   * - ``wait_text``
+     - Block until any of ``text`` (a string or list) is on screen — or, with
+       ``gone: true``, until none is. Fails on ``timeout`` and as soon as any
+       ``fail_on`` text shows. Case-insensitive substring, one OCR pass per
+       ``interval``
+   * - ``wait_stable``
+     - Wait until the frame stops changing for ``settle`` s (``min`` floor,
+       ``timeout``); a timeout only warns unless ``required: true``
+   * - ``tap`` / ``type`` / ``key`` / ``wait`` / ``shot``
+     - Raw click at coords, keystrokes, sleep, screenshot
 
-**How the waiting works.** The primitive that makes replay robust is
-``wait_stable`` (:mod:`adare.hypervisor.qemu.vm_creator.qmp_replay`): successive
-``screendump`` frames are diffed *as raw bytes* until the screen stops changing
-for a settle period. There is no template matching, no OCR and no model, so a
-step never waits on a fixed sleep that is too short on a slow host or wastefully
-long on a fast one. During the copy phase the progress bar keeps the frame
-changing, so the wait only returns once the installer is genuinely idle on its
-"Installation Complete" dialog. A ``min:`` floor skips the static early-boot
-plymouth screens, which are otherwise perfectly stable before any UI exists.
-
-**Two constraints, both learned by breaking them.** The creator asserts the
-first and the playbooks depend on the second:
-
-- **``-vga qxl``, never ``-vga std``.** The std adapter's tablet applies a 2x
-  coordinate scaling, so absolute clicks land at double the intended offset and
-  the right half of the screen is simply unreachable.
-- **Click buttons with ``tap``, not the keyboard.** ubiquity does not reliably
-  hold keyboard focus at live-session start, and its timezone screen traps focus
-  in the city-entry field. A mouse click both focuses the window and activates
-  the button.
-
-**Playbooks.** They live beside the other templates as
-``qmpinstall_<stem>.yaml`` (override in ``~/.adare/vm-templates/``) and are
-resolved by the same stem lookup ``gui-auto`` uses, so ``template: ubuntu1804``
-keeps per-version isolation — 18.04's and 20.04's ubiquity differ visually and
-must not share a recording. Steps are ``key`` / ``type`` / ``tap`` / ``wait`` /
-``wait_stable`` / ``shot``:
+**Prove completion, don't infer it.** A still screen is what a finished
+installer looks like — but also a crash dialog, an error page or a hung progress
+bar. So every playbook profile ends ``install_steps`` with a ``wait_text`` on the
+installer's "done" screen and lists its failure texts:
 
 .. code-block:: yaml
 
-   vm:
-     ram_mb: 4096
-     cpus: 4
-     disk_size: "60G"
-     vga: qxl
-     firmware: bios
-     frame:            # the frame the tap coords were calibrated at
-       width: 1024
-       height: 768
+   install_steps:
+     # ...
+     - {action: click_text, text: "Continue", note: "start install"}
+     - {action: wait_text, text: "Restart Now", fail_on: ["installer crashed", "unrecoverable error"],
+        timeout: 3600, interval: 10, shot: complete}
 
-   install:
-     - {action: wait_stable, settle: 6, timeout: 360, min: 120, shot: welcome}
-     - {action: tap, coords: [763, 434, 1024, 768], note: "click 'Install Ubuntu'"}
-     - {action: type, text: "adare"}
-     - {action: key, keys: [tab], repeat: 2}
-
-   reboot_from_disk: true
-
-   verify:
+   verify_steps:
      - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
+     - {action: click_text, text: "adare"}          # the greeter is up
+     - {action: type, text: "adare"}
+     - {action: key, keys: [ret]}
+     # the greeter only goes away on a successful login
+     - {action: wait_text, text: "adare", gone: true, fail_on: ["didn't work"], timeout: 120}
+     - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}
 
-Every ``tap`` carries the frame its coordinates belong to, and the creator
-**rejects** a playbook whose coords disagree with the declared ``frame`` or fall
-outside it. A coordinate recorded at another resolution otherwise mis-clicks
-silently, which is far more expensive to diagnose after a 40-minute install. A
-screenshot is written per step (``<vm>_gui-script/``) and stays on by default —
-it is the only useful debugging aid when a click lands wrong.
+A unit test enforces both checks for every ``install_mode: playbook`` profile.
 
-**Calibrating a new playbook.** ``scripts/gui-install/`` is the authoring tool
-and shares this playbook format. Boot the installer with ``--keep-running`` and
-poke at it interactively to read coordinates off the screen:
+**Watching a run.** The VM runs headless: the playbook sends every click and key
+and reads every screen over QMP, so it needs no window. ``--display`` shows the
+VM in a QEMU window to watch it in — watch only, since a click or keystroke of
+yours lands in the installer too. If the window cannot be opened (a QEMU
+without GTK, no desktop session) the run continues headless with a warning.
+QEMU's own output goes to ``<vm>_playbook/qemu.log``.
 
-.. code-block:: bash
+In a terminal, a status block at the bottom shows the current step, how long it
+has run, what it is waiting for (OCR attempt ``7/25``, elapsed / timeout and the
+text currently on screen, a warning once the screen has not changed for 10
+minutes) and whether the VM window is open. It redraws in place; the scrollback
+keeps one line per finished step with its duration, retries and screenshot::
 
-   cd scripts/gui-install
-   ./gui_install.py playbooks/ubuntu2004-desktop.yaml \
-       --iso ubuntu-20.04.6-desktop-amd64.iso --vm-dir /vms --keep-running
-   ./qmp_drive.py --sock /tmp/gui-install/qmp.sock shot /tmp/now.png
-   ./qmp_drive.py --sock /tmp/gui-install/qmp.sock tap 924 566 1024 768
+   > 14:01:52 [install 02] click_text 'English'  — 16s, 7 retries, shot install_02_language.png
+   > 14:02:11 [install 25] wait_text 'Restart Now'  wait for install  — 18m40s, shot install_25_complete.png
+   ╭─ ubuntu2404 · installer · 21m07s ──────────────────────────────────────╮
+   │ ⠋ [install 27/58] click_text 'Restart Now'  4s                         │
+   │   'Restart Now' not on screen yet: attempt 3/10, every 2s              │
+   │   headless: no VM window (--display to show one); screenshots in …     │
+   ╰────────────────────────────────────────────────────────────────────────╯
 
-Once the coordinates are proven, copy the playbook to
-``adare/adare/hypervisor/qemu/vm_creator/templates/qmpinstall_<stem>.yaml`` and
-flip the profile to ``install_mode: gui-script``.
+Off a terminal (CI, output redirected to a file) there is no status block: each
+step prints a line when it starts and a ``done in`` line with its retries when
+it ends, and a long wait prints a progress line every minute.
+When a step fails, the screen at that moment is saved as
+``<vm>_playbook/<phase>_<nn>_FAILED.png`` next to the per-step screenshots, and a
+``click_text`` that never found its label says what text was on screen instead.
 
-**Limitations.** Coordinate-fragile by construction: a different guest
-resolution silently mis-clicks, and a redesigned installer needs recalibration
-(there is no self-heal). Use ``gui-auto`` to record a route for a release nobody
-has coordinates for, and ``gui-script`` to replay one that is proven.
+**Making the guest ADARE-ready.** A genuine installer leaves a stock desktop: no
+QEMU guest agent, a login screen on every boot, a screen that locks when idle and
+a first-login welcome wizard. With ``--setup base`` or ``full`` (the default) the
+creator therefore continues after ``verify_steps`` in the same boot, which has a
+guest-agent port:
 
-.. warning::
+1. *Bootstrap.* It switches to a text console (Ctrl+Alt+F3), logs in as
+   ``adare`` and installs ``qemu-guest-agent`` with one typed ``apt-get``
+   command, then waits for the agent to answer. This is the only typed part and
+   needs network in the guest. A profile for a non-apt distribution supplies its
+   own ``bootstrap_steps`` (same actions as above).
+2. *Provisioning over the agent*, one command per step, each with its exit code:
+   passwordless sudo, ``cifs-utils`` / ``openssh-server`` / ``curl``, GDM or
+   SDDM automatic login (the release's default session is kept, Wayland
+   included), no idle lock or blanking, no first-login wizard
+   (``gnome-initial-setup``, Plasma Welcome), no background apt updates. ``full``
+   adds ``python3-pip`` and ``uv`` in ``/usr/local/bin``.
+3. *Proof.* It reboots and requires the agent to come back and an automatic-login
+   session for ``adare`` to exist, then shuts the guest down cleanly.
 
-   The 18.04 / 20.04 playbooks are **x86_64 desktop** installs and have not been
-   replayed by us on this Apple Silicon host — x86_64 guests cannot be built
-   there (no TCG fallback). See :ref:`replicating-on-x86-64`.
+Any failure fails ``vm create`` with a ``bootstrap_FAILED.png`` /
+``provision_FAILED.png`` / ``reboot_FAILED.png`` / ``autologin_FAILED.png``
+screenshot; a working run ends with ``ready_desktop.png``. ``--setup bare`` skips
+all of it and yields the stock install, which ADARE cannot drive.
+
+**Every other creator checks too.** Unattended installs (autoinstall, preseed,
+kickstart, AutoYaST, Windows autounattend) used to report success once their
+installer powered off, without ever booting the result. With ``--setup base`` or
+``full`` they now end with a readiness pass that reuses the recipe build's
+provisioning stage: the finished disk boots on a throwaway overlay with a
+guest-agent channel, and over the agent
+
+* Linux gets what the answer files leave out (no idle lock or blanking for
+  GNOME, Plasma 5/6 and Xfce, no first-login wizard), then reboots and must
+  show an automatic-login session for ``adare``. Autologin itself is checked, not
+  rewritten, since some answer files force an X11 session on purpose;
+* Windows, whose answer files already disable lock, OOBE and updates, reboots
+  and must show ``adare`` logged on at the console.
+
+The guest is then shut down cleanly and the overlay flattened (and compressed)
+into the final disk. If the agent never answers or a check fails, ``vm create``
+fails; the installed disk stays where it is for inspection and
+``<disk>_readiness.log`` records every command. Manual installs get the playbook
+setup instead (see *Manual ISO install*); ``gui-auto`` installs skip it and say
+so.
+
+**Opting out.** ``--setup bare`` makes ADARE add nothing to the guest after the
+OS install: no agent, no provisioning, no check, for every install mode. For
+unattended installs the answer file still creates the ``adare`` account and sets
+autologin, since an unattended install needs an answer file anyway.
+
+An image with no guest agent (``--setup bare``, or built before this provisioning
+existed) does not hang ``adare vm test`` or an experiment through every boot
+retry: when a Linux boot attempt runs out while the guest's screen has been still
+for a minute, the guest has booted and its agent is missing, so the run stops at
+once with that diagnosis and the last frame saved next to the log
+(``<log>-no-guest-agent.png``) or in the run directory.
+
+**Tuning a new installer.** ``scripts/gui-install/`` boots an installer and
+lets you take screenshots and click interactively (``qmp_drive.py shot/tap``) and
+query the CV server's ``find_text``, to read off the labels a playbook needs.
 
 
 Options
@@ -398,7 +442,7 @@ Options
    * - ``--relearn``
      - GUI-auto only: discard the cached playbook and re-record from scratch.
    * - ``--display``
-     - GUI-auto only: show the VM window while the agent drives the installer (and leave it up on failure for inspection).
+     - GUI-auto and playbook: show the VM in a window while the installer is driven (watch only). GUI-auto also leaves it up on failure for inspection.
    * - ``--template NAME``
      - GUI-auto only: explicit goal/spec template name (default: ``gui_<distribution>``).
 
@@ -891,14 +935,14 @@ Listing profiles
 
 .. code-block:: bash
 
-   adare os-profile list
+   adare vm profile list
 
 Showing profile details
 -----------------------
 
 .. code-block:: bash
 
-   adare os-profile show ubuntu2404
+   adare vm profile show ubuntu2404
 
 Adding a custom profile
 -----------------------
@@ -913,7 +957,7 @@ Create a YAML file (e.g. ``my-distro.yml``):
    distribution: ubuntu         # distribution family
    version: '1.0'
    architecture: x86_64         # 'x86_64' or 'aarch64'
-   install_mode: auto           # 'auto', 'manual', 'gui-auto', or 'gui-script'
+   install_mode: auto           # 'auto', 'manual', 'gui-auto', or 'playbook'
 
    # Optional -- omit for manual installs or when using --iso
    iso_url: https://example.com/my-distro.iso
@@ -945,14 +989,14 @@ Then add it:
 
 .. code-block:: bash
 
-   adare os-profile add my-distro.yml
+   adare vm profile add my-distro.yml
 
 Removing a custom profile
 --------------------------
 
 .. code-block:: bash
 
-   adare os-profile remove my-distro
+   adare vm profile remove my-distro
 
 YAML field reference
 --------------------
@@ -986,8 +1030,9 @@ YAML field reference
      - No
      - ``auto`` (default, unattended answer file), ``manual`` (a human clicks
        through a QEMU window), ``gui-auto`` (a vision-LLM drives the GUI
-       installer and records a playbook), or ``gui-script`` (deterministic QMP
-       playbook replay -- no model, no CV server)
+       installer and records a playbook), or ``playbook`` (deterministic replay of
+       the profile's ``install_steps`` / ``verify_steps`` -- no model, OCR via the
+       CV server)
    * - ``template``
      - No
      - Jinja2 template filename for unattended install (empty = default lookup)
@@ -1140,7 +1185,7 @@ experiment run against it.
    ship **untested**. They cannot be built on an Apple Silicon host: the guest
    architecture is guarded for non-aarch64 guests and QEMU is invoked as
    ``qemu-system-<host arch>`` with ``accel=hvf``, and ADARE deliberately has no
-   TCG fallback. A green ``adare os-profile list`` row is *not* a verification —
+   TCG fallback. A green ``adare vm profile list`` row is *not* a verification —
    treat these as recipes for replication on Intel/AMD hosts.
 
 Paper-replication profiles
@@ -1182,10 +1227,10 @@ The profiles behind the case studies, and the ISO each one expects:
      - kickstart
      - ``Fedora-Everything-netinst-aarch64-42-1.1.iso``
    * - ``ubuntu1804`` (x86_64)
-     - gui-script
+     - playbook (ubiquity)
      - auto-downloads ``ubuntu-18.04.5-desktop-amd64.iso``
    * - ``ubuntu2004`` (x86_64)
-     - gui-script
+     - playbook (ubiquity)
      - auto-downloads ``ubuntu-20.04.6-desktop-amd64.iso``
    * - ``kubuntu2004`` / ``kubuntu2204`` (x86_64)
      - ubiquity
@@ -1503,7 +1548,7 @@ Field reference:
 - ``schema`` (required, integer) -- Metadata schema version. Currently ``1``.
   Loading a template with an unknown schema raises an explicit error.
 - ``id`` (required, string) -- Stable identifier surfaced in
-  ``adare os-profile show``. Independent of filename.
+  ``adare vm profile show``. Independent of filename.
 - ``description`` (string) -- Human-readable summary.
 - ``maintainer`` (string) -- Name or handle responsible for the template.
 - ``revision`` (string) -- Free-form revision marker (date, version, etc.).
@@ -1544,7 +1589,7 @@ Writing a custom template
 
    .. code-block:: bash
 
-      adare os-profile add my-ubuntu.yml
+      adare vm profile add my-ubuntu.yml
       adare vm create my-ubuntu
 
 

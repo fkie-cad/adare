@@ -82,8 +82,7 @@ def _install_testfunction_requirements(requirements_file: Path, name: str) -> No
         log,
         message=(
             f'Failed to install dependencies for testfunction "{name}" from '
-            f'{requirements_file}'
-            + (f': {last_error}' if last_error else '')
+            f'{requirements_file}' + (f': {last_error}' if last_error else '')
         ),
         possible_solutions=[
             f'Install them manually: {manual_cmd}',
@@ -195,6 +194,7 @@ def testfunction_load(project_path: Path, name: str):
     # Upsert by hash: create the file at v1, or bump its version (and retain a
     # snapshot) when the content changed. This drives the versioned update path.
     from adare.database.api.testfunction import TestfunctionDbApi
+
     with TestfunctionDbApi() as api:
         action, file_obj = api.upsert_testfunction_file_obj(target_python_file, target_requirements_file)
         testfunction_id = file_obj.id
@@ -204,6 +204,7 @@ def testfunction_load(project_path: Path, name: str):
 
     # Protect testfunction files after loading (protect the global copies)
     from adare.helperfunctions.integrity import protect_loaded_files
+
     testfunction_files = [target_python_file, target_requirements_file]
     protected_files = protect_loaded_files(testfunction_files)
     log.info(f'Protected {len(protected_files)} testfunction files for {name}')
@@ -222,8 +223,6 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
         # Direct python file
         python_file = testfunction_path
         requirements_file = testfunction_path.parent / 'requirements.txt'
-        # Use parent directory as a "fake" project path for database purposes
-        project_path = testfunction_path.parent
         testfunction_name = python_file.stem
     elif testfunction_path.is_dir():
         # Directory containing testfunction - look for .py file inside
@@ -241,7 +240,6 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
             python_file = python_files[0]
 
         requirements_file = testfunction_path / 'requirements.txt'
-        project_path = testfunction_path
         testfunction_name = testfunction_path.name
     else:
         raise TestfunctionMissingFileError(
@@ -254,13 +252,17 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
 
     if usage['exists'] and not usage['can_safely_delete']:
         if not force:
-            log.info(f'Testfunction "{testfunction_name}" is currently used by {len(usage["experiments"])} experiments with {len(usage["runs"])} runs')
+            log.info(
+                f'Testfunction "{testfunction_name}" is currently used by {len(usage["experiments"])} experiments with {len(usage["runs"])} runs'
+            )
             log.info('Use --force to overwrite and delete associated experiment runs')
             log.info(f'Experiments affected: {", ".join([exp["name"] for exp in usage["experiments"]])}')
             return usage['testfunction_file_id']  # Return existing ID without updating
         # Force mode - ask for confirmation
         print(f'\n⚠️  WARNING: Testfunction "{testfunction_name}" is currently in use!')
-        print(f'   • Used by {len(usage["experiments"])} experiments: {", ".join([exp["name"] for exp in usage["experiments"]])}')
+        print(
+            f'   • Used by {len(usage["experiments"])} experiments: {", ".join([exp["name"] for exp in usage["experiments"]])}'
+        )
         print(f'   • Would delete {len(usage["runs"])} experiment runs')
         print('   • This action cannot be undone!')
 
@@ -276,6 +278,7 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
 
     # Use TestfunctionManager to install to global directory
     from adare.backend.testfunction.manager import TestfunctionManager
+
     manager = TestfunctionManager()
     manager.ensure_global_directory_exists()
 
@@ -291,6 +294,7 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
 
     # Upsert by hash: create at v1 or bump the version (retaining a snapshot) on change.
     from adare.database.api.testfunction import TestfunctionDbApi
+
     with TestfunctionDbApi() as api:
         action, file_obj = api.upsert_testfunction_file_obj(target_python_file, target_requirements_file)
         testfunction_id = file_obj.id
@@ -300,6 +304,7 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
 
     # Protect testfunction files after loading (protect the global copies)
     from adare.helperfunctions.integrity import protect_loaded_files
+
     testfunction_files = [target_python_file]
     if target_requirements_file.exists():
         testfunction_files.append(target_requirements_file)
@@ -307,50 +312,6 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
     log.info(f'Protected {len(protected_files)} testfunction files for {python_file.name}')
 
     return testfunction_id
-
-
-def testfunction_list(testfunction_set: str = None):
-    from adare.database.api.frontend import DataRetrievalApi
-    from adare.frontend.terminal.console import DefaultConsole
-    from adare.frontend.terminal.testfunction_list import TestfunctionListPanel
-
-    # Use the same data source as the working testfunction show command
-    with DataRetrievalApi() as api:
-        testfunctions_df = api.get_testfunction_list()
-
-    # Filter by testfunction set if specified
-    if testfunction_set:
-        # Filter based on file name (extracted from dotnotation or file_name column)
-        if 'file_name' in testfunctions_df.columns:
-            file_column = 'file_name'
-        elif 'dotnotation' in testfunctions_df.columns:
-            # Extract file name from dotnotation
-            testfunctions_df = testfunctions_df.copy()
-            testfunctions_df['file_name'] = testfunctions_df['dotnotation'].apply(
-                lambda x: x.split('.', 1)[0] if '.' in str(x) else str(x)
-            )
-            file_column = 'file_name'
-        else:
-            file_column = None
-
-        if file_column:
-            # Filter by testfunction set
-            mask = (
-                testfunctions_df[file_column].str.contains(testfunction_set, na=False) |
-                testfunctions_df[file_column].str.startswith(testfunction_set, na=False) |
-                (testfunctions_df[file_column] == testfunction_set)
-            )
-            testfunctions_df = testfunctions_df[mask]
-
-    if not testfunctions_df.empty:
-        # Printed directly, NOT wrapped in a Layout: a Layout crops its content to
-        # the terminal height and silently drops the overflowing rows, which reads
-        # as "those testfunctions do not exist".
-        # testfunction_file=None means show all files
-        DefaultConsole().print(TestfunctionListPanel(testfunctions_df, testfunction_file=None))
-    else:
-        filter_msg = f" for set '{testfunction_set}'" if testfunction_set else ""
-        print(f"No testfunctions found{filter_msg}")
 
 
 def testfunction_download(project_path: Path, name: str, version: int = None):
@@ -397,8 +358,9 @@ def _refresh_global_testfunction(manager, source_py: Path, source_req: Path, nam
     src_files = [source_py, source_req] if source_req.exists() else [source_py]
     tgt_files = [target_py, target_req] if target_req.exists() else [target_py]
     if len(src_files) == len(tgt_files):
-        if combine_hashes([hash_file_sha256(f) for f in src_files]) == \
-                combine_hashes([hash_file_sha256(f) for f in tgt_files]):
+        if combine_hashes([hash_file_sha256(f) for f in src_files]) == combine_hashes(
+            [hash_file_sha256(f) for f in tgt_files]
+        ):
             return target_py, target_req
 
     unprotect_files_for_update([target_py, target_req])

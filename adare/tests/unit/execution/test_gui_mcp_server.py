@@ -8,7 +8,7 @@ and CV resolver are fakes. They assert:
 - ``add_test`` validates the function against the catalog (dropping unknowns),
 - ``save_playbook`` writes a ``parse_playbook``-valid playbook carrying GUI
   actions **and** a ``tests:`` block **and** a ``- test:`` action,
-- ``list_testfunctions`` / catalog shaping from structured-data-shaped input,
+- ``list_testfunctions``: compact index without a query, ranked full entries with one,
 - ``run_playbook`` wires through to the deterministic replay engine,
 - an in-memory MCP client can drive the tools end-to-end (integration).
 """
@@ -23,7 +23,6 @@ from PIL import Image
 
 from adare.backend.experiment.target_resolver import TargetMatch
 from adare.backend.experiment.vlm.mcp_server import GuiMcpServer
-from adare.services.devmode.mcp_serving import shape_testfunction_catalog
 from adare.types.playbook import ActionTestAction, ClickAction, parse_playbook
 
 pytestmark = pytest.mark.unit
@@ -52,8 +51,7 @@ class _FakeExecutor:
     async def screenshot(self, region=None):
         self.n += 1
         shade = min(255, 30 + self.n * 5)
-        return {'status': 'success',
-                'image': {'data': _png_b64(color=(shade, shade, shade)), 'format': 'png'}}
+        return {'status': 'success', 'image': {'data': _png_b64(color=(shade, shade, shade)), 'format': 'png'}}
 
     async def click(self, x, y, button_type='left'):
         self.clicks.append((x, y, button_type))
@@ -79,26 +77,25 @@ class _FakeResolver:
         return self._match
 
 
-class _TF:
-    """Structured-data-shaped testfunction (mirrors TestFunctionInfo)."""
-
-    def __init__(self, name, dotnotation, description='', parameters=None, file_name=''):
-        self.name = name
-        self.dotnotation = dotnotation
-        self.description = description
-        self.parameters = parameters or []
-        self.file_name = file_name
-        self.file_path = file_name
-
-
 def _catalog():
-    return shape_testfunction_catalog([
-        _TF('file_does_not_exist', 'filesystem.file_does_not_exist',
-            'Assert a path is absent',
-            [{'name': 'path', 'data_type': 'str', 'required': True}], 'filesystem.py'),
-        _TF('file_exists', 'filesystem.file_exists', 'Assert a path is present',
-            [{'name': 'path', 'data_type': 'str', 'required': True}], 'filesystem.py'),
-    ])
+    # Full static-catalog dicts, as ``testfunction_catalog_entries`` produces them.
+    def param(name):
+        return {'name': name, 'type': 'str', 'required': True, 'default': None, 'doc': 'Guest path'}
+
+    return [
+        {
+            'dotnotation': 'filesystem.file_does_not_exist',
+            'name': 'file_does_not_exist',
+            'summary': 'Assert a path is absent',
+            'params': [param('path')],
+        },
+        {
+            'dotnotation': 'filesystem.file_exists',
+            'name': 'file_exists',
+            'summary': 'Assert a path is present',
+            'params': [param('path')],
+        },
+    ]
 
 
 def _server(tmp_path, resolver=None):
@@ -114,26 +111,42 @@ def _server(tmp_path, resolver=None):
 # Catalog shaping / list_testfunctions
 # ---------------------------------------------------------------------------
 
-def test_shape_catalog_maps_structured_fields():
-    catalog = _catalog()
-    assert {e['dotnotation'] for e in catalog} == {
-        'filesystem.file_does_not_exist', 'filesystem.file_exists'}
-    entry = catalog[0]
-    assert entry['name'] == 'file_does_not_exist'
-    assert entry['category'] == 'filesystem.py'
-    assert entry['parameters'][0]['name'] == 'path'
+
+def test_list_testfunctions_without_query_is_compact_index(tmp_path):
+    got = _server(tmp_path).list_testfunctions()
+    assert {e['dotnotation'] for e in got} == {'filesystem.file_does_not_exist', 'filesystem.file_exists'}
+    assert set(got[0]) == {'dotnotation', 'summary', 'signature', 'os', 'installed'}
+    assert got[0]['signature'] == 'filesystem.file_does_not_exist(path: str)'
 
 
-def test_list_testfunctions_returns_catalog(tmp_path):
-    server = _server(tmp_path)
-    got = server.list_testfunctions()
-    assert {e['dotnotation'] for e in got} == {
-        'filesystem.file_does_not_exist', 'filesystem.file_exists'}
+def test_list_testfunctions_query_ranks_goal_with_example(tmp_path):
+    got = _server(tmp_path).list_testfunctions(query='verify the file is gone')
+    assert got[0]['dotnotation'] == 'filesystem.file_does_not_exist'
+    assert got[0]['example']['parameter'] == {'path': '<str>'}
+    assert got[0]['params'][0]['doc'] == 'Guest path'
+
+
+def test_static_catalog_entries_feed_the_server(tmp_path, monkeypatch):
+    from adare.backend.testfunction import catalog
+    from adare.services.devmode.mcp_serving import testfunction_catalog_entries
+
+    root = tmp_path / 'tf' / 'demo'
+    root.mkdir(parents=True)
+    (root / 'demo.py').write_text(
+        "@testfunction(name='file_exists', description='tests if file exists')\n"
+        "def file_exists(ctx, dst: str, mode: str = 'any'):\n    pass\n"
+    )
+    monkeypatch.setattr(catalog, 'default_sources', lambda: [(tmp_path / 'tf', True)])
+    entries = testfunction_catalog_entries()
+    server = GuiMcpServer(executor=_FakeExecutor(), resolver=_FakeResolver(), catalog=entries, base_dir=tmp_path)
+    assert server.add_test('t', 'demo.file_exists', parameters={'dst': '/x'})['status'] == 'error'  # not recording
+    assert server.list_testfunctions()[0]['signature'] == "demo.file_exists(dst: str, mode: str = 'any')"
 
 
 # ---------------------------------------------------------------------------
 # Recording: click auto-crops
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_click_while_recording_appends_and_crops(tmp_path):
@@ -143,10 +156,11 @@ async def test_click_while_recording_appends_and_crops(tmp_path):
     await server.click(640, 400, describe='trash icon')
 
     recorder = server._recorder
-    assert recorder.action_count == 1
+    assert recorder.action_count == 2  # wait_until gate + click
     crops = list(recorder.img_dir.glob('*.png'))
     assert len(crops) == 1  # the click cropped an image target
-    action = recorder._actions[0]
+    gate, action = recorder._actions
+    assert gate['wait_until']['condition'] == {'exists': {'image': crops[0].name}}
     assert 'click' in action
     assert action['click']['target']['image'] == crops[0].name
     assert action['click']['description'] == 'trash icon'
@@ -159,7 +173,7 @@ async def test_click_without_prior_screenshot_still_crops(tmp_path):
     server = _server(tmp_path)
     server.start_recording()
     await server.click(10, 10, describe='corner')  # no screenshot() first
-    assert server._recorder.action_count == 1
+    assert server._recorder.action_count == 2  # wait_until gate + click
     assert list(server._recorder.img_dir.glob('*.png'))
 
 
@@ -167,19 +181,25 @@ async def test_click_without_prior_screenshot_still_crops(tmp_path):
 # add_test validation against the catalog
 # ---------------------------------------------------------------------------
 
+
 def test_add_test_accepts_known_function(tmp_path):
     server = _server(tmp_path)
     server.start_recording()
-    res = server.add_test('verify_gone', 'filesystem.file_does_not_exist',
-                          parameters={'path': '/home/user/testfile.txt'},
-                          description='file removed')
+    res = server.add_test(
+        'verify_gone',
+        'filesystem.file_does_not_exist',
+        parameters={'path': '/home/user/testfile.txt'},
+        description='file removed',
+    )
     assert res['status'] == 'success'
-    assert server._recorder._tests == [{
-        'name': 'verify_gone',
-        'function': 'filesystem.file_does_not_exist',
-        'description': 'file removed',
-        'parameter': {'path': '/home/user/testfile.txt'},
-    }]
+    assert server._recorder._tests == [
+        {
+            'name': 'verify_gone',
+            'function': 'filesystem.file_does_not_exist',
+            'description': 'file removed',
+            'parameter': {'path': '/home/user/testfile.txt'},
+        }
+    ]
     # also appended a `- test:` action to run it in sequence
     assert {'test': {'name': 'verify_gone', 'description': 'file removed'}} in server._recorder._actions
 
@@ -203,6 +223,7 @@ def test_add_test_requires_recording(tmp_path):
 # save_playbook -> parse_playbook-valid playbook with actions + tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_save_playbook_is_parseable_with_actions_and_tests(tmp_path):
     server = _server(tmp_path)
@@ -211,8 +232,9 @@ async def test_save_playbook_is_parseable_with_actions_and_tests(tmp_path):
     await server.click(500, 300, describe='testfile.txt')
     await server.key('Delete', describe='delete key')
     server.add_variable('target', '/home/user/testfile.txt')
-    server.add_test('verify_gone', 'filesystem.file_does_not_exist',
-                    parameters={'path': '{{ target }}'}, description='file removed')
+    server.add_test(
+        'verify_gone', 'filesystem.file_does_not_exist', parameters={'path': '{{ target }}'}, description='file removed'
+    )
 
     out = tmp_path / 'saved' / 'delete_file.play.yaml'
     res = server.save_playbook(out)
@@ -242,13 +264,13 @@ async def test_save_playbook_is_parseable_with_actions_and_tests(tmp_path):
 # Grounding aids
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_find_text_returns_coordinates(tmp_path):
     match = TargetMatch(coordinates=(120, 240), confidence=0.91, method='text')
     server = _server(tmp_path, resolver=_FakeResolver(match=match))
     res = await server.find_text('Trash')
-    assert res == {'status': 'success', 'x': 120, 'y': 240,
-                   'confidence': pytest.approx(0.91), 'method': 'text'}
+    assert res == {'status': 'success', 'x': 120, 'y': 240, 'confidence': pytest.approx(0.91), 'method': 'text'}
 
 
 @pytest.mark.asyncio
@@ -261,6 +283,7 @@ async def test_find_icon_not_found(tmp_path):
 # ---------------------------------------------------------------------------
 # run_playbook wiring (no real VM)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_run_playbook_wires_to_replay(tmp_path, monkeypatch):
@@ -287,6 +310,7 @@ async def test_run_playbook_wires_to_replay(tmp_path, monkeypatch):
 # Integration: drive the tools via an in-memory MCP client
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_in_memory_mcp_client_records_and_parses(tmp_path):
@@ -297,19 +321,31 @@ async def test_in_memory_mcp_client_records_and_parses(tmp_path):
 
     async with Client(server.mcp) as client:
         tools = {t.name for t in await client.list_tools()}
-        assert {'screenshot', 'click', 'type', 'key', 'list_testfunctions',
-                'start_recording', 'add_test', 'save_playbook', 'run_playbook'} <= tools
+        assert {
+            'screenshot',
+            'click',
+            'type',
+            'key',
+            'list_testfunctions',
+            'start_recording',
+            'add_test',
+            'save_playbook',
+            'run_playbook',
+        } <= tools
 
         await client.call_tool('start_recording', {'goal': 'delete a file and verify'})
         await client.call_tool('screenshot', {})
         await client.call_tool('click', {'x': 500, 'y': 300, 'describe': 'testfile.txt'})
         await client.call_tool('key', {'combo': 'Delete', 'describe': 'delete'})
-        await client.call_tool('add_test', {
-            'name': 'verify_gone',
-            'function': 'filesystem.file_does_not_exist',
-            'parameters': {'path': '/home/user/testfile.txt'},
-            'description': 'file removed',
-        })
+        await client.call_tool(
+            'add_test',
+            {
+                'name': 'verify_gone',
+                'function': 'filesystem.file_does_not_exist',
+                'parameters': {'path': '/home/user/testfile.txt'},
+                'description': 'file removed',
+            },
+        )
         await client.call_tool('save_playbook', {'path': str(out)})
 
     assert out.exists()

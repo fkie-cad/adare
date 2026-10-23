@@ -4,7 +4,6 @@ Verifies that _run_test() correctly handles both sync and async test() methods
 without triggering 'RuntimeError: This event loop is already running'.
 """
 
-
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -50,6 +49,7 @@ def executor():
     Only _run_test() is under test, so the proxies are irrelevant.
     """
     from unittest.mock import MagicMock
+
     return GuestToHostTestExecutor(
         guest_file=MagicMock(),
         guest_command=MagicMock(),

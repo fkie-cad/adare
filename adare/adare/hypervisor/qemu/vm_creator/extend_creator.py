@@ -44,7 +44,9 @@ _WORK_NAME = 'work-overlay'
 
 
 def _synthesize_os_definition(
-    os_block: dict, ram_mb: int, cpus: int,
+    os_block: dict,
+    ram_mb: int,
+    cpus: int,
 ) -> tuple[OsDefinition, str]:
     """Build a minimal OsDefinition describing how to boot the base disk.
 
@@ -63,13 +65,18 @@ def _synthesize_os_definition(
         'uefi' or 'bios' (for logging/UI).
     """
     architecture = os_block.get('architecture') or 'x86_64'
-    guest_os = ' '.join(
-        part for part in (
-            os_block.get('platform') or '',
-            os_block.get('os') or '',
-            os_block.get('distribution') or '',
-        ) if part
-    ) or 'linux'
+    guest_os = (
+        ' '.join(
+            part
+            for part in (
+                os_block.get('platform') or '',
+                os_block.get('os') or '',
+                os_block.get('distribution') or '',
+            )
+            if part
+        )
+        or 'linux'
+    )
 
     boot_mode = get_boot_mode_for_os(guest_os, architecture)
     requires_uefi = boot_mode == 'uefi'
@@ -152,8 +159,7 @@ def run_interactive_extend(
     # Fail fast before the (long) interactive session if the artifact exists.
     if dest_disk.exists():
         raise HypervisorException(
-            f'Destination disk already exists: {dest_disk}. Remove it or choose '
-            f'a different --disk-name.'
+            f'Destination disk already exists: {dest_disk}. Remove it or choose a different --disk-name.'
         )
 
     ram_mb = ram or _DEFAULT_RAM_MB
@@ -178,19 +184,20 @@ def run_interactive_extend(
         #    which regenerates NVRAM per run rather than persisting it.
         work_nvram: Path | None = None
         if os_def.requires_uefi or os_def.architecture == 'aarch64':
-            work_nvram = Path(
-                create_nvram_for_vm(_WORK_NAME, work_dir, os_def.architecture)
-            )
+            work_nvram = Path(create_nvram_for_vm(_WORK_NAME, work_dir, os_def.architecture))
 
         # 3. Boot the GUI window + interactive console; blocks until the user
         #    stores/discards or shuts the VM down. Returns recorded installs.
-        print_step(
-            f'Booting base disk overlay ({boot_mode.upper()}) for interactive '
-            f'customization...'
-        )
+        print_step(f'Booting base disk overlay ({boot_mode.upper()}) for interactive customization...')
         store, recorded = run_post_install_session(
-            work_overlay, work_nvram, os_def, ram_mb, cpu_count,
-            console_mode=console, ask_store=True, allow_emulation=allow_emulation,
+            work_overlay,
+            work_nvram,
+            os_def,
+            ram_mb,
+            cpu_count,
+            console_mode=console,
+            ask_store=True,
+            allow_emulation=allow_emulation,
         )
 
         # 4. Flatten the overlay into a standalone qcow2 (no backing file) ONLY

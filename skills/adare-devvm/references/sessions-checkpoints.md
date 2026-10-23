@@ -15,7 +15,7 @@
 | `--shared-dir TEXT` | Shared dir as `HOST_PATH:VM_PATH`. |
 | `--debug-screenshots` | Save screenshots for debugging. |
 | `--reuse` | Attach to the most-recent running session for the project instead of booting a new VM. |
-| `--watch` | Open the live screen (read-only) in the browser via VirtualSpice (needs `adare web start`). |
+| `--watch` | Open the live screen (read-only) in the browser via VirtualSpice (needs `adare ui start`). |
 
 `-s/--session` on every other `dev` command is **auto-detected when only one session
 runs**; pass it (id or `--name`) when several are up.

@@ -82,14 +82,25 @@ class QemuVideoRecorder:
         exe = self.ensure_ffmpeg(self.ffmpeg)
         self.out_path.parent.mkdir(parents=True, exist_ok=True)
         cmd = [
-            exe, '-y', '-loglevel', 'error',
-            '-f', 'image2pipe', '-vcodec', 'ppm',
-            '-framerate', str(self.fps),
-            '-i', '-',
+            exe,
+            '-y',
+            '-loglevel',
+            'error',
+            '-f',
+            'image2pipe',
+            '-vcodec',
+            'ppm',
+            '-framerate',
+            str(self.fps),
+            '-i',
+            '-',
             # yuv420p needs even dimensions; pad odd screens up by one pixel.
-            '-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2',
-            '-pix_fmt', 'yuv420p',
-            '-an', str(self.out_path),
+            '-vf',
+            'pad=ceil(iw/2)*2:ceil(ih/2)*2',
+            '-pix_fmt',
+            'yuv420p',
+            '-an',
+            str(self.out_path),
         ]
         try:
             self._proc = await asyncio.create_subprocess_exec(

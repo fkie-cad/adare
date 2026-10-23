@@ -6,7 +6,9 @@ or previously-run copies of VM templates.
 """
 
 import logging
+import os
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
@@ -15,14 +17,21 @@ from adare.database.models.global_models import Vm, VmInstance
 
 from .exceptions import VMLoadError, VMNotFoundError
 
+if TYPE_CHECKING:
+    from adare.database.api.base import GlobalDatabaseApi as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class VmInstanceMixin:
+class VmInstanceMixin(_Host):
     """Mixin providing VM instance management operations."""
 
-    def create_vm_instance(self, vm_id: str, instance_name: str, experiment_run_id: str,
-                          websocket_port: int, status: str = 'active') -> VmInstance:
+    def create_vm_instance(
+        self, vm_id: str, instance_name: str, experiment_run_id: str, websocket_port: int, status: str = 'active'
+    ) -> VmInstance:
         """
         Create a new VM instance entry in the database.
 
@@ -45,8 +54,9 @@ class VmInstanceMixin:
             current_experiment_run_id=experiment_run_id,
             websocket_port=websocket_port,
             status=status,
+            owner_pid=os.getpid() if status == 'active' else None,
             created_at=datetime.now(UTC),
-            last_used_at=datetime.now(UTC)
+            last_used_at=datetime.now(UTC),
         )
 
         try:
@@ -56,9 +66,12 @@ class VmInstanceMixin:
                 self._session.refresh(instance)
 
                 # Eagerly load the VM relationship before detaching
-                instance = self._session.query(VmInstance).options(
-                    joinedload(VmInstance.vm).joinedload(Vm.osinfo)
-                ).filter_by(id=instance.id).first()
+                instance = (
+                    self._session.query(VmInstance)
+                    .options(joinedload(VmInstance.vm).joinedload(Vm.osinfo))
+                    .filter_by(id=instance.id)
+                    .first()
+                )
 
                 if instance:
                     self._session.expunge(instance)
@@ -85,9 +98,12 @@ class VmInstanceMixin:
             VmInstance or None if not found
         """
         with self:
-            instance = self._session.query(VmInstance).options(
-                joinedload(VmInstance.vm).joinedload(Vm.osinfo)
-            ).filter_by(id=instance_id).first()
+            instance = (
+                self._session.query(VmInstance)
+                .options(joinedload(VmInstance.vm).joinedload(Vm.osinfo))
+                .filter_by(id=instance_id)
+                .first()
+            )
             if instance:
                 self._session.expunge(instance)
             return instance
@@ -104,9 +120,11 @@ class VmInstanceMixin:
             List of VmInstance objects
         """
         with self:
-            query = self._session.query(VmInstance).options(
-                joinedload(VmInstance.vm).joinedload(Vm.osinfo)
-            ).filter_by(vm_id=vm_id)
+            query = (
+                self._session.query(VmInstance)
+                .options(joinedload(VmInstance.vm).joinedload(Vm.osinfo))
+                .filter_by(vm_id=vm_id)
+            )
             if status:
                 query = query.filter_by(status=status)
             instances = query.all()
@@ -123,9 +141,7 @@ class VmInstanceMixin:
             List of all VmInstance objects
         """
         with self:
-            instances = self._session.query(VmInstance).options(
-                joinedload(VmInstance.vm).joinedload(Vm.osinfo)
-            ).all()
+            instances = self._session.query(VmInstance).options(joinedload(VmInstance.vm).joinedload(Vm.osinfo)).all()
             # Expunge objects from session to make them detached
             for instance in instances:
                 self._session.expunge(instance)
@@ -143,9 +159,11 @@ class VmInstanceMixin:
             List of old VmInstance objects
         """
         with self:
-            query = self._session.query(VmInstance).options(
-                joinedload(VmInstance.vm).joinedload(Vm.osinfo)
-            ).filter(VmInstance.last_used_at < cutoff_date)
+            query = (
+                self._session.query(VmInstance)
+                .options(joinedload(VmInstance.vm).joinedload(Vm.osinfo))
+                .filter(VmInstance.last_used_at < cutoff_date)
+            )
             if status:
                 query = query.filter_by(status=status)
             instances = query.all()
@@ -178,8 +196,7 @@ class VmInstanceMixin:
             self._session.rollback()
             raise VMLoadError(log, f"Database error while updating VM instance: {e}") from e
 
-    def claim_available_vm_instance(self, instance_id: str, experiment_run_id: str,
-                                     websocket_port: int) -> bool:
+    def claim_available_vm_instance(self, instance_id: str, experiment_run_id: str, websocket_port: int) -> bool:
         """
         Atomically claim an available VM instance for an experiment.
 
@@ -198,14 +215,20 @@ class VmInstanceMixin:
         """
         try:
             with self:
-                updated_count = self._session.query(VmInstance).filter_by(
-                    id=instance_id, status='available'
-                ).update({
-                    'status': 'active',
-                    'current_experiment_run_id': experiment_run_id,
-                    'websocket_port': websocket_port,
-                    'last_used_at': datetime.now(UTC)
-                }, synchronize_session=False)
+                updated_count = (
+                    self._session.query(VmInstance)
+                    .filter_by(id=instance_id, status='available')
+                    .update(
+                        {
+                            'status': 'active',
+                            'current_experiment_run_id': experiment_run_id,
+                            'websocket_port': websocket_port,
+                            'owner_pid': os.getpid(),
+                            'last_used_at': datetime.now(UTC),
+                        },
+                        synchronize_session=False,
+                    )
+                )
 
                 self._session.commit()
 
@@ -259,9 +282,12 @@ class VmInstanceMixin:
             VmInstance or None if not found
         """
         with self:
-            instance = self._session.query(VmInstance).options(
-                joinedload(VmInstance.vm).joinedload(Vm.osinfo)
-            ).filter_by(instance_name=instance_name).first()
+            instance = (
+                self._session.query(VmInstance)
+                .options(joinedload(VmInstance.vm).joinedload(Vm.osinfo))
+                .filter_by(instance_name=instance_name)
+                .first()
+            )
             if instance:
                 self._session.expunge(instance)
             return instance

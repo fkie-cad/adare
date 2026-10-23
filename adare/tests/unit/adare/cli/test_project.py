@@ -15,6 +15,7 @@ pytestmark = pytest.mark.unit
 # exec_create_project
 # ---------------------------------------------------------------------------
 
+
 @patch("adare.cli.project.print_success_message")
 @patch("adare.cli.project.AdareAPI")
 def test_exec_create_project_success(mock_api_cls, mock_print_success):
@@ -81,6 +82,7 @@ def test_exec_create_project_failure(mock_api_cls, mock_handle_error):
 # exec_remove_project
 # ---------------------------------------------------------------------------
 
+
 @patch("adare.cli.project.print_success_message")
 @patch("adare.cli.project.AdareAPI")
 @patch("adare.cli.project.determine_projectdirectory_for_removal")
@@ -126,6 +128,7 @@ def test_exec_remove_project_no_path_exits(mock_determine, mock_api_cls):
 # ---------------------------------------------------------------------------
 # exec_list_projects
 # ---------------------------------------------------------------------------
+
 
 @patch("adare.cli.project.handle_api_error")
 @patch("adare.cli.project.AdareAPI")

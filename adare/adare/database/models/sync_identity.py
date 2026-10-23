@@ -65,10 +65,9 @@ class RemoteIdentityMixin:
         return bool(meta.needs_sync) if meta else False
 
 
-def apply_remote_identity(session, entity, sync_metadata_cls, *,
-                          remote_ulid: str | None,
-                          remote_url: str | None,
-                          is_published: bool):
+def apply_remote_identity(
+    session, entity, sync_metadata_cls, *, remote_ulid: str | None, remote_url: str | None, is_published: bool
+):
     """Persist *entity*'s remote identity, creating its SyncMetadata row if needed.
 
     Args:

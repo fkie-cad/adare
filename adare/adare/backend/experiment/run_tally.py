@@ -77,15 +77,16 @@ class EventRow:
     Kept separate from the ORM models so the counting logic is pure and testable
     without a database.
     """
+
     group_id: str
-    category: str                                   # 'action' | 'test'
+    category: str  # 'action' | 'test'
     event_type_specific: str
     parent_group_id: str | None = None
     success: bool | None = None
     sequence_order: int | None = None
-    test_status: int | None = None                   # StatusEnum value, tests only
-    loop_iterations_planned: int | None = None       # from the loop start event
-    loop_iterations_completed: int | None = None     # from the loop complete event
+    test_status: int | None = None  # StatusEnum value, tests only
+    loop_iterations_planned: int | None = None  # from the loop start event
+    loop_iterations_completed: int | None = None  # from the loop complete event
     loop_actions_executed: int | None = None
 
     @property
@@ -96,6 +97,7 @@ class EventRow:
 @dataclass(frozen=True)
 class LoopSummary:
     """What one ``loop:`` container reported about its iterations."""
+
     iterations_planned: int | None = None
     iterations_completed: int | None = None
     actions_executed: int | None = None
@@ -112,6 +114,7 @@ class LoopSummary:
 @dataclass(frozen=True)
 class ExperimentTally:
     """Executed actions and tests for one run, split by nesting depth."""
+
     total_actions: int = 0
     successful_actions: int = 0
     failed_actions: int = 0
@@ -141,8 +144,10 @@ class ExperimentTally:
         must not read green when an action stopped reporting mid-flight.
         """
         return not (
-            self.failed_actions or self.failed_tests
-            or self.incomplete_actions or self.incomplete_tests
+            self.failed_actions
+            or self.failed_tests
+            or self.incomplete_actions
+            or self.incomplete_tests
             or any(not loop.fully_iterated for loop in self.loops)
         )
 
@@ -200,12 +205,14 @@ def build_tally(rows: Iterable[EventRow]) -> ExperimentTally:
 
         if kind in CONTAINER_KINDS:
             if kind == 'loop':
-                loops.append(LoopSummary(
-                    iterations_planned=start.loop_iterations_planned if start else None,
-                    iterations_completed=complete.loop_iterations_completed if complete else None,
-                    actions_executed=complete.loop_actions_executed if complete else None,
-                    completed=complete is not None,
-                ))
+                loops.append(
+                    LoopSummary(
+                        iterations_planned=start.loop_iterations_planned if start else None,
+                        iterations_completed=complete.loop_iterations_completed if complete else None,
+                        actions_executed=complete.loop_actions_executed if complete else None,
+                        completed=complete is not None,
+                    )
+                )
             continue
 
         is_test = group_rows[0].category == 'test'
@@ -274,24 +281,22 @@ def load_event_rows(session, experiment_run_ulid: str) -> list[EventRow]:
 
     rows: list[EventRow] = []
 
-    action_events = (
-        session.query(ActionEvent)
-        .filter(ActionEvent.experiment_run_id == experiment_run_ulid)
-        .all()
-    )
+    action_events = session.query(ActionEvent).filter(ActionEvent.experiment_run_id == experiment_run_ulid).all()
     for event in action_events:
         data = _parse_action_data(event.action_data)
-        rows.append(EventRow(
-            group_id=event.event_group_id or event.action_id or event.id,
-            category='action',
-            event_type_specific=event.event_type_specific or '',
-            parent_group_id=event.parent_event_id,
-            success=event.success,
-            sequence_order=_coerce_int(data.get('sequence_order')),
-            loop_iterations_planned=_coerce_int(data.get('iteration_count')),
-            loop_iterations_completed=_coerce_int(data.get('iterations_completed')),
-            loop_actions_executed=_coerce_int(data.get('actions_executed')),
-        ))
+        rows.append(
+            EventRow(
+                group_id=event.event_group_id or event.action_id or event.id,
+                category='action',
+                event_type_specific=event.event_type_specific or '',
+                parent_group_id=event.parent_event_id,
+                success=event.success,
+                sequence_order=_coerce_int(data.get('sequence_order')),
+                loop_iterations_planned=_coerce_int(data.get('iteration_count')),
+                loop_iterations_completed=_coerce_int(data.get('iterations_completed')),
+                loop_actions_executed=_coerce_int(data.get('actions_executed')),
+            )
+        )
 
     test_events = (
         session.query(TestEvent)
@@ -301,14 +306,16 @@ def load_event_rows(session, experiment_run_ulid: str) -> list[EventRow]:
     )
     for event in test_events:
         status = _coerce_int(event.result.status_id) if event.result is not None else None
-        rows.append(EventRow(
-            group_id=event.event_group_id or event.id,
-            category='test',
-            event_type_specific=event.event_type_specific or '',
-            parent_group_id=event.parent_event_id,
-            success=event.success,
-            test_status=status,
-        ))
+        rows.append(
+            EventRow(
+                group_id=event.event_group_id or event.id,
+                category='test',
+                event_type_specific=event.event_type_specific or '',
+                parent_group_id=event.parent_event_id,
+                success=event.success,
+                test_status=status,
+            )
+        )
 
     return rows
 

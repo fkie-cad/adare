@@ -34,8 +34,10 @@ class TestErrorInfo:
 
     def test_to_dict_full(self):
         err = ErrorInfo(
-            code="ERR", message="msg",
-            solutions=["fix it"], context={"k": "v"},
+            code="ERR",
+            message="msg",
+            solutions=["fix it"],
+            context={"k": "v"},
         )
         d = err.to_dict()
         assert d["solutions"] == ["fix it"]
@@ -79,7 +81,8 @@ class TestResultFail:
 
     def test_fail_with_solutions_and_context(self):
         r = Result.fail(
-            "DUPLICATE", "Exists",
+            "DUPLICATE",
+            "Exists",
             solutions=["Rename it"],
             context={"name": "x"},
         )
@@ -126,6 +129,7 @@ class TestResultToDict:
         class Foo:
             def __init__(self):
                 self.x = 1
+
         r = Result.ok(Foo())
         d = r.to_dict()
         assert d["data"] == {"x": 1}

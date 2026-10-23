@@ -280,17 +280,13 @@ class TestGetOrCreate:
         assert entity.name == "existing"
 
     def test_applies_defaults_on_create(self, api):
-        entity, created = api.get_or_create(
-            Item, defaults={"category": "default_cat"}, name="with_defaults"
-        )
+        entity, created = api.get_or_create(Item, defaults={"category": "default_cat"}, name="with_defaults")
         assert created is True
         assert entity.category == "default_cat"
 
     def test_defaults_ignored_for_existing(self, api):
         api.create_entity(Item, name="old", category="original")
-        entity, created = api.get_or_create(
-            Item, defaults={"category": "overridden"}, name="old"
-        )
+        entity, created = api.get_or_create(Item, defaults={"category": "overridden"}, name="old")
         assert created is False
         assert entity.category == "original"
 
@@ -589,12 +585,12 @@ class TestHelperMethods:
     def test_helpers_are_safe_without_session(self, api_no_session):
         """Helper methods should not raise when there is no active session."""
         fake = Item(name="x")
-        api_no_session.expunge(fake)       # no-op
-        api_no_session.expunge_all()       # no-op
-        api_no_session.refresh(fake)       # no-op
-        api_no_session.commit()            # no-op
-        api_no_session.rollback()          # no-op
-        api_no_session.flush()             # no-op
+        api_no_session.expunge(fake)  # no-op
+        api_no_session.expunge_all()  # no-op
+        api_no_session.refresh(fake)  # no-op
+        api_no_session.commit()  # no-op
+        api_no_session.rollback()  # no-op
+        api_no_session.flush()  # no-op
         api_no_session.make_transient(fake)  # no-op
 
 
@@ -639,6 +635,7 @@ class TestSetupDatabase:
         with patch("adare.config.database.get_database_location") as mock_loc:
             # Use a path that will fail in create_engine due to directory not existing
             from pathlib import Path
+
             mock_loc.return_value = Path("/nonexistent_dir_abc123/db.sqlite")
             # The constructor calls _setup_database; the engine creation itself may
             # succeed (SQLite lazily creates) but sessionmaker should work.

@@ -7,6 +7,7 @@ Each strategy handles a different mechanism for getting files to/from QEMU guest
 - Libguestfs: offline disk manipulation via guestfish CLI
 - QGA: file transfer via QEMU Guest Agent guest-file-* operations
 """
+
 from abc import ABC, abstractmethod
 from typing import Any
 

@@ -3,6 +3,7 @@ VirtualBox VM command execution operations mixin.
 
 Implements AbstractCommandMixin for VirtualBox-specific command execution.
 """
+
 import asyncio
 import base64
 import logging
@@ -14,13 +15,20 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adare.hypervisor.base.mixins.commands import AbstractCommandMixin
+
+if TYPE_CHECKING:
+    from adare.hypervisor.virtualbox.mixins.host import VirtualBoxVMHost as _Host
+else:
+    _Host = object
+
 
 log = logging.getLogger(__name__)
 
 
-class CommandExecutionMixin(AbstractCommandMixin):
+class CommandExecutionMixin(AbstractCommandMixin, _Host):
     """Mixin class providing command execution operations for VirtualBox VMs."""
 
     def _stream_vboxmanage_command(self, args: list[str], stop_event: threading.Event | None = None) -> Iterator[str]:
@@ -31,7 +39,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             "stdout": subprocess.PIPE,
             "stderr": subprocess.STDOUT,
             "bufsize": 0,
-            "preexec_fn": os.setsid if os.name != 'windows' else None
+            "preexec_fn": os.setsid if os.name != 'windows' else None,
         }
 
         with subprocess.Popen(**sp_args) as proc:
@@ -62,6 +70,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     if os.name != 'windows':
                         # Use select on Unix-like systems
                         import select
+
                         ready, _, _ = select.select([proc.stdout], [], [], 0.1)  # 100ms timeout
 
                         if ready:
@@ -144,7 +153,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            preexec_fn=os.setsid if os.name != 'windows' else None
+            preexec_fn=os.setsid if os.name != 'windows' else None,
         )
 
         try:
@@ -234,10 +243,11 @@ class CommandExecutionMixin(AbstractCommandMixin):
         silent: bool = False,
         ctx_manager=None,
         operation_name: str = "VBoxManage operation",
-        timeout: int = 300  # 5 minute default timeout
+        timeout: int = 300,  # 5 minute default timeout
     ) -> int:
         """Generic method to execute VBoxManage commands with streaming output."""
         import time
+
         start_time = time.time()
 
         log.info(f"Executing {operation_name} for VM '{self.vm_name}' with streaming output (timeout: {timeout}s)")
@@ -249,6 +259,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         # Update context manager to running status
         if ctx_manager:
             from adarelib.constants import StatusEnum
+
             ctx_manager.set_status(StatusEnum.RUNNING)
 
         def stream_worker():
@@ -281,6 +292,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                             log.error(f"{operation_name} timed out after {timeout}s for VM '{self.vm_name}'")
                             if ctx_manager:
                                 from adarelib.constants import StatusEnum
+
                                 ctx_manager.set_status(StatusEnum.FAILED)
                             return_value = 1
                             break
@@ -290,6 +302,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                             log.info(f"Stop event detected during {operation_name}")
                             if ctx_manager:
                                 from adarelib.constants import StatusEnum
+
                                 ctx_manager.set_status(StatusEnum.INTERRUPTED)
                             break
                         continue
@@ -320,7 +333,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         stop_event: threading.Event | None = None,
         silent: bool = False,
         ctx_manager=None,
-        operation_name: str = "VBoxManage operation"
+        operation_name: str = "VBoxManage operation",
     ) -> tuple[int, str, str]:
         """Async version of _execute_streaming_command with responsive stop_event handling."""
         log.info(f"Executing {operation_name} for VM '{self.vm_name}' with async streaming output")
@@ -330,6 +343,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         # Update context manager to running status
         if ctx_manager:
             from adarelib.constants import StatusEnum
+
             ctx_manager.set_status(StatusEnum.RUNNING)
 
         try:
@@ -384,11 +398,18 @@ class CommandExecutionMixin(AbstractCommandMixin):
         '''.strip()
 
         args = [
-            "guestcontrol", self.vm_name, "run",
-            "--exe", "/bin/bash",
-            "--wait-stdout", "--wait-stderr",
-            "--timeout", "10000",
-            "--", "-c", detect_cmd
+            "guestcontrol",
+            self.vm_name,
+            "run",
+            "--exe",
+            "/bin/bash",
+            "--wait-stdout",
+            "--wait-stderr",
+            "--timeout",
+            "10000",
+            "--",
+            "-c",
+            detect_cmd,
         ]
 
         if hasattr(self, "_guest_session_id") and self._guest_session_id:
@@ -401,6 +422,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             args.insert(5, self.password)
 
         from adare.hypervisor.virtualbox.utils import run_subprocess
+
         result = run_subprocess([self.vboxmanage_exe] + args, check=False)
 
         if result.returncode == 0 and result.stdout.strip():
@@ -412,7 +434,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             f"Failed to detect XAUTHORITY (exit code {result.returncode}). "
             f"stdout: {result.stdout.strip()!r}, stderr: {result.stderr.strip()!r}"
         )
-        return None   # better than returning a hardcoded, possibly wrong path
+        return None  # better than returning a hardcoded, possibly wrong path
 
     async def _discover_guest_path(self) -> str | None:
         """
@@ -512,7 +534,9 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     )
                 command_bytes = ps_cmd.encode('utf-16le')
                 encoded_command = base64.b64encode(command_bytes).decode('ascii')
-                command_args = [arg for arg in [noprofile_arg, "-ExecutionPolicy Bypass", "-EncodedCommand", encoded_command] if arg]
+                command_args = [
+                    arg for arg in [noprofile_arg, "-ExecutionPolicy Bypass", "-EncodedCommand", encoded_command] if arg
+                ]
             else:
                 # Foreground command - handle admin elevation
                 if admin:
@@ -523,7 +547,9 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
                 command_bytes = cmd_to_run.encode('utf-16le')
                 encoded_command = base64.b64encode(command_bytes).decode('ascii')
-                command_args = [arg for arg in [noprofile_arg, "-ExecutionPolicy Bypass", "-EncodedCommand", encoded_command] if arg]
+                command_args = [
+                    arg for arg in [noprofile_arg, "-ExecutionPolicy Bypass", "-EncodedCommand", encoded_command] if arg
+                ]
         else:
             # Linux/Unix guest
             command_exe = "/bin/bash"
@@ -536,13 +562,17 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 escaped_cmd = cmd_to_run.replace("'", "'\"'\"'")
                 # Apply sudo before nohup if admin privileges requested
                 sudo_prefix = 'sudo env "PATH=$PATH" "DISPLAY=$DISPLAY" "XAUTHORITY=$XAUTHORITY" ' if admin else ""
-                linux_command = f"nohup {sudo_prefix}bash -c '{escaped_cmd}' >>/adare/run/logs/adarevmstartup.log 2>&1 & echo $!"
+                linux_command = (
+                    f"nohup {sudo_prefix}bash -c '{escaped_cmd}' >>/adare/run/logs/adarevmstartup.log 2>&1 & echo $!"
+                )
             else:
                 # Apply sudo if admin privileges requested (foreground commands)
                 if admin:
                     # Escape single quotes in the command for bash -c
                     escaped_cmd = cmd_to_run.replace("'", "'\"'\"'")
-                    linux_command = f'sudo env "PATH=$PATH" "DISPLAY=$DISPLAY" "XAUTHORITY=$XAUTHORITY" bash -c \'{escaped_cmd}\''
+                    linux_command = (
+                        f'sudo env "PATH=$PATH" "DISPLAY=$DISPLAY" "XAUTHORITY=$XAUTHORITY" bash -c \'{escaped_cmd}\''
+                    )
                 else:
                     # Wrap in bash -c for glob expansion and shell features
                     escaped_cmd = cmd_to_run.replace("'", "'\"'\"'")
@@ -550,22 +580,25 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
         # Build the full VBoxManage guestcontrol command
         if 'windows' in self.guest_os.lower():
-            args = [
-                "guestcontrol", self.vm_name, "run",
-                "--exe", command_exe,
-                "--", command_exe
-            ]
+            args = ["guestcontrol", self.vm_name, "run", "--exe", command_exe, "--", command_exe]
             # Add PowerShell arguments as separate list items
             args.extend(command_args)
         else:
             # Detect XAUTHORITY for Linux guests
             xauthority_path = self._detect_xauthority()
             args = [
-                "guestcontrol", self.vm_name, "run",
-                "--exe", command_exe,
-                "--putenv", "DISPLAY=:0",
-                "--putenv", f"XAUTHORITY={xauthority_path}",
-                "--", "-c", linux_command
+                "guestcontrol",
+                self.vm_name,
+                "run",
+                "--exe",
+                command_exe,
+                "--putenv",
+                "DISPLAY=:0",
+                "--putenv",
+                f"XAUTHORITY={xauthority_path}",
+                "--",
+                "-c",
+                linux_command,
             ]
 
         # Add authentication
@@ -592,11 +625,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         Returns:
             True if copy was successful
         """
-        args = [
-            "guestcontrol", self.vm_name, "copyfrom",
-            "--username", self.username,
-            "--password", self.password
-        ]
+        args = ["guestcontrol", self.vm_name, "copyfrom", "--username", self.username, "--password", self.password]
 
         if recursive:
             args.append("--recursive")

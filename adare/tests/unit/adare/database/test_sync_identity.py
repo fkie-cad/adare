@@ -64,8 +64,12 @@ class TestGlobalEnvironment:
     def test_published_identity_survives_a_commit(self, global_session):
         env = self._environment(global_session)
         apply_remote_identity(
-            global_session, env, global_models.SyncMetadata,
-            remote_ulid=REMOTE_ULID, remote_url=REMOTE_URL, is_published=True,
+            global_session,
+            env,
+            global_models.SyncMetadata,
+            remote_ulid=REMOTE_ULID,
+            remote_url=REMOTE_URL,
+            is_published=True,
         )
         global_session.commit()
         global_session.expunge_all()
@@ -79,8 +83,12 @@ class TestGlobalEnvironment:
     def test_submitted_but_unmerged_reads_as_in_request(self, global_session):
         env = self._environment(global_session)
         apply_remote_identity(
-            global_session, env, global_models.SyncMetadata,
-            remote_ulid=REMOTE_ULID, remote_url=REMOTE_URL, is_published=False,
+            global_session,
+            env,
+            global_models.SyncMetadata,
+            remote_ulid=REMOTE_ULID,
+            remote_url=REMOTE_URL,
+            is_published=False,
         )
         global_session.commit()
         global_session.expunge_all()
@@ -95,8 +103,12 @@ class TestGlobalEnvironment:
         env = self._environment(global_session)
         for published in (False, True):
             apply_remote_identity(
-                global_session, env, global_models.SyncMetadata,
-                remote_ulid=REMOTE_ULID, remote_url=REMOTE_URL, is_published=published,
+                global_session,
+                env,
+                global_models.SyncMetadata,
+                remote_ulid=REMOTE_ULID,
+                remote_url=REMOTE_URL,
+                is_published=published,
             )
             global_session.commit()
 
@@ -114,12 +126,18 @@ class TestGlobalEnvironment:
     def test_testfunction_file_uses_the_same_row(self, global_session):
         """TestFunctionFile had the identical bug and the identical FK."""
         tf_file = global_models.TestFunctionFile(
-            name='standard', path='/tmp/standard.py', sha256hash='0' * 64,
+            name='standard',
+            path='/tmp/standard.py',
+            sha256hash='0' * 64,
         )
         global_session.add(tf_file)
         apply_remote_identity(
-            global_session, tf_file, global_models.SyncMetadata,
-            remote_ulid='7', remote_url=REMOTE_URL, is_published=True,
+            global_session,
+            tf_file,
+            global_models.SyncMetadata,
+            remote_ulid='7',
+            remote_url=REMOTE_URL,
+            is_published=True,
         )
         global_session.commit()
         global_session.expunge_all()
@@ -142,8 +160,12 @@ class TestProjectExperiment:
     def test_published_identity_survives_a_commit(self, project_session):
         experiment = self._experiment(project_session)
         apply_remote_identity(
-            project_session, experiment, project_models.SyncMetadata,
-            remote_ulid=REMOTE_ULID, remote_url=REMOTE_URL, is_published=True,
+            project_session,
+            experiment,
+            project_models.SyncMetadata,
+            remote_ulid=REMOTE_ULID,
+            remote_url=REMOTE_URL,
+            is_published=True,
         )
         project_session.commit()
         project_session.expunge_all()
@@ -157,7 +179,9 @@ class TestProjectExperiment:
         """The test ULID is a plain column, not a SyncMetadata row: a test has no
         publish state of its own. It still has to persist."""
         test = project_models.AbstractTest(
-            name='file_exists', testfunction_id='tf-1', remote_ulid=REMOTE_ULID,
+            name='file_exists',
+            testfunction_id='tf-1',
+            remote_ulid=REMOTE_ULID,
         )
         project_session.add(test)
         project_session.commit()
@@ -179,9 +203,9 @@ class TestProjectExperiment:
 
 
 class TestBothBasesAgree:
-
     def test_sync_metadata_columns_match_across_bases(self):
         """The project twin must not drift from the global original."""
+
         def columns(cls):
             return {c.name: str(c.type) for c in cls.__table__.columns}
 

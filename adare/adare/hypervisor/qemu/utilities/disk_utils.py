@@ -1,6 +1,7 @@
 """
 Disk Utilities - Standalone functions for disk operations.
 """
+
 import logging
 
 log = logging.getLogger(__name__)
@@ -63,10 +64,7 @@ def try_cow_clone(source: str, dest: str) -> bool:
         return False
 
     if result.returncode != 0 or not os.path.exists(dest):
-        log.debug(
-            f"CoW clone did not produce a file (rc={result.returncode}): "
-            f"{result.stderr.strip()}"
-        )
+        log.debug(f"CoW clone did not produce a file (rc={result.returncode}): {result.stderr.strip()}")
         _remove_partial(dest)
         return False
 
@@ -94,7 +92,9 @@ def _is_standalone_qcow2(path: str) -> bool:
     try:
         result = subprocess.run(
             ['qemu-img', 'info', '--output=json', path],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError) as e:
         log.debug(f"Could not probe clone {path} with qemu-img info: {e}")
@@ -183,18 +183,12 @@ def resolve_boot_mode(guest_os: str, hypervisor_config: dict = None, architectur
 
         # Validate boot_mode value
         if boot_mode not in ('uefi', 'bios', 'auto'):
-            raise ValueError(
-                f"Invalid boot_mode '{boot_mode}' in hypervisor_config. "
-                f"Must be 'uefi', 'bios', or 'auto'"
-            )
+            raise ValueError(f"Invalid boot_mode '{boot_mode}' in hypervisor_config. Must be 'uefi', 'bios', or 'auto'")
 
         # Handle 'auto' - delegate to architecture-aware auto-detection
         if boot_mode == 'auto':
             detected = get_boot_mode_for_os(guest_os, architecture)
-            log.info(
-                f"Boot mode 'auto' specified for {guest_os}, "
-                f"auto-detected: {detected}"
-            )
+            log.info(f"Boot mode 'auto' specified for {guest_os}, auto-detected: {detected}")
             return detected
 
         # Explicit override

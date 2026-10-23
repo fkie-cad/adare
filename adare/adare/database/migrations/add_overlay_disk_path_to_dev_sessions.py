@@ -36,9 +36,7 @@ def upgrade(conn) -> None:
         return
 
     print("Adding column 'overlay_disk_path' to dev_sessions table...")
-    conn.execute(text(
-        "ALTER TABLE dev_sessions ADD COLUMN overlay_disk_path VARCHAR(1024) NULL"
-    ))
+    conn.execute(text("ALTER TABLE dev_sessions ADD COLUMN overlay_disk_path VARCHAR(1024) NULL"))
 
 
 def run_migration() -> bool:
@@ -48,9 +46,8 @@ def run_migration() -> bool:
     print("Running migration: add_overlay_disk_path_to_dev_sessions")
 
     try:
-        with DevModeApi() as api:
-            with api.engine.begin() as conn:
-                upgrade(conn)
+        with DevModeApi() as api, api.engine.begin() as conn:
+            upgrade(conn)
 
         print("✓ Migration completed successfully!")
         print("\nIMPORTANT:")

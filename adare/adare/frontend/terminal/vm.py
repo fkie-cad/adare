@@ -57,7 +57,7 @@ class VMInfoPanel:
                     created_at = snap.get('created_at', 'Unknown')
                     if isinstance(created_at, str) and len(created_at) > 16:
                         created_at = created_at[:16] + "..."
-                    table.add_row(f"  Snapshot {i+1}:", f"{snap['name']} ({created_at})")
+                    table.add_row(f"  Snapshot {i + 1}:", f"{snap['name']} ({created_at})")
 
                 if len(exp_snapshots) > 3:
                     table.add_row("", f"... and {len(exp_snapshots) - 3} more")
@@ -89,58 +89,49 @@ def print_vm_info(vm_id: str):
 
 
 def print_vm_or_instance_info(vm_or_instance_id: str, formatter=None, output_file=None, dual_output=False):
-    """Print detailed information about a VM or instance (auto-detected)."""
-    from adare.database.api.vm import VmApi
+    """Print detailed information about a VM or instance (auto-detected).
+
+    Accepts a base-VM ID or name, or a VM-instance ID or name. Raises
+    ``VMNotFoundError`` (exit 3 at the CLI boundary) when nothing matches.
+    """
+    from adare.backend.vm.resolve import resolve_vm_target
     from adare.frontend.terminal.vm_instances import print_vm_instance_info
 
     # Get formatter if not provided
     if formatter is None:
         from adare.run import get_formatter_from_context
+
         formatter, output_file, dual_output = get_formatter_from_context()
 
-    console = DefaultConsole()
+    target = resolve_vm_target(vm_or_instance_id)
+    if target.kind == 'instance':
+        print_vm_instance_info(target.id, formatter, output_file, dual_output)
+        return
 
-    try:
-        # First, try as base VM
-        vm_info = get_vm_info(vm_or_instance_id)
-        if vm_info:
-            # Check if structured output is needed
-            if dual_output or formatter.format_type.value != 'rich':
-                # Prepare structured data
-                structured_data = {
-                    'type': 'vm',
-                    'name': vm_info['name'],
-                    'id': vm_info['id'],
-                    'description': vm_info.get('description'),
-                    'file': vm_info['file'],
-                    'hash': vm_info['hash'],
-                    'use_snapshots': vm_info.get('use_snapshots', False),
-                    'snapshots': vm_info.get('snapshots', {})
-                }
-                formatter.print_or_save(structured_data, output_file, dual_output)
+    vm_info = get_vm_info(target.id)
+    if vm_info:
+        # Check if structured output is needed
+        if dual_output or formatter.format_type.value != 'rich':
+            structured_data = {
+                'type': 'vm',
+                'name': vm_info['name'],
+                'id': vm_info['id'],
+                'description': vm_info.get('description'),
+                'file': vm_info['file'],
+                'hash': vm_info['hash'],
+                'use_snapshots': bool(vm_info.get('use_snapshots', False)),
+                'snapshots': vm_info.get('snapshots', {}),
+            }
+            formatter.print_or_save(structured_data, output_file, dual_output)
 
-                if not dual_output:
-                    return
-
-            # Printed directly, NOT wrapped in a Layout: a Layout crops its content
-            # to the terminal height and silently drops whatever overflows, so a
-            # short window hid snapshot rows without any indication.
-            console.print(VMInfoPanel(vm_info))
-            return
-
-        # If not found as base VM, try as instance
-        with VmApi() as api:
-            instance = api.get_vm_instance_by_id(vm_or_instance_id)
-            if instance:
-                print_vm_instance_info(vm_or_instance_id, formatter, output_file, dual_output)
+            if not dual_output:
                 return
 
-        # Not found as either
-        console.print(f"[red]VM or instance with ID '{vm_or_instance_id}' not found[/red]")
-
-    except Exception as e:
-        log.error(f"Failed to get VM/instance info: {e}")
-        console.print(f"[red]Error getting VM/instance info: {e}[/red]")
+        # Printed directly, NOT wrapped in a Layout: a Layout crops its content
+        # to the terminal height and silently drops whatever overflows, so a
+        # short window hid snapshot rows without any indication.
+        DefaultConsole().print(VMInfoPanel(vm_info))
+        return
 
 
 def print_vm_instance_snapshots(instance_id: str):
@@ -176,9 +167,7 @@ def print_vm_instance_snapshots(instance_id: str):
         # Add each snapshot
         for snap in snapshots:
             table.add_row(
-                snap.get('name', 'Unknown'),
-                snap.get('uuid', 'Unknown')[:16] + "...",
-                snap.get('description', '')
+                snap.get('name', 'Unknown'), snap.get('uuid', 'Unknown')[:16] + "...", snap.get('description', '')
             )
 
         total = len(snapshots)
@@ -203,6 +192,7 @@ def print_all_snapshots(instance_id_filter: str = None, formatter=None, output_f
     # Get formatter if not provided
     if formatter is None:
         from adare.run import get_formatter_from_context
+
         formatter, output_file, dual_output = get_formatter_from_context()
 
     console = DefaultConsole()
@@ -240,21 +230,23 @@ def print_all_snapshots(instance_id_filter: str = None, formatter=None, output_f
 
                 for snap in snapshots:
                     total_snapshots += 1
-                    structured_snapshots.append({
-                        'instance_name': instance.instance_name,
-                        'instance_id': instance.id,
-                        'vm_name': vm_name,
-                        'snapshot_name': snap.get('name', 'Unknown'),
-                        'snapshot_uuid': snap.get('uuid', 'Unknown'),
-                        'description': snap.get('description', '')
-                    })
+                    structured_snapshots.append(
+                        {
+                            'instance_name': instance.instance_name,
+                            'instance_id': instance.id,
+                            'vm_name': vm_name,
+                            'snapshot_name': snap.get('name', 'Unknown'),
+                            'snapshot_uuid': snap.get('uuid', 'Unknown'),
+                            'description': snap.get('description', ''),
+                        }
+                    )
 
         # Check if structured output is needed
         if dual_output or formatter.format_type.value != 'rich':
             structured_data = {
                 'snapshots': structured_snapshots,
                 'total_snapshots': total_snapshots,
-                'total_instances': len(instances)
+                'total_instances': len(instances),
             }
             formatter.print_or_save(structured_data, output_file, dual_output)
 
@@ -276,7 +268,7 @@ def print_all_snapshots(instance_id_filter: str = None, formatter=None, output_f
                 snap_data['vm_name'][:20],
                 snap_data['snapshot_name'],
                 snap_data['snapshot_uuid'][:16] + "...",
-                snap_data['description'][:50]  # Truncate long descriptions
+                snap_data['description'][:50],  # Truncate long descriptions
             )
 
         title = f"[b gold3]All VM Snapshots ({total_snapshots} total across {len(instances)} instances)[/b gold3]"

@@ -6,7 +6,10 @@ and OS info entries.
 """
 
 import logging
+import os
+import stat
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -15,14 +18,43 @@ from adare.database.models.global_models import OsInfo, Vm
 
 from .exceptions import VMLoadError, VMNameConflictError, VMNotFoundError
 
+if TYPE_CHECKING:
+    from adare.database.api.base import GlobalDatabaseApi as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class VmCrudMixin:
+def _make_read_only(path: Path) -> None:
+    """Drop write permission on a managed disk copy: it is only ever a backing file.
+
+    POSIX only -- there, deleting the file later needs write access to the
+    directory, not the file. On Windows a read-only file cannot be deleted, so
+    managed disks stay writable there.
+    """
+    if os.name != 'posix':
+        return
+    try:
+        mode = path.stat().st_mode
+        path.chmod(mode & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+    except OSError as e:
+        log.warning(f"Could not make managed disk read-only {path}: {e}")
+
+
+class VmCrudMixin(_Host):
     """Mixin providing core VM CRUD operations."""
 
-    def create_osinfo(self, platform: str = '', os: str = '', distribution: str = '',
-                     version: str = '', language: str = '', architecture: str = 'x86_64') -> OsInfo:
+    def create_osinfo(
+        self,
+        platform: str = '',
+        os: str = '',
+        distribution: str = '',
+        version: str = '',
+        language: str = '',
+        architecture: str = 'x86_64',
+    ) -> OsInfo:
         """
         Create a new OSInfo entry in the database.
 
@@ -47,7 +79,7 @@ class VmCrudMixin:
             distribution=distribution,
             version=version,
             language=language,
-            architecture=architecture
+            architecture=architecture,
         )
 
         with self:
@@ -60,12 +92,28 @@ class VmCrudMixin:
             return osinfo
         # Context manager commits on successful exit
 
-    def create_vm(self, project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '',
-                  os_platform: str = '', os_type: str = '', os_distribution: str = '',
-                  os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
-                  silent: bool = False, no_copy: bool = False, hypervisor: str = 'virtualbox',
-                  force: bool = False, build_source: str = 'baked', recipe_hash: str | None = None,
-                  iso_sha256: str | None = None, profile_name: str | None = None) -> Vm:
+    def create_vm(
+        self,
+        project_path: Path,
+        name: str,
+        file_path: Path,
+        file_hash: str,
+        description: str = '',
+        os_platform: str = '',
+        os_type: str = '',
+        os_distribution: str = '',
+        os_version: str = '',
+        os_language: str = '',
+        os_architecture: str = 'x86_64',
+        silent: bool = False,
+        no_copy: bool = False,
+        hypervisor: str = 'virtualbox',
+        force: bool = False,
+        build_source: str = 'baked',
+        recipe_hash: str | None = None,
+        iso_sha256: str | None = None,
+        profile_name: str | None = None,
+    ) -> Vm:
         """
         Create a new VM entry in the database with file operations.
 
@@ -106,10 +154,19 @@ class VmCrudMixin:
             if force:
                 log.info(f"VM '{name}' exists with matching hash - updating metadata due to --force")
                 return self._update_vm_metadata(
-                    existing_vm_by_name.id, description, os_platform, os_type,
-                    os_distribution, os_version, os_language, os_architecture, hypervisor,
-                    build_source=build_source, recipe_hash=recipe_hash,
-                    iso_sha256=iso_sha256, profile_name=profile_name,
+                    existing_vm_by_name.id,
+                    description,
+                    os_platform,
+                    os_type,
+                    os_distribution,
+                    os_version,
+                    os_language,
+                    os_architecture,
+                    hypervisor,
+                    build_source=build_source,
+                    recipe_hash=recipe_hash,
+                    iso_sha256=iso_sha256,
+                    profile_name=profile_name,
                 )
             log.info(f"VM '{name}' already exists with matching hash - returning existing VM")
             return existing_vm_by_name
@@ -119,11 +176,25 @@ class VmCrudMixin:
             if force:
                 log.info(f"VM '{name}' exists with different hash - updating to new version due to --force")
                 return self._update_vm_file_and_metadata(
-                    existing_vm_by_name.id, existing_vm_by_name.name, file_path, file_hash,
-                    description, os_platform, os_type, os_distribution, os_version,
-                    os_language, os_architecture, no_copy, silent, hypervisor, project_path,
-                    build_source=build_source, recipe_hash=recipe_hash,
-                    iso_sha256=iso_sha256, profile_name=profile_name,
+                    existing_vm_by_name.id,
+                    existing_vm_by_name.name,
+                    file_path,
+                    file_hash,
+                    description,
+                    os_platform,
+                    os_type,
+                    os_distribution,
+                    os_version,
+                    os_language,
+                    os_architecture,
+                    no_copy,
+                    silent,
+                    hypervisor,
+                    project_path,
+                    build_source=build_source,
+                    recipe_hash=recipe_hash,
+                    iso_sha256=iso_sha256,
+                    profile_name=profile_name,
                 )
             raise VMNameConflictError(
                 log,
@@ -133,8 +204,8 @@ class VmCrudMixin:
                 possible_solutions=[
                     "Use --force flag to update the existing VM to the new version",
                     "Use a different VM name",
-                    "Delete the existing VM first"
-                ]
+                    "Delete the existing VM first",
+                ],
             )
 
         # Scenario 3: Hash matches but name differs (hash-based deduplication)
@@ -153,6 +224,7 @@ class VmCrudMixin:
         else:
             # Copy VM file to storage location
             target_file_path = self._copy_vm_file(file_path, project_path, name, silent=silent)
+            _make_read_only(target_file_path)
 
         # Create both OsInfo and VM in same transaction to prevent orphaned records
         try:
@@ -164,7 +236,7 @@ class VmCrudMixin:
                     distribution=os_distribution,
                     version=os_version,
                     language=os_language,
-                    architecture=os_architecture
+                    architecture=os_architecture,
                 )
                 self._session.add(osinfo)
                 self._session.flush()  # Get ID without committing
@@ -206,6 +278,7 @@ class VmCrudMixin:
             VM instance or None if not found
         """
         from sqlalchemy.orm import joinedload
+
         with self:
             vm = self._session.query(Vm).options(joinedload(Vm.osinfo)).filter_by(name=name).first()
             if vm:
@@ -223,6 +296,7 @@ class VmCrudMixin:
             VM instance if found, None otherwise
         """
         from sqlalchemy.orm import joinedload
+
         with self:
             vm = self._session.query(Vm).options(joinedload(Vm.osinfo)).filter_by(hash=file_hash).first()
             if vm:
@@ -245,13 +319,9 @@ class VmCrudMixin:
         if not recipe_hash:
             return None
         from sqlalchemy.orm import joinedload
+
         with self:
-            vm = (
-                self._session.query(Vm)
-                .options(joinedload(Vm.osinfo))
-                .filter_by(recipe_hash=recipe_hash)
-                .first()
-            )
+            vm = self._session.query(Vm).options(joinedload(Vm.osinfo)).filter_by(recipe_hash=recipe_hash).first()
             if vm:
                 self._session.expunge(vm)
             return vm
@@ -259,6 +329,7 @@ class VmCrudMixin:
     def get_vm_by_id(self, vm_id: str) -> Vm | None:
         """Get VM by database ID."""
         from sqlalchemy.orm import joinedload
+
         with self:
             vm = self._session.query(Vm).options(joinedload(Vm.osinfo)).filter(Vm.id == vm_id).first()
             if vm:
@@ -298,6 +369,7 @@ class VmCrudMixin:
         """
         with self:
             from sqlalchemy.orm import joinedload
+
             vms = self._session.query(Vm).options(joinedload(Vm.osinfo)).all()
             # Expunge objects from session to make them detached
             for vm in vms:
@@ -334,6 +406,7 @@ class VmCrudMixin:
         """
         with self:
             from sqlalchemy.orm import joinedload
+
             vms = self._session.query(Vm).options(joinedload(Vm.osinfo)).all()
             # Expunge objects from session to make them detached
             for vm in vms:
@@ -392,12 +465,22 @@ class VmCrudMixin:
 
         return suggestions
 
-    def _update_vm_metadata(self, vm_id: str, description: str = '', os_platform: str = '',
-                           os_type: str = '', os_distribution: str = '', os_version: str = '',
-                           os_language: str = '', os_architecture: str = 'x86_64',
-                           hypervisor: str = 'virtualbox', build_source: str = 'baked',
-                           recipe_hash: str | None = None, iso_sha256: str | None = None,
-                           profile_name: str | None = None) -> Vm:
+    def _update_vm_metadata(
+        self,
+        vm_id: str,
+        description: str = '',
+        os_platform: str = '',
+        os_type: str = '',
+        os_distribution: str = '',
+        os_version: str = '',
+        os_language: str = '',
+        os_architecture: str = 'x86_64',
+        hypervisor: str = 'virtualbox',
+        build_source: str = 'baked',
+        recipe_hash: str | None = None,
+        iso_sha256: str | None = None,
+        profile_name: str | None = None,
+    ) -> Vm:
         """
         Update VM metadata without changing file or hash.
 
@@ -452,7 +535,7 @@ class VmCrudMixin:
                     distribution=os_distribution,
                     version=os_version,
                     language=os_language,
-                    architecture=os_architecture
+                    architecture=os_architecture,
                 )
                 self._session.add(osinfo)
                 self._session.flush()  # Get osinfo.id without committing
@@ -464,14 +547,28 @@ class VmCrudMixin:
         # Re-fetch and return detached object
         return self.get_vm_by_id(vm_id)
 
-    def _update_vm_file_and_metadata(self, vm_id: str, vm_name: str, file_path: Path, file_hash: str,
-                                     description: str = '', os_platform: str = '', os_type: str = '',
-                                     os_distribution: str = '', os_version: str = '', os_language: str = '',
-                                     os_architecture: str = 'x86_64', no_copy: bool = False,
-                                     silent: bool = False, hypervisor: str = 'virtualbox',
-                                     project_path: Path = None, build_source: str = 'baked',
-                                     recipe_hash: str | None = None, iso_sha256: str | None = None,
-                                     profile_name: str | None = None) -> Vm:
+    def _update_vm_file_and_metadata(
+        self,
+        vm_id: str,
+        vm_name: str,
+        file_path: Path,
+        file_hash: str,
+        description: str = '',
+        os_platform: str = '',
+        os_type: str = '',
+        os_distribution: str = '',
+        os_version: str = '',
+        os_language: str = '',
+        os_architecture: str = 'x86_64',
+        no_copy: bool = False,
+        silent: bool = False,
+        hypervisor: str = 'virtualbox',
+        project_path: Path = None,
+        build_source: str = 'baked',
+        recipe_hash: str | None = None,
+        iso_sha256: str | None = None,
+        profile_name: str | None = None,
+    ) -> Vm:
         """
         Update VM to point to new file with new hash, preserving VM ID and relationships.
         CRITICAL: We update the existing VM record rather than delete/recreate to preserve FK relationships.
@@ -549,7 +646,7 @@ class VmCrudMixin:
                     distribution=os_distribution,
                     version=os_version,
                     language=os_language,
-                    architecture=os_architecture
+                    architecture=os_architecture,
                 )
                 self._session.add(osinfo)
                 self._session.flush()  # Get osinfo.id without committing

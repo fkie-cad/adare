@@ -48,25 +48,18 @@ def exec_dev_action(arguments):
         content = ''
     else:
         print_error_message(
-            title='No action source specified',
-            next_steps=[
-                'Specify action with: -f <file>, -y <yaml>, or --stdin'
-            ]
+            title='No action source specified', next_steps=['Specify action with: -f <file>, -y <yaml>, or --stdin']
         )
         exit(1)
 
     api = AdareAPI()
-    result = api.devmode.execute_action(DevActionExecuteRequest(
-        session_id=session_id,
-        action_source=source,
-        action_content=content
-    ))
+    result = api.devmode.execute_action(
+        DevActionExecuteRequest(session_id=session_id, action_source=source, action_content=content)
+    )
 
     if result.success:
         action_result = result.data
-        print_success_message(
-            title='Action executed successfully'
-        )
+        print_success_message(title='Action executed successfully')
         print(f"\nSuccess: {action_result.success}")
         print(f"Message: {action_result.message}")
         print(f"Execution Time: {action_result.execution_time:.2f}s")
@@ -125,9 +118,7 @@ def parse_indices_with_bounds(indices_str: str, total_actions: int) -> list[int]
     # Validate all indices are in bounds
     for idx in indices:
         if idx < 1 or idx > total_actions:
-            raise ValueError(
-                f"Index {idx} out of bounds (playbook has {total_actions} actions)"
-            )
+            raise ValueError(f"Index {idx} out of bounds (playbook has {total_actions} actions)")
 
     return sorted(list(indices))
 
@@ -144,11 +135,7 @@ def _parse_indices(indices_str: str | None, total_actions: int) -> list[int] | N
         return parse_indices_with_bounds(indices_str, total_actions)
     except ValueError as e:
         print_error_message(
-            title="Invalid indices format",
-            next_steps=[
-                str(e),
-                "Use format like '1-3', 'S-5', '7,23-E', or 'S-E'"
-            ]
+            title="Invalid indices format", next_steps=[str(e), "Use format like '1-3', 'S-5', '7,23-E', or 'S-E'"]
         )
         exit(1)
 
@@ -174,10 +161,7 @@ def exec_dev_playbook(arguments):
         content = ''
     else:
         print_error_message(
-            title='No playbook source specified',
-            next_steps=[
-                'Specify playbook with: -f <file>, -u <url>, or --stdin'
-            ]
+            title='No playbook source specified', next_steps=['Specify playbook with: -f <file>, -u <url>, or --stdin']
         )
         exit(1)
 
@@ -200,14 +184,16 @@ def exec_dev_playbook(arguments):
     try:
         # Execute playbook with console_ulid
         api = AdareAPI()
-        result = api.devmode.execute_playbook(DevPlaybookExecuteRequest(
-            session_id=session_id,
-            playbook_source=source,
-            playbook_content=content,
-            console_ulid=console_ulid,
-            restore_initial=arguments.restore,
-            indices=indices
-        ))
+        result = api.devmode.execute_playbook(
+            DevPlaybookExecuteRequest(
+                session_id=session_id,
+                playbook_source=source,
+                playbook_content=content,
+                console_ulid=console_ulid,
+                restore_initial=arguments.restore,
+                indices=indices,
+            )
+        )
 
         # Log completion and summary to flow console BEFORE stopping
         if result.success:
@@ -221,10 +207,12 @@ def exec_dev_playbook(arguments):
                 successful_actions=playbook_result.successful_actions,
                 failed_actions=playbook_result.failed_actions,
                 total_tests=playbook_result.test_stats.get('total_tests', 0) if playbook_result.test_stats else 0,
-                successful_tests=playbook_result.test_stats.get('successful_tests', 0) if playbook_result.test_stats else 0,
+                successful_tests=playbook_result.test_stats.get('successful_tests', 0)
+                if playbook_result.test_stats
+                else 0,
                 failed_tests=playbook_result.test_stats.get('failed_tests', 0) if playbook_result.test_stats else 0,
                 duration=playbook_result.execution_time,
-                was_interrupted=False
+                was_interrupted=False,
             )
 
             # Give flow console time to render summary
@@ -239,8 +227,7 @@ def exec_dev_playbook(arguments):
         # Show error message if failed
         if result.success and not result.data.success:
             print_error_message(
-                title='Playbook execution completed with errors',
-                next_steps=['Check the summary above for details']
+                title='Playbook execution completed with errors', next_steps=['Check the summary above for details']
             )
         elif not result.success:
             handle_api_error(result)
@@ -274,19 +261,17 @@ def exec_dev_cv_start(arguments):
         debug_output_dir = Path(arguments.debug_output)
 
     api = AdareAPI()
-    result = api.devmode.restart_cv_server(DevCVRestartRequest(
-        session_id=session_id,
-        debug=debug,
-        debug_output_dir=debug_output_dir
-    ))
+    result = api.devmode.restart_cv_server(
+        DevCVRestartRequest(session_id=session_id, debug=debug, debug_output_dir=debug_output_dir)
+    )
 
     if result.success:
         print_success_message(
             title=f'CV Server started/restarted for session {session_id}',
             next_steps=[
                 f'Debug logging: {"Enabled" if debug else "Disabled" if debug is False else "Unchanged"}',
-                f'Debug output directory: {debug_output_dir if debug_output_dir else "Unchanged/Default"}'
-            ]
+                f'Debug output directory: {debug_output_dir if debug_output_dir else "Unchanged/Default"}',
+            ],
         )
     else:
         handle_api_error(result)
@@ -298,14 +283,10 @@ def exec_dev_cv_stop(arguments):
     session_id = _resolve_session_id(arguments.session_id)
 
     api = AdareAPI()
-    result = api.devmode.stop_cv_server(DevCVStopRequest(
-        session_id=session_id
-    ))
+    result = api.devmode.stop_cv_server(DevCVStopRequest(session_id=session_id))
 
     if result.success:
-        print_success_message(
-            title=f'CV Server stopped for session {session_id}'
-        )
+        print_success_message(title=f'CV Server stopped for session {session_id}')
     else:
         handle_api_error(result)
 
@@ -325,18 +306,20 @@ def exec_dev_playbook_batch(arguments):
     ExperimentFlowConsole(
         run_ulid=console_ulid,
         total_action_count=0,  # Will be updated during execution
-        show_substages=True
+        show_substages=True,
     )
 
     # Execute batch
     api = AdareAPI()
-    result = api.devmode.execute_playbook_batch(DevPlaybookBatchExecuteRequest(
-        session_id=session_id,
-        playbook_patterns=list(arguments.playbook_patterns),
-        checkpoint_name=arguments.checkpoint_name,
-        timeout=arguments.timeout,
-        console_ulid=console_ulid
-    ))
+    result = api.devmode.execute_playbook_batch(
+        DevPlaybookBatchExecuteRequest(
+            session_id=session_id,
+            playbook_patterns=list(arguments.playbook_patterns),
+            checkpoint_name=arguments.checkpoint_name,
+            timeout=arguments.timeout,
+            console_ulid=console_ulid,
+        )
+    )
 
     # Print summary
     if result.success:
@@ -359,17 +342,15 @@ def exec_dev_update_testfunctions(arguments):
 
     from adare.core.dto.devmode import DevUpdateTestfunctionsRequest
 
-    result = api.devmode.update_testfunctions(DevUpdateTestfunctionsRequest(
-        session_id=session_id
-    ))
+    result = api.devmode.update_testfunctions(DevUpdateTestfunctionsRequest(session_id=session_id))
 
     if result.success:
         print_success_message(
             title="Test functions updated successfully",
             next_steps=[
                 f"Execution time: {result.data.execution_time:.2f}s",
-                "You can now run tests with the updated code"
-            ]
+                "You can now run tests with the updated code",
+            ],
         )
     else:
         handle_api_error(result)

@@ -4,6 +4,7 @@ Abstract VM class for hypervisor implementations.
 All hypervisor implementations must provide a VM class that implements
 these operations for consistent VM management across different hypervisors.
 """
+
 import logging
 import threading
 from abc import ABC, abstractmethod
@@ -28,7 +29,7 @@ class AbstractVM(ABC):
         manager,  # AbstractHypervisorManager
         username: str,
         password: str,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize VM instance.
@@ -55,7 +56,7 @@ class AbstractVM(ABC):
         ctx_manager=None,
         stop_event: threading.Event | None = None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ):
         """
         Create a new VM with the specified configuration.
@@ -78,7 +79,7 @@ class AbstractVM(ABC):
         raise_if_running: bool = False,
         stop_event: threading.Event | None = None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ):
         """
         Start the VM.
@@ -99,13 +100,7 @@ class AbstractVM(ABC):
         pass
 
     @abstractmethod
-    async def stop(
-        self,
-        ctx_manager=None,
-        log_file: Path | None = None,
-        silent: bool = False,
-        force: bool = False
-    ):
+    async def stop(self, ctx_manager=None, log_file: Path | None = None, silent: bool = False, force: bool = False):
         """
         Stop the VM.
 
@@ -125,7 +120,7 @@ class AbstractVM(ABC):
         ctx_manager=None,
         stop_event: threading.Event | None = None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ):
         """
         Destroy the VM completely (unregister and delete).
@@ -176,7 +171,7 @@ class AbstractVM(ABC):
         silent: bool = False,
         stop_event: threading.Event | None = None,
         cwd: str | None = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Run a command inside the VM guest.
@@ -195,12 +190,7 @@ class AbstractVM(ABC):
         pass
 
     @abstractmethod
-    async def copy_from_guest(
-        self,
-        guest_path: str,
-        host_path: str,
-        recursive: bool = True
-    ) -> bool:
+    async def copy_from_guest(self, guest_path: str, host_path: str, recursive: bool = True) -> bool:
         """
         Copy files/directories from guest to host.
 
@@ -224,7 +214,7 @@ class AbstractVM(ABC):
         ctx_manager=None,
         stop_event: threading.Event | None = None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ):
         """
         Create VM by importing from OVF or OVA file.
@@ -252,7 +242,7 @@ class AbstractVM(ABC):
         ctx_manager=None,
         stop_event: threading.Event | None = None,
         log_file: Path | None = None,
-        silent: bool = False
+        silent: bool = False,
     ):
         """
         Set video mode hint for the VM (OPTIONAL feature).
@@ -274,18 +264,14 @@ class AbstractVM(ABC):
             UnsupportedFeatureException: If hypervisor doesn't support video mode hints
         """
         from adare.hypervisor.exceptions import UnsupportedFeatureException
-        raise UnsupportedFeatureException(
-            f"{self.__class__.__name__} does not support video mode hints"
-        )
+
+        raise UnsupportedFeatureException(f"{self.__class__.__name__} does not support video mode hints")
 
     # ==================== Utility Methods ====================
 
     @abstractmethod
     async def wait_until_fully_booted(
-        self,
-        timeout: int = 300,
-        ctx_manager=None,
-        stop_event: threading.Event | None = None
+        self, timeout: int = 300, ctx_manager=None, stop_event: threading.Event | None = None
     ):
         """
         Wait until VM is fully booted and accessible.
@@ -318,7 +304,7 @@ class AbstractVM(ABC):
         stop_event: threading.Event | None = None,
         log_file: Path | None = None,
         silent: bool = False,
-        **kwargs
+        **kwargs,
     ):
         """
         Execute all queued commands in a single batch.

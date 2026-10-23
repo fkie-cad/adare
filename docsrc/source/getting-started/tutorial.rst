@@ -267,13 +267,13 @@ Check the experiment results:
 .. code-block:: bash
 
    # Show details of most recent run
-   adare run info
+   adare runs info
 
    # List runs
-   adare run list
+   adare runs list
 
    # View detailed results of a specific run (replace ULID with actual run ID)
-   adare run info 01ARZ3NDEKTSV4RRFFQ69G5FAV
+   adare runs info 01ARZ3NDEKTSV4RRFFQ69G5FAV
 
 
 What Just Happened?

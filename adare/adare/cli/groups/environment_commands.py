@@ -10,6 +10,8 @@ from types import SimpleNamespace
 
 import click
 
+from adare.cli.output import output_options
+
 
 def register(cli, AliasedGroup, exec_with_error_printing):
     """Register environment management commands with the CLI."""
@@ -24,15 +26,37 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @env.command()
     @click.argument('environment', type=click.Path(exists=False))
-    @click.option('--project', '-p', help='Name of the project')
-    @click.option('--force', '-f', is_flag=True, help='Force update of the environment. For a recipe environment this rebuilds BOTH the base disk and the provisioning stage.')
-    @click.option('--no-copy', is_flag=True, help='Keep VM file at original location instead of copying to managed storage (local files only). WARNING: Do not move or delete the original file!')
-    @click.option('--iso', type=click.Path(exists=True), help='[recipe] Path to the installer ISO, or a directory to search for it. Use this to supply the ISO for a consumer-supplied ("BYO") recipe that declares iso_name.')
-    @click.option('--reprovision', is_flag=True, help='[recipe] Reuse the cached base disk but re-run build-time provisioning from scratch. The retry path after a failed provisioning step — minutes instead of a full OS reinstall.')
-    @click.option('--allow-emulation', is_flag=True, help='[recipe] Allow QEMU TCG software emulation when the recipe profile\'s guest architecture does not match the host CPU (slow).')
+    @click.option('--project', '-p', hidden=True, help='Ignored: environments are global.')
+    @click.option(
+        '--force',
+        '-f',
+        is_flag=True,
+        help='Load a changed file as a new version of an existing environment (the old version and its runs are kept). For a recipe environment this also rebuilds BOTH the base disk and the provisioning stage.',
+    )
+    @click.option(
+        '--no-copy',
+        is_flag=True,
+        help='Keep VM file at original location instead of copying to managed storage (local files only). WARNING: Do not move or delete the original file!',
+    )
+    @click.option(
+        '--iso',
+        type=click.Path(exists=True),
+        help='[recipe] Path to the installer ISO, or a directory to search for it. Use this to supply the ISO for a consumer-supplied ("BYO") recipe that declares iso_name.',
+    )
+    @click.option(
+        '--reprovision',
+        is_flag=True,
+        help='[recipe] Reuse the cached base disk but re-run build-time provisioning from scratch. The retry path after a failed provisioning step — minutes instead of a full OS reinstall.',
+    )
+    @click.option(
+        '--allow-emulation',
+        is_flag=True,
+        help='[recipe] Allow QEMU TCG software emulation when the recipe profile\'s guest architecture does not match the host CPU (slow).',
+    )
     def load(environment, project, force, no_copy, iso, reprovision, allow_emulation):
         """Load an environment.
 
+        \b
         ENVIRONMENT can be:
         - Simple name: ubuntu24
         - Relative path: environments/ubuntu24.yml
@@ -47,36 +71,70 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         in ~/.adare/isos/, point $ADARE_ISO_DIR at its directory, or pass --iso.
         """
         from adare.cli.environment import exec_environment_load
+
         args = SimpleNamespace(
-            environment=environment, project=project, force=force, no_copy=no_copy,
-            iso=iso, reprovision=reprovision, allow_emulation=allow_emulation,
+            environment=environment,
+            project=project,
+            force=force,
+            no_copy=no_copy,
+            iso=iso,
+            reprovision=reprovision,
+            allow_emulation=allow_emulation,
         )
         exec_with_error_printing(exec_environment_load, args)
 
     @env.command()
     @click.argument('name', type=click.Path(exists=False))
-    @click.option('--project', '-p', help='Name of the project')
-    @click.option('--with-vm', type=click.Path(exists=True), help='VM file path (OVA) to load automatically during environment creation')
+    @click.option('--project', '-p', hidden=True, help='Ignored: environments are global.')
+    @click.option(
+        '--with-vm',
+        type=click.Path(exists=True),
+        help='Disk image to reference in the new environment file (registered by `adare env load`)',
+    )
     def create(name, project, with_vm):
         """Create an environment.
 
+        \b
         NAME can be:
         - Simple name: ubuntu24
         - Relative path: environments/ubuntu24
         """
         from adare.cli.environment import exec_environment_create
+
         args = SimpleNamespace(name=name, project=project, with_vm=with_vm)
         exec_with_error_printing(exec_environment_create, args)
 
     @env.command(name='publish-prepare')
     @click.argument('name')
-    @click.option('--vm-url', required=True, help='Published http(s) URL where the disk image is hosted (any host, incl. owncloud/Nextcloud share links)')
-    @click.option('--vm-format', type=click.Choice(['qcow2', 'ova', 'vmdk', 'vdi', 'img', 'raw']), help='Disk format hint (inferred from the local disk extension when omitted; required if neither the local disk nor the URL names a recognized format)')
-    @click.option('--verify-url', is_flag=True, help='Download the hosted URL and confirm its bytes hash-match the published disk (catches a wrong/HTML share link or a changed upload)')
-    @click.option('--compress', is_flag=True, help='qcow2 only: zstd-compress the disk into a "<name>-published.qcow2" sibling file before hashing, and publish that instead (transparent to readers, typically ~30-50% smaller; upload the compressed file, not the original)')
-    @click.option('--source-profile', help='Optional provenance: the OS profile this disk was built from. Informational only -- not validated, not used to rebuild the disk.')
-    @click.option('--source-iso-sha256', help='Optional provenance: sha256 of the installer ISO this disk was built from, if still known. Informational only.')
-    @click.option('--project', '-p', help='Name of the project')
+    @click.option(
+        '--vm-url',
+        required=True,
+        help='Published http(s) URL where the disk image is hosted (any host, incl. owncloud/Nextcloud share links)',
+    )
+    @click.option(
+        '--vm-format',
+        type=click.Choice(['qcow2', 'ova', 'vmdk', 'vdi', 'img', 'raw']),
+        help='Disk format hint (inferred from the local disk extension when omitted; required if neither the local disk nor the URL names a recognized format)',
+    )
+    @click.option(
+        '--verify-url',
+        is_flag=True,
+        help='Download the hosted URL and confirm its bytes hash-match the published disk (catches a wrong/HTML share link or a changed upload)',
+    )
+    @click.option(
+        '--compress',
+        is_flag=True,
+        help='qcow2 only: zstd-compress the disk into a "<name>-published.qcow2" sibling file before hashing, and publish that instead (transparent to readers, typically ~30-50% smaller; upload the compressed file, not the original)',
+    )
+    @click.option(
+        '--source-profile',
+        help='Optional provenance: the OS profile this disk was built from. Informational only -- not validated, not used to rebuild the disk.',
+    )
+    @click.option(
+        '--source-iso-sha256',
+        help='Optional provenance: sha256 of the installer ISO this disk was built from, if still known. Informational only.',
+    )
+    @click.option('--project', '-p', hidden=True, help='Ignored: environments are global.')
     def publish_prepare(name, vm_url, vm_format, verify_url, compress, source_profile, source_iso_sha256, project):
         """Prepare a local baked environment for sharing (local disk -> URL + sha256).
 
@@ -93,18 +151,29 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         environments directory).
         """
         from adare.cli.environment import exec_environment_publish_prepare
+
         args = SimpleNamespace(
-            name=name, vm_url=vm_url, vm_format=vm_format,
-            verify_url=verify_url, compress=compress, project=project,
-            source_profile=source_profile, source_iso_sha256=source_iso_sha256,
+            name=name,
+            vm_url=vm_url,
+            vm_format=vm_format,
+            verify_url=verify_url,
+            compress=compress,
+            project=project,
+            source_profile=source_profile,
+            source_iso_sha256=source_iso_sha256,
         )
         exec_with_error_printing(exec_environment_publish_prepare, args)
 
     @env.command(name='recipe-byo')
     @click.argument('name')
-    @click.option('--iso-name', help='Bare ISO filename the consumer must supply (defaults to the basename of the current "iso" path)')
-    @click.option('--iso-notes', help='Plain-text download pointer for the consumer (defaults to the OS profile\'s iso_notes)')
-    @click.option('--project', '-p', help='Name of the project')
+    @click.option(
+        '--iso-name',
+        help='Bare ISO filename the consumer must supply (defaults to the basename of the current "iso" path)',
+    )
+    @click.option(
+        '--iso-notes', help='Plain-text download pointer for the consumer (defaults to the OS profile\'s iso_notes)'
+    )
+    @click.option('--project', '-p', hidden=True, help='Ignored: environments are global.')
     def recipe_byo(name, iso_name, iso_notes, project):
         """Convert a recipe environment's local ISO path into a consumer-supplied ISO.
 
@@ -120,8 +189,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         build input, so an already-built disk stays a cache hit.
         """
         from adare.cli.environment import exec_environment_recipe_byo
+
         args = SimpleNamespace(
-            name=name, iso_name=iso_name, iso_notes=iso_notes, project=project,
+            name=name,
+            iso_name=iso_name,
+            iso_notes=iso_notes,
+            project=project,
         )
         exec_with_error_printing(exec_environment_recipe_byo, args)
 
@@ -132,20 +205,55 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--from-file', type=click.Path(exists=True), help='YAML file with post-setup installations to add')
     @click.option('--shell', is_flag=True, help='Run --install commands through a shell')
     @click.option('--cwd', help='Working directory for --install commands')
-    @click.option('--interactive', '--manual', 'interactive', is_flag=True, help='Boot the base in a GUI window for manual, GUI-only customization (QEMU only)')
-    @click.option('--console', is_flag=True, help='[interactive mode] Also open a terminal REPL that records typed commands as installs (requires --interactive)')
+    @click.option(
+        '--interactive',
+        '--manual',
+        'interactive',
+        is_flag=True,
+        help='Boot the base in a GUI window for manual, GUI-only customization (QEMU only)',
+    )
+    @click.option(
+        '--console',
+        is_flag=True,
+        help='[interactive mode] Also open a terminal REPL that records typed commands as installs (requires --interactive)',
+    )
     @click.option('--ram', type=int, help='[interactive mode] RAM in MB for the boot window')
     @click.option('--cpus', type=int, help='[interactive mode] CPU count for the boot window')
     @click.option('--disk-name', help='[interactive mode] Name for the new flattened disk (defaults to --name)')
-    @click.option('--compress/--no-compress', 'compress', default=True, help='[interactive mode] Zstd-compress the flattened disk. Default: on.')
-    @click.option('--allow-emulation', is_flag=True, help='[interactive mode] Allow QEMU TCG software emulation when the base disk\'s guest architecture does not match the host CPU (slow).')
+    @click.option(
+        '--compress/--no-compress',
+        'compress',
+        default=True,
+        help='[interactive mode] Zstd-compress the flattened disk. Default: on.',
+    )
+    @click.option(
+        '--allow-emulation',
+        is_flag=True,
+        help='[interactive mode] Allow QEMU TCG software emulation when the base disk\'s guest architecture does not match the host CPU (slow).',
+    )
     @click.option('--description', '-d', help='Description for the new environment')
     @click.option('--tag', '-t', multiple=True, help='Tag to attach to the new environment (repeatable)')
     @click.option('--force', '-f', is_flag=True, help='Force overwrite if the new name already exists')
-    @click.option('--project', '-p', help='Name of the project')
-    def extend(source, name, install, from_file, shell, cwd, interactive, console,
-               ram, cpus, disk_name, compress, allow_emulation, description, tag,
-               force, project):
+    @click.option('--project', '-p', hidden=True, help='Ignored: environments are global.')
+    def extend(
+        source,
+        name,
+        install,
+        from_file,
+        shell,
+        cwd,
+        interactive,
+        console,
+        ram,
+        cpus,
+        disk_name,
+        compress,
+        allow_emulation,
+        description,
+        tag,
+        force,
+        project,
+    ):
         """Extend an environment (or VM) into a new environment that reuses the same base disk.
 
         SOURCE can be an environment name, environment ULID, or VM name.
@@ -164,12 +272,25 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         NEW base VM + environment. May be combined with --install.
         """
         from adare.cli.environment_extend import exec_environment_extend
+
         args = SimpleNamespace(
-            source=source, name=name, install=install, from_file=from_file,
-            shell=shell, cwd=cwd, interactive=interactive, console=console,
-            ram=ram, cpus=cpus, disk_name=disk_name, compress=compress,
-            allow_emulation=allow_emulation, description=description, tag=tag,
-            force=force, project=project,
+            source=source,
+            name=name,
+            install=install,
+            from_file=from_file,
+            shell=shell,
+            cwd=cwd,
+            interactive=interactive,
+            console=console,
+            ram=ram,
+            cpus=cpus,
+            disk_name=disk_name,
+            compress=compress,
+            allow_emulation=allow_emulation,
+            description=description,
+            tag=tag,
+            force=force,
+            project=project,
         )
         exec_with_error_printing(exec_environment_extend, args)
 
@@ -182,38 +303,47 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         Idempotently registers the verify_vm example experiment, attaches the
         environment, and runs it in the foreground with live progress."""
         from adare.cli.environment import exec_environment_verify
+
         args = SimpleNamespace(name=name, project=project)
         exec_with_error_printing(exec_environment_verify, args)
 
     @env.command()
     @click.argument('identifier')
-    @click.option('--force', '-f', is_flag=True, help='Force deletion of the environment and any orphaned experiments')
+    @click.option(
+        '--force', '-f', is_flag=True, help='Also delete the runs that used the environment and detach its experiments'
+    )
     def remove(identifier, force):
-        """Remove an environment.
+        """Remove an environment, including all of its versions.
 
+        \b
         IDENTIFIER can be:
         - Environment name: ubuntu24
         - Environment ULID: 01K72Q25GDNHWMEZB97N9RDPG0
 
-        WARNING: If this environment is the only one used by experiments,
-        those experiments will become orphaned and be removed when using --force.
-        Without --force, removal will fail to prevent data loss."""
+        Without --force, removal fails while any version has experiment runs or
+        is the only environment of an experiment. With --force those runs are
+        deleted and the experiments are kept, without this environment."""
         from adare.cli.environment import exec_environment_delete
+
         args = SimpleNamespace(identifier=identifier, force=force)
         exec_with_error_printing(exec_environment_delete, args)
 
     @env.command(name='list')
+    @output_options
     def list_environments():
-        """List all environments in a project."""
+        """List all environments (current versions; environments are global)."""
         from adare.cli.show import exec_show_environments
+
         args = SimpleNamespace()
         exec_with_error_printing(exec_show_environments, args)
 
     @env.command()
+    @output_options
     @click.argument('environment_name')
     def info(environment_name):
         """Show detailed information about a specific environment."""
         from adare.cli.show import exec_show_environment
+
         args = SimpleNamespace(
             environment_name=environment_name,
         )

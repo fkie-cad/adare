@@ -111,7 +111,9 @@ class WindowsVMCreator(BaseVMCreator):
             tmpdir_path = Path(tmpdir)
 
             # Create Autounattend media (floppy for x86_64, ISO for aarch64)
-            media_path = _create_autounattend_media(self.os_def, tmpdir_path, setup_level=self.setup_level, virtio_iso_path=self._virtio_iso_path)
+            media_path = _create_autounattend_media(
+                self.os_def, tmpdir_path, setup_level=self.setup_level, virtio_iso_path=self._virtio_iso_path
+            )
 
             # aarch64: build the legacy-boot override ISO. Win11 24H2/25H2 use the
             # redesigned "ConX" Setup that ignores Autounattend.xml on removable
@@ -119,10 +121,10 @@ class WindowsVMCreator(BaseVMCreator):
             # boot.wim forces the legacy setup.exe path that honors the answer file.
             legacy_boot_iso: Path | None = None
             if self.os_def.architecture == 'aarch64':
-                print_step('Building legacy-boot override ISO [dim](forces setup.exe /legacy for Win11 24H2/25H2)[/dim]')
-                legacy_boot_iso = _create_legacy_boot_media(
-                    self.os_def, tmpdir_path, self.iso_path, self.setup_level
+                print_step(
+                    'Building legacy-boot override ISO [dim](forces setup.exe /legacy for Win11 24H2/25H2)[/dim]'
                 )
+                legacy_boot_iso = _create_legacy_boot_media(self.os_def, tmpdir_path, self.iso_path, self.setup_level)
 
             # Boot QEMU and wait for install
             try:
@@ -209,7 +211,9 @@ def _ensure_utm_guest_tools_iso() -> Path:
     return utm_path
 
 
-def _create_autounattend_media(os_def: OsDefinition, tmpdir: Path, setup_level: int = SetupLevel.FULL, virtio_iso_path: Path | None = None) -> Path:
+def _create_autounattend_media(
+    os_def: OsDefinition, tmpdir: Path, setup_level: int = SetupLevel.FULL, virtio_iso_path: Path | None = None
+) -> Path:
     """Create media containing Autounattend.xml, appropriate for the architecture.
 
     - x86_64: 1.44MB FAT12 floppy image (attached via if=floppy as drive A:)
@@ -228,6 +232,7 @@ def _create_autounattend_media(os_def: OsDefinition, tmpdir: Path, setup_level: 
 
     if os_def.architecture == 'aarch64':
         from adare.hypervisor.qemu.vm_creator.iso_utils import create_tools_iso
+
         iso_path = tmpdir / 'tools.iso'
         return create_tools_iso(xml_content, virtio_iso_path, iso_path)
 
@@ -246,14 +251,12 @@ def _render_autounattend_for(os_def: OsDefinition, setup_level: int) -> bytes:
         template_name = _AUTOUNATTEND_MAP.get(os_def.name)
         if template_name is None:
             raise WindowsVMCreationError(f"No Autounattend template for OS '{os_def.name}'")
-    return _render_autounattend(
-        template_name, architecture=os_def.architecture, setup_level=setup_level
-    ).encode('utf-8')
+    return _render_autounattend(template_name, architecture=os_def.architecture, setup_level=setup_level).encode(
+        'utf-8'
+    )
 
 
-def _create_legacy_boot_media(
-    os_def: OsDefinition, tmpdir: Path, windows_iso_path: Path, setup_level: int
-) -> Path:
+def _create_legacy_boot_media(os_def: OsDefinition, tmpdir: Path, windows_iso_path: Path, setup_level: int) -> Path:
     """Build the legacy-boot override ISO for aarch64 Windows (see iso_utils).
 
     Forces Windows Setup into legacy (non-ConX) mode so the Autounattend.xml is
@@ -261,9 +264,9 @@ def _create_legacy_boot_media(
     ISO's EFI boot tree and is attached alongside the untouched Windows ISO.
     """
     from adare.hypervisor.qemu.vm_creator.iso_utils import create_legacy_boot_iso
+
     xml_content = _render_autounattend_for(os_def, setup_level)
     return create_legacy_boot_iso(windows_iso_path, xml_content, tmpdir / 'legacy-boot.iso')
-
 
 
 def _write_fat12_floppy(path: Path, files: dict[str, bytes]) -> None:
@@ -288,28 +291,28 @@ def _write_fat12_floppy(path: Path, files: dict[str, bytes]) -> None:
     # Boot sector (BPB - BIOS Parameter Block)
     bpb = struct.pack(
         '<3s8sHBHBHHBHHHIIBBBI11s8s',
-        b'\xEB\x3C\x90',       # Jump + NOP
-        b'MSDOS5.0',           # OEM name
-        SECTOR_SIZE,            # Bytes per sector
-        SECTORS_PER_CLUSTER,    # Sectors per cluster
-        RESERVED_SECTORS,       # Reserved sectors
-        NUM_FATS,               # Number of FATs
-        ROOT_DIR_ENTRIES,       # Root directory entries
-        TOTAL_SECTORS,          # Total sectors (16-bit)
-        0xF0,                   # Media descriptor (1.44MB floppy)
-        SECTORS_PER_FAT,        # Sectors per FAT
-        SECTORS_PER_TRACK,      # Sectors per track
-        NUM_HEADS,              # Number of heads
-        0,                      # Hidden sectors
-        0,                      # Total sectors (32-bit, 0 = use 16-bit)
-        0x00,                   # Drive number
-        0,                      # Reserved
-        0x29,                   # Extended boot signature
-        0x12345678,             # Volume serial number
-        b'ADARE      ',        # Volume label
-        b'FAT12   ',           # File system type
+        b'\xeb\x3c\x90',  # Jump + NOP
+        b'MSDOS5.0',  # OEM name
+        SECTOR_SIZE,  # Bytes per sector
+        SECTORS_PER_CLUSTER,  # Sectors per cluster
+        RESERVED_SECTORS,  # Reserved sectors
+        NUM_FATS,  # Number of FATs
+        ROOT_DIR_ENTRIES,  # Root directory entries
+        TOTAL_SECTORS,  # Total sectors (16-bit)
+        0xF0,  # Media descriptor (1.44MB floppy)
+        SECTORS_PER_FAT,  # Sectors per FAT
+        SECTORS_PER_TRACK,  # Sectors per track
+        NUM_HEADS,  # Number of heads
+        0,  # Hidden sectors
+        0,  # Total sectors (32-bit, 0 = use 16-bit)
+        0x00,  # Drive number
+        0,  # Reserved
+        0x29,  # Extended boot signature
+        0x12345678,  # Volume serial number
+        b'ADARE      ',  # Volume label
+        b'FAT12   ',  # File system type
     )
-    img[:len(bpb)] = bpb
+    img[: len(bpb)] = bpb
     img[510] = 0x55
     img[511] = 0xAA
 
@@ -342,7 +345,7 @@ def _write_fat12_floppy(path: Path, files: dict[str, bytes]) -> None:
             # Write LFN entries (reversed order) before the 8.3 entry
             lfn_entries = _make_lfn_entries(filename, name_83)
             for lfn_entry in lfn_entries:
-                img[dir_entry_offset:dir_entry_offset + 32] = lfn_entry
+                img[dir_entry_offset : dir_entry_offset + 32] = lfn_entry
                 dir_entry_offset += 32
         else:
             name_83 = _to_83_name(filename)
@@ -350,25 +353,25 @@ def _write_fat12_floppy(path: Path, files: dict[str, bytes]) -> None:
         # Write 8.3 directory entry
         entry = struct.pack(
             '<11sBBBHHHHHHHI',
-            name_83,             # Filename (8.3)
-            0x20,                # Attribute (Archive)
-            0,                   # Reserved
-            0,                   # Create time (fine)
-            0,                   # Create time
-            0,                   # Create date
-            0,                   # Access date
-            0,                   # EA index (high cluster for FAT32)
-            0,                   # Modify time
-            0,                   # Modify date
-            next_cluster,        # Starting cluster
-            len(content),        # File size
+            name_83,  # Filename (8.3)
+            0x20,  # Attribute (Archive)
+            0,  # Reserved
+            0,  # Create time (fine)
+            0,  # Create time
+            0,  # Create date
+            0,  # Access date
+            0,  # EA index (high cluster for FAT32)
+            0,  # Modify time
+            0,  # Modify date
+            next_cluster,  # Starting cluster
+            len(content),  # File size
         )
-        img[dir_entry_offset:dir_entry_offset + 32] = entry
+        img[dir_entry_offset : dir_entry_offset + 32] = entry
         dir_entry_offset += 32
 
         # Write file data
         data_offset = data_start + (next_cluster - 2) * SECTOR_SIZE * SECTORS_PER_CLUSTER
-        img[data_offset:data_offset + len(content)] = content
+        img[data_offset : data_offset + len(content)] = content
 
         # Write FAT chain
         for i in range(clusters_needed - 1):
@@ -400,7 +403,7 @@ def _make_short_name(filename: str, index: int = 1) -> bytes:
     # Keep only valid 8.3 characters
     name = ''.join(c for c in name if c.isalnum() or c in '!#$%&\'()-@^_`{}~')
     suffix = f'~{index}'
-    name = name[:8 - len(suffix)] + suffix
+    name = name[: 8 - len(suffix)] + suffix
     return name.ljust(8).encode('ascii') + ext.ljust(3).encode('ascii')
 
 
@@ -425,7 +428,7 @@ def _make_lfn_entries(long_name: str, short_name: bytes) -> list[bytes]:
     encoded = long_name.encode('utf-16-le') + b'\x00\x00'
     # Pad to multiple of 26 bytes (13 UTF-16 chars per LFN entry)
     while len(encoded) % 26 != 0:
-        encoded += b'\xFF\xFF'
+        encoded += b'\xff\xff'
 
     num_entries = len(encoded) // 26
     entries = []
@@ -436,15 +439,15 @@ def _make_lfn_entries(long_name: str, short_name: bytes) -> list[bytes]:
         if i == num_entries - 1:
             seq |= 0x40  # mark as last LFN entry
 
-        chunk = encoded[i * 26:(i + 1) * 26]
+        chunk = encoded[i * 26 : (i + 1) * 26]
         entry[0] = seq
-        entry[1:11] = chunk[0:10]     # chars 1-5 (5 UTF-16 chars = 10 bytes)
-        entry[11] = 0x0F              # LFN attribute
-        entry[12] = 0                 # type
+        entry[1:11] = chunk[0:10]  # chars 1-5 (5 UTF-16 chars = 10 bytes)
+        entry[11] = 0x0F  # LFN attribute
+        entry[12] = 0  # type
         entry[13] = checksum
-        entry[14:26] = chunk[10:22]   # chars 6-11 (6 UTF-16 chars = 12 bytes)
-        entry[26:28] = b'\x00\x00'    # first cluster = 0
-        entry[28:32] = chunk[22:26]   # chars 12-13 (2 UTF-16 chars = 4 bytes)
+        entry[14:26] = chunk[10:22]  # chars 6-11 (6 UTF-16 chars = 12 bytes)
+        entry[26:28] = b'\x00\x00'  # first cluster = 0
+        entry[28:32] = chunk[22:26]  # chars 12-13 (2 UTF-16 chars = 4 bytes)
 
         entries.append(bytes(entry))
 
@@ -464,8 +467,9 @@ def _to_83_name(filename: str) -> bytes:
     return (name + ext).encode('ascii')
 
 
-def _set_fat12_entry(img: bytearray, fat_start: int, sectors_per_fat: int,
-                     sector_size: int, cluster: int, value: int) -> None:
+def _set_fat12_entry(
+    img: bytearray, fat_start: int, sectors_per_fat: int, sector_size: int, cluster: int, value: int
+) -> None:
     """Set a FAT12 entry for the given cluster in both FAT copies."""
     for fat_num in range(2):
         offset = fat_start + (fat_num * sectors_per_fat * sector_size)
@@ -598,27 +602,34 @@ def _run_qemu_install_phase(
     # highmem-* properties instead of blanket highmem=off, because highmem=off
     # also caps RAM at ~3 GB (incompatible with Windows 11's 4 GB minimum).
     if os_def.architecture == 'aarch64':
-        machine = machine.replace(
-            'virt,', 'virt,highmem-mmio=off,highmem-ecam=off,highmem-redists=off,')
+        machine = machine.replace('virt,', 'virt,highmem-mmio=off,highmem-ecam=off,highmem-redists=off,')
 
     ovmf_code, _ = find_ovmf_firmware(os_def.architecture)
 
     cmd = [
         arch_params['exe'],
-        '-machine', machine,
-        '-cpu', arch_params['cpu'],
-        '-m', str(ram_mb),
-        '-smp', str(cpus),
+        '-machine',
+        machine,
+        '-cpu',
+        arch_params['cpu'],
+        '-m',
+        str(ram_mb),
+        '-smp',
+        str(cpus),
     ]
 
     # UEFI firmware — pflash mode with separate NVRAM for persistent boot vars.
     # aarch64: NVRAM is pre-populated with Shell as Boot0000 (firmware.py).
     # Shell auto-executes startup.nsh which boots Windows Setup.
     # x86_64: NVRAM starts empty; fw_cfg bootorder handles boot device selection.
-    cmd.extend([
-        '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
-        '-drive', f'if=pflash,format=raw,file={nvram_path}',
-    ])
+    cmd.extend(
+        [
+            '-drive',
+            f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
+            '-drive',
+            f'if=pflash,format=raw,file={nvram_path}',
+        ]
+    )
 
     # Disk — ARM64 uses NVMe (native Windows driver, no viostor needed in WinPE).
     # x86_64 uses virtio-blk-pci (viostor loaded via Autounattend DriverPaths).
@@ -626,24 +637,33 @@ def _run_qemu_install_phase(
     # Phase 1 (boot_from_disk=False): bootindex=1 (fallback, boot from ISO)
     # Phase 2 (boot_from_disk=True):  bootindex=0 (primary, boot from disk)
     cmd.extend(disk_device_args(disk_path, os_def, bootindex=0 if boot_from_disk else 1))
-    cmd.extend([
-        # Network
-        '-nic', 'user,model=virtio-net-pci',
-        # Display — show QEMU window so user can watch install progress
-        '-display', 'cocoa' if platform.system() == 'Darwin' else 'gtk',
-    ])
+    cmd.extend(
+        [
+            # Network
+            '-nic',
+            'user,model=virtio-net-pci',
+            # Display — show QEMU window so user can watch install progress
+            '-display',
+            'cocoa' if platform.system() == 'Darwin' else 'gtk',
+        ]
+    )
     # Display device — ramfb only during install (virtio-gpu-device conflicts
     # with firmware console init on aarch64, causes UEFI Shell).
     if os_def.architecture == 'aarch64':
         cmd.extend(['-device', 'ramfb'])
     else:
         cmd.extend(arch_params['vga_args'])
-    cmd.extend([
-        # USB controller (must come before USB devices)
-        '-device', 'qemu-xhci',
-        '-device', 'usb-kbd',
-        '-device', 'usb-tablet',
-    ])
+    cmd.extend(
+        [
+            # USB controller (must come before USB devices)
+            '-device',
+            'qemu-xhci',
+            '-device',
+            'usb-kbd',
+            '-device',
+            'usb-tablet',
+        ]
+    )
 
     # -boot c is a legacy BIOS concept; UEFI uses bootindex on devices instead.
     # Only add for x86_64 (SeaBIOS fallback compatibility).
@@ -662,26 +682,42 @@ def _run_qemu_install_phase(
         # In that case the Windows ISO carries no bootindex; it only supplies
         # install.wim once WinPE (from the patched boot.wim) is running.
         if legacy_boot_iso is not None:
-            cmd.extend([
-                '-drive', f'file={legacy_boot_iso},media=cdrom,if=none,id=bootiso',
-                '-device', 'usb-storage,drive=bootiso,bootindex=0,removable=on',
-            ])
+            cmd.extend(
+                [
+                    '-drive',
+                    f'file={legacy_boot_iso},media=cdrom,if=none,id=bootiso',
+                    '-device',
+                    'usb-storage,drive=bootiso,bootindex=0,removable=on',
+                ]
+            )
             winiso_bootindex = ''
         else:
             winiso_bootindex = '' if boot_from_disk else ',bootindex=0'
-        cmd.extend([
-            '-drive', f'file={windows_iso_path},media=cdrom,if=none,id=winiso',
-            '-device', f'usb-storage,drive=winiso{winiso_bootindex},removable=on',
-            '-drive', f'file={media_path},media=cdrom,if=none,id=toolsiso',
-            '-device', 'usb-storage,drive=toolsiso,removable=on',
-            '-drive', f'file={guest_tools_iso},media=cdrom,if=none,id=guestiso',
-            '-device', 'usb-storage,drive=guestiso,removable=on',
-        ])
+        cmd.extend(
+            [
+                '-drive',
+                f'file={windows_iso_path},media=cdrom,if=none,id=winiso',
+                '-device',
+                f'usb-storage,drive=winiso{winiso_bootindex},removable=on',
+                '-drive',
+                f'file={media_path},media=cdrom,if=none,id=toolsiso',
+                '-device',
+                'usb-storage,drive=toolsiso,removable=on',
+                '-drive',
+                f'file={guest_tools_iso},media=cdrom,if=none,id=guestiso',
+                '-device',
+                'usb-storage,drive=guestiso,removable=on',
+            ]
+        )
     else:
-        cmd.extend([
-            '-drive', f'file={windows_iso_path},media=cdrom,index=0',
-            '-drive', f'file={virtio_iso_path},media=cdrom,index=1',
-        ])
+        cmd.extend(
+            [
+                '-drive',
+                f'file={windows_iso_path},media=cdrom,index=0',
+                '-drive',
+                f'file={virtio_iso_path},media=cdrom,index=1',
+            ]
+        )
         # x86_64 uses a FAT12 floppy image on drive A: (classic Autounattend delivery)
         cmd.extend(['-drive', f'file={media_path},format=raw,if=floppy'])
 

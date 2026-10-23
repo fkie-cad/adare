@@ -16,12 +16,16 @@ from adarelib.testset.type import Test
 @attrs.define
 class SweepStrategy:
     """Select the nth match when scanning left-to-right, top-to-bottom."""
+
     index: int = 1  # 1-based index (1 = first, 2 = second, etc.)
+
 
 @attrs.define
 class BestConfidenceStrategy:
     """Select match with highest confidence score."""
+
     pass
+
 
 @attrs.define
 class ClosestToStrategy:
@@ -34,6 +38,7 @@ class ClosestToStrategy:
 
     Optional max_distance enables region-based search optimization.
     """
+
     # Mode 1: Fixed coordinates (existing - backwards compatible)
     x: int | None = None
     y: int | None = None
@@ -49,59 +54,69 @@ class ClosestToStrategy:
 
     def __attrs_post_init__(self):
         """Validate that exactly one mode is specified."""
-        modes_set = sum([
-            self.x is not None and self.y is not None,  # coordinates mode
-            self.text is not None,  # text reference mode
-            self.image is not None  # image reference mode
-        ])
+        modes_set = sum(
+            [
+                self.x is not None and self.y is not None,  # coordinates mode
+                self.text is not None,  # text reference mode
+                self.image is not None,  # image reference mode
+            ]
+        )
 
         if modes_set != 1:
             raise ValueError(
-                "ClosestToStrategy must specify exactly one of: "
-                "(x, y) coordinates, text reference, or image reference"
+                "ClosestToStrategy must specify exactly one of: (x, y) coordinates, text reference, or image reference"
             )
 
         # Validate x,y together
         if (self.x is None) != (self.y is None):
-            raise ValueError(
-                "ClosestToStrategy: x and y must both be specified or both be None"
-            )
+            raise ValueError("ClosestToStrategy: x and y must both be specified or both be None")
 
         # Validate max_distance
         if self.max_distance is not None and self.max_distance <= 0:
-            raise ValueError(
-                f"ClosestToStrategy: max_distance must be positive, got {self.max_distance}"
-            )
+            raise ValueError(f"ClosestToStrategy: max_distance must be positive, got {self.max_distance}")
+
 
 @attrs.define
 class TopLeftStrategy:
     """Select topmost-leftmost match."""
+
     pass
+
 
 @attrs.define
 class TopRightStrategy:
     """Select topmost-rightmost match."""
+
     pass
+
 
 @attrs.define
 class BottomLeftStrategy:
     """Select bottommost-leftmost match."""
+
     pass
+
 
 @attrs.define
 class BottomRightStrategy:
     """Select bottommost-rightmost match."""
+
     pass
+
 
 @attrs.define
 class LargestStrategy:
     """Select match with largest bounding box area."""
+
     pass
+
 
 @attrs.define
 class SmallestStrategy:
     """Select match with smallest bounding box area."""
+
     pass
+
 
 TargetStrategyType = (
     SweepStrategy
@@ -114,6 +129,7 @@ TargetStrategyType = (
     | LargestStrategy
     | SmallestStrategy
 )
+
 
 @attrs.define
 class Settings:
@@ -128,9 +144,16 @@ class Settings:
     gui_execution_mode: str = 'auto'  # GUI automation mode: 'auto', 'agent', 'host' (QEMU only)
     resolution: str | None = None  # Guest display resolution "WxH" (e.g. "1280x1024"); unset = host/env default
     vm_memory: int | None = None  # Working RAM in MB discovered/used for this run; boots future runs at this size
-    export_disk_image: bool = False  # Export the VM's overlay disk as a merged raw image (artifacts/disk/), e.g. for Autopsy ingestion
-    capture_pcap: bool = False  # Capture the VM's outside-world traffic to a pcap (artifacts/pcap/) via QEMU filter-dump
-    export_memory_dump: bool = False  # Live-dump guest RAM via QMP dump-guest-memory (artifacts/memory/), e.g. for Volatility ingestion
+    export_disk_image: bool = (
+        False  # Export the VM's overlay disk as a merged raw image (artifacts/disk/), e.g. for Autopsy ingestion
+    )
+    capture_pcap: bool = (
+        False  # Capture the VM's outside-world traffic to a pcap (artifacts/pcap/) via QEMU filter-dump
+    )
+    export_memory_dump: bool = (
+        False  # Live-dump guest RAM via QMP dump-guest-memory (artifacts/memory/), e.g. for Volatility ingestion
+    )
+
 
 @attrs.define
 class Offset:
@@ -140,11 +163,19 @@ class Offset:
 
     def __attrs_post_init__(self):
         valid_bases = {
-            'center', 'top-left', 'top-right', 'bottom-left', 'bottom-right',
-            'center-left', 'center-right', 'top-center', 'bottom-center'
+            'center',
+            'top-left',
+            'top-right',
+            'bottom-left',
+            'bottom-right',
+            'center-left',
+            'center-right',
+            'top-center',
+            'bottom-center',
         }
         if self.base not in valid_bases:
             raise ValueError(f"Offset.base must be one of {valid_bases}, got '{self.base}'")
+
 
 @attrs.define
 class TextMatchConfig:
@@ -156,9 +187,12 @@ class TextMatchConfig:
     - fuzzy: Fuzzy matching for OCR inaccuracies
     - regex_fuzzy: Combined regex + fuzzy matching
     """
+
     mode: str = 'substring'  # 'substring', 'regex', 'fuzzy', 'regex_fuzzy'
     flags: list[str] | None = None  # Regex flags: IGNORECASE, MULTILINE, DOTALL, VERBOSE
-    allow_missing_chars: bool | str | list[str] | None = None  # True = any char, "." = only dots, [".", ","] = specific chars
+    allow_missing_chars: bool | str | list[str] | None = (
+        None  # True = any char, "." = only dots, [".", ","] = specific chars
+    )
     max_missing: int | None = None  # Max missing chars allowed (requires allow_missing_chars)
     min_similarity: float | None = None  # Minimum similarity ratio 0.0-1.0
     case_sensitive: bool = False  # Enable case-sensitive matching
@@ -168,21 +202,15 @@ class TextMatchConfig:
         # Validate mode
         valid_modes = {'substring', 'regex', 'fuzzy', 'regex_fuzzy'}
         if self.mode not in valid_modes:
-            raise ValueError(
-                f"TextMatchConfig.mode must be one of {valid_modes}, got '{self.mode}'"
-            )
+            raise ValueError(f"TextMatchConfig.mode must be one of {valid_modes}, got '{self.mode}'")
 
         # Validate min_similarity range
         if self.min_similarity is not None and not (0.0 <= self.min_similarity <= 1.0):
-            raise ValueError(
-                f"TextMatchConfig.min_similarity must be between 0.0 and 1.0, got {self.min_similarity}"
-            )
+            raise ValueError(f"TextMatchConfig.min_similarity must be between 0.0 and 1.0, got {self.min_similarity}")
 
         # Validate max_missing
         if self.max_missing is not None and self.max_missing < 0:
-            raise ValueError(
-                f"TextMatchConfig.max_missing must be >= 0, got {self.max_missing}"
-            )
+            raise ValueError(f"TextMatchConfig.max_missing must be >= 0, got {self.max_missing}")
 
         # Fuzzy mode requires either allow_missing_chars or min_similarity
         if self.mode in ('fuzzy', 'regex_fuzzy'):
@@ -198,9 +226,9 @@ class TextMatchConfig:
             invalid_flags = set(self.flags) - valid_flags
             if invalid_flags:
                 raise ValueError(
-                    f"TextMatchConfig.flags contains invalid values: {invalid_flags}. "
-                    f"Valid flags: {valid_flags}"
+                    f"TextMatchConfig.flags contains invalid values: {invalid_flags}. Valid flags: {valid_flags}"
                 )
+
 
 @attrs.define
 class Target:
@@ -212,8 +240,8 @@ class Target:
     strategy: TargetStrategyType | None = None
     offset: Offset | None = None
     use_cache: bool | None = None  # If False, forces a fresh detection even when the
-                                    # immediately-preceding target resolution would
-                                    # otherwise be reused. Default (None/True): auto-reuse.
+    # immediately-preceding target resolution would
+    # otherwise be reused. Default (None/True): auto-reuse.
 
 
 @attrs.define
@@ -221,10 +249,12 @@ class ExistsCondition:
     text: str | None = None
     image: str | None = None
 
+
 @attrs.define
 class NotExistsCondition:
     text: str | None = None
     image: str | None = None
+
 
 @attrs.define
 class KeyboardAction:
@@ -235,12 +265,14 @@ class KeyboardAction:
     description: str = ''
     machine: str | None = None
 
+
 @attrs.define
 class ClickAction:
     target: Target
     type: str = 'left'  # 'left', 'right', 'double'
     description: str = ''
     machine: str | None = None  # Machine key from playbook.machines this action targets (multi-machine playbooks only)
+
 
 @attrs.define
 class DragAction:
@@ -249,11 +281,13 @@ class DragAction:
     description: str = ''
     machine: str | None = None
 
+
 @attrs.define
 class IdleAction:
     duration: float
     description: str = ''
     machine: str | None = None
+
 
 @attrs.define
 class ScrollAction:
@@ -262,11 +296,13 @@ class ScrollAction:
     description: str = ''
     machine: str | None = None
 
+
 @attrs.define
 class GotoAction:
     target: Target
     description: str = ''
     machine: str | None = None
+
 
 # info: Do NOT rename it to TestAction, since it lets pytest think it is a test
 @attrs.define
@@ -276,9 +312,11 @@ class ActionTestAction:
     timeout: float | None = None  # Test timeout in seconds (None = use Test default)
     machine: str | None = None
 
+
 @attrs.define
 class CaptureSpec:
     """Specification for capturing command output to a variable."""
+
     variable: str  # Variable name to store the captured output
     source: str = 'stdout'  # Source to capture from: stdout, stderr, returncode, all
     parser: str | None = None  # Optional Python expression to parse the output
@@ -287,9 +325,8 @@ class CaptureSpec:
         """Validate capture specification."""
         valid_sources = {'stdout', 'stderr', 'returncode', 'all'}
         if self.source not in valid_sources:
-            raise ValueError(
-                f"CaptureSpec.source must be one of {valid_sources}, got '{self.source}'"
-            )
+            raise ValueError(f"CaptureSpec.source must be one of {valid_sources}, got '{self.source}'")
+
 
 @attrs.define
 class CommandAction:
@@ -317,7 +354,14 @@ class CommandAction:
 
         # Support for Python-style raw strings to make Windows paths easier in YAML
         # E.g. command: r"C:\Windows\System32" -> shell command: C:\Windows\System32
-        if self.command.startswith('r"') and self.command.endswith('"') and len(self.command) >= 3 or self.command.startswith("r'") and self.command.endswith("'") and len(self.command) >= 3:
+        if (
+            self.command.startswith('r"')
+            and self.command.endswith('"')
+            and len(self.command) >= 3
+            or self.command.startswith("r'")
+            and self.command.endswith("'")
+            and len(self.command) >= 3
+        ):
             self.command = self.command[2:-1]
 
 
@@ -331,19 +375,23 @@ class ScreenshotAction:
     height: int | None = None
     machine: str | None = None
 
+
 @attrs.define
 class SaveTimestampAction:
     variable: str
     description: str = ''
     machine: str | None = None
 
+
 @attrs.define
 class SaveVariableAction:
     """Save a value (static or Jinja2 expression) to a variable."""
+
     name: str  # Variable name to save to
     value: Any  # Static value OR Jinja2 template string
     description: str = ''
     machine: str | None = None
+
 
 @attrs.define
 class PullAction:
@@ -357,18 +405,19 @@ class PullAction:
         """Validate mode field."""
         valid_modes = {'hypervisor', 'websocket'}
         if self.mode not in valid_modes:
-            raise ValueError(
-                f"PullAction.mode must be one of {valid_modes}, got '{self.mode}'"
-            )
+            raise ValueError(f"PullAction.mode must be one of {valid_modes}, got '{self.mode}'")
+
 
 @attrs.define
 class SnapshotFilesystemAction:
     """Capture filesystem snapshot and store in variable."""
+
     variable: str  # Variable name to store snapshot data
     root_path: str | None = None  # Root path to scan (default: / or C:\)
     timeout: float | None = 300.0  # Timeout in seconds (default: 5 minutes)
     description: str = ''
     machine: str | None = None
+
 
 @attrs.define
 class PullChangedFilesAction:
@@ -377,8 +426,9 @@ class PullChangedFilesAction:
     Automatically calculates diff between snapshots and pulls all changed/added files
     in batch using efficient chunked transfer.
     """
+
     snapshot_before: str  # Variable name containing initial snapshot
-    snapshot_after: str   # Variable name containing final snapshot
+    snapshot_after: str  # Variable name containing final snapshot
     dst: str = 'changed_files'  # Destination folder in artifacts
     mode: str = 'websocket'  # Transfer mode: 'hypervisor' or 'websocket'
     include_modified: bool = True  # Pull modified files
@@ -390,22 +440,19 @@ class PullChangedFilesAction:
         """Validate fields."""
         valid_modes = {'hypervisor', 'websocket'}
         if self.mode not in valid_modes:
-            raise ValueError(
-                f"PullChangedFilesAction.mode must be one of {valid_modes}, got '{self.mode}'"
-            )
+            raise ValueError(f"PullChangedFilesAction.mode must be one of {valid_modes}, got '{self.mode}'")
 
         if not self.include_modified and not self.include_added:
-            raise ValueError(
-                "PullChangedFilesAction must include at least one of: "
-                "include_modified or include_added"
-            )
+            raise ValueError("PullChangedFilesAction must include at least one of: include_modified or include_added")
+
 
 @attrs.define
 class PauseAction:
     message: str | None = None  # Optional message to display during pause
-    name: str | None = None     # Optional name for the pause action
+    name: str | None = None  # Optional name for the pause action
     description: str = ''
     machine: str | None = None
+
 
 @attrs.define
 class VariableCondition:
@@ -413,6 +460,7 @@ class VariableCondition:
 
     Exactly one operator must be specified per condition.
     """
+
     variable: str  # Variable name to test
 
     # Operators (mutually exclusive - exactly one must be specified)
@@ -431,7 +479,7 @@ class VariableCondition:
             self.matches is not None,
             self.greater_than is not None,
             self.less_than is not None,
-            self.is_empty is not None
+            self.is_empty is not None,
         ]
         operators_set = sum(operators)
 
@@ -441,6 +489,7 @@ class VariableCondition:
                 "Valid operators: equals, contains, matches, greater_than, less_than, is_empty"
             )
 
+
 @attrs.define
 class StopAction:
     """Stop playbook execution based on a condition.
@@ -448,9 +497,11 @@ class StopAction:
     If condition is specified, stops only when condition evaluates to True.
     If no condition, always stops (unconditional stop).
     """
+
     condition: VariableCondition | None = None
     description: str = ''
     machine: str | None = None
+
 
 @attrs.define
 class ContinueAction:
@@ -460,9 +511,11 @@ class ContinueAction:
     If no condition, always continues (unconditional continue).
     Only valid within loop or block contexts.
     """
+
     condition: VariableCondition | None = None
     description: str = ''
     machine: str | None = None
+
 
 @attrs.define
 class BlockAction:
@@ -472,9 +525,11 @@ class BlockAction:
     delay: float | None = None
     machine: str | None = None  # Default machine for children that don't set their own (cascades at parse time)
 
+
 @attrs.define
 class WaitCondition:
     """Recursive boolean condition for wait_until actions."""
+
     # Leaf conditions (mutually exclusive with operators)
     exists: Target | None = None
     not_exists: Target | None = None
@@ -482,17 +537,19 @@ class WaitCondition:
     # Boolean operators (mutually exclusive with leaf conditions)
     all: list[WaitCondition] | None = None  # AND logic
     any: list[WaitCondition] | None = None  # OR logic
-    negate: WaitCondition | None = None     # NOT logic
+    negate: WaitCondition | None = None  # NOT logic
 
     def __attrs_post_init__(self):
         """Validation: exactly one field must be set."""
-        fields_set = sum([
-            self.exists is not None,
-            self.not_exists is not None,
-            self.all is not None,
-            self.any is not None,
-            self.negate is not None
-        ])
+        fields_set = sum(
+            [
+                self.exists is not None,
+                self.not_exists is not None,
+                self.all is not None,
+                self.any is not None,
+                self.negate is not None,
+            ]
+        )
         if fields_set != 1:
             raise ValueError("WaitCondition must have exactly one field set")
 
@@ -511,28 +568,31 @@ class WaitCondition:
         elif self.negate:
             self.negate.validate_depth(current_depth + 1, max_depth)
 
+
 @attrs.define
 class PixelChangeConstraint:
     above: float | None = None  # Skip if change > value (Wait for stability)
     below: float | None = None  # Skip if change < value (Wait for activity)
-    strategy: str = 'once'         # 'once' (latch) or 'continuous' (enforce always). Default: 'once'
-    idle: float | None = None   # Wait (s) after constraint satisfied before searching.
+    strategy: str = 'once'  # 'once' (latch) or 'continuous' (enforce always). Default: 'once'
+    idle: float | None = None  # Wait (s) after constraint satisfied before searching.
 
     def __attrs_post_init__(self):
         valid_strategies = {'once', 'continuous'}
         if self.strategy not in valid_strategies:
-             raise ValueError(f"PixelChangeConstraint.strategy must be one of {valid_strategies}, got '{self.strategy}'")
+            raise ValueError(f"PixelChangeConstraint.strategy must be one of {valid_strategies}, got '{self.strategy}'")
+
 
 @attrs.define
 class SkipOptions:
     pixel_change: PixelChangeConstraint | None = None
+
 
 @attrs.define
 class WaitUntilAction:
     condition: WaitCondition
     timeout: float = 60.0
     check_interval: float = 3.0  # Default 3s check interval (previously 0.0)
-    initial_delay: float = 5.0   # Default 5s delay to let UI stabilize
+    initial_delay: float = 5.0  # Default 5s delay to let UI stabilize
     skip: SkipOptions | None = None
     description: str = ''
     machine: str | None = None
@@ -540,6 +600,7 @@ class WaitUntilAction:
     def __attrs_post_init__(self):
         """Validate condition tree depth."""
         self.condition.validate_depth()
+
 
 @attrs.define
 class LoopAction:
@@ -550,6 +611,7 @@ class LoopAction:
     - total: Total number of iterations
     - item: Current item (for list iteration)
     """
+
     actions: list[ActionType]  # Will be resolved after ActionType is defined
 
     # Simple iteration (mutually exclusive with items)
@@ -571,20 +633,39 @@ class LoopAction:
         if self.times is not None and self.times < 1:
             raise ValueError(f"Loop times must be >= 1, got {self.times}")
 
+
 # Now define ActionType after all classes
 ActionType = (
-    ClickAction | DragAction
-    | KeyboardAction | IdleAction | ScrollAction | GotoAction | ActionTestAction
-    | CommandAction | ScreenshotAction | BlockAction | SaveTimestampAction | SaveVariableAction
-    | PullAction | PauseAction | WaitUntilAction | LoopAction | StopAction | ContinueAction
-    | SnapshotFilesystemAction | PullChangedFilesAction
+    ClickAction
+    | DragAction
+    | KeyboardAction
+    | IdleAction
+    | ScrollAction
+    | GotoAction
+    | ActionTestAction
+    | CommandAction
+    | ScreenshotAction
+    | BlockAction
+    | SaveTimestampAction
+    | SaveVariableAction
+    | PullAction
+    | PauseAction
+    | WaitUntilAction
+    | LoopAction
+    | StopAction
+    | ContinueAction
+    | SnapshotFilesystemAction
+    | PullChangedFilesAction
 )
+
 
 @attrs.define
 class MachineSpec:
     """One entry of a playbook's `machines:` section (multi-machine experiments, e.g. a Nextcloud client+server pair)."""
+
     environment: str  # Environment name to boot this machine from
     depends_on: list[str] = attrs.Factory(list)  # Other machine keys that must finish booting first
+
 
 @attrs.define
 class Playbook:
@@ -592,10 +673,14 @@ class Playbook:
     settings: Settings = attrs.Factory(Settings)
     variables: VariableRegistry | None = None
     tests: list[Test] = attrs.Factory(list)
-    machines: dict[str, MachineSpec] | None = None  # Multi-machine playbooks only; absent/None = today's single implicit VM
+    machines: dict[str, MachineSpec] | None = (
+        None  # Multi-machine playbooks only; absent/None = today's single implicit VM
+    )
+
 
 def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
     import logging
+
     logging.getLogger(__name__)
 
     yaml_path = Path(yaml_path)  # Ensure it's a Path object
@@ -620,6 +705,7 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
 
     # Validate playbook (variable definitions, etc.)
     from adare.types.playbook_validators import validate_playbook
+
     validate_playbook(playbook)
 
     return playbook
@@ -638,55 +724,41 @@ def build_playbook_converter() -> cattrs.Converter:
     converter.forbid_extra_keys = True
 
     # Register structure hooks for Union types if needed
+    converter.register_structure_hook(ActionType, lambda obj, _: _structure_action(obj, converter))
     converter.register_structure_hook(
-        ActionType,
-        lambda obj, _: _structure_action(obj, converter)
+        ExistsCondition | NotExistsCondition, lambda obj, _: _structure_condition(obj, converter)
     )
     converter.register_structure_hook(
-        ExistsCondition | NotExistsCondition,
-        lambda obj, _: _structure_condition(obj, converter)
-    )
-    converter.register_structure_hook(
-        TargetStrategyType | None,
-        lambda obj, _: _structure_strategy(obj, converter) if obj is not None else None
+        TargetStrategyType | None, lambda obj, _: _structure_strategy(obj, converter) if obj is not None else None
     )
 
     # Register structure hook for VariableRegistry
     converter.register_structure_hook(
-        VariableRegistry,
-        lambda obj, _: obj if isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
+        VariableRegistry, lambda obj, _: obj if isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
     )
     converter.register_structure_hook(
         VariableRegistry | None,
-        lambda obj, _: obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
+        lambda obj, _: obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj),
     )
 
     # Register structure hook for str | list[str] in PullAction.src
-    converter.register_structure_hook(
-        str | list[str],
-        lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj)
-    )
+    converter.register_structure_hook(str | list[str], lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj))
 
     # Register structure hook for WaitCondition
+    converter.register_structure_hook(WaitCondition, lambda obj, _: _structure_wait_condition(obj, converter))
     converter.register_structure_hook(
-        WaitCondition,
-        lambda obj, _: _structure_wait_condition(obj, converter)
-    )
-    converter.register_structure_hook(
-        WaitCondition | None,
-        lambda obj, _: _structure_wait_condition(obj, converter) if obj is not None else None
+        WaitCondition | None, lambda obj, _: _structure_wait_condition(obj, converter) if obj is not None else None
     )
 
     # Register structure hook for LoopAction items field (Union[str, List[Any]])
     converter.register_structure_hook(
         str | list[Any] | None,
-        lambda obj, _: obj  # Pass through as-is, will be resolved at runtime
+        lambda obj, _: obj,  # Pass through as-is, will be resolved at runtime
     )
 
     # Register structure hook for allow_missing_chars field (Union[bool, str, List[str]])
     converter.register_structure_hook(
-        bool | str | list[str] | None,
-        lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None
+        bool | str | list[str] | None, lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None
     )
 
     # Register structure hook for numeric comparison fields (Union[int, float, None])
@@ -706,27 +778,21 @@ def build_playbook_converter() -> cattrs.Converter:
                     raise ValueError(f"Cannot convert '{obj}' to numeric value") from None
         return obj
 
-    converter.register_structure_hook(
-        int | float | None,
-        structure_optional_numeric
-    )
+    converter.register_structure_hook(int | float | None, structure_optional_numeric)
 
     # Register structure hook for SkipOptions
     converter.register_structure_hook(
-        SkipOptions | None,
-        lambda obj, _: _structure_skip_options(obj, converter) if obj is not None else None
+        SkipOptions | None, lambda obj, _: _structure_skip_options(obj, converter) if obj is not None else None
     )
 
     # Register structure hook for Offset
     converter.register_structure_hook(
-        Offset | None,
-        lambda obj, _: converter.structure(obj, Offset) if obj is not None else None
+        Offset | None, lambda obj, _: converter.structure(obj, Offset) if obj is not None else None
     )
 
     # Register structure hook for TextMatchConfig
     converter.register_structure_hook(
-        TextMatchConfig | None,
-        lambda obj, _: converter.structure(obj, TextMatchConfig) if obj is not None else None
+        TextMatchConfig | None, lambda obj, _: converter.structure(obj, TextMatchConfig) if obj is not None else None
     )
 
     # Register strict structure hooks for all main classes to validate fields
@@ -816,9 +882,7 @@ def _apply_sibling_fields(obj, action_key, action):
             continue
 
         value = obj[sibling_key]
-        if not attrs.has(type(action)) or sibling_key not in {
-            field.name for field in attrs.fields(type(action))
-        }:
+        if not attrs.has(type(action)) or sibling_key not in {field.name for field in attrs.fields(type(action))}:
             raise ValueError(
                 f"action '{action_key}' has no '{sibling_key}' field, so the "
                 f"{sibling_key} {value!r} written beside it cannot be stored. "
@@ -852,12 +916,14 @@ def _cascade_machine(action):
             child.machine = action.machine
         _cascade_machine(child)
 
+
 def _structure_condition(obj, converter):
     if 'exists' in obj:
         return converter.structure(obj['exists'], ExistsCondition)
     if 'not_exists' in obj:
         return converter.structure(obj['not_exists'], NotExistsCondition)
     raise ValueError(f"Unknown condition: {obj}")
+
 
 def _structure_strategy(obj, converter):
     if 'SweepStrategy' in obj:
@@ -880,6 +946,7 @@ def _structure_strategy(obj, converter):
         return converter.structure(obj['SmallestStrategy'], SmallestStrategy)
     raise ValueError(f"Unknown strategy: {obj}")
 
+
 def _structure_wait_condition(obj, converter):
     """Structure WaitCondition objects with recursive support."""
     if 'exists' in obj:
@@ -899,6 +966,7 @@ def _structure_wait_condition(obj, converter):
         return WaitCondition(negate=condition)
     raise ValueError(f"Unknown wait condition: {obj}")
 
+
 def _structure_skip_options(obj, converter):
     """Structure SkipOptions object."""
     if 'pixel_change' in obj:
@@ -906,11 +974,13 @@ def _structure_skip_options(obj, converter):
         return SkipOptions(pixel_change=pixel_change)
     raise ValueError(f"Unknown skip option: {obj}")
 
+
 def _register_strict_hooks(converter):
     """Register strict structure hooks that validate all fields."""
 
     def _validate_attrs_class(cls):
         """Create a strict structure hook for an attrs class."""
+
         def strict_structure_hook(obj, _):
             # Get expected field names from the attrs class
             if not attrs.has(cls):
@@ -931,38 +1001,36 @@ def _register_strict_hooks(converter):
             # Use cattrs default structure with a fresh converter to avoid recursion
             fresh_converter = cattrs.Converter()
             # Copy union hooks to fresh converter to handle nested unions
+            fresh_converter.register_structure_hook(ActionType, lambda obj, _: _structure_action(obj, fresh_converter))
             fresh_converter.register_structure_hook(
-                ActionType,
-                lambda obj, _: _structure_action(obj, fresh_converter)
-            )
-            fresh_converter.register_structure_hook(
-                ExistsCondition | NotExistsCondition,
-                lambda obj, _: _structure_condition(obj, fresh_converter)
+                ExistsCondition | NotExistsCondition, lambda obj, _: _structure_condition(obj, fresh_converter)
             )
             fresh_converter.register_structure_hook(
                 TargetStrategyType | None,
-                lambda obj, _: _structure_strategy(obj, fresh_converter) if obj is not None else None
+                lambda obj, _: _structure_strategy(obj, fresh_converter) if obj is not None else None,
             )
             fresh_converter.register_structure_hook(
                 VariableRegistry,
-                lambda obj, _: obj if isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
+                lambda obj, _: obj if isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj),
             )
             fresh_converter.register_structure_hook(
                 VariableRegistry | None,
-                lambda obj, _: obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
+                lambda obj, _: (
+                    obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
+                ),
             )
             fresh_converter.register_structure_hook(
-                WaitCondition,
-                lambda obj, _: _structure_wait_condition(obj, fresh_converter)
+                WaitCondition, lambda obj, _: _structure_wait_condition(obj, fresh_converter)
             )
             fresh_converter.register_structure_hook(
                 WaitCondition | None,
-                lambda obj, _: _structure_wait_condition(obj, fresh_converter) if obj is not None else None
+                lambda obj, _: _structure_wait_condition(obj, fresh_converter) if obj is not None else None,
             )
             fresh_converter.register_structure_hook(
                 str | list[Any] | None,
-                lambda obj, _: obj  # Pass through as-is for LoopAction items
+                lambda obj, _: obj,  # Pass through as-is for LoopAction items
             )
+
             # Register numeric structure hook for VariableCondition fields
             def structure_optional_numeric(obj, _):
                 if obj is None:
@@ -978,39 +1046,70 @@ def _register_strict_hooks(converter):
                         except ValueError:
                             raise ValueError(f"Cannot convert '{obj}' to numeric value") from None
                 return obj
-            fresh_converter.register_structure_hook(
-                int | float | None,
-                structure_optional_numeric
-            )
+
+            fresh_converter.register_structure_hook(int | float | None, structure_optional_numeric)
             # Register structure hook for str | list[str] in PullAction.src
             fresh_converter.register_structure_hook(
-                str | list[str],
-                lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj)
+                str | list[str], lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj)
             )
             # Register structure hook for SkipOptions
             fresh_converter.register_structure_hook(
                 SkipOptions | None,
-                lambda obj, _: _structure_skip_options(obj, fresh_converter) if obj is not None else None
+                lambda obj, _: _structure_skip_options(obj, fresh_converter) if obj is not None else None,
             )
             # Register structure hook for allow_missing_chars field (Union[bool, str, List[str]])
             fresh_converter.register_structure_hook(
                 bool | str | list[str] | None,
-                lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None
+                lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None,
             )
             return fresh_converter.structure(obj, cls)
+
         return strict_structure_hook
 
     # Register hooks for all main attrs classes
-    for cls in [Target, Settings, ClickAction,
-                DragAction, KeyboardAction, IdleAction, ScrollAction, GotoAction,
-                ActionTestAction, CommandAction, CaptureSpec, ScreenshotAction, BlockAction,
-                SaveTimestampAction, SaveVariableAction, PullAction, PauseAction,
-                WaitUntilAction, LoopAction, StopAction, ContinueAction, VariableCondition,
-                WaitCondition, ExistsCondition, NotExistsCondition,
-                SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
-                TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
-                BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook,
-                SnapshotFilesystemAction, PullChangedFilesAction, PixelChangeConstraint, SkipOptions, Offset,
-                TextMatchConfig, MachineSpec]:
+    for cls in [
+        Target,
+        Settings,
+        ClickAction,
+        DragAction,
+        KeyboardAction,
+        IdleAction,
+        ScrollAction,
+        GotoAction,
+        ActionTestAction,
+        CommandAction,
+        CaptureSpec,
+        ScreenshotAction,
+        BlockAction,
+        SaveTimestampAction,
+        SaveVariableAction,
+        PullAction,
+        PauseAction,
+        WaitUntilAction,
+        LoopAction,
+        StopAction,
+        ContinueAction,
+        VariableCondition,
+        WaitCondition,
+        ExistsCondition,
+        NotExistsCondition,
+        SweepStrategy,
+        BestConfidenceStrategy,
+        ClosestToStrategy,
+        TopLeftStrategy,
+        TopRightStrategy,
+        BottomLeftStrategy,
+        BottomRightStrategy,
+        LargestStrategy,
+        SmallestStrategy,
+        Playbook,
+        SnapshotFilesystemAction,
+        PullChangedFilesAction,
+        PixelChangeConstraint,
+        SkipOptions,
+        Offset,
+        TextMatchConfig,
+        MachineSpec,
+    ]:
         if attrs.has(cls):
             converter.register_structure_hook(cls, _validate_attrs_class(cls))

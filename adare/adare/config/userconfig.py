@@ -96,6 +96,7 @@ def _load() -> dict:
 
 # ── read API (used by config/server.py) ──────────────────────────────────────
 
+
 def get(name: str):
     """Value for a single ``ADARE_*`` key from the active profile, or ``None``."""
     store = _load()
@@ -122,6 +123,7 @@ def get_profile(name: str):
 
 
 # ── write API (used by `adare vlm ...`) ──────────────────────────────────────
+
 
 def set_profile(name: str, values: dict, activate: bool = True) -> None:
     """Create or replace a profile and (by default) make it active."""
@@ -157,8 +159,7 @@ def remove_profile(name: str) -> bool:
 
 
 def _copy(store: dict) -> dict:
-    return {'active': store['active'],
-            'profiles': {n: dict(v) for n, v in store['profiles'].items()}}
+    return {'active': store['active'], 'profiles': {n: dict(v) for n, v in store['profiles'].items()}}
 
 
 def _save(store: dict) -> None:

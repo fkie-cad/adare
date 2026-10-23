@@ -12,7 +12,7 @@ used for the Win11-ARM64 legacy-boot workaround. **Detect-and-report only — ne
 installs anything, always exits 0.** Run it before any `vm create`.
 
 ```sh
-adare vm gui-doctor
+adare vlm doctor
 ```
 
 Preflights the vision-LLM used for GUI automation (`ADARE_VLLM_*`): confirms the
@@ -42,13 +42,14 @@ longer in the DB) left by older removal paths or crashes. **Dry-run by default**
 always preview before `--force`.
 
 ```sh
-adare vm remove --id <ulid>              # one instance
+adare vm remove <instance-name-or-id>    # one instance (--force if running)
+adare vm remove <vm-name-or-id>          # registered VM + its environments (asks; -y skips)
 adare vm remove --stopped                # all stopped instances
 adare vm remove --experiment <id>        # instances for an experiment
-adare vm remove --env <ulid> --force     # all VMs for an environment
+adare vm remove --env <ulid> --force     # instances of an environment's VM
 adare vm remove --all --force            # ALL instances incl. running
 adare vm snapshot remove <…>             # delete one snapshot
-adare vm reset --force                   # reset ALL VMs — use with extreme caution
+adare vm reset --force                   # remove ALL instances — use with extreme caution
 ```
 
 `vm remove --all --force` and `vm reset --force` wipe VMs system-wide. Confirm the
@@ -63,6 +64,6 @@ adare vm watch <name> --interactive      # allow input
 ```
 
 Opens VirtualSpice's display page pointed at the VM (requires VirtualSpice running,
-started by `adare web start`). Toggle view-only/interactive live from VirtualSpice's
+started by `adare ui start`). Toggle view-only/interactive live from VirtualSpice's
 own toolbar either way. For driving a session VM rather than just watching, see
 `adare-devvm`.

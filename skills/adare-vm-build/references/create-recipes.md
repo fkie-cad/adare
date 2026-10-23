@@ -2,7 +2,7 @@
 
 ## `adare vm create <OS_NAME>`
 
-`adare vm create --help` prints the canonical target list; `adare os-profile list`
+`adare vm create --help` prints the canonical target list; `adare vm profile list`
 is the live source of truth. Common targets:
 
 - **Ubuntu (autoinstall):** ubuntu2204, ubuntu2404, ubuntu2510, ubuntu2604
@@ -39,7 +39,7 @@ is the live source of truth. Common targets:
   profile.
 - **GUI-automated** (kubuntu, and any distro without an unattended path): the vision
   agent drives the graphical installer, records a playbook the first time, then
-  replays it. Needs a working VLM (`adare vm gui-doctor`). `--record`/`--relearn`
+  replays it. Needs a working VLM (`adare vlm doctor`). `--record`/`--relearn`
   control the cached playbook; `--display` watches it drive.
 - **Manual** (`--interactive`, mint/popos/nixos/elementary): boots the VM so a human
   installs the OS/software, then ADARE captures the result.
@@ -141,14 +141,14 @@ Miniforge build exists for it.
 ## OS profiles
 
 ```sh
-adare os-profile list                 # all profiles
-adare os-profile show <name>          # one profile's detail
-adare os-profile add <profile.yml>    # register a custom profile
-adare os-profile remove <name>        # remove a custom profile
+adare vm profile list                 # all profiles
+adare vm profile show <name>          # one profile's detail
+adare vm profile add <profile.yml>    # register a custom profile
+adare vm profile remove <name>        # remove a custom profile
 ```
 
 A profile pins the OS's arch, install method, answer-file template, and defaults. To
-target an OS ADARE doesn't ship, author a profile YAML and `os-profile add` it, then
+target an OS ADARE doesn't ship, author a profile YAML and `vm profile add` it, then
 `vm create <that-name>`.
 
 ## Verifying a fresh VM

@@ -14,6 +14,11 @@ from .vm_file_service import VMFileService
 from .vm_operation_proxy import VMOperationProxy
 
 __all__ = [
-    'CVService', 'ScreenshotService', 'VMFileService',
-    'VMOperationProxy', 'GuestFileProxy', 'GuestCommandProxy', 'FileMetadata',
+    'CVService',
+    'ScreenshotService',
+    'VMFileService',
+    'VMOperationProxy',
+    'GuestFileProxy',
+    'GuestCommandProxy',
+    'FileMetadata',
 ]

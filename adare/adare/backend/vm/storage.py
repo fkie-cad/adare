@@ -45,7 +45,9 @@ def ensure_project_vm_directory(project_path: Path) -> Path:
         VMStorageError: If directory creation fails
     """
     try:
-        vm_dir = project_path / "vm" # todo: maybe there is some way to get the place dynamically from directory class without providing it everywhere here via args?
+        vm_dir = (
+            project_path / "vm"
+        )  # todo: maybe there is some way to get the place dynamically from directory class without providing it everywhere here via args?
         vm_dir.mkdir(parents=True, exist_ok=True)
         log.info(f"Ensured project VM directory exists: {vm_dir}")
         return vm_dir

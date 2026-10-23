@@ -27,9 +27,12 @@ class TestRunListRequest:
 class TestRunListItem:
     def test_construction(self):
         item = RunListItem(
-            ulid="abc", experiment_name="exp",
-            experiment_ulid="e1", environment_name="env",
-            environment_ulid="v1", project_name="proj",
+            ulid="abc",
+            experiment_name="exp",
+            experiment_ulid="e1",
+            environment_name="env",
+            environment_ulid="v1",
+            project_name="proj",
         )
         assert item.status == ""
         assert item.published is False
@@ -38,10 +41,14 @@ class TestRunListItem:
     def test_to_dict(self):
         now = datetime(2025, 1, 1, 12, 0, 0)
         item = RunListItem(
-            ulid="abc", experiment_name="exp",
-            experiment_ulid="e1", environment_name="env",
-            environment_ulid="v1", project_name="proj",
-            start_time=now, duration_seconds=60.0,
+            ulid="abc",
+            experiment_name="exp",
+            experiment_ulid="e1",
+            environment_name="env",
+            environment_ulid="v1",
+            project_name="proj",
+            start_time=now,
+            duration_seconds=60.0,
             status="SUCCESS",
         )
         d = item.to_dict()
@@ -54,9 +61,12 @@ class TestRunListItem:
 class TestRunDetail:
     def test_construction(self):
         detail = RunDetail(
-            ulid="abc", experiment_name="exp",
-            experiment_ulid="e1", environment_name="env",
-            environment_ulid="v1", project_name="proj",
+            ulid="abc",
+            experiment_name="exp",
+            experiment_ulid="e1",
+            environment_name="env",
+            environment_ulid="v1",
+            project_name="proj",
         )
         assert detail.test_results == []
         assert detail.os_info == ""

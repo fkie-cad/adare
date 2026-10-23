@@ -20,8 +20,22 @@ from adare.types.environment import ProvisionCommand, ProvisionStep
 # --- Helpers ---
 
 AUTOPSY_VERSIONS = [
-    '4.4.0', '4.4.1', '4.5.0', '4.6.0', '4.7.0', '4.8.0', '4.9.0', '4.9.1',
-    '4.10.0', '4.11.0', '4.12.0', '4.13.0', '4.14.0', '4.15.0', '4.16.0', '4.17.0',
+    '4.4.0',
+    '4.4.1',
+    '4.5.0',
+    '4.6.0',
+    '4.7.0',
+    '4.8.0',
+    '4.9.0',
+    '4.9.1',
+    '4.10.0',
+    '4.11.0',
+    '4.12.0',
+    '4.13.0',
+    '4.14.0',
+    '4.15.0',
+    '4.16.0',
+    '4.17.0',
 ]
 
 
@@ -35,7 +49,7 @@ def _autopsy_group(versions=None) -> ProvisionStep:
             ProvisionCommand(
                 name='autopsy-{{ item }}-download',
                 command='curl.exe -L -f -o "C:\\Windows\\Temp\\autopsy-{{ item }}.msi" '
-                        'https://example.invalid/autopsy-{{ item }}-64bit.msi',
+                'https://example.invalid/autopsy-{{ item }}-64bit.msi',
                 timeout_minutes=20,
             ),
             ProvisionCommand(
@@ -56,6 +70,7 @@ def _autopsy_group(versions=None) -> ProvisionStep:
 
 # --- T4: expansion ---
 
+
 def test_for_each_expands_to_versions_times_steps():
     """16 versions x 3 steps -> 48 commands."""
     expanded = expand_provision([_autopsy_group()], 'windows')
@@ -70,8 +85,12 @@ def test_expansion_is_group_major_so_each_item_stays_contiguous():
     """
     expanded = expand_provision([_autopsy_group(['4.4.0', '4.4.1'])], 'windows')
     assert [c.name for c in expanded] == [
-        'autopsy-4.4.0-download', 'autopsy-4.4.0-install', 'autopsy-4.4.0-cleanup',
-        'autopsy-4.4.1-download', 'autopsy-4.4.1-install', 'autopsy-4.4.1-cleanup',
+        'autopsy-4.4.0-download',
+        'autopsy-4.4.0-install',
+        'autopsy-4.4.0-cleanup',
+        'autopsy-4.4.1-download',
+        'autopsy-4.4.1-install',
+        'autopsy-4.4.1-cleanup',
     ]
 
 
@@ -94,8 +113,7 @@ def test_non_templated_fields_pass_through_unchanged():
 
 def test_single_command_shorthand_yields_one_command():
     """A step with `command` and no `steps` is one command, not a group."""
-    step = ProvisionStep(name='boot-hardening', shell='cmd',
-                         command='bcdedit /set {default} recoveryenabled No')
+    step = ProvisionStep(name='boot-hardening', shell='cmd', command='bcdedit /set {default} recoveryenabled No')
     expanded = expand_provision([step], 'windows')
     assert len(expanded) == 1
     assert expanded[0].name == 'boot-hardening'
@@ -104,12 +122,11 @@ def test_single_command_shorthand_yields_one_command():
 
 def test_literal_braces_survive_when_there_is_no_for_each():
     """`{default}` in a bcdedit command must not be touched by the templater."""
-    step = ProvisionStep(name='hardening', shell='cmd',
-                         command='bcdedit /set {default} bootstatuspolicy ignoreallfailures')
-    expanded = expand_provision([step], 'windows')
-    assert expanded[0].command == (
-        'bcdedit /set {default} bootstatuspolicy ignoreallfailures'
+    step = ProvisionStep(
+        name='hardening', shell='cmd', command='bcdedit /set {default} bootstatuspolicy ignoreallfailures'
     )
+    expanded = expand_provision([step], 'windows')
+    assert expanded[0].command == ('bcdedit /set {default} bootstatuspolicy ignoreallfailures')
 
 
 def test_declared_order_of_top_level_steps_is_preserved():
@@ -125,6 +142,7 @@ def test_declared_order_of_top_level_steps_is_preserved():
 
 # --- T5: rejections ---
 
+
 def test_unknown_jinja_variable_is_a_hard_error():
     """StrictUndefined: `{{ version }}` must raise, not render empty.
 
@@ -132,7 +150,8 @@ def test_unknown_jinja_variable_is_a_hard_error():
     '.../autopsy--64bit.msi' and a plausible-but-wrong disk.
     """
     step = ProvisionStep(
-        name='g', for_each=['1.0'],
+        name='g',
+        for_each=['1.0'],
         steps=[ProvisionCommand(name='s-{{ item }}', command='get autopsy-{{ version }}.msi')],
     )
     with pytest.raises(ProvisionSchemaError, match="'version' is undefined"):
@@ -141,9 +160,9 @@ def test_unknown_jinja_variable_is_a_hard_error():
 
 def test_error_message_names_the_step_and_the_field():
     step = ProvisionStep(
-        name='g', for_each=['1.0'],
-        steps=[ProvisionCommand(name='dl-{{ item }}', command='ok',
-                                verify='Test-Path {{ nope }}')],
+        name='g',
+        for_each=['1.0'],
+        steps=[ProvisionCommand(name='dl-{{ item }}', command='ok', verify='Test-Path {{ nope }}')],
     )
     with pytest.raises(ProvisionSchemaError) as excinfo:
         expand_provision([step], 'windows')
@@ -154,7 +173,8 @@ def test_error_message_names_the_step_and_the_field():
 def test_duplicate_expanded_name_is_rejected():
     """Forgetting `{{ item }}` in a for_each step's name yields 16 identical names."""
     step = ProvisionStep(
-        name='g', for_each=['1.0', '2.0'],
+        name='g',
+        for_each=['1.0', '2.0'],
         steps=[ProvisionCommand(name='install', command='msiexec {{ item }}')],
     )
     with pytest.raises(ProvisionSchemaError, match='duplicate provision step name'):
@@ -177,8 +197,7 @@ def test_empty_command_is_rejected():
 
 def test_step_with_both_command_and_steps_is_rejected():
     with pytest.raises(ValueError, match='both'):
-        ProvisionStep(name='x', command='echo 1',
-                      steps=[ProvisionCommand(name='y', command='echo 2')])
+        ProvisionStep(name='x', command='echo 1', steps=[ProvisionCommand(name='y', command='echo 2')])
 
 
 def test_step_with_neither_command_nor_steps_is_rejected():
@@ -199,21 +218,32 @@ def test_non_positive_timeout_is_rejected():
 
 # --- shell resolution ---
 
+
 @pytest.mark.parametrize('platform,expected', [('windows', 'powershell'), ('linux', 'bash')])
 def test_auto_shell_resolves_per_platform(platform, expected):
     assert resolve_shell('auto', platform) == expected
 
 
-@pytest.mark.parametrize('shell,platform', [
-    ('powershell', 'windows'), ('cmd', 'windows'), ('bash', 'linux'),
-])
+@pytest.mark.parametrize(
+    'shell,platform',
+    [
+        ('powershell', 'windows'),
+        ('cmd', 'windows'),
+        ('bash', 'linux'),
+    ],
+)
 def test_explicit_available_shell_passes_through(shell, platform):
     assert resolve_shell(shell, platform) == shell
 
 
-@pytest.mark.parametrize('shell,platform', [
-    ('cmd', 'linux'), ('powershell', 'linux'), ('bash', 'windows'),
-])
+@pytest.mark.parametrize(
+    'shell,platform',
+    [
+        ('cmd', 'linux'),
+        ('powershell', 'linux'),
+        ('bash', 'windows'),
+    ],
+)
 def test_shell_unavailable_on_platform_is_rejected(shell, platform):
     """A silent substitution would run the author's text through the wrong parser."""
     with pytest.raises(ProvisionSchemaError, match='not available'):
@@ -232,6 +262,7 @@ def test_expanded_shell_is_never_auto():
 
 
 # --- identity projection ---
+
 
 def test_identity_excludes_description_and_log_files():
     """Neither can affect the disk, so a typo in prose must not force a rebuild."""

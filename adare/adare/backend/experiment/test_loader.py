@@ -24,8 +24,7 @@ class TestLoader:
     in PlaybookController, providing clean separation of concerns.
     """
 
-    def __init__(self, experiment_dir: Path, project_dir: Path, playbook = None,
-                 variable_resolver = None):
+    def __init__(self, experiment_dir: Path, project_dir: Path, playbook=None, variable_resolver=None):
         """
         Initialize the test loader.
 
@@ -91,6 +90,7 @@ class TestLoader:
 
         # Upload only testfunctions that are actually used in the playbook
         from adare.config.configdirectory import STATE_DIR
+
         global_testfunctions_path = STATE_DIR / 'testfunctions'
 
         if global_testfunctions_path.exists():
@@ -102,7 +102,9 @@ class TestLoader:
                 required_files = self._get_testfunction_files_for_functions(used_function_names)
 
                 if required_files:
-                    log.info(f"Uploading {len(required_files)} testfunction files for functions: {sorted(used_function_names)}")
+                    log.info(
+                        f"Uploading {len(required_files)} testfunction files for functions: {sorted(used_function_names)}"
+                    )
                     try:
                         await websocket_client.upload_testfunctions(global_testfunctions_path, required_files)
                     except OSError as e:
@@ -115,7 +117,7 @@ class TestLoader:
                 log.info("No testfunctions used in playbook - skipping testfunction upload")
         else:
             log.warning(f"Global testfunctions directory not found: {global_testfunctions_path}")
-            log.info("Load testfunctions using 'adare testfunction load-global <path>' to enable testfunction uploads")
+            log.info("Load testfunctions using 'adare test load <path>' to enable testfunction uploads")
 
         # Individual tests are sent via WebSocket when executed
         # No need to upload entire testset file to VM
@@ -159,7 +161,9 @@ class TestLoader:
 
             dependencies_list = list(dependencies)
             if dependencies_list:
-                log.info(f"Collected {len(dependencies_list)} unique dependencies for used testfunctions: {dependencies_list}")
+                log.info(
+                    f"Collected {len(dependencies_list)} unique dependencies for used testfunctions: {dependencies_list}"
+                )
             else:
                 log.debug("No dependencies found in used testfunction files")
 
@@ -181,9 +185,9 @@ class TestLoader:
         try:
             # Get testfunction data from database for this project
             from adare.backend.testfunction.database import get_testfunction_files_data
+
             testfunction_files = get_testfunction_files_data(
-                project_path=self.project_dir,
-                fields=['requirements_path']
+                project_path=self.project_dir, fields=['requirements_path']
             )
 
             # Read each requirements file and collect dependencies
@@ -207,7 +211,9 @@ class TestLoader:
 
             dependencies_list = list(dependencies)
             if dependencies_list:
-                log.info(f"Collected {len(dependencies_list)} unique dependencies (fallback - all files): {dependencies_list}")
+                log.info(
+                    f"Collected {len(dependencies_list)} unique dependencies (fallback - all files): {dependencies_list}"
+                )
             else:
                 log.debug("No dependencies found in any testfunctions (fallback)")
 
@@ -230,6 +236,7 @@ class TestLoader:
         playbook_path = self.experiment_dir / "playbook.yml"
         if playbook_path.exists():
             from adarelib.testset.yaml.customloader import get_custom_loader
+
             playbook_data = yaml.load(playbook_path.read_text(), Loader=get_custom_loader())
             tests = (playbook_data or {}).get('tests')
             if tests:
@@ -237,6 +244,7 @@ class TestLoader:
         tests = getattr(self.playbook, 'tests', None)
         if tests:
             import attrs
+
             return [attrs.asdict(t) if attrs.has(type(t)) else dict(t) for t in tests]
         return []
 
@@ -277,7 +285,9 @@ class TestLoader:
             log.error(f"Unexpected error resolving test '{test_name}' locally: {e}", exc_info=True)
             return None
 
-    async def resolve_test_with_runtime_context(self, test_name: str, runtime_execution_context: dict[str, Any]) -> dict[str, Any] | None:
+    async def resolve_test_with_runtime_context(
+        self, test_name: str, runtime_execution_context: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """Load and resolve a specific test with runtime execution context for variables set during action execution."""
         try:
             # Load tests from the playbook (staged file or in-memory playbook)
@@ -294,7 +304,9 @@ class TestLoader:
             # Merge with runtime context (runtime context takes precedence)
             combined_context = {**base_context, **runtime_execution_context}
 
-            log.info(f"Resolving test '{test_name}' with runtime context. Base context keys: {list(base_context.keys())}, Runtime context keys: {list(runtime_execution_context.keys())}")
+            log.info(
+                f"Resolving test '{test_name}' with runtime context. Base context keys: {list(base_context.keys())}, Runtime context keys: {list(runtime_execution_context.keys())}"
+            )
             log.info(f"Combined context: {combined_context}")
 
             # Find the test by name
@@ -354,10 +366,7 @@ class TestLoader:
             log.debug("No variables referenced, using empty context")
 
         # Single call handles everything - YAML tags AND Jinja templates
-        resolver = self.variable_resolver.__class__(
-            variable_registry=variable_registry,
-            jinja_env=jinja_env
-        )
+        resolver = self.variable_resolver.__class__(variable_registry=variable_registry, jinja_env=jinja_env)
 
         resolved_test = resolver.process_data(test_data, template_context)
 
@@ -377,6 +386,7 @@ class TestLoader:
         filters = {}
         if hasattr(self.playbook, 'variables') and self.playbook.variables:
             from adarelib.common.variables import TimestampMetadata
+
             metadata = TimestampMetadata()  # Create temp metadata object
             filters.update(metadata.get_jinja_filters(self.playbook.variables))
 
@@ -410,7 +420,9 @@ class TestLoader:
                     used_functions.add(function_name)
                     log.debug(f"Found testfunction usage: {function_name}")
 
-            log.info(f"Extracted {len(used_functions)} unique testfunction names from playbook: {sorted(used_functions)}")
+            log.info(
+                f"Extracted {len(used_functions)} unique testfunction names from playbook: {sorted(used_functions)}"
+            )
             return used_functions
 
         except (OSError, UnicodeDecodeError) as e:
@@ -439,7 +451,9 @@ class TestLoader:
                         # Check for exact match first
                         if testfunction['name'] in function_names:
                             # Find the actual file path for this testfunction file
-                            testfunction_file_obj = api._session.query(TestFunctionFile).filter_by(name=file_name).first()
+                            testfunction_file_obj = (
+                                api._session.query(TestFunctionFile).filter_by(name=file_name).first()
+                            )
                             if testfunction_file_obj:
                                 file_path = Path(testfunction_file_obj.path)
                                 testfunction_files.add(file_path)
@@ -451,14 +465,18 @@ class TestLoader:
                             collection, func_name = testfunction['name'].split('.', 1)
                             if collection == 'standard' and func_name in function_names:
                                 # Find the actual file path for this testfunction file
-                                testfunction_file_obj = api._session.query(TestFunctionFile).filter_by(name=file_name).first()
+                                testfunction_file_obj = (
+                                    api._session.query(TestFunctionFile).filter_by(name=file_name).first()
+                                )
                                 if testfunction_file_obj:
                                     file_path = Path(testfunction_file_obj.path)
                                     testfunction_files.add(file_path)
                                     log.debug(f"Mapped unprefixed function '{func_name}' to standard file: {file_path}")
                                 break
 
-            log.info(f"Mapped {len(function_names)} functions to {len(testfunction_files)} files: {[f.name for f in testfunction_files]}")
+            log.info(
+                f"Mapped {len(function_names)} functions to {len(testfunction_files)} files: {[f.name for f in testfunction_files]}"
+            )
             return testfunction_files
 
         except (ImportError, AttributeError) as e:
@@ -480,6 +498,7 @@ class TestLoader:
         if '_resolved' in text and '{{' in text and '}}' in text:
             # Check if this looks like one of our placeholders (regex_N_resolved, timestamp_N_resolved, etc.)
             import re
+
             if re.match(r'^\{\{\s*(regex|timestamp)_\d+_resolved\s*\}\}$', text.strip()):
                 log.debug(f"Skipping variable replacement for placeholder: '{text}'")
                 return text
@@ -496,7 +515,11 @@ class TestLoader:
             template = jinja2.Template(text)
 
             # Add custom filters for metadata capture
-            custom_filters = self.variable_resolver.get_custom_filters() if hasattr(self.variable_resolver, 'get_custom_filters') else {}
+            custom_filters = (
+                self.variable_resolver.get_custom_filters()
+                if hasattr(self.variable_resolver, 'get_custom_filters')
+                else {}
+            )
             template.environment.filters.update(custom_filters)
 
             result = template.render(formatted_context)
@@ -560,8 +583,8 @@ class TestLoader:
 
             # Get test class from collection
             from adarelib.testset.testfunction import get_testclass_from_testfunction
-            return get_testclass_from_testfunction(test_function, testfunction_collection)
 
+            return get_testclass_from_testfunction(test_function, testfunction_collection)
 
         except (OSError, yaml.YAMLError) as e:
             log.error(f"Failed to load test class for '{test_name}': {e}")
@@ -595,6 +618,7 @@ class TestLoader:
 
             # Structure the test using cattrs
             import cattrs
+
             test_instance = cattrs.structure(resolved_test, test_class)
 
             log.debug(f"Test Loader: Structured host test '{test_name}' as {test_class.__name__}")

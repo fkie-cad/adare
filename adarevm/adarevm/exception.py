@@ -1,5 +1,6 @@
 import logging
 
+
 class LoggedException(Exception):
     def __init__(self, log: logging.Logger, message: str, level: str = 'info'):
         self.log = log

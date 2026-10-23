@@ -48,7 +48,7 @@ fi
 
 # Run the Python script
 if [ -f adare/install/copy_appdata.py ]; then
-    python3 adare/install/copy_appdata.py
+    python3 adare/install/copy_appdata.py || exit 1
 else
     echo "The script 'adare/install/copy_appdata.py' does not exist. Exiting..."
     exit 1

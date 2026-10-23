@@ -35,6 +35,7 @@ ValueInAnyLineParameter = jsonl_module.value_in_any_line._parameter_class
 
 # Import test helpers
 import importlib.util
+
 helpers_path = Path(__file__).parent / "helpers.py"
 spec = importlib.util.spec_from_file_location("helpers", helpers_path)
 helpers = importlib.util.module_from_spec(spec)
@@ -47,9 +48,11 @@ assert_test_error = helpers.assert_test_error
 
 # === Fixtures ===
 
+
 @pytest.fixture
 def create_jsonl_file(tmp_path):
     """Factory to create JSONL files (one JSON object per line)."""
+
     def _create(filename, lines_data):
         """
         Create a JSONL file.
@@ -68,6 +71,7 @@ def create_jsonl_file(tmp_path):
                     # Write dict as JSON line
                     f.write(json.dumps(data) + '\n')
         return filepath
+
     return _create
 
 
@@ -75,24 +79,26 @@ def create_jsonl_file(tmp_path):
 # LineMatches Tests
 # ============================================================================
 
+
 class TestLineMatches:
     """Tests for LineMatches testfunction."""
 
     def test_line_matches_any_mode_success(self, create_jsonl_file):
         """Test successful match in 'any' mode."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"name": "Alice", "age": 30, "city": "New York"},
-            {"name": "Bob", "age": 25, "city": "London"},
-            {"name": "Charlie", "age": 35, "city": "Paris"}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl",
+            [
+                {"name": "Alice", "age": 30, "city": "New York"},
+                {"name": "Bob", "age": 25, "city": "London"},
+                {"name": "Charlie", "age": 35, "city": "Paris"},
+            ],
+        )
 
         test = LineMatches(
             name="test_any",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"name": "Bob", "age": 25},
-                match_mode="any"
-            )
+                dst=str(jsonl_file), conditions={"name": "Bob", "age": 25}, match_mode="any"
+            ),
         )
         result = test.test()
 
@@ -102,18 +108,13 @@ class TestLineMatches:
 
     def test_line_matches_any_mode_failure(self, create_jsonl_file):
         """Test failure in 'any' mode when no lines match."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"name": "Alice", "age": 30},
-            {"name": "Bob", "age": 25}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}])
 
         test = LineMatches(
             name="test_any",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"name": "Charlie", "age": 35},
-                match_mode="any"
-            )
+                dst=str(jsonl_file), conditions={"name": "Charlie", "age": 35}, match_mode="any"
+            ),
         )
         result = test.test()
 
@@ -122,19 +123,20 @@ class TestLineMatches:
 
     def test_line_matches_all_mode_success(self, create_jsonl_file):
         """Test success in 'all' mode when all lines match."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"status": "active", "verified": True},
-            {"status": "active", "verified": True},
-            {"status": "active", "verified": True}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl",
+            [
+                {"status": "active", "verified": True},
+                {"status": "active", "verified": True},
+                {"status": "active", "verified": True},
+            ],
+        )
 
         test = LineMatches(
             name="test_all",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"status": "active", "verified": True},
-                match_mode="all"
-            )
+                dst=str(jsonl_file), conditions={"status": "active", "verified": True}, match_mode="all"
+            ),
         )
         result = test.test()
 
@@ -144,19 +146,13 @@ class TestLineMatches:
 
     def test_line_matches_all_mode_failure(self, create_jsonl_file):
         """Test failure in 'all' mode when some lines don't match."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"status": "active"},
-            {"status": "inactive"},
-            {"status": "active"}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl", [{"status": "active"}, {"status": "inactive"}, {"status": "active"}]
+        )
 
         test = LineMatches(
             name="test_all",
-            parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"status": "active"},
-                match_mode="all"
-            )
+            parameter=LineMatchesParameter(dst=str(jsonl_file), conditions={"status": "active"}, match_mode="all"),
         )
         result = test.test()
 
@@ -165,18 +161,14 @@ class TestLineMatches:
 
     def test_line_matches_nested_value(self, create_jsonl_file):
         """Test matching nested values using dot notation."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"user": {"name": "Alice", "profile": {"age": 30}}},
-            {"user": {"name": "Bob", "profile": {"age": 25}}}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl",
+            [{"user": {"name": "Alice", "profile": {"age": 30}}}, {"user": {"name": "Bob", "profile": {"age": 25}}}],
+        )
 
         test = LineMatches(
             name="test_nested",
-            parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"user.profile.age": 30},
-                match_mode="any"
-            )
+            parameter=LineMatchesParameter(dst=str(jsonl_file), conditions={"user.profile.age": 30}, match_mode="any"),
         )
         result = test.test()
 
@@ -184,18 +176,16 @@ class TestLineMatches:
 
     def test_line_matches_wildcard_array(self, create_jsonl_file):
         """Test wildcard array access with [*] syntax."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"users": [{"name": "Alice"}, {"name": "Bob"}]},
-            {"users": [{"name": "Charlie"}, {"name": "David"}]}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl",
+            [{"users": [{"name": "Alice"}, {"name": "Bob"}]}, {"users": [{"name": "Charlie"}, {"name": "David"}]}],
+        )
 
         test = LineMatches(
             name="test_wildcard",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"users[*].name": "Alice"},
-                match_mode="any"
-            )
+                dst=str(jsonl_file), conditions={"users[*].name": "Alice"}, match_mode="any"
+            ),
         )
         result = test.test()
 
@@ -203,18 +193,19 @@ class TestLineMatches:
 
     def test_line_matches_wildcard_object_keys(self, create_jsonl_file):
         """Test wildcard object keys with * syntax."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"config": {"feature1": {"enabled": True}, "feature2": {"enabled": True}}},
-            {"config": {"feature1": {"enabled": False}, "feature2": {"enabled": True}}}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl",
+            [
+                {"config": {"feature1": {"enabled": True}, "feature2": {"enabled": True}}},
+                {"config": {"feature1": {"enabled": False}, "feature2": {"enabled": True}}},
+            ],
+        )
 
         test = LineMatches(
             name="test_wildcard_keys",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"config.*.enabled": True},
-                match_mode="any"
-            )
+                dst=str(jsonl_file), conditions={"config.*.enabled": True}, match_mode="any"
+            ),
         )
         result = test.test()
 
@@ -222,20 +213,15 @@ class TestLineMatches:
 
     def test_line_matches_regex_mode(self, create_jsonl_file):
         """Test regex matching with regex_match=True."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"email": "alice@example.com"},
-            {"email": "bob@test.org"},
-            {"email": "invalid-email"}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl", [{"email": "alice@example.com"}, {"email": "bob@test.org"}, {"email": "invalid-email"}]
+        )
 
         test = LineMatches(
             name="test_regex",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"email": r".*@example\.com"},
-                match_mode="any",
-                regex_match=True
-            )
+                dst=str(jsonl_file), conditions={"email": r".*@example\.com"}, match_mode="any", regex_match=True
+            ),
         )
         result = test.test()
 
@@ -243,20 +229,13 @@ class TestLineMatches:
 
     def test_line_matches_malformed_skip_true(self, create_jsonl_file):
         """Test skipping malformed JSON lines with skip_malformed=True."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"name": "Alice"},
-            "this is not valid JSON",
-            {"name": "Bob"}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"name": "Alice"}, "this is not valid JSON", {"name": "Bob"}])
 
         test = LineMatches(
             name="test_malformed",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"name": "Bob"},
-                match_mode="any",
-                skip_malformed=True
-            )
+                dst=str(jsonl_file), conditions={"name": "Bob"}, match_mode="any", skip_malformed=True
+            ),
         )
         result = test.test()
 
@@ -264,20 +243,13 @@ class TestLineMatches:
 
     def test_line_matches_malformed_skip_false(self, create_jsonl_file):
         """Test failing on malformed JSON with skip_malformed=False."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"name": "Alice"},
-            "this is not valid JSON",
-            {"name": "Bob"}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"name": "Alice"}, "this is not valid JSON", {"name": "Bob"}])
 
         test = LineMatches(
             name="test_malformed",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"name": "Bob"},
-                match_mode="any",
-                skip_malformed=False
-            )
+                dst=str(jsonl_file), conditions={"name": "Bob"}, match_mode="any", skip_malformed=False
+            ),
         )
         result = test.test()
 
@@ -290,11 +262,7 @@ class TestLineMatches:
 
         test = LineMatches(
             name="test_empty",
-            parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"name": "Alice"},
-                match_mode="any"
-            )
+            parameter=LineMatchesParameter(dst=str(jsonl_file), conditions={"name": "Alice"}, match_mode="any"),
         )
         result = test.test()
 
@@ -306,10 +274,8 @@ class TestLineMatches:
         test = LineMatches(
             name="test_not_found",
             parameter=LineMatchesParameter(
-                dst=str(tmp_path / "nonexistent.jsonl"),
-                conditions={"name": "Alice"},
-                match_mode="any"
-            )
+                dst=str(tmp_path / "nonexistent.jsonl"), conditions={"name": "Alice"}, match_mode="any"
+            ),
         )
         result = test.test()
 
@@ -318,19 +284,16 @@ class TestLineMatches:
 
     def test_line_matches_with_placeholder(self, create_jsonl_file, variable_metadata_simple):
         """Test matching with placeholder variables."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"name": "Alice", "value": "value1"},
-            {"name": "Bob", "value": "value2"}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl", [{"name": "Alice", "value": "value1"}, {"name": "Bob", "value": "value2"}]
+        )
 
         test = LineMatches(
             name="test_placeholder",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"name": "Alice", "value": "{{VAR1}}"},
-                match_mode="any"
+                dst=str(jsonl_file), conditions={"name": "Alice", "value": "{{VAR1}}"}, match_mode="any"
             ),
-            variable_metadata=variable_metadata_simple
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -342,11 +305,7 @@ class TestLineMatches:
 
         test = LineMatches(
             name="test_invalid_mode",
-            parameter=LineMatchesParameter(
-                dst=str(jsonl_file),
-                conditions={"name": "Alice"},
-                match_mode="invalid"
-            )
+            parameter=LineMatchesParameter(dst=str(jsonl_file), conditions={"name": "Alice"}, match_mode="invalid"),
         )
         result = test.test()
 
@@ -358,24 +317,19 @@ class TestLineMatches:
 # LineCount Tests
 # ============================================================================
 
+
 class TestLineCount:
     """Tests for LineCount testfunction."""
 
     def test_line_count_exact_match(self, create_jsonl_file):
         """Test exact count match."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"status": "active"},
-            {"status": "active"},
-            {"status": "inactive"}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl", [{"status": "active"}, {"status": "active"}, {"status": "inactive"}]
+        )
 
         test = LineCount(
             name="test_count",
-            parameter=LineCountParameter(
-                dst=str(jsonl_file),
-                conditions={"status": "active"},
-                expected_count=2
-            )
+            parameter=LineCountParameter(dst=str(jsonl_file), conditions={"status": "active"}, expected_count=2),
         )
         result = test.test()
 
@@ -385,19 +339,11 @@ class TestLineCount:
 
     def test_line_count_exact_mismatch(self, create_jsonl_file):
         """Test failure when count doesn't match expected."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"status": "active"},
-            {"status": "active"},
-            {"status": "active"}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"status": "active"}, {"status": "active"}, {"status": "active"}])
 
         test = LineCount(
             name="test_count",
-            parameter=LineCountParameter(
-                dst=str(jsonl_file),
-                conditions={"status": "active"},
-                expected_count=2
-            )
+            parameter=LineCountParameter(dst=str(jsonl_file), conditions={"status": "active"}, expected_count=2),
         )
         result = test.test()
 
@@ -407,19 +353,13 @@ class TestLineCount:
 
     def test_line_count_range_min_max(self, create_jsonl_file):
         """Test count with min/max range."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"status": "active"},
-            {"status": "active"},
-            {"status": "active"}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"status": "active"}, {"status": "active"}, {"status": "active"}])
 
         test = LineCount(
             name="test_count_range",
             parameter=LineCountParameter(
-                dst=str(jsonl_file),
-                conditions={"status": "active"},
-                expected_count={"min": 2, "max": 5}
-            )
+                dst=str(jsonl_file), conditions={"status": "active"}, expected_count={"min": 2, "max": 5}
+            ),
         )
         result = test.test()
 
@@ -429,17 +369,13 @@ class TestLineCount:
 
     def test_line_count_range_below_min(self, create_jsonl_file):
         """Test failure when count is below minimum."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"status": "active"}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"status": "active"}])
 
         test = LineCount(
             name="test_count_range",
             parameter=LineCountParameter(
-                dst=str(jsonl_file),
-                conditions={"status": "active"},
-                expected_count={"min": 2, "max": 5}
-            )
+                dst=str(jsonl_file), conditions={"status": "active"}, expected_count={"min": 2, "max": 5}
+            ),
         )
         result = test.test()
 
@@ -449,22 +385,23 @@ class TestLineCount:
 
     def test_line_count_range_above_max(self, create_jsonl_file):
         """Test failure when count is above maximum."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"status": "active"},
-            {"status": "active"},
-            {"status": "active"},
-            {"status": "active"},
-            {"status": "active"},
-            {"status": "active"}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl",
+            [
+                {"status": "active"},
+                {"status": "active"},
+                {"status": "active"},
+                {"status": "active"},
+                {"status": "active"},
+                {"status": "active"},
+            ],
+        )
 
         test = LineCount(
             name="test_count_range",
             parameter=LineCountParameter(
-                dst=str(jsonl_file),
-                conditions={"status": "active"},
-                expected_count={"min": 2, "max": 5}
-            )
+                dst=str(jsonl_file), conditions={"status": "active"}, expected_count={"min": 2, "max": 5}
+            ),
         )
         result = test.test()
 
@@ -473,19 +410,10 @@ class TestLineCount:
 
     def test_line_count_no_conditions_all_lines(self, create_jsonl_file):
         """Test counting all lines when no conditions specified."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"name": "Alice"},
-            {"name": "Bob"},
-            {"name": "Charlie"}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"name": "Alice"}, {"name": "Bob"}, {"name": "Charlie"}])
 
         test = LineCount(
-            name="test_count_all",
-            parameter=LineCountParameter(
-                dst=str(jsonl_file),
-                conditions=None,
-                expected_count=3
-            )
+            name="test_count_all", parameter=LineCountParameter(dst=str(jsonl_file), conditions=None, expected_count=3)
         )
         result = test.test()
 
@@ -494,18 +422,11 @@ class TestLineCount:
 
     def test_line_count_at_least_one_default(self, create_jsonl_file):
         """Test default behavior (expected_count=None means at least 1)."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"status": "active"},
-            {"status": "inactive"}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"status": "active"}, {"status": "inactive"}])
 
         test = LineCount(
             name="test_count_default",
-            parameter=LineCountParameter(
-                dst=str(jsonl_file),
-                conditions={"status": "active"},
-                expected_count=None
-            )
+            parameter=LineCountParameter(dst=str(jsonl_file), conditions={"status": "active"}, expected_count=None),
         )
         result = test.test()
 
@@ -515,18 +436,11 @@ class TestLineCount:
 
     def test_line_count_no_matching_lines(self, create_jsonl_file):
         """Test when no lines match conditions."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"status": "inactive"},
-            {"status": "inactive"}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"status": "inactive"}, {"status": "inactive"}])
 
         test = LineCount(
             name="test_no_match",
-            parameter=LineCountParameter(
-                dst=str(jsonl_file),
-                conditions={"status": "active"},
-                expected_count=None
-            )
+            parameter=LineCountParameter(dst=str(jsonl_file), conditions={"status": "active"}, expected_count=None),
         )
         result = test.test()
 
@@ -535,19 +449,13 @@ class TestLineCount:
 
     def test_line_count_with_nested_conditions(self, create_jsonl_file):
         """Test counting with nested conditions."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"user": {"age": 30}},
-            {"user": {"age": 25}},
-            {"user": {"age": 30}}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl", [{"user": {"age": 30}}, {"user": {"age": 25}}, {"user": {"age": 30}}]
+        )
 
         test = LineCount(
             name="test_nested",
-            parameter=LineCountParameter(
-                dst=str(jsonl_file),
-                conditions={"user.age": 30},
-                expected_count=2
-            )
+            parameter=LineCountParameter(dst=str(jsonl_file), conditions={"user.age": 30}, expected_count=2),
         )
         result = test.test()
 
@@ -555,19 +463,18 @@ class TestLineCount:
 
     def test_line_count_with_wildcards(self, create_jsonl_file):
         """Test counting with wildcard conditions."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"items": [{"status": "done"}, {"status": "pending"}]},
-            {"items": [{"status": "done"}, {"status": "done"}]},
-            {"items": [{"status": "pending"}]}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl",
+            [
+                {"items": [{"status": "done"}, {"status": "pending"}]},
+                {"items": [{"status": "done"}, {"status": "done"}]},
+                {"items": [{"status": "pending"}]},
+            ],
+        )
 
         test = LineCount(
             name="test_wildcard",
-            parameter=LineCountParameter(
-                dst=str(jsonl_file),
-                conditions={"items[*].status": "done"},
-                expected_count=2
-            )
+            parameter=LineCountParameter(dst=str(jsonl_file), conditions={"items[*].status": "done"}, expected_count=2),
         )
         result = test.test()
 
@@ -575,22 +482,16 @@ class TestLineCount:
 
     def test_line_count_skip_malformed(self, create_jsonl_file):
         """Test counting with malformed lines skipped."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"status": "active"},
-            "malformed json",
-            {"status": "active"},
-            "another bad line",
-            {"status": "active"}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl",
+            [{"status": "active"}, "malformed json", {"status": "active"}, "another bad line", {"status": "active"}],
+        )
 
         test = LineCount(
             name="test_malformed",
             parameter=LineCountParameter(
-                dst=str(jsonl_file),
-                conditions={"status": "active"},
-                expected_count=3,
-                skip_malformed=True
-            )
+                dst=str(jsonl_file), conditions={"status": "active"}, expected_count=3, skip_malformed=True
+            ),
         )
         result = test.test()
 
@@ -602,11 +503,7 @@ class TestLineCount:
 
         test = LineCount(
             name="test_empty",
-            parameter=LineCountParameter(
-                dst=str(jsonl_file),
-                conditions={"status": "active"},
-                expected_count=0
-            )
+            parameter=LineCountParameter(dst=str(jsonl_file), conditions={"status": "active"}, expected_count=0),
         )
         result = test.test()
 
@@ -618,24 +515,19 @@ class TestLineCount:
 # ValueInAnyLine Tests
 # ============================================================================
 
+
 class TestValueInAnyLine:
     """Tests for ValueInAnyLine testfunction."""
 
     def test_value_in_any_line_found(self, create_jsonl_file):
         """Test successful value match in a line."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"name": "Alice", "age": 30},
-            {"name": "Bob", "age": 25},
-            {"name": "Charlie", "age": 35}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl", [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}, {"name": "Charlie", "age": 35}]
+        )
 
         test = ValueInAnyLine(
             name="test_value",
-            parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="name",
-                expected_value="Bob"
-            )
+            parameter=ValueInAnyLineParameter(dst=str(jsonl_file), key_path="name", expected_value="Bob"),
         )
         result = test.test()
 
@@ -645,18 +537,11 @@ class TestValueInAnyLine:
 
     def test_value_in_any_line_not_found(self, create_jsonl_file):
         """Test failure when value not found."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"name": "Alice", "age": 30},
-            {"name": "Bob", "age": 25}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}])
 
         test = ValueInAnyLine(
             name="test_value",
-            parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="name",
-                expected_value="Charlie"
-            )
+            parameter=ValueInAnyLineParameter(dst=str(jsonl_file), key_path="name", expected_value="Charlie"),
         )
         result = test.test()
 
@@ -666,18 +551,16 @@ class TestValueInAnyLine:
 
     def test_value_in_any_line_nested_path(self, create_jsonl_file):
         """Test with nested key path."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"user": {"profile": {"email": "alice@test.com"}}},
-            {"user": {"profile": {"email": "bob@test.com"}}}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl",
+            [{"user": {"profile": {"email": "alice@test.com"}}}, {"user": {"profile": {"email": "bob@test.com"}}}],
+        )
 
         test = ValueInAnyLine(
             name="test_nested",
             parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="user.profile.email",
-                expected_value="bob@test.com"
-            )
+                dst=str(jsonl_file), key_path="user.profile.email", expected_value="bob@test.com"
+            ),
         )
         result = test.test()
 
@@ -685,19 +568,14 @@ class TestValueInAnyLine:
 
     def test_value_in_any_line_wildcard_array(self, create_jsonl_file):
         """Test with wildcard array access."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"tags": ["python", "java", "go"]},
-            {"tags": ["rust", "cpp"]},
-            {"tags": ["javascript", "python"]}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl",
+            [{"tags": ["python", "java", "go"]}, {"tags": ["rust", "cpp"]}, {"tags": ["javascript", "python"]}],
+        )
 
         test = ValueInAnyLine(
             name="test_wildcard",
-            parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="tags[*]",
-                expected_value="rust"
-            )
+            parameter=ValueInAnyLineParameter(dst=str(jsonl_file), key_path="tags[*]", expected_value="rust"),
         )
         result = test.test()
 
@@ -705,18 +583,19 @@ class TestValueInAnyLine:
 
     def test_value_in_any_line_wildcard_objects(self, create_jsonl_file):
         """Test with wildcard object key access."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"config": {"db": {"host": "localhost"}, "cache": {"host": "redis"}}},
-            {"config": {"db": {"host": "prod-db"}, "cache": {"host": "prod-cache"}}}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl",
+            [
+                {"config": {"db": {"host": "localhost"}, "cache": {"host": "redis"}}},
+                {"config": {"db": {"host": "prod-db"}, "cache": {"host": "prod-cache"}}},
+            ],
+        )
 
         test = ValueInAnyLine(
             name="test_wildcard_obj",
             parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="config.*.host",
-                expected_value="localhost"
-            )
+                dst=str(jsonl_file), key_path="config.*.host", expected_value="localhost"
+            ),
         )
         result = test.test()
 
@@ -724,20 +603,13 @@ class TestValueInAnyLine:
 
     def test_value_in_any_line_regex_match(self, create_jsonl_file):
         """Test with regex matching."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"id": "user-123"},
-            {"id": "user-456"},
-            {"id": "admin-789"}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"id": "user-123"}, {"id": "user-456"}, {"id": "admin-789"}])
 
         test = ValueInAnyLine(
             name="test_regex",
             parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="id",
-                expected_value=r"admin-\d+",
-                regex_match=True
-            )
+                dst=str(jsonl_file), key_path="id", expected_value=r"admin-\d+", regex_match=True
+            ),
         )
         result = test.test()
 
@@ -745,20 +617,13 @@ class TestValueInAnyLine:
 
     def test_value_in_any_line_multiple_matches(self, create_jsonl_file):
         """Test when value appears in multiple lines."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"status": "active"},
-            {"status": "inactive"},
-            {"status": "active"},
-            {"status": "active"}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl", [{"status": "active"}, {"status": "inactive"}, {"status": "active"}, {"status": "active"}]
+        )
 
         test = ValueInAnyLine(
             name="test_multiple",
-            parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="status",
-                expected_value="active"
-            )
+            parameter=ValueInAnyLineParameter(dst=str(jsonl_file), key_path="status", expected_value="active"),
         )
         result = test.test()
 
@@ -768,18 +633,11 @@ class TestValueInAnyLine:
 
     def test_value_in_any_line_key_not_exists(self, create_jsonl_file):
         """Test when key path doesn't exist in any line."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"name": "Alice"},
-            {"name": "Bob"}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"name": "Alice"}, {"name": "Bob"}])
 
         test = ValueInAnyLine(
             name="test_no_key",
-            parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="email",
-                expected_value="test@example.com"
-            )
+            parameter=ValueInAnyLineParameter(dst=str(jsonl_file), key_path="email", expected_value="test@example.com"),
         )
         result = test.test()
 
@@ -788,19 +646,14 @@ class TestValueInAnyLine:
 
     def test_value_in_any_line_with_placeholder(self, create_jsonl_file, variable_metadata_simple):
         """Test with placeholder variable."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"name": "Alice", "value": "value1"},
-            {"name": "Bob", "value": "value2"}
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl", [{"name": "Alice", "value": "value1"}, {"name": "Bob", "value": "value2"}]
+        )
 
         test = ValueInAnyLine(
             name="test_placeholder",
-            parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="name",
-                expected_value="{{NAME_VAR}}"
-            ),
-            variable_metadata=variable_metadata_simple
+            parameter=ValueInAnyLineParameter(dst=str(jsonl_file), key_path="name", expected_value="{{NAME_VAR}}"),
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -808,21 +661,15 @@ class TestValueInAnyLine:
 
     def test_value_in_any_line_skip_malformed(self, create_jsonl_file):
         """Test skipping malformed JSON lines."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"name": "Alice"},
-            "this is malformed",
-            {"name": "Bob"},
-            "another bad line"
-        ])
+        jsonl_file = create_jsonl_file(
+            "test.jsonl", [{"name": "Alice"}, "this is malformed", {"name": "Bob"}, "another bad line"]
+        )
 
         test = ValueInAnyLine(
             name="test_malformed",
             parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="name",
-                expected_value="Bob",
-                skip_malformed=True
-            )
+                dst=str(jsonl_file), key_path="name", expected_value="Bob", skip_malformed=True
+            ),
         )
         result = test.test()
 
@@ -830,19 +677,13 @@ class TestValueInAnyLine:
 
     def test_value_in_any_line_malformed_fail(self, create_jsonl_file):
         """Test failing on malformed JSON."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"name": "Alice"},
-            "malformed json"
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"name": "Alice"}, "malformed json"])
 
         test = ValueInAnyLine(
             name="test_malformed",
             parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="name",
-                expected_value="Alice",
-                skip_malformed=False
-            )
+                dst=str(jsonl_file), key_path="name", expected_value="Alice", skip_malformed=False
+            ),
         )
         result = test.test()
 
@@ -855,11 +696,7 @@ class TestValueInAnyLine:
 
         test = ValueInAnyLine(
             name="test_empty",
-            parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="name",
-                expected_value="Alice"
-            )
+            parameter=ValueInAnyLineParameter(dst=str(jsonl_file), key_path="name", expected_value="Alice"),
         )
         result = test.test()
 
@@ -871,10 +708,8 @@ class TestValueInAnyLine:
         test = ValueInAnyLine(
             name="test_not_found",
             parameter=ValueInAnyLineParameter(
-                dst=str(tmp_path / "nonexistent.jsonl"),
-                key_path="name",
-                expected_value="Alice"
-            )
+                dst=str(tmp_path / "nonexistent.jsonl"), key_path="name", expected_value="Alice"
+            ),
         )
         result = test.test()
 
@@ -883,19 +718,11 @@ class TestValueInAnyLine:
 
     def test_value_in_any_line_numeric_values(self, create_jsonl_file):
         """Test with numeric values."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"count": 100},
-            {"count": 200},
-            {"count": 300}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"count": 100}, {"count": 200}, {"count": 300}])
 
         test = ValueInAnyLine(
             name="test_numeric",
-            parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="count",
-                expected_value=200
-            )
+            parameter=ValueInAnyLineParameter(dst=str(jsonl_file), key_path="count", expected_value=200),
         )
         result = test.test()
 
@@ -903,19 +730,11 @@ class TestValueInAnyLine:
 
     def test_value_in_any_line_boolean_values(self, create_jsonl_file):
         """Test with boolean values."""
-        jsonl_file = create_jsonl_file("test.jsonl", [
-            {"enabled": True},
-            {"enabled": False},
-            {"enabled": True}
-        ])
+        jsonl_file = create_jsonl_file("test.jsonl", [{"enabled": True}, {"enabled": False}, {"enabled": True}])
 
         test = ValueInAnyLine(
             name="test_boolean",
-            parameter=ValueInAnyLineParameter(
-                dst=str(jsonl_file),
-                key_path="enabled",
-                expected_value=False
-            )
+            parameter=ValueInAnyLineParameter(dst=str(jsonl_file), key_path="enabled", expected_value=False),
         )
         result = test.test()
 

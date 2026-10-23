@@ -1,15 +1,52 @@
 """Image processing utilities for computer vision tasks."""
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
-import numpy as np
+
 import cv2
+import numpy as np
 
 from .constants import CVConstants
-from .exceptions import ImageDecodingError, HomographyCalculationError
+from .exceptions import HomographyCalculationError, ImageDecodingError
 
 log = logging.getLogger(__name__)
+
+# Per-request decode memo. find_icon runs up to six stages and each one decodes
+# the same screenshot (and icon) bytes from scratch; inside shared_decodes() the
+# first decode is kept and later ones get a copy of it instead.
+_decode_memo: ContextVar[dict[tuple[bytes, int], np.ndarray] | None] = ContextVar('_decode_memo', default=None)
+
+
+@contextmanager
+def shared_decodes() -> Iterator[None]:
+    """Within this block, decoding the same image bytes again reuses the first decode."""
+    token = _decode_memo.set({})
+    try:
+        yield
+    finally:
+        _decode_memo.reset(token)
+
+
+def _imdecode(data: bytes, flags: int) -> np.ndarray | None:
+    """``cv2.imdecode`` that reuses an earlier decode of the same bytes inside :func:`shared_decodes`.
+
+    Callers always get their own copy, so a stage that modifies its image in place
+    cannot affect the others.
+    """
+    memo = _decode_memo.get()
+    if memo is None:
+        return cv2.imdecode(np.frombuffer(data, np.uint8), flags)
+    key = (bytes(data), flags)
+    img = memo.get(key)
+    if img is None:
+        img = cv2.imdecode(np.frombuffer(data, np.uint8), flags)
+        if img is None:
+            return None
+        memo[key] = img
+    return img.copy()
 
 
 class ImageDecoder:
@@ -60,8 +97,9 @@ class ImageDecoder:
         Raises ImageDecodingError if conversion fails.
         """
         try:
-            import cairosvg
             import xml.etree.ElementTree as ET
+
+            import cairosvg
 
             log.info("Converting SVG to PNG for OpenCV processing")
 
@@ -81,7 +119,9 @@ class ImageDecoder:
                         scale_factor = CVConstants.SVG_UPSCALE_FACTOR
                         output_width = int(w * scale_factor)
                         output_height = int(h * scale_factor)
-                        log.info(f"Small icon detected ({w}x{h}), upscaling {scale_factor}x to {output_width}x{output_height}")
+                        log.info(
+                            f"Small icon detected ({w}x{h}), upscaling {scale_factor}x to {output_width}x{output_height}"
+                        )
                     else:
                         output_width = None
                         output_height = None
@@ -99,7 +139,7 @@ class ImageDecoder:
                 bytestring=svg_bytes,
                 output_width=output_width,
                 output_height=output_height,
-                background_color=CVConstants.SVG_BACKGROUND_COLOR
+                background_color=CVConstants.SVG_BACKGROUND_COLOR,
             )
 
             log.info(f"SVG conversion successful, PNG size: {len(png_bytes)} bytes")
@@ -184,8 +224,9 @@ class ImageDecoder:
             # Enforce minimum size (prevent over-trimming tiny icons)
             MIN_ICON_SIZE = 10
             if trimmed_height < MIN_ICON_SIZE or trimmed_width < MIN_ICON_SIZE:
-                log.warning(f"Trimmed size ({trimmed_width}x{trimmed_height}) "
-                           f"below minimum {MIN_ICON_SIZE}px, keeping original")
+                log.warning(
+                    f"Trimmed size ({trimmed_width}x{trimmed_height}) below minimum {MIN_ICON_SIZE}px, keeping original"
+                )
                 return png_bytes
 
             # Check if any trimming occurred
@@ -204,9 +245,7 @@ class ImageDecoder:
                     alpha = trimmed[:, :, 3:4]  # 4th channel (alpha), keep dimensions
 
                     # Parse background color (hex to BGR)
-                    bg_color = ImageDecoder._parse_background_color(
-                        CVConstants.SVG_COMPOSITE_BACKGROUND
-                    )
+                    bg_color = ImageDecoder._parse_background_color(CVConstants.SVG_COMPOSITE_BACKGROUND)
 
                     # Alpha blending: result = foreground * alpha + background * (1 - alpha)
                     alpha_norm = alpha.astype(np.float32) / 255.0  # Normalize to 0.0-1.0
@@ -216,8 +255,7 @@ class ImageDecoder:
 
                     # Blend: fg * alpha + bg * (1 - alpha)
                     composited = (
-                        bgr.astype(np.float32) * alpha_norm +
-                        background.astype(np.float32) * (1 - alpha_norm)
+                        bgr.astype(np.float32) * alpha_norm + background.astype(np.float32) * (1 - alpha_norm)
                     ).astype(np.uint8)
 
                     # Use composited result (no alpha channel)
@@ -229,10 +267,12 @@ class ImageDecoder:
                     log.warning(f"Background compositing failed: {e}, keeping alpha channel")
                     # Keep original trimmed image with alpha
 
-            log.info(f"Trimmed transparent padding: {original_width}x{original_height} "
-                    f"→ {trimmed_width}x{trimmed_height} "
-                    f"(removed {original_width - trimmed_width}px horizontal, "
-                    f"{original_height - trimmed_height}px vertical)")
+            log.info(
+                f"Trimmed transparent padding: {original_width}x{original_height} "
+                f"→ {trimmed_width}x{trimmed_height} "
+                f"(removed {original_width - trimmed_width}px horizontal, "
+                f"{original_height - trimmed_height}px vertical)"
+            )
 
             # Encode back to PNG bytes
             success, encoded = cv2.imencode('.png', trimmed)
@@ -267,7 +307,7 @@ class ImageDecoder:
 
         # Handle 3-digit hex (#RGB → #RRGGBB)
         if len(color) == 3:
-            color = ''.join([c*2 for c in color])
+            color = ''.join([c * 2 for c in color])
 
         if len(color) != 6:
             raise ValueError(f"Invalid hex color length: #{color} (expected 6 digits)")
@@ -291,7 +331,9 @@ class ImageDecoder:
         Returns processed bytes (PNG if SVG, unchanged otherwise).
         """
         if ImageDecoder._is_svg(image_bytes):
-            log.debug("SVG detected, converting to PNG (consider using preprocess_icon() at pipeline entry to avoid redundant conversions)")
+            log.debug(
+                "SVG detected, converting to PNG (consider using preprocess_icon() at pipeline entry to avoid redundant conversions)"
+            )
             return ImageDecoder._convert_svg_to_png(image_bytes)
         return image_bytes
 
@@ -315,16 +357,13 @@ class ImageDecoder:
             screenshot_bytes = ImageDecoder._preprocess_image_bytes(screenshot_bytes)
             icon_bytes = ImageDecoder._preprocess_image_bytes(icon_bytes)
 
-            screenshot_array = np.frombuffer(screenshot_bytes, np.uint8)
-            icon_array = np.frombuffer(icon_bytes, np.uint8)
-
             # Screenshot: always BGR (no alpha needed)
-            screenshot_img = cv2.imdecode(screenshot_array, cv2.IMREAD_COLOR)
+            screenshot_img = _imdecode(screenshot_bytes, cv2.IMREAD_COLOR)
             if screenshot_img is None:
                 raise ImageDecodingError("Failed to decode screenshot image")
 
             # Icon: preserve alpha if present
-            icon_img = cv2.imdecode(icon_array, cv2.IMREAD_UNCHANGED)
+            icon_img = _imdecode(icon_bytes, cv2.IMREAD_UNCHANGED)
             if icon_img is None:
                 raise ImageDecodingError("Failed to decode icon image")
 
@@ -333,10 +372,9 @@ class ImageDecoder:
             if len(icon_img.shape) == 3 and icon_img.shape[2] == 4:
                 # BGRA format: split into BGR + alpha
                 icon_mask = icon_img[:, :, 3]  # 4th channel = alpha
-                icon_img = icon_img[:, :, :3]   # First 3 channels = BGR
+                icon_img = icon_img[:, :, :3]  # First 3 channels = BGR
 
-                log.info(f"Icon alpha channel extracted as mask "
-                        f"({np.sum(icon_mask < 255)} transparent pixels)")
+                log.info(f"Icon alpha channel extracted as mask ({np.sum(icon_mask < 255)} transparent pixels)")
             else:
                 # BGR or grayscale: no alpha channel
                 log.debug("Icon has no alpha channel, no mask needed")
@@ -350,7 +388,7 @@ class ImageDecoder:
             raise ImageDecodingError(f"Image decoding failed: {e}") from e
 
     @staticmethod
-    def decode_images(screenshot_bytes: bytes, icon_bytes: bytes) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    def decode_images(screenshot_bytes: bytes, icon_bytes: bytes) -> tuple[np.ndarray, np.ndarray] | None:
         """Decode screenshot and icon from bytes.
 
         DEPRECATED: Use decode_images_with_alpha() for mask support.
@@ -362,11 +400,8 @@ class ImageDecoder:
             screenshot_bytes = ImageDecoder._preprocess_image_bytes(screenshot_bytes)
             icon_bytes = ImageDecoder._preprocess_image_bytes(icon_bytes)
 
-            screenshot_array = np.frombuffer(screenshot_bytes, np.uint8)
-            icon_array = np.frombuffer(icon_bytes, np.uint8)
-
-            screenshot_img = cv2.imdecode(screenshot_array, cv2.IMREAD_COLOR)
-            icon_img = cv2.imdecode(icon_array, cv2.IMREAD_COLOR)
+            screenshot_img = _imdecode(screenshot_bytes, cv2.IMREAD_COLOR)
+            icon_img = _imdecode(icon_bytes, cv2.IMREAD_COLOR)
 
             if screenshot_img is None or icon_img is None:
                 raise ImageDecodingError("Failed to decode images from bytes")
@@ -380,7 +415,7 @@ class ImageDecoder:
             raise ImageDecodingError(f"Image decoding failed: {e}") from e
 
     @staticmethod
-    def convert_to_grayscale(screenshot_img: np.ndarray, icon_img: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def convert_to_grayscale(screenshot_img: np.ndarray, icon_img: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Convert images to grayscale."""
         screenshot_gray = cv2.cvtColor(screenshot_img, cv2.COLOR_BGR2GRAY)
         icon_gray = cv2.cvtColor(icon_img, cv2.COLOR_BGR2GRAY)
@@ -392,11 +427,11 @@ class FeatureMatchingResult:
 
     def __init__(
         self,
-        locations: List[Tuple[int, int]],
-        similarities: List[float],
+        locations: list[tuple[int, int]],
+        similarities: list[float],
         method: str,
-        scales: Optional[List[float]] = None,
-        sizes: Optional[List[Tuple[int, int]]] = None
+        scales: list[float] | None = None,
+        sizes: list[tuple[int, int]] | None = None,
     ):
         self.locations = locations
         self.similarities = similarities
@@ -408,25 +443,19 @@ class FeatureMatchingResult:
     def apply_offset(self, offset_x: int, offset_y: int) -> 'FeatureMatchingResult':
         """Apply coordinate offset to all locations."""
         offset_locations = [(x + offset_x, y + offset_y) for x, y in self.locations]
-        return FeatureMatchingResult(
-            offset_locations, self.similarities, self.method,
-            self.scales, self.sizes
-        )
+        return FeatureMatchingResult(offset_locations, self.similarities, self.method, self.scales, self.sizes)
 
     def limit_results(self, max_results: int) -> 'FeatureMatchingResult':
         """Limit results to max_results, sorted by similarity."""
         if max_results and self.locations:
             sorted_results = sorted(
-                zip(self.locations, self.similarities, self.scales, self.sizes),
-                key=lambda item: item[1],
-                reverse=True
+                zip(self.locations, self.similarities, self.scales, self.sizes), key=lambda item: item[1], reverse=True
             )[:max_results]
 
             if sorted_results:
                 locations, similarities, scales, sizes = zip(*sorted_results)
                 return FeatureMatchingResult(
-                    list(locations), list(similarities), self.method,
-                    list(scales), list(sizes)
+                    list(locations), list(similarities), self.method, list(scales), list(sizes)
                 )
 
         return self
@@ -439,20 +468,21 @@ class DetectionMatch:
     Used in multi-method aggregation pipeline to track matches from
     different detection methods before applying global NMS.
     """
-    location: Tuple[int, int]      # Center coordinates (x, y)
-    similarity: float              # Raw similarity (0.0-1.0)
-    method: str                    # Source method name
-    scale: float = 1.0             # Detected scale (1.0 = original size)
-    size: Tuple[int, int] = (0, 0) # Bounding box (width, height) at detected scale
+
+    location: tuple[int, int]  # Center coordinates (x, y)
+    similarity: float  # Raw similarity (0.0-1.0)
+    method: str  # Source method name
+    scale: float = 1.0  # Detected scale (1.0 = original size)
+    size: tuple[int, int] = (0, 0)  # Bounding box (width, height) at detected scale
     weighted_similarity: float = 0.0  # similarity * method_weight (computed during aggregation)
 
 
 def non_maximum_suppression(
-    locations: List[Tuple[int, int]],
-    similarities: List[float],
-    sizes: List[Tuple[int, int]],
-    overlap_threshold: float = 0.5
-) -> Tuple[List[Tuple[int, int]], List[float]]:
+    locations: list[tuple[int, int]],
+    similarities: list[float],
+    sizes: list[tuple[int, int]],
+    overlap_threshold: float = 0.5,
+) -> tuple[list[tuple[int, int]], list[float]]:
     """Apply non-maximum suppression to remove overlapping detections.
 
     Keeps the match with highest similarity when IoU (Intersection over Union)
@@ -487,8 +517,10 @@ def non_maximum_suppression(
         return [], []
 
     if len(locations) != len(similarities) or len(locations) != len(sizes):
-        log.warning(f"NMS input length mismatch - locations: {len(locations)}, "
-                   f"similarities: {len(similarities)}, sizes: {len(sizes)}")
+        log.warning(
+            f"NMS input length mismatch - locations: {len(locations)}, "
+            f"similarities: {len(similarities)}, sizes: {len(sizes)}"
+        )
         return locations, similarities
 
     # Convert to numpy arrays for efficient computation
@@ -512,17 +544,16 @@ def non_maximum_suppression(
                 continue
 
             # Calculate IoU between idx and prev_idx
-            iou = _calculate_iou(
-                locations_arr[idx], sizes_arr[idx],
-                locations_arr[prev_idx], sizes_arr[prev_idx]
-            )
+            iou = _calculate_iou(locations_arr[idx], sizes_arr[idx], locations_arr[prev_idx], sizes_arr[prev_idx])
 
             # Suppress if IoU exceeds threshold
             if iou > overlap_threshold:
                 keep_mask[idx] = False
-                log.info(f"NMS suppressed match at {locations[idx]} "
-                        f"(similarity {similarities[idx]:.3f}) - overlaps with "
-                        f"{locations[prev_idx]} (similarity {similarities[prev_idx]:.3f}), IoU: {iou:.3f}")
+                log.info(
+                    f"NMS suppressed match at {locations[idx]} "
+                    f"(similarity {similarities[idx]:.3f}) - overlaps with "
+                    f"{locations[prev_idx]} (similarity {similarities[prev_idx]:.3f}), IoU: {iou:.3f}"
+                )
                 break
 
     # Return only non-suppressed matches
@@ -530,18 +561,12 @@ def non_maximum_suppression(
     filtered_locations = [locations[i] for i in kept_indices]
     filtered_similarities = [similarities[i] for i in kept_indices]
 
-    log.info(f"NMS kept {len(filtered_locations)} of {len(locations)} matches "
-            f"(overlap_threshold: {overlap_threshold})")
+    log.info(f"NMS kept {len(filtered_locations)} of {len(locations)} matches (overlap_threshold: {overlap_threshold})")
 
     return filtered_locations, filtered_similarities
 
 
-def _calculate_iou(
-    center1: np.ndarray,
-    size1: np.ndarray,
-    center2: np.ndarray,
-    size2: np.ndarray
-) -> float:
+def _calculate_iou(center1: np.ndarray, size1: np.ndarray, center2: np.ndarray, size2: np.ndarray) -> float:
     """Calculate Intersection over Union (IoU) for two bounding boxes.
 
     Args:
@@ -593,21 +618,17 @@ class HomographyCalculator:
     def calculate_center_from_homography(
         src_pts: np.ndarray,
         dst_pts: np.ndarray,
-        icon_shape: Tuple[int, int],
+        icon_shape: tuple[int, int],
         ransac_threshold: float = CVConstants.SIFT_RANSAC_THRESHOLD,
-        screenshot_shape: Optional[Tuple[int, int]] = None
-    ) -> Optional[Tuple[int, int]]:
+        screenshot_shape: tuple[int, int] | None = None,
+    ) -> tuple[int, int] | None:
         """Calculate icon center using homography transformation."""
         try:
-            M, _ = cv2.findHomography(
-                src_pts, dst_pts,
-                cv2.RANSAC,
-                ransac_threshold
-            )
+            M, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, ransac_threshold)
 
             if M is not None:
                 h, w = icon_shape
-                corners = np.float32([[0,0], [w,0], [w,h], [0,h]]).reshape(-1, 1, 2)
+                corners = np.float32([[0, 0], [w, 0], [w, h], [0, h]]).reshape(-1, 1, 2)
                 transformed_corners = cv2.perspectiveTransform(corners, M)
 
                 center_x = int(np.mean(transformed_corners[:, 0, 0]))
@@ -630,7 +651,7 @@ class HomographyCalculator:
             raise HomographyCalculationError(f"Homography calculation failed: {e}") from e
 
     @staticmethod
-    def calculate_centroid(points: np.ndarray) -> Tuple[int, int]:
+    def calculate_centroid(points: np.ndarray) -> tuple[int, int]:
         """Calculate centroid of a set of points."""
         center_x = int(np.mean(points[:, 0]))
         center_y = int(np.mean(points[:, 1]))
@@ -669,10 +690,7 @@ class IconComplexityAnalyzer:
         return variance_per_pixel
 
     @staticmethod
-    def should_use_orb(
-        icon_gray: np.ndarray,
-        threshold: float = CVConstants.LAPLACIAN_VARIANCE_THRESHOLD
-    ) -> bool:
+    def should_use_orb(icon_gray: np.ndarray, threshold: float = CVConstants.LAPLACIAN_VARIANCE_THRESHOLD) -> bool:
         """Determine if icon is complex enough for ORB.
 
         Args:
@@ -689,7 +707,6 @@ class IconComplexityAnalyzer:
         variance = IconComplexityAnalyzer.calculate_laplacian_variance(icon_gray)
         use_orb = variance > threshold
 
-        log.info(f"Laplacian variance (per pixel): {variance:.3f}, "
-                f"threshold: {threshold}, use_orb: {use_orb}")
+        log.info(f"Laplacian variance (per pixel): {variance:.3f}, threshold: {threshold}, use_orb: {use_orb}")
 
         return use_orb

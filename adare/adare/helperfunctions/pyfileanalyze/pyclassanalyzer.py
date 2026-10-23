@@ -30,11 +30,7 @@ class PyClassAnalyzer:
 
     def get_method(self, method_name: str) -> ast.FunctionDef | None:
         return next(
-            (
-                method
-                for method in self.root.body
-                if type(method) == ast.FunctionDef and method.name == method_name
-            ),
+            (method for method in self.root.body if type(method) is ast.FunctionDef and method.name == method_name),
             None,
         )
 

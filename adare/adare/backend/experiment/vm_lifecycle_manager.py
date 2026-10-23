@@ -1,160 +1,32 @@
+import asyncio
 import logging
-import os
 import shutil
+import subprocess
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
 import adare.backend.environment.database as environment_database
 import adare.backend.experiment.database as experiment_database
-import adare.backend.vm.database as vm_database
+from adare.backend.experiment import agent_wheels
 from adare.backend.experiment.directory import ExperimentRunDirectory
 from adare.backend.experiment.runctx import ExperimentRunCtx
 from adare.backend.experiment.stagectxmanager import StageCtxManager
+from adare.database.exceptions import DatabaseError
+from adare.database.models.global_models import VmInstance
 from adare.exceptions import LoggedException
-from adare.hypervisor.qemu.libvirt_undefine import keep_firmware_state_flags, undefine
 from adare.hypervisor.virtualbox import VirtualBoxVM
 from adare.types.stages import (
     VMDestroyStage,
     VMExperimentSnapshotStage,
     VMFileTransferSetupStage,
-    VMImportStage,
     VMInstanceVerificationStage,
     VMNetworkingStage,
     VMRuntimePreparationStage,
-    VMSnapshotCreateStage,
     VMStopStage,
 )
 
 log = logging.getLogger(__name__)
-
-
-def _undefine_keeping_firmware_state(domain) -> None:
-    """Undefine a libvirt domain while preserving its UEFI NVRAM varstore and vTPM.
-
-    libvirt refuses a flagless ``undefine()`` on a domain that declares ``<nvram/>``
-    ("Cannot undefine domain with NVRAM/varstore"), which is every UEFI guest and
-    therefore every aarch64 guest. That refusal used to leave the domain defined but
-    shut off forever, one stale entry per run in ``virsh list --all``.
-
-    ``KEEP_NVRAM`` rather than ``NVRAM`` because the varstore is INSTANCE-scoped, not
-    run-scoped: ``libvirt_xml_builder`` points ``<nvram/>`` at
-    ``<disk_dir>/<instance_name>-nvram.fd`` (``firmware.get_nvram_path_for_vm``), beside
-    the instance's base disk, and the caller of this function releases that instance for
-    reuse by the next experiment. The file carries the guest's UEFI boot entries -
-    including the aarch64 Shell-boot pre-population from
-    ``firmware._prepare_nvram_for_shell_boot`` - so deleting it here would silently reset
-    a reusable instance's firmware state. Only ``QEMUVM.cleanup_base_disk()``, on
-    instance removal, may delete it.
-
-    For a BIOS domain with no ``<nvram/>`` the flag is inert, so x86 guests are
-    unaffected.
-
-    ``KEEP_TPM`` is here for the same instance-scoped reason, and matters more than it
-    looks: without it libvirt DELETES the emulated TPM state on undefine, so the next
-    run manufactures a factory-fresh vTPM and the Windows guest re-provisions its TPM
-    on every single cold boot. See ``hypervisor/qemu/libvirt_undefine`` for the full
-    reasoning.
-
-    Args:
-        domain: libvirt virDomain object to undefine
-
-    Raises:
-        libvirt.libvirtError: Propagated to the caller, which decides how to report it
-    """
-    undefine(domain, keep_firmware_state_flags())
-
-
-def destroy_domain_by_name(vm_name: str | None) -> bool:
-    """Force-stop and undefine the libvirt domain called ``vm_name``. Best-effort.
-
-    The emergency counterpart to the ordinary teardown at the end of
-    :func:`adare.backend.experiment.run.run_experiment`. That path needs a live
-    ``VMLifecycleManager`` plus a populated run context; this one needs only a name,
-    so it can be called from a signal handler after a second SIGTERM, when the
-    caller has given up on unwinding gracefully and only wants the guest gone.
-
-    ``destroy()`` (not ``shutdown()``) on purpose: a second termination signal means
-    the operator wants out now, and the run overlay is discarded anyway.
-
-    Note this cannot be expressed with the existing reaping helpers in
-    ``hypervisor/qemu/vm_creator/progress.py``: those are ``subprocess.Popen``-shaped,
-    and on the *run* path ADARE never owns the QEMU process — libvirt forks it from
-    ``defineXML`` + ``create()``, so PPID 1 is its normal, healthy state. There is no
-    child to reap; there is only a domain to destroy.
-
-    Idempotent and silent by design — an absent domain, an unreachable libvirtd, or a
-    missing libvirt-python must not turn a shutdown into a traceback.
-
-    Args:
-        vm_name: libvirt domain name. This is the VM *instance* name
-            (``context.vm_name``), which is what ``QEMUVM`` records as
-            ``config.libvirt_domain_name`` when it defines the domain (vm.py).
-            ``None`` is accepted and is a no-op, because a signal can arrive before
-            an instance has been allocated.
-
-    Returns:
-        True if a running domain was destroyed, False in every other case
-        (nothing to do, or the attempt failed).
-    """
-    if not vm_name:
-        return False
-
-    try:
-        import libvirt
-
-        from adare.config import HYPERVISOR_CONFIGS
-        from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
-
-        qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
-        libvirt_uri = qemu_config.get('libvirt_uri', 'qemu:///session')
-
-        conn = libvirt.open(libvirt_uri)
-        if not conn:
-            log.warning(f"Emergency stop: no libvirt connection, cannot destroy '{vm_name}'")
-            return False
-
-        log_file = get_experiment_log_file()
-        destroyed = False
-        try:
-            with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
-                domain = conn.lookupByName(vm_name)
-
-            if domain.isActive():
-                with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
-                    domain.destroy()
-                log.info(f"Emergency stop: destroyed libvirt domain '{vm_name}'")
-                destroyed = True
-            else:
-                log.debug(f"Emergency stop: domain '{vm_name}' is already shut off")
-
-            # Undefining as well keeps `virsh list --all` from filling up with one
-            # stale shut-off entry per interrupted run. KEEP_NVRAM because the
-            # varstore is instance-scoped and the instance is reused — see
-            # _undefine_keeping_firmware_state.
-            try:
-                with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
-                    _undefine_keeping_firmware_state(domain)
-            except libvirt.libvirtError as e:
-                log.debug(f"Emergency stop: could not undefine '{vm_name}': {e}")
-
-        except libvirt.libvirtError as e:
-            # Domain absent is the common case (never created, or already cleaned up).
-            log.debug(f"Emergency stop: domain '{vm_name}' not actionable: {e}")
-        finally:
-            try:
-                conn.close()
-            except libvirt.libvirtError:
-                pass
-
-        return destroyed
-
-    except ImportError:
-        log.debug("Emergency stop: libvirt-python not installed; nothing to destroy")
-        return False
-    except OSError as e:
-        log.warning(f"Emergency stop: error destroying domain '{vm_name}': {e}")
-        return False
 
 
 class VMLifecycleManager:
@@ -172,9 +44,11 @@ class VMLifecycleManager:
         # Instantiate appropriate lifecycle strategy based on hypervisor type
         if hypervisor_type == 'virtualbox':
             from adare.hypervisor.virtualbox.lifecycle import VirtualBoxLifecycleStrategy
+
             self.strategy = VirtualBoxLifecycleStrategy()
         elif hypervisor_type == 'qemu':
             from adare.hypervisor.qemu.lifecycle import QEMULifecycleStrategy
+
             self.strategy = QEMULifecycleStrategy()
         else:
             raise ValueError(f"Unsupported hypervisor: {hypervisor_type}. Supported: 'virtualbox', 'qemu'")
@@ -199,17 +73,11 @@ class VMLifecycleManager:
         elif not adarevm_target.exists() or not adarelib_target.exists():
             log.info("Project VM runtime directory incomplete, updating")
             needs_update = True
-        else:
-            # Check if source files are newer than target
-            adarevm_source_time = self._get_latest_mtime(adarevm_source)
-            adarelib_source_time = self._get_latest_mtime(adarelib_source)
-            adarevm_target_time = self._get_latest_mtime(adarevm_target)
-            adarelib_target_time = self._get_latest_mtime(adarelib_target)
-
-            if (adarevm_source_time > adarevm_target_time or
-                adarelib_source_time > adarelib_target_time):
-                log.info("Source files newer than cached runtime, updating")
-                needs_update = True
+        elif self._runtime_copy_stale(adarevm_source, adarevm_target) or self._runtime_copy_stale(
+            adarelib_source, adarelib_target
+        ):
+            log.info("Agent sources changed since the cached runtime was copied, updating")
+            needs_update = True
 
         if needs_update:
             # Create/recreate VM runtime directory
@@ -227,109 +95,28 @@ class VMLifecycleManager:
 
             log.info("Project VM runtime directory ready")
 
-        # Build wheels (separate from copy logic since we check mtime separately)
+        # Wheels carry a content-hash version, so this also catches edits that
+        # mtimes miss and tells the guest-side version check to reinstall.
         wheels_dir = vm_runtime_dir / 'wheels'
-        wheels_dir.mkdir(exist_ok=True)
+        package_dirs = {'adarelib': adarelib_target, 'adarevm': adarevm_target}
+        if agent_wheels.wheels_up_to_date(package_dirs, wheels_dir):
+            log.info("Wheels are up-to-date - skipping build")
+            return
+        try:
+            agent_wheels.build_agent_wheels(package_dirs, wheels_dir)
+        except subprocess.CalledProcessError as e:
+            log.warning(f"Wheel build failed: {e.stderr.decode() if e.stderr else str(e)}")
+            log.warning("Falling back to editable install mode (wheels will not be available)")
+            # Don't raise - let it fall back to editable install
 
-        adarelib_wheel = list(wheels_dir.glob('adarelib-*.whl'))
-        adarevm_wheel = list(wheels_dir.glob('adarevm-*.whl'))
+    @staticmethod
+    def _runtime_copy_stale(source: Path, target: Path) -> bool:
+        """True if the cached copy's contents differ from the agent sources.
 
-        # Check if wheels need rebuilding
-        rebuild_wheels = False
-        if not adarelib_wheel or not adarevm_wheel:
-            log.info("Wheels not found - building...")
-            rebuild_wheels = True
-        else:
-            # Check if source is newer than wheels
-            adarelib_wheel_time = adarelib_wheel[0].stat().st_mtime
-            adarevm_wheel_time = adarevm_wheel[0].stat().st_mtime
-
-            # Compare each wheel against its OWN source tree. Deriving both times from
-            # adarevm_source meant an adarelib-only change never rebuilt any wheel, so
-            # the guest kept running a stale adarelib indefinitely.
-            adarelib_source_time = self._get_latest_mtime(adarelib_source)
-            adarevm_source_time = self._get_latest_mtime(adarevm_source)
-
-            if (adarelib_source_time > adarelib_wheel_time or
-                adarevm_source_time > adarevm_wheel_time):
-                log.info("Source code newer than wheels - rebuilding...")
-                rebuild_wheels = True
-            else:
-                log.info("Wheels are up-to-date - skipping build")
-
-        if rebuild_wheels:
-            try:
-                # Clean old wheels
-                for old_wheel in wheels_dir.glob('*.whl'):
-                    old_wheel.unlink()
-
-                # Build adarelib wheel first (it has no path dependencies)
-                log.info("Building adarelib wheel...")
-                import subprocess
-                subprocess.run(
-                    ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
-                    cwd=adarelib_target,
-                    check=True,
-                    capture_output=True
-                )
-
-                # Build adarevm wheel without path dependency
-                log.info("Building adarevm wheel...")
-
-                # Temporarily modify pyproject.toml to remove workspace source
-                # This is necessary because uv workspace sources don't exist in the VM filesystem
-                adarevm_pyproject = adarevm_target / 'pyproject.toml'
-                original_content = adarevm_pyproject.read_text()
-
-                # Remove workspace source for adarelib
-                import re
-                modified_content = re.sub(
-                    r'adarelib\s*=\s*\{\s*workspace\s*=\s*true\s*\}',
-                    '',
-                    original_content
-                )
-                adarevm_pyproject.write_text(modified_content)
-
-                try:
-                    subprocess.run(
-                        ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
-                        cwd=adarevm_target,
-                        check=True,
-                        capture_output=True
-                    )
-                finally:
-                    # Restore original pyproject.toml
-                    adarevm_pyproject.write_text(original_content)
-
-                log.info(f"Wheels built in {wheels_dir}")
-            except subprocess.CalledProcessError as e:
-                log.warning(f"Wheel build failed: {e.stderr.decode() if e.stderr else str(e)}")
-                log.warning("Falling back to editable install mode (wheels will not be available)")
-                # Don't raise - let it fall back to editable install
-        else:
-            log.info("Project VM runtime directory up-to-date")
-
-    def _get_latest_mtime(self, directory: Path) -> float:
-        """Get the latest modification time in a directory tree."""
-        if not directory.exists():
-            return 0.0
-
-        latest = 0.0
-        for root, dirs, files in os.walk(directory):
-            # Skip __pycache__ directories
-            dirs[:] = [d for d in dirs if d != '__pycache__']
-
-            for file in files:
-                if file.endswith('.pyc'):
-                    continue
-                file_path = Path(root) / file
-                try:
-                    mtime = file_path.stat().st_mtime
-                    latest = max(latest, mtime)
-                except (OSError, PermissionError):
-                    continue
-        return latest
-
+        Compared by content, not mtime: building a wheel rewrites the copy's
+        pyproject.toml, which made the copy look newer than any later source edit.
+        """
+        return agent_wheels.source_hash(source) != agent_wheels.source_hash(target)
 
     async def create_and_prepare_vm(self, context: ExperimentRunCtx):
         """Create and prepare VM for experiment with snapshots and shared folders."""
@@ -339,229 +126,88 @@ class VMLifecycleManager:
         if not vm_id:
             raise LoggedException(log, "No VM associated with environment. Did you load the environment properly?")
 
-        # Prepare VM instance for experiment (includes port allocation and VM reuse)
         from adare.backend.vm.commands import ensure_vm_ready_for_experiment
-        from adare.database.api.vm import VmApi
 
-        log.info("Starting VM instance preparation for experiment (with dynamic port allocation)")
-
-        # Use shorter experiment ID for VM instance naming (first 8 chars of ULID)
-        short_experiment_id = context.experiment_run_ulid[:8]
-
-        # Allocate VM instance (allocation and sync stages managed internally)
-        import asyncio
-        vm_instance_id = await asyncio.wait_for(
-            ensure_vm_ready_for_experiment(
+        async def allocate() -> VmInstance | None:
+            vm_instance_id = await ensure_vm_ready_for_experiment(
                 vm_id=vm_id,
-                experiment_id=short_experiment_id,  # Use shorter ID for naming
                 environment_ulid=context.environment_ulid,
                 experiment_run_ulid=context.experiment_run_ulid,
-                preserve_experiment_snapshot=context.config.preserve_snapshot,
                 interrupt_event=context.user_interrupt_event,
-                test_mode=context.test_mode  # NEW: Pass test mode from context
-            ),
-            timeout=300  # 5 minute timeout for VM import operations
-        )
+                test_mode=context.test_mode,
+                machine_key=context.machine_key,
+            )
+            if vm_instance_id is None:
+                log.info("VM instance preparation was interrupted")
+                return None
+            return self._use_instance(context, vm_instance_id)
 
-        log.info(f"VM instance allocation completed successfully, instance_id={vm_instance_id}")
-
-        # Check if VM preparation was interrupted - return early if so
-        if vm_instance_id is None:
-            log.info("VM instance preparation was interrupted - returning early")
+        vm_instance = await asyncio.wait_for(allocate(), timeout=300)  # VirtualBox imports can be slow
+        if vm_instance is None:
             return
 
-        # Get the prepared VM instance from database
-        log.debug(f"Attempting to fetch VM instance with ID: {vm_instance_id}")
-        try:
-            with VmApi() as api:
-                vm_instance = api.get_vm_instance_by_id(vm_instance_id)
-                if not vm_instance:
-                    # Try to debug what instances exist
-                    log.error(f"VM instance {vm_instance_id} not found! Checking database...")
-                    all_instances = api.get_all_vm_instances()
-                    log.error(f"Found {len(all_instances)} total instances in database:")
-                    for inst in all_instances:
-                        log.error(f"  - {inst.id}: {inst.instance_name} (status: {inst.status})")
-
-                    # Check if ID format is correct
-                    log.error(f"Problematic ID: '{vm_instance_id}' (length: {len(vm_instance_id)}, type: {type(vm_instance_id)})")
-
-                    raise LoggedException(log, f"VM instance with ID {vm_instance_id} not found after preparation")
-
-                log.debug(f"Successfully found VM instance: {vm_instance.instance_name}")
-        except LoggedException:
-            raise
-        except (OSError, ValueError, RuntimeError) as e:
-            log.error(f"Error fetching VM instance: {e}")
-            import traceback
-            log.debug(f"Fetch VM instance traceback: {traceback.format_exc()}")
-            raise
-
-        # Update experiment run with VM instance ID
-        experiment_database.update_experiment_run_vm_instance(
-            context.config.project_path,
-            context.experiment_run_ulid,
-            vm_instance_id
-        )
-
-        # Use the instance name and port from the allocated instance
-        context.vm_name = vm_instance.instance_name
-        context.config.websocket_port = vm_instance.websocket_port
-
-        # Validate that the port was properly allocated
-        if context.config.websocket_port is None:
-            raise LoggedException(log, f"VM instance {vm_instance.instance_name} has no websocket port allocated")
-
-        log.info(f"Using VM instance: {context.vm_name} on port {context.config.websocket_port}")
-
-        # Setup VM runtime directory with smart copying
         with StageCtxManager(
-            VMRuntimePreparationStage(),
-            context.experiment_run_ulid,
-            event=context.user_interrupt_event
+            VMRuntimePreparationStage(), context.experiment_run_ulid, event=context.user_interrupt_event
         ):
             await self._ensure_vm_runtime_ready(context)
 
-        # Delegate VM instance creation to hypervisor-specific strategy
         await self.strategy.prepare_vm_for_experiment(context)
 
-        # NOTE: setup_file_transfer() removed from here - now called explicitly in run.py
-        # This makes file transfer operations visible as a dedicated stage in the UI
-
-        # VirtualBox-specific: VM instance is already prepared with snapshots - verify it exists and cleanup if missing
-        # For QEMU, the prepare_vm_for_experiment already handles all VM creation
-        # NOTE: VMCreateStage wrapper removed - will be added in run.py to wrap entire create_and_prepare_vm()
+        # VirtualBox: a pooled instance can have vanished from VirtualBox since it
+        # was last used. verify_and_cleanup removes such a row; allocate again,
+        # which imports a fresh instance and takes its base snapshot.
         if self.hypervisor_type == 'virtualbox':
-            # Import the VM instance verification function
             from adare.backend.vm.commands import verify_and_cleanup_vm_instance_for_experiment
-            from adare.database.api.vm import VmApi
 
-            # Wrap verification and recovery logic with stage for visibility
             with StageCtxManager(
-                VMInstanceVerificationStage(),
-                context.experiment_run_ulid,
-                event=context.user_interrupt_event
+                VMInstanceVerificationStage(), context.experiment_run_ulid, event=context.user_interrupt_event
             ):
-                # First verify and cleanup VM instance if missing from VirtualBox
-                try:
-                    vm_instance_is_available = verify_and_cleanup_vm_instance_for_experiment(
-                        vm_instance.id,
-                        context.experiment_run_ulid
-                    )
-                    if not vm_instance_is_available:
-                        # VM instance was missing and cleaned up - need to allocate a new one
-                        log.info("VM instance was cleaned up, allocating a new instance for the experiment")
-
-                        # Re-allocate a new VM instance for this experiment
-                        from adare.backend.vm.instance_manager import allocate_vm_instance_for_experiment
-
-                        # Get VM ID from environment (same as original allocation)
-                        env_data = environment_database.get_environment_by_ulid(context.environment_ulid, fields=['vm_id'])
-                        vm_id = env_data['vm_id'] if env_data else None
-                        if not vm_id:
-                            raise LoggedException(log, "No VM associated with environment after cleanup")
-
-                        # Allocate new instance
-                        new_vm_instance = await allocate_vm_instance_for_experiment(vm_id, context.experiment_run_ulid)
-                        if not new_vm_instance:
-                            raise LoggedException(log, "Failed to allocate new VM instance after cleanup")
-
-                        # Update the experiment run with new VM instance ID
-                        experiment_database.update_experiment_run_vm_instance(
-                            context.config.project_path,
-                            context.experiment_run_ulid,
-                            new_vm_instance.id
-                        )
-
-                        # Update context with new instance information
-                        vm_instance = new_vm_instance
-                        context.vm_name = vm_instance.instance_name
-                        context.config.websocket_port = vm_instance.websocket_port
-
-                        # Validate that the port was properly allocated
-                        if context.config.websocket_port is None:
-                            raise LoggedException(log, f"New VM instance {vm_instance.instance_name} has no websocket port allocated")
-
-                        log.info(f"Successfully allocated new VM instance after cleanup: {context.vm_name} on port {context.config.websocket_port}")
-
-                        # New instance needs to be imported to VirtualBox if it doesn't have a UUID
-                        if not vm_instance.vbox_uuid:
-                            log.info(f"New VM instance '{vm_instance.instance_name}' needs to be imported to VirtualBox")
-
-                            # Get source VM for import
-                            source_vm = vm_database.get_vm_by_id(vm_id)
-                            if not source_vm:
-                                raise LoggedException(log, f"Source VM with ID {vm_id} not found for import")
-
-                            # Verify source VM integrity
-                            from adare.backend.vm.commands import verify_vm_integrity
-                            await verify_vm_integrity(vm_id, context.experiment_run_ulid, context.user_interrupt_event, test_mode=context.test_mode)
-
-                            # Import VM instance to VirtualBox with proper stage management
-                            from adare.types.stages import VMDiskPreparationStage
-                            with StageCtxManager(VMDiskPreparationStage(), context.experiment_run_ulid, context.user_interrupt_event):
-                                with StageCtxManager(VMImportStage(), context.experiment_run_ulid, context.user_interrupt_event):
-                                    log.info(f"Importing new VM instance '{vm_instance.instance_name}' to VirtualBox...")
-
-                                    # Import using VirtualBox manager directly (inline implementation)
-                                    from adare.hypervisor.virtualbox.manager import VirtualBoxManager
-
-                                    manager = VirtualBoxManager()
-                                    vm_file_path = Path(source_vm.file)
-
-                                    # Import VM with unique instance name
-                                    vbox_vm = await manager.import_vm_async(
-                                        vm_file_path,
-                                        vm_instance.instance_name,
-                                        environment_ulid=context.environment_ulid
-                                    )
-
-                                    # Update instance with VirtualBox UUID
-                                    vbox_uuid = vbox_vm.get_vm_uuid()
-                                    with VmApi() as api:
-                                        api.update_vm_instance(
-                                            vm_instance.id,
-                                            vbox_uuid=vbox_uuid,
-                                            base_snapshot_name=f"{vm_instance.instance_name}_base"
-                                        )
-
-                                    log.info(f"Successfully imported VM instance '{vm_instance.instance_name}' with UUID: {vbox_uuid}")
-
-                                    # Return updated instance
-                                    with VmApi() as api:
-                                        vm_instance = api.get_vm_instance_by_id(vm_instance.id)
-
-                            # Create base snapshot for the new instance
-                            with StageCtxManager(VMSnapshotCreateStage(), context.experiment_run_ulid, context.user_interrupt_event):
-                                from adare.backend.vm.snapshot_manager import create_base_snapshot_for_instance
-                                snapshot_success = create_base_snapshot_for_instance(vm_instance, silent=False)
-                                if not snapshot_success:
-                                    log.warning(f"Failed to create base snapshot for new instance {vm_instance.instance_name}")
-                                else:
-                                    log.info(f"Successfully created base snapshot for new instance {vm_instance.instance_name}")
-
-                            log.info(f"Successfully imported and prepared new VM instance: {vm_instance.instance_name}")
-                except LoggedException:
-                    raise
-                except (OSError, ValueError, RuntimeError, TimeoutError) as e:
-                    log.error(f"VM instance verification failed: {e}")
-                    raise LoggedException(log, f"VM instance verification failed: {e}") from e
-
-                # Final verification that VM instance exists in VirtualBox
+                if not verify_and_cleanup_vm_instance_for_experiment(vm_instance.id, context.experiment_run_ulid):
+                    log.info("VM instance was missing from VirtualBox and removed; allocating a new one")
+                    vm_instance = await allocate()
+                    if vm_instance is None:
+                        return
                 if not vm_instance.vbox_uuid or not VirtualBoxVM.verify_vm_exists_by_uuid(vm_instance.vbox_uuid):
-                    raise LoggedException(log, f"VM instance '{context.vm_name}' was not properly prepared - missing from VirtualBox")
-                log.info(f"Using prepared VM instance '{context.vm_name}' with snapshots (UUID: {vm_instance.vbox_uuid})")
+                    raise LoggedException(
+                        log, f"VM instance '{context.vm_name}' was not properly prepared - missing from VirtualBox"
+                    )
+            log.info(f"Using prepared VM instance '{context.vm_name}' with snapshots (UUID: {vm_instance.vbox_uuid})")
 
         # Update experiment run with VM-specific data (skip in diff mode where no database persistence)
-        if (not context.stop_event.is_set() and
-            context.experiment_run_directory is not None and
-            isinstance(context.experiment_run_directory, ExperimentRunDirectory)):
+        if (
+            not context.stop_event.is_set()
+            and context.experiment_run_directory is not None
+            and isinstance(context.experiment_run_directory, ExperimentRunDirectory)
+        ):
             context.experiment_run_ulid = experiment_database.update_experiment_run(
-                context.experiment_run_ulid,
-                context.experiment_run_directory
+                context.experiment_run_ulid, context.experiment_run_directory
             )
 
         context.timestamp_before_vm_start = datetime.now(UTC)
+
+    @staticmethod
+    def _use_instance(context: ExperimentRunCtx, vm_instance_id: str) -> VmInstance:
+        """Point this machine's context at the allocated instance and record it on the run."""
+        from adare.database.api.vm import VmApi
+
+        with VmApi() as api:
+            vm_instance = api.get_vm_instance_by_id(vm_instance_id)
+        if vm_instance is None:
+            raise LoggedException(log, f"VM instance with ID {vm_instance_id} not found after preparation")
+        if vm_instance.websocket_port is None:
+            raise LoggedException(log, f"VM instance {vm_instance.instance_name} has no websocket port allocated")
+
+        context.vm_instance_id = vm_instance.id
+        context.vm_name = vm_instance.instance_name
+        context.config.websocket_port = vm_instance.websocket_port
+        # The run records the primary machine's instance; every machine releases
+        # its own via context.vm_instance_id.
+        if context.machine_key == context.primary_machine:
+            experiment_database.update_experiment_run_vm_instance(
+                context.config.project_path, context.experiment_run_ulid, vm_instance.id
+            )
+        log.info(f"Using VM instance: {vm_instance.instance_name} on port {vm_instance.websocket_port}")
+        return vm_instance
 
     async def setup_networking(self, context: ExperimentRunCtx):
         """
@@ -571,11 +217,7 @@ class VMLifecycleManager:
         - VirtualBox: Configure port forwarding via VBoxManage
         - QEMU: Save port forwarding rules to config (applied on VM start)
         """
-        with StageCtxManager(
-            VMNetworkingStage(),
-            context.experiment_run_ulid,
-            event=context.user_interrupt_event
-        ):
+        with StageCtxManager(VMNetworkingStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
             await self.strategy.setup_networking(context)
 
     async def setup_file_transfer(self, context: ExperimentRunCtx):
@@ -588,9 +230,7 @@ class VMLifecycleManager:
         """
         log.info("Starting file transfer setup")
         with StageCtxManager(
-            VMFileTransferSetupStage(),
-            context.experiment_run_ulid,
-            event=context.user_interrupt_event
+            VMFileTransferSetupStage(), context.experiment_run_ulid, event=context.user_interrupt_event
         ) as stage_ctx:
             if self.hypervisor_type == 'qemu' and hasattr(self.strategy, 'file_transfer'):
                 stage_ctx.stage.sub_msg = self.strategy.file_transfer.setup_description
@@ -628,7 +268,9 @@ class VMLifecycleManager:
         but kept for backward compatibility with existing code that may call it separately.
         """
         # For backward compatibility - this is now a no-op as the strategy handles mounting
-        log.debug("mount_shared_directories() called - directories should already be mounted from start_and_initialize_vm()")
+        log.debug(
+            "mount_shared_directories() called - directories should already be mounted from start_and_initialize_vm()"
+        )
 
     async def stop_vm(self, context: ExperimentRunCtx, post_interrupt: bool = False, force: bool = False):
         """Stop the virtual machine."""
@@ -638,7 +280,9 @@ class VMLifecycleManager:
             if context.vm:
                 await context.vm.stop(force=force)
 
-    async def retrieve_artifacts(self, context: ExperimentRunCtx, post_interrupt: bool = False, force_stop: bool = False):
+    async def retrieve_artifacts(
+        self, context: ExperimentRunCtx, post_interrupt: bool = False, force_stop: bool = False
+    ):
         """
         Retrieve artifacts from VM with proper stage visibility.
 
@@ -656,11 +300,7 @@ class VMLifecycleManager:
         # Don't check interrupt event when retrieving artifacts during post-interrupt cleanup
         event = None if post_interrupt else context.user_interrupt_event
 
-        with StageCtxManager(
-            VMFileTransferRetrievalStage(),
-            context.experiment_run_ulid,
-            event=event
-        ) as stage_ctx:
+        with StageCtxManager(VMFileTransferRetrievalStage(), context.experiment_run_ulid, event=event) as stage_ctx:
             if self.hypervisor_type == 'qemu' and hasattr(self.strategy, 'file_transfer'):
                 stage_ctx.stage.sub_msg = self.strategy.file_transfer.retrieval_description
             await self.strategy.retrieve_artifacts(context, post_interrupt=post_interrupt, force_stop=force_stop)
@@ -699,14 +339,11 @@ class VMLifecycleManager:
         event = None if post_interrupt else context.user_interrupt_event
 
         # Wrap execution in StageCtxManager for flow console visibility
-        with StageCtxManager(
-            VMHostDiffStage(),
-            context.experiment_run_ulid,
-            event=event
-        ) as stage_ctx:
+        with StageCtxManager(VMHostDiffStage(), context.experiment_run_ulid, event=event) as stage_ctx:
             try:
                 # Get disk paths from QEMU VM
                 from adare.hypervisor.qemu.vm import QEMUVM
+
                 if not isinstance(context.vm, QEMUVM):
                     log.warning("VM is not a QEMU instance - cannot perform host diff")
                     return
@@ -719,6 +356,7 @@ class VMLifecycleManager:
 
                 # Validate disk paths exist
                 from pathlib import Path
+
                 if not Path(base_disk_path).exists():
                     log.error(f"Base disk not found: {base_disk_path}")
                     return
@@ -740,9 +378,7 @@ class VMLifecycleManager:
                     extract_content_dir = diff_dir / 'content'
 
                 diff_results = self.strategy.compare_disk_images_with_virt_diff(
-                    base_disk_path=base_disk_path,
-                    overlay_disk_path=overlay_disk_path,
-                    extract_dir=extract_content_dir
+                    base_disk_path=base_disk_path, overlay_disk_path=overlay_disk_path, extract_dir=extract_content_dir
                 )
 
                 # Export results to artifacts directory
@@ -752,7 +388,7 @@ class VMLifecycleManager:
                         'diff_mode': 'host',
                         'tool': 'virt-ls-manual',
                         'base_disk_path': base_disk_path,
-                        'overlay_disk_path': overlay_disk_path
+                        'overlay_disk_path': overlay_disk_path,
                     }
 
                     # Export to JSON and CSV formats
@@ -761,6 +397,7 @@ class VMLifecycleManager:
                         export_diff_csv,
                         export_diff_json,
                     )
+
                     json_path = diff_dir / 'filesystem_diffs.json'
                     csv_path = diff_dir / 'filesystem_diffs.csv'
                     bodyfile_path = diff_dir / 'filesystem_diffs.bodyfile'
@@ -770,10 +407,12 @@ class VMLifecycleManager:
                     export_diff_bodyfile(diff_results, bodyfile_path)
 
                     log.info(f"Host-side diff exported to {diff_dir}")
-                    log.info(f"Filesystem changes - "
-                            f"Added: {len(diff_results.get('added', []))}, "
-                            f"Removed: {len(diff_results.get('removed', []))}, "
-                            f"Modified: {len(diff_results.get('modified', []))}")
+                    log.info(
+                        f"Filesystem changes - "
+                        f"Added: {len(diff_results.get('added', []))}, "
+                        f"Removed: {len(diff_results.get('removed', []))}, "
+                        f"Modified: {len(diff_results.get('modified', []))}"
+                    )
 
                     # Update stage sub_msg with diff summary for flow console display
                     stage_ctx.stage.sub_msg = (
@@ -858,7 +497,9 @@ class VMLifecycleManager:
 
                 log.info(f"Exporting disk image ({fmt}) to {dest_path}")
                 export_disk_image(
-                    overlay_disk_path, dest_path, fmt=fmt,
+                    overlay_disk_path,
+                    dest_path,
+                    fmt=fmt,
                     qemu_img_exe=context.vm.executables.qemu_img,
                 )
 
@@ -866,6 +507,7 @@ class VMLifecycleManager:
 
                 from adare.database.api.experiment import ExperimentApi
                 from adare.database.exceptions import DatabaseError
+
                 with ExperimentApi(context.config.project_path) as api:
                     api.add_run_artifact(
                         run_ulid=context.experiment_run_ulid,
@@ -942,7 +584,7 @@ class VMLifecycleManager:
                     free_bytes = shutil.disk_usage(dest_path.parent).free
                     if free_bytes < configured_memory_mb * 1024 * 1024 * 1.5:
                         log.warning(
-                            f"Free disk space ({free_bytes / (1024 ** 3):.1f}GiB) is less than 1.5x "
+                            f"Free disk space ({free_bytes / (1024**3):.1f}GiB) is less than 1.5x "
                             f"configured VM RAM ({configured_memory_mb}MB) - memory dump may fail to complete"
                         )
 
@@ -953,6 +595,7 @@ class VMLifecycleManager:
 
                 from adare.database.api.experiment import ExperimentApi
                 from adare.database.exceptions import DatabaseError
+
                 with ExperimentApi(context.config.project_path) as api:
                     api.add_run_artifact(
                         run_ulid=context.experiment_run_ulid,
@@ -1004,166 +647,73 @@ class VMLifecycleManager:
             # Hypervisor-specific cleanup (port forwarding, etc.)
             await self.strategy.cleanup_vm(context, post_interrupt)
 
-            # QEMU-specific: Cleanup experiment overlay disk
-            # This deletes the overlay, leaving the immutable base disk intact
-            if context.vm and hasattr(context.vm, 'cleanup_overlay_disk'):
-                experiment_id = context.experiment_run_ulid or 'default'
-                try:
-                    await context.vm.cleanup_overlay_disk(experiment_id)
-                    log.info(f"Cleaned up QEMU overlay for experiment {experiment_id}")
-                except (OSError, RuntimeError) as e:
-                    log.warning(f"Failed to cleanup overlay disk: {e}")
+            if self.hypervisor_type == 'qemu':
+                # The run's domain, overlay, UEFI vars, vTPM copy, config and
+                # instance row all go; the environment disk is never touched.
+                await self._remove_qemu_run(context)
+            else:
+                log.info('Releasing VM instance for reuse by future experiments')
+                await self._release_vm_instance(context)
 
-            # QEMU-specific: Undefine libvirt domain to prevent stale disk path references
-            # This ensures the domain doesn't persist with references to deleted overlay
-            if context.vm and hasattr(context.vm, '_libvirt_domain'):
-                try:
-                    import libvirt
+    async def _remove_qemu_run(self, context: ExperimentRunCtx) -> None:
+        from adare.backend.vm.run_instances import remove_qemu_run_instance
 
-                    if context.vm._libvirt_domain:
-                        try:
-                            # Only undefine if domain is not running
-                            state, _ = context.vm._libvirt_domain.state()
-                            if state == libvirt.VIR_DOMAIN_SHUTOFF:
-                                _undefine_keeping_firmware_state(context.vm._libvirt_domain)
-                                log.info(f"Undefined libvirt domain '{context.vm.vm_name}'")
-                            else:
-                                log.warning(
-                                    f"Cannot undefine domain '{context.vm.vm_name}' - "
-                                    f"still running (state: {state}). Domain will be undefined on next start."
-                                )
-                        except libvirt.libvirtError as e:
-                            # A domain that is already gone is the normal case; anything
-                            # else means the definition just leaked and stays visible in
-                            # `virsh list --all` forever, so do not bury it at debug.
-                            if e.get_error_code() == libvirt.VIR_ERR_NO_DOMAIN:
-                                log.debug(f"Domain already undefined: {e}")
-                            else:
-                                log.warning(
-                                    f"Could not undefine domain '{context.vm.vm_name}' - its "
-                                    f"definition will leak (see `virsh list --all`): {e}"
-                                )
-                        finally:
-                            # Always clear cached domain object to force redefinition
-                            context.vm._libvirt_domain = None
-                            log.debug(f"Cleared libvirt domain cache for '{context.vm.vm_name}'")
-                except (OSError, RuntimeError, ImportError) as e:
-                    log.warning(f"Failed to cleanup libvirt domain: {e}")
-
-            # Release VM instance for reuse by other experiments
-            log.info('Releasing VM instance for reuse by future experiments')
-            await self._release_vm_instance(context)
+        if context.vm is not None:
+            context.vm._libvirt_domain = None  # stale after the domain is undefined below
+        instance_name = context.vm_name
+        if not instance_name:
+            log.warning('No run instance recorded - nothing to remove')
+            return
+        try:
+            remove_qemu_run_instance(instance_name)
+        except (OSError, DatabaseError) as e:
+            # reconcile_instances() reaps whatever is left once this process is gone.
+            log.error(f"Failed to remove run instance {instance_name}: {e}")
 
     async def _release_vm_instance(self, context: ExperimentRunCtx):
-        """Release the VM instance used by this experiment."""
+        """Return this machine's pooled (VirtualBox) instance to the pool."""
+        from adare.backend.vm.commands import release_vm_instance_for_experiment
+
+        instance_id = context.vm_instance_id
+        if not instance_id:
+            log.warning("No VM instance recorded for this machine - cannot release")
+            return
         try:
-            # Get the VM instance ID from the experiment run
-            from adare.database.api.experiment import ExperimentApi
-            from adare.database.models.project_models import ExperimentRun
-
-            with ExperimentApi(context.config.project_path) as api:
-                experiment_run = api._session.query(ExperimentRun).filter(
-                    ExperimentRun.id == context.experiment_run_ulid
-                ).first()
-
-            if experiment_run and experiment_run.vm_instance_id:
-                from adare.backend.vm.commands import release_vm_instance_for_experiment
-                await release_vm_instance_for_experiment(experiment_run.vm_instance_id)
-                log.info(f"Released VM instance {experiment_run.vm_instance_id} for reuse")
-            else:
-                log.warning("No VM instance ID found in experiment run - cannot release")
-        except (OSError, ValueError, RuntimeError) as e:
+            await release_vm_instance_for_experiment(instance_id)
+            log.info(f"Released VM instance {instance_id} for reuse")
+        except (OSError, ValueError, RuntimeError, DatabaseError) as e:
             log.error(f"Failed to release VM instance: {e}")
 
-
     async def _create_experiment_snapshot(self, context: ExperimentRunCtx, event: threading.Event):
-        """Create a snapshot of the final experiment state."""
-        if context.vm and context.experiment_run_ulid:
-            # Import snapshot manager for creating snapshot
-            from adare.backend.vm.snapshot_manager import SnapshotManager
+        """Snapshot the final state of this machine's (VirtualBox) instance."""
+        if self.hypervisor_type == 'qemu':
+            log.warning(
+                '--preserve-snapshot is VirtualBox-only: a QEMU run\'s overlay is discarded with the run. '
+                'Use --export-disk-image to keep the final disk in the run directory.'
+            )
+            return
+        if not context.vm or not context.experiment_run_ulid or not context.vm_instance_id:
+            log.warning('No VM instance recorded for this machine - cannot create experiment snapshot')
+            return
+        from adare.backend.vm.snapshot_manager import SnapshotManager
+        from adare.database.api.vm import VmApi
 
-            # Get VM instance from database to create snapshot
-            try:
-                from adare.database.api.experiment import ExperimentApi
-                from adare.database.api.vm import VmApi
-                from adare.database.models.project_models import ExperimentRun
-
-                # Get the VM instance ID from the experiment run
-                with ExperimentApi(context.config.project_path) as api:
-                    experiment_run = api._session.query(ExperimentRun).filter(
-                        ExperimentRun.id == context.experiment_run_ulid
-                    ).first()
-
-                if not experiment_run or not experiment_run.vm_instance_id:
-                    log.warning('No VM instance ID found in experiment run - cannot create experiment snapshot')
-                    return
-
-                # Get the VM instance
-                with VmApi() as api:
-                    vm_instance = api.get_vm_instance_by_id(experiment_run.vm_instance_id)
-
-                if vm_instance and vm_instance.vbox_uuid:
-                    snapshot_manager = SnapshotManager()
-
-                    # Create new experiment snapshot with current state
-                    with StageCtxManager(VMExperimentSnapshotStage(), context.experiment_run_ulid, event=event):
-                        created_snapshot = snapshot_manager.create_experiment_snapshot_for_instance(
-                            vm_instance,
-                            context.experiment_run_ulid,
-                            description=f"Final state snapshot for experiment {context.experiment_run_ulid}",
-                            silent=False
-                        )
-
-                    if created_snapshot:
-                        log.info(f'Created experiment snapshot: {created_snapshot}')
-                    else:
-                        log.warning('Failed to create experiment snapshot')
-                else:
-                    log.warning('VM instance not found or missing UUID - cannot create experiment snapshot')
-
-            except (OSError, ValueError, RuntimeError) as e:
-                log.warning(f'Error creating experiment snapshot: {e}')
-
-    async def _cleanup_experiment_snapshot(self, context: ExperimentRunCtx):
-        """Clean up experiment-specific snapshots."""
-        if context.vm and context.experiment_run_ulid:
-            # Import snapshot manager for cleanup
-            from adare.backend.vm.snapshot_manager import SnapshotManager
-
-            # Get VM instance from database to delete snapshot
-            try:
-                from adare.database.api.experiment import ExperimentApi
-                from adare.database.api.vm import VmApi
-                from adare.database.models.project_models import ExperimentRun
-
-                # Get the VM instance ID from the experiment run
-                with ExperimentApi(context.config.project_path) as api:
-                    experiment_run = api._session.query(ExperimentRun).filter(
-                        ExperimentRun.id == context.experiment_run_ulid
-                    ).first()
-
-                if not experiment_run or not experiment_run.vm_instance_id:
-                    log.warning('No VM instance ID found in experiment run - cannot cleanup experiment snapshot')
-                    return
-
-                # Get the VM instance
-                with VmApi() as api:
-                    vm_instance = api.get_vm_instance_by_id(experiment_run.vm_instance_id)
-
-                if vm_instance and vm_instance.vbox_uuid:
-                    snapshot_manager = SnapshotManager()
-
-                    # Generate the experiment snapshot name (same logic as in create_experiment_snapshot_for_instance)
-                    exp_snapshot_name = f"adare_exp_{context.experiment_run_ulid[:8]}"
-
-                    # Delete only the experiment-specific snapshot
-                    success = snapshot_manager.delete_instance_snapshot(vm_instance, exp_snapshot_name, silent=True)
-                    if success:
-                        log.info(f'Successfully cleaned up experiment snapshot: {exp_snapshot_name}')
-                    else:
-                        log.warning(f'Failed to cleanup experiment snapshot: {exp_snapshot_name} (may not exist)')
-                else:
-                    log.warning('VM instance not found or missing UUID - cannot cleanup experiment snapshot')
-
-            except (OSError, ValueError, RuntimeError) as e:
-                log.warning(f'Error during snapshot cleanup: {e}')
+        try:
+            with VmApi() as api:
+                vm_instance = api.get_vm_instance_by_id(context.vm_instance_id)
+            if not vm_instance or not vm_instance.vbox_uuid:
+                log.warning('VM instance not found or missing UUID - cannot create experiment snapshot')
+                return
+            with StageCtxManager(VMExperimentSnapshotStage(), context.experiment_run_ulid, event=event):
+                created_snapshot = SnapshotManager().create_experiment_snapshot_for_instance(
+                    vm_instance,
+                    context.experiment_run_ulid,
+                    description=f"Final state snapshot for experiment {context.experiment_run_ulid}",
+                    silent=False,
+                )
+            if created_snapshot:
+                log.info(f'Created experiment snapshot: {created_snapshot}')
+            else:
+                log.warning('Failed to create experiment snapshot')
+        except (OSError, ValueError, RuntimeError, DatabaseError) as e:
+            log.warning(f'Error creating experiment snapshot: {e}')

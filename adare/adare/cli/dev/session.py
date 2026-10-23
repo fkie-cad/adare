@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 def _running_sessions_for(project_directory):
     """Running sessions for a project (most recent first)."""
     from adare.database.api.devmode import DevModeApi
+
     return DevModeApi().list_running_sessions(project_directory)
 
 
@@ -55,7 +56,7 @@ def _handle_start_reuse_or_warn(arguments, project_directory) -> str | None:
                     f"Inspect it: adare dev state -s {reused.session_id}",
                     f"Stop it:    adare dev stop -s {reused.session_id}",
                 ],
-                tip='Wanted a fresh VM instead? re-run without --reuse.'
+                tip='Wanted a fresh VM instead? re-run without --reuse.',
             )
             return reused.session_id
         print("No running session to reuse for this project — starting a new one.\n")
@@ -88,7 +89,7 @@ def _open_watch_for_session(session_id: str) -> None:
         resolve_vm_uuid,
     )
 
-    # ADARE web server port (default of `adare web start`); the in-app viewer is
+    # ADARE web server port (default of `adare ui start`); the in-app viewer is
     # served here, so the live view opens same-origin, not on VirtualSpice's :8081.
     ADARE_WEB_PORT = 8089
 
@@ -100,16 +101,10 @@ def _open_watch_for_session(session_id: str) -> None:
 
     uuid = resolve_vm_uuid(vm_name, spice_port=DEFAULT_SPICE_PORT)
     if uuid is None:
-        print(
-            f"\n⚠ --watch: could not open a live view for '{vm_name}'. "
-            "Is VirtualSpice running (adare web start)?"
-        )
+        print(f"\n⚠ --watch: could not open a live view for '{vm_name}'. Is VirtualSpice running (adare ui start)?")
         return
 
-    url = (
-        f"http://127.0.0.1:{ADARE_WEB_PORT}/vm/watch"
-        f"?name={quote(vm_name)}&view_only=true"
-    )
+    url = f"http://127.0.0.1:{ADARE_WEB_PORT}/vm/watch?name={quote(vm_name)}&view_only=true"
     webbrowser.open(url)
     print(f"\n👁  Watching VM '{vm_name}' (read-only): {url}")
 
@@ -144,24 +139,20 @@ def exec_dev_start(arguments):
                 # Setup structure expected by ExperimentConfig:
                 # Dict[str, Dict[str, Path]] = {name: {'host': Path, 'vm': Path}}
                 # Auto-generate name since user only provides paths
-                share_name = f"dev_shared_{idx+1}"
-
+                share_name = f"dev_shared_{idx + 1}"
 
                 host_path = Path(host_path_str).resolve()
                 if not host_path.exists():
-                     # Auto-create if it doesn't exist, as this is a dev convenience feature
-                     host_path.mkdir(parents=True, exist_ok=True)
-                     log.info(f"Created shared directory on host: {host_path}")
+                    # Auto-create if it doesn't exist, as this is a dev convenience feature
+                    host_path.mkdir(parents=True, exist_ok=True)
+                    log.info(f"Created shared directory on host: {host_path}")
 
-                shared_directories[share_name] = {
-                    'host': host_path,
-                    'vm': Path(vm_path_str)
-                }
+                shared_directories[share_name] = {'host': host_path, 'vm': Path(vm_path_str)}
                 log.debug(f"Parsed shared directory: {host_path_str} -> {vm_path_str} ({share_name})")
             except ValueError:
                 print_error_message(
                     title=f"Invalid shared directory format: {dir_spec}",
-                    next_steps=["Use format: HOST_PATH:VM_PATH (e.g., /tmp/data:/mnt/data)"]
+                    next_steps=["Use format: HOST_PATH:VM_PATH (e.g., /tmp/data:/mnt/data)"],
                 )
                 exit(1)
 
@@ -180,17 +171,19 @@ def exec_dev_start(arguments):
     try:
         # Start session
         api = AdareAPI()
-        result = api.devmode.start_session(DevSessionStartRequest(
-            project_path=project_directory,
-            environment_name=arguments.environment,
-            name=getattr(arguments, 'name', None),
-            gui_mode=getattr(arguments, 'gui_mode', None),
-            vm_memory=getattr(arguments, 'vm_memory', None),
-            vm_cpus=getattr(arguments, 'vm_cpus', None),
-            debug_screenshots=getattr(arguments, 'debug_screenshots', False),
-            console_ulid=console_ulid,
-            shared_directories=shared_directories if shared_directories else None
-        ))
+        result = api.devmode.start_session(
+            DevSessionStartRequest(
+                project_path=project_directory,
+                environment_name=arguments.environment,
+                name=getattr(arguments, 'name', None),
+                gui_mode=getattr(arguments, 'gui_mode', None),
+                vm_memory=getattr(arguments, 'vm_memory', None),
+                vm_cpus=getattr(arguments, 'vm_cpus', None),
+                debug_screenshots=getattr(arguments, 'debug_screenshots', False),
+                console_ulid=console_ulid,
+                shared_directories=shared_directories if shared_directories else None,
+            )
+        )
 
         if result.success:
             flow_console.log_success('DEV_START_SUCCESS', f'Dev session started: {result.data.session_id}')
@@ -198,7 +191,7 @@ def exec_dev_start(arguments):
             print_success_message(
                 title=f'Dev session started: {result.data.session_id}',
                 next_steps=result.data.next_steps,
-                tip=result.data.tip
+                tip=result.data.tip,
             )
 
             if shared_directories:
@@ -268,7 +261,7 @@ def exec_dev_resume(arguments):
             print_success_message(
                 title=f'Dev session resumed: {result.data.session_id}',
                 next_steps=result.data.next_steps,
-                tip=result.data.tip
+                tip=result.data.tip,
             )
             print(f"\n  Variables preserved: {len(result.data.current_variables)}")
             print(f"  Checkpoints available: {len(result.data.available_snapshots)}")
@@ -322,10 +315,9 @@ def _exec_dev_stop_all(api, remove_resources, assume_yes):
 
     done, failed = [], []
     for s in running:
-        result = api.devmode.stop_session(DevSessionStopRequest(
-            session_id=s.session_id,
-            remove_resources=remove_resources
-        ))
+        result = api.devmode.stop_session(
+            DevSessionStopRequest(session_id=s.session_id, remove_resources=remove_resources)
+        )
         if result.success:
             done.append(s.session_id)
             print(f"  {'removed' if remove_resources else 'stopped'}: {s.session_id}")
@@ -336,7 +328,7 @@ def _exec_dev_stop_all(api, remove_resources, assume_yes):
     if failed:
         print_error_message(
             title=f'{len(done)} session(s) {verb}ped, {len(failed)} failed',
-            next_steps=['Check logs for the failed sessions', 'Retry with: adare dev stop -s <session_id>']
+            next_steps=['Check logs for the failed sessions', 'Retry with: adare dev stop -s <session_id>'],
         )
     else:
         print_success_message(title=f'All {len(done)} running session(s) {verb}ped')
@@ -357,19 +349,13 @@ def exec_dev_stop(arguments):
     # AUTO-DETECT SESSION ID (accepts an id or a name)
     session_id = _resolve_session_id(arguments.session_id)
 
-    result = api.devmode.stop_session(DevSessionStopRequest(
-        session_id=session_id,
-        remove_resources=remove_resources
-    ))
+    result = api.devmode.stop_session(DevSessionStopRequest(session_id=session_id, remove_resources=remove_resources))
 
     if result.success:
         if remove_resources:
             print_success_message(
                 title=f'Dev session removed: {session_id}',
-                next_steps=[
-                    'All resources deleted (VM, snapshots, database)',
-                    'Session cannot be restarted'
-                ]
+                next_steps=['All resources deleted (VM, snapshots, database)', 'Session cannot be restarted'],
             )
         else:
             print_success_message(
@@ -377,8 +363,8 @@ def exec_dev_stop(arguments):
                 next_steps=[
                     'VM shut down, resources preserved',
                     f'Resume with: adare dev resume {session_id}',
-                    'Or resume most recent: adare dev resume'
-                ]
+                    'Or resume most recent: adare dev resume',
+                ],
             )
     else:
         handle_api_error(result)
@@ -391,11 +377,14 @@ def exec_dev_list(arguments):
         project_directory = determine_projectdirectory(arguments.project)
 
     api = AdareAPI()
-    result = api.devmode.list_sessions(DevSessionListRequest(
-        project_path=project_directory
-    ))
+    result = api.devmode.list_sessions(DevSessionListRequest(project_path=project_directory))
 
     if result.success:
+        from adare.cli.output import emit, is_structured_output
+
+        if is_structured_output():
+            emit({'sessions': result.data or []})
+            return
         if not result.data:
             print("No dev sessions found")
             print("\nStart a new session with: adare dev start <experiment> -e <environment>")
@@ -409,16 +398,18 @@ def exec_dev_list(arguments):
             # Convert to DataFrame
             data = []
             for session in result.data:
-                data.append({
-                    'session_id': session.session_id,
-                    'name': session.name,
-                    'experiment_name': session.experiment_name,
-                    'environment_name': session.environment_name,
-                    'vm_running': session.vm_running,
-                    'actions_executed': session.actions_executed,
-                    'created_at': session.created_at,
-                    'status': session.status,
-                })
+                data.append(
+                    {
+                        'session_id': session.session_id,
+                        'name': session.name,
+                        'experiment_name': session.experiment_name,
+                        'environment_name': session.environment_name,
+                        'vm_running': session.vm_running,
+                        'actions_executed': session.actions_executed,
+                        'created_at': session.created_at,
+                        'status': session.status,
+                    }
+                )
 
             df = pd.DataFrame(data)
 
@@ -441,12 +432,15 @@ def exec_dev_state(arguments):
     session_id = _resolve_session_id(arguments.session_id)
 
     api = AdareAPI()
-    result = api.devmode.get_state(DevSessionStateRequest(
-        session_id=session_id
-    ))
+    result = api.devmode.get_state(DevSessionStateRequest(session_id=session_id))
 
     if result.success:
         state = result.data
+        from adare.cli.output import emit, is_structured_output
+
+        if is_structured_output():
+            emit(state)
+            return
         print(f"Dev Session State: {state.session_id}\n")
         if state.name:
             print(f"  Name: {state.name}")
@@ -474,24 +468,19 @@ def exec_dev_cleanup(arguments):
         project_directory = determine_projectdirectory(arguments.project)
 
     api = AdareAPI()
-    result = api.devmode.cleanup_stale_sessions(DevSessionCleanupRequest(
-        project_path=project_directory
-    ))
+    result = api.devmode.cleanup_stale_sessions(DevSessionCleanupRequest(project_path=project_directory))
 
     if result.success:
         data = result.data
         if data.sessions_reconciled == 0:
-            print(
-                f"No stale sessions found ({data.sessions_left_running} running "
-                f"session(s) left untouched)"
-            )
+            print(f"No stale sessions found ({data.sessions_left_running} running session(s) left untouched)")
         else:
             print_success_message(
                 title=(
                     f'Reconciled {data.sessions_reconciled} stale session(s) to '
                     f"'stopped'; left {data.sessions_left_running} running untouched"
                 ),
-                next_steps=['Resume a reconciled session with: adare dev resume <session_id|name>']
+                next_steps=['Resume a reconciled session with: adare dev resume <session_id|name>'],
             )
             for session_id in data.reconciled_session_ids:
                 print(f"  Reconciled -> stopped: {session_id}")

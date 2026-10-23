@@ -27,15 +27,16 @@
 # =============================================================================
 
 # external imports
+# configure logging
+import logging
 from pathlib import Path
+
+from adarelib.event.event import TestResult
 
 # internal imports
 from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
-from adarelib.event.event import TestResult
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 

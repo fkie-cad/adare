@@ -1,9 +1,9 @@
 """ISO extraction utilities using pycdlib (pure Python, cross-platform)."""
 
-import hashlib
 import logging
 from pathlib import Path
 
+from adare.helperfunctions.digest_cache import cached_file_sha256
 from adare.hypervisor.exceptions import HypervisorException
 
 log = logging.getLogger(__name__)
@@ -19,19 +19,21 @@ log = logging.getLogger(__name__)
 # script matters for the POST-INSTALL disk boot (Phase 2, no override attached):
 # try the Windows Boot Manager on the installed NVMe, then a generic loader.
 # map -r forces device re-enumeration in case USB devices weren't mapped yet.
-_STARTUP_NSH = "\r\n".join([
-    "@echo -off",
-    "map -r",
-    r"FS0:\EFI\Microsoft\Boot\bootmgfw.efi",
-    r"FS1:\EFI\Microsoft\Boot\bootmgfw.efi",
-    r"FS2:\EFI\Microsoft\Boot\bootmgfw.efi",
-    r"FS3:\EFI\Microsoft\Boot\bootmgfw.efi",
-    r"FS0:\EFI\BOOT\BOOTAA64.EFI",
-    r"FS1:\EFI\BOOT\BOOTAA64.EFI",
-    r"FS2:\EFI\BOOT\BOOTAA64.EFI",
-    r"FS3:\EFI\BOOT\BOOTAA64.EFI",
-    "",
-])
+_STARTUP_NSH = "\r\n".join(
+    [
+        "@echo -off",
+        "map -r",
+        r"FS0:\EFI\Microsoft\Boot\bootmgfw.efi",
+        r"FS1:\EFI\Microsoft\Boot\bootmgfw.efi",
+        r"FS2:\EFI\Microsoft\Boot\bootmgfw.efi",
+        r"FS3:\EFI\Microsoft\Boot\bootmgfw.efi",
+        r"FS0:\EFI\BOOT\BOOTAA64.EFI",
+        r"FS1:\EFI\BOOT\BOOTAA64.EFI",
+        r"FS2:\EFI\BOOT\BOOTAA64.EFI",
+        r"FS3:\EFI\BOOT\BOOTAA64.EFI",
+        "",
+    ]
+)
 
 
 class ISOExtractionError(HypervisorException):
@@ -106,7 +108,7 @@ def extract_kernel_and_initrd(
             str(iso_path),
             f'Could not find {kernel_iso_path} and {initrd_iso_path} in the ISO. '
             'The ISO does not appear to contain a kernel/initrd at the '
-            'expected locations for this distro.'
+            'expected locations for this distro.',
         )
     finally:
         iso.close()
@@ -330,10 +332,7 @@ def _extract_guest_tools_exe(virtio_iso_path: Path, output_dir: Path) -> None:
                 log.info(f'Extracted {ident} as {exe_name} (ISO9660 scan)')
                 return
 
-        raise ISOExtractionError(
-            str(virtio_iso_path),
-            f'{exe_name} not found in virtio-win ISO'
-        )
+        raise ISOExtractionError(str(virtio_iso_path), f'{exe_name} not found in virtio-win ISO')
     finally:
         iso.close()
 
@@ -351,20 +350,39 @@ def _build_tools_iso(source_dir: Path, output_path: Path) -> None:
 
     if platform.system() == 'Darwin':
         subprocess.run(
-            ['hdiutil', 'makehybrid', '-iso', '-joliet',
-             '-default-volume-name', 'AAINSTALL',
-             '-o', str(output_path), str(source_dir)],
-            check=True, capture_output=True,
+            [
+                'hdiutil',
+                'makehybrid',
+                '-iso',
+                '-joliet',
+                '-default-volume-name',
+                'AAINSTALL',
+                '-o',
+                str(output_path),
+                str(source_dir),
+            ],
+            check=True,
+            capture_output=True,
         )
         return
 
     for tool in ('mkisofs', 'genisoimage'):
         if shutil.which(tool):
             subprocess.run(
-                [tool, '-J', '-rational-rock', '-full-iso9660-filenames',
-                 '-V', 'AAINSTALL', '-quiet',
-                 '-o', str(output_path), str(source_dir)],
-                check=True, capture_output=True,
+                [
+                    tool,
+                    '-J',
+                    '-rational-rock',
+                    '-full-iso9660-filenames',
+                    '-V',
+                    'AAINSTALL',
+                    '-quiet',
+                    '-o',
+                    str(output_path),
+                    str(source_dir),
+                ],
+                check=True,
+                capture_output=True,
             )
             return
 
@@ -390,10 +408,7 @@ def _build_tools_iso(source_dir: Path, output_path: Path) -> None:
 # ISO (kept attached). Requires wimlib-imagex (patch boot.wim) + 7z (read the UDF
 # source) + xorriso (build the El Torito ISO) — validated in check_prerequisites.
 
-_WINPESHL_INI = (
-    '[LaunchApps]\r\n'
-    '%SystemDrive%\\sources\\setup.exe, /legacy\r\n'
-)
+_WINPESHL_INI = '[LaunchApps]\r\n%SystemDrive%\\sources\\setup.exe, /legacy\r\n'
 
 # boot.wim image index that Windows install media boots ("Windows Setup"); the
 # generic "Windows PE" image (index 1) does not carry setup.exe.
@@ -421,7 +436,6 @@ def create_legacy_boot_iso(
     the answer file). The original Windows ISO is left untouched and must stay
     attached alongside this override to supply install.wim.
     """
-    import shutil
     import subprocess
     import tempfile
 
@@ -444,9 +458,16 @@ def create_legacy_boot_iso(
         winpeshl = tmp / 'winpeshl.ini'
         winpeshl.write_bytes(_WINPESHL_INI.encode('ascii'))
         subprocess.run(
-            ['wimlib-imagex', 'update', str(boot_wim), str(_SETUP_WIM_INDEX),
-             '--command', f'add {winpeshl} /Windows/System32/winpeshl.ini'],
-            check=True, capture_output=True,
+            [
+                'wimlib-imagex',
+                'update',
+                str(boot_wim),
+                str(_SETUP_WIM_INDEX),
+                '--command',
+                f'add {winpeshl} /Windows/System32/winpeshl.ini',
+            ],
+            check=True,
+            capture_output=True,
         )
 
         # 3. Extract the source ISO's El Torito UEFI boot image + add the answer file.
@@ -472,7 +493,8 @@ def _extract_eltorito_efi_image(iso_path: Path, output_path: Path) -> None:
 
     result = subprocess.run(
         ['xorriso', '-indev', str(iso_path), '-report_el_torito', 'plain'],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     lba = size_sectors = None
     for line in (result.stdout + '\n' + result.stderr).splitlines():
@@ -520,10 +542,26 @@ def _build_bootable_iso(
             'Install with: brew install xorriso (macOS) / apt install xorriso (Linux).',
         )
     subprocess.run(
-        ['xorriso', '-as', 'mkisofs', '-iso-level', '3', '-R', '-J', '-joliet-long',
-         '-V', volume_label, '-e', efi_boot_img, '-no-emul-boot',
-         '-o', str(output_path), str(source_dir)],
-        check=True, capture_output=True,
+        [
+            'xorriso',
+            '-as',
+            'mkisofs',
+            '-iso-level',
+            '3',
+            '-R',
+            '-J',
+            '-joliet-long',
+            '-V',
+            volume_label,
+            '-e',
+            efi_boot_img,
+            '-no-emul-boot',
+            '-o',
+            str(output_path),
+            str(source_dir),
+        ],
+        check=True,
+        capture_output=True,
     )
 
 
@@ -545,7 +583,8 @@ def _extract_with_7z(archive: Path, members: list[str], dest_dir: Path) -> None:
         )
     result = subprocess.run(
         [sevenzip, 'x', str(archive), f'-o{dest_dir}', '-y', *members],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         raise ISOExtractionError(
@@ -597,15 +636,11 @@ def iso_sha256(iso_path: Path) -> str:
     Exists so a mismatch error can name the *actual* digest alongside the
     declared one without hashing a multi-gigabyte file a second time in the
     caller. :func:`verify_iso_hash` only answers yes/no.
+
+    Served from the ``<iso>.sha256`` sidecar cache while the file's size, mtime
+    and inode are unchanged (see :mod:`adare.helperfunctions.digest_cache`).
     """
-    digest = hashlib.sha256()
-    with open(iso_path, 'rb') as f:
-        while True:
-            chunk = f.read(8192)
-            if not chunk:
-                break
-            digest.update(chunk)
-    return digest.hexdigest()
+    return cached_file_sha256(iso_path)
 
 
 def verify_iso_hash(iso_path: Path, expected_sha256: str) -> bool:
@@ -629,15 +664,9 @@ def verify_iso_hash(iso_path: Path, expected_sha256: str) -> bool:
         return True
 
     log.info(f'Verifying SHA256 hash of {iso_path}...')
-    sha256 = hashlib.sha256()
-    with open(iso_path, 'rb') as f:
-        while True:
-            chunk = f.read(8192)
-            if not chunk:
-                break
-            sha256.update(chunk)
-
-    actual = sha256.hexdigest()
+    # Cached ISOs used to be re-hashed on every `vm create` / `env load`; the
+    # sidecar cache re-hashes only when the file's size, mtime or inode changed.
+    actual = cached_file_sha256(iso_path)
     if actual != expected_sha256:
         log.error(f'SHA256 mismatch for {iso_path}: expected {expected_sha256}, got {actual}')
         return False

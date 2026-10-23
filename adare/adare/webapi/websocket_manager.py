@@ -74,19 +74,14 @@ class WebSocketManager:
             try:
                 await websocket.send_json(message)
             except RuntimeError as e:
-                logger.warning(
-                    f"Failed to send to WebSocket for session {session_id}: {e}"
-                )
+                logger.warning(f"Failed to send to WebSocket for session {session_id}: {e}")
                 dead_connections.append(websocket)
 
         # Clean up dead connections
         if dead_connections:
             async with self._lock:
                 for websocket in dead_connections:
-                    if (
-                        session_id in self._connections
-                        and websocket in self._connections[session_id]
-                    ):
+                    if session_id in self._connections and websocket in self._connections[session_id]:
                         self._connections[session_id].remove(websocket)
                 if session_id in self._connections and not self._connections[session_id]:
                     del self._connections[session_id]
@@ -103,17 +98,11 @@ class WebSocketManager:
         """
         return len(self._connections.get(session_id, []))
 
-    async def send_session_state(
-        self, session_id: str, state: dict[str, Any]
-    ) -> None:
+    async def send_session_state(self, session_id: str, state: dict[str, Any]) -> None:
         """Send session state update."""
-        await self.broadcast(
-            session_id, {"type": "session_state", "session_id": session_id, "data": state}
-        )
+        await self.broadcast(session_id, {"type": "session_state", "session_id": session_id, "data": state})
 
-    async def send_action_start(
-        self, session_id: str, action_type: str, description: str
-    ) -> None:
+    async def send_action_start(self, session_id: str, action_type: str, description: str) -> None:
         """Send action start event."""
         await self.broadcast(
             session_id,
@@ -141,9 +130,7 @@ class WebSocketManager:
             },
         )
 
-    async def send_vm_status(
-        self, session_id: str, status: str, websocket_connected: bool
-    ) -> None:
+    async def send_vm_status(self, session_id: str, status: str, websocket_connected: bool) -> None:
         """Send VM status update."""
         await self.broadcast(
             session_id,
@@ -154,18 +141,14 @@ class WebSocketManager:
             },
         )
 
-    async def send_agent_step(
-        self, session_id: str, data: dict[str, Any]
-    ) -> None:
+    async def send_agent_step(self, session_id: str, data: dict[str, Any]) -> None:
         """Send a GUI-agent per-step activity event (decided / executed / …)."""
         await self.broadcast(
             session_id,
             {"type": "agent_step", "session_id": session_id, "data": data},
         )
 
-    async def send_agent_status(
-        self, session_id: str, state: str, summary: str = ""
-    ) -> None:
+    async def send_agent_status(self, session_id: str, state: str, summary: str = "") -> None:
         """Send a GUI-agent run status event (running / finished / failed)."""
         await self.broadcast(
             session_id,
@@ -176,9 +159,7 @@ class WebSocketManager:
             },
         )
 
-    async def send_checkpoint_created(
-        self, session_id: str, checkpoint_name: str
-    ) -> None:
+    async def send_checkpoint_created(self, session_id: str, checkpoint_name: str) -> None:
         """Send checkpoint created event."""
         await self.broadcast(
             session_id,

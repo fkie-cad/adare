@@ -1,22 +1,23 @@
 """Shared CLI utilities to eliminate duplication across CLI modules."""
 
 import logging
+import sys
 
 from adare.backend.basics import determine_projectdirectory
-from adare.console import print_error_message
+from adare.cli.errors import report_error
 from adare.exceptions import NoProjectFoundError
 
 log = logging.getLogger(__name__)
 
 
 def handle_api_error(result) -> None:
-    """Handle an API error result by printing formatted error message and exiting."""
+    """Report an API error result once on stderr and exit.
+
+    Exit code follows ``adare.cli.errors``: 3 for not-found codes, 2 for usage
+    errors, 1 otherwise; json mode prints an ``{"error": {...}}`` document.
+    """
     error = result.error
-    print_error_message(
-        title=f'{error.code}: {error.message}',
-        next_steps=error.solutions
-    )
-    exit(1)
+    sys.exit(report_error(error.code, error.message, error.solutions))
 
 
 def get_project_path(arguments):

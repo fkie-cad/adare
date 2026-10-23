@@ -36,6 +36,7 @@ class DevSession(SerializerMixin, GlobalBase):
         created_at: Timestamp when session was created
         updated_at: Timestamp of last status update
     """
+
     __tablename__ = 'dev_sessions'
     RELATIONSHIPS_TO_DICT = True
 

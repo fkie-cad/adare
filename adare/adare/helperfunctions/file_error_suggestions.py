@@ -10,14 +10,12 @@ import logging
 import os
 from pathlib import Path
 
+from adare.config.configdirectory import APPDATA_DIR
+
 log = logging.getLogger(__name__)
 
 
-def analyze_file_error(
-    operation: str,
-    file_path: Path,
-    error: Exception
-) -> tuple[str, list[str]]:
+def analyze_file_error(operation: str, file_path: Path, error: Exception) -> tuple[str, list[str]]:
     """
     Analyze file operation error and generate suggestions.
 
@@ -73,20 +71,26 @@ def _get_permission_solutions(file_path: Path, operation: str) -> list[str]:
             current_perms = oct(file_stat.st_mode)[-3:]
 
             if operation in ['read', 'validate', 'load']:
-                solutions.extend([
-                    f"Add read permission: 'chmod +r {file_path}'",
-                    f"Current permissions: {current_perms} - need read access",
-                ])
+                solutions.extend(
+                    [
+                        f"Add read permission: 'chmod +r {file_path}'",
+                        f"Current permissions: {current_perms} - need read access",
+                    ]
+                )
             elif operation in ['write', 'create', 'save']:
-                solutions.extend([
-                    f"Add write permission: 'chmod +w {file_path}'",
-                    f"Current permissions: {current_perms} - need write access",
-                ])
+                solutions.extend(
+                    [
+                        f"Add write permission: 'chmod +w {file_path}'",
+                        f"Current permissions: {current_perms} - need write access",
+                    ]
+                )
             elif operation in ['execute', 'run']:
-                solutions.extend([
-                    f"Add execute permission: 'chmod +x {file_path}'",
-                    f"Current permissions: {current_perms} - need execute access",
-                ])
+                solutions.extend(
+                    [
+                        f"Add execute permission: 'chmod +x {file_path}'",
+                        f"Current permissions: {current_perms} - need execute access",
+                    ]
+                )
 
             # Check ownership
             try:
@@ -94,6 +98,7 @@ def _get_permission_solutions(file_path: Path, operation: str) -> list[str]:
                 current_uid = os.getuid()
                 if owner_uid != current_uid:
                     import pwd
+
                     owner_name = pwd.getpwuid(owner_uid).pw_name
                     solutions.append(f"File owned by {owner_name} - consider using sudo or changing ownership")
             except Exception:
@@ -110,19 +115,23 @@ def _get_permission_solutions(file_path: Path, operation: str) -> list[str]:
             parent_perms = oct(parent_stat.st_mode)[-3:]
 
             if operation in ['create', 'write']:
-                solutions.extend([
-                    f"Check parent directory permissions: {parent_perms}",
-                    f"Add write permission to parent: 'chmod +w {parent}'",
-                ])
+                solutions.extend(
+                    [
+                        f"Check parent directory permissions: {parent_perms}",
+                        f"Add write permission to parent: 'chmod +w {parent}'",
+                    ]
+                )
         except Exception:
             pass
 
     # Generic permission solutions
-    solutions.extend([
-        "Run with elevated privileges: 'sudo <command>'",
-        f"Check file ownership: 'ls -la {file_path}'",
-        f"Fix ownership: 'sudo chown $USER {file_path}'",
-    ])
+    solutions.extend(
+        [
+            "Run with elevated privileges: 'sudo <command>'",
+            f"Check file ownership: 'ls -la {file_path}'",
+            f"Fix ownership: 'sudo chown $USER {file_path}'",
+        ]
+    )
 
     return solutions
 
@@ -134,10 +143,12 @@ def _get_file_not_found_solutions(file_path: Path, operation: str) -> list[str]:
     # Check if parent directory exists
     parent = file_path.parent
     if not parent.exists():
-        solutions.extend([
-            f"Create parent directory: 'mkdir -p {parent}'",
-            f"Parent directory {parent} does not exist",
-        ])
+        solutions.extend(
+            [
+                f"Create parent directory: 'mkdir -p {parent}'",
+                f"Parent directory {parent} does not exist",
+            ]
+        )
 
     # Check for similar files in the directory
     if parent.exists():
@@ -159,23 +170,29 @@ def _get_file_not_found_solutions(file_path: Path, operation: str) -> list[str]:
     existing_alternatives = [loc for loc in common_locations if loc.exists()]
 
     if existing_alternatives:
-        solutions.extend([
-            f"File found in alternative location: {existing_alternatives[0]}",
-            f"Use: 'ln -s {existing_alternatives[0]} {file_path}' to create link",
-        ])
+        solutions.extend(
+            [
+                f"File found in alternative location: {existing_alternatives[0]}",
+                f"Use: 'ln -s {existing_alternatives[0]} {file_path}' to create link",
+            ]
+        )
 
     # Operation-specific solutions
     if operation in ['read', 'load', 'validate']:
-        solutions.extend([
-            f"Verify file path spelling: {file_path}",
-            "Check if file was moved or renamed",
-            "Use absolute path if using relative path",
-        ])
+        solutions.extend(
+            [
+                f"Verify file path spelling: {file_path}",
+                "Check if file was moved or renamed",
+                "Use absolute path if using relative path",
+            ]
+        )
     elif operation in ['write', 'create', 'save']:
-        solutions.extend([
-            f"Create the file first: 'touch {file_path}'",
-            f"Ensure parent directory exists: 'mkdir -p {parent}'",
-        ])
+        solutions.extend(
+            [
+                f"Create the file first: 'touch {file_path}'",
+                f"Ensure parent directory exists: 'mkdir -p {parent}'",
+            ]
+        )
 
     solutions.append("Check current directory: 'pwd' (are you in the right place?)")
 
@@ -188,11 +205,13 @@ def _get_directory_error_solutions(file_path: Path, operation: str) -> list[str]
 
     if operation in ['read', 'write']:
         # User tried to read/write a directory as a file
-        solutions.extend([
-            f"'{file_path}' is a directory, not a file",
-            f"List directory contents: 'ls -la {file_path}'",
-            "Specify a file within the directory",
-        ])
+        solutions.extend(
+            [
+                f"'{file_path}' is a directory, not a file",
+                f"List directory contents: 'ls -la {file_path}'",
+                "Specify a file within the directory",
+            ]
+        )
 
         # Check for common files in the directory
         if file_path.exists():
@@ -214,19 +233,23 @@ def _get_file_exists_solutions(file_path: Path, operation: str) -> list[str]:
     solutions = []
 
     if operation in ['create', 'write']:
-        solutions.extend([
-            f"File already exists: {file_path}",
-            f"Remove existing file: 'rm {file_path}'",
-            f"Backup existing file: 'mv {file_path} {file_path}.backup'",
-            "Use different filename or add timestamp",
-        ])
+        solutions.extend(
+            [
+                f"File already exists: {file_path}",
+                f"Remove existing file: 'rm {file_path}'",
+                f"Backup existing file: 'mv {file_path} {file_path}.backup'",
+                "Use different filename or add timestamp",
+            ]
+        )
 
         # Check if it's a directory
         if file_path.is_dir():
-            solutions.extend([
-                f"'{file_path}' is a directory - use a different name",
-                f"Or remove directory: 'rm -rf {file_path}'",
-            ])
+            solutions.extend(
+                [
+                    f"'{file_path}' is a directory - use a different name",
+                    f"Or remove directory: 'rm -rf {file_path}'",
+                ]
+            )
 
     return solutions
 
@@ -244,18 +267,22 @@ def _get_disk_space_solutions(file_path: Path) -> list[str]:
         free_gb = free_space / (1024**3)
         total_gb = total_space / (1024**3)
 
-        solutions.extend([
-            f"Free space: {free_gb:.1f} GB of {total_gb:.1f} GB",
-            f"Clean up disk space: 'du -h {file_path.parent} | sort -hr | head -10'",
-            "Remove temporary files or move files to another location",
-            "Check for large log files or old backups",
-        ])
+        solutions.extend(
+            [
+                f"Free space: {free_gb:.1f} GB of {total_gb:.1f} GB",
+                f"Clean up disk space: 'du -h {file_path.parent} | sort -hr | head -10'",
+                "Remove temporary files or move files to another location",
+                "Check for large log files or old backups",
+            ]
+        )
     except Exception:
-        solutions.extend([
-            "Check disk space: 'df -h'",
-            "Clean up temporary files",
-            "Move files to another location with more space",
-        ])
+        solutions.extend(
+            [
+                "Check disk space: 'df -h'",
+                "Clean up temporary files",
+                "Move files to another location with more space",
+            ]
+        )
 
     return solutions
 
@@ -265,23 +292,29 @@ def _get_generic_file_solutions(file_path: Path, operation: str) -> list[str]:
     solutions = []
 
     # Basic troubleshooting
-    solutions.extend([
-        f"Check if file exists: 'ls -la {file_path}'",
-        f"Check permissions: 'ls -la {file_path.parent}'",
-        "Verify you're in the correct directory: 'pwd'",
-    ])
+    solutions.extend(
+        [
+            f"Check if file exists: 'ls -la {file_path}'",
+            f"Check permissions: 'ls -la {file_path.parent}'",
+            "Verify you're in the correct directory: 'pwd'",
+        ]
+    )
 
     # Operation-specific advice
     if operation in ['read', 'load']:
-        solutions.extend([
-            "Ensure file is not corrupted",
-            "Try copying file from backup if available",
-        ])
+        solutions.extend(
+            [
+                "Ensure file is not corrupted",
+                "Try copying file from backup if available",
+            ]
+        )
     elif operation in ['write', 'save']:
-        solutions.extend([
-            "Check if file is locked by another process",
-            "Ensure sufficient disk space",
-        ])
+        solutions.extend(
+            [
+                "Check if file is locked by another process",
+                "Ensure sufficient disk space",
+            ]
+        )
 
     return solutions
 
@@ -299,7 +332,7 @@ def _get_common_file_locations(file_path: Path) -> list[Path]:
     # Common config directories
     config_dirs = [
         Path.home() / '.config',
-        Path.home() / '.adare',
+        APPDATA_DIR,
         Path('/etc'),
         Path('/usr/local/etc'),
     ]
@@ -322,10 +355,7 @@ def _get_common_file_locations(file_path: Path) -> list[Path]:
 
 
 def format_file_error_message(
-    operation: str,
-    file_path: Path,
-    error: Exception,
-    include_debug_info: bool = False
+    operation: str, file_path: Path, error: Exception, include_debug_info: bool = False
 ) -> tuple[str, list[str]]:
     """
     Format a comprehensive file error message.
@@ -342,10 +372,12 @@ def format_file_error_message(
     message, solutions = analyze_file_error(operation, file_path, error)
 
     if include_debug_info:
-        solutions.extend([
-            f"Original error: {type(error).__name__}: {error}",
-            f"Operation: {operation}",
-            f"Path: {file_path}",
-        ])
+        solutions.extend(
+            [
+                f"Original error: {type(error).__name__}: {error}",
+                f"Operation: {operation}",
+                f"Path: {file_path}",
+            ]
+        )
 
     return message, solutions

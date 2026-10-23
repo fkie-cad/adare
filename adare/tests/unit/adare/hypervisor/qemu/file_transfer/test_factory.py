@@ -4,6 +4,7 @@ Tests for the file transfer strategy factory.
 Verifies that detect_file_transfer_mode() and get_file_transfer_strategy()
 select the correct strategy based on tool availability and platform.
 """
+
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -17,6 +18,17 @@ from adare.hypervisor.qemu.file_transfer import (
     detect_file_transfer_mode,
     get_file_transfer_strategy,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_host_virtiofsd(monkeypatch):
+    """Tests decide virtiofsd availability through ``shutil.which`` alone.
+
+    Without this, a host that has virtiofsd at a known off-PATH location
+    (``/usr/lib/qemu/virtiofsd`` on Debian/Ubuntu) is detected regardless of the
+    patched ``which`` -- and the probe prepends that directory to the real PATH.
+    """
+    monkeypatch.setattr('adare.hypervisor.qemu.file_transfer._VIRTIOFSD_KNOWN_PATHS', ())
 
 
 class TestDetectFileTransferMode:
@@ -61,6 +73,7 @@ class TestDetectFileTransferMode:
         everything therefore yields 'qga', which is correct — see
         `test_returns_qga_on_linux_without_guestfish`.
         """
+
         def which_side_effect(name):
             if name == 'virtiofsd':
                 return None
@@ -94,6 +107,7 @@ class TestDetectFileTransferMode:
 
     def test_returns_libguestfs_on_macos_with_guestfish(self):
         """macOS without virtiofsd but with guestfish -> libguestfs."""
+
         def which_side_effect(name):
             if name == 'virtiofsd':
                 return None

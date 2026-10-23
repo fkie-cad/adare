@@ -40,6 +40,7 @@ NamespaceMatchesParameter = xml_module.namespace_matches._parameter_class
 
 # Import test helpers
 import importlib.util
+
 helpers_path = Path(__file__).parent / "helpers.py"
 spec = importlib.util.spec_from_file_location("helpers", helpers_path)
 helpers = importlib.util.module_from_spec(spec)
@@ -54,26 +55,24 @@ assert_test_error = helpers.assert_test_error
 # ElementExists Tests
 # ============================================================================
 
+
 class TestElementExists:
     """Tests for ElementExists testfunction."""
 
     def test_element_exists_success(self, create_xml_file):
         """Test successful element existence check."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <person>
         <name>Alice</name>
         <age>30</age>
     </person>
-</root>""")
-
-        test = ElementExists(
-            name="test_exists",
-            parameter=ElementExistsParameter(
-                dst=str(xml_file),
-                xpath="//person"
-            )
+</root>""",
         )
+
+        test = ElementExists(name="test_exists", parameter=ElementExistsParameter(dst=str(xml_file), xpath="//person"))
         result = test.test()
 
         assert_test_success(result)
@@ -81,20 +80,17 @@ class TestElementExists:
 
     def test_element_exists_multiple_matches(self, create_xml_file):
         """Test element existence with multiple matches."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Item 1</item>
     <item>Item 2</item>
     <item>Item 3</item>
-</root>""")
-
-        test = ElementExists(
-            name="test_exists",
-            parameter=ElementExistsParameter(
-                dst=str(xml_file),
-                xpath="//item"
-            )
+</root>""",
         )
+
+        test = ElementExists(name="test_exists", parameter=ElementExistsParameter(dst=str(xml_file), xpath="//item"))
         result = test.test()
 
         assert_test_success(result)
@@ -102,19 +98,18 @@ class TestElementExists:
 
     def test_element_exists_failure_not_found(self, create_xml_file):
         """Test failure when element doesn't exist."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <person>
         <name>Alice</name>
     </person>
-</root>""")
+</root>""",
+        )
 
         test = ElementExists(
-            name="test_exists",
-            parameter=ElementExistsParameter(
-                dst=str(xml_file),
-                xpath="//nonexistent"
-            )
+            name="test_exists", parameter=ElementExistsParameter(dst=str(xml_file), xpath="//nonexistent")
         )
         result = test.test()
 
@@ -123,20 +118,21 @@ class TestElementExists:
 
     def test_element_exists_with_namespaces(self, create_xml_file):
         """Test element existence with namespace support."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns:ns="http://example.com/ns">
     <ns:person>
         <ns:name>Alice</ns:name>
     </ns:person>
-</root>""")
+</root>""",
+        )
 
         test = ElementExists(
             name="test_exists",
             parameter=ElementExistsParameter(
-                dst=str(xml_file),
-                xpath="//ns:person",
-                namespaces={"ns": "http://example.com/ns"}
-            )
+                dst=str(xml_file), xpath="//ns:person", namespaces={"ns": "http://example.com/ns"}
+            ),
         )
         result = test.test()
 
@@ -144,18 +140,17 @@ class TestElementExists:
 
     def test_element_exists_xpath_with_attribute(self, create_xml_file):
         """Test XPath with attribute selector."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item type="active">Item 1</item>
     <item type="inactive">Item 2</item>
-</root>""")
+</root>""",
+        )
 
         test = ElementExists(
-            name="test_exists",
-            parameter=ElementExistsParameter(
-                dst=str(xml_file),
-                xpath="//item[@type='active']"
-            )
+            name="test_exists", parameter=ElementExistsParameter(dst=str(xml_file), xpath="//item[@type='active']")
         )
         result = test.test()
 
@@ -165,11 +160,7 @@ class TestElementExists:
     def test_element_exists_file_not_found(self, tmp_path):
         """A missing XML file is a test FAILURE, not an execution error."""
         test = ElementExists(
-            name="test_exists",
-            parameter=ElementExistsParameter(
-                dst=str(tmp_path / "nonexistent.xml"),
-                xpath="//item"
-            )
+            name="test_exists", parameter=ElementExistsParameter(dst=str(tmp_path / "nonexistent.xml"), xpath="//item")
         )
         result = test.test()
 
@@ -191,18 +182,15 @@ class TestElementExists:
 
     def test_element_exists_malformed_xml(self, create_xml_file):
         """Test error with malformed XML."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Not closed
-</root>""")
-
-        test = ElementExists(
-            name="test_exists",
-            parameter=ElementExistsParameter(
-                dst=str(xml_file),
-                xpath="//item"
-            )
+</root>""",
         )
+
+        test = ElementExists(name="test_exists", parameter=ElementExistsParameter(dst=str(xml_file), xpath="//item"))
         result = test.test()
 
         assert result.status == StatusEnum.ERROR
@@ -210,15 +198,14 @@ class TestElementExists:
 
     def test_element_exists_invalid_xpath(self, create_xml_file):
         """Test error with invalid XPath expression."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
-<root><item>Test</item></root>""")
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
+<root><item>Test</item></root>""",
+        )
 
         test = ElementExists(
-            name="test_exists",
-            parameter=ElementExistsParameter(
-                dst=str(xml_file),
-                xpath="//[invalid"
-            )
+            name="test_exists", parameter=ElementExistsParameter(dst=str(xml_file), xpath="//[invalid")
         )
         result = test.test()
 
@@ -230,23 +217,23 @@ class TestElementExists:
 # ElementTextMatches Tests
 # ============================================================================
 
+
 class TestElementTextMatches:
     """Tests for ElementTextMatches testfunction."""
 
     def test_element_text_matches_success(self, create_xml_file):
         """Test successful text match."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <name>Alice</name>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
-            parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//name",
-                expected_text="Alice"
-            )
+            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//name", expected_text="Alice"),
         )
         result = test.test()
 
@@ -255,18 +242,17 @@ class TestElementTextMatches:
 
     def test_element_text_matches_failure(self, create_xml_file):
         """Test failure when text doesn't match."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <name>Alice</name>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
-            parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//name",
-                expected_text="Bob"
-            )
+            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//name", expected_text="Bob"),
         )
         result = test.test()
 
@@ -276,19 +262,19 @@ class TestElementTextMatches:
 
     def test_element_text_matches_regex(self, create_xml_file):
         """Test text matching with regex."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <code>ABC-12345</code>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//code",
-                expected_text=r"[A-Z]{3}-\d{5}",
-                regex_match=True
-            )
+                dst=str(xml_file), xpath="//code", expected_text=r"[A-Z]{3}-\d{5}", regex_match=True
+            ),
         )
         result = test.test()
 
@@ -297,19 +283,19 @@ class TestElementTextMatches:
 
     def test_element_text_matches_regex_failure(self, create_xml_file):
         """Test regex match failure."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <code>invalid</code>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//code",
-                expected_text=r"\d{5}",
-                regex_match=True
-            )
+                dst=str(xml_file), xpath="//code", expected_text=r"\d{5}", regex_match=True
+            ),
         )
         result = test.test()
 
@@ -318,19 +304,19 @@ class TestElementTextMatches:
 
     def test_element_text_matches_case_insensitive(self, create_xml_file):
         """Test case-insensitive text matching."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <name>ALICE</name>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//name",
-                expected_text="alice",
-                case_sensitive=False
-            )
+                dst=str(xml_file), xpath="//name", expected_text="alice", case_sensitive=False
+            ),
         )
         result = test.test()
 
@@ -338,19 +324,19 @@ class TestElementTextMatches:
 
     def test_element_text_matches_case_sensitive(self, create_xml_file):
         """Test case-sensitive text matching failure."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <name>ALICE</name>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//name",
-                expected_text="alice",
-                case_sensitive=True
-            )
+                dst=str(xml_file), xpath="//name", expected_text="alice", case_sensitive=True
+            ),
         )
         result = test.test()
 
@@ -358,21 +344,21 @@ class TestElementTextMatches:
 
     def test_element_text_matches_wildcard_any_mode(self, create_xml_file):
         """Test matching multiple elements with 'any' mode."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Apple</item>
     <item>Banana</item>
     <item>Cherry</item>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                expected_text="Banana",
-                wildcard_mode="any"
-            )
+                dst=str(xml_file), xpath="//item", expected_text="Banana", wildcard_mode="any"
+            ),
         )
         result = test.test()
 
@@ -381,21 +367,21 @@ class TestElementTextMatches:
 
     def test_element_text_matches_wildcard_all_mode_success(self, create_xml_file):
         """Test matching all elements with 'all' mode."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <status>active</status>
     <status>active</status>
     <status>active</status>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//status",
-                expected_text="active",
-                wildcard_mode="all"
-            )
+                dst=str(xml_file), xpath="//status", expected_text="active", wildcard_mode="all"
+            ),
         )
         result = test.test()
 
@@ -404,21 +390,21 @@ class TestElementTextMatches:
 
     def test_element_text_matches_wildcard_all_mode_failure(self, create_xml_file):
         """Test failure when not all elements match in 'all' mode."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <status>active</status>
     <status>inactive</status>
     <status>active</status>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//status",
-                expected_text="active",
-                wildcard_mode="all"
-            )
+                dst=str(xml_file), xpath="//status", expected_text="active", wildcard_mode="all"
+            ),
         )
         result = test.test()
 
@@ -427,19 +413,19 @@ class TestElementTextMatches:
 
     def test_element_text_matches_with_namespaces(self, create_xml_file):
         """Test text matching with namespaces."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns:ns="http://example.com/ns">
     <ns:name>Alice</ns:name>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//ns:name",
-                expected_text="Alice",
-                namespaces={"ns": "http://example.com/ns"}
-            )
+                dst=str(xml_file), xpath="//ns:name", expected_text="Alice", namespaces={"ns": "http://example.com/ns"}
+            ),
         )
         result = test.test()
 
@@ -447,18 +433,17 @@ class TestElementTextMatches:
 
     def test_element_text_matches_empty_text(self, create_xml_file):
         """Test matching empty element text."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <empty></empty>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
-            parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//empty",
-                expected_text=""
-            )
+            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//empty", expected_text=""),
         )
         result = test.test()
 
@@ -466,18 +451,17 @@ class TestElementTextMatches:
 
     def test_element_text_matches_no_elements_found(self, create_xml_file):
         """Test failure when no elements found at XPath."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <name>Alice</name>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
-            parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//nonexistent",
-                expected_text="test"
-            )
+            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//nonexistent", expected_text="test"),
         )
         result = test.test()
 
@@ -486,19 +470,18 @@ class TestElementTextMatches:
 
     def test_element_text_matches_with_placeholder(self, create_xml_file, variable_metadata_simple):
         """Test text matching with placeholder."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>value1</item>
-</root>""")
+</root>""",
+        )
 
         test = ElementTextMatches(
             name="test_text",
-            parameter=ElementTextMatchesParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                expected_text="{{VAR1}}"
-            ),
-            variable_metadata=variable_metadata_simple
+            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//item", expected_text="{{VAR1}}"),
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -509,24 +492,25 @@ class TestElementTextMatches:
 # AttributeMatches Tests
 # ============================================================================
 
+
 class TestAttributeMatches:
     """Tests for AttributeMatches testfunction."""
 
     def test_attribute_matches_success(self, create_xml_file):
         """Test successful attribute match."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item type="active">Item 1</item>
-</root>""")
+</root>""",
+        )
 
         test = AttributeMatches(
             name="test_attr",
             parameter=AttributeMatchesParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                attribute="type",
-                expected_value="active"
-            )
+                dst=str(xml_file), xpath="//item", attribute="type", expected_value="active"
+            ),
         )
         result = test.test()
 
@@ -535,19 +519,19 @@ class TestAttributeMatches:
 
     def test_attribute_matches_failure(self, create_xml_file):
         """Test failure when attribute value doesn't match."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item type="active">Item 1</item>
-</root>""")
+</root>""",
+        )
 
         test = AttributeMatches(
             name="test_attr",
             parameter=AttributeMatchesParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                attribute="type",
-                expected_value="inactive"
-            )
+                dst=str(xml_file), xpath="//item", attribute="type", expected_value="inactive"
+            ),
         )
         result = test.test()
 
@@ -557,19 +541,19 @@ class TestAttributeMatches:
 
     def test_attribute_matches_attribute_not_found(self, create_xml_file):
         """Test failure when attribute doesn't exist."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item type="active">Item 1</item>
-</root>""")
+</root>""",
+        )
 
         test = AttributeMatches(
             name="test_attr",
             parameter=AttributeMatchesParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                attribute="nonexistent",
-                expected_value="value"
-            )
+                dst=str(xml_file), xpath="//item", attribute="nonexistent", expected_value="value"
+            ),
         )
         result = test.test()
 
@@ -578,20 +562,19 @@ class TestAttributeMatches:
 
     def test_attribute_matches_regex(self, create_xml_file):
         """Test attribute matching with regex."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item id="item-12345">Item 1</item>
-</root>""")
+</root>""",
+        )
 
         test = AttributeMatches(
             name="test_attr",
             parameter=AttributeMatchesParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                attribute="id",
-                expected_value=r"item-\d+",
-                regex_match=True
-            )
+                dst=str(xml_file), xpath="//item", attribute="id", expected_value=r"item-\d+", regex_match=True
+            ),
         )
         result = test.test()
 
@@ -600,20 +583,19 @@ class TestAttributeMatches:
 
     def test_attribute_matches_case_insensitive(self, create_xml_file):
         """Test case-insensitive attribute matching."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item type="ACTIVE">Item 1</item>
-</root>""")
+</root>""",
+        )
 
         test = AttributeMatches(
             name="test_attr",
             parameter=AttributeMatchesParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                attribute="type",
-                expected_value="active",
-                case_sensitive=False
-            )
+                dst=str(xml_file), xpath="//item", attribute="type", expected_value="active", case_sensitive=False
+            ),
         )
         result = test.test()
 
@@ -621,10 +603,13 @@ class TestAttributeMatches:
 
     def test_attribute_matches_with_namespaces(self, create_xml_file):
         """Test attribute matching with namespaces."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns:ns="http://example.com/ns">
     <ns:item type="active">Item 1</ns:item>
-</root>""")
+</root>""",
+        )
 
         test = AttributeMatches(
             name="test_attr",
@@ -633,8 +618,8 @@ class TestAttributeMatches:
                 xpath="//ns:item",
                 attribute="type",
                 expected_value="active",
-                namespaces={"ns": "http://example.com/ns"}
-            )
+                namespaces={"ns": "http://example.com/ns"},
+            ),
         )
         result = test.test()
 
@@ -642,19 +627,19 @@ class TestAttributeMatches:
 
     def test_attribute_matches_element_not_found(self, create_xml_file):
         """Test failure when element doesn't exist."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Item 1</item>
-</root>""")
+</root>""",
+        )
 
         test = AttributeMatches(
             name="test_attr",
             parameter=AttributeMatchesParameter(
-                dst=str(xml_file),
-                xpath="//nonexistent",
-                attribute="type",
-                expected_value="active"
-            )
+                dst=str(xml_file), xpath="//nonexistent", attribute="type", expected_value="active"
+            ),
         )
         result = test.test()
 
@@ -663,20 +648,20 @@ class TestAttributeMatches:
 
     def test_attribute_matches_with_placeholder(self, create_xml_file, variable_metadata_simple):
         """Test attribute matching with placeholder."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item status="value1">Item 1</item>
-</root>""")
+</root>""",
+        )
 
         test = AttributeMatches(
             name="test_attr",
             parameter=AttributeMatchesParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                attribute="status",
-                expected_value="{{VAR1}}"
+                dst=str(xml_file), xpath="//item", attribute="status", expected_value="{{VAR1}}"
             ),
-            variable_metadata=variable_metadata_simple
+            variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
@@ -687,26 +672,27 @@ class TestAttributeMatches:
 # ElementCount Tests
 # ============================================================================
 
+
 class TestElementCount:
     """Tests for ElementCount testfunction."""
 
     def test_element_count_equals_success(self, create_xml_file):
         """Test successful count with equals comparison."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Item 1</item>
     <item>Item 2</item>
     <item>Item 3</item>
-</root>""")
+</root>""",
+        )
 
         test = ElementCount(
             name="test_count",
             parameter=ElementCountParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                expected_count=3,
-                comparison_type="equals"
-            )
+                dst=str(xml_file), xpath="//item", expected_count=3, comparison_type="equals"
+            ),
         )
         result = test.test()
 
@@ -715,20 +701,20 @@ class TestElementCount:
 
     def test_element_count_equals_failure(self, create_xml_file):
         """Test failure when count doesn't equal expected."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Item 1</item>
     <item>Item 2</item>
-</root>""")
+</root>""",
+        )
 
         test = ElementCount(
             name="test_count",
             parameter=ElementCountParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                expected_count=3,
-                comparison_type="equals"
-            )
+                dst=str(xml_file), xpath="//item", expected_count=3, comparison_type="equals"
+            ),
         )
         result = test.test()
 
@@ -737,21 +723,21 @@ class TestElementCount:
 
     def test_element_count_greater_success(self, create_xml_file):
         """Test successful count with greater comparison."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Item 1</item>
     <item>Item 2</item>
     <item>Item 3</item>
-</root>""")
+</root>""",
+        )
 
         test = ElementCount(
             name="test_count",
             parameter=ElementCountParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                expected_count=2,
-                comparison_type="greater"
-            )
+                dst=str(xml_file), xpath="//item", expected_count=2, comparison_type="greater"
+            ),
         )
         result = test.test()
 
@@ -760,19 +746,19 @@ class TestElementCount:
 
     def test_element_count_less_success(self, create_xml_file):
         """Test successful count with less comparison."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Item 1</item>
-</root>""")
+</root>""",
+        )
 
         test = ElementCount(
             name="test_count",
             parameter=ElementCountParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                expected_count=2,
-                comparison_type="less"
-            )
+                dst=str(xml_file), xpath="//item", expected_count=2, comparison_type="less"
+            ),
         )
         result = test.test()
 
@@ -781,20 +767,20 @@ class TestElementCount:
 
     def test_element_count_greater_equal_success(self, create_xml_file):
         """Test successful count with greater_equal comparison."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Item 1</item>
     <item>Item 2</item>
-</root>""")
+</root>""",
+        )
 
         test = ElementCount(
             name="test_count",
             parameter=ElementCountParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                expected_count=2,
-                comparison_type="greater_equal"
-            )
+                dst=str(xml_file), xpath="//item", expected_count=2, comparison_type="greater_equal"
+            ),
         )
         result = test.test()
 
@@ -802,19 +788,19 @@ class TestElementCount:
 
     def test_element_count_less_equal_success(self, create_xml_file):
         """Test successful count with less_equal comparison."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Item 1</item>
-</root>""")
+</root>""",
+        )
 
         test = ElementCount(
             name="test_count",
             parameter=ElementCountParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                expected_count=1,
-                comparison_type="less_equal"
-            )
+                dst=str(xml_file), xpath="//item", expected_count=1, comparison_type="less_equal"
+            ),
         )
         result = test.test()
 
@@ -822,18 +808,18 @@ class TestElementCount:
 
     def test_element_count_zero(self, create_xml_file):
         """Test counting with zero elements."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
-</root>""")
+</root>""",
+        )
 
         test = ElementCount(
             name="test_count",
             parameter=ElementCountParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                expected_count=0,
-                comparison_type="equals"
-            )
+                dst=str(xml_file), xpath="//item", expected_count=0, comparison_type="equals"
+            ),
         )
         result = test.test()
 
@@ -842,11 +828,14 @@ class TestElementCount:
 
     def test_element_count_with_namespaces(self, create_xml_file):
         """Test element counting with namespaces."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns:ns="http://example.com/ns">
     <ns:item>Item 1</ns:item>
     <ns:item>Item 2</ns:item>
-</root>""")
+</root>""",
+        )
 
         test = ElementCount(
             name="test_count",
@@ -855,8 +844,8 @@ class TestElementCount:
                 xpath="//ns:item",
                 expected_count=2,
                 comparison_type="equals",
-                namespaces={"ns": "http://example.com/ns"}
-            )
+                namespaces={"ns": "http://example.com/ns"},
+            ),
         )
         result = test.test()
 
@@ -864,21 +853,21 @@ class TestElementCount:
 
     def test_element_count_with_xpath_filter(self, create_xml_file):
         """Test element counting with XPath filter."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item type="active">Item 1</item>
     <item type="inactive">Item 2</item>
     <item type="active">Item 3</item>
-</root>""")
+</root>""",
+        )
 
         test = ElementCount(
             name="test_count",
             parameter=ElementCountParameter(
-                dst=str(xml_file),
-                xpath="//item[@type='active']",
-                expected_count=2,
-                comparison_type="equals"
-            )
+                dst=str(xml_file), xpath="//item[@type='active']", expected_count=2, comparison_type="equals"
+            ),
         )
         result = test.test()
 
@@ -886,19 +875,19 @@ class TestElementCount:
 
     def test_element_count_invalid_operator(self, create_xml_file):
         """Test error with invalid comparison operator."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Item 1</item>
-</root>""")
+</root>""",
+        )
 
         test = ElementCount(
             name="test_count",
             parameter=ElementCountParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                expected_count=1,
-                comparison_type="invalid_operator"
-            )
+                dst=str(xml_file), xpath="//item", expected_count=1, comparison_type="invalid_operator"
+            ),
         )
         result = test.test()
 
@@ -910,24 +899,25 @@ class TestElementCount:
 # XPathResultMatches Tests
 # ============================================================================
 
+
 class TestXPathResultMatches:
     """Tests for XPathResultMatches testfunction."""
 
     def test_xpath_result_matches_text_success(self, create_xml_file):
         """Test successful text result match."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <name>Alice</name>
-</root>""")
+</root>""",
+        )
 
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file),
-                xpath="//name",
-                expected_result="Alice",
-                result_type="text"
-            )
+                dst=str(xml_file), xpath="//name", expected_result="Alice", result_type="text"
+            ),
         )
         result = test.test()
 
@@ -936,19 +926,19 @@ class TestXPathResultMatches:
 
     def test_xpath_result_matches_text_failure(self, create_xml_file):
         """Test failure when text result doesn't match."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <name>Alice</name>
-</root>""")
+</root>""",
+        )
 
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file),
-                xpath="//name",
-                expected_result="Bob",
-                result_type="text"
-            )
+                dst=str(xml_file), xpath="//name", expected_result="Bob", result_type="text"
+            ),
         )
         result = test.test()
 
@@ -957,19 +947,19 @@ class TestXPathResultMatches:
 
     def test_xpath_result_matches_number_success(self, create_xml_file):
         """Test successful number result match."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <price>29.99</price>
-</root>""")
+</root>""",
+        )
 
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file),
-                xpath="//price",
-                expected_result=29.99,
-                result_type="number"
-            )
+                dst=str(xml_file), xpath="//price", expected_result=29.99, result_type="number"
+            ),
         )
         result = test.test()
 
@@ -977,19 +967,19 @@ class TestXPathResultMatches:
 
     def test_xpath_result_matches_number_failure(self, create_xml_file):
         """Test failure when number result doesn't match."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <price>29.99</price>
-</root>""")
+</root>""",
+        )
 
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file),
-                xpath="//price",
-                expected_result=19.99,
-                result_type="number"
-            )
+                dst=str(xml_file), xpath="//price", expected_result=19.99, result_type="number"
+            ),
         )
         result = test.test()
 
@@ -997,19 +987,19 @@ class TestXPathResultMatches:
 
     def test_xpath_result_matches_boolean_true(self, create_xml_file):
         """Test boolean result match when element exists."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Exists</item>
-</root>""")
+</root>""",
+        )
 
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file),
-                xpath="//item",
-                expected_result=True,
-                result_type="boolean"
-            )
+                dst=str(xml_file), xpath="//item", expected_result=True, result_type="boolean"
+            ),
         )
         result = test.test()
 
@@ -1017,18 +1007,18 @@ class TestXPathResultMatches:
 
     def test_xpath_result_matches_boolean_false(self, create_xml_file):
         """Test boolean result match when element doesn't exist."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
-</root>""")
+</root>""",
+        )
 
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file),
-                xpath="//nonexistent",
-                expected_result=False,
-                result_type="boolean"
-            )
+                dst=str(xml_file), xpath="//nonexistent", expected_result=False, result_type="boolean"
+            ),
         )
         result = test.test()
 
@@ -1036,10 +1026,13 @@ class TestXPathResultMatches:
 
     def test_xpath_result_matches_with_namespaces(self, create_xml_file):
         """Test XPath result matching with namespaces."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns:ns="http://example.com/ns">
     <ns:name>Alice</ns:name>
-</root>""")
+</root>""",
+        )
 
         test = XPathResultMatches(
             name="test_xpath",
@@ -1048,8 +1041,8 @@ class TestXPathResultMatches:
                 xpath="//ns:name",
                 expected_result="Alice",
                 result_type="text",
-                namespaces={"ns": "http://example.com/ns"}
-            )
+                namespaces={"ns": "http://example.com/ns"},
+            ),
         )
         result = test.test()
 
@@ -1057,19 +1050,19 @@ class TestXPathResultMatches:
 
     def test_xpath_result_matches_empty_text(self, create_xml_file):
         """Test XPath result with empty text."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <empty></empty>
-</root>""")
+</root>""",
+        )
 
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file),
-                xpath="//empty",
-                expected_result="",
-                result_type="text"
-            )
+                dst=str(xml_file), xpath="//empty", expected_result="", result_type="text"
+            ),
         )
         result = test.test()
 
@@ -1077,19 +1070,19 @@ class TestXPathResultMatches:
 
     def test_xpath_result_matches_number_zero(self, create_xml_file):
         """Test XPath result with zero number."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <count>0</count>
-</root>""")
+</root>""",
+        )
 
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file),
-                xpath="//count",
-                expected_result=0,
-                result_type="number"
-            )
+                dst=str(xml_file), xpath="//count", expected_result=0, result_type="number"
+            ),
         )
         result = test.test()
 
@@ -1097,10 +1090,13 @@ class TestXPathResultMatches:
 
     def test_xpath_result_matches_type_conversion_string_to_number(self, create_xml_file):
         """Test XPath result with type conversion from string to number."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <value>42</value>
-</root>""")
+</root>""",
+        )
 
         test = XPathResultMatches(
             name="test_xpath",
@@ -1108,8 +1104,8 @@ class TestXPathResultMatches:
                 dst=str(xml_file),
                 xpath="//value",
                 expected_result="42",  # String that will be converted to float
-                result_type="number"
-            )
+                result_type="number",
+            ),
         )
         result = test.test()
 
@@ -1117,19 +1113,19 @@ class TestXPathResultMatches:
 
     def test_xpath_result_matches_missing_element_returns_zero(self, create_xml_file):
         """Test XPath result with missing element for number type returns 0."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root>
     <item>Test</item>
-</root>""")
+</root>""",
+        )
 
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file),
-                xpath="//nonexistent",
-                expected_result=0,
-                result_type="number"
-            )
+                dst=str(xml_file), xpath="//nonexistent", expected_result=0, result_type="number"
+            ),
         )
         result = test.test()
 
@@ -1139,6 +1135,7 @@ class TestXPathResultMatches:
 # ============================================================================
 # NamespaceMatches Tests
 # ============================================================================
+
 
 class TestNamespaceMatches:
     """Tests for NamespaceMatches testfunction."""
@@ -1150,18 +1147,19 @@ class TestNamespaceMatches:
         only extracts namespaces from the root element's attributes.
         This test verifies basic functionality.
         """
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns:ns="http://example.com/ns">
     <ns:item>Item 1</ns:item>
-</root>""")
+</root>""",
+        )
 
         test = NamespaceMatches(
             name="test_ns",
             parameter=NamespaceMatchesParameter(
-                dst=str(xml_file),
-                expected_namespaces={"ns": "http://example.com/ns"},
-                check_mode="contains"
-            )
+                dst=str(xml_file), expected_namespaces={"ns": "http://example.com/ns"}, check_mode="contains"
+            ),
         )
         result = test.test()
 
@@ -1171,18 +1169,19 @@ class TestNamespaceMatches:
 
     def test_namespace_matches_contains_failure(self, create_xml_file):
         """Test failure when expected namespace is missing."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns:ns="http://example.com/ns">
     <ns:item>Item 1</ns:item>
-</root>""")
+</root>""",
+        )
 
         test = NamespaceMatches(
             name="test_ns",
             parameter=NamespaceMatchesParameter(
-                dst=str(xml_file),
-                expected_namespaces={"other": "http://other.com/ns"},
-                check_mode="contains"
-            )
+                dst=str(xml_file), expected_namespaces={"other": "http://other.com/ns"}, check_mode="contains"
+            ),
         )
         result = test.test()
 
@@ -1194,18 +1193,19 @@ class TestNamespaceMatches:
 
         Note: Namespace extraction may have limitations.
         """
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns:ns="http://example.com/ns">
     <ns:item>Item 1</ns:item>
-</root>""")
+</root>""",
+        )
 
         test = NamespaceMatches(
             name="test_ns",
             parameter=NamespaceMatchesParameter(
-                dst=str(xml_file),
-                expected_namespaces={"ns": "http://example.com/ns"},
-                check_mode="exact"
-            )
+                dst=str(xml_file), expected_namespaces={"ns": "http://example.com/ns"}, check_mode="exact"
+            ),
         )
         result = test.test()
 
@@ -1214,18 +1214,19 @@ class TestNamespaceMatches:
 
     def test_namespace_matches_exact_failure_extra(self, create_xml_file):
         """Test namespace behavior with extra namespaces in 'exact' mode."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns:ns="http://example.com/ns" xmlns:other="http://other.com/ns">
     <ns:item>Item 1</ns:item>
-</root>""")
+</root>""",
+        )
 
         test = NamespaceMatches(
             name="test_ns",
             parameter=NamespaceMatchesParameter(
-                dst=str(xml_file),
-                expected_namespaces={"ns": "http://example.com/ns"},
-                check_mode="exact"
-            )
+                dst=str(xml_file), expected_namespaces={"ns": "http://example.com/ns"}, check_mode="exact"
+            ),
         )
         result = test.test()
 
@@ -1235,21 +1236,21 @@ class TestNamespaceMatches:
 
     def test_namespace_matches_exact_failure_missing(self, create_xml_file):
         """Test failure with missing namespaces in 'exact' mode."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns:ns="http://example.com/ns">
     <ns:item>Item 1</ns:item>
-</root>""")
+</root>""",
+        )
 
         test = NamespaceMatches(
             name="test_ns",
             parameter=NamespaceMatchesParameter(
                 dst=str(xml_file),
-                expected_namespaces={
-                    "ns": "http://example.com/ns",
-                    "other": "http://other.com/ns"
-                },
-                check_mode="exact"
-            )
+                expected_namespaces={"ns": "http://example.com/ns", "other": "http://other.com/ns"},
+                check_mode="exact",
+            ),
         )
         result = test.test()
 
@@ -1258,18 +1259,19 @@ class TestNamespaceMatches:
 
     def test_namespace_matches_default_namespace(self, create_xml_file):
         """Test matching default namespace."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns="http://example.com/ns">
     <item>Item 1</item>
-</root>""")
+</root>""",
+        )
 
         test = NamespaceMatches(
             name="test_ns",
             parameter=NamespaceMatchesParameter(
-                dst=str(xml_file),
-                expected_namespaces={"": "http://example.com/ns"},
-                check_mode="contains"
-            )
+                dst=str(xml_file), expected_namespaces={"": "http://example.com/ns"}, check_mode="contains"
+            ),
         )
         result = test.test()
 
@@ -1277,22 +1279,22 @@ class TestNamespaceMatches:
 
     def test_namespace_matches_multiple_namespaces(self, create_xml_file):
         """Test matching multiple namespaces."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns:ns1="http://example.com/ns1" xmlns:ns2="http://example.com/ns2">
     <ns1:item>Item 1</ns1:item>
     <ns2:item>Item 2</ns2:item>
-</root>""")
+</root>""",
+        )
 
         test = NamespaceMatches(
             name="test_ns",
             parameter=NamespaceMatchesParameter(
                 dst=str(xml_file),
-                expected_namespaces={
-                    "ns1": "http://example.com/ns1",
-                    "ns2": "http://example.com/ns2"
-                },
-                check_mode="contains"
-            )
+                expected_namespaces={"ns1": "http://example.com/ns1", "ns2": "http://example.com/ns2"},
+                check_mode="contains",
+            ),
         )
         result = test.test()
 
@@ -1301,18 +1303,19 @@ class TestNamespaceMatches:
 
     def test_namespace_matches_uri_mismatch(self, create_xml_file):
         """Test failure when namespace URI doesn't match."""
-        xml_file = create_xml_file("test.xml", """<?xml version="1.0"?>
+        xml_file = create_xml_file(
+            "test.xml",
+            """<?xml version="1.0"?>
 <root xmlns:ns="http://example.com/ns">
     <ns:item>Item 1</ns:item>
-</root>""")
+</root>""",
+        )
 
         test = NamespaceMatches(
             name="test_ns",
             parameter=NamespaceMatchesParameter(
-                dst=str(xml_file),
-                expected_namespaces={"ns": "http://wrong.com/ns"},
-                check_mode="contains"
-            )
+                dst=str(xml_file), expected_namespaces={"ns": "http://wrong.com/ns"}, check_mode="contains"
+            ),
         )
         result = test.test()
 

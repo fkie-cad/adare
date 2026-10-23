@@ -6,6 +6,7 @@ from adare.types.stages import Stage
 
 log = logging.getLogger(__name__)
 
+
 def emit_stage(ulid: str, stage: Stage, stage_id: str) -> None:
     """Emit a stage event through the thread-safe coordinator."""
     coordinator = get_stage_coordinator()

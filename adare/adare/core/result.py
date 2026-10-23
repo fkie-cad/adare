@@ -4,6 +4,7 @@ Result pattern for API operations.
 Provides a standardized way to return success/failure from service operations,
 enabling any frontend (CLI, Web, REST API) to handle results consistently.
 """
+
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -24,6 +25,7 @@ class ErrorInfo:
         solutions: List of actionable suggestions to resolve the error
         context: Additional debug information (optional)
     """
+
     code: str
     message: str
     solutions: list[str] | None = None
@@ -31,7 +33,7 @@ class ErrorInfo:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        result = {
+        result: dict[str, Any] = {
             'code': self.code,
             'message': self.message,
         }
@@ -67,6 +69,7 @@ class Result[T]:
         else:
             print(f"Error {result.error.code}: {result.error.message}")
     """
+
     success: bool
     data: T | None = None
     error: ErrorInfo | None = None
@@ -79,22 +82,10 @@ class Result[T]:
 
     @classmethod
     def fail(
-        cls,
-        code: str,
-        message: str,
-        solutions: list[str] | None = None,
-        context: dict[str, Any] | None = None
+        cls, code: str, message: str, solutions: list[str] | None = None, context: dict[str, Any] | None = None
     ) -> "Result[T]":
         """Create a failure result with error information."""
-        return cls(
-            success=False,
-            error=ErrorInfo(
-                code=code,
-                message=message,
-                solutions=solutions,
-                context=context
-            )
-        )
+        return cls(success=False, error=ErrorInfo(code=code, message=message, solutions=solutions, context=context))
 
     @classmethod
     def from_exception(cls, exc: "LoggedErrorException") -> "Result[T]":
@@ -109,8 +100,8 @@ class Result[T]:
             error=ErrorInfo(
                 code=exc.error_name,
                 message=exc.message,
-                solutions=exc.possible_solutions if hasattr(exc, 'possible_solutions') else None
-            )
+                solutions=exc.possible_solutions if hasattr(exc, 'possible_solutions') else None,
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:

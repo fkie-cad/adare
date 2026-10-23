@@ -9,7 +9,19 @@ These models are stored in the global database and shared across all projects.
 from pathlib import Path
 
 import ulid
-from sqlalchemy import CHAR, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, UniqueConstraint, func
+from sqlalchemy import (
+    CHAR,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Table,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import backref, declarative_base, relationship
@@ -53,6 +65,7 @@ class SyncMetadata(SerializerMixin, GlobalBase):
     """
     Metadata for tracking synchronization state of entities with remote instances.
     """
+
     __tablename__ = 'sync_metadata'
     RELATIONSHIPS_TO_DICT = True
 
@@ -90,6 +103,7 @@ class Tag(SerializerMixin, GlobalBase):
     """
     Tag for categorizing environments and other global entities.
     """
+
     __tablename__ = 'tag'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id',)
@@ -108,6 +122,7 @@ class PostSetupInstallation(SerializerMixin, GlobalBase):
     """
     Post-setup installation command for environments.
     """
+
     __tablename__ = 'post_setup_installation'
     RELATIONSHIPS_TO_DICT = True
 
@@ -129,6 +144,7 @@ class TestParameter(SerializerMixin, GlobalBase):
     """
     Defines a parameter for test functions, including type and description.
     """
+
     __tablename__ = 'test_parameter'
     RELATIONSHIPS_TO_DICT = True
 
@@ -149,6 +165,7 @@ class TestFunctionFile(RemoteIdentityMixin, SerializerMixin, GlobalBase):
     """
     Represents a file containing one or more test functions, with metadata and hash.
     """
+
     __tablename__ = 'test_function_file'
     RELATIONSHIPS_TO_DICT = True
 
@@ -181,6 +198,7 @@ class TestFunction(SerializerMixin, GlobalBase):
     """
     Represents a test function definition, including its parameters and file association.
     """
+
     __tablename__ = 'test_function'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id',)
@@ -225,6 +243,7 @@ class TestFunctionFileVersion(SerializerMixin, GlobalBase):
     where the on-disk copy of that version was kept. Old versions are never
     pruned (forensic tool; snapshots are cheap .py files).
     """
+
     __tablename__ = 'test_function_file_version'
     RELATIONSHIPS_TO_DICT = True
 
@@ -237,9 +256,7 @@ class TestFunctionFileVersion(SerializerMixin, GlobalBase):
     snapshot_dir = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=True, default=func.now())
 
-    __table_args__ = (
-        UniqueConstraint('file_id', 'version', name='uq_test_function_file_version'),
-    )
+    __table_args__ = (UniqueConstraint('file_id', 'version', name='uq_test_function_file_version'),)
 
     def __repr__(self):
         return f"<TestFunctionFileVersion(file_id='{self.file_id}', version={self.version})>"
@@ -251,6 +268,7 @@ class TestFunctionVersion(SerializerMixin, GlobalBase):
     is the per-method pin source. `file_version` records which file version
     introduced this method hash.
     """
+
     __tablename__ = 'test_function_version'
     RELATIONSHIPS_TO_DICT = True
 
@@ -263,9 +281,7 @@ class TestFunctionVersion(SerializerMixin, GlobalBase):
     file_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=True, default=func.now())
 
-    __table_args__ = (
-        UniqueConstraint('test_function_id', 'version', name='uq_test_function_version'),
-    )
+    __table_args__ = (UniqueConstraint('test_function_id', 'version', name='uq_test_function_version'),)
 
     def __repr__(self):
         return f"<TestFunctionVersion(test_function_id='{self.test_function_id}', version={self.version})>"
@@ -275,6 +291,7 @@ class OsInfo(SerializerMixin, GlobalBase):
     """
     Operating system information for VMs and environments.
     """
+
     __tablename__ = 'os_info'
     RELATIONSHIPS_TO_DICT = True
 
@@ -298,6 +315,7 @@ class Project(SerializerMixin, GlobalBase):
     """
     Project metadata stored in global database.
     """
+
     __tablename__ = 'project'
     RELATIONSHIPS_TO_DICT = True
 
@@ -314,6 +332,7 @@ class Vm(SerializerMixin, GlobalBase):
     """
     Virtual machine definition stored globally.
     """
+
     __tablename__ = 'vm'
     RELATIONSHIPS_TO_DICT = True
 
@@ -354,6 +373,7 @@ class VmSnapshot(SerializerMixin, GlobalBase):
     """
     VM snapshot information.
     """
+
     __tablename__ = 'vm_snapshot'
     RELATIONSHIPS_TO_DICT = True
 
@@ -393,6 +413,7 @@ class VmInstance(SerializerMixin, GlobalBase):
     enabling multiple experiments to run concurrently with the same environment.
     Supports both VirtualBox and QEMU hypervisors.
     """
+
     __tablename__ = 'vm_instance'
     RELATIONSHIPS_TO_DICT = True
 
@@ -410,6 +431,10 @@ class VmInstance(SerializerMixin, GlobalBase):
     # Experiment tracking
     current_experiment_run_id = Column(String, nullable=True, index=True)
     websocket_port = Column(Integer, nullable=True, index=True)
+    # PID of the process that holds this instance while it is active. Lets
+    # reconciliation tell a crashed run's leftover row from one a live process
+    # (possibly another `adare` invocation) is still setting up.
+    owner_pid = Column(Integer, nullable=True)
 
     # Instance lifecycle - uses enum for database-level constraint
     status = Column(VmInstanceStatusType, nullable=False, default='active', index=True)
@@ -429,8 +454,9 @@ class VmInstance(SerializerMixin, GlobalBase):
         # processes/connections) that no two *active* instances share a port.
         # Scoped to status='active' so releasing a port (websocket_port=None)
         # or stale values on non-active rows never trips the constraint.
-        Index('idx_vm_instance_active_websocket_port', 'websocket_port', unique=True,
-              sqlite_where=(status == 'active')),
+        Index(
+            'idx_vm_instance_active_websocket_port', 'websocket_port', unique=True, sqlite_where=(status == 'active')
+        ),
     )
 
     def __str__(self):
@@ -467,6 +493,7 @@ class VmInstance(SerializerMixin, GlobalBase):
         """Mark instance as available for reuse."""
         self.status = 'available'
         self.current_experiment_run_id = None
+        self.owner_pid = None
         self.last_used_at = func.now()
 
     def mark_active(self, experiment_run_id: str):
@@ -488,11 +515,15 @@ class Environment(RemoteIdentityMixin, SerializerMixin, GlobalBase):
     """
     Environment definition stored globally.
     """
+
     __tablename__ = 'environment'
     RELATIONSHIPS_TO_DICT = True
 
     id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
-    name = Column(String, nullable=False, unique=True, index=True)
+    # Not unique on its own: reloading a changed environment file keeps the old
+    # row as a superseded version (runs still reference it). Only one *current*
+    # version per name is allowed -- see idx_environment_current_name.
+    name = Column(String, nullable=False, index=True)
     description = Column(String, nullable=True)
 
     # VM relationship
@@ -505,12 +536,30 @@ class Environment(RemoteIdentityMixin, SerializerMixin, GlobalBase):
     sha256hash = Column(String, nullable=True)
     hypervisor = Column(String, nullable=False, default='virtualbox', server_default='virtualbox')
 
+    # Disk hash this version was loaded against. Vm rows are shared by every
+    # environment using the same disk, and a forced rebuild can replace that
+    # disk in place; pinning the hash here lets a run detect that its
+    # environment version no longer matches the registered disk.
+    vm_hash = Column(String, nullable=True)
+
     created_at = Column(DateTime, nullable=True, default=func.now())
+    # Set when a newer version of the same name is loaded. NULL = current.
+    superseded_at = Column(DateTime, nullable=True, index=True)
 
     tags = relationship(Tag, secondary=mapping_environment_tag)
 
     sync_metadata_id = Column(CHAR(26), ForeignKey('sync_metadata.id', ondelete='CASCADE'), nullable=True)
     sync_metadata = relationship("SyncMetadata", backref="environment")
+
+    __table_args__ = (Index('idx_environment_current_name', 'name', unique=True, sqlite_where=superseded_at.is_(None)),)
+
+    @hybrid_property
+    def is_current(self) -> bool:
+        return self.superseded_at is None
+
+    @is_current.expression  # type: ignore[no-redef]
+    def is_current(cls):
+        return cls.superseded_at.is_(None)
 
     def __str__(self):
         return str(self.name)

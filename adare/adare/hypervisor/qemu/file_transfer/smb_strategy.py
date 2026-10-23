@@ -13,6 +13,7 @@ root), then tells QEMU to serve it via SLIRP SMB. The guest mounts
 and creates junctions (Windows). Read-write shares are copied back to
 the host during artifact retrieval and cleanup.
 """
+
 import asyncio
 import json
 import logging
@@ -21,6 +22,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from adare.backend.experiment.agent_token import ensure_agent_token
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
 from adare.hypervisor.qemu.file_transfer.shares import build_config_json, build_share_list
@@ -97,6 +99,7 @@ class SMBStrategy(FileTransferStrategy):
             is_windows=is_windows,
             file_transfer_mode='smb',
             installation_mode=context.config.installation_mode,
+            agent_token=ensure_agent_token(context),
         )
         with open(run_dir / 'config.json', 'w') as f:
             json.dump(config_data, f, indent=2)
@@ -120,8 +123,7 @@ class SMBStrategy(FileTransferStrategy):
             src = Path(host_path)
             file_count = sum(1 for _ in src.rglob('*') if _.is_file())
             log.info(
-                f"Copying share {i}/{len(self._shares)} '{tag}': "
-                f"{host_path} -> {target_path} ({file_count} files)"
+                f"Copying share {i}/{len(self._shares)} '{tag}': {host_path} -> {target_path} ({file_count} files)"
             )
 
             shutil.copytree(host_path, target_path, dirs_exist_ok=True)
@@ -139,10 +141,7 @@ class SMBStrategy(FileTransferStrategy):
         # Store shares on context for post-boot mounting
         context.smb_shares = self._shares
 
-        log.info(
-            f"Configured SMB share directory at {smb_dir} "
-            f"with {len(self._shares)} shares:"
-        )
+        log.info(f"Configured SMB share directory at {smb_dir} with {len(self._shares)} shares:")
         for share in self._shares:
             rw = "rw" if not share.get('readonly', True) else "ro"
             log.debug(f"  {share['tag']} ({rw}): {share['host_path']} -> {share['guest_mount']}")
@@ -160,10 +159,7 @@ class SMBStrategy(FileTransferStrategy):
         """
         # Wait for guest OS to stabilize
         stabilization_delay = 5
-        log.info(
-            f"Waiting {stabilization_delay}s for guest OS to stabilize "
-            f"before SMB mount..."
-        )
+        log.info(f"Waiting {stabilization_delay}s for guest OS to stabilize before SMB mount...")
         await asyncio.sleep(stabilization_delay)
 
         is_windows = 'windows' in context.guest_platform.lower()
@@ -228,6 +224,7 @@ class SMBStrategy(FileTransferStrategy):
                 log_dest = context.experiment_run_directory.log_directory
                 if log_dest != logs_dir:
                     import shutil as _shutil
+
                     _shutil.copy2(log_path, log_dest / log_file)
                     log.debug(f"Copied {log_file} to {log_dest}")
                 retrieved.append(log_file)
@@ -273,7 +270,9 @@ class SMBStrategy(FileTransferStrategy):
                 continue
             log.info(f"Writing back SMB share '{tag}': {smb_copy} -> {host_path}")
             shutil.copytree(
-                smb_copy, host_path, dirs_exist_ok=True,
+                smb_copy,
+                host_path,
+                dirs_exist_ok=True,
                 ignore=_ignore_host_generated_files,
             )
 
@@ -296,9 +295,7 @@ class SMBStrategy(FileTransferStrategy):
         )
 
         if result.returncode != 0:
-            raise HypervisorException(
-                f"Failed to mount SMB share on Linux guest: {result.stderr}"
-            )
+            raise HypervisorException(f"Failed to mount SMB share on Linux guest: {result.stderr}")
 
         # Verify mount
         verify = await context.vm.run_command(
@@ -333,18 +330,14 @@ class SMBStrategy(FileTransferStrategy):
         log.info("Disabled SMB client signing requirement")
 
         # Map network drive
-        map_cmd = (
-            f'net use Z: \\\\{SMB_GATEWAY}\\{SMB_SHARE_NAME} /persistent:no'
-        )
+        map_cmd = f'net use Z: \\\\{SMB_GATEWAY}\\{SMB_SHARE_NAME} /persistent:no'
         result = await context.vm.run_command(
             map_cmd,
             stop_event=context.user_interrupt_event,
         )
 
         if result.returncode != 0:
-            raise HypervisorException(
-                f"Failed to map SMB network drive: {result.stderr}"
-            )
+            raise HypervisorException(f"Failed to map SMB network drive: {result.stderr}")
 
         # Create base directory and junctions for each subdirectory
         # Use UNC paths directly so junctions work regardless of which user
@@ -370,9 +363,7 @@ class SMBStrategy(FileTransferStrategy):
         )
 
         if result.returncode != 0:
-            raise HypervisorException(
-                f"Failed to create directory junctions: {result.stderr}"
-            )
+            raise HypervisorException(f"Failed to create directory junctions: {result.stderr}")
 
         # Copy tools locally — Windows CreateProcess cannot execute .exe files
         # through directory junctions that point to SMB/UNC paths.

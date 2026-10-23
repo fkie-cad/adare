@@ -3,6 +3,7 @@ Shared utility functions for data display logic.
 
 These functions help reduce code duplication across database API classes.
 """
+
 # configure logging
 import logging
 from functools import lru_cache
@@ -20,6 +21,7 @@ def get_current_project_name() -> str | None:
     """
     try:
         from adare.backend.basics import determine_projectdirectory
+
         project_path = determine_projectdirectory(None, silent=True)
         return project_path.name if project_path else None
     except Exception as e:
@@ -117,7 +119,7 @@ def safe_get_os_info(vm) -> tuple[str, str, str, str, str]:
                 osinfo.os or "",
                 osinfo.distribution or "",
                 osinfo.version or "",
-                osinfo.language or ""
+                osinfo.language or "",
             )
     except Exception as e:
         log.debug(f"Could not get OS info: {e}")

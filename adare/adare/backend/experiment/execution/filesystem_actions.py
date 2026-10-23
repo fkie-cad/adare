@@ -9,7 +9,7 @@ import subprocess
 import time
 from datetime import UTC
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from adare.backend.experiment.filesystem_snapshot import (
     FilesystemSnapshot,
@@ -22,15 +22,21 @@ from adare.types.playbook import (
 
 from .base import ActionResult
 
+if TYPE_CHECKING:
+    from adare.backend.experiment.execution.executor_core import ActionsExecutorCore as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class FilesystemActionsMixin:
+class FilesystemActionsMixin(_Host):
     """Mixin providing filesystem action execution methods for SimpleActionsExecutor."""
 
-    async def execute_snapshot_filesystem(self, action: SnapshotFilesystemAction,
-                                          parent_event_id: str = None,
-                                          event_emitter = None) -> ActionResult:
+    async def execute_snapshot_filesystem(
+        self, action: SnapshotFilesystemAction, parent_event_id: str = None, event_emitter=None
+    ) -> ActionResult:
         """
         Execute filesystem snapshot action.
 
@@ -46,10 +52,7 @@ class FilesystemActionsMixin:
                 os_type = self.vm.guest_os
 
             if not os_type:
-                return ActionResult(
-                    success=False,
-                    message="Cannot determine VM OS type for filesystem snapshot"
-                )
+                return ActionResult(success=False, message="Cannot determine VM OS type for filesystem snapshot")
 
             log.info(f"Capturing filesystem snapshot for {os_type} (variable: {action.variable})")
 
@@ -59,7 +62,7 @@ class FilesystemActionsMixin:
             # Use native WebSocket tool instead of shell command
             result = await self.client.get_filesystem_snapshot(
                 root_path=action.root_path or '/',
-                timeout=snapshot_timeout + 60  # Add buffer for WebSocket timeout
+                timeout=snapshot_timeout + 60,  # Add buffer for WebSocket timeout
             )
 
             # Check result status
@@ -73,24 +76,17 @@ class FilesystemActionsMixin:
                         message=(
                             "MFT snapshot requires Administrator privileges. "
                             "Please ensure adarevm is running as Administrator in the VM."
-                        )
+                        ),
                     )
 
-                return ActionResult(
-                    success=False,
-                    message=f"Snapshot failed: {error_msg}"
-                )
+                return ActionResult(success=False, message=f"Snapshot failed: {error_msg}")
 
             # Extract files directly from result (already parsed JSON)
             files = result.get('snapshot', {})
             log.info(f"Snapshot captured {len(files)} files")
 
             # Create snapshot object
-            snapshot = FilesystemSnapshot(
-                files=files,
-                timestamp=datetime.now(UTC).isoformat(),
-                os_type=os_type
-            )
+            snapshot = FilesystemSnapshot(files=files, timestamp=datetime.now(UTC).isoformat(), os_type=os_type)
 
             # Store in execution context
             self.execution_context[action.variable] = snapshot
@@ -98,6 +94,7 @@ class FilesystemActionsMixin:
             # Also store in variable registry if available
             if hasattr(self.playbook, 'variables') and self.playbook.variables:
                 from adarelib.common.variables import Variable
+
                 snapshot_var = Variable(value=snapshot, type='object')
                 self.playbook.variables.add(action.variable, snapshot_var)
                 log.info(f"Stored snapshot in variable '{action.variable}'")
@@ -105,20 +102,16 @@ class FilesystemActionsMixin:
             return ActionResult(
                 success=True,
                 message=f"Captured filesystem snapshot ({len(files)} files) in variable '{action.variable}'",
-                data={
-                    'variable': action.variable,
-                    'file_count': len(files),
-                    'os_type': os_type
-                }
+                data={'variable': action.variable, 'file_count': len(files), 'os_type': os_type},
             )
 
         except (RuntimeError, OSError, KeyError, ValueError, TypeError) as e:
             log.error(f"Error executing snapshot_filesystem action: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
 
-    async def execute_pull_changed_files(self, action: PullChangedFilesAction,
-                                        parent_event_id: str = None,
-                                        event_emitter = None) -> ActionResult:
+    async def execute_pull_changed_files(
+        self, action: PullChangedFilesAction, parent_event_id: str = None, event_emitter=None
+    ) -> ActionResult:
         """
         Execute pull_changed_files action.
 
@@ -134,26 +127,23 @@ class FilesystemActionsMixin:
             if snapshot_before is None:
                 return ActionResult(
                     success=False,
-                    message=f"Snapshot variable '{action.snapshot_before}' not found in execution context"
+                    message=f"Snapshot variable '{action.snapshot_before}' not found in execution context",
                 )
 
             if snapshot_after is None:
                 return ActionResult(
-                    success=False,
-                    message=f"Snapshot variable '{action.snapshot_after}' not found in execution context"
+                    success=False, message=f"Snapshot variable '{action.snapshot_after}' not found in execution context"
                 )
 
             # Validate snapshot types
             if not isinstance(snapshot_before, FilesystemSnapshot):
                 return ActionResult(
-                    success=False,
-                    message=f"Variable '{action.snapshot_before}' is not a FilesystemSnapshot object"
+                    success=False, message=f"Variable '{action.snapshot_before}' is not a FilesystemSnapshot object"
                 )
 
             if not isinstance(snapshot_after, FilesystemSnapshot):
                 return ActionResult(
-                    success=False,
-                    message=f"Variable '{action.snapshot_after}' is not a FilesystemSnapshot object"
+                    success=False, message=f"Variable '{action.snapshot_after}' is not a FilesystemSnapshot object"
                 )
 
             log.info(
@@ -187,18 +177,15 @@ class FilesystemActionsMixin:
                     data={
                         'modified_count': len(diff['modified']),
                         'added_count': len(diff['added']),
-                        'files_pulled': 0
-                    }
+                        'files_pulled': 0,
+                    },
                 )
 
             log.info(f"Total files to pull: {len(files_to_pull)}")
 
             # 4. Ensure experiment run directory exists
             if not self.experiment_run_directory:
-                return ActionResult(
-                    success=False,
-                    message="Experiment run directory not available"
-                )
+                return ActionResult(success=False, message="Experiment run directory not available")
 
             # Create destination directory
             dest_dir = Path(self.experiment_run_directory) / "artifacts" / action.dst
@@ -212,13 +199,9 @@ class FilesystemActionsMixin:
 
             if effective_mode == 'websocket':
                 # Use batch chunked transfer
-                result = await self._pull_changed_files_websocket(
-                    files_to_pull, dest_dir, event_emitter
-                )
+                result = await self._pull_changed_files_websocket(files_to_pull, dest_dir, event_emitter)
             else:  # hypervisor mode
-                result = await self._pull_changed_files_hypervisor(
-                    files_to_pull, dest_dir
-                )
+                result = await self._pull_changed_files_hypervisor(files_to_pull, dest_dir)
 
             execution_time = time.time() - start_time
 
@@ -232,8 +215,7 @@ class FilesystemActionsMixin:
                 )
             else:
                 message = (
-                    f"Pulled {result['success_count']}/{len(files_to_pull)} files "
-                    f"({result['failed_count']} failed)"
+                    f"Pulled {result['success_count']}/{len(files_to_pull)} files ({result['failed_count']} failed)"
                 )
 
             return ActionResult(
@@ -251,21 +233,19 @@ class FilesystemActionsMixin:
                     'failures': result['failures'],
                     'modified_count': len(diff['modified']) if action.include_modified else 0,
                     'added_count': len(diff['added']) if action.include_added else 0,
-                    'destination': str(dest_dir)
-                }
+                    'destination': str(dest_dir),
+                },
             )
 
         except (RuntimeError, OSError, KeyError, ValueError, TypeError) as e:
             log.error(f"Error executing pull_changed_files action: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
 
-    async def _pull_changed_files_websocket(self, file_paths: list, dest_dir: Path,
-                                           event_emitter) -> dict[str, Any]:
+    async def _pull_changed_files_websocket(self, file_paths: list, dest_dir: Path, event_emitter) -> dict[str, Any]:
         """Pull changed files via WebSocket with batch chunked transfer."""
         try:
             # Progress callback for logging
-            def progress_callback(file_idx, total_files, file_path,
-                                chunk_idx, total_chunks, bytes_xfer, file_size):
+            def progress_callback(file_idx, total_files, file_path, chunk_idx, total_chunks, bytes_xfer, file_size):
                 # Calculate overall progress percentage
                 overall_progress = (file_idx - 1) / total_files * 100
                 file_progress = bytes_xfer / file_size * 100 if file_size > 0 else 0
@@ -279,11 +259,8 @@ class FilesystemActionsMixin:
 
             # Call batch pull method
             return await self.client.pull_multiple_files_chunked(
-                guest_paths=file_paths,
-                host_dest_dir=dest_dir,
-                progress_callback=progress_callback
+                guest_paths=file_paths, host_dest_dir=dest_dir, progress_callback=progress_callback
             )
-
 
         except (RuntimeError, OSError, KeyError, ValueError) as e:
             log.error(f"WebSocket batch pull failed: {e}")
@@ -293,7 +270,7 @@ class FilesystemActionsMixin:
                 'total_files': len(file_paths),
                 'total_bytes': 0,
                 'failures': [{'path': p, 'error': str(e)} for p in file_paths],
-                'file_results': []
+                'file_results': [],
             }
 
     async def _pull_changed_files_hypervisor(self, file_paths: list, dest_dir: Path) -> dict[str, Any]:
@@ -305,7 +282,7 @@ class FilesystemActionsMixin:
                 'total_files': len(file_paths),
                 'total_bytes': 0,
                 'failures': [{'path': p, 'error': 'VM instance not available'} for p in file_paths],
-                'file_results': []
+                'file_results': [],
             }
 
         success_count = 0
@@ -330,9 +307,7 @@ class FilesystemActionsMixin:
 
                 # Use VBoxManage to copy file
                 success = await self.vm.copy_from_guest(
-                    guest_path=guest_path,
-                    host_path=str(host_path),
-                    recursive=False
+                    guest_path=guest_path, host_path=str(host_path), recursive=False
                 )
 
                 if success:
@@ -340,12 +315,9 @@ class FilesystemActionsMixin:
                     success_count += 1
                     total_bytes += file_size
 
-                    file_results.append({
-                        'path': guest_path,
-                        'success': True,
-                        'destination': str(host_path),
-                        'file_size': file_size
-                    })
+                    file_results.append(
+                        {'path': guest_path, 'success': True, 'destination': str(host_path), 'file_size': file_size}
+                    )
 
                     log.info(f"Successfully pulled {guest_path} ({file_size} bytes)")
                 else:
@@ -367,5 +339,5 @@ class FilesystemActionsMixin:
             'total_files': len(file_paths),
             'total_bytes': total_bytes,
             'failures': failures,
-            'file_results': file_results
+            'file_results': file_results,
         }

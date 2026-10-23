@@ -72,6 +72,7 @@ class GuiMcpServer:
         self._server_name = server_name
         if recorder_factory is None:
             from adare.backend.experiment.vlm.recorder import PlaybookRecorder
+
             recorder_factory = PlaybookRecorder
         self._recorder_factory = recorder_factory
 
@@ -153,13 +154,15 @@ class GuiMcpServer:
             return await self.find_icon(image_name)
 
         @mcp.tool()
-        async def list_testfunctions() -> list[dict[str, Any]]:
-            """Search the project's testfunctions (name, dotnotation, params, ...).
+        async def list_testfunctions(query: str = '', limit: int = 8) -> list[dict[str, Any]]:
+            """Find the assertion (testfunction) for a goal, then register it with ``add_test``.
 
-            Use this to find an assertion for a goal like "verify the file is
-            gone", then register it with ``add_test``.
+            With ``query`` (e.g. "verify the file is gone", "registry value
+            set"), returns the best matches with full parameter docs, defaults
+            and a ready-to-use example. Without it, returns a compact index of
+            every testfunction (dotnotation, summary, signature).
             """
-            return self.list_testfunctions()
+            return self.list_testfunctions(query=query, limit=limit)
 
         @mcp.tool()
         async def start_recording(goal: str = '', path: str = '') -> dict[str, Any]:
@@ -173,7 +176,9 @@ class GuiMcpServer:
 
         @mcp.tool()
         async def add_test(
-            name: str, function: str, parameters: dict[str, Any] | None = None,
+            name: str,
+            function: str,
+            parameters: dict[str, Any] | None = None,
             description: str = '',
         ) -> dict[str, Any]:
             """Add an assertion to the recording, validated against the catalog.
@@ -234,7 +239,10 @@ class GuiMcpServer:
         if self._recording:
             png = self._last_png or await self._capture()
             self._recorder.record_click(
-                png, int(x), int(y), describe or f'click ({x}, {y})',
+                png,
+                int(x),
+                int(y),
+                describe or f'click ({x}, {y})',
                 button='left' if button == 'double' else button,
                 double=(button == 'double'),
             )
@@ -261,6 +269,7 @@ class GuiMcpServer:
 
     async def wait(self, seconds: float) -> dict[str, Any]:
         import asyncio
+
         await asyncio.sleep(float(seconds))
         if self._recording:
             self._recorder.record_idle(float(seconds), f'wait {seconds}s')
@@ -285,17 +294,24 @@ class GuiMcpServer:
 
     async def find_text(self, text: str) -> dict[str, Any]:
         from adare.types.playbook import Target
+
         return await self._resolve(Target(text=text))
 
     async def find_icon(self, image_name: str) -> dict[str, Any]:
         from adare.types.playbook import Target
+
         return await self._resolve(Target(image=image_name))
 
     # -- discovery ----------------------------------------------------------
 
-    def list_testfunctions(self) -> list[dict[str, Any]]:
-        """Return the testfunction catalog (host-mode compatibility is checked at replay)."""
-        return [dict(entry) for entry in self._catalog]
+    def list_testfunctions(self, query: str = '', limit: int = 8) -> list[dict[str, Any]]:
+        """Ranked full entries for ``query``, else a compact index (host-mode is checked at replay)."""
+        from adare.backend.testfunction.catalog import CatalogEntry, search
+
+        entries = [CatalogEntry.from_dict(entry) for entry in self._catalog]
+        if query:
+            return [entry.to_dict() for entry in search(entries, query, limit=limit)]
+        return [entry.to_dict(compact=True) for entry in entries]
 
     # -- authoring ----------------------------------------------------------
 
@@ -320,16 +336,21 @@ class GuiMcpServer:
         return {'status': 'success', 'action_count': count}
 
     def add_test(
-        self, name: str, function: str,
-        *, parameters: dict[str, Any] | None = None, description: str = '',
+        self,
+        name: str,
+        function: str,
+        *,
+        parameters: dict[str, Any] | None = None,
+        description: str = '',
     ) -> dict[str, Any]:
         if self._recorder is None:
             return {'status': 'error', 'message': 'Not recording — call start_recording first'}
         if function not in self._known_functions:
             return {
                 'status': 'error',
-                'message': (f"Unknown testfunction '{function}'. "
-                            'Call list_testfunctions for valid names/dotnotations.'),
+                'message': (
+                    f"Unknown testfunction '{function}'. Call list_testfunctions for valid names/dotnotations."
+                ),
             }
         self._recorder.add_test(name, function, parameter=parameters, description=description)
         return {'status': 'success', 'name': name, 'function': function}

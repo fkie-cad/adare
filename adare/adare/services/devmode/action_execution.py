@@ -57,9 +57,7 @@ class ActionExecutionMixin:
         # Get or restore session (stays in same event loop)
         session = await self._manager.get_or_restore_session(request.session_id)
         if not session:
-            raise RuntimeError(
-                f"Dev session '{request.session_id}' not found or could not be restored"
-            )
+            raise RuntimeError(f"Dev session '{request.session_id}' not found or could not be restored")
 
         # Parse action based on source
         if request.action_source == 'file':
@@ -91,53 +89,42 @@ class ActionExecutionMixin:
         try:
             # CRITICAL: Execute entire flow in ONE asyncio.run() call
             # This keeps the WebSocket message_handler_task alive throughout execution
-            action_result, execution_time = asyncio.run(
-                self._execute_action_async(request)
-            )
+            action_result, execution_time = asyncio.run(self._execute_action_async(request))
 
-            return Result.ok(DevActionResult(
-                success=action_result.success,
-                message=action_result.message,
-                execution_time=execution_time,
-                coordinates=action_result.coordinates,
-                data=action_result.data
-            ))
+            return Result.ok(
+                DevActionResult(
+                    success=action_result.success,
+                    message=action_result.message,
+                    execution_time=execution_time,
+                    coordinates=action_result.coordinates,
+                    data=action_result.data,
+                )
+            )
 
         except RuntimeError as e:
             # Raised by _execute_action_async when session not found
             return Result.fail(
                 "SESSION_NOT_FOUND",
                 str(e),
-                [
-                    "Check active sessions with: adare dev list",
-                    "VM may not be running - check with hypervisor tools"
-                ]
+                ["Check active sessions with: adare dev list", "VM may not be running - check with hypervisor tools"],
             )
         except ValueError as e:
             # Raised by _execute_action_async for invalid action source
-            return Result.fail(
-                "INVALID_ACTION_SOURCE",
-                str(e),
-                ["Valid sources: file, yaml, stdin"]
-            )
+            return Result.fail("INVALID_ACTION_SOURCE", str(e), ["Valid sources: file, yaml, stdin"])
         except yaml.YAMLError as e:
             return Result.fail(
                 "YAML_PARSE_ERROR",
                 f"Failed to parse action YAML: {str(e)}",
-                ["Check YAML syntax", "Ensure action format is valid"]
+                ["Check YAML syntax", "Ensure action format is valid"],
             )
         except FileNotFoundError as e:
-            return Result.fail(
-                "FILE_NOT_FOUND",
-                f"Action file not found: {str(e)}",
-                ["Check file path is correct"]
-            )
+            return Result.fail("FILE_NOT_FOUND", f"Action file not found: {str(e)}", ["Check file path is correct"])
         except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error executing action: {e}", exc_info=True)
             return Result.fail(
                 "ACTION_EXECUTION_ERROR",
                 f"Action execution failed: {str(e)}",
-                ["Check logs for details", "Verify action syntax"]
+                ["Check logs for details", "Verify action syntax"],
             )
 
     async def _execute_playbook_async(self, request: DevPlaybookExecuteRequest):
@@ -159,14 +146,9 @@ class ActionExecutionMixin:
             ValueError: If invalid playbook source
         """
         # Get or restore session (stays in same event loop)
-        session = await self._manager.get_or_restore_session(
-            request.session_id,
-            console_ulid=request.console_ulid
-        )
+        session = await self._manager.get_or_restore_session(request.session_id, console_ulid=request.console_ulid)
         if not session:
-            raise RuntimeError(
-                f"Dev session '{request.session_id}' not found or could not be restored"
-            )
+            raise RuntimeError(f"Dev session '{request.session_id}' not found or could not be restored")
 
         # Parse playbook based on source
         experiment_dir = None
@@ -188,6 +170,7 @@ class ActionExecutionMixin:
         parsed_indices = None
         if request.indices:
             from adare.cli.dev import parse_indices_with_bounds
+
             try:
                 parsed_indices = parse_indices_with_bounds(request.indices, len(playbook.actions))
             except ValueError as e:
@@ -210,9 +193,7 @@ class ActionExecutionMixin:
         # Execute playbook (in same event loop!)
         start_time = time.time()
         playbook_result = await session.execute_playbook(
-            playbook,
-            experiment_dir=experiment_dir,
-            indices=parsed_indices
+            playbook, experiment_dir=experiment_dir, indices=parsed_indices
         )
         execution_time = time.time() - start_time
 
@@ -231,9 +212,7 @@ class ActionExecutionMixin:
         try:
             # CRITICAL: Execute entire flow in ONE asyncio.run() call
             # This keeps the WebSocket message_handler_task alive throughout execution
-            playbook_result, execution_time = asyncio.run(
-                self._execute_playbook_async(request)
-            )
+            playbook_result, execution_time = asyncio.run(self._execute_playbook_async(request))
 
             # Convert action results
             action_results = [
@@ -242,61 +221,54 @@ class ActionExecutionMixin:
                     message=ar.message,
                     execution_time=0.0,  # Individual timing not tracked
                     coordinates=ar.coordinates,
-                    data=ar.data
+                    data=ar.data,
                 )
                 for ar in playbook_result.action_results
             ]
 
-            return Result.ok(DevPlaybookResult(
-                success=playbook_result.success,
-                total_actions=playbook_result.total_actions,
-                successful_actions=playbook_result.successful_actions,
-                failed_actions=playbook_result.failed_actions,
-                execution_time=execution_time,
-                action_results=action_results,
-                error_message=playbook_result.error_message,
-                test_stats={
-                    'total_tests': playbook_result.total_tests,
-                    'successful_tests': playbook_result.successful_tests,
-                    'failed_tests': playbook_result.failed_tests,
-                } if playbook_result.total_tests > 0 else None
-            ))
+            return Result.ok(
+                DevPlaybookResult(
+                    success=playbook_result.success,
+                    total_actions=playbook_result.total_actions,
+                    successful_actions=playbook_result.successful_actions,
+                    failed_actions=playbook_result.failed_actions,
+                    execution_time=execution_time,
+                    action_results=action_results,
+                    error_message=playbook_result.error_message,
+                    test_stats={
+                        'total_tests': playbook_result.total_tests,
+                        'successful_tests': playbook_result.successful_tests,
+                        'failed_tests': playbook_result.failed_tests,
+                    }
+                    if playbook_result.total_tests > 0
+                    else None,
+                )
+            )
 
         except RuntimeError as e:
             # Raised by _execute_playbook_async when session not found
             return Result.fail(
                 "SESSION_NOT_FOUND",
                 str(e),
-                [
-                    "Check active sessions with: adare dev list",
-                    "VM may not be running - check with hypervisor tools"
-                ]
+                ["Check active sessions with: adare dev list", "VM may not be running - check with hypervisor tools"],
             )
         except ValueError as e:
             # Raised by _execute_playbook_async for invalid playbook source
-            return Result.fail(
-                "INVALID_PLAYBOOK_SOURCE",
-                str(e),
-                ["Valid sources: file, url, stdin"]
-            )
+            return Result.fail("INVALID_PLAYBOOK_SOURCE", str(e), ["Valid sources: file, url, stdin"])
         except yaml.YAMLError as e:
             return Result.fail(
                 "YAML_PARSE_ERROR",
                 f"Failed to parse playbook YAML: {str(e)}",
-                ["Check YAML syntax", "Ensure playbook format is valid"]
+                ["Check YAML syntax", "Ensure playbook format is valid"],
             )
         except FileNotFoundError as e:
-            return Result.fail(
-                "FILE_NOT_FOUND",
-                f"Playbook file not found: {str(e)}",
-                ["Check file path is correct"]
-            )
+            return Result.fail("FILE_NOT_FOUND", f"Playbook file not found: {str(e)}", ["Check file path is correct"])
         except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error executing playbook: {e}", exc_info=True)
             return Result.fail(
                 "PLAYBOOK_EXECUTION_ERROR",
                 f"Playbook execution failed: {str(e)}",
-                ["Check logs for details", "Verify playbook syntax"]
+                ["Check logs for details", "Verify playbook syntax"],
             )
 
     def execute_playbook_batch(self, request: DevPlaybookBatchExecuteRequest) -> Result[PlaybookBatchSummary]:
@@ -310,28 +282,24 @@ class ActionExecutionMixin:
             Result[PlaybookBatchSummary]
         """
         try:
-            summary = asyncio.run(self._manager.execute_playbook_batch(
-                session_id=request.session_id,
-                playbook_patterns=request.playbook_patterns,
-                checkpoint_name=request.checkpoint_name,
-                timeout=request.timeout,
-                console_ulid=request.console_ulid
-            ))
+            summary = asyncio.run(
+                self._manager.execute_playbook_batch(
+                    session_id=request.session_id,
+                    playbook_patterns=request.playbook_patterns,
+                    checkpoint_name=request.checkpoint_name,
+                    timeout=request.timeout,
+                    console_ulid=request.console_ulid,
+                )
+            )
 
             return Result.ok(summary)
 
         except RuntimeError as e:
             log.error(f"Batch execution failed: {e}", exc_info=True)
             return Result.fail(
-                "BATCH_EXECUTION_FAILED",
-                str(e),
-                ["Check session status", "Check playbook paths", "Check VM state"]
+                "BATCH_EXECUTION_FAILED", str(e), ["Check session status", "Check playbook paths", "Check VM state"]
             )
 
         except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error executing playbook batch: {e}", exc_info=True)
-            return Result.fail(
-                "INTERNAL_ERROR",
-                f"Unexpected error: {str(e)}",
-                ["Check logs for details"]
-            )
+            return Result.fail("INTERNAL_ERROR", f"Unexpected error: {str(e)}", ["Check logs for details"])

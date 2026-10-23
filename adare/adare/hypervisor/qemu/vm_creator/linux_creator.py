@@ -15,6 +15,7 @@ from pathlib import Path
 
 from adare.config.configdirectory import QEMU_CACHE_DIR
 from adare.console import console, print_section, print_step
+from adare.helperfunctions.digest_cache import record_file_sha256
 from adare.helperfunctions.web.download import download
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.autoinstall import seed_filename, write_autoinstall_dir
@@ -57,7 +58,9 @@ def _install_timeout_minutes() -> int:
     except ValueError as e:
         log.warning(
             'Ignoring ADARE_VM_INSTALL_TIMEOUT_MINUTES=%r (%s); using %d',
-            raw, e, _DEFAULT_INSTALL_TIMEOUT_MINUTES,
+            raw,
+            e,
+            _DEFAULT_INSTALL_TIMEOUT_MINUTES,
         )
         return _DEFAULT_INSTALL_TIMEOUT_MINUTES
     return minutes
@@ -140,8 +143,7 @@ class LinuxVMCreator(BaseVMCreator):
             self.iso_path = _download_and_cache_iso(self.os_def)
         else:
             raise LinuxVMCreationError(
-                f'No ISO URL for {self.os_def.display_name}. '
-                f'Use: adare vm create {self.os_def.name} --iso /path/to/iso'
+                f'No ISO URL for {self.os_def.display_name}. Use: adare vm create {self.os_def.name} --iso /path/to/iso'
             )
 
     def _run_installation(self, disk_path: Path, nvram_path: Path | None) -> None:
@@ -182,8 +184,7 @@ class LinuxVMCreator(BaseVMCreator):
                 label=self.os_def.seed_label,
             )
             print_step(
-                f'Created seed ISO ([dim]{self.os_def.seed_label}[/dim]) for '
-                f'autoinstall: [dim]{seed_path}[/dim]'
+                f'Created seed ISO ([dim]{self.os_def.seed_label}[/dim]) for autoinstall: [dim]{seed_path}[/dim]'
             )
 
             try:
@@ -251,14 +252,13 @@ def _download_and_cache_iso(os_def: OsDefinition) -> Path:
             return iso_path
 
     print_step(f'Downloading {os_def.display_name} ISO...')
-    download(os_def.iso_url, iso_path)
+    # The digest is computed while streaming; caching it lets the check below
+    # skip re-reading the multi-GB file.
+    record_file_sha256(iso_path, download(os_def.iso_url, iso_path))
 
     if os_def.iso_sha256 and not verify_iso_hash(iso_path, os_def.iso_sha256):
         iso_path.unlink()
-        raise LinuxVMCreationError(
-            f'Downloaded ISO failed SHA256 verification. '
-            f'Expected: {os_def.iso_sha256}'
-        )
+        raise LinuxVMCreationError(f'Downloaded ISO failed SHA256 verification. Expected: {os_def.iso_sha256}')
 
     return iso_path
 
@@ -301,8 +301,7 @@ def _run_qemu_installation(
     if os_def.seed_transport == 'http':
         if seed_dir is None:
             raise LinuxVMCreationError(
-                f'{os_def.name} declares seed_transport: http but no seed directory '
-                f'was rendered'
+                f'{os_def.name} declares seed_transport: http but no seed directory was rendered'
             )
         seed_server = SeedHTTPServer(seed_dir).start()
 
@@ -322,33 +321,51 @@ def _run_qemu_installation(
 
         cmd = [
             arch_params['exe'],
-            '-machine', arch_params['machine'],
-            '-cpu', arch_params['cpu'],
-            '-m', str(ram_mb),
-            '-smp', str(cpus),
+            '-machine',
+            arch_params['machine'],
+            '-cpu',
+            arch_params['cpu'],
+            '-m',
+            str(ram_mb),
+            '-smp',
+            str(cpus),
             # Disk
-            '-drive', f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
+            '-drive',
+            f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
             # Ubuntu ISO as CD-ROM
-            '-cdrom', str(iso_path),
+            '-cdrom',
+            str(iso_path),
             # Direct kernel boot — passes installer-specific cmdline to the guest
-            '-kernel', str(kernel_path),
-            '-initrd', str(initrd_path),
-            '-append', kernel_cmdline,
+            '-kernel',
+            str(kernel_path),
+            '-initrd',
+            str(initrd_path),
+            '-append',
+            kernel_cmdline,
             # Network (user mode)
-            '-netdev', 'user,id=net0',
-            '-device', 'virtio-net-pci,netdev=net0',
+            '-netdev',
+            'user,id=net0',
+            '-device',
+            'virtio-net-pci,netdev=net0',
             # Display — show QEMU window so user can watch install progress
-            '-display', 'cocoa' if platform.system() == 'Darwin' else 'gtk',
+            '-display',
+            'cocoa' if platform.system() == 'Darwin' else 'gtk',
             # USB devices for input in display window
-            '-device', 'qemu-xhci',
-            '-device', 'usb-tablet',
-            '-device', 'usb-kbd',
+            '-device',
+            'qemu-xhci',
+            '-device',
+            'usb-tablet',
+            '-device',
+            'usb-kbd',
             # Virtio RNG for faster entropy
-            '-device', 'virtio-rng-pci',
+            '-device',
+            'virtio-rng-pci',
             # Serial console for installer log output
-            '-serial', f'file:{install_log}',
+            '-serial',
+            f'file:{install_log}',
             # Seed ISO — auto-detected by volume label (cidata / OEMDRV / ...)
-            '-drive', f'file={seed_path},format=raw,if=virtio,readonly=on',
+            '-drive',
+            f'file={seed_path},format=raw,if=virtio,readonly=on',
             # Exit QEMU on guest reboot (Subiquity reboots after install)
             '-no-reboot',
         ]
@@ -357,8 +374,10 @@ def _run_qemu_installation(
         if needs_uefi and nvram_path is not None:
             ovmf_code, _ = find_ovmf_firmware(os_def.architecture)
             pflash_args = [
-                '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
-                '-drive', f'if=pflash,format=raw,file={nvram_path}',
+                '-drive',
+                f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
+                '-drive',
+                f'if=pflash,format=raw,file={nvram_path}',
             ]
             machine_idx = cmd.index('-machine') + 2
             cmd[machine_idx:machine_idx] = pflash_args

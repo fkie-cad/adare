@@ -52,6 +52,7 @@ _TOOL_PROTOCOLS = ('native', 'json', 'auto')
 @dataclass
 class ToolCall:
     """A single tool invocation the brain wants the REPL to execute."""
+
     id: str
     name: str
     input: dict[str, Any]
@@ -60,6 +61,7 @@ class ToolCall:
 @dataclass
 class ToolResult:
     """The normalized ``{ok, data|error}`` envelope for one executed tool call."""
+
     id: str
     name: str
     output: dict[str, Any]
@@ -69,6 +71,7 @@ class ToolResult:
 @dataclass
 class BrainResponse:
     """One assistant turn: visible text and any requested tool calls."""
+
     text: str
     tool_calls: list[ToolCall] = field(default_factory=list)
     done: bool = True
@@ -125,8 +128,7 @@ class OpenAICompatBrain(ChatBrain):
         heal_retries: int = DEFAULT_HEAL_RETRIES,
     ):
         if tool_protocol not in _TOOL_PROTOCOLS:
-            raise ValueError(
-                f'Unknown tool protocol {tool_protocol!r}; expected one of {_TOOL_PROTOCOLS}')
+            raise ValueError(f'Unknown tool protocol {tool_protocol!r}; expected one of {_TOOL_PROTOCOLS}')
         self._base_url = base_url.rstrip('/')
         self.model = model
         self._api_key = api_key
@@ -164,21 +166,22 @@ class OpenAICompatBrain(ChatBrain):
     def send_tool_results(self, results: list[ToolResult]) -> BrainResponse:
         if self._protocol == 'native':
             for r in results:
-                self._messages.append({
-                    'role': 'tool',
-                    'tool_call_id': r.id,
-                    'content': json.dumps(r.output, default=str),
-                })
+                self._messages.append(
+                    {
+                        'role': 'tool',
+                        'tool_call_id': r.id,
+                        'content': json.dumps(r.output, default=str),
+                    }
+                )
         else:
-            blocks = '\n\n'.join(
-                f'Tool `{r.name}` returned:\n{json.dumps(r.output, default=str)}'
-                for r in results
+            blocks = '\n\n'.join(f'Tool `{r.name}` returned:\n{json.dumps(r.output, default=str)}' for r in results)
+            self._messages.append(
+                {
+                    'role': 'user',
+                    'content': blocks + '\n\nContinue: reply with the next tool call, '
+                    'or {"final": "..."} if the task is done.',
+                }
             )
-            self._messages.append({
-                'role': 'user',
-                'content': blocks + '\n\nContinue: reply with the next tool call, '
-                'or {"final": "..."} if the task is done.',
-            })
         return self._turn()
 
     # -- turn dispatch ------------------------------------------------------
@@ -193,8 +196,9 @@ class OpenAICompatBrain(ChatBrain):
             msg = self._post(tools=self._native_tools)
         except _ToolsUnsupported as exc:
             # auto-only: this endpoint/model can't take `tools`. Switch once.
-            log.info('Endpoint rejected native tool-calling; falling back to the '
-                     'JSON-in-text protocol. (%s)', str(exc)[:200])
+            log.info(
+                'Endpoint rejected native tool-calling; falling back to the JSON-in-text protocol. (%s)', str(exc)[:200]
+            )
             self._switch_to_json()
             return self._json_turn()
 
@@ -208,8 +212,7 @@ class OpenAICompatBrain(ChatBrain):
                 args = {}
             if not isinstance(args, dict):
                 args = {}
-            tool_calls.append(ToolCall(id=tc.get('id') or self._next_id(),
-                                       name=fn.get('name', ''), input=args))
+            tool_calls.append(ToolCall(id=tc.get('id') or self._next_id(), name=fn.get('name', ''), input=args))
         text = _coerce_text(msg.get('content'))
         return BrainResponse(text=text, tool_calls=tool_calls, done=not tool_calls)
 
@@ -234,25 +237,30 @@ class OpenAICompatBrain(ChatBrain):
             if not isinstance(args, dict):
                 raise VLMError(f'"arguments" must be an object, got: {args!r}')
             tc = ToolCall(id=self._next_id(), name=name, input=args)
-            return BrainResponse(text=str(obj.get('reasoning', '')),
-                                 tool_calls=[tc], done=False)
+            return BrainResponse(text=str(obj.get('reasoning', '')), tool_calls=[tc], done=False)
         raise VLMError('JSON object had neither a "tool" nor a "final" key')
 
     def _json_self_heal(self, bad_reply: str, exc: VLMError) -> BrainResponse:
         """Bounded repair for a JSON-contract parse slip (mirrors agent._recover_decision)."""
         last_reply, last_exc = bad_reply, exc
         for attempt in range(1, self._heal_retries + 1):
-            log.warning('Chat tool-call parse failed (attempt %d/%d): %s; requesting a repair',
-                        attempt, self._heal_retries, last_exc)
-            self._messages.append({
-                'role': 'user',
-                'content': (
-                    f'Your last reply could not be parsed ({last_exc}). Reply with '
-                    'ONLY a single JSON object and nothing else — either '
-                    '{"tool": "<name>", "arguments": {...}} to call a tool, or '
-                    '{"final": "<answer>"} if the task is done.'
-                ),
-            })
+            log.warning(
+                'Chat tool-call parse failed (attempt %d/%d): %s; requesting a repair',
+                attempt,
+                self._heal_retries,
+                last_exc,
+            )
+            self._messages.append(
+                {
+                    'role': 'user',
+                    'content': (
+                        f'Your last reply could not be parsed ({last_exc}). Reply with '
+                        'ONLY a single JSON object and nothing else — either '
+                        '{"tool": "<name>", "arguments": {...}} to call a tool, or '
+                        '{"final": "<answer>"} if the task is done.'
+                    ),
+                }
+            )
             msg = self._post(tools=None)
             reply = _coerce_text(msg.get('content'))
             self._messages.append({'role': 'assistant', 'content': reply})
@@ -261,8 +269,7 @@ class OpenAICompatBrain(ChatBrain):
             except VLMError as rexc:
                 last_reply, last_exc = reply, rexc
         # Give up gracefully: surface the raw reply as text rather than crash.
-        return BrainResponse(text=last_reply.strip() or f'(unparseable reply: {last_exc})',
-                             tool_calls=[], done=True)
+        return BrainResponse(text=last_reply.strip() or f'(unparseable reply: {last_exc})', tool_calls=[], done=True)
 
     # -- transport ----------------------------------------------------------
 
@@ -286,17 +293,20 @@ class OpenAICompatBrain(ChatBrain):
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
             body = exc.response.text
-            if (tools and self._auto and self._protocol == 'native'
-                    and exc.response.status_code in (400, 422)
-                    and _mentions_tools(body)):
+            if (
+                tools
+                and self._auto
+                and self._protocol == 'native'
+                and exc.response.status_code in (400, 422)
+                and _mentions_tools(body)
+            ):
                 raise _ToolsUnsupported(body) from exc
-            raise RuntimeError(
-                f'chat endpoint {url} returned HTTP {exc.response.status_code}: '
-                f'{body[:400]}') from exc
+            raise RuntimeError(f'chat endpoint {url} returned HTTP {exc.response.status_code}: {body[:400]}') from exc
         except httpx.HTTPError as exc:
             raise RuntimeError(
                 f'chat request to {url} failed: {exc}. Check the endpoint is up, or '
-                'configure a provider with `adare vlm use`.') from exc
+                'configure a provider with `adare vlm use`.'
+            ) from exc
 
         try:
             data = resp.json()
@@ -329,8 +339,7 @@ class OpenAICompatBrain(ChatBrain):
             '  {"tool": "<tool_name>", "arguments": { ... }}   # to call one tool',
             '  {"final": "<your answer to the user>"}          # when no more tools are needed',
             '',
-            'Call exactly one tool per reply; you will be shown its result and may '
-            'then call another. Available tools:',
+            'Call exactly one tool per reply; you will be shown its result and may then call another. Available tools:',
         ]
         for t in self._tools:
             lines.append(f'- {t.name}: {t.description}')

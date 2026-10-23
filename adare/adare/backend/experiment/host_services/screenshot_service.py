@@ -58,7 +58,9 @@ class ScreenshotService:
 
                 # Return first matching window screenshot
                 screenshot = screenshots[0]
-                log.debug(f"Screenshot Service: Captured window '{window}' at offset ({screenshot.get('offset', {}).get('x', 0)}, {screenshot.get('offset', {}).get('y', 0)})")
+                log.debug(
+                    f"Screenshot Service: Captured window '{window}' at offset ({screenshot.get('offset', {}).get('x', 0)}, {screenshot.get('offset', {}).get('y', 0)})"
+                )
                 return screenshot
             log.debug("Screenshot Service: Capturing full screen")
             screenshot = await self.client.take_screenshot()
@@ -72,13 +74,7 @@ class ScreenshotService:
             log.error(f"Screenshot Service: Capture failed: {e}", exc_info=True)
             raise RuntimeError(f"Screenshot capture failed: {e}") from e
 
-    async def take_region(
-        self,
-        x: int,
-        y: int,
-        width: int,
-        height: int
-    ) -> dict[str, Any]:
+    async def take_region(self, x: int, y: int, width: int, height: int) -> dict[str, Any]:
         """
         Take screenshot of specific screen region.
 
@@ -106,14 +102,11 @@ class ScreenshotService:
             log.debug(f"Screenshot Service: Capturing region ({x}, {y}, {width}x{height})")
 
             # Use WebSocket client's screenshot with region parameters
-            screenshot = await self.client.take_screenshot(
-                x=x,
-                y=y,
-                width=width,
-                height=height
-            )
+            screenshot = await self.client.take_screenshot(x=x, y=y, width=width, height=height)
 
-            log.debug(f"Screenshot Service: Region captured at offset ({screenshot.get('offset', {}).get('x', 0)}, {screenshot.get('offset', {}).get('y', 0)})")
+            log.debug(
+                f"Screenshot Service: Region captured at offset ({screenshot.get('offset', {}).get('x', 0)}, {screenshot.get('offset', {}).get('y', 0)})"
+            )
             return screenshot
 
         except Exception as e:

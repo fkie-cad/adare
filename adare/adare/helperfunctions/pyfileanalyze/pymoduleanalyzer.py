@@ -148,7 +148,7 @@ class PyModuleAnalyzer:
     def get_classes(self, parent: str = None) -> list[PyClassAnalyzer]:
         class_list: list = []
         for node in self.module.body:
-            if isinstance(node,ast.ClassDef):
+            if isinstance(node, ast.ClassDef):
                 node: ast.ClassDef
                 if parent:
                     is_subclass = False

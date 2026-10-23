@@ -1,6 +1,7 @@
 """
 Gitea REST API v1 client for creating branches, uploading files, and creating pull requests.
 """
+
 import base64
 import logging
 
@@ -41,8 +42,9 @@ class GiteaApiClient:
         log.error(f'Failed to create branch {branch_name}: {response.status_code} {response.text}')
         return False
 
-    def create_or_update_file(self, owner: str, repo: str, filepath: str,
-                               content_bytes: bytes, branch: str, message: str) -> bool:
+    def create_or_update_file(
+        self, owner: str, repo: str, filepath: str, content_bytes: bytes, branch: str, message: str
+    ) -> bool:
         url = f'{self.api_url}repos/{owner}/{repo}/contents/{filepath}'
         content_b64 = base64.b64encode(content_bytes).decode('ascii')
 
@@ -55,8 +57,7 @@ class GiteaApiClient:
             response = self.session.put(url, json=data)
         else:
             if probe.status_code != 404:
-                log.warning(f'Unexpected status probing {filepath} on {branch}: '
-                            f'{probe.status_code} {probe.text}')
+                log.warning(f'Unexpected status probing {filepath} on {branch}: {probe.status_code} {probe.text}')
             response = self.session.post(url, json=data)
 
         if response.status_code in (200, 201):
@@ -65,8 +66,7 @@ class GiteaApiClient:
         log.error(f'Failed to upload {filepath}: {response.status_code} {response.text}')
         return False
 
-    def delete_file(self, owner: str, repo: str, filepath: str,
-                     branch: str, sha: str, message: str) -> bool:
+    def delete_file(self, owner: str, repo: str, filepath: str, branch: str, sha: str, message: str) -> bool:
         url = f'{self.api_url}repos/{owner}/{repo}/contents/{filepath}'
         data = {
             'message': message,
@@ -80,8 +80,7 @@ class GiteaApiClient:
         log.error(f'Failed to delete {filepath}: {response.status_code} {response.text}')
         return False
 
-    def find_open_pull_request(self, owner: str, repo: str,
-                                title: str = None, head_prefix: str = None) -> dict | None:
+    def find_open_pull_request(self, owner: str, repo: str, title: str = None, head_prefix: str = None) -> dict | None:
         """Return the first open PR matching by exact title or head-branch prefix.
 
         The submit branch carries a timestamp suffix, so we match on the stable
@@ -99,8 +98,9 @@ class GiteaApiClient:
                 return pr
         return None
 
-    def create_pull_request(self, owner: str, repo: str, title: str,
-                             head: str, base: str = 'main', body: str = '') -> dict:
+    def create_pull_request(
+        self, owner: str, repo: str, title: str, head: str, base: str = 'main', body: str = ''
+    ) -> dict:
         url = f'{self.api_url}repos/{owner}/{repo}/pulls'
         data = {
             'title': title,

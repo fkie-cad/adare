@@ -35,7 +35,8 @@ class AuthoringMixin:
     """Adds LLM playbook authoring to :class:`DevModeService`."""
 
     def author_playbook(
-        self, request: DevAuthorPlaybookRequest,
+        self,
+        request: DevAuthorPlaybookRequest,
     ) -> Result[DevAuthorPlaybookResult]:
         """Author a UI-action playbook for ``request.goal`` on the session VM."""
         from adare.backend.experiment.vlm.authoring.author_playbook import (
@@ -48,26 +49,33 @@ class AuthoringMixin:
             return Result.ok(result)
         except RuntimeError as exc:  # session / VM not found
             return Result.fail(
-                'SESSION_NOT_FOUND', str(exc),
-                ['Check active sessions with: adare dev list',
-                 'Start one with: adare dev start -e <environment>'],
+                'SESSION_NOT_FOUND',
+                str(exc),
+                ['Check active sessions with: adare dev list', 'Start one with: adare dev start -e <environment>'],
             )
         except OllamaError as exc:
             return Result.fail(
-                'AUTHORING_MODEL_ERROR', str(exc),
-                ['Verify the Ollama daemon is reachable (default http://localhost:11434)',
-                 'Confirm the author models are pulled and vision-capable',
-                 'Raise the read timeout with --read-timeout for slow cloud reasoning'],
+                'AUTHORING_MODEL_ERROR',
+                str(exc),
+                [
+                    'Verify the Ollama daemon is reachable (default http://localhost:11434)',
+                    'Confirm the author models are pulled and vision-capable',
+                    'Raise the read timeout with --read-timeout for slow cloud reasoning',
+                ],
             )
         except AuthoringError as exc:
             return Result.fail(
-                'AUTHORING_ERROR', str(exc),
-                ['The model produced no usable playbook — retry or refine the --goal',
-                 'Inspect the per-round summary for the parse/replay failure'],
+                'AUTHORING_ERROR',
+                str(exc),
+                [
+                    'The model produced no usable playbook — retry or refine the --goal',
+                    'Inspect the per-round summary for the parse/replay failure',
+                ],
             )
 
     async def _author_playbook_async(
-        self, request: DevAuthorPlaybookRequest,
+        self,
+        request: DevAuthorPlaybookRequest,
     ) -> DevAuthorPlaybookResult:
         from adare.backend.experiment.execution.qemu_host_gui_executor import (
             QEMUHostGUIExecutor,
@@ -82,9 +90,7 @@ class AuthoringMixin:
 
         session = await self._manager.get_or_restore_session(request.session_id)
         if not session:
-            raise RuntimeError(
-                f"Dev session '{request.session_id}' not found or could not be restored"
-            )
+            raise RuntimeError(f"Dev session '{request.session_id}' not found or could not be restored")
         ctx = session.experiment_ctx
         vm = getattr(ctx, 'vm', None) if ctx else None
         if vm is None:
@@ -112,14 +118,21 @@ class AuthoringMixin:
 
             def replay_cb(playbook_yaml: str) -> tuple[bool, str]:  # noqa: E306
                 future = asyncio.run_coroutine_threadsafe(
-                    self._replay_yaml(vm, playbook_yaml, cv_url, request.os_key), loop,
+                    self._replay_yaml(vm, playbook_yaml, cv_url, request.os_key),
+                    loop,
                 )
                 return future.result()
 
         outcome = await asyncio.to_thread(
             author_verify_repair_loop,
-            request.goal, models, request.rounds, screenshot_b64, schema,
-            replay_cb=replay_cb, host=host, read_timeout=read_timeout,
+            request.goal,
+            models,
+            request.rounds,
+            screenshot_b64,
+            schema,
+            replay_cb=replay_cb,
+            host=host,
+            read_timeout=read_timeout,
         )
 
         output_file: str | None = None
@@ -136,8 +149,12 @@ class AuthoringMixin:
             playbook_yaml=outcome.best_yaml,
             rounds=[
                 DevAuthorRoundInfo(
-                    model=r.model, round=r.round, valid=r.valid,
-                    replayed=r.replayed, passing=r.passing, error=r.error,
+                    model=r.model,
+                    round=r.round,
+                    valid=r.valid,
+                    replayed=r.replayed,
+                    passing=r.passing,
+                    error=r.error,
                 )
                 for r in outcome.rounds
             ],

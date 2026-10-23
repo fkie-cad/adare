@@ -31,12 +31,7 @@ class CVService:
         """
         self.mcp_client = mcp_client
 
-    async def find_text(
-        self,
-        text: str,
-        screenshot_data: dict[str, Any],
-        format: str = "json"
-    ) -> list[dict[str, Any]]:
+    async def find_text(self, text: str, screenshot_data: dict[str, Any], format: str = "json") -> list[dict[str, Any]]:
         """
         Find text in screenshot.
 
@@ -64,7 +59,7 @@ class CVService:
                 screenshot_base64=screenshot_data['image']['data'],
                 offset_x=screenshot_data.get('offset', {}).get('x', 0),
                 offset_y=screenshot_data.get('offset', {}).get('y', 0),
-                format=format
+                format=format,
             )
 
             locations = result.get('locations', [])
@@ -79,11 +74,7 @@ class CVService:
             raise RuntimeError(f"CV server text search failed: {e}") from e
 
     async def find_icon(
-        self,
-        icon_path: Path,
-        screenshot_data: dict[str, Any],
-        threshold: float = 0.5,
-        max_results: int = 10
+        self, icon_path: Path, screenshot_data: dict[str, Any], threshold: float = 0.5, max_results: int = 10
     ) -> list[dict[str, Any]]:
         """
         Find icon/image in screenshot.
@@ -122,7 +113,7 @@ class CVService:
                 offset_x=screenshot_data.get('offset', {}).get('x', 0),
                 offset_y=screenshot_data.get('offset', {}).get('y', 0),
                 threshold=threshold,
-                max_results=max_results
+                max_results=max_results,
             )
 
             locations = result.get('locations', [])
@@ -138,11 +129,7 @@ class CVService:
             log.error(f"CV Service: find_icon failed: {e}", exc_info=True)
             raise RuntimeError(f"CV server icon search failed: {e}") from e
 
-    async def get_all_text(
-        self,
-        screenshot_data: dict[str, Any],
-        format: str = "json"
-    ) -> list[dict[str, Any]]:
+    async def get_all_text(self, screenshot_data: dict[str, Any], format: str = "json") -> list[dict[str, Any]]:
         """
         Extract all text from screenshot using OCR.
 
@@ -168,7 +155,7 @@ class CVService:
                 screenshot_base64=screenshot_data['image']['data'],
                 offset_x=screenshot_data.get('offset', {}).get('x', 0),
                 offset_y=screenshot_data.get('offset', {}).get('y', 0),
-                format=format
+                format=format,
             )
 
             all_text = result.get('all_text', [])

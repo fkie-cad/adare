@@ -9,10 +9,13 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from adare.console import console
 from adarelib.constants import StatusEnum
+
+if TYPE_CHECKING:
+    from .session import DevModeSession
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +23,7 @@ log = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class PlaybookBatchResult:
     """Result of single playbook execution in batch."""
+
     playbook_path: str
     playbook_name: str
     status: StatusEnum
@@ -56,12 +60,7 @@ class PlaybookBatchResult:
 class PlaybookBatchSummary:
     """Aggregated results for batch execution."""
 
-    def __init__(
-        self,
-        results: list[PlaybookBatchResult],
-        total_playbooks: int,
-        checkpoint_name: str
-    ):
+    def __init__(self, results: list[PlaybookBatchResult], total_playbooks: int, checkpoint_name: str):
         self.results = results
         self.total_playbooks = total_playbooks
         self.checkpoint_name = checkpoint_name
@@ -128,7 +127,7 @@ class PlaybookBatchSummary:
                 f"[{status_style}]{status_icon}[/{status_style}]",
                 duration_str,
                 actions_str,
-                tests_str
+                tests_str,
             )
 
         console.print(table)
@@ -158,7 +157,7 @@ class PlaybookBatchSummary:
         console.print(f"Checkpoint Restores: {len(self.results)}/{len(self.results)} successful", style="green")
         console.print()
         console.print(f"[dim]Tip: Checkpoint '{self.checkpoint_name}' has been preserved.[/dim]")
-        console.print(f"[dim]     Delete with: adare dev checkpoint-delete {self.checkpoint_name}[/dim]")
+        console.print(f"[dim]     Delete with: adare dev checkpoint remove {self.checkpoint_name}[/dim]")
         console.print()
 
     def to_dict(self) -> dict[str, Any]:
@@ -170,9 +169,9 @@ class PlaybookBatchSummary:
                 'failed': self.failed_playbooks,
                 'success_rate': self.success_rate,
                 'total_duration_seconds': self.total_duration.total_seconds(),
-                'checkpoint_name': self.checkpoint_name
+                'checkpoint_name': self.checkpoint_name,
             },
-            'results': [result.to_dict() for result in self.results]
+            'results': [result.to_dict() for result in self.results],
         }
 
 
@@ -223,11 +222,7 @@ class PlaybookBatchRunner:
         return unique_paths
 
     async def execute_batch(
-        self,
-        playbook_patterns: list[str],
-        checkpoint_name: str,
-        timeout: int,
-        console_ulid: str | None
+        self, playbook_patterns: list[str], checkpoint_name: str, timeout: int, console_ulid: str | None
     ) -> PlaybookBatchSummary:
         """
         Execute batch of playbooks with checkpoint restoration.
@@ -251,13 +246,14 @@ class PlaybookBatchRunner:
 
         if not playbook_paths:
             from adare.exceptions import LoggedErrorException
+
             raise LoggedErrorException(
                 log,
                 'No playbooks found matching patterns',
                 possible_solutions=[
                     f'Patterns: {playbook_patterns}',
-                    'Check paths and try: ls experiments/*/playbook.yml'
-                ]
+                    'Check paths and try: ls experiments/*/playbook.yml',
+                ],
             )
 
         log.info(f"Resolved {len(playbook_paths)} playbook(s) from patterns")
@@ -269,6 +265,7 @@ class PlaybookBatchRunner:
         try:
             # Delete existing checkpoint with same name if it exists
             from adare.database.api.devmode import DevModeApi
+
             with DevModeApi() as api:
                 existing = api.get_checkpoint(self.session.session_id, checkpoint_name)
                 if existing:
@@ -279,24 +276,23 @@ class PlaybookBatchRunner:
                             self.session.experiment_ctx.vm.delete_external_snapshot(
                                 snapshot_name=existing.snapshot_name,
                                 memory_path=existing.memory_file_path,
-                                disk_path=existing.disk_file_path
+                                disk_path=existing.disk_file_path,
                             )
                         except (OSError, RuntimeError) as e:
                             log.warning(f"Failed to delete existing snapshot files: {e}")
                     # Delete from database
                     api.delete_checkpoint(self.session.session_id, checkpoint_name)
 
-            checkpoint_result = await self.session.create_checkpoint(checkpoint_name, "Base checkpoint for batch execution")
+            checkpoint_result = await self.session.create_checkpoint(
+                checkpoint_name, "Base checkpoint for batch execution"
+            )
             if not checkpoint_result.success:
                 error_msg = checkpoint_result.error.message if checkpoint_result.error else "Unknown error"
                 raise RuntimeError(
-                    f"Failed to create base checkpoint '{checkpoint_name}': {error_msg}. "
-                    "Check VM state and disk space."
+                    f"Failed to create base checkpoint '{checkpoint_name}': {error_msg}. Check VM state and disk space."
                 )
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to create base checkpoint '{checkpoint_name}': {e}"
-            ) from e
+            raise RuntimeError(f"Failed to create base checkpoint '{checkpoint_name}': {e}") from e
 
         log.info(f"Base checkpoint '{checkpoint_name}' created successfully")
 
@@ -310,10 +306,12 @@ class PlaybookBatchRunner:
 
             # Print immediate result
             status_icon, status_color = self._get_status_display(result.status)
-            console.print(f"  [{status_color}]{status_icon}[/{status_color}] "
-                         f"{result.execution_time:.1f}s - "
-                         f"Actions: {result.successful_actions}/{result.total_actions}, "
-                         f"Tests: {result.successful_tests}/{result.total_tests}")
+            console.print(
+                f"  [{status_color}]{status_icon}[/{status_color}] "
+                f"{result.execution_time:.1f}s - "
+                f"Actions: {result.successful_actions}/{result.total_actions}, "
+                f"Tests: {result.successful_tests}/{result.total_tests}"
+            )
 
             if result.error_message:
                 console.print(f"  [red]Error: {result.error_message}[/red]")
@@ -331,15 +329,11 @@ class PlaybookBatchRunner:
                             f"Results: {len(results)}/{len(playbook_paths)} playbooks completed."
                         )
                 except Exception as e:
-                    raise RuntimeError(
-                        f"Failed to restore checkpoint '{checkpoint_name}': {e}"
-                    ) from e
+                    raise RuntimeError(f"Failed to restore checkpoint '{checkpoint_name}': {e}") from e
 
         # 4. Create summary
         summary = PlaybookBatchSummary(
-            results=results,
-            total_playbooks=len(playbook_paths),
-            checkpoint_name=checkpoint_name
+            results=results, total_playbooks=len(playbook_paths), checkpoint_name=checkpoint_name
         )
 
         end_time = datetime.now(UTC)
@@ -354,13 +348,11 @@ class PlaybookBatchRunner:
         try:
             # Parse playbook
             from adare.types.playbook import parse_playbook_file
+
             playbook = parse_playbook_file(playbook_path)
 
             # Execute playbook
-            execution_result = await self.session.execute_playbook(
-                playbook,
-                experiment_dir=playbook_path.parent
-            )
+            execution_result = await self.session.execute_playbook(playbook, experiment_dir=playbook_path.parent)
 
             end_time = datetime.now(UTC)
             execution_time = (end_time - start_time).total_seconds()
@@ -386,7 +378,7 @@ class PlaybookBatchRunner:
                 failed_tests=execution_result.failed_tests,
                 error_message=error_msg,
                 start_time=start_time,
-                end_time=end_time
+                end_time=end_time,
             )
 
         except Exception as e:
@@ -408,7 +400,7 @@ class PlaybookBatchRunner:
                 failed_tests=0,
                 error_message=str(e),
                 start_time=start_time,
-                end_time=end_time
+                end_time=end_time,
             )
 
     def _get_status_display(self, status: StatusEnum) -> tuple[str, str]:

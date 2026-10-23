@@ -48,12 +48,18 @@ install_steps:
   - {action: type, text: "kubuntu2204"}
   - {action: shot, name: user-filled}
   - {action: click_text, text: "Continue", note: "start install"}
-  - {action: wait_stable, settle: 45, timeout: 3600, shot: complete, note: "wait for install"}
+  # Finished only once ubiquity's 'Installation Complete' dialog is up: a still
+  # screen alone is also what a crash dialog or a hung progress bar looks like.
+  - {action: wait_text, text: "Restart Now", fail_on: ["installer crashed", "unrecoverable error", "encountered an error"], timeout: 3600, interval: 10, shot: complete, note: "wait for install"}
 
 verify_steps:
   # Reboots from disk into SDDM (KDE login manager). The password field is
   # focused; type the password and log in.
   - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
+  - {action: wait_text, text: "adare", timeout: 120, note: "SDDM greeter with the adare user"}
   - {action: type, text: "adare", note: "password (SDDM field is focused)"}
   - {action: key, keys: [ret]}
+  # SDDM only leaves the greeter on a successful login, so the user name
+  # disappearing (without an error) is the proof the session started.
+  - {action: wait_text, text: "adare", gone: true, fail_on: ["login failed"], timeout: 120, note: "greeter gone = logged in"}
   - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}

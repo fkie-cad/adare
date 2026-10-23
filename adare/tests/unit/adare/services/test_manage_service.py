@@ -11,6 +11,7 @@ pytestmark = pytest.mark.unit
 @pytest.fixture
 def service():
     from adare.services.manage_service import ManageService
+
     return ManageService()
 
 

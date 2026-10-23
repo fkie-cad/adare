@@ -26,7 +26,9 @@ class TestfunctionManager:
     def __init__(self):
         self.global_testfunctions_dir = STATE_DIR / 'testfunctions'
 
-    def install_testfunction(self, source_python_file: Path, source_requirements_file: Path, name: str) -> tuple[Path, Path]:
+    def install_testfunction(
+        self, source_python_file: Path, source_requirements_file: Path, name: str
+    ) -> tuple[Path, Path]:
         """
         Install a testfunction to the global directory.
 
@@ -42,10 +44,7 @@ class TestfunctionManager:
             TestfunctionMissingFileError: If source files don't exist
         """
         if not source_python_file.exists():
-            raise TestfunctionMissingFileError(
-                log,
-                message=f'Source Python file does not exist: {source_python_file}'
-            )
+            raise TestfunctionMissingFileError(log, message=f'Source Python file does not exist: {source_python_file}')
 
         # Create target directory structure
         target_dir = self.global_testfunctions_dir / name

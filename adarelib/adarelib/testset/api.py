@@ -1,26 +1,30 @@
 # external imports
-import sys
 import inspect
-import attrs
-from typing import ClassVar, Optional, Dict, Any
-
-# internal imports
-from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
-from adarelib.event.event import TestResult
 
 # configure logging
 import logging
+import sys
+from typing import Any, Optional
+
+import attrs
+
+from adarelib.event.event import TestResult
+
+# internal imports
+from adarelib.testset.basictest import BasicTest, HostModeCategory, Parameter
 
 log = logging.getLogger(__name__)
 
 
 class TestFailed(Exception):
     """Raised by ctx.fail_if when a test condition is not met."""
+
     pass
 
 
 class TestError(Exception):
     """Raised by ctx.error_if when a precondition/setup fails."""
+
     pass
 
 
@@ -50,8 +54,7 @@ class TestContext:
 
     # Delegated helpers from BasicTest
 
-    def resolve_globfilepath(self, globfilepath: str, match_mode: str = "single",
-                             return_list: bool = False):
+    def resolve_globfilepath(self, globfilepath: str, match_mode: str = "single", return_list: bool = False):
         return self._test.resolve_globfilepath(globfilepath, match_mode=match_mode, return_list=return_list)
 
     def has_placeholders(self, text: str) -> bool:
@@ -66,7 +69,7 @@ class TestContext:
     def compare_with_placeholder(self, placeholder_name: str, actual_value: str):
         return self._test.compare_with_placeholder(placeholder_name, actual_value)
 
-    def get_placeholder_metadata(self, placeholder_name: str) -> Dict[str, Any]:
+    def get_placeholder_metadata(self, placeholder_name: str) -> dict[str, Any]:
         return self._test.get_placeholder_metadata(placeholder_name)
 
     def has_tolerance_metadata(self, placeholder_name: str) -> bool:
@@ -76,7 +79,7 @@ class TestContext:
         return self._test._handle_placeholders_comparison(actual_content, expected_template)
 
     @property
-    def variable_metadata(self) -> Optional[Dict[str, Any]]:
+    def variable_metadata(self) -> dict[str, Any] | None:
         return self._test.variable_metadata
 
 
@@ -95,13 +98,13 @@ def _validate_signature(func, testname: str, sig: inspect.Signature) -> None:
         raise ValueError(
             f"{location}: first parameter must be 'ctx' "
             f"(got {params[0].name!r} — signature: def {func.__name__}(ctx, ...))"
-            if params else
-            f"{location}: must accept 'ctx' as its first parameter "
-            f"(signature: def {func.__name__}(ctx, ...))"
+            if params
+            else f"{location}: must accept 'ctx' as its first parameter (signature: def {func.__name__}(ctx, ...))"
         )
 
     unannotated = [
-        p.name for p in params[1:]
+        p.name
+        for p in params[1:]
         if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
         and p.annotation is inspect.Parameter.empty
     ]
@@ -140,9 +143,15 @@ def _make_parameter_class(func_name: str, param_specs: list) -> type:
     return param_cls
 
 
-def _make_test_class(func_name: str, testname: str, testdescription: str,
-                     host_mode_category: HostModeCategory, execute_on_host: bool,
-                     param_cls: type, test_func) -> type:
+def _make_test_class(
+    func_name: str,
+    testname: str,
+    testdescription: str,
+    host_mode_category: HostModeCategory,
+    execute_on_host: bool,
+    param_cls: type,
+    test_func,
+) -> type:
     """Dynamically create a BasicTest subclass that calls the decorated function."""
 
     is_async = inspect.iscoroutinefunction(test_func)
@@ -151,16 +160,16 @@ def _make_test_class(func_name: str, testname: str, testdescription: str,
         """Convert a test function's return value to a TestResult."""
         if isinstance(result, TestResult):
             return result
-        elif result is None:
+        if result is None:
             return TestResult.success([])
-        elif isinstance(result, str):
+        if isinstance(result, str):
             return TestResult.success([result])
-        elif isinstance(result, list):
+        if isinstance(result, list):
             return TestResult.success(result)
-        else:
-            return TestResult.success([str(result)])
+        return TestResult.success([str(result)])
 
     if is_async:
+
         async def test_method(self, context=None):
             ctx = TestContext(self, host_context=context)
             kwargs = attrs.asdict(self.parameter)
@@ -174,6 +183,7 @@ def _make_test_class(func_name: str, testname: str, testdescription: str,
                 return TestResult.execution_error(e, f"Error in testfunction '{testname}'")
             return _convert_result(result)
     else:
+
         def test_method(self):
             ctx = TestContext(self)
             kwargs = attrs.asdict(self.parameter)
@@ -192,8 +202,10 @@ def _make_test_class(func_name: str, testname: str, testdescription: str,
         '__annotations__': {
             'name': str,
             'parameter': param_cls,
-            'description': Optional[str],
-            'variable_metadata': Optional[dict],
+            # Runtime annotations consumed by attrs/cattrs structuring on the guest;
+            # kept as typing.Optional until `X | None` is verified there.
+            'description': Optional[str],  # noqa: UP045
+            'variable_metadata': Optional[dict],  # noqa: UP045
         },
         'description': '',
         'variable_metadata': None,
@@ -211,9 +223,9 @@ def _make_test_class(func_name: str, testname: str, testdescription: str,
     return test_cls
 
 
-def testfunction(name: str, description: str,
-                 category: HostModeCategory = HostModeCategory.AGENT_ONLY,
-                 execute_on_host: bool = False):
+def testfunction(
+    name: str, description: str, category: HostModeCategory = HostModeCategory.AGENT_ONLY, execute_on_host: bool = False
+):
     """
     Decorator that turns a plain function into a BasicTest subclass.
 
@@ -237,16 +249,14 @@ def testfunction(name: str, description: str,
         The decorated function, with a generated BasicTest subclass attached
         as `_test_class` attribute and registered as a module-level name.
     """
+
     def decorator(func):
         sig = inspect.signature(func)
         _validate_signature(func, name, sig)
         param_specs = _build_type_annotation_map(sig)
 
         param_cls = _make_parameter_class(func.__name__, param_specs)
-        test_cls = _make_test_class(
-            func.__name__, name, description, category, execute_on_host,
-            param_cls, func
-        )
+        test_cls = _make_test_class(func.__name__, name, description, category, execute_on_host, param_cls, func)
 
         # Register the generated class in the caller's module so TestfunctionLoader
         # can discover it via dir(module) + isclass() + issubclass(cls, BasicTest).

@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class FilterAnalysis:
     """Analysis of filters applied to a Jinja2 template"""
+
     has_tolerance: bool = False
     has_format: bool = False
     has_localtime: bool = False
@@ -35,6 +36,7 @@ class FilterAnalysis:
 @dataclass
 class ItemInfo:
     """Information about an item being processed"""
+
     type: str  # 'timestamp', 'regex', 'string'
     value: Any
     metadata: dict[str, Any]
@@ -54,7 +56,9 @@ class MetadataManager:
         """
         self.variable_registry = variable_registry
 
-    def add_regex_metadata(self, placeholder_name: str, regex_pattern: str, template_context: dict[str, Any] | None = None):
+    def add_regex_metadata(
+        self, placeholder_name: str, regex_pattern: str, template_context: dict[str, Any] | None = None
+    ):
         """
         Add regex metadata following the same structure as timestamp tolerance.
 
@@ -74,7 +78,7 @@ class MetadataManager:
         self.variable_registry._placeholder_metadata[placeholder_name] = {
             'raw_value': regex_pattern,
             'resolved_value': regex_pattern,
-            'type': 'regex'
+            'type': 'regex',
         }
         log.debug(f"Added regex metadata for '{placeholder_name}': pattern='{regex_pattern}'")
 
@@ -83,7 +87,14 @@ class MetadataManager:
             template_context[placeholder_name] = regex_pattern
             log.debug(f"Added regex placeholder '{placeholder_name}' to template context with value '{regex_pattern}'")
 
-    def add_timestamp_metadata(self, placeholder_name: str, timestamp_value: str, tolerance: Any | None = None, template_context: dict[str, Any] | None = None, yaml_metadata: dict[str, Any] | None = None):
+    def add_timestamp_metadata(
+        self,
+        placeholder_name: str,
+        timestamp_value: str,
+        tolerance: Any | None = None,
+        template_context: dict[str, Any] | None = None,
+        yaml_metadata: dict[str, Any] | None = None,
+    ):
         """
         Add timestamp metadata following the existing structure.
 
@@ -100,11 +111,7 @@ class MetadataManager:
         if not hasattr(self.variable_registry, '_placeholder_metadata'):
             self.variable_registry._placeholder_metadata = {}
 
-        metadata = {
-            'raw_value': timestamp_value,
-            'resolved_value': timestamp_value,
-            'type': 'timestamp'
-        }
+        metadata = {'raw_value': timestamp_value, 'resolved_value': timestamp_value, 'type': 'timestamp'}
 
         # If the timestamp value contains template syntax, mark it for runtime resolution
         if '{{' in str(timestamp_value) and '}}' in str(timestamp_value):
@@ -122,17 +129,25 @@ class MetadataManager:
             log.debug(f"Overriding tolerance from explicit parameter: {tolerance}")
 
         self.variable_registry._placeholder_metadata[placeholder_name] = metadata
-        log.debug(f"Added timestamp metadata for '{placeholder_name}': value='{timestamp_value}', tolerance={tolerance}")
+        log.debug(
+            f"Added timestamp metadata for '{placeholder_name}': value='{timestamp_value}', tolerance={tolerance}"
+        )
 
         # Only add placeholder to template context if it does NOT have tolerance
         # Tolerance placeholders should remain as placeholders for VM-side processing
         if template_context is not None and tolerance is None:
             template_context[placeholder_name] = timestamp_value
-            log.debug(f"Added non-tolerance placeholder '{placeholder_name}' to template context with value '{timestamp_value}'")
+            log.debug(
+                f"Added non-tolerance placeholder '{placeholder_name}' to template context with value '{timestamp_value}'"
+            )
         elif tolerance is not None:
-            log.debug(f"Skipping template context addition for tolerance placeholder '{placeholder_name}' (tolerance={tolerance})")
+            log.debug(
+                f"Skipping template context addition for tolerance placeholder '{placeholder_name}' (tolerance={tolerance})"
+            )
 
-    def add_tolerance_metadata_from_analysis(self, placeholder_name: str, analysis: FilterAnalysis, template_context: dict[str, Any]):
+    def add_tolerance_metadata_from_analysis(
+        self, placeholder_name: str, analysis: FilterAnalysis, template_context: dict[str, Any]
+    ):
         """
         Add metadata for a tolerance-based placeholder created from filter analysis.
 
@@ -161,7 +176,7 @@ class MetadataManager:
         metadata = {
             'raw_value': str(base_timestamp_value) if base_timestamp_value else analysis.original_template,
             'resolved_value': str(resolved_value) if resolved_value else analysis.original_template,
-            'type': 'timestamp'
+            'type': 'timestamp',
         }
 
         if analysis.tolerance_values:
@@ -183,8 +198,7 @@ class MetadataManager:
         Returns:
             Dictionary of placeholder metadata
         """
-        if (self.variable_registry and
-            hasattr(self.variable_registry, '_placeholder_metadata')):
+        if self.variable_registry and hasattr(self.variable_registry, '_placeholder_metadata'):
             return self.variable_registry._placeholder_metadata
         return {}
 
@@ -218,7 +232,9 @@ class YamlTagProcessor:
         self._placeholder_counter += 1
         return placeholder_name
 
-    def process_yaml_tags(self, data: dict[str, Any], template_context: dict[str, Any] | None = None, template_resolver=None) -> dict[str, Any]:
+    def process_yaml_tags(
+        self, data: dict[str, Any], template_context: dict[str, Any] | None = None, template_resolver=None
+    ) -> dict[str, Any]:
         """
         Process YAML custom tags (existing logic, renamed for clarity).
 
@@ -228,11 +244,12 @@ class YamlTagProcessor:
             template_resolver: Template resolver function for resolving templates
         """
         # Process parameter.entry specially for CSV tests and similar structures
-        if (isinstance(data, dict) and
-            'parameter' in data and
-            isinstance(data['parameter'], dict) and
-            'entry' in data['parameter']):
-
+        if (
+            isinstance(data, dict)
+            and 'parameter' in data
+            and isinstance(data['parameter'], dict)
+            and 'entry' in data['parameter']
+        ):
             original_entry = data['parameter']['entry']
             processed_entry = self.process_entry_list(original_entry, template_context, template_resolver)
 
@@ -240,6 +257,7 @@ class YamlTagProcessor:
                 log.info(f"Processed entry list: {original_entry} -> {processed_entry}")
                 # Make a copy to avoid modifying original
                 import copy
+
                 processed_data = copy.deepcopy(data)
                 processed_data['parameter']['entry'] = processed_entry
                 return processed_data
@@ -247,7 +265,9 @@ class YamlTagProcessor:
         # For other cases, recursively process all data
         return self.process_recursive(data, template_context, template_resolver)
 
-    def process_entry_list(self, entry_list, template_context: dict[str, Any] | None = None, template_resolver=None) -> list[Any]:
+    def process_entry_list(
+        self, entry_list, template_context: dict[str, Any] | None = None, template_resolver=None
+    ) -> list[Any]:
         """
         Process an entry list containing potential YAML custom tag objects.
 
@@ -277,9 +297,13 @@ class YamlTagProcessor:
             elif isinstance(item, YamlTimestamp):
                 # Apply smart resolution logic for YAML timestamps
                 has_tolerance = self.tolerance_detector.has_yaml_tolerance(item)
-                log.info(f"Processing YamlTimestamp '{item.string}', has_tolerance={has_tolerance}, tolerance={getattr(item, 'tolerance', None)}")
+                log.info(
+                    f"Processing YamlTimestamp '{item.string}', has_tolerance={has_tolerance}, tolerance={getattr(item, 'tolerance', None)}"
+                )
                 log.info(f"YamlTimestamp object attributes: {[attr for attr in dir(item) if not attr.startswith('_')]}")
-                log.info(f"YamlTimestamp hasattr tolerance: {hasattr(item, 'tolerance')}, value: {getattr(item, 'tolerance', 'NOT_FOUND')}")
+                log.info(
+                    f"YamlTimestamp hasattr tolerance: {hasattr(item, 'tolerance')}, value: {getattr(item, 'tolerance', 'NOT_FOUND')}"
+                )
 
                 if has_tolerance:
                     # Has tolerance - create placeholder, try to extract variable name from template
@@ -300,7 +324,9 @@ class YamlTagProcessor:
                             resolved_timestamp = template_resolver(timestamp_value, template_context)
                             # Check if resolution resulted in empty/blank value - this indicates the variable will be populated later
                             if not resolved_timestamp or resolved_timestamp.isspace():
-                                log.info(f"Timestamp template '{timestamp_value}' resolved to empty value - likely populated during execution")
+                                log.info(
+                                    f"Timestamp template '{timestamp_value}' resolved to empty value - likely populated during execution"
+                                )
                                 # Store the original template for runtime resolution during test execution
                                 resolved_timestamp = timestamp_value  # Keep original template for test-time resolution
                         else:
@@ -310,9 +336,17 @@ class YamlTagProcessor:
                         resolved_timestamp = timestamp_value
 
                     yaml_metadata = getattr(item, 'metadata', {})
-                    self.metadata_manager.add_timestamp_metadata(placeholder_name, resolved_timestamp, getattr(item, 'tolerance', None), template_context, yaml_metadata)
+                    self.metadata_manager.add_timestamp_metadata(
+                        placeholder_name,
+                        resolved_timestamp,
+                        getattr(item, 'tolerance', None),
+                        template_context,
+                        yaml_metadata,
+                    )
                     processed_list.append(f'{{{{ {placeholder_name} }}}}')
-                    log.info(f"Converted YamlTimestamp with tolerance to placeholder '{placeholder_name}' (resolved_timestamp='{resolved_timestamp}')")
+                    log.info(
+                        f"Converted YamlTimestamp with tolerance to placeholder '{placeholder_name}' (resolved_timestamp='{resolved_timestamp}')"
+                    )
                 else:
                     # No tolerance - resolve directly
                     timestamp_value = item.string
@@ -321,7 +355,9 @@ class YamlTagProcessor:
                             resolved_timestamp = template_resolver(timestamp_value, template_context)
                         else:
                             resolved_timestamp = timestamp_value
-                        log.info(f"Resolved YamlTimestamp WITHOUT tolerance '{timestamp_value}' to '{resolved_timestamp}'")
+                        log.info(
+                            f"Resolved YamlTimestamp WITHOUT tolerance '{timestamp_value}' to '{resolved_timestamp}'"
+                        )
                         processed_list.append(resolved_timestamp)
                     else:
                         log.info(f"Using YamlTimestamp value directly: '{timestamp_value}'")
@@ -332,7 +368,9 @@ class YamlTagProcessor:
 
         return processed_list
 
-    def process_recursive(self, data: Any, template_context: dict[str, Any] | None = None, template_resolver=None) -> Any:
+    def process_recursive(
+        self, data: Any, template_context: dict[str, Any] | None = None, template_resolver=None
+    ) -> Any:
         """
         Recursively process data structure for YAML custom tags.
 
@@ -347,9 +385,13 @@ class YamlTagProcessor:
         from adarelib.testset.yaml.customtags import YamlRegexString, YamlTimestamp
 
         if isinstance(data, dict):
-            return {key: self.process_recursive(value, template_context, template_resolver) for key, value in data.items()}
+            return {
+                key: self.process_recursive(value, template_context, template_resolver) for key, value in data.items()
+            }
         if isinstance(data, list):
-            return self.process_entry_list(data, template_context, template_resolver)  # Use specialized entry list processing
+            return self.process_entry_list(
+                data, template_context, template_resolver
+            )  # Use specialized entry list processing
         if isinstance(data, YamlRegexString):
             # Convert single regex object to placeholder
             placeholder_name = self.create_placeholder_name('regex')
@@ -376,7 +418,13 @@ class YamlTagProcessor:
                     resolved_timestamp = timestamp_value
 
                 yaml_metadata = getattr(data, 'metadata', {})
-                self.metadata_manager.add_timestamp_metadata(placeholder_name, resolved_timestamp, getattr(data, 'tolerance', None), template_context, yaml_metadata)
+                self.metadata_manager.add_timestamp_metadata(
+                    placeholder_name,
+                    resolved_timestamp,
+                    getattr(data, 'tolerance', None),
+                    template_context,
+                    yaml_metadata,
+                )
                 log.info(f"Converted single YamlTimestamp with tolerance to placeholder '{placeholder_name}'")
                 return f'{{{{ {placeholder_name} }}}}'
             # No tolerance - resolve directly
@@ -396,8 +444,13 @@ class YamlTagProcessor:
 class JinjaTemplateResolver:
     """Handles all Jinja2 template processing and resolution."""
 
-    def __init__(self, jinja_env=None, tolerance_detector: 'ToleranceDetector' = None,
-                 metadata_manager: MetadataManager = None, yaml_tag_processor: YamlTagProcessor = None):
+    def __init__(
+        self,
+        jinja_env=None,
+        tolerance_detector: 'ToleranceDetector' = None,
+        metadata_manager: MetadataManager = None,
+        yaml_tag_processor: YamlTagProcessor = None,
+    ):
         """
         Initialize Jinja template resolver.
 
@@ -415,6 +468,7 @@ class JinjaTemplateResolver:
     def is_our_placeholder(self, text: str) -> bool:
         """Check if text is one of our generated placeholders."""
         import re
+
         return bool(re.match(r'^\{\{\s*\w+_resolved\s*\}\}$', text.strip()))
 
     def resolve_template_with_context(self, template_string: str, template_context: dict[str, Any]) -> str:
@@ -438,6 +492,7 @@ class JinjaTemplateResolver:
                 resolved = template.render(template_context)
             else:
                 import jinja2
+
                 template = jinja2.Template(template_string)
                 resolved = template.render(template_context)
             log.debug(f"Resolved template '{template_string}' to '{resolved}'")
@@ -466,6 +521,7 @@ class JinjaTemplateResolver:
 
         try:
             import jinja2
+
             template = jinja2.Template(str(template_string))
             resolved = template.render(template_context)
             log.debug(f"Resolved template '{template_string}' to '{resolved}'")
@@ -511,9 +567,13 @@ class JinjaTemplateResolver:
                     placeholder_name = f"{filter_analysis.variable_name}_resolved"
                 else:
                     placeholder_name = self.yaml_tag_processor.create_placeholder_name('timestamp')
-                self.metadata_manager.add_tolerance_metadata_from_analysis(placeholder_name, filter_analysis, template_context)
+                self.metadata_manager.add_tolerance_metadata_from_analysis(
+                    placeholder_name, filter_analysis, template_context
+                )
                 replacement = f'{{{{ {placeholder_name} }}}}'
-                log.info(f"Created tolerance placeholder '{placeholder_name}' for template '{template_expr}' in mixed content")
+                log.info(
+                    f"Created tolerance placeholder '{placeholder_name}' for template '{template_expr}' in mixed content"
+                )
             else:
                 # No tolerance - check if format filter needs special handling
                 if filter_analysis.has_format:
@@ -560,15 +620,15 @@ class JinjaTemplateResolver:
             return self.process_mixed_template_content(data, template_context)
 
         if isinstance(data, dict):
-            return {key: self.process_jinja_templates(value, template_context)
-                    for key, value in data.items()}
+            return {key: self.process_jinja_templates(value, template_context) for key, value in data.items()}
         if isinstance(data, list):
-            return [self.process_jinja_templates(item, template_context)
-                    for item in data]
+            return [self.process_jinja_templates(item, template_context) for item in data]
 
         return data
 
-    def _apply_format_filter(self, template_expr: str, filter_analysis: FilterAnalysis, template_context: dict[str, Any]) -> str:
+    def _apply_format_filter(
+        self, template_expr: str, filter_analysis: FilterAnalysis, template_context: dict[str, Any]
+    ) -> str:
         """Apply timestamp formatting for format-only cases (no tolerance)."""
         try:
             variable_name = filter_analysis.variable_name
@@ -583,7 +643,9 @@ class JinjaTemplateResolver:
                 return template_expr
 
             timestamp_value = template_context[variable_name]
-            log.debug(f"Formatting timestamp '{variable_name}' with value '{timestamp_value}' using format '{format_string}'")
+            log.debug(
+                f"Formatting timestamp '{variable_name}' with value '{timestamp_value}' using format '{format_string}'"
+            )
 
             # Convert to datetime and apply timezone if needed
             dt = self._parse_timestamp_value(timestamp_value)
@@ -722,7 +784,9 @@ class VariableResolver:
         self._tolerance_detector = ToleranceDetector()
         self._metadata_manager = MetadataManager(variable_registry)
         self._yaml_tag_processor = YamlTagProcessor(self._metadata_manager, self._tolerance_detector)
-        self._jinja_resolver = JinjaTemplateResolver(jinja_env, self._tolerance_detector, self._metadata_manager, self._yaml_tag_processor)
+        self._jinja_resolver = JinjaTemplateResolver(
+            jinja_env, self._tolerance_detector, self._metadata_manager, self._yaml_tag_processor
+        )
 
     def process_data(self, data: dict[str, Any], template_context: dict[str, Any] = None) -> dict[str, Any]:
         """
@@ -741,7 +805,9 @@ class VariableResolver:
         self._current_template_context = template_context or {}
 
         # Phase 1: Process YAML custom tags (existing logic)
-        data = self._yaml_tag_processor.process_yaml_tags(data, template_context, self._jinja_resolver.resolve_template_with_context)
+        data = self._yaml_tag_processor.process_yaml_tags(
+            data, template_context, self._jinja_resolver.resolve_template_with_context
+        )
 
         # Phase 2: Process Jinja2 templates with filter analysis
         if template_context and self.jinja_env:
@@ -788,7 +854,9 @@ class VariableResolver:
             if resolved_action.cwd:
                 resolved_action.cwd = self.replace_variables(resolved_action.cwd, execution_context)
             if resolved_action.env:
-                resolved_action.env = {k: self.replace_variables(str(v), execution_context) for k, v in resolved_action.env.items()}
+                resolved_action.env = {
+                    k: self.replace_variables(str(v), execution_context) for k, v in resolved_action.env.items()
+                }
 
         elif isinstance(action, KeyboardAction):
             if resolved_action.text:
@@ -810,8 +878,7 @@ class VariableResolver:
                 # paths. Resolve each entry individually.
                 if isinstance(resolved_action.src, list):
                     resolved_action.src = [
-                        self.replace_variables(entry, execution_context)
-                        for entry in resolved_action.src
+                        self.replace_variables(entry, execution_context) for entry in resolved_action.src
                     ]
                 else:
                     resolved_action.src = self.replace_variables(resolved_action.src, execution_context)
@@ -826,9 +893,7 @@ class VariableResolver:
         # a flat `target` attribute, so the branch above never reached them and the guest
         # was asked to wait for a literal "{{ filename }}".
         if hasattr(resolved_action, 'condition') and resolved_action.condition:
-            resolved_action.condition = self._resolve_condition_variables(
-                resolved_action.condition, execution_context
-            )
+            resolved_action.condition = self._resolve_condition_variables(resolved_action.condition, execution_context)
 
         # Resolve Source/Destination targets for DragAction
         if isinstance(action, DragAction):
@@ -853,9 +918,9 @@ class VariableResolver:
         for group in ('all', 'any'):
             nested = getattr(condition, group, None)
             if nested:
-                setattr(condition, group, [
-                    self._resolve_condition_variables(child, execution_context) for child in nested
-                ])
+                setattr(
+                    condition, group, [self._resolve_condition_variables(child, execution_context) for child in nested]
+                )
         if getattr(condition, 'negate', None):
             condition.negate = self._resolve_condition_variables(condition.negate, execution_context)
         return condition
@@ -948,7 +1013,9 @@ class VariableResolver:
 
         return result
 
-    def get_formatted_context(self, execution_context: dict[str, Any] = None, for_tests: bool = False) -> dict[str, Any]:
+    def get_formatted_context(
+        self, execution_context: dict[str, Any] = None, for_tests: bool = False
+    ) -> dict[str, Any]:
         """Get execution context with smart variable handling based on usage."""
         # If we have a variable registry, use its smart execution context
         if hasattr(self, 'variable_registry') and self.variable_registry:
@@ -967,7 +1034,9 @@ class VariableResolver:
         if hasattr(self, 'variable_registry') and self.variable_registry:
             registry_filters = self.variable_registry.get_all_jinja_filters()
             if registry_filters:
-                log.debug(f"Using {len(registry_filters)} filters from variable registry: {list(registry_filters.keys())}")
+                log.debug(
+                    f"Using {len(registry_filters)} filters from variable registry: {list(registry_filters.keys())}"
+                )
                 return registry_filters
 
         # Fallback to empty dict - no custom filters available

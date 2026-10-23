@@ -3,6 +3,7 @@ from enum import IntEnum
 # timestamp format
 TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%f'
 
+
 class StatusEnum(IntEnum):
     NONE = 1
     SUCCESS = 2
@@ -22,23 +23,23 @@ class StatusEnum(IntEnum):
         status_string = status_string.strip().lower()
         if status_string == 'success':
             return StatusEnum.SUCCESS
-        elif status_string == 'failed':
+        if status_string == 'failed':
             return StatusEnum.FAILED
-        elif status_string == 'warning':
+        if status_string == 'warning':
             return StatusEnum.WARNING
-        elif status_string == 'error':
+        if status_string == 'error':
             return StatusEnum.ERROR
-        elif status_string == 'running':
+        if status_string == 'running':
             return StatusEnum.RUNNING
-        elif status_string == 'pending':
+        if status_string == 'pending':
             return StatusEnum.PENDING
-        elif status_string == 'interrupted':
+        if status_string == 'interrupted':
             return StatusEnum.INTERRUPTED
-        elif status_string == 'finished':
+        if status_string == 'finished':
             return StatusEnum.FINISHED
-        elif status_string == 'test_missing':
+        if status_string == 'test_missing':
             return StatusEnum.TEST_MISSING
-        elif status_string == 'test_failed':
+        if status_string == 'test_failed':
             return StatusEnum.TEST_FAILED
         return StatusEnum.NONE
 
@@ -69,42 +70,42 @@ class StatusEnum(IntEnum):
         elif value == StatusEnum.PAUSE:
             icon = ':pause_button:'
         from rich.text import Text
+
         return f'[{colorname}]{Text.from_markup(icon)}[/{colorname}]' if colorname else Text.from_markup(icon)
 
     @staticmethod
     def get_color(value: int):
         if value == StatusEnum.SUCCESS:
             return 'green'
-        elif value == StatusEnum.WARNING:
+        if value == StatusEnum.WARNING:
             return 'yellow'
-        elif value == StatusEnum.FAILED:
+        if value == StatusEnum.FAILED or value == StatusEnum.ERROR:
             return 'red'
-        elif value == StatusEnum.ERROR:
-            return 'red'
-        elif value == StatusEnum.FINISHED:
+        if value == StatusEnum.FINISHED:
             return 'green'
-        elif value == StatusEnum.INTERRUPTED:
+        if value == StatusEnum.INTERRUPTED:
             return 'yellow'
-        elif value == StatusEnum.RUNNING:
+        if value == StatusEnum.RUNNING:
             return 'blue'
-        elif value == StatusEnum.PENDING:
+        if value == StatusEnum.PENDING:
             return 'yellow'
-        elif value == StatusEnum.TEST_MISSING:
+        if value == StatusEnum.TEST_MISSING:
             return 'blue'
-        elif value == StatusEnum.TEST_FAILED:
+        if value == StatusEnum.TEST_FAILED:
             return 'red'
-        elif value == StatusEnum.PAUSE:
+        if value == StatusEnum.PAUSE:
             return 'yellow'
         return ''
 
 
 class VMStatus(IntEnum):
     """Status values for VM availability and readiness"""
-    IMPORTED = 1      # VM imported but not verified
-    READY = 2         # VM exists and base snapshot available
-    MISSING = 3       # VM should exist but not found in VirtualBox
+
+    IMPORTED = 1  # VM imported but not verified
+    READY = 2  # VM exists and base snapshot available
+    MISSING = 3  # VM should exist but not found in VirtualBox
     SNAPSHOT_MISSING = 4  # VM exists but base snapshot missing
-    CORRUPTED = 5     # VM or snapshot corrupted/invalid
+    CORRUPTED = 5  # VM or snapshot corrupted/invalid
 
 
 class VmInstanceStatus(IntEnum):
@@ -113,9 +114,10 @@ class VmInstanceStatus(IntEnum):
 
     Uses integer values with string conversion methods for database compatibility.
     """
-    ACTIVE = 1          # Instance is currently in use by an experiment
-    AVAILABLE = 2       # Instance is ready for reuse
-    CLEANUP_PENDING = 3 # Instance is marked for cleanup
+
+    ACTIVE = 1  # Instance is currently in use by an experiment
+    AVAILABLE = 2  # Instance is ready for reuse
+    CLEANUP_PENDING = 3  # Instance is marked for cleanup
 
     @property
     def string_value(self) -> str:

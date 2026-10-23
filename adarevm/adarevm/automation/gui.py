@@ -2,13 +2,12 @@
 GUI automation tools using pyautogui and platform-specific helpers.
 """
 
-from io import BytesIO
-import platform
 import base64
 import logging
+import platform
 import subprocess
-from PIL import Image
-from typing import Dict, List, Any, Optional
+from io import BytesIO
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -18,18 +17,16 @@ log = logging.getLogger(__name__)
 _use_maim_screenshot = False
 
 
-def _check_gui_enabled() -> Optional[Dict[str, str]]:
+def _check_gui_enabled() -> dict[str, str] | None:
     """
     Check if GUI automation is enabled via ADARE_GUI_MODE environment variable.
     Returns error dict if disabled, None if enabled.
     """
     import os
+
     mode = os.environ.get('ADARE_GUI_MODE', 'agent').lower()
     if mode in ('host', 'disabled'):
-        return {
-            "status": "error",
-            "message": f"GUI automation disabled (ADARE_GUI_MODE={mode})"
-        }
+        return {"status": "error", "message": f"GUI automation disabled (ADARE_GUI_MODE={mode})"}
     return None
 
 
@@ -52,16 +49,10 @@ def _take_screenshot_maim(x: int = None, y: int = None, width: int = None, heigh
     else:
         log.info("Taking screenshot with maim")
 
-    # Capture screenshot using maim
-    png_bytes = subprocess.check_output(maim_cmd, stderr=subprocess.PIPE)
-
-    # Load image and convert to RGBA
-    img = Image.open(BytesIO(png_bytes)).convert("RGBA")
-
-    # Convert back to bytes
-    buffer = BytesIO()
-    img.save(buffer, format="PNG")
-    return buffer.getvalue()
+    # maim already writes a PNG; return it as is. Re-encoding it as RGBA cost a full
+    # decode + encode per shot, and every consumer reads PNGs in any mode (the host's
+    # own QMP screenshots are RGB).
+    return subprocess.check_output(maim_cmd, stderr=subprocess.PIPE)
 
 
 def _take_screenshot_pyautogui(x: int = None, y: int = None, width: int = None, height: int = None) -> bytes:
@@ -93,16 +84,16 @@ def _take_screenshot_pyautogui(x: int = None, y: int = None, width: int = None, 
     return buffer.getvalue()
 
 
-def take_screenshot(x: int = None, y: int = None, width: int = None, height: int = None) -> Dict[str, Any]:
+def take_screenshot(x: int = None, y: int = None, width: int = None, height: int = None) -> dict[str, Any]:
     """
     Take a screenshot and return the image data and offset in JSON-safe format.
     Uses either maim or pyautogui based on configuration (defaults to pyautogui).
     """
     # Check if GUI is enabled first (but only if defaulting to pyautogui)
-    # If using maim, we might still allow screenshot even in host mode? 
+    # If using maim, we might still allow screenshot even in host mode?
     # Current requirement says "prevent loading of pyautogui".
     # Assuming host mode means NO agent-side GUI automation.
-    
+
     error = _check_gui_enabled()
     if error and not _use_maim_screenshot:
         return error
@@ -115,8 +106,8 @@ def take_screenshot(x: int = None, y: int = None, width: int = None, height: int
 
     except subprocess.CalledProcessError as e:
         log.error(f"maim command failed: {e.stderr.decode() if e.stderr else str(e)}")
-        # For screenshot, we return error dict rather than raising if possible, 
-        # but existing code raised RuntimeError. 
+        # For screenshot, we return error dict rather than raising if possible,
+        # but existing code raised RuntimeError.
         # Requirement was "return in the websocket an not implemented!".
         # So we catch and return dict.
         return {"status": "error", "message": f"Screenshot capture failed: {e.stderr.decode() if e.stderr else str(e)}"}
@@ -124,7 +115,7 @@ def take_screenshot(x: int = None, y: int = None, width: int = None, height: int
         log.error("maim command not found - please install maim")
         return {"status": "error", "message": "maim command not found - please install maim package"}
     except RuntimeError as e:
-         return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": str(e)}
     except Exception as e:
         log.error(f"Screenshot processing failed: {str(e)}")
         return {"status": "error", "message": f"Screenshot processing failed: {str(e)}"}
@@ -136,25 +127,19 @@ def take_screenshot(x: int = None, y: int = None, width: int = None, height: int
     return {
         "status": "success",
         "message": "Screenshot captured successfully",
-        "image": {
-            "data": img_base64,
-            "format": "png"
-        },
-        "offset": {
-            "x": x if x is not None else 0,
-            "y": y if y is not None else 0
-        }
+        "image": {"data": img_base64, "format": "png"},
+        "offset": {"x": x if x is not None else 0, "y": y if y is not None else 0},
     }
 
 
-def take_window_screenshots(window: str) -> List[Dict[str, Any]]:
+def take_window_screenshots(window: str) -> list[dict[str, Any]]:
     """
     Take screenshots of windows matching the search string.
     """
     error = _check_gui_enabled()
     if error:
-        # Return list containing error for list return type? 
-        # Or just raise? The signature says List[Dict]. 
+        # Return list containing error for list return type?
+        # Or just raise? The signature says List[Dict].
         # We can cheat and return a list with one error dict.
         return [error]
 
@@ -162,10 +147,11 @@ def take_window_screenshots(window: str) -> List[Dict[str, Any]]:
     if platform.system() == "Windows":
         # TODO: Implement Windows window screenshot
         log.warning("Window screenshot functionality is not implemented for Windows yet.")
-        return [take_screenshot()] # Reuse logic which checks enabled
-    elif platform.system() == "Linux":
+        return [take_screenshot()]  # Reuse logic which checks enabled
+    if platform.system() == "Linux":
         try:
             from adarevm.platforms.linux import get_windows_by_search_string
+
             windows = get_windows_by_search_string(window)
             if not windows:
                 return []
@@ -178,11 +164,11 @@ def take_window_screenshots(window: str) -> List[Dict[str, Any]]:
             log.error("x11helper not available on this system")
             return [{"status": "error", "message": "x11helper not available"}]
     else:
-         return [{"status": "error", "message": "Screenshot for this platform is not implemented yet."}]
+        return [{"status": "error", "message": "Screenshot for this platform is not implemented yet."}]
     return screenshots
 
 
-def click(x: int, y: int) -> Dict[str, str]:
+def click(x: int, y: int) -> dict[str, str]:
     """
     Simulate a mouse click at the specified coordinates.
     """
@@ -195,7 +181,7 @@ def click(x: int, y: int) -> Dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     log.info(f"GUI click called with x={x}, y={y}")
@@ -203,7 +189,7 @@ def click(x: int, y: int) -> Dict[str, str]:
     return {"status": "success", "message": f"Clicked at ({x}, {y})"}
 
 
-def right_click(x: int, y: int) -> Dict[str, str]:
+def right_click(x: int, y: int) -> dict[str, str]:
     """
     Simulate a right mouse click at the specified coordinates.
     """
@@ -216,7 +202,7 @@ def right_click(x: int, y: int) -> Dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     log.info(f"GUI right_click called with x={x}, y={y}")
@@ -224,7 +210,7 @@ def right_click(x: int, y: int) -> Dict[str, str]:
     return {"status": "success", "message": f"Right clicked at ({x}, {y})"}
 
 
-def double_click(x: int, y: int) -> Dict[str, str]:
+def double_click(x: int, y: int) -> dict[str, str]:
     """
     Simulate a double mouse click at the specified coordinates.
     """
@@ -237,7 +223,7 @@ def double_click(x: int, y: int) -> Dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     log.info(f"GUI double_click called with x={x}, y={y}")
@@ -245,7 +231,7 @@ def double_click(x: int, y: int) -> Dict[str, str]:
     return {"status": "success", "message": f"Double clicked at ({x}, {y})"}
 
 
-def drag(x1: int, y1: int, x2: int, y2: int) -> Dict[str, str]:
+def drag(x1: int, y1: int, x2: int, y2: int) -> dict[str, str]:
     """
     Simulate a mouse drag from (x1, y1) to (x2, y2).
     """
@@ -258,7 +244,7 @@ def drag(x1: int, y1: int, x2: int, y2: int) -> Dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     log.info(f"GUI drag called from ({x1}, {y1}) to ({x2}, {y2})")
@@ -266,7 +252,7 @@ def drag(x1: int, y1: int, x2: int, y2: int) -> Dict[str, str]:
     return {"status": "success", "message": f"Dragged from ({x1}, {y1}) to ({x2}, {y2})"}
 
 
-def keyboard_action(action_type: str, key: str) -> Dict[str, str]:
+def keyboard_action(action_type: str, key: str) -> dict[str, str]:
     """
     Simulate a keyboard action.
     """
@@ -279,7 +265,7 @@ def keyboard_action(action_type: str, key: str) -> Dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     if action_type == "press":
@@ -294,7 +280,7 @@ def keyboard_action(action_type: str, key: str) -> Dict[str, str]:
     return {"status": "success", "message": f"Keyboard action {action_type} on {key}"}
 
 
-def scroll(direction: str, amount: int) -> Dict[str, str]:
+def scroll(direction: str, amount: int) -> dict[str, str]:
     """
     Simulate a scroll action.
     """
@@ -307,7 +293,7 @@ def scroll(direction: str, amount: int) -> Dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     if direction == "up":
@@ -319,7 +305,7 @@ def scroll(direction: str, amount: int) -> Dict[str, str]:
     return {"status": "success", "message": f"Scrolled {direction} by {amount}"}
 
 
-def move_mouse(x: int, y: int) -> Dict[str, str]:
+def move_mouse(x: int, y: int) -> dict[str, str]:
     """
     Move the mouse to the specified coordinates.
     """
@@ -332,7 +318,7 @@ def move_mouse(x: int, y: int) -> Dict[str, str]:
     except ImportError:
         return {
             "status": "error",
-            "message": "pyautogui is not available. This is required for agent-based GUI execution."
+            "message": "pyautogui is not available. This is required for agent-based GUI execution.",
         }
 
     log.info(f"GUI move_mouse called with x={x}, y={y}")
@@ -340,7 +326,7 @@ def move_mouse(x: int, y: int) -> Dict[str, str]:
     return {"status": "success", "message": f"Moved to ({x}, {y})"}
 
 
-def idle(duration: float) -> Dict[str, str]:
+def idle(duration: float) -> dict[str, str]:
     """
     Simulate an idle action for the specified duration.
     Note: This should not be used in async contexts - use asyncio.sleep() instead.
@@ -348,5 +334,6 @@ def idle(duration: float) -> Dict[str, str]:
     # Idle is safe to run even if GUI is disabled as it's just sleep
     log.info(f"GUI idle called for {duration} seconds")
     import time
+
     time.sleep(duration)
     return {"status": "success", "message": f"Idle for {duration} seconds"}

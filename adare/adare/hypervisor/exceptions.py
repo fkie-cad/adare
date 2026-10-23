@@ -12,6 +12,7 @@ This module defines a comprehensive exception hierarchy following the pattern:
     │   ├── VMStopException
     │   ├── VMAlreadyRunningException
     │   └── GuestAgentTimeoutException
+    │       └── GuestAgentMissingException
     ├── SnapshotOperationException (snapshot operations)
     │   ├── SnapshotNotFoundException
     │   ├── SnapshotCreationException
@@ -35,7 +36,9 @@ Usage:
     except HypervisorException as e:
         # Handle any hypervisor error
 """
+
 import logging
+from pathlib import Path
 
 from adare.exceptions import LoggedErrorException
 
@@ -44,6 +47,7 @@ log = logging.getLogger(__name__)
 
 class HypervisorException(LoggedErrorException):
     """Base exception for all hypervisor operations."""
+
     def __init__(self, message: str, possible_solutions: list[str] | None = None):
         super().__init__(log, message, possible_solutions=possible_solutions)
 
@@ -51,6 +55,7 @@ class HypervisorException(LoggedErrorException):
 # =============================================================================
 # VM Operation Exceptions
 # =============================================================================
+
 
 class VMOperationException(HypervisorException):
     """
@@ -61,13 +66,8 @@ class VMOperationException(HypervisorException):
         operation: The operation that failed (e.g., 'start', 'stop', 'import')
         reason: Detailed reason for the failure
     """
-    def __init__(
-        self,
-        vm_identifier: str,
-        operation: str,
-        reason: str,
-        message: str | None = None
-    ):
+
+    def __init__(self, vm_identifier: str, operation: str, reason: str, message: str | None = None):
         self.vm_identifier = vm_identifier
         self.operation = operation
         self.reason = reason
@@ -78,30 +78,35 @@ class VMOperationException(HypervisorException):
 
 class VMNotFoundException(VMOperationException):
     """Raised when a VM cannot be found."""
+
     def __init__(self, vm_identifier: str, reason: str = "VM not found"):
         super().__init__(vm_identifier, "lookup", reason)
 
 
 class VMImportException(VMOperationException):
     """Raised when VM import fails."""
+
     def __init__(self, vm_identifier: str, reason: str):
         super().__init__(vm_identifier, "import", reason)
 
 
 class VMStartException(VMOperationException):
     """Raised when VM fails to start."""
+
     def __init__(self, vm_identifier: str, reason: str):
         super().__init__(vm_identifier, "start", reason)
 
 
 class VMStopException(VMOperationException):
     """Raised when VM fails to stop gracefully."""
+
     def __init__(self, vm_identifier: str, reason: str):
         super().__init__(vm_identifier, "stop", reason)
 
 
 class VMAlreadyRunningException(VMOperationException):
     """Raised when attempting to start a VM that is already running."""
+
     def __init__(self, vm_identifier: str):
         super().__init__(vm_identifier, "start", "VM is already running")
 
@@ -116,28 +121,61 @@ class GuestAgentTimeoutException(VMOperationException):
     retry had been switched off via ``ADARE_VM_BOOT_ATTEMPTS`` read exactly
     like a guest that had been given every chance and was genuinely dead.
     """
+
     def __init__(
         self,
         vm_identifier: str,
         timeout_seconds: float,
-        attempt_budgets: list[int] | None = None
+        attempt_budgets: list[int] | None = None,
+        reason: str | None = None,
     ):
-        reason = f"Guest agent did not respond within {timeout_seconds}s"
-        if attempt_budgets:
-            budgets = '/'.join(f'{b}s' for b in attempt_budgets)
-            plural = '' if len(attempt_budgets) == 1 else 's'
-            reason += f" ({len(attempt_budgets)} cold-boot attempt{plural} of {budgets}"
-            if len(attempt_budgets) == 1:
-                reason += "; boot retry is off - unset ADARE_VM_BOOT_ATTEMPTS to restore it"
-            reason += ")"
+        if reason is None:
+            reason = f"Guest agent did not respond within {timeout_seconds}s"
+            if attempt_budgets:
+                budgets = '/'.join(f'{b}s' for b in attempt_budgets)
+                plural = '' if len(attempt_budgets) == 1 else 's'
+                reason += f" ({len(attempt_budgets)} cold-boot attempt{plural} of {budgets}"
+                if len(attempt_budgets) == 1:
+                    reason += "; boot retry is off - unset ADARE_VM_BOOT_ATTEMPTS to restore it"
+                reason += ")"
         super().__init__(vm_identifier, "guest_agent_connect", reason)
         self.timeout_seconds = timeout_seconds
         self.attempt_budgets = list(attempt_budgets) if attempt_budgets else []
 
 
+class GuestAgentMissingException(GuestAgentTimeoutException):
+    """The guest finished booting but its guest agent never connected.
+
+    Raised instead of retrying the cold boot: the screen had stopped changing,
+    so the guest was up and idle, and another boot cannot install an agent the
+    image does not have.
+    """
+
+    def __init__(
+        self,
+        vm_identifier: str,
+        timeout_seconds: float,
+        settled_seconds: float,
+        screenshot: Path | None = None,
+    ):
+        reason = (
+            f"Guest agent never connected, although the guest finished booting: its screen "
+            f"had not changed for {settled_seconds:.0f}s of the {timeout_seconds:.0f}s wait"
+            + (f" (screenshot: {screenshot})" if screenshot else "")
+            + ". The image most likely has no qemu-guest-agent installed or enabled, and "
+            "another boot cannot fix that. Install it in the image (e.g. `adare environment "
+            "extend <env> --interactive`, then `sudo apt install qemu-guest-agent`) or rebuild "
+            "it with `adare vm create` (not `--setup bare`)."
+        )
+        super().__init__(vm_identifier, timeout_seconds, reason=reason)
+        self.settled_seconds = settled_seconds
+        self.screenshot = screenshot
+
+
 # =============================================================================
 # Snapshot Operation Exceptions
 # =============================================================================
+
 
 class SnapshotOperationException(HypervisorException):
     """
@@ -149,14 +187,8 @@ class SnapshotOperationException(HypervisorException):
         operation: The operation that failed
         reason: Detailed reason for the failure
     """
-    def __init__(
-        self,
-        vm_identifier: str,
-        snapshot_name: str,
-        operation: str,
-        reason: str,
-        message: str | None = None
-    ):
+
+    def __init__(self, vm_identifier: str, snapshot_name: str, operation: str, reason: str, message: str | None = None):
         self.vm_identifier = vm_identifier
         self.snapshot_name = snapshot_name
         self.operation = operation
@@ -168,18 +200,21 @@ class SnapshotOperationException(HypervisorException):
 
 class SnapshotNotFoundException(SnapshotOperationException):
     """Raised when a snapshot cannot be found."""
+
     def __init__(self, vm_identifier: str, snapshot_name: str):
         super().__init__(vm_identifier, snapshot_name, "lookup", "Snapshot not found")
 
 
 class SnapshotCreationException(SnapshotOperationException):
     """Raised when snapshot creation fails."""
+
     def __init__(self, vm_identifier: str, snapshot_name: str, reason: str):
         super().__init__(vm_identifier, snapshot_name, "create", reason)
 
 
 class SnapshotRestoreException(SnapshotOperationException):
     """Raised when snapshot restoration fails."""
+
     def __init__(self, vm_identifier: str, snapshot_name: str, reason: str):
         super().__init__(vm_identifier, snapshot_name, "restore", reason)
 
@@ -188,6 +223,7 @@ class SnapshotRestoreException(SnapshotOperationException):
 # Instance Management Exceptions
 # =============================================================================
 
+
 class InstanceOperationException(HypervisorException):
     """
     Base exception for VM instance management operations.
@@ -195,11 +231,13 @@ class InstanceOperationException(HypervisorException):
     These are database-level operations for tracking VM instances,
     separate from hypervisor-level VM operations.
     """
+
     pass
 
 
 class PortAllocationException(InstanceOperationException):
     """Raised when port allocation fails (no ports available or race condition)."""
+
     def __init__(self, reason: str, port_range: tuple[int, int] | None = None):
         self.port_range = port_range
         if port_range:
@@ -211,6 +249,7 @@ class PortAllocationException(InstanceOperationException):
 
 class InstanceNotFoundException(InstanceOperationException):
     """Raised when a VM instance cannot be found in the database."""
+
     def __init__(self, instance_identifier: str):
         self.instance_identifier = instance_identifier
         super().__init__(f"VM instance '{instance_identifier}' not found in database")
@@ -218,14 +257,14 @@ class InstanceNotFoundException(InstanceOperationException):
 
 class InstanceStateException(InstanceOperationException):
     """Raised when an instance is in an unexpected state for the requested operation."""
+
     def __init__(self, instance_identifier: str, current_state: str, expected_states: list[str]):
         self.instance_identifier = instance_identifier
         self.current_state = current_state
         self.expected_states = expected_states
         expected_str = ", ".join(expected_states)
         super().__init__(
-            f"VM instance '{instance_identifier}' is in state '{current_state}', "
-            f"but expected one of: {expected_str}"
+            f"VM instance '{instance_identifier}' is in state '{current_state}', but expected one of: {expected_str}"
         )
 
 
@@ -233,8 +272,10 @@ class InstanceStateException(InstanceOperationException):
 # Disk Operation Exceptions
 # =============================================================================
 
+
 class DiskOperationException(HypervisorException):
     """Base exception for disk operations."""
+
     def __init__(self, disk_path: str, operation: str, reason: str):
         self.disk_path = disk_path
         self.operation = operation
@@ -244,18 +285,16 @@ class DiskOperationException(HypervisorException):
 
 class DiskConversionException(DiskOperationException):
     """Raised when disk format conversion fails."""
+
     def __init__(self, disk_path: str, source_format: str, target_format: str, reason: str):
         self.source_format = source_format
         self.target_format = target_format
-        super().__init__(
-            disk_path,
-            f"convert ({source_format} -> {target_format})",
-            reason
-        )
+        super().__init__(disk_path, f"convert ({source_format} -> {target_format})", reason)
 
 
 class DiskNotFoundException(DiskOperationException):
     """Raised when a disk file cannot be found."""
+
     def __init__(self, disk_path: str):
         super().__init__(disk_path, "lookup", "Disk file not found")
 
@@ -264,8 +303,10 @@ class DiskNotFoundException(DiskOperationException):
 # Memory Operation Exceptions
 # =============================================================================
 
+
 class MemoryOperationException(HypervisorException):
     """Base exception for guest-memory operations."""
+
     def __init__(self, dest_path: str, operation: str, reason: str):
         self.dest_path = dest_path
         self.operation = operation
@@ -281,8 +322,10 @@ class MemoryDumpException(MemoryOperationException):
 # Feature Support Exceptions
 # =============================================================================
 
+
 class UnsupportedFeatureException(HypervisorException):
     """Raised when a hypervisor doesn't support a specific feature."""
+
     def __init__(self, hypervisor: str, feature: str):
         self.hypervisor = hypervisor
         self.feature = feature

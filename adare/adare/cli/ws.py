@@ -16,16 +16,19 @@ from adare.exceptions import LoggedException
 
 log = logging.getLogger(__name__)
 
+
 class WSActionError(LoggedException):
     """Error during WebSocket action execution."""
+
     def __init__(self, message: str):
         super().__init__(log, message)
+
 
 async def exec_ws_action(args: SimpleNamespace):
     """Execute WebSocket actions from YAML file."""
     try:
         # Determine connection parameters based on VM instance or explicit host/port
-        host = getattr(args, 'host', 'localhost')
+        host = getattr(args, 'host', '127.0.0.1')
         vm_instance = getattr(args, 'vm_instance', None)
 
         if vm_instance:
@@ -38,8 +41,10 @@ async def exec_ws_action(args: SimpleNamespace):
                 port = vm_api.get_websocket_port_for_instance(vm_instance)
 
             if port is None:
-                raise WSActionError(f"Could not find active WebSocket port for VM instance '{vm_instance}'. "
-                                  f"Check that the instance exists, is active, and has a port allocated.")
+                raise WSActionError(
+                    f"Could not find active WebSocket port for VM instance '{vm_instance}'. "
+                    f"Check that the instance exists, is active, and has a port allocated."
+                )
 
             log.info(f"Found port {port} for VM instance '{vm_instance}'")
         else:
@@ -77,7 +82,7 @@ async def exec_ws_action(args: SimpleNamespace):
             raise WSActionError("'actions' must be a list")
 
         # Connect to adarevm
-        client = AdareVMClient(host=host, port=port)
+        client = AdareVMClient(host=host, port=port, token=getattr(args, 'token', None))
 
         try:
             connected = await client.connect(timeout=args.connect_timeout)
@@ -89,12 +94,12 @@ async def exec_ws_action(args: SimpleNamespace):
             # Execute actions
             results = []
             for i, action in enumerate(actions):
-                result = await execute_single_action(client, action, i+1, args)
+                result = await execute_single_action(client, action, i + 1, args)
                 results.append(result)
 
                 # Stop on first error if not in continue mode
                 if not args.continue_on_error and result.get('status') == 'error':
-                    log.error(f"Action {i+1} failed, stopping execution")
+                    log.error(f"Action {i + 1} failed, stopping execution")
                     break
 
             # Output results
@@ -107,16 +112,14 @@ async def exec_ws_action(args: SimpleNamespace):
         log.error(f"WebSocket action execution failed: {e}", exc_info=True)
         raise WSActionError(str(e)) from e
 
-async def execute_single_action(client: AdareVMClient, action: dict[str, Any],
-                               action_num: int, args: SimpleNamespace) -> dict[str, Any]:
+
+async def execute_single_action(
+    client: AdareVMClient, action: dict[str, Any], action_num: int, args: SimpleNamespace
+) -> dict[str, Any]:
     """Execute a single action and return result."""
 
     if not isinstance(action, dict):
-        return {
-            'action_num': action_num,
-            'status': 'error',
-            'error': 'Action must be a dictionary'
-        }
+        return {'action_num': action_num, 'status': 'error', 'error': 'Action must be a dictionary'}
 
     # Detect action type from playbook format
     action_type = None
@@ -146,14 +149,20 @@ async def execute_single_action(client: AdareVMClient, action: dict[str, Any],
         return {
             'action_num': action_num,
             'status': 'error',
-            'error': 'Unknown action format - no recognizable action type found'
+            'error': 'Unknown action format - no recognizable action type found',
         }
 
-    description = action_data.get('description', f"{action_type} action") if isinstance(action_data, dict) else f"{action_type} action"
+    description = (
+        action_data.get('description', f"{action_type} action")
+        if isinstance(action_data, dict)
+        else f"{action_type} action"
+    )
     log.info(f"[Action {action_num}] {description}")
 
     try:
-        timeout = action_data.get('timeout', args.default_timeout) if isinstance(action_data, dict) else args.default_timeout
+        timeout = (
+            action_data.get('timeout', args.default_timeout) if isinstance(action_data, dict) else args.default_timeout
+        )
 
         if action_type == 'command':
             command = action_data.get('command') if isinstance(action_data, dict) else action_data
@@ -165,7 +174,7 @@ async def execute_single_action(client: AdareVMClient, action: dict[str, Any],
                 cwd=action_data.get('cwd') if isinstance(action_data, dict) else None,
                 timeout=timeout,
                 shell=action_data.get('shell', True) if isinstance(action_data, dict) else True,
-                env=action_data.get('env') if isinstance(action_data, dict) else None
+                env=action_data.get('env') if isinstance(action_data, dict) else None,
             )
 
         elif action_type == 'screenshot':
@@ -179,7 +188,10 @@ async def execute_single_action(client: AdareVMClient, action: dict[str, Any],
                     result = await client.click(action_data['x'], action_data['y'])
                 else:
                     # For now, skip target-based clicks (would need MCP integration)
-                    result = {"status": "skipped", "message": "Target-based clicks not yet implemented in WebSocket mode"}
+                    result = {
+                        "status": "skipped",
+                        "message": "Target-based clicks not yet implemented in WebSocket mode",
+                    }
             else:
                 raise ValueError("Click action requires coordinate or target data")
 
@@ -214,7 +226,7 @@ async def execute_single_action(client: AdareVMClient, action: dict[str, Any],
             'action_type': action_type,
             'description': description,
             'status': 'success',
-            'result': result
+            'result': result,
         }
 
     except WebSocketTimeoutError as e:
@@ -224,7 +236,7 @@ async def execute_single_action(client: AdareVMClient, action: dict[str, Any],
             'action_type': action_type,
             'description': description,
             'status': 'timeout',
-            'error': str(e)
+            'error': str(e),
         }
     except Exception as e:
         log.error(f"[Action {action_num}] Error: {e}", exc_info=True)
@@ -233,8 +245,9 @@ async def execute_single_action(client: AdareVMClient, action: dict[str, Any],
             'action_type': action_type,
             'description': description,
             'status': 'error',
-            'error': str(e)
+            'error': str(e),
         }
+
 
 def output_results(results: list[dict[str, Any]], output_format: str):
     """Output results in the specified format."""
@@ -287,6 +300,7 @@ def output_results(results: list[dict[str, Any]], output_format: str):
                 print(f"   ❌ Error: {result.get('error', 'Unknown error')}")
             print()
 
+
 def print_detailed_result(result: dict[str, Any], action_type: str):
     """Print detailed result information based on action type."""
     if not isinstance(result, dict):
@@ -317,6 +331,7 @@ def print_detailed_result(result: dict[str, Any], action_type: str):
         else:
             print(f"   Result: {result}")
 
+
 def create_example_action_file(file_path: Path):
     """Create an example action file in playbook format."""
     example = {
@@ -326,7 +341,7 @@ def create_example_action_file(file_path: Path):
                     'name': 'Get VM Status',
                     'description': 'Check adarevm server status',
                     'command': 'echo "Checking VM status"',
-                    'shell': True
+                    'shell': True,
                 }
             },
             {
@@ -334,33 +349,13 @@ def create_example_action_file(file_path: Path):
                     'name': 'List Directory',
                     'description': 'List files in current directory',
                     'command': 'dir',
-                    'shell': True
+                    'shell': True,
                 }
             },
-            {
-                'idle': {
-                    'duration': 2.0,
-                    'description': 'Wait 2 seconds'
-                }
-            },
-            {
-                'keyboard': {
-                    'combination': ['ctrl', 'c'],
-                    'description': 'Press Ctrl+C'
-                }
-            },
-            {
-                'screenshot': {
-                    'description': 'Take a screenshot'
-                }
-            },
-            {
-                'click': {
-                    'x': 100,
-                    'y': 200,
-                    'description': 'Click at coordinates (100, 200)'
-                }
-            }
+            {'idle': {'duration': 2.0, 'description': 'Wait 2 seconds'}},
+            {'keyboard': {'combination': ['ctrl', 'c'], 'description': 'Press Ctrl+C'}},
+            {'screenshot': {'description': 'Take a screenshot'}},
+            {'click': {'x': 100, 'y': 200, 'description': 'Click at coordinates (100, 200)'}},
         ]
     }
 
@@ -369,4 +364,4 @@ def create_example_action_file(file_path: Path):
 
     print(f"Example playbook-format action file created: {file_path}")
     print("\nNow you can execute it with:")
-    print(f"adare ws action {file_path} --host VM_IP")
+    print(f"adare debug ws action {file_path} --host VM_IP")

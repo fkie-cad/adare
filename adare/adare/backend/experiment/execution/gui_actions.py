@@ -10,6 +10,7 @@ import binascii
 import logging
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adare.backend.events.emitters import emit_action
 from adare.types.playbook import (
@@ -25,14 +26,19 @@ from adare.types.step_actions import ExecuteAction
 
 from .base import ActionResult
 
+if TYPE_CHECKING:
+    from adare.backend.experiment.execution.executor_core import ActionsExecutorCore as _Host
+else:
+    _Host = object
+
+
 log = logging.getLogger(__name__)
 
 
-class GUIActionsMixin:
+class GUIActionsMixin(_Host):
     """Mixin providing GUI action execution methods for SimpleActionsExecutor."""
 
-    async def execute_click(self, action: ClickAction, parent_event_id: str = None,
-                           event_emitter = None) -> ActionResult:
+    async def execute_click(self, action: ClickAction, parent_event_id: str = None, event_emitter=None) -> ActionResult:
         """Execute click action with steps."""
         handler = self.get_click_handler(action.type)
 
@@ -41,10 +47,10 @@ class GUIActionsMixin:
         if action.target.text:
             target_name = f"text_{action.target.text[:15]}"
         elif action.target.image:
-             try:
-                 target_name = f"img_{Path(action.target.image).stem}"
-             except (TypeError, ValueError):
-                 target_name = "img"
+            try:
+                target_name = f"img_{Path(action.target.image).stem}"
+            except (TypeError, ValueError):
+                target_name = "img"
         elif action.target.position:
             target_name = "pos"
 
@@ -54,8 +60,7 @@ class GUIActionsMixin:
             action, handler, parent_event_id, event_emitter, action_context=action_context
         )
 
-    async def execute_drag(self, action: DragAction, parent_event_id: str = None,
-                          event_emitter = None) -> ActionResult:
+    async def execute_drag(self, action: DragAction, parent_event_id: str = None, event_emitter=None) -> ActionResult:
         """Execute drag action - special handling for two targets."""
         try:
             # Resolve both targets (each will emit their own find steps with proper parent)
@@ -70,17 +75,19 @@ class GUIActionsMixin:
                 return ActionResult(success=False, message="Could not resolve targets")
 
             # Create and emit execution step
-            execute_action_id = f"execute_step_{int(time.time()*1000)}"
+            execute_action_id = f"execute_step_{int(time.time() * 1000)}"
 
             if self.experiment_run_id and event_emitter:
                 # Create execution step action
                 execute_step = ExecuteAction(
                     description=f"dragging from ({src_coords[0]}, {src_coords[1]}) to ({dst_coords[0]}, {dst_coords[1]})",
-                    coordinates=src_coords  # Use source coordinates
+                    coordinates=src_coords,  # Use source coordinates
                 )
 
                 # Emit execution start event
-                start_event = event_emitter.create_action_start_event(execute_step, -1, execute_action_id, parent_event_id)
+                start_event = event_emitter.create_action_start_event(
+                    execute_step, -1, execute_action_id, parent_event_id
+                )
                 emit_action(self.experiment_run_id, start_event, execute_action_id)
 
             # Execute the drag via GUI executor
@@ -96,9 +103,11 @@ class GUIActionsMixin:
                     message=result.get('message', ''),
                     execution_time=execution_time,
                     coordinates=dst_coords,  # Use destination coordinates as final result
-                    data={'source_coordinates': src_coords, 'dest_coordinates': dst_coords}
+                    data={'source_coordinates': src_coords, 'dest_coordinates': dst_coords},
                 )
-                complete_event = event_emitter.create_action_complete_event(execute_step, -1, execute_action_id, execute_result, parent_event_id)
+                complete_event = event_emitter.create_action_complete_event(
+                    execute_step, -1, execute_action_id, execute_result, parent_event_id
+                )
                 emit_action(self.experiment_run_id, complete_event, execute_action_id)
 
             return ActionResult(
@@ -113,20 +122,22 @@ class GUIActionsMixin:
                     'destination': action.dst.text or action.dst.image,
                     'source_coordinates': src_coords,
                     'dest_coordinates': dst_coords,
-                }
+                },
             )
 
         except Exception as e:
             log.error(f"Error executing drag action: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
 
-    async def execute_keyboard(self, action: KeyboardAction, parent_event_id: str = None,
-                              event_emitter = None) -> ActionResult:
+    async def execute_keyboard(
+        self, action: KeyboardAction, parent_event_id: str = None, event_emitter=None
+    ) -> ActionResult:
         """Execute keyboard action via GUI executor."""
         # Evaluate optional `when` conditions before acting (mirrors execute_block).
         # Skipping is treated as success, matching FlowControlExecutor.execute_block.
         if action.when:
             from adare.backend.experiment.target_resolver import MCPConditionChecker
+
             try:
                 screenshot_base64, _ = await self.target_resolution.get_current_screenshot_with_path()
                 checker = MCPConditionChecker(self.target_resolution.target_resolver)
@@ -150,10 +161,7 @@ class GUIActionsMixin:
                 combo = "+".join(action.combination)
                 result = await self.gui_executor.keyboard("hotkey", combo)
             else:
-                return ActionResult(
-                    success=False,
-                    message="No key, text, or combination specified"
-                )
+                return ActionResult(success=False, message="No key, text, or combination specified")
 
             # Prepare data for result
             result_data = {}
@@ -165,16 +173,13 @@ class GUIActionsMixin:
                 result_data['combination'] = action.combination
 
             return ActionResult(
-                success=result.get('status') == 'success',
-                message=result.get('message', ''),
-                data=result_data
+                success=result.get('status') == 'success', message=result.get('message', ''), data=result_data
             )
         except Exception as e:
             log.error(f"Error executing keyboard action: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
 
-    async def execute_idle(self, action: IdleAction, parent_event_id: str = None,
-                          event_emitter = None) -> ActionResult:
+    async def execute_idle(self, action: IdleAction, parent_event_id: str = None, event_emitter=None) -> ActionResult:
         """Execute idle action locally without involving the VM."""
         try:
             log.info(f"Starting idle action for {action.duration} seconds (local)")
@@ -184,30 +189,28 @@ class GUIActionsMixin:
 
             log.info(f"Idle action completed locally ({action.duration}s)")
 
-            return ActionResult(
-                success=True,
-                message=f"Idle completed ({action.duration}s)"
-            )
+            return ActionResult(success=True, message=f"Idle completed ({action.duration}s)")
         except (asyncio.CancelledError, OSError) as e:
             log.error(f"Idle action failed: {e}")
             return ActionResult(success=False, message=str(e))
 
-    async def execute_scroll(self, action: ScrollAction, parent_event_id: str = None,
-                            event_emitter = None) -> ActionResult:
+    async def execute_scroll(
+        self, action: ScrollAction, parent_event_id: str = None, event_emitter=None
+    ) -> ActionResult:
         """Execute scroll action via GUI executor."""
         result = await self.gui_executor.scroll(action.direction, action.amount or 3)
         return ActionResult(success=result.get('status') == 'success')
 
-    async def execute_goto(self, action: GotoAction, parent_event_id: str = None,
-                          event_emitter = None) -> ActionResult:
+    async def execute_goto(self, action: GotoAction, parent_event_id: str = None, event_emitter=None) -> ActionResult:
         """Execute goto action with steps."""
         handler = self.get_click_handler('left')  # goto uses left click
         return await self.target_resolution.execute_action_with_steps(
             action, handler, parent_event_id, event_emitter, action_context="goto"
         )
 
-    async def execute_screenshot(self, action: ScreenshotAction, parent_event_id: str = None,
-                                event_emitter = None) -> ActionResult:
+    async def execute_screenshot(
+        self, action: ScreenshotAction, parent_event_id: str = None, event_emitter=None
+    ) -> ActionResult:
         """
         Execute screenshot action via GUI executor.
 
@@ -238,7 +241,7 @@ class GUIActionsMixin:
             return ActionResult(
                 success=result.get('status') == 'success',
                 message=result.get('message', ''),
-                data={**result, 'screenshot_path': screenshot_path} if screenshot_path else result
+                data={**result, 'screenshot_path': screenshot_path} if screenshot_path else result,
             )
         except (RuntimeError, OSError, KeyError, ValueError) as e:
             return ActionResult(success=False, message=str(e))

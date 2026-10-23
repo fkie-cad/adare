@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import click
 
+from adare.cli.output import output_options
+
 
 def register(cli, AliasedGroup, exec_with_error_printing):
     """Register experiment commands with the CLI."""
@@ -25,11 +27,13 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def create(experiment, project):
         """Create a new experiment skeleton.
 
+        \b
         EXPERIMENT can be:
         - Simple name: test_csv
         - Relative path: experiments/test_csv
         """
         from adare.cli.experiment import exec_experiment_create
+
         args = SimpleNamespace(experiment=experiment, project=project)
         exec_with_error_printing(exec_experiment_create, args)
 
@@ -41,56 +45,123 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def load(experiment, environment, force, project):
         """Load an experiment.
 
+        \b
         EXPERIMENT can be:
         - Simple name: test_csv
         - Relative path: experiments/test_csv
         - Relative path: ./experiments/test_csv
         """
         from adare.cli.experiment import exec_experiment_load
-        args = SimpleNamespace(
-            experiment=experiment,
-            environment=environment,
-            force=force,
-            project=project
-        )
+
+        args = SimpleNamespace(experiment=experiment, environment=environment, force=force, project=project)
         exec_with_error_printing(exec_experiment_load, args)
 
     @experiment.command()
     @click.argument('experiment', type=click.Path(exists=False))
-    @click.option('-e', '--environment', type=click.Path(exists=False), help='Name of the environment (if not specified, runs on all environments in project)')
-    @click.option('--production', '--prod', is_flag=True, help='Run the experiment in production mode - creates real runs with integrity checks (default: test mode)')
-    @click.option('--debug-screenshots', is_flag=True, help='Save screenshots to experiment run directory for debugging')
-    @click.option('--preserve-snapshot', '-s', is_flag=True, help='Create experiment snapshot for preservation (default: only reset to base snapshot)')
+    @click.option(
+        '-e',
+        '--environment',
+        type=click.Path(exists=False),
+        help='Name of the environment (if not specified, runs on all environments in project)',
+    )
+    @click.option(
+        '--production',
+        '--prod',
+        is_flag=True,
+        help='Run the experiment in production mode - creates real runs with integrity checks (default: test mode)',
+    )
+    @click.option(
+        '--debug-screenshots', is_flag=True, help='Save screenshots to experiment run directory for debugging'
+    )
+    @click.option(
+        '--preserve-snapshot',
+        '-s',
+        is_flag=True,
+        help='VirtualBox: snapshot the final VM state (default: only reset to base snapshot). '
+        'QEMU runs are discarded; use --export-disk-image to keep the final disk.',
+    )
     @click.option('--no-runlog', is_flag=True, help='Do not save adare log to the run/logs directory')
     @click.option('--vm-memory', type=int, help='VM RAM in MB (default: 4096 for Linux, 8192 for Windows)')
     @click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
-    @click.option('--gui-mode', type=click.Choice(['auto', 'agent', 'host']), help='GUI execution mode: auto (default), agent (WebSocket), or host (QMP for QEMU only)')
-    @click.option('--test-mode', type=click.Choice(['auto', 'agent', 'host']), help='Test execution mode: auto (default), agent (WebSocket), or host (QGA for QEMU only)')
+    @click.option(
+        '--gui-mode',
+        type=click.Choice(['auto', 'agent', 'host']),
+        help='GUI execution mode: auto (default), agent (WebSocket), or host (QMP for QEMU only)',
+    )
+    @click.option(
+        '--test-mode',
+        type=click.Choice(['auto', 'agent', 'host']),
+        help='Test execution mode: auto (default), agent (WebSocket), or host (QGA for QEMU only)',
+    )
     @click.option('--diff/--no-diff', default=None, help='Enable/disable filesystem diff (overrides playbook setting)')
-    @click.option('--diff-mode', type=click.Choice(['auto', 'guest', 'host']), default='auto', help='Diff mode: auto (smart selection), guest (VM-based), host (QEMU virt-diff)')
-    @click.option('--export-disk-image/--no-export-disk-image', default=None, help='Export the VM overlay disk as a merged raw image to artifacts/disk/, e.g. for Autopsy ingestion (overrides playbook setting; off by default)')
-    @click.option('--capture-pcap/--no-capture-pcap', default=None, help='Capture outside-world VM traffic to artifacts/pcap/ (QEMU only; overrides playbook setting; off by default)')
-    @click.option('--export-memory-dump/--no-export-memory-dump', default=None, help='Live-dump guest RAM via QMP dump-guest-memory to artifacts/memory/, e.g. for Volatility ingestion (QEMU only; overrides playbook setting; off by default)')
-    @click.option('--allow-emulation', is_flag=True, default=False, help='Allow QEMU TCG software emulation when the environment guest architecture does not match the host CPU (slow; hardware acceleration is used otherwise). Also honored via hypervisor_config.allow_emulation in the environment YAML.')
-    @click.option('--project', help='Name of the project')
+    @click.option(
+        '--diff-mode',
+        type=click.Choice(['auto', 'guest', 'host']),
+        default='auto',
+        help='Diff mode: auto (smart selection), guest (VM-based), host (QEMU virt-diff)',
+    )
+    @click.option(
+        '--export-disk-image/--no-export-disk-image',
+        default=None,
+        help='Export the VM overlay disk as a merged raw image to artifacts/disk/, e.g. for Autopsy ingestion (overrides playbook setting; off by default)',
+    )
+    @click.option(
+        '--capture-pcap/--no-capture-pcap',
+        default=None,
+        help='Capture outside-world VM traffic to artifacts/pcap/ (QEMU only; overrides playbook setting; off by default)',
+    )
+    @click.option(
+        '--export-memory-dump/--no-export-memory-dump',
+        default=None,
+        help='Live-dump guest RAM via QMP dump-guest-memory to artifacts/memory/, e.g. for Volatility ingestion (QEMU only; overrides playbook setting; off by default)',
+    )
+    @click.option(
+        '--allow-emulation',
+        is_flag=True,
+        default=False,
+        help='Allow QEMU TCG software emulation when the environment guest architecture does not match the host CPU (slow; hardware acceleration is used otherwise). Also honored via hypervisor_config.allow_emulation in the environment YAML.',
+    )
+    @click.option('--project', '-p', help='Name of the project')
     @click.pass_context
-    def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, gui_mode, test_mode, diff, diff_mode, export_disk_image, capture_pcap, export_memory_dump, allow_emulation, project):
+    def run(
+        ctx,
+        experiment,
+        environment,
+        production,
+        debug_screenshots,
+        preserve_snapshot,
+        no_runlog,
+        vm_memory,
+        vm_cpus,
+        gui_mode,
+        test_mode,
+        diff,
+        diff_mode,
+        export_disk_image,
+        capture_pcap,
+        export_memory_dump,
+        allow_emulation,
+        project,
+    ):
         """Run an experiment in a given environment or all environments if none specified.
 
         By default, runs in TEST mode (creates fake runs, skips integrity checks, allows modifications).
         Use --production/--prod for real production runs with full integrity validation.
 
+        \b
         EXPERIMENT can be:
         - Simple name: test_csv
         - Relative path: experiments/test_csv
         - Relative path: ./experiments/test_csv
 
+        \b
         ENVIRONMENT can be:
         - Simple name: ubuntu24
         - Relative path: environments/ubuntu24.yml
         - Relative path: ./environments/ubuntu24.yaml
         """
         from adare.cli.experiment import exec_experiment_run
+
         args = SimpleNamespace(
             experiment=experiment,
             environment=environment,
@@ -110,7 +181,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             allow_emulation=allow_emulation,
             project=project,
             verbose=ctx.obj.verbose,
-            very_verbose=ctx.obj.very_verbose
+            very_verbose=ctx.obj.very_verbose,
         )
         exec_with_error_printing(exec_experiment_run, args)
 
@@ -120,37 +191,36 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def example(name, project):
         """Create the example experiment."""
         from adare.cli.experiment import exec_experiment_example
-        args = SimpleNamespace(
-            experiment=name,
-            project=project
-        )
+
+        args = SimpleNamespace(experiment=name, project=project)
         exec_with_error_printing(exec_experiment_example, args)
 
     @experiment.command(name='list')
+    @output_options
     def list_experiments():
-        """List all experiments in an environment."""
+        """List all experiments across all projects."""
         from adare.cli.show import exec_show_experiments
+
         args = SimpleNamespace()
         exec_with_error_printing(exec_show_experiments, args)
 
     @experiment.command()
+    @output_options
     @click.argument('name', required=False)
     @click.option('--ulid', '-u', help='ULID of the experiment')
     @click.option('--dotnotation', '-d', help='Dotnotation in format: project_name.environment_name.experiment_name')
     def info(name, ulid, dotnotation):
         """Show detailed information about a specific experiment.
 
+        \b
         Usage:
         - adare experiment info NAME (find experiment by name in current project)
         - adare experiment info -u ULID (find experiment by ULID)
         - adare experiment info -d project.env.experiment (find by dotnotation)
         """
         from adare.cli.show import exec_show_experiment
-        args = SimpleNamespace(
-            name=name,
-            ulid=ulid,
-            dotnotation=dotnotation
-        )
+
+        args = SimpleNamespace(name=name, ulid=ulid, dotnotation=dotnotation)
         exec_with_error_printing(exec_show_experiment, args)
 
     @experiment.command()
@@ -163,46 +233,43 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         permanently deletes all fake runs associated with the experiment.
         """
         from adare.cli.experiment import exec_experiment_clean
-        args = SimpleNamespace(
-            experiment=experiment,
-            project=project
-        )
-        exec_with_error_printing(exec_experiment_clean, args)
 
+        args = SimpleNamespace(experiment=experiment, project=project)
+        exec_with_error_printing(exec_experiment_clean, args)
 
     @experiment.command()
     @click.argument('experiment', type=click.Path(exists=False))
     @click.option('--project', '-p', help='Name of the project')
     @click.option('--force', '-f', is_flag=True, help='Force removal even if experiment has productive runs')
-    @click.option('--keep-files', is_flag=True, help='Keep experiment directory on filesystem (only remove from database)')
+    @click.option(
+        '--keep-files', is_flag=True, help='Keep experiment directory on filesystem (only remove from database)'
+    )
     def remove(experiment, project, force, keep_files):
         """Remove an experiment from the database and optionally from filesystem.
 
         This command permanently deletes the experiment, all its runs (both productive
         and fake), and optionally the experiment directory. Use with caution!
 
+        \b
         By default, the command will:
         - Fail if the experiment has productive runs (use --force to override)
         - Delete the experiment directory from filesystem (use --keep-files to preserve)
 
+        \b
         EXPERIMENT can be:
         - Simple name: test_csv
         - Relative path: experiments/test_csv
 
+        \b
         Examples:
         - adare experiment remove test_csv (fails if has runs)
         - adare experiment remove test_csv --force (removes with all runs)
         - adare experiment remove test_csv --force --keep-files (DB only)
         """
         from adare.cli.experiment import exec_experiment_remove
-        args = SimpleNamespace(
-            experiment=experiment,
-            project=project,
-            force=force,
-            keep_files=keep_files
-        )
-        exec_with_error_printing(exec_experiment_remove, args)
 
+        args = SimpleNamespace(experiment=experiment, project=project, force=force, keep_files=keep_files)
+        exec_with_error_printing(exec_experiment_remove, args)
 
     @experiment.command(name='add-env')
     @click.argument('experiment_pattern')
@@ -215,20 +282,18 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         EXPERIMENT_PATTERN can be an exact name or glob pattern (e.g., test_*, *_linux).
         ENVIRONMENTS are the environment names to add.
 
+        \b
         Examples:
         - adare experiment add-env "test_*" ubuntu24
         - adare experiment add-env "*_linux" ubuntu22 ubuntu24
         - adare experiment add-env specific_experiment ubuntu24
         """
         from adare.cli.experiment import exec_experiment_add_env
+
         args = SimpleNamespace(
-            experiment_pattern=experiment_pattern,
-            environments=list(environments),
-            force=force,
-            project=project
+            experiment_pattern=experiment_pattern, environments=list(environments), force=force, project=project
         )
         exec_with_error_printing(exec_experiment_add_env, args)
-
 
     @experiment.command(name='remove-env')
     @click.argument('experiment_pattern')
@@ -241,25 +306,28 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         EXPERIMENT_PATTERN can be an exact name or glob pattern (e.g., test_*, *_linux).
         ENVIRONMENTS are the environment names to remove.
 
+        \b
         Examples:
         - adare experiment remove-env "win_*" ubuntu22
         - adare experiment remove-env "*_test" old_env
         - adare experiment remove-env specific_experiment ubuntu22
         """
         from adare.cli.experiment import exec_experiment_remove_env
+
         args = SimpleNamespace(
-            experiment_pattern=experiment_pattern,
-            environments=list(environments),
-            force=force,
-            project=project
+            experiment_pattern=experiment_pattern, environments=list(environments), force=force, project=project
         )
         exec_with_error_printing(exec_experiment_remove_env, args)
-
 
     @experiment.command()
     @click.argument('source_experiment')
     @click.argument('target_experiment')
-    @click.option('-e', '--environments', multiple=True, help='Override environments for the cloned experiment (can specify multiple)')
+    @click.option(
+        '-e',
+        '--environments',
+        multiple=True,
+        help='Override environments for the cloned experiment (can specify multiple)',
+    )
     @click.option('--project', '-p', help='Name of the project')
     def clone(source_experiment, target_experiment, environments, project):
         """Clone an existing experiment to create a variation.
@@ -270,26 +338,31 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         SOURCE_EXPERIMENT is the name of the experiment to clone from.
         TARGET_EXPERIMENT is the name for the new cloned experiment.
 
+        \b
         Examples:
         - adare experiment clone firefox_test firefox_test_v2
         - adare experiment clone prod_exp dev_exp -e ubuntu22 -e debian12
         - adare experiment clone test1 test1_variant --project myproject
         """
         from adare.cli.experiment import exec_experiment_clone
+
         args = SimpleNamespace(
             source_experiment=source_experiment,
             target_experiment=target_experiment,
             environments=list(environments) if environments else None,
-            project=project
+            project=project,
         )
         exec_with_error_printing(exec_experiment_clone, args)
 
-
     @experiment.command()
     @click.argument('ulid')
-    @click.option('-e', '--environment', help='Name of the environment to use (required if the bundle has more than one)')
+    @click.option(
+        '-e', '--environment', help='Name of the environment to use (required if the bundle has more than one)'
+    )
     @click.option('--project', '-p', help='Name of the project')
-    @click.option('--production', '--prod', is_flag=True, help='Run the experiment in production mode (default: test mode)')
+    @click.option(
+        '--production', '--prod', is_flag=True, help='Run the experiment in production mode (default: test mode)'
+    )
     @click.option('--skip-run', is_flag=True, help="Download and load only, don't execute")
     def replicate(ulid, environment, project, production, skip_run):
         """Download a published experiment bundle and run it, end to end.
@@ -300,12 +373,14 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         ULID is the published experiment's ULID.
 
+        \b
         Examples:
         - adare experiment replicate 01HXYZ...
         - adare experiment replicate 01HXYZ... -e ubuntu24 --production
         - adare experiment replicate 01HXYZ... --skip-run
         """
         from adare.cli.experiment import exec_experiment_replicate
+
         args = SimpleNamespace(
             ulid=ulid,
             environment=environment,
@@ -317,8 +392,13 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @experiment.command()
     @click.argument('experiment', type=click.Path(exists=False))
-    @click.option('-e', '--environment', type=click.Path(exists=False), required=True,
-                  help='Name of the environment (must be QEMU-based)')
+    @click.option(
+        '-e',
+        '--environment',
+        type=click.Path(exists=False),
+        required=True,
+        help='Name of the environment (must be QEMU-based)',
+    )
     @click.option('--project', '-p', help='Name of the project')
     def diff(experiment, environment, project):
         """Run experiment in visual diff mode for manual comparison.
@@ -326,6 +406,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         Diff mode is designed for visual comparison between different OS/software versions.
         It runs experiments in QEMU with GUI mode without agent installation.
 
+        \b
         Features:
         - QEMU only (no agent installation)
         - Executes visual actions only (click, keyboard, screenshot)
@@ -335,16 +416,14 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         EXPERIMENT is the experiment name.
 
+        \b
         Examples:
         - adare experiment diff test_csv -e ubuntu24
         - adare experiment diff firefox_test -e windows11 --project myproject
         """
         from adare.cli.diff import exec_experiment_diff
-        args = SimpleNamespace(
-            experiment=experiment,
-            environment=environment,
-            project=project
-        )
+
+        args = SimpleNamespace(experiment=experiment, environment=environment, project=project)
         exec_with_error_printing(exec_experiment_diff, args)
 
     # ------------------------------
@@ -358,6 +437,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     playbook.add_alias('cat', 'show')
 
     @playbook.command(name='show')
+    @output_options
     @click.argument('experiment', type=click.Path(exists=False))
     @click.option('--project', '-p', help='Name of the project')
     def playbook_show(experiment, project):
@@ -365,7 +445,8 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         EXPERIMENT is the experiment name.
         """
-        from adare.cli.experiment import exec_playbook_show
+        from adare.cli.experiment_playbook import exec_playbook_show
+
         args = SimpleNamespace(experiment=experiment, project=project)
         exec_with_error_printing(exec_playbook_show, args)
 
@@ -376,7 +457,8 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         FILE is a path to a playbook YAML file.
         """
-        from adare.cli.experiment import exec_playbook_validate
+        from adare.cli.experiment_playbook import exec_playbook_validate
+
         args = SimpleNamespace(file=file)
         exec_with_error_printing(exec_playbook_validate, args)
 
@@ -394,10 +476,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         EXPERIMENT is the target experiment name.
         FILE is the playbook YAML file to write.
         """
-        from adare.cli.experiment import exec_playbook_set
-        args = SimpleNamespace(
-            experiment=experiment, file=file, backup=not no_backup, project=project
-        )
+        from adare.cli.experiment_playbook import exec_playbook_set
+
+        args = SimpleNamespace(experiment=experiment, file=file, backup=not no_backup, project=project)
         exec_with_error_printing(exec_playbook_set, args)
 
     return experiment

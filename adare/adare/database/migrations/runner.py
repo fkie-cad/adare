@@ -105,6 +105,16 @@ MIGRATIONS: list[Migration] = [
         scope='project',
         module=f'{_PACKAGE}.add_run_artifact_table',
     ),
+    Migration(
+        name='add_environment_versioning',
+        scope='global',
+        module=f'{_PACKAGE}.add_environment_versioning',
+    ),
+    Migration(
+        name='add_owner_pid_to_vm_instance',
+        scope='global',
+        module=f'{_PACKAGE}.add_owner_pid_to_vm_instance',
+    ),
 ]
 
 # Applied-migration names per database URL. Keeps auto-apply at one SELECT per
@@ -148,15 +158,17 @@ def _cache_key(engine: sqlalchemy.Engine) -> str:
 
 def _ensure_ledger(conn) -> None:
     """Create the applied-migration ledger table if it does not exist yet."""
-    conn.execute(text(
-        f"""
+    conn.execute(
+        text(
+            f"""
         CREATE TABLE IF NOT EXISTS {LEDGER_TABLE} (
             name TEXT PRIMARY KEY,
             applied_at DATETIME,
             adare_version TEXT NULL
         )
         """
-    ))
+        )
+    )
 
 
 def _stamp(conn, name: str) -> None:
