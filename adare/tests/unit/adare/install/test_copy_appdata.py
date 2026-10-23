@@ -111,3 +111,17 @@ def test_workspace_root_is_repo_root(copy_appdata):
     assert (copy_appdata.WORKSPACE_ROOT / 'adarevm' / 'pyproject.toml').is_file()
     for rel in (*copy_appdata.WORKSPACE_DIRS, *copy_appdata.WORKSPACE_FILES):
         assert (copy_appdata.WORKSPACE_ROOT / rel).exists(), rel
+
+
+def test_main_reports_unremovable_files_instead_of_crashing(copy_appdata, tmp_path, monkeypatch, capsys):
+    """Root-owned guest leftovers (a venv a VM wrote through a share) fail with the fix, not a traceback."""
+    monkeypatch.setenv('ADARE_HOME', str(tmp_path / 'home'))
+
+    def denied(src, dst):
+        raise PermissionError(13, 'Permission denied', str(dst / '.venv'))
+
+    monkeypatch.setattr(copy_appdata, 'sync_workspace', denied)
+
+    assert copy_appdata.main() == 1
+    err = capsys.readouterr().err
+    assert 'Cannot replace' in err and '.venv' in err
