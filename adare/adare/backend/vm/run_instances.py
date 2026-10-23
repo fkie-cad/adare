@@ -138,13 +138,13 @@ def _is_stale(instance: VmInstance) -> bool:
     return False
 
 
-def _orphaned_run_names(known_names: set[str]) -> set[str]:
-    """Instance names that still have run files on disk but no database row."""
+def _run_names_on_disk() -> set[str]:
+    """Instance names that have run files (config or overlay) on disk."""
     from adare.hypervisor.qemu.mixins.configuration import get_qemu_disk_dir, get_qemu_vm_config_dir
 
     names = {path.stem for path in get_qemu_vm_config_dir().glob('*_run_*.json')}
     names |= {path.name.split('-overlay-')[0] for path in get_qemu_disk_dir().glob('*_run_*-overlay-*.qcow2')}
-    return names - known_names
+    return names
 
 
 async def reconcile_instances(dry_run: bool = False) -> ReconcileReport:
@@ -165,6 +165,10 @@ async def reconcile_instances(dry_run: bool = False) -> ReconcileReport:
     dev_names = _dev_session_vm_names()
     if dev_names is None:
         return report
+    # Scan run files BEFORE reading rows: a run inserts its row before it creates
+    # files, so every file seen here belongs to a row the read below includes.
+    # The other order lets a concurrent run's fresh files look orphaned.
+    run_names_on_disk = _run_names_on_disk()
     with VmApi() as api:
         instances = api.get_all_vm_instances()
 
@@ -189,7 +193,7 @@ async def reconcile_instances(dry_run: bool = False) -> ReconcileReport:
                     await release_vm_instance(instance.id)
 
     known = {instance.instance_name for instance in instances}
-    for name in sorted(_orphaned_run_names(known)):
+    for name in sorted(run_names_on_disk - known - dev_names):
         report.orphaned_run_files.append(name)
         if not dry_run:
             remove_run_files(name)

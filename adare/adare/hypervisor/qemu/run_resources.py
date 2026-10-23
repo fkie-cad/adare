@@ -26,7 +26,10 @@ import subprocess
 import tarfile
 import tempfile
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from pathlib import Path
+from typing import Any
 
 from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.helperfunctions.file.lock import exclusive_lock
@@ -272,54 +275,79 @@ def remove_run_files(instance_name: str) -> list[Path]:
     return removed
 
 
-def destroy_run_domain(instance_name: str) -> None:
-    """Force-stop and undefine a run's libvirt domain, deleting its varstore and vTPM. Best-effort."""
+@contextmanager
+def _libvirt_connection() -> Iterator[tuple[Any, Any] | None]:
+    """``(libvirt module, open connection)``, or None without libvirt-python or libvirtd.
+
+    libvirt's own error chatter goes to the experiment log, never the console.
+    The connection is closed on exit.
+    """
     try:
         import libvirt
     except ImportError:
+        yield None
         return
     from adare.config import HYPERVISOR_CONFIGS
     from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
-    from adare.hypervisor.qemu.libvirt_undefine import delete_firmware_state_flags, undefine
 
     uri = HYPERVISOR_CONFIGS.get('qemu', {}).get('libvirt_uri', 'qemu:///session')
-    log_file = get_experiment_log_file()
+    redirect = LibvirtStderrRedirect(log_file=get_experiment_log_file(), suppress_console=True)
     try:
-        with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+        with redirect:
             conn = libvirt.open(uri)
     except libvirt.libvirtError as e:
-        log.debug(f"No libvirt connection to remove domain {instance_name}: {e}")
+        log.debug(f"No libvirt connection ({uri}): {e}")
+        conn = None
+    if conn is None:
+        yield None
         return
     try:
-        with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+        with redirect:
+            yield libvirt, conn
+    finally:
+        with suppress(libvirt.libvirtError):
+            conn.close()
+
+
+def destroy_run_domain(instance_name: str | None) -> bool:
+    """Force-stop and undefine a run's libvirt domain, deleting its varstore and vTPM.
+
+    Best-effort and silent about a domain that does not exist, an unreachable
+    libvirtd or a missing libvirt-python, so it is safe from a signal handler
+    (``destroy()``, not ``shutdown()``: the run's overlay is discarded anyway).
+
+    Returns:
+        True if a running domain was destroyed.
+    """
+    if not instance_name:
+        return False
+    from adare.hypervisor.qemu.libvirt_undefine import delete_firmware_state_flags, undefine
+
+    with _libvirt_connection() as session:
+        if session is None:
+            return False
+        libvirt, conn = session
+        destroyed = False
+        try:
             domain = conn.lookupByName(instance_name)
             if domain.isActive():
                 domain.destroy()
+                destroyed = True
             undefine(domain, delete_firmware_state_flags())
-        log.info(f"Removed libvirt domain {instance_name}")
-    except libvirt.libvirtError as e:
-        if e.get_error_code() != libvirt.VIR_ERR_NO_DOMAIN:
-            log.warning(f"Could not remove libvirt domain {instance_name}: {e}")
-    finally:
-        conn.close()
+            log.info(f"Removed libvirt domain {instance_name}")
+        except libvirt.libvirtError as e:
+            if e.get_error_code() != libvirt.VIR_ERR_NO_DOMAIN:
+                log.warning(f"Could not remove libvirt domain {instance_name}: {e}")
+        return destroyed
 
 
 def is_domain_running(instance_name: str) -> bool:
     """True if a libvirt domain of this name is currently running."""
-    try:
-        import libvirt
-    except ImportError:
-        return False
-    from adare.config import HYPERVISOR_CONFIGS
-    from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
-
-    uri = HYPERVISOR_CONFIGS.get('qemu', {}).get('libvirt_uri', 'qemu:///session')
-    try:
-        with LibvirtStderrRedirect(log_file=get_experiment_log_file(), suppress_console=True):
-            conn = libvirt.open(uri)
-            try:
-                return bool(conn.lookupByName(instance_name).isActive())
-            finally:
-                conn.close()
-    except libvirt.libvirtError:
-        return False
+    with _libvirt_connection() as session:
+        if session is None:
+            return False
+        libvirt, conn = session
+        try:
+            return bool(conn.lookupByName(instance_name).isActive())
+        except libvirt.libvirtError:
+            return False

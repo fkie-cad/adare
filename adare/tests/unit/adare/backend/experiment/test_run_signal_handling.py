@@ -8,7 +8,7 @@ Two separate defects are pinned here.
    never our child — reparented to PID 1 and kept running. Observed directly: a
    SIGTERM killed a run's CLI in under 2 s and left its VM live.
 
-2. There was no way to stop such a VM without a run context. ``destroy_domain_by_name``
+2. There was no way to stop such a VM without a run context. ``run_resources.destroy_run_domain``
    is that way, and it must be idempotent and silent, because it is called from a
    signal handler where a traceback is worse than a no-op.
 
@@ -27,12 +27,20 @@ pytestmark = pytest.mark.unit
 
 
 # --------------------------------------------------------------------------- #
-# destroy_domain_by_name
+# destroy_run_domain
 # --------------------------------------------------------------------------- #
 
 
+VIR_ERR_NO_DOMAIN = 42
+
+
 class FakeLibvirtError(Exception):
-    pass
+    def __init__(self, message, code=VIR_ERR_NO_DOMAIN):
+        super().__init__(message)
+        self.code = code
+
+    def get_error_code(self):
+        return self.code
 
 
 class FakeDomain:
@@ -70,12 +78,13 @@ class FakeConnection:
 def fake_libvirt(monkeypatch):
     """Install a fake ``libvirt`` module and return a handle to configure it.
 
-    ``destroy_domain_by_name`` imports libvirt lazily inside the function, so
+    ``destroy_run_domain`` imports libvirt lazily inside the function, so
     patching ``sys.modules`` is enough — no import-time interference with the rest
     of the suite, which imports the real libvirt.
     """
     module = types.ModuleType('libvirt')
     module.libvirtError = FakeLibvirtError
+    module.VIR_ERR_NO_DOMAIN = VIR_ERR_NO_DOMAIN
     module.VIR_DOMAIN_UNDEFINE_KEEP_NVRAM = 1
     module.VIR_DOMAIN_UNDEFINE_NVRAM = 2
 
@@ -93,22 +102,22 @@ def fake_libvirt(monkeypatch):
 
 
 @pytest.fixture
-def destroy_domain_by_name(fake_libvirt):
-    from adare.backend.experiment.vm_lifecycle_manager import destroy_domain_by_name as fn
+def destroy_run_domain(fake_libvirt):
+    from adare.hypervisor.qemu.run_resources import destroy_run_domain as fn
 
     return fn
 
 
-class TestDestroyDomainByName:
-    def test_destroys_a_running_domain(self, destroy_domain_by_name, fake_libvirt):
+class TestDestroyRunDomain:
+    def test_destroys_a_running_domain(self, destroy_run_domain, fake_libvirt):
         """The scenario that leaked: a live guest with no owning process left."""
         domain = FakeDomain(active=True)
         fake_libvirt.domains['run-vm-1'] = domain
 
-        assert destroy_domain_by_name('run-vm-1') is True
+        assert destroy_run_domain('run-vm-1') is True
         assert domain.destroy_calls == 1
 
-    def test_undefines_taking_the_run_varstore_with_it(self, destroy_domain_by_name, fake_libvirt):
+    def test_undefines_taking_the_run_varstore_with_it(self, destroy_run_domain, fake_libvirt):
         """Undefine so virsh does not fill with stale shut-off domains.
 
         The varstore belongs to this run alone (runs overlay a read-only
@@ -117,57 +126,57 @@ class TestDestroyDomainByName:
         domain = FakeDomain(active=True)
         fake_libvirt.domains['run-vm-1'] = domain
 
-        destroy_domain_by_name('run-vm-1')
+        destroy_run_domain('run-vm-1')
 
         (flags,) = domain.undefine_flags_calls
         assert flags & 2  # NVRAM: delete the run's varstore
         assert not flags & 1  # never KEEP_NVRAM
 
-    def test_missing_domain_is_silent_and_false(self, destroy_domain_by_name, fake_libvirt):
+    def test_missing_domain_is_silent_and_false(self, destroy_run_domain, fake_libvirt):
         """Idempotence: called twice, or before a VM existed, it must not raise."""
-        assert destroy_domain_by_name('never-existed') is False
+        assert destroy_run_domain('never-existed') is False
 
-    def test_calling_twice_is_idempotent(self, destroy_domain_by_name, fake_libvirt):
+    def test_calling_twice_is_idempotent(self, destroy_run_domain, fake_libvirt):
         domain = FakeDomain(active=True)
         fake_libvirt.domains['run-vm-1'] = domain
 
-        assert destroy_domain_by_name('run-vm-1') is True
+        assert destroy_run_domain('run-vm-1') is True
         # Second call: the domain is now shut off, so there is nothing to destroy.
-        assert destroy_domain_by_name('run-vm-1') is False
+        assert destroy_run_domain('run-vm-1') is False
         assert domain.destroy_calls == 1
 
-    def test_already_shutoff_domain_is_not_destroyed_again(self, destroy_domain_by_name, fake_libvirt):
+    def test_already_shutoff_domain_is_not_destroyed_again(self, destroy_run_domain, fake_libvirt):
         domain = FakeDomain(active=False)
         fake_libvirt.domains['run-vm-1'] = domain
 
-        assert destroy_domain_by_name('run-vm-1') is False
+        assert destroy_run_domain('run-vm-1') is False
         assert domain.destroy_calls == 0
 
-    def test_none_name_is_a_no_op(self, destroy_domain_by_name, fake_libvirt):
+    def test_none_name_is_a_no_op(self, destroy_run_domain, fake_libvirt):
         """A signal can arrive before an instance has been allocated."""
-        assert destroy_domain_by_name(None) is False
+        assert destroy_run_domain(None) is False
 
-    def test_empty_name_is_a_no_op(self, destroy_domain_by_name, fake_libvirt):
-        assert destroy_domain_by_name('') is False
+    def test_empty_name_is_a_no_op(self, destroy_run_domain, fake_libvirt):
+        assert destroy_run_domain('') is False
 
-    def test_unreachable_libvirtd_is_silent(self, destroy_domain_by_name, fake_libvirt):
+    def test_unreachable_libvirtd_is_silent(self, destroy_run_domain, fake_libvirt):
         fake_libvirt.open_returns = False
-        assert destroy_domain_by_name('run-vm-1') is False
+        assert destroy_run_domain('run-vm-1') is False
 
-    def test_connection_is_closed_even_when_the_domain_is_absent(self, destroy_domain_by_name, fake_libvirt):
+    def test_connection_is_closed_even_when_the_domain_is_absent(self, destroy_run_domain, fake_libvirt):
         """A handler that leaks libvirt connections per signal is its own problem."""
-        destroy_domain_by_name('never-existed')
+        destroy_run_domain('never-existed')
         assert fake_libvirt.connection.closed is True
 
-    def test_connection_is_closed_after_a_successful_destroy(self, destroy_domain_by_name, fake_libvirt):
+    def test_connection_is_closed_after_a_successful_destroy(self, destroy_run_domain, fake_libvirt):
         fake_libvirt.domains['run-vm-1'] = FakeDomain(active=True)
-        destroy_domain_by_name('run-vm-1')
+        destroy_run_domain('run-vm-1')
         assert fake_libvirt.connection.closed is True
 
     def test_missing_libvirt_python_is_silent(self, monkeypatch):
         """No libvirt installed at all: still a no-op, never an ImportError traceback."""
         monkeypatch.setitem(sys.modules, 'libvirt', None)
-        from adare.backend.experiment.vm_lifecycle_manager import destroy_domain_by_name as fn
+        from adare.hypervisor.qemu.run_resources import destroy_run_domain as fn
 
         assert fn('run-vm-1') is False
 
@@ -213,9 +222,9 @@ def _install_handlers(loop, ctx, stop_event, user_interrupt_event):
             ctx.stop_event.set()
             stop_event.set()
             return
-        from adare.backend.experiment.vm_lifecycle_manager import destroy_domain_by_name
+        from adare.hypervisor.qemu.run_resources import destroy_run_domain
 
-        destroy_domain_by_name(ctx.vm_name)
+        destroy_run_domain(ctx.vm_name)
         loop.remove_signal_handler(signum)
 
     installed = []
@@ -269,7 +278,7 @@ class TestRegistrationMatchesTheSource:
 
     def test_a_second_signal_destroys_the_domain(self):
         source = self._source()
-        assert 'destroy_domain_by_name' in source
+        assert 'destroy_run_domain' in source
 
     def test_handlers_are_removed_on_exit(self):
         """batch_runner and the webapi await this in-process; a stale handler misfires."""

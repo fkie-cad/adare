@@ -20,6 +20,17 @@ from adare.hypervisor.qemu.file_transfer import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_host_virtiofsd(monkeypatch):
+    """Tests decide virtiofsd availability through ``shutil.which`` alone.
+
+    Without this, a host that has virtiofsd at a known off-PATH location
+    (``/usr/lib/qemu/virtiofsd`` on Debian/Ubuntu) is detected regardless of the
+    patched ``which`` -- and the probe prepends that directory to the real PATH.
+    """
+    monkeypatch.setattr('adare.hypervisor.qemu.file_transfer._VIRTIOFSD_KNOWN_PATHS', ())
+
+
 class TestDetectFileTransferMode:
     """Tests for detect_file_transfer_mode()."""
 

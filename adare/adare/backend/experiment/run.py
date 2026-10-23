@@ -340,13 +340,13 @@ async def experiment_run(
         # worse for a forensic tool. So: first signal collects the artifacts,
         # second signal forfeits them.
         log.warning(f"Second {name} received — skipping graceful wind-down and destroying the VM domain(s) immediately")
-        from adare.backend.experiment.vm_lifecycle_manager import destroy_domain_by_name
+        from adare.hypervisor.qemu.run_resources import destroy_run_domain
 
         # Multi-machine runs have one VM per machine key (not just the primary/None
         # one `experiment_run_context.vm_name` would read) -- destroy every one so a
         # second SIGTERM cannot leak a sibling VM.
         for machine_ctx in experiment_run_context.machines.values():
-            destroy_domain_by_name(machine_ctx.vm_name)
+            destroy_run_domain(machine_ctx.vm_name)
 
         # Hand the signal back to the default handler so a third one, or an
         # unwinding that is itself wedged, still terminates the process.
