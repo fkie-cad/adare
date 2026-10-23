@@ -228,11 +228,9 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
             if context.config.environment_name:
                 environment_name = context.config.environment_name
             else:
-                environment_file = experiment_database.get_experiment_environment(
-                    context.config.project_path, context.config.environment_name, context.config.experiment_name
+                environment_name = experiment_database.get_experiment_environment_name(
+                    context.config.project_path, context.config.experiment_name
                 )
-                # update environment_name based on file stem
-                environment_name = environment_file.stem
                 context.config.environment_name = environment_name
             _resolve_machine_environment(context, context.primary_machine, environment_name)
 
@@ -254,6 +252,8 @@ def _resolve_machine_environment(
     machine_ctx.environment_ulid = experiment_database.get_environment_ulid(
         context.config.project_path, environment_name
     )
+
+    environment_database.verify_environment_disk_pin(machine_ctx.environment_ulid)
 
     # For lazy loading, VM file might not be available yet - will be resolved during VM creation
     machine_ctx.vm_file = environment_database.get_environment_vm_file(machine_ctx.environment_ulid)

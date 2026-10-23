@@ -26,12 +26,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @env.command()
     @click.argument('environment', type=click.Path(exists=False))
-    @click.option('--project', '-p', help='Name of the project')
+    @click.option('--project', '-p', hidden=True, help='Ignored: environments are global.')
     @click.option(
         '--force',
         '-f',
         is_flag=True,
-        help='Force update of the environment. For a recipe environment this rebuilds BOTH the base disk and the provisioning stage.',
+        help='Load a changed file as a new version of an existing environment (the old version and its runs are kept). For a recipe environment this also rebuilds BOTH the base disk and the provisioning stage.',
     )
     @click.option(
         '--no-copy',
@@ -84,11 +84,11 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @env.command()
     @click.argument('name', type=click.Path(exists=False))
-    @click.option('--project', '-p', help='Name of the project')
+    @click.option('--project', '-p', hidden=True, help='Ignored: environments are global.')
     @click.option(
         '--with-vm',
         type=click.Path(exists=True),
-        help='VM file path (OVA) to load automatically during environment creation',
+        help='Disk image to reference in the new environment file (registered by `adare env load`)',
     )
     def create(name, project, with_vm):
         """Create an environment.
@@ -132,7 +132,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         '--source-iso-sha256',
         help='Optional provenance: sha256 of the installer ISO this disk was built from, if still known. Informational only.',
     )
-    @click.option('--project', '-p', help='Name of the project')
+    @click.option('--project', '-p', hidden=True, help='Ignored: environments are global.')
     def publish_prepare(name, vm_url, vm_format, verify_url, compress, source_profile, source_iso_sha256, project):
         """Prepare a local baked environment for sharing (local disk -> URL + sha256).
 
@@ -171,7 +171,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option(
         '--iso-notes', help='Plain-text download pointer for the consumer (defaults to the OS profile\'s iso_notes)'
     )
-    @click.option('--project', '-p', help='Name of the project')
+    @click.option('--project', '-p', hidden=True, help='Ignored: environments are global.')
     def recipe_byo(name, iso_name, iso_notes, project):
         """Convert a recipe environment's local ISO path into a consumer-supplied ISO.
 
@@ -232,7 +232,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--description', '-d', help='Description for the new environment')
     @click.option('--tag', '-t', multiple=True, help='Tag to attach to the new environment (repeatable)')
     @click.option('--force', '-f', is_flag=True, help='Force overwrite if the new name already exists')
-    @click.option('--project', '-p', help='Name of the project')
+    @click.option('--project', '-p', hidden=True, help='Ignored: environments are global.')
     def extend(
         source,
         name,
@@ -307,17 +307,19 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @env.command()
     @click.argument('identifier')
-    @click.option('--force', '-f', is_flag=True, help='Force deletion of the environment and any orphaned experiments')
+    @click.option(
+        '--force', '-f', is_flag=True, help='Also delete the runs that used the environment and detach its experiments'
+    )
     def remove(identifier, force):
-        """Remove an environment.
+        """Remove an environment, including all of its versions.
 
         IDENTIFIER can be:
         - Environment name: ubuntu24
         - Environment ULID: 01K72Q25GDNHWMEZB97N9RDPG0
 
-        WARNING: If this environment is the only one used by experiments,
-        those experiments will become orphaned and be removed when using --force.
-        Without --force, removal will fail to prevent data loss."""
+        Without --force, removal fails while any version has experiment runs or
+        is the only environment of an experiment. With --force those runs are
+        deleted and the experiments are kept, without this environment."""
         from adare.cli.environment import exec_environment_delete
 
         args = SimpleNamespace(identifier=identifier, force=force)
@@ -326,7 +328,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @env.command(name='list')
     @output_options
     def list_environments():
-        """List all environments in a project."""
+        """List all environments (current versions; environments are global)."""
         from adare.cli.show import exec_show_environments
 
         args = SimpleNamespace()

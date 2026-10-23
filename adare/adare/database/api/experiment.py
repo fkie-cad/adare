@@ -102,7 +102,11 @@ class ExperimentApi(ProjectDatabaseApi):
         try:
             with GlobalDatabaseApi() as global_api:
                 # Fix N+1 query: Use single query with IN clause
-                environments = global_api._session.query(Environment).filter(Environment.name.in_(names)).all()
+                environments = (
+                    global_api._session.query(Environment)
+                    .filter(Environment.name.in_(names), Environment.is_current)
+                    .all()
+                )
 
                 # Preserve order from input names
                 env_map = {env.name: env.id for env in environments}
@@ -122,7 +126,11 @@ class ExperimentApi(ProjectDatabaseApi):
 
         try:
             with GlobalDatabaseApi() as global_api:
-                return global_api._session.query(Environment).filter_by(name=environment_name).first()
+                return (
+                    global_api._session.query(Environment)
+                    .filter(Environment.name == environment_name, Environment.is_current)
+                    .first()
+                )
         except SQLAlchemyError as e:
             log.error(f"Database error querying global environment '{environment_name}': {e}")
             return None

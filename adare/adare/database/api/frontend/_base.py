@@ -109,7 +109,11 @@ class DataRetrievalBase:
             raise ProjectNotFoundError(log, f'Project "{project_name}" not found')
 
     def _check_environment_exists_by_name(self, environment_name: str):
-        if not self._global_api._session.query(Environment).filter_by(name=environment_name).count():
+        if (
+            not self._global_api._session.query(Environment)
+            .filter(Environment.name == environment_name, Environment.is_current)
+            .count()
+        ):
             raise EnvironmentNotFoundError(log, f'Environment "{environment_name}" not found')
 
     def _check_environment_exists_by_ulid(self, environment_ulid: str):

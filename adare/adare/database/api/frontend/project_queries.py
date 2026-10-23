@@ -110,9 +110,10 @@ class ProjectQueryMixin(_Host):
         return data.drop(columns=['object'])
 
     def get_environments(self) -> pd.DataFrame:
-        data = pd.read_sql(self._global_api._session.query(Environment).statement, self._global_api._session.bind).map(
-            str
-        )
+        data = pd.read_sql(
+            self._global_api._session.query(Environment).filter(Environment.is_current).statement,
+            self._global_api._session.bind,
+        ).map(str)
         return self._enrich_environment_data(data)
 
     def get_environment(self, project_name: str = None, environment_name: str = None, ulid: str = None) -> pd.DataFrame:
@@ -143,11 +144,17 @@ class ProjectQueryMixin(_Host):
 
     def get_environment_by_name(self, environment_name: str) -> pd.DataFrame:
         """Get environment by name (environments are now global)."""
-        if not self._global_api._session.query(Environment).filter_by(name=environment_name).count():
+        if (
+            not self._global_api._session.query(Environment)
+            .filter(Environment.name == environment_name, Environment.is_current)
+            .count()
+        ):
             raise EnvironmentNotFoundError(log, f'Environment "{environment_name}" not found')
 
         environment_df = pd.read_sql(
-            self._global_api._session.query(Environment).filter(Environment.name == environment_name).statement,
+            self._global_api._session.query(Environment)
+            .filter(Environment.name == environment_name, Environment.is_current)
+            .statement,
             self._global_api._session.bind,
         )
         environment_df = environment_df.map(str)
