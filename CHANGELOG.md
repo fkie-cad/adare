@@ -53,6 +53,24 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `adare ws action` / `adare icons dump-all` take `--token` / `ADARE_AGENT_TOKEN`.
 
 ### Changed
+- QEMU runs no longer copy the environment disk into a pooled instance (a full
+  `qemu-img convert`, ~12 GB, per instance). Each run boots a throwaway overlay
+  directly on the read-only environment disk with its own UEFI varstore, domain
+  config and domain UUID, all removed when the run ends; runs of one environment
+  are independent and can run concurrently. Non-qcow2 disks are converted once.
+- The QEMU vTPM is per run: every run boots a copy of the environment's vTPM
+  template (adopted from the previously shared vTPM, or manufactured once), so
+  the TPM identity stays stable but no run inherits another run's TPM changes.
+- The run-time disk integrity check hashes the full disk only when it changed
+  since its last verification (size/mtime/ctime/inode, cached under
+  `~/.adare/state/disk-digests/`); managed disk copies are read-only on POSIX.
+- VM instances record their owning process (`owner_pid`, migration
+  `add_owner_pid_to_vm_instance`). Instances of crashed runs are reclaimed by the
+  next QEMU run and `adare vm prune`, which also removes pooled QEMU instances
+  left from before per-run overlays; a live run's instance is never touched.
+- `adare vm remove --all` / `--env` remove instances, as documented; they used to
+  delete the VM registrations and break every environment using them (`adare vm
+  reset` remains the command for that).
 - Environments are versioned. `adare env load --force` on a changed file adds a
   new version and keeps the old one with its runs; it used to delete the old
   environment and every run of it in every project. `env remove` deletes all
@@ -111,6 +129,13 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Concurrent QEMU runs of one environment deleted each other's overlays (the
+  orphan sweep matched every overlay of the template), and `--no-copy` overlays
+  were written next to the user's disk.
+- Multi-machine runs on one VM collided on the instance name and released only
+  the last machine's instance.
+- `adare vm test` used a fixed host port (19000), so two tests collided; it now
+  also works for non-qcow2 disks and removes its config/varstore afterwards.
 - Running an experiment without `-e` looked up an environment named after the
   managed file (`<name>_<hash8>`) and failed.
 - Environment installation / platform lookups queried a non-existent `ulid` column.

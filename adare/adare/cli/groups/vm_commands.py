@@ -81,11 +81,13 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         '--sockets', is_flag=True, default=False, help='Also reap crash-orphaned dead QMP/QGA sockets in run/.'
     )
     def vm_prune(dry_run, sockets):
-        """Reclaim orphaned QEMU base disks (and, with --sockets, dead sockets).
+        """Reclaim what crashed runs and older versions left behind.
 
-        An orphan is a '<name>-base.qcow2' (plus its '-nvram.fd' sibling) whose
-        instance/VM is no longer registered in the database. This is the
-        garbage collector for debris left by older removal paths or crashes.
+        Instances of runs whose process is gone (QEMU: domain, overlay, varstore,
+        vTPM copy and row; VirtualBox: released to the pool), QEMU run files
+        without an instance, pooled QEMU instances from before per-run overlays,
+        and orphaned '<name>-base.qcow2' / '-nvram.fd' files, stale recipe base
+        caches and (with --sockets) dead sockets.
 
         \b
         Examples:

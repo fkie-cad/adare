@@ -9,8 +9,8 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.hypervisor.exceptions import HypervisorException
+from adare.hypervisor.qemu.mixins.configuration import get_qemu_disk_dir
 
 if TYPE_CHECKING:
     from adare.hypervisor.qemu.mixins.host import QEMUVMHost as _Host
@@ -162,6 +162,16 @@ class DiskManagementMixin(_Host):
             Overlay: ADARE-Ubuntu-24.04_exp_01KDK1XE-overlay-01KDKGR211GPRRSC0NGX8GWZMH.qcow2
             (72 characters - well within 255 limit)
         """
+        if self._external_disk_path:
+            # Template disk (possibly the user's own file, shared by concurrent
+            # runs): keep the overlay in managed storage and name it after this
+            # VM (the run instance), never after the template, so neither the name
+            # nor _cleanup_orphaned_overlays can reach another run's overlay.
+            overlay_dir = get_qemu_disk_dir()
+            overlay_name = f"{self.vm_name}-overlay-{experiment_id}.qcow2"
+            if len(overlay_name) > 255:
+                raise HypervisorException(f"Overlay filename exceeds 255 characters: {overlay_name}")
+            return str(overlay_dir / overlay_name)
         # First, try to get the base disk path (normal case)
         base_disk_path = self.get_base_disk_path()
         base_disk = Path(base_disk_path)
@@ -214,12 +224,6 @@ class DiskManagementMixin(_Host):
                     f"Base VM name may be too long. Consider using a shorter VM name."
                 )
 
-            # For external VMs, store overlays in managed storage (not next to original file)
-            if self._external_disk_path:
-                overlay_dir = QEMU_STATE_DIR / 'disks'
-                overlay_dir.mkdir(parents=True, exist_ok=True)
-                log.debug(f"Using managed storage for external VM overlay: {overlay_dir}")
-                return str(overlay_dir / overlay_name)
             # Managed VM - store overlay next to base disk
             log.debug(f"Generated overlay name (external case): {overlay_name}")
             return str(current_disk.parent / overlay_name)
@@ -364,11 +368,10 @@ class DiskManagementMixin(_Host):
 
             # Determine overlay directory based on VM type
             if self._external_disk_path:
-                # External VM: overlays are in managed storage, not next to base
-                overlay_dir = QEMU_STATE_DIR / 'disks'
-                # External qcow2: use the original filename stem
-                vm_name_stem = Path(self._external_disk_path).stem
-                log.debug(f"Cleaning external VM overlays from managed storage: {overlay_dir}")
+                # Template disk: this VM's own overlays only (named after the VM,
+                # see get_overlay_disk_path) -- other runs share the template.
+                overlay_dir = get_qemu_disk_dir()
+                vm_name_stem = self.vm_name
             else:
                 # Managed VM: overlays are next to base disk
                 overlay_dir = base_path.parent

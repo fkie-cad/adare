@@ -108,19 +108,20 @@ class TestDestroyDomainByName:
         assert destroy_domain_by_name('run-vm-1') is True
         assert domain.destroy_calls == 1
 
-    def test_undefines_keeping_the_nvram_varstore(self, destroy_domain_by_name, fake_libvirt):
-        """Undefine so virsh does not fill with stale shut-off domains — but KEEP_NVRAM.
+    def test_undefines_taking_the_run_varstore_with_it(self, destroy_domain_by_name, fake_libvirt):
+        """Undefine so virsh does not fill with stale shut-off domains.
 
-        The varstore is instance-scoped and the instance is reused by the next
-        experiment, so the destructive NVRAM flag must never appear here.
+        The varstore belongs to this run alone (runs overlay a read-only
+        template), so it goes with the domain -- NVRAM, never KEEP_NVRAM.
         """
         domain = FakeDomain(active=True)
         fake_libvirt.domains['run-vm-1'] = domain
 
         destroy_domain_by_name('run-vm-1')
 
-        assert domain.undefine_flags_calls == [1]  # KEEP_NVRAM
-        assert not domain.undefine_flags_calls[0] & 2  # never NVRAM (deletes the file)
+        (flags,) = domain.undefine_flags_calls
+        assert flags & 2  # NVRAM: delete the run's varstore
+        assert not flags & 1  # never KEEP_NVRAM
 
     def test_missing_domain_is_silent_and_false(self, destroy_domain_by_name, fake_libvirt):
         """Idempotence: called twice, or before a VM existed, it must not raise."""

@@ -110,6 +110,11 @@ MIGRATIONS: list[Migration] = [
         scope='global',
         module=f'{_PACKAGE}.add_environment_versioning',
     ),
+    Migration(
+        name='add_owner_pid_to_vm_instance',
+        scope='global',
+        module=f'{_PACKAGE}.add_owner_pid_to_vm_instance',
+    ),
 ]
 
 # Applied-migration names per database URL. Keeps auto-apply at one SELECT per

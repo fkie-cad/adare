@@ -90,15 +90,8 @@ class QEMUVM(
         boot_from_cdrom: bool = False,
         resolution: str | None = None,
         hypervisor_config: dict | None = None,
-        environment_identity: str | None = None,
     ):
         self.vm_name = vm_name
-        # Stable per-environment id (e.g. the environment's vm_id), used only to
-        # derive a deterministic domain UUID on first config creation -- see
-        # ConfigurationMixin._domain_uuid_for. vm_name itself is run-scoped, so
-        # this is the one piece of identity that survives across runs of the
-        # same environment. None for callers with no environment context.
-        self._environment_identity = environment_identity
         self.guest_os = guest_os
         self.architecture = architecture
         self.username = username
