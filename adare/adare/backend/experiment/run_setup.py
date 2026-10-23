@@ -253,7 +253,7 @@ def _resolve_machine_environment(
         context.config.project_path, environment_name
     )
 
-    environment_database.verify_environment_disk_pin(machine_ctx.environment_ulid)
+    environment_database.verify_environment_vm(machine_ctx.environment_ulid)
 
     # For lazy loading, VM file might not be available yet - will be resolved during VM creation
     machine_ctx.vm_file = environment_database.get_environment_vm_file(machine_ctx.environment_ulid)

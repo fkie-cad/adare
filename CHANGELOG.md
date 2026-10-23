@@ -53,6 +53,13 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `adare ws action` / `adare icons dump-all` take `--token` / `ADARE_AGENT_TOKEN`.
 
 ### Changed
+- `adare vm` help separates registered VMs (`list`, `info`, `reset`) from
+  instances (`usage`, `remove`, `snapshot`, `prune`); `vm create` no longer
+  suggests `--no-copy` for a disk already in managed storage.
+- A run fails early when its environment and VM disagree on the hypervisor
+  (possible for environments loaded before the load-time check).
+- `--preserve-snapshot` on a QEMU run warns that it is VirtualBox-only and points
+  to `--export-disk-image` instead of silently doing nothing.
 - QEMU runs no longer copy the environment disk into a pooled instance (a full
   `qemu-img convert`, ~12 GB, per instance). Each run boots a throwaway overlay
   directly on the read-only environment disk with its own UEFI varstore, domain
@@ -129,6 +136,8 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- `adare vm snapshot remove` always failed (it went through a deprecated
+  template-level path that refused every deletion).
 - Concurrent QEMU runs of one environment deleted each other's overlays (the
   orphan sweep matched every overlay of the template), and `--no-copy` overlays
   were written next to the user's disk.
@@ -183,6 +192,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `pattern` to the shell unquoted, allowing command injection from a playbook.
 
 ### Removed
+- Dead VM/environment code: template-level snapshot shims, always-true VM
+  "verification", the duplicated VirtualBox re-import in the run path (it now
+  re-allocates through the normal path), unused environment API helpers and the
+  second `parse_environment_file`.
 - Broken console scripts `adareexp` and `mcp_gui` (their modules no longer exist).
 - Stale CV server scripts (`reproduce_ocr.py`, a pipeline test for an API that
   no longer exists, sample images).

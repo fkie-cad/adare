@@ -606,24 +606,39 @@ def get_environment_path_by_project_and_name(project_path: Path, environment_nam
         )
 
 
-def verify_environment_disk_pin(environment_ulid: str) -> None:
-    """Fail if the environment's VM now points at a different disk than it was loaded with.
+def verify_environment_vm(environment_ulid: str) -> None:
+    """Fail if the environment and its (shared) VM no longer agree.
 
-    Several environments can share one VM, and a forced reload of one of them
-    may replace that VM's disk. The run would then use bytes this environment
-    version was never loaded (or hashed) against.
+    Several environments can share one VM row. A forced reload of one of them
+    may replace that VM's disk, so each environment version pins the disk hash
+    it was loaded with. Run setup reads the hypervisor from the environment and
+    instance management reads it from the VM, so the two must match as well
+    (loads enforce this; rows from before that check may not).
     """
     with EnvironmentDbApi() as db:
         env = db.get_environment_by_ulid(environment_ulid)
-        if not env or not env.vm or not env.vm_hash or env.vm_hash == env.vm.hash:
+        if not env or not env.vm:
             return
-        name, vm_name, pinned, registered = env.name, env.vm.name, env.vm_hash, env.vm.hash
-    raise EnvironmentDiskChanged(
-        log,
-        f"Environment '{name}' was loaded against disk {pinned[:16]}..., but VM '{vm_name}' "
-        f"now has disk {registered[:16]}... (replaced by a forced reload of another environment)",
-        possible_solutions=[f'Reload the environment to accept the new disk: adare env load --force {name}'],
-    )
+        name, vm_name = env.name, env.vm.name
+        pinned, registered = env.vm_hash, env.vm.hash
+        env_hypervisor, vm_hypervisor = env.hypervisor, env.vm.hypervisor
+    if pinned and pinned != registered:
+        raise EnvironmentDiskChanged(
+            log,
+            f"Environment '{name}' was loaded against disk {pinned[:16]}..., but VM '{vm_name}' "
+            f"now has disk {registered[:16]}... (replaced by a forced reload of another environment)",
+            possible_solutions=[f'Reload the environment to accept the new disk: adare env load --force {name}'],
+        )
+    if env_hypervisor != vm_hypervisor:
+        raise EnvironmentDiskChanged(
+            log,
+            f"Environment '{name}' declares hypervisor '{env_hypervisor}', but its VM '{vm_name}' "
+            f"is registered for '{vm_hypervisor}'",
+            possible_solutions=[
+                f'Set "hypervisor: {vm_hypervisor}" in the environment file and reload it with --force',
+                'Or remove the environment and load it with a separate disk',
+            ],
+        )
 
 
 def get_environment_vm_ids(environment_ulid: str) -> list:

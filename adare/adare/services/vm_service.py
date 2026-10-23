@@ -567,31 +567,17 @@ class VMService:
                         ],
                     )
 
-                # Get the parent VM record
-                vm_record = api.get_vm_by_id(instance.vm_id)
-                if not vm_record:
-                    return Result.fail(
-                        code="VMNotFoundError",
-                        message=f'Parent VM with ID {instance.vm_id} not found',
-                        solutions=[
-                            'The VM may have been deleted',
-                        ],
-                    )
-
-            # Delete the snapshot using snapshot manager
-            snapshot_manager = SnapshotManager()
-            success, msg = snapshot_manager._delete_snapshot(vm_record, snapshot_name)
-
-            if success:
-                return Result.ok(None)
-            return Result.fail(
-                code="SnapshotDeleteError",
-                message=f'Failed to delete snapshot "{snapshot_name}": {msg}',
-                solutions=[
-                    'Check if the snapshot exists',
-                    'Ensure the VM is not running',
-                ],
-            )
+            # Base snapshots are protected (VMError); QEMU run instances have none.
+            if not SnapshotManager().delete_instance_snapshot(instance, snapshot_name):
+                return Result.fail(
+                    code="SnapshotDeleteError",
+                    message=f'Failed to delete snapshot "{snapshot_name}"',
+                    solutions=[
+                        'Check if the snapshot exists',
+                        'Ensure the VM is not running',
+                    ],
+                )
+            return Result.ok(None)
 
         except VMNotFoundError as e:
             return Result.from_exception(e)

@@ -25,6 +25,15 @@ def _use_recipe(os_def: OsDefinition, recipe_flag: bool | None) -> bool:
     return os_def.platform == 'windows'
 
 
+def _in_managed_storage(disk_path: Path) -> bool:
+    from adare.config.configdirectory import VMS_DIR
+
+    try:
+        return disk_path.resolve().parent == VMS_DIR.resolve()
+    except OSError:
+        return False
+
+
 def exec_vm_create(arguments):
     """Create a new ADARE-ready VM from scratch.
 
@@ -231,15 +240,18 @@ def exec_vm_create(arguments):
         env_file_path = build_baked_environment_file(
             disk_path=disk_path, os_def=os_def, vm_name=final_name, env_name=env_name
         )
+        # A disk already in managed storage is registered in place (no copy);
+        # --no-copy only matters for a custom --vm-dir.
+        no_copy = '' if _in_managed_storage(disk_path) else ' --no-copy'
         env_next_steps = [
-            f'Load environment: adare environment load {env_file_path} --no-copy',
+            f'Load environment: adare environment load {env_file_path}{no_copy}',
             'Then: adare experiment load <playbook> && adare experiment run',
         ]
     except OSError as e:
         log.warning('Failed to generate environment file: %s', e)
         env_next_steps = [
             'Create an environment YAML referencing this VM',
-            'Then: adare environment load <env.yml> --no-copy',
+            'Then: adare environment load <env.yml>',
         ]
 
     if os_def.install_mode == 'gui-auto':
