@@ -84,6 +84,14 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   apart from a slow boot.
 
 ### Changed
+- `adare vm remove <name-or-id>` removes what `adare vm list` shows: a registered
+  VM (with the environments that run on it, after showing what goes and asking;
+  `-y` skips the prompt) or a VM instance, by name or ID. It refuses while an
+  instance is running, and never removes a VM that another version of one of
+  those environments runs on. `--id` still works. Usage errors now exit 2.
+  `vm prune` lists registered VMs no environment uses (it does not delete them).
+- `vm reset`, `vm remove --env` and their prompts now say what they do: remove
+  instances. Registered VMs were never deleted by them.
 - `env remove` refuses without `--force` when a registered project cannot be
   checked for references, and deletes exactly the versions it checked.
 - `env load --force` on an unchanged file whose disk is unchanged no longer adds
@@ -173,6 +181,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Deleting a VM in the web UI only dropped its database row: instances, QEMU
+  templates and the managed disk were left behind, and environments using it
+  silently lost their VM. It now tears the VM down fully and refuses a VM that
+  environments use.
+- Deleting a VM with force (`env remove --force`, web UI) deleted a running
+  instance's row but left its domain running; force now reaches the instance cleanup.
 - Concurrent QEMU runs could delete each other's run files: the crashed-run
   sweep at run start now scans files before reading instance rows.
 - `experiment run` without `-e` failed with "multiple environments" after

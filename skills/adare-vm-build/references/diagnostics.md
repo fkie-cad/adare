@@ -42,13 +42,14 @@ longer in the DB) left by older removal paths or crashes. **Dry-run by default**
 always preview before `--force`.
 
 ```sh
-adare vm remove --id <ulid>              # one instance
+adare vm remove <instance-name-or-id>    # one instance (--force if running)
+adare vm remove <vm-name-or-id>          # registered VM + its environments (asks; -y skips)
 adare vm remove --stopped                # all stopped instances
 adare vm remove --experiment <id>        # instances for an experiment
-adare vm remove --env <ulid> --force     # all VMs for an environment
+adare vm remove --env <ulid> --force     # instances of an environment's VM
 adare vm remove --all --force            # ALL instances incl. running
 adare vm snapshot remove <…>             # delete one snapshot
-adare vm reset --force                   # reset ALL VMs — use with extreme caution
+adare vm reset --force                   # remove ALL instances — use with extreme caution
 ```
 
 `vm remove --all --force` and `vm reset --force` wipe VMs system-wide. Confirm the

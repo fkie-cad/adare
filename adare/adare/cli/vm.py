@@ -324,106 +324,135 @@ def exec_vm_instance_info(arguments):
     print_vm_instance_info(arguments.instance_id)
 
 
-async def exec_vm_instance_remove(arguments):
-    """Remove VM instances based on criteria using AdareAPI."""
+def _clear_results_dict(data) -> dict:
+    """VmClearResult -> the dict the cleanup printers expect."""
+    return {
+        'deleted_count': data.deleted_count,
+        'deleted_vms': data.deleted_vms,
+        'failed_count': data.failed_count,
+        'failed_vms': data.failed_vms,
+    }
+
+
+def exec_vm_remove(arguments):
+    """Remove a registered VM or a VM instance (auto-detected), or instances in bulk."""
+    from adare.backend.vm.database import run_blocking
+    from adare.cli.errors import EXIT_USAGE, fail
+    from adare.frontend.terminal.vm_cleanup import (
+        print_vm_clear_all_results,
+        print_vm_clear_environment_confirmation,
+        print_vm_clear_environment_results,
+    )
     from adare.frontend.terminal.vm_instances import print_vm_instance_cleanup_results
 
     api = AdareAPI()
 
-    if arguments.instance_id:
-        # Remove specific instance by ULID
-        if not _is_valid_ulid(arguments.instance_id):
-            print_error_message(
-                title="Invalid instance ID format",
-                next_steps=[f"Instance ID '{arguments.instance_id}' is not a valid ULID format"],
-            )
-            return
+    if getattr(arguments, 'target', None):
+        from adare.backend.vm.resolve import resolve_vm_target
 
-        result = await api.vm.remove_instance(arguments.instance_id)
-        if result.success:
-            print_vm_instance_cleanup_results([arguments.instance_id], "specific instance")
-        else:
+        target = resolve_vm_target(arguments.target)
+        if target.kind == 'vm':
+            _remove_registered_vm(target, force=arguments.force, assume_yes=getattr(arguments, 'yes', False))
+            return
+        result = run_blocking(api.vm.remove_instance(target.id, force=arguments.force))
+        if not result.success:
             handle_api_error(result)
+        print_vm_instance_cleanup_results([target.name], "specific instance")
 
     elif arguments.all and arguments.force:
         # Remove ALL instances (running or not) — replaces 'vm clear all --force'
         result = api.vm.clear_all(force=True)
-        if result.success:
-            from adare.frontend.terminal.vm_cleanup import print_vm_clear_all_results
-
-            results = {
-                'deleted_count': result.data.deleted_count,
-                'deleted_vms': result.data.deleted_vms,
-                'failed_count': result.data.failed_count,
-                'failed_vms': result.data.failed_vms,
-            }
-            print_vm_clear_all_results(results)
-        else:
+        if not result.success:
             handle_api_error(result)
+        print_vm_clear_all_results(_clear_results_dict(result.data))
 
-    elif arguments.all and not arguments.force:
-        print_error_message(
-            title="--all requires --force",
-            next_steps=[
-                "Use --all --force to remove ALL instances (including running ones)",
-                "Use --stopped to remove only stopped instances",
+    elif arguments.all:
+        fail(
+            'USAGE',
+            '--all requires --force',
+            [
+                'Use --all --force to remove ALL instances (including running ones)',
+                'Use --stopped to remove only stopped instances',
             ],
+            exit_code=EXIT_USAGE,
         )
 
     elif getattr(arguments, 'environment_ulid', None):
-        # Remove all VMs for environment — replaces 'vm clear environment'
+        # Remove the instances of an environment's VM — replaces 'vm clear environment'
         if not arguments.force:
-            from adare.frontend.terminal.vm_cleanup import print_vm_clear_environment_confirmation
-
             print_vm_clear_environment_confirmation(arguments.environment_ulid)
             return
-
         result = api.vm.clear_by_environment(arguments.environment_ulid, force=True)
-        if result.success:
-            from adare.frontend.terminal.vm_cleanup import print_vm_clear_environment_results
-
-            results = {
-                'deleted_count': result.data.deleted_count,
-                'deleted_vms': result.data.deleted_vms,
-                'failed_count': result.data.failed_count,
-                'failed_vms': result.data.failed_vms,
-            }
-            print_vm_clear_environment_results(results, arguments.environment_ulid)
-        else:
+        if not result.success:
             handle_api_error(result)
+        print_vm_clear_environment_results(_clear_results_dict(result.data), arguments.environment_ulid)
 
     elif getattr(arguments, 'stopped', False):
         # Remove all stopped instances — replaces old '--all' behavior
         if not _confirm_removal("all stopped instances"):
             log.info("Operation cancelled by user")
             return
-
-        result = await api.vm.remove_all_stopped_instances()
-        if result.success:
-            print_vm_instance_cleanup_results(result.data.removed_instances, "all stopped instances")
-        else:
+        result = run_blocking(api.vm.remove_all_stopped_instances())
+        if not result.success:
             handle_api_error(result)
+        print_vm_instance_cleanup_results(result.data.removed_instances, "all stopped instances")
 
     elif arguments.experiment_id:
         from adare.backend.vm.commands import cleanup_vm_instances_for_experiment
 
-        await cleanup_vm_instances_for_experiment(arguments.experiment_id)
+        run_blocking(cleanup_vm_instances_for_experiment(arguments.experiment_id))
         print_vm_instance_cleanup_results([arguments.experiment_id], "experiment instances")
 
     else:
-        print_error_message(
-            title="No removal criteria specified",
-            next_steps=["Use --id, --stopped, --experiment, --all --force, or --env --force"],
+        fail(
+            'USAGE',
+            'Nothing to remove: name a VM or instance, or pick instances to remove',
+            [
+                'adare vm remove <name-or-id>  (see `adare vm list` and `adare vm usage`)',
+                'Or one of --stopped, --experiment <id>, --all --force, --env <ulid> --force',
+            ],
+            exit_code=EXIT_USAGE,
         )
 
 
-def _is_valid_ulid(ulid_string):
-    """Validate ULID format."""
-    import re
+def _stdin_is_terminal() -> bool:
+    import sys
 
-    # ULID format: 26 characters, base32 encoded (0-9, A-Z excluding I, L, O, U)
-    ulid_pattern = r'^[0-9A-HJKMNP-TV-Z]{26}$'
-    return bool(re.match(ulid_pattern, ulid_string))
+    return sys.stdin.isatty()
+
+
+def _remove_registered_vm(target, force: bool, assume_yes: bool) -> None:
+    """Remove a registered VM with its environments, after showing what goes and asking."""
+    import click
+
+    from adare.backend.vm.removal import plan_vm_removal, remove_vm
+    from adare.cli.errors import EXIT_USAGE, fail
+    from adare.frontend.terminal.vm_cleanup import print_vm_removal_plan
+
+    plan = plan_vm_removal(target.id)
+    plan.check(force=force)  # refuse before asking
+    print_vm_removal_plan(plan, force)
+    if not assume_yes:
+        if not _stdin_is_terminal():
+            fail(
+                'USAGE',
+                f'Refusing to remove VM {plan.vm_name} without confirmation (stdin is not a terminal)',
+                ['Pass --yes to remove it without asking'],
+                exit_code=EXIT_USAGE,
+            )
+        if not click.confirm('Remove it? This cannot be undone.', default=False):
+            click.echo('Cancelled; nothing removed.')
+            return
+
+    outcome = remove_vm(target.id, force=force)
+    details = [f'Removed environment {name}' for name in outcome.environments]
+    if outcome.disk is not None:
+        details.append(
+            f'Deleted disk {outcome.disk}' if outcome.disk_deleted else f'Kept disk {outcome.disk} (not ADARE-managed)'
+        )
+    print_success_message(title=f'Removed VM {outcome.vm_name}')
+    for detail in details:
+        click.echo(f'   {detail}')
 
 
 def _confirm_removal(target):
@@ -528,6 +557,21 @@ def _print_reconcile_report(report, dry_run: bool) -> None:
                 click.echo(f"                {name}")
 
 
+def _print_unreferenced_vms() -> None:
+    """List registered VMs no environment uses. Never deleted by prune: registering a disk
+    without an environment is legitimate (the API does it), so removing one is a decision."""
+    import click
+
+    from adare.backend.vm.removal import find_unreferenced_vms
+
+    unreferenced = find_unreferenced_vms()
+    if not unreferenced:
+        return
+    click.echo("\nRegistered VMs no environment uses (kept; remove one with `adare vm remove <name>`):")
+    for name, vm_id in unreferenced:
+        click.echo(f"  {name}  ({vm_id})")
+
+
 def exec_vm_prune(arguments):
     """Reclaim orphaned QEMU base disks / NVRAM (and optionally dead sockets).
 
@@ -554,6 +598,7 @@ def exec_vm_prune(arguments):
 
     # 0. Instances: crashed runs, run files without a row, pooled QEMU leftovers.
     _print_reconcile_report(run_blocking(reconcile_instances(dry_run=dry_run)), dry_run)
+    _print_unreferenced_vms()
 
     # 1. Referenced set: every registered VM + instance name from the DB.
     referenced: set[str] = set()

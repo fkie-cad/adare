@@ -297,7 +297,7 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
 
                 for instance in instances:
                     try:
-                        await cleanup_vm_instance(instance.id)
+                        await cleanup_vm_instance(instance.id, force=force)
                         log.info(f"Deleted VM instance: {instance.instance_name}")
                     except (VMError, OSError, InstanceStateException) as inst_error:
                         log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")

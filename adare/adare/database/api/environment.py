@@ -44,6 +44,11 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         """True if any environment version (current or superseded) uses VM ``vm_id``."""
         return bool(self._session.query(exists().where(Environment.vm_id == vm_id)).scalar())
 
+    def get_environment_names_using_vm(self, vm_id: str) -> list[str]:
+        """Names of the environments with any version (current or superseded) on VM ``vm_id``."""
+        rows = self._session.query(Environment.name).filter(Environment.vm_id == vm_id).distinct().all()
+        return sorted(name for (name,) in rows)
+
     def create_environment_version(
         self,
         name: str,

@@ -17,6 +17,24 @@ class VMNotFoundError(VMError):
     pass
 
 
+class AmbiguousVmTargetError(VMError):
+    """A name matches both a registered VM and a VM instance."""
+
+    pass
+
+
+class VMRemovalError(VMError):
+    """A registered VM cannot be removed (an experiment runs on it, or removal would take more along)."""
+
+    pass
+
+
+class VMInUseByEnvironmentError(VMRemovalError):
+    """A registered VM is still what environments run on."""
+
+    pass
+
+
 class VMValidationError(VMError):
     """VM validation failed."""
 

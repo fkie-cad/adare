@@ -16,10 +16,11 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         """VM management commands.
 
         \b
-        Registered VMs (`list`, `info`, `reset`) are the disks environments
-        run on; `adare env load` registers them. Instances (`usage`, `remove`,
-        `snapshot`, `prune`) are what experiment runs boot from them: on QEMU
+        Registered VMs (`list`) are the disks environments run on;
+        `adare env load` registers them. Instances (`usage`, `snapshot`,
+        `prune`, `reset`) are what experiment runs boot from them: on QEMU
         one throwaway instance per run, on VirtualBox a reusable pool.
+        `info` and `remove` take either kind, by name or ID.
         """
         pass
 
@@ -43,33 +44,57 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_vm_info, args)
 
     @vm.command()
-    @click.option('--id', 'instance_id', help='Remove specific instance by ULID')
+    @click.argument('target', required=False, metavar='[NAME_OR_ID]')
+    @click.option('--id', 'target_id', hidden=True, help='Same as NAME_OR_ID (kept for scripts)')
     @click.option('--stopped', is_flag=True, help='Remove all stopped instances')
-    @click.option('--experiment', 'experiment_id', help='Remove instances for specific experiment')
+    @click.option('--experiment', 'experiment_id', help='Remove the instances of an experiment')
     @click.option('--all', is_flag=True, help='Remove ALL instances including running (requires --force)')
-    @click.option('--env', 'environment_ulid', help='Remove all VMs for a specific environment (requires --force)')
-    @click.option('--force', is_flag=True, help='Force removal of running instances')
-    def remove(instance_id, stopped, experiment_id, all, environment_ulid, force):
-        """Remove VM instances.
+    @click.option('--env', 'environment_ulid', help="Remove the instances of an environment's VM (requires --force)")
+    @click.option(
+        '-f',
+        '--force',
+        is_flag=True,
+        help='Instance: remove it even if running. Registered VM: also delete the runs that used its environments.',
+    )
+    @click.option('-y', '--yes', is_flag=True, help='Skip the confirmation prompt (registered VMs)')
+    def remove(target, target_id, stopped, experiment_id, all, environment_ulid, force, yes):
+        """Remove a registered VM or a VM instance, or instances in bulk.
 
+        NAME_OR_ID is a name or ID from `adare vm list` (registered VMs) or
+        `adare vm usage` (instances); which kind it is is detected.
+
+        \b
+        A registered VM is the disk environments run on, so removing it also
+        removes those environments with every version -- like `adare env remove`.
+        It shows what goes and asks first (--yes skips that), and refuses while
+        an experiment runs on it. Disks outside ADARE's managed storage are kept.
+
+        \b
         Examples:
-            adare vm remove --id <ulid>              # specific instance
-            adare vm remove --stopped                 # all stopped instances
-            adare vm remove --experiment <id>         # instances for experiment
-            adare vm remove --all --force             # ALL instances (running or not)
-            adare vm remove --env <ulid> --force      # all VMs for environment
+          adare vm remove ubuntu2404-20261023    # registered VM + its environment
+          adare vm remove <instance-name>        # one instance
+          adare vm remove --stopped              # all stopped instances
+          adare vm remove --experiment <id>      # instances of an experiment
+          adare vm remove --all --force          # ALL instances, running or not
+          adare vm remove --env <ulid> --force   # instances of an environment's VM
         """
-        from adare.cli.vm import exec_vm_instance_remove
+        from adare.cli.vm import exec_vm_remove
 
+        if target and target_id and target != target_id:
+            raise click.UsageError(f'two different targets given: {target!r} and --id {target_id!r}. Pass one.')
+        target = target or target_id
+        if target and (stopped or experiment_id or all or environment_ulid):
+            raise click.UsageError('pass either NAME_OR_ID or one of --stopped/--experiment/--all/--env, not both')
         args = SimpleNamespace(
-            instance_id=instance_id,
+            target=target,
             stopped=stopped,
             experiment_id=experiment_id,
             all=all,
             environment_ulid=environment_ulid,
             force=force,
+            yes=yes,
         )
-        exec_with_error_printing(exec_vm_instance_remove, args)
+        exec_with_error_printing(exec_vm_remove, args)
 
     @vm.command()
     @output_options
@@ -438,9 +463,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_vm_doctor, args)
 
     @vm.command(name='reset')
-    @click.option('--force', '-f', is_flag=True, help='Force reset of all VMs (required for confirmation)')
+    @click.option('--force', '-f', is_flag=True, help='Skip the confirmation prompt')
     def vm_reset(force):
-        """Reset all VMs in the system (use with caution)."""
+        """Remove the instances of every VM, running or not (registered VMs stay)."""
         from adare.cli.manage import exec_manage_reset_vm
 
         args = SimpleNamespace(force=force)

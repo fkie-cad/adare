@@ -94,8 +94,7 @@ def print_vm_or_instance_info(vm_or_instance_id: str, formatter=None, output_fil
     Accepts a base-VM ID or name, or a VM-instance ID or name. Raises
     ``VMNotFoundError`` (exit 3 at the CLI boundary) when nothing matches.
     """
-    from adare.database.api.vm import VmApi
-    from adare.database.api.vm.exceptions import VMNotFoundError
+    from adare.backend.vm.resolve import resolve_vm_target
     from adare.frontend.terminal.vm_instances import print_vm_instance_info
 
     # Get formatter if not provided
@@ -104,15 +103,12 @@ def print_vm_or_instance_info(vm_or_instance_id: str, formatter=None, output_fil
 
         formatter, output_file, dual_output = get_formatter_from_context()
 
-    # First, try as base VM (by ID, then by name)
-    vm_info = get_vm_info(vm_or_instance_id)
-    if not vm_info:
-        with VmApi() as api:
-            vm_by_name = api.get_vm_by_name(vm_or_instance_id)
-            vm_id = vm_by_name.id if vm_by_name else None
-        if vm_id:
-            vm_info = get_vm_info(vm_id)
+    target = resolve_vm_target(vm_or_instance_id)
+    if target.kind == 'instance':
+        print_vm_instance_info(target.id, formatter, output_file, dual_output)
+        return
 
+    vm_info = get_vm_info(target.id)
     if vm_info:
         # Check if structured output is needed
         if dual_output or formatter.format_type.value != 'rich':
@@ -136,22 +132,6 @@ def print_vm_or_instance_info(vm_or_instance_id: str, formatter=None, output_fil
         # short window hid snapshot rows without any indication.
         DefaultConsole().print(VMInfoPanel(vm_info))
         return
-
-    # If not found as base VM, try as instance (by ID, then by name)
-    with VmApi() as api:
-        instance = api.get_vm_instance_by_id(vm_or_instance_id) or api.get_vm_instance_by_name(vm_or_instance_id)
-        instance_id = instance.id if instance else None
-    if instance_id:
-        print_vm_instance_info(instance_id, formatter, output_file, dual_output)
-        return
-
-    raise VMNotFoundError(
-        log,
-        f"VM or instance '{vm_or_instance_id}' not found",
-        possible_solutions=[
-            'Run `adare vm list` to see VM and instance IDs and names',
-        ],
-    )
 
 
 def print_vm_instance_snapshots(instance_id: str):

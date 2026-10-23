@@ -468,36 +468,60 @@ Agent Integration
 Virtual Machine Management
 ==========================
 
-VM commands provide lifecycle management for virtual machines used in experiments.
+ADARE knows two kinds of VM:
+
+* **Registered VMs** are the disks environments run on. ``adare env load``
+  registers them; ``adare vm list`` shows them.
+* **VM instances** are what experiment runs boot from a registered VM: on QEMU
+  one throwaway instance per run, on VirtualBox a reusable pool.
+  ``adare vm usage`` shows them.
+
+``info`` and ``remove`` take either kind, by name or ID, and detect which it is.
 
 ``adare vm list``
-  List all VMs currently managed by ADARE, including their status and associated environments.
+  List registered VMs. Alias: ``l``.
 
-``adare vm info <vm_id>``
-  Get detailed information about a specific VM, including snapshots and configuration.
+``adare vm info <name-or-id>``
+  Show a registered VM or a VM instance.
 
-``adare vm delete <vm_id>``
-  Delete a specific VM from the system.
-  
+``adare vm usage``
+  Show VM instances (running experiment runs; VirtualBox pool) and their usage.
+
+``adare vm remove <name-or-id>``
+  Remove a registered VM or a VM instance. Alias: ``rm``.
+
+  A registered VM is the disk environments run on, so removing it also removes
+  those environments, every version -- the same end state as
+  ``adare env remove``. The command lists what goes (environments, stopped
+  instances, runs, the disk) and asks first. It refuses:
+
+  * while an instance of the VM is running (an experiment run or dev session uses it);
+  * when an environment on it also has versions on another VM -- removing the
+    environment would take that VM along; use ``adare env remove`` for that;
+  * without ``--force``, when runs used its environments (as ``adare env remove``).
+
+  Disks inside ADARE's managed storage are deleted; disks elsewhere are kept.
+
   Options:
-    * ``--force`` - Force deletion even if VM is in use
+    * ``-f, --force`` - Instance: remove it even if running. Registered VM: also
+      delete the runs that used its environments (experiments are kept, detached)
+    * ``-y, --yes`` - Skip the confirmation prompt (required when stdin is not a terminal)
 
-``adare vm delete-snapshot <vm_id> <snapshot_name>``
-  Delete a specific snapshot from a VM while preserving the VM itself.
+``adare vm remove --stopped | --experiment <id> | --all --force | --env <ulid> --force``
+  Remove instances in bulk: all stopped ones, those of an experiment, all of
+  them (running too), or those of an environment's VM. Registered VMs stay.
 
-**VM Cleanup Sub-commands (adare vm clear)**
+``adare vm prune``
+  Reclaim what crashed runs left behind (instances, run files, orphaned base
+  disks, stale recipe caches). Dry run unless ``--force``. Also lists registered
+  VMs no environment uses; those are never deleted by prune -- remove one with
+  ``adare vm remove <name>``.
 
-``adare vm clear all``
-  Clear ALL VMs from the system.
-  
-  Options:
-    * ``--force`` - Force deletion of all VMs (required for confirmation)
+``adare vm reset``
+  Remove the instances of every VM, running or not. Registered VMs stay.
 
-``adare vm clear environment <environment_ulid>``
-  Clear all VMs associated with a specific environment.
-  
-  Options:
-    * ``--force`` - Force deletion of environment VMs (required for confirmation)
+``adare vm snapshot list <instance_id>`` / ``adare vm snapshot remove <instance_id> <snapshot_name>``
+  List or delete a VM instance's snapshots (VirtualBox).
 
 Run Management
 ==============
