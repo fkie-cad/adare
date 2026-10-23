@@ -113,6 +113,14 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - Database APIs resolving their path at import time.
 - Late-bound loop variables in the chunked file-pull progress callback.
 - Unclosed file handles in network-drive setup and web-app upload.
+- `adare vm create` playbook installs counted a crash dialog or a hung progress
+  bar as "installed" (any screen still for 45 s), and Kubuntu logins were never
+  checked. A new `wait_text` step (`gone`, `fail_on`, `timeout`) now waits for
+  the installer's "done" screen and fails fast on crash/error texts; the login
+  check fails unless the greeter goes away without an error. All seven playbook
+  profiles use it. The live session is powered off via ACPI before the hard
+  stop, `wait_stable` takes `required: true`, and a failing step saves
+  `<phase>_<nn>_FAILED.png`.
 
 ### Security
 - The guest agent no longer accepts unauthenticated connections (per-run token);
