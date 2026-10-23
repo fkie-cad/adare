@@ -364,4 +364,4 @@ def create_example_action_file(file_path: Path):
 
     print(f"Example playbook-format action file created: {file_path}")
     print("\nNow you can execute it with:")
-    print(f"adare ws action {file_path} --host VM_IP")
+    print(f"adare debug ws action {file_path} --host VM_IP")

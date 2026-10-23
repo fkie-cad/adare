@@ -1,4 +1,4 @@
-"""``adare agent setup/status``: install skills without clobbering anything."""
+"""``adare skills install/status``: install skills without clobbering anything."""
 
 from pathlib import Path
 

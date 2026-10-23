@@ -59,7 +59,7 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   opens every connection with a `welcome` carrying `protocol_version`, versions
   and tools, and serves exactly the `Tool` enum. The host rejects other protocol
   versions (reinstalling the agent once first) and only calls advertised tools.
-  `adare ws action` / `adare icons dump-all` take `--token` / `ADARE_AGENT_TOKEN`.
+  `adare debug ws action` / `adare icons dump-all` take `--token` / `ADARE_AGENT_TOKEN`.
 - `adare vm test` writes a debug log to `./adare-vm-test-<target>-<timestamp>.log`
   and prints its path at the end, failures included. `--log-file` picks the path,
   `--no-log` turns it off, and an existing global `--logfile` is used as is.
@@ -93,6 +93,20 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   apart from a slow boot.
 
 ### Changed
+- CLI commands renamed or moved to the group they belong to. The old names
+  still work (hidden from `--help`) and print the new name on stderr:
+  - `adare run list/info/remove` -> `adare runs ...` (no longer looks like
+    `adare experiment run`)
+  - `adare agent setup/status` -> `adare skills install/status` (no clash with
+    `adare dev agent`)
+  - local web UI: `adare web start/services/build/install-spice` ->
+    `adare ui start/status/build/install-spice`; `adare web` is now only the
+    ADARE Web platform (login, download, publish, submit)
+  - `adare cv ...` / `adare ws ...` -> `adare debug cv ...` / `adare debug ws ...`
+  - `adare os-profile` -> `adare vm profile`, `adare vm gui-doctor` ->
+    `adare vlm doctor`, `adare dev grounding-pull` -> `adare vlm pull-grounding`
+  `adare vlm rm` is now `adare vlm remove` (`rm` stays an alias, `l` joins `ls`),
+  and `adare experiment run` accepts `-p` for `--project` like its siblings.
 - `adare vm remove <name-or-id>` removes what `adare vm list` shows: a registered
   VM (with the environments that run on it, after showing what goes and asking;
   `-y` skips the prompt) or a VM instance, by name or ID. It refuses while an
@@ -190,6 +204,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Bullet lists and examples in command help (`experiment run`, `env load`,
+  `vm test`, ...) were re-wrapped into one run-on paragraph; they now keep
+  their line breaks. `adare experiment list` no longer claims to list "in an
+  environment" (it lists every project's experiments).
 - Playbook VM creation printed its step labels (`[install 25]`, `[provision]`)
   as Rich markup, so they never appeared in the terminal.
 - Playbook VM creation piped QEMU's output without reading it; a chatty QEMU
@@ -278,6 +296,8 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `pattern` to the shell unquoted, allowing command injection from a playbook.
 
 ### Removed
+- `adare server start`, which failed with `ModuleNotFoundError` and duplicated
+  `adare web start` (now `adare ui start`), and the empty `adare help` group.
 - Duplicate libvirt domain teardown: the run path, its signal handler and
   `vm test` share `run_resources.destroy_run_domain`; dead QEMU branches in the
   VirtualBox instance preparation, the broken `ensure_vm_available_for_environment`

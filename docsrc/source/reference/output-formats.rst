@@ -16,7 +16,7 @@ Read-only ``list``/``info``/``show``/``status`` commands take the format flags
 
    adare env list --json
    adare experiment info my_experiment --format yaml
-   adare run list --format plain
+   adare runs list --format plain
    adare status --json
 
 The global options before the subcommand keep working, and an environment
@@ -49,7 +49,7 @@ Precedence, highest first:
 ``-o`` is deliberately **not** a format flag: several commands already use it for
 an output file. ``NO_COLOR`` is respected by the Rich output.
 
-Commands that cannot produce structured data (for example ``vm gui-doctor``, which
+Commands that cannot produce structured data (for example ``vlm doctor``, which
 streams live probe results) still accept ``--format rich|plain`` but exit with a
 usage error (exit code 2) when asked for ``json``/``yaml``, instead of printing a
 table that a JSON parser would choke on.
@@ -69,7 +69,7 @@ A failure prints **one** concise message on stderr:
 
    Error: Experiment run "NOSUCH" not found
    Hints:
-     - Use `adare run list` to list available experiment runs
+     - Use `adare runs list` to list available experiment runs
      - Check if the run ULID is correct
 
 In ``json`` (and ``yaml``) mode the message is a document instead:
@@ -78,8 +78,8 @@ In ``json`` (and ``yaml``) mode the message is a document instead:
 
    {"error": {"code": "RUN_NOT_FOUND",
               "message": "Experiment run \"NOSUCH\" not found",
-              "hint": "Use `adare run list` to list available experiment runs",
-              "solutions": ["Use `adare run list` to list available experiment runs",
+              "hint": "Use `adare runs list` to list available experiment runs",
+              "solutions": ["Use `adare runs list` to list available experiment runs",
                             "Check if the run ULID is correct"]}}
 
 ``code`` is derived from the exception class (``TestFunctionNotFoundError`` ->
@@ -100,7 +100,7 @@ Code   Meaning
 =====  ===========================================================
 
 Earlier versions exited ``255`` on every error and ``0`` on some failures
-(e.g. ``vm info`` or ``os-profile show`` with an unknown name).
+(e.g. ``vm info`` or ``vm profile show`` with an unknown name).
 
 Dual Output Mode
 ----------------

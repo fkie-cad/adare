@@ -941,7 +941,7 @@ def get_os_definition(os_name: str) -> OsDefinition:
     if os_name not in catalog:
         available = ', '.join(sorted(catalog.keys()))
         raise KeyError(
-            f"Unknown OS '{os_name}'. Available: {available}\nRun 'adare os-profile list' to see all profiles."
+            f"Unknown OS '{os_name}'. Available: {available}\nRun 'adare vm profile list' to see all profiles."
         )
     return catalog[os_name]
 

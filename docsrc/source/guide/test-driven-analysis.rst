@@ -205,7 +205,7 @@ Run info
 
 .. code-block:: bash
 
-   adare run info
+   adare runs info
 
 This displays a summary of every test execution: pass/fail status, execution
 time, and any error messages for failed assertions.
@@ -394,7 +394,7 @@ Step 4 -- Iterate in test mode
 
    adare experiment run firefox-history-analysis -e win11
 
-Review results with ``adare run info``. Adjust wait times, fix image references,
+Review results with ``adare runs info``. Adjust wait times, fix image references,
 or refine SQL queries as needed. Repeat until all four tests pass consistently.
 
 Step 5 -- Production run

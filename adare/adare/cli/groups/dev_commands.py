@@ -43,7 +43,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         '--watch',
         is_flag=True,
         help="Open the session VM's live screen (read-only) in the browser via "
-        'VirtualSpice once it is up. Needs VirtualSpice running (adare web start).',
+        'VirtualSpice once it is up. Needs VirtualSpice running (adare ui start).',
     )
     def start(
         environment, project, name, gui_mode, test_mode, vm_memory, vm_cpus, shared_dir, debug_screenshots, reuse, watch
@@ -75,6 +75,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         If SESSION_ID is provided, resumes that specific session.
         If SESSION_ID is omitted, resumes the most recently stopped session.
 
+        \b
         Examples:
             adare dev resume                      # Resume most recent stopped session
             adare dev resume 01K72Q...            # Resume specific session by ID
@@ -406,6 +407,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         --as-experiment, records a reusable playbook; --verify (default) then
         replays it on the VM to validate it.
 
+        \b
         Examples:
             adare dev agent -s <id> --goal "open the Files app and go to Documents"
             adare dev agent -s <id> --goal "..." -o experiments/files.play.yaml
@@ -435,25 +437,6 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         )
         exec_with_error_printing(exec_dev_agent, args)
 
-    @dev.command(name='grounding-pull')
-    @click.option(
-        '--model',
-        default=None,
-        help='HF id or local path (default: ADARE_LOCATE_MODEL_PATH or nvidia/LocateAnything-3B)',
-    )
-    def grounding_pull(model):
-        """Pre-download the LocateAnything grounding weights (~7.3 GB).
-
-        Pays the cold-download cost up front instead of on the first
-        `adare dev agent --ground` run. Needs the grounding backend
-        (`uv sync --extra grounding`), an HF_TOKEN and the accepted NVIDIA
-        license. Skipped if the configured model is already a local directory.
-        """
-        from adare.cli.dev import exec_dev_grounding_pull
-
-        args = SimpleNamespace(model=model)
-        exec_with_error_printing(exec_dev_grounding_pull, args)
-
     @dev.command()
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
     @click.option(
@@ -475,6 +458,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         identical in shape to an agent-recorded one. Use `click @x,y ...` to place
         a click by hand when no grounding backend is available.
 
+        \b
         Examples:
             adare dev author -s <id> --script-file steps.txt -o report.play.yaml
             adare dev author -s <id> --interactive -o report.play.yaml
@@ -514,6 +498,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         real schema and, with --replay, verifies it live on the VM and repairs
         on failure, picking the best model. See vlm/authoring/FLOW.md.
 
+        \b
         Examples:
             adare dev author-ai -s <id> --goal "open the File menu"
             adare dev author-ai -s <id> --goal "type a sentence in Writer and save" --replay -o report.play.yaml
@@ -551,6 +536,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         replay is deterministic with no LLM. See the MCP authoring guide for
         harness connection snippets.
 
+        \b
         Example:
             adare dev mcp -s <id> --port 13110
 
@@ -594,6 +580,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def playbook_batch(session_id, playbook_patterns, checkpoint_name, timeout):
         """Execute multiple playbooks with checkpoint restoration.
 
+        \b
         Supports both explicit paths and glob patterns:
         - adare dev playbook-batch playbook1.yml playbook2.yml
         - adare dev playbook-batch experiments/*/playbook.yml

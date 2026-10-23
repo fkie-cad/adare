@@ -483,7 +483,7 @@ class ExperimentService:
             return Result.fail(
                 code="ExperimentRunError",
                 message=f"Experiment run {ulid_str} failed: {e}",
-                solutions=[f'Inspect the run log with `adare run info {ulid_str}`'],
+                solutions=[f'Inspect the run log with `adare runs info {ulid_str}`'],
             )
         return Result.ok(ExperimentRunStartedInfo(run_ulid=ulid_str, experiment_name=name))
 

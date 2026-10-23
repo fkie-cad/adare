@@ -243,7 +243,7 @@ def check_recipe_publish_contract(
         raise RecipeContractError(
             f"recipe 'profile' is not a known OS profile on this host: {recipe.profile!r}",
             possible_solutions=[
-                'Run: adare os-profile list',
+                'Run: adare vm profile list',
                 'Fix the "profile" field in the recipe block',
             ],
         )
