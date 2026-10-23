@@ -368,8 +368,9 @@ class DevModeLifecycleMixin:
                         except (HypervisorException, OSError, TimeoutError) as e:
                             log.warning(f"Failed to stop VM: {e}")
 
-                    # 4. Release VM instance for reuse
-                    if self.vm_instance_id:
+                    # 4. Release VM instance for reuse. A QEMU run instance stays
+                    # reserved (port, overlay, checkpoints) until `dev remove`.
+                    if self.vm_instance_id and getattr(self.vm_manager, 'hypervisor_type', None) != 'qemu':
                         try:
                             from adare.backend.vm.commands import release_vm_instance_for_experiment
 
@@ -469,7 +470,20 @@ class DevModeLifecycleMixin:
                         # Continue with VM destruction
 
                     # 5. Destroy VM (undefine domain + delete disks)
-                    if self.vm_manager and self.experiment_ctx.vm:
+                    is_qemu = getattr(self.vm_manager, 'hypervisor_type', None) == 'qemu'
+                    if is_qemu and self.experiment_ctx.vm_name:
+                        # Run-scoped instance: domain, overlay, varstore, vTPM copy,
+                        # config and instance row in one go.
+                        from adare.backend.vm.run_instances import remove_qemu_run_instance
+
+                        try:
+                            remove_qemu_run_instance(self.experiment_ctx.vm_name)
+                            log.info(f"VM '{self.experiment_ctx.vm_name}' removed")
+                        except (OSError, DatabaseError) as e:
+                            error_msg = f"VM removal failed: {e}"
+                            log.error(error_msg)
+                            cleanup_failures.append(error_msg)
+                    elif self.vm_manager and self.experiment_ctx.vm:
                         try:
                             result = await vm.destroy(silent=False)
                             if result != 0:
@@ -484,7 +498,7 @@ class DevModeLifecycleMixin:
                             cleanup_failures.append(error_msg)
 
                     # 6. Release VM instance before removal
-                    if self.vm_instance_id:
+                    if self.vm_instance_id and not is_qemu:
                         try:
                             from adare.backend.vm.commands import release_vm_instance_for_experiment
 

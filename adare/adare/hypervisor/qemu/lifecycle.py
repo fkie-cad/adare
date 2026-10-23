@@ -55,75 +55,33 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         self.disk_diff = DiskDiffComparator(self.guestfish)
         self.file_transfer = get_file_transfer_strategy(self.guestfish)
 
-    def _validate_external_disk_writable(self, disk_path: Path) -> None:
-        """
-        Validate that external disk path is writable (required for snapshots).
-
-        Args:
-            disk_path: Path to external disk image
-
-        Raises:
-            HypervisorException: If disk is not writable
-        """
-        import os
-
-        # Check if file exists (for existing qcow2)
-        if disk_path.exists():
-            # Test write permission
-            if not os.access(disk_path, os.W_OK):
-                raise HypervisorException(
-                    f"External disk is not writable: {disk_path}\n"
-                    f"QEMU requires write access to disk for snapshot operations.\n"
-                    f"Please ensure the file has write permissions."
-                )
-            log.debug(f"Validated write access to external disk: {disk_path}")
-        else:
-            # File doesn't exist yet (will be created by conversion)
-            # Check parent directory is writable
-            parent_dir = disk_path.parent
-            if not parent_dir.exists():
-                raise HypervisorException(
-                    f"Parent directory does not exist: {parent_dir}\nCannot create converted qcow2 file."
-                )
-            if not os.access(parent_dir, os.W_OK):
-                raise HypervisorException(
-                    f"Parent directory is not writable: {parent_dir}\n"
-                    f"Cannot create converted qcow2 file for external VM.\n"
-                    f"Please ensure directory has write permissions."
-                )
-            log.debug(f"Validated write access to parent directory: {parent_dir}")
-
     async def prepare_vm_for_experiment(self, context):
         """
-        Create QEMU VM instance and allocate resources.
+        Define this run's QEMU VM: a throwaway overlay on the environment's disk.
 
-        Supports both managed and external (--no-copy) disk images.
-        For external disks: detects format and uses in-place if qcow2, or determines conversion path.
+        The environment disk (or its one-time qcow2 conversion) is the read-only
+        backing *template* of every run; this run gets its own overlay, UEFI
+        varstore, domain config, random domain UUID and a copy of the
+        environment's vTPM template -- all removed again at cleanup (see
+        :mod:`adare.hypervisor.qemu.run_resources`).
 
         Args:
-            context: ExperimentRunCtx with vm_name and guest_platform already set
+            context: ExperimentRunCtx with vm_name (the run instance) and guest_platform set
         """
         from adare.backend.environment import database as environment_database
-        from adare.backend.vm.commands import _is_vm_managed
         from adare.database.api.vm import VmApi
+        from adare.hypervisor.qemu.run_resources import resolve_template_disk, seed_run_tpm
         from adare.hypervisor.qemu.vm import QEMUVM
 
-        # Query database for source VM to get disk path and architecture
         env_data = environment_database.get_environment_by_ulid(
             context.environment_ulid, fields=['vm_id', 'vm_architecture']
         )
-
         if not env_data or not env_data.get('vm_id'):
             raise HypervisorException("No VM associated with environment. Run 'adare environment load' first.")
-
-        # Get source VM file path from database
         with VmApi() as api:
             source_vm = api.get_vm_by_id(env_data['vm_id'])
-
         if not source_vm:
             raise HypervisorException("Source VM not found in database")
-
-        source_vm_path = Path(source_vm.file)
 
         # Load environment metadata for hypervisor config
         from adare.types.environment import parse_environment_file
@@ -137,43 +95,19 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 log.warning(f"Could not load environment metadata: {e}")
                 # Continue without hypervisor config (will use auto-detection)
 
-        # Determine if this is an external VM (--no-copy mode)
-        is_external = not _is_vm_managed(source_vm_path)
+        from adare.backend.experiment.stagectxmanager import StageCtxManager
+        from adare.types.stages import VMDiskConversionStage, VMDiskOverlayCreationStage, VMDiskPreparationStage
 
-        # Determine disk path for QEMU VM
-        disk_path = None  # None = use managed storage (default behavior)
-
-        if is_external:
-            log.debug(f"External VM detected (--no-copy mode): {source_vm_path}")
-
-            # Detect file format
-            try:
-                detected_format = QEMUVM._detect_disk_format_static(
-                    source_vm_path, self.qemu_manager.executables.qemu_img
+        with StageCtxManager(VMDiskPreparationStage(), context.experiment_run_ulid, context.user_interrupt_event):
+            with StageCtxManager(
+                VMDiskConversionStage(), context.experiment_run_ulid, context.user_interrupt_event
+            ) as template_stage:
+                template_disk = resolve_template_disk(
+                    Path(source_vm.file), source_vm.hash, self.qemu_manager.executables.qemu_img
                 )
-                log.debug(f"Detected format: {detected_format}")
-            except HypervisorException as e:
-                log.warning(f"Could not detect format: {e}")
-                detected_format = 'unknown'
-
-            if detected_format == 'qcow2':
-                # Already qcow2 - use directly
-                log.debug("Source is qcow2 format, will use directly without conversion")
-                disk_path = str(source_vm_path.resolve())
-            elif detected_format in ['ova', 'vmdk', 'vdi', 'raw', 'unknown']:
-                # Non-qcow2 format - need to convert in-place
-                log.debug(f"Source is {detected_format} format, will convert to qcow2 in-place")
-                converted_path = source_vm_path.parent / f"{source_vm_path.stem}_adare_converted.qcow2"
-                disk_path = str(converted_path.resolve())
-            else:
-                log.warning(f"Unknown format {detected_format}, treating as non-qcow2")
-                converted_path = source_vm_path.parent / f"{source_vm_path.stem}_adare_converted.qcow2"
-                disk_path = str(converted_path.resolve())
-
-            # Validate write permissions for external disk path
-            self._validate_external_disk_writable(Path(disk_path))
-        else:
-            log.debug("Managed VM detected, using managed storage")
+                template_stage.stage.sub_msg = f"Template: {template_disk.name}"
+                template_stage.set_status(template_stage.stage.status)
+            disk_path = str(template_disk.resolve())
 
         # Determine guest architecture
         vm_architecture = (env_data.get('vm_architecture') if env_data else None) or getattr(
@@ -211,13 +145,14 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             architecture=vm_architecture,
             resolution=context.config.vm_display_resolution,
             hypervisor_config=environment_metadata.hypervisor_config if environment_metadata else None,
-            # Stable per-environment id so a first-time config creation derives a
-            # deterministic domain UUID (see ConfigurationMixin._domain_uuid_for)
-            # instead of a fresh random one per run -- see docsrc hypervisors.rst
-            # "Instance-scoped firmware state" for why that matters for the vTPM.
-            environment_identity=env_data.get('vm_id') if env_data else None,
         )
         log.debug(f"Created QEMU VM instance: {context.vm_name}")
+
+        # The run boots a copy of the environment's vTPM under its own (random)
+        # domain UUID, so concurrent runs never share TPM state and no run sees
+        # another's TPM changes.
+        if 'windows' in context.vm.config.guest_os.lower() and shutil.which('swtpm'):
+            seed_run_tpm(source_vm.id, context.vm.config.uuid)
 
         # Configure VM logging paths for experiment run
         log_file = get_experiment_log_file()
@@ -241,12 +176,9 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         from adare.hypervisor.qemu.pcap_capture import PcapCaptureConfig, resolve_net0_pcap_path
 
-        # QEMUVMConfig persists across runs of the same VM (loaded from
-        # ~/.adare/qemu/vms/<vm_name>.json), so pcap_paths must be reassigned
-        # unconditionally every run -- otherwise a prior run's entry (pointing
-        # at that run's now-cleaned-up directory) survives into a later run
-        # where capture wasn't requested, and QEMU fails to boot trying to
-        # open a filter-dump file that no longer exists.
+        # Set unconditionally: a restored dev session reloads its persisted
+        # config (~/.adare/qemu/vms/<vm_name>.json), whose pcap entry may point
+        # at a directory that no longer exists.
         pcap_config = PcapCaptureConfig()
         if capture_pcap_enabled and context.experiment_run_directory:
             pcap_path = resolve_net0_pcap_path(context.experiment_run_directory, context.vm_name)
@@ -255,105 +187,17 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         context.vm.config.pcap_paths = pcap_config.to_dict()
         context.vm._save_vm_config()
 
-        # Create experiment overlay backed by immutable base disk
-        # This ensures libguestfs operations don't modify the base disk,
-        # preserving hash integrity for forensic validation
-        from adare.backend.experiment.stagectxmanager import StageCtxManager
-        from adare.types.stages import (
-            VMDiskConversionStage,
-            VMDiskFormatDetectionStage,
-            VMDiskOverlayCreationStage,
-            VMDiskPreparationStage,
-        )
-
+        # The run overlay: every guest write (and every libguestfs injection) lands here.
         experiment_id = context.experiment_run_ulid or 'default'
-
-        # Wrap entire disk preparation with parent stage
-        with StageCtxManager(VMDiskPreparationStage(), context.experiment_run_ulid, context.user_interrupt_event):
-            # Step 1: Format detection (for external VMs only)
-            if is_external:
-                with StageCtxManager(
-                    VMDiskFormatDetectionStage(), context.experiment_run_ulid, context.user_interrupt_event
-                ) as detect_stage:
-                    # Detection already happened at lines 518-526, just update stage message
-                    detect_stage.stage.sub_msg = f"Detected: {detected_format}"
-                    detect_stage.set_status(detect_stage.stage.status)
-                    log.debug(f"Format detection stage: {detected_format}")
-
-            # Step 2: Conversion (only if needed)
-            if is_external and detected_format == 'qcow2':
-                # External qcow2 - use directly without conversion
-                log.debug("Skipping conversion - external qcow2 will be used as base")
-                if not source_vm_path.exists():
-                    raise HypervisorException(f"External qcow2 file not found: {source_vm_path}")
-                # _get_true_base_disk() will return external path directly
-            elif is_external and detected_format != 'qcow2':
-                # External non-qcow2 - convert to qcow2
-                base_disk_path = context.vm.get_base_disk_path()
-                if not Path(base_disk_path).exists():
-                    with StageCtxManager(
-                        VMDiskConversionStage(), context.experiment_run_ulid, context.user_interrupt_event
-                    ) as conv_stage:
-                        conv_stage.stage.sub_msg = f"Converting {detected_format} → qcow2"
-                        conv_stage.set_status(conv_stage.stage.status)
-
-                        log.debug(f"Converting {detected_format} to qcow2 base disk...")
-                        return_code, message = await context.vm.create_from_ovf_or_ova(
-                            source_vm_path, silent=False, try_extract=True
-                        )
-
-                        if return_code != 0:
-                            raise HypervisorException(f"Failed to convert VM disk: {message}")
-
-                        log.debug("Conversion to base disk completed successfully")
-
-            # Step 3: Create overlay disk (always happens)
-            with StageCtxManager(
-                VMDiskOverlayCreationStage(), context.experiment_run_ulid, context.user_interrupt_event
-            ):
-                try:
-                    overlay_path = await context.vm.create_overlay_disk(experiment_id)
-
-                    # Update VM config to use overlay (not base)
-                    # This ensures all disk operations (especially libguestfs) write to overlay
-                    context.vm.config.disk_path = overlay_path
-                    log.debug(f"Using overlay disk for experiment: {overlay_path}")
-
-                    # Validate overlay was created successfully
-                    if not Path(overlay_path).exists():
-                        raise HypervisorException(
-                            f"Overlay disk creation reported success but file not found: {overlay_path}\n"
-                            f"This indicates a race condition or filesystem issue."
-                        )
-                    log.debug(f"Verified overlay exists: {overlay_path}")
-
-                    # Log base disk location for reference
-                    if Path(context.vm.config.disk_path).exists():
-                        base_info = "external qcow2"
-                    else:
-                        base_info = context.vm.get_base_disk_path()
-                    log.debug(f"Base disk preserved for integrity checks: {base_info}")
-
-                    # Cleanup orphaned overlays from old naming scheme
-                    # Old overlays have chained names like: VM-name-overlay-{ULID1}-overlay-{ULID2}.qcow2
-                    try:
-                        disk_dir = Path(overlay_path).parent
-                        base_disk_path = Path(context.vm.get_base_disk_path())
-
-                        for orphan in disk_dir.glob('*-overlay-*-overlay-*.qcow2'):
-                            # Only delete if it's not the current overlay or base disk
-                            if orphan != Path(overlay_path) and orphan != base_disk_path:
-                                log.debug(f"Cleaning up orphaned overlay: {orphan.name}")
-                                orphan.unlink()
-                    except OSError as e:
-                        log.warning(f"Failed to cleanup orphaned overlays: {e}")
-
-                except (subprocess.CalledProcessError, OSError, HypervisorException) as e:
-                    raise HypervisorException(
-                        f"Failed to create overlay disk: {e}\n"
-                        f"Overlay creation failed. Ensure base disk exists and is accessible.\n"
-                        f"VM: {context.vm_name}, External: {is_external}"
-                    ) from e
+        with StageCtxManager(VMDiskOverlayCreationStage(), context.experiment_run_ulid, context.user_interrupt_event):
+            try:
+                overlay_path = await context.vm.create_overlay_disk(experiment_id)
+            except (subprocess.CalledProcessError, OSError) as e:
+                raise HypervisorException(f"Failed to create overlay on {disk_path}: {e}") from e
+            if not Path(overlay_path).exists():
+                raise HypervisorException(f"Overlay creation reported success but {overlay_path} is missing")
+            context.vm.config.disk_path = overlay_path
+            log.debug(f"Run overlay {overlay_path} on template {disk_path}")
 
     async def setup_file_transfer(self, context):
         """

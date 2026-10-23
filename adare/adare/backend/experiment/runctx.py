@@ -63,6 +63,7 @@ class MachineRunCtx:
     vm: VirtualBoxVM | None = None
     vm_file: Path | None = None
     vm_name: str | None = None
+    vm_instance_id: str | None = None  # VmInstance row this machine runs on (released at cleanup)
     client: AdareVMClient | None = None
     mcp_server: MCPServerManager | None = None
     adarevm: Path | None = None
@@ -191,6 +192,19 @@ class ExperimentRunCtx:
     @vm_name.setter
     def vm_name(self, value: str | None) -> None:
         self.machines[self.primary_machine].vm_name = value
+
+    @property
+    def vm_instance_id(self) -> str | None:
+        return self.machines[self.primary_machine].vm_instance_id
+
+    @vm_instance_id.setter
+    def vm_instance_id(self, value: str | None) -> None:
+        self.machines[self.primary_machine].vm_instance_id = value
+
+    @property
+    def machine_key(self) -> str | None:
+        """Key of the machine this context describes (None for a single-VM run)."""
+        return self.primary_machine
 
     @property
     def client(self) -> AdareVMClient | None:

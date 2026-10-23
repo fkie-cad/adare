@@ -24,39 +24,10 @@ else:
 log = logging.getLogger(__name__)
 
 
-# Fixed namespace for deriving a stable per-environment domain UUID (see
-# ``_domain_uuid_for`` below). Generated once via uuid.uuid4() and frozen here --
-# it is a namespace, not a secret, and must never change or every environment's
-# derived UUID (and thus its vTPM identity) would silently shift.
+# Namespace of the per-environment domain UUIDs used before per-run vTPM copies;
+# kept so run_resources.adopt_legacy_tpm can find that shared vTPM state. Must
+# never change.
 _ADARE_VM_UUID_NAMESPACE = uuid.UUID('7c6f6e6e-2e26-4e5a-9f2d-8f6a1a9c8b7e')
-
-
-def _domain_uuid_for(environment_identity: str | None) -> str:
-    """A libvirt domain UUID, stable across runs of the same environment.
-
-    ``vm_name`` (and therefore this VM's own config file) is scoped to the
-    *experiment run*, not the environment -- see ``QEMULifecycleStrategy.
-    prepare_vm_for_experiment``, which mints a fresh instance name per run. A
-    plain ``uuid.uuid4()`` here therefore gave every run of the same environment
-    a different domain UUID, and because swtpm keys its state directory by
-    domain UUID (``~/.config/libvirt/qemu/swtpm/<uuid>/``), KEEP_TPM was
-    preserving a directory the next run's domain never pointed at again -- the
-    vTPM "survived" undefine but was orphaned rather than reused.
-
-    Deriving the UUID from ``environment_identity`` (the environment's stable
-    VM/disk id, not the run-scoped ``vm_name``) instead makes it identical for
-    every run of the same environment, so the same domain UUID -- and thus the
-    same swtpm state directory -- is reused run after run.
-
-    Args:
-        environment_identity: A stable per-environment identifier (e.g. the
-            environment's ``vm_id``). ``None`` for VMs with no environment
-            context (dev-session restore, OVA import, ad-hoc test VMs), which
-            fall back to a random UUID -- the status quo for those paths.
-    """
-    if not environment_identity:
-        return str(uuid.uuid4())
-    return str(uuid.uuid5(_ADARE_VM_UUID_NAMESPACE, environment_identity))
 
 
 # ---------------------------------------------------------------------------
@@ -352,10 +323,9 @@ class ConfigurationMixin(_Host):
 
             return config
         log.debug(f"Creating new VM config for '{self.vm_name}'")
-        # Create new config. See _domain_uuid_for: deterministic per environment
-        # when we know one, so the domain (and its vTPM state) is reused across
-        # runs rather than re-randomized every time.
-        vm_uuid = _domain_uuid_for(getattr(self, '_environment_identity', None))
+        # A fresh UUID per VM: a run's vTPM is a copy seeded under this UUID
+        # (run_resources.seed_run_tpm), so concurrent runs never share one.
+        vm_uuid = str(uuid.uuid4())
 
         # Determine disk path: use external path if provided, otherwise use managed storage
         if self._external_disk_path:
