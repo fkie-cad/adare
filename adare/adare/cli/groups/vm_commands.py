@@ -13,13 +13,20 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     # ------------------------------
     @cli.group(cls=AliasedGroup)
     def vm():
-        """VM management commands."""
+        """VM management commands.
+
+        \b
+        Registered VMs (`list`, `info`, `reset`) are the disks environments
+        run on; `adare env load` registers them. Instances (`usage`, `remove`,
+        `snapshot`, `prune`) are what experiment runs boot from them: on QEMU
+        one throwaway instance per run, on VirtualBox a reusable pool.
+        """
         pass
 
     @vm.command(name='list')
     @output_options
     def vm_list():
-        """List all VMs in the system."""
+        """List registered VMs (the disks environments run on)."""
         from adare.cli.vm import exec_vm_list
 
         args = SimpleNamespace()
@@ -29,7 +36,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @output_options
     @click.argument('vm_id')
     def info(vm_id):
-        """Get detailed information about a VM."""
+        """Show a registered VM or a VM instance (auto-detected from the id)."""
         from adare.cli.vm import exec_vm_info
 
         args = SimpleNamespace(vm_id=vm_id)
@@ -67,7 +74,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @vm.command()
     @output_options
     def usage():
-        """Show VM instance usage statistics."""
+        """Show VM instances (running experiment runs; VirtualBox pool) and their usage."""
         from adare.cli.vm import exec_vm_instance_usage
 
         args = SimpleNamespace()

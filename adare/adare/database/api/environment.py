@@ -4,14 +4,10 @@ import datetime
 import logging
 from pathlib import Path
 
-import attrs
-import sqlalchemy
-
 # internal imports
 from adare.database.api.base import GlobalDatabaseApi
-from adare.database.models.global_models import Environment, OsInfo, PostSetupInstallation, SyncMetadata, Tag
+from adare.database.models.global_models import Environment, PostSetupInstallation, SyncMetadata, Tag
 from adare.database.models.sync_identity import apply_remote_identity
-from adare.types.environment import OsInfo as OsInfoAttrs
 from adare.types.environment import PostsetupInstallations as PostsetupInstallationsAttrs
 
 log = logging.getLogger(__name__)
@@ -21,25 +17,6 @@ class EnvironmentDbApi(GlobalDatabaseApi):
     def __init__(self):
         super().__init__()
         self._start_session()
-
-    def get_or_create_os_info(self, os_info_attrs: OsInfoAttrs) -> tuple[OsInfo, bool]:
-        os_info_dict = attrs.asdict(os_info_attrs)
-        os_info = self._session.query(OsInfo).filter_by(**os_info_dict).first()
-        if os_info:
-            return os_info, False
-        os_info = OsInfo(**os_info_dict)
-        self._session.add(os_info)
-        self._session.commit()
-        return os_info, True
-
-    def get_environments_by_path(self, path: Path) -> list[Environment]:
-        """returns a list of environments with the given path sorted by creation date"""
-        return (
-            self._session.query(Environment)
-            .filter(Environment.file == path.as_posix())
-            .order_by(sqlalchemy.desc(Environment.created_at))
-            .all()
-        )
 
     def get_or_create_tags(self, tag_names: list[str]) -> list:
         """
@@ -63,15 +40,6 @@ class EnvironmentDbApi(GlobalDatabaseApi):
 
     def get_environment_by_hash(self, sha256hash: str) -> Environment:
         return self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
-
-    def __get_or_create_installations(
-        self, installations: list[PostsetupInstallationsAttrs]
-    ) -> list[PostSetupInstallation]:
-        installation_objects = []
-        for installation in installations:
-            installation_obj, created = self.get_or_create(PostSetupInstallation, **attrs.asdict(installation))
-            installation_objects.append(installation_obj)
-        return installation_objects
 
     def create_environment_version(
         self,
@@ -170,11 +138,6 @@ class EnvironmentDbApi(GlobalDatabaseApi):
             return env
         log.error(f'environment {name} does not exist in the database')
         return None
-
-    def get_environment_vm(self, environment_ulid: str) -> str:
-        if env := self._session.query(Environment).filter_by(id=environment_ulid).first():
-            return env.vm.name if env.vm else None
-        raise ValueError(f'environment {environment_ulid} not found in database')
 
     def get_environment_by_project_and_name(self, project_path: Path, environment_name: str) -> Environment | None:
         # Since environments are now global, we just search by name

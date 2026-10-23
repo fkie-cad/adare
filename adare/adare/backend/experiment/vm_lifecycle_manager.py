@@ -7,7 +7,6 @@ from pathlib import Path
 
 import adare.backend.environment.database as environment_database
 import adare.backend.experiment.database as experiment_database
-import adare.backend.vm.database as vm_database
 from adare.backend.experiment import agent_wheels
 from adare.backend.experiment.directory import ExperimentRunDirectory
 from adare.backend.experiment.runctx import ExperimentRunCtx
@@ -20,11 +19,9 @@ from adare.types.stages import (
     VMDestroyStage,
     VMExperimentSnapshotStage,
     VMFileTransferSetupStage,
-    VMImportStage,
     VMInstanceVerificationStage,
     VMNetworkingStage,
     VMRuntimePreparationStage,
-    VMSnapshotCreateStage,
     VMStopStage,
 )
 
@@ -238,7 +235,6 @@ class VMLifecycleManager:
                 experiment_id=short_experiment_id,  # Use shorter ID for naming
                 environment_ulid=context.environment_ulid,
                 experiment_run_ulid=context.experiment_run_ulid,
-                preserve_experiment_snapshot=context.config.preserve_snapshot,
                 interrupt_event=context.user_interrupt_event,
                 test_mode=context.test_mode,
                 machine_key=context.machine_key,
@@ -313,159 +309,42 @@ class VMLifecycleManager:
         # NOTE: setup_file_transfer() removed from here - now called explicitly in run.py
         # This makes file transfer operations visible as a dedicated stage in the UI
 
-        # VirtualBox-specific: VM instance is already prepared with snapshots - verify it exists and cleanup if missing
-        # For QEMU, the prepare_vm_for_experiment already handles all VM creation
-        # NOTE: VMCreateStage wrapper removed - will be added in run.py to wrap entire create_and_prepare_vm()
+        # VirtualBox: a pooled instance can have vanished from VirtualBox since it
+        # was last used. verify_and_cleanup removes such a row; allocate again,
+        # which imports a fresh instance and takes its base snapshot.
         if self.hypervisor_type == 'virtualbox':
-            # Import the VM instance verification function
             from adare.backend.vm.commands import verify_and_cleanup_vm_instance_for_experiment
-            from adare.database.api.vm import VmApi
 
-            # Wrap verification and recovery logic with stage for visibility
             with StageCtxManager(
                 VMInstanceVerificationStage(), context.experiment_run_ulid, event=context.user_interrupt_event
             ):
-                # First verify and cleanup VM instance if missing from VirtualBox
-                try:
-                    vm_instance_is_available = verify_and_cleanup_vm_instance_for_experiment(
-                        vm_instance.id, context.experiment_run_ulid
+                if not verify_and_cleanup_vm_instance_for_experiment(vm_instance.id, context.experiment_run_ulid):
+                    log.info("VM instance was missing from VirtualBox and removed; allocating a new one")
+                    vm_instance_id = await ensure_vm_ready_for_experiment(
+                        vm_id=vm_id,
+                        experiment_id=short_experiment_id,
+                        environment_ulid=context.environment_ulid,
+                        experiment_run_ulid=context.experiment_run_ulid,
+                        interrupt_event=context.user_interrupt_event,
+                        test_mode=context.test_mode,
+                        machine_key=context.machine_key,
                     )
-                    if not vm_instance_is_available:
-                        # VM instance was missing and cleaned up - need to allocate a new one
-                        log.info("VM instance was cleaned up, allocating a new instance for the experiment")
-
-                        # Re-allocate a new VM instance for this experiment
-                        from adare.backend.vm.instance_manager import allocate_vm_instance_for_experiment
-
-                        # Get VM ID from environment (same as original allocation)
-                        env_data = environment_database.get_environment_by_ulid(
-                            context.environment_ulid, fields=['vm_id']
-                        )
-                        vm_id = env_data['vm_id'] if env_data else None
-                        if not vm_id:
-                            raise LoggedException(log, "No VM associated with environment after cleanup")
-
-                        # Allocate new instance
-                        new_vm_instance = await allocate_vm_instance_for_experiment(vm_id, context.experiment_run_ulid)
-                        if not new_vm_instance:
-                            raise LoggedException(log, "Failed to allocate new VM instance after cleanup")
-
-                        # Update the experiment run with new VM instance ID
+                    if vm_instance_id is None:
+                        return
+                    with VmApi() as api:
+                        vm_instance = api.get_vm_instance_by_id(vm_instance_id)
+                    context.vm_instance_id = vm_instance.id
+                    context.vm_name = vm_instance.instance_name
+                    context.config.websocket_port = vm_instance.websocket_port
+                    if context.machine_key == getattr(context, 'primary_machine', context.machine_key):
                         experiment_database.update_experiment_run_vm_instance(
-                            context.config.project_path, context.experiment_run_ulid, new_vm_instance.id
+                            context.config.project_path, context.experiment_run_ulid, vm_instance.id
                         )
-
-                        # Update context with new instance information
-                        vm_instance = new_vm_instance
-                        context.vm_instance_id = vm_instance.id
-                        context.vm_name = vm_instance.instance_name
-                        context.config.websocket_port = vm_instance.websocket_port
-
-                        # Validate that the port was properly allocated
-                        if context.config.websocket_port is None:
-                            raise LoggedException(
-                                log, f"New VM instance {vm_instance.instance_name} has no websocket port allocated"
-                            )
-
-                        log.info(
-                            f"Successfully allocated new VM instance after cleanup: {context.vm_name} on port {context.config.websocket_port}"
-                        )
-
-                        # New instance needs to be imported to VirtualBox if it doesn't have a UUID
-                        if not vm_instance.vbox_uuid:
-                            log.info(
-                                f"New VM instance '{vm_instance.instance_name}' needs to be imported to VirtualBox"
-                            )
-
-                            # Get source VM for import
-                            source_vm = vm_database.get_vm_by_id(vm_id)
-                            if not source_vm:
-                                raise LoggedException(log, f"Source VM with ID {vm_id} not found for import")
-
-                            # Verify source VM integrity
-                            from adare.backend.vm.commands import verify_vm_integrity
-
-                            await verify_vm_integrity(
-                                vm_id,
-                                context.experiment_run_ulid,
-                                context.user_interrupt_event,
-                                test_mode=context.test_mode,
-                            )
-
-                            # Import VM instance to VirtualBox with proper stage management
-                            from adare.types.stages import VMDiskPreparationStage
-
-                            with StageCtxManager(
-                                VMDiskPreparationStage(), context.experiment_run_ulid, context.user_interrupt_event
-                            ):
-                                with StageCtxManager(
-                                    VMImportStage(), context.experiment_run_ulid, context.user_interrupt_event
-                                ):
-                                    log.info(
-                                        f"Importing new VM instance '{vm_instance.instance_name}' to VirtualBox..."
-                                    )
-
-                                    # Import using VirtualBox manager directly (inline implementation)
-                                    from adare.hypervisor.virtualbox.manager import VirtualBoxManager
-
-                                    manager = VirtualBoxManager()
-                                    vm_file_path = Path(source_vm.file)
-
-                                    # Import VM with unique instance name
-                                    vbox_vm = await manager.import_vm_async(
-                                        vm_file_path,
-                                        vm_instance.instance_name,
-                                        environment_ulid=context.environment_ulid,
-                                    )
-
-                                    # Update instance with VirtualBox UUID
-                                    vbox_uuid = vbox_vm.get_vm_uuid()
-                                    with VmApi() as api:
-                                        api.update_vm_instance(
-                                            vm_instance.id,
-                                            vbox_uuid=vbox_uuid,
-                                            base_snapshot_name=f"{vm_instance.instance_name}_base",
-                                        )
-
-                                    log.info(
-                                        f"Successfully imported VM instance '{vm_instance.instance_name}' with UUID: {vbox_uuid}"
-                                    )
-
-                                    # Return updated instance
-                                    with VmApi() as api:
-                                        vm_instance = api.get_vm_instance_by_id(vm_instance.id)
-
-                            # Create base snapshot for the new instance
-                            with StageCtxManager(
-                                VMSnapshotCreateStage(), context.experiment_run_ulid, context.user_interrupt_event
-                            ):
-                                from adare.backend.vm.snapshot_manager import create_base_snapshot_for_instance
-
-                                snapshot_success = create_base_snapshot_for_instance(vm_instance, silent=False)
-                                if not snapshot_success:
-                                    log.warning(
-                                        f"Failed to create base snapshot for new instance {vm_instance.instance_name}"
-                                    )
-                                else:
-                                    log.info(
-                                        f"Successfully created base snapshot for new instance {vm_instance.instance_name}"
-                                    )
-
-                            log.info(f"Successfully imported and prepared new VM instance: {vm_instance.instance_name}")
-                except LoggedException:
-                    raise
-                except (OSError, ValueError, RuntimeError, TimeoutError) as e:
-                    log.error(f"VM instance verification failed: {e}")
-                    raise LoggedException(log, f"VM instance verification failed: {e}") from e
-
-                # Final verification that VM instance exists in VirtualBox
                 if not vm_instance.vbox_uuid or not VirtualBoxVM.verify_vm_exists_by_uuid(vm_instance.vbox_uuid):
                     raise LoggedException(
                         log, f"VM instance '{context.vm_name}' was not properly prepared - missing from VirtualBox"
                     )
-                log.info(
-                    f"Using prepared VM instance '{context.vm_name}' with snapshots (UUID: {vm_instance.vbox_uuid})"
-                )
+            log.info(f"Using prepared VM instance '{context.vm_name}' with snapshots (UUID: {vm_instance.vbox_uuid})")
 
         # Update experiment run with VM-specific data (skip in diff mode where no database persistence)
         if (
@@ -955,97 +834,35 @@ class VMLifecycleManager:
             log.error(f"Failed to release VM instance: {e}")
 
     async def _create_experiment_snapshot(self, context: ExperimentRunCtx, event: threading.Event):
-        """Create a snapshot of the final experiment state."""
-        if context.vm and context.experiment_run_ulid:
-            # Import snapshot manager for creating snapshot
-            from adare.backend.vm.snapshot_manager import SnapshotManager
+        """Snapshot the final state of this machine's (VirtualBox) instance."""
+        if self.hypervisor_type == 'qemu':
+            log.warning(
+                '--preserve-snapshot is VirtualBox-only: a QEMU run\'s overlay is discarded with the run. '
+                'Use --export-disk-image to keep the final disk in the run directory.'
+            )
+            return
+        if not context.vm or not context.experiment_run_ulid or not context.vm_instance_id:
+            log.warning('No VM instance recorded for this machine - cannot create experiment snapshot')
+            return
+        from adare.backend.vm.snapshot_manager import SnapshotManager
+        from adare.database.api.vm import VmApi
 
-            # Get VM instance from database to create snapshot
-            try:
-                from adare.database.api.experiment import ExperimentApi
-                from adare.database.api.vm import VmApi
-                from adare.database.models.project_models import ExperimentRun
-
-                # Get the VM instance ID from the experiment run
-                with ExperimentApi(context.config.project_path) as api:
-                    experiment_run = (
-                        api._session.query(ExperimentRun)
-                        .filter(ExperimentRun.id == context.experiment_run_ulid)
-                        .first()
-                    )
-
-                if not experiment_run or not experiment_run.vm_instance_id:
-                    log.warning('No VM instance ID found in experiment run - cannot create experiment snapshot')
-                    return
-
-                # Get the VM instance
-                with VmApi() as api:
-                    vm_instance = api.get_vm_instance_by_id(experiment_run.vm_instance_id)
-
-                if vm_instance and vm_instance.vbox_uuid:
-                    snapshot_manager = SnapshotManager()
-
-                    # Create new experiment snapshot with current state
-                    with StageCtxManager(VMExperimentSnapshotStage(), context.experiment_run_ulid, event=event):
-                        created_snapshot = snapshot_manager.create_experiment_snapshot_for_instance(
-                            vm_instance,
-                            context.experiment_run_ulid,
-                            description=f"Final state snapshot for experiment {context.experiment_run_ulid}",
-                            silent=False,
-                        )
-
-                    if created_snapshot:
-                        log.info(f'Created experiment snapshot: {created_snapshot}')
-                    else:
-                        log.warning('Failed to create experiment snapshot')
-                else:
-                    log.warning('VM instance not found or missing UUID - cannot create experiment snapshot')
-
-            except (OSError, ValueError, RuntimeError) as e:
-                log.warning(f'Error creating experiment snapshot: {e}')
-
-    async def _cleanup_experiment_snapshot(self, context: ExperimentRunCtx):
-        """Clean up experiment-specific snapshots."""
-        if context.vm and context.experiment_run_ulid:
-            # Import snapshot manager for cleanup
-            from adare.backend.vm.snapshot_manager import SnapshotManager
-
-            # Get VM instance from database to delete snapshot
-            try:
-                from adare.database.api.experiment import ExperimentApi
-                from adare.database.api.vm import VmApi
-                from adare.database.models.project_models import ExperimentRun
-
-                # Get the VM instance ID from the experiment run
-                with ExperimentApi(context.config.project_path) as api:
-                    experiment_run = (
-                        api._session.query(ExperimentRun)
-                        .filter(ExperimentRun.id == context.experiment_run_ulid)
-                        .first()
-                    )
-
-                if not experiment_run or not experiment_run.vm_instance_id:
-                    log.warning('No VM instance ID found in experiment run - cannot cleanup experiment snapshot')
-                    return
-
-                # Get the VM instance
-                with VmApi() as api:
-                    vm_instance = api.get_vm_instance_by_id(experiment_run.vm_instance_id)
-
-                if vm_instance and vm_instance.vbox_uuid:
-                    snapshot_manager = SnapshotManager()
-
-                    # Generate the experiment snapshot name (same logic as in create_experiment_snapshot_for_instance)
-                    exp_snapshot_name = f"adare_exp_{context.experiment_run_ulid[:8]}"
-
-                    # Delete only the experiment-specific snapshot
-                    success = snapshot_manager.delete_instance_snapshot(vm_instance, exp_snapshot_name, silent=True)
-                    if success:
-                        log.info(f'Successfully cleaned up experiment snapshot: {exp_snapshot_name}')
-                    else:
-                        log.warning(f'Failed to cleanup experiment snapshot: {exp_snapshot_name} (may not exist)')
-                else:
-                    log.warning('VM instance not found or missing UUID - cannot cleanup experiment snapshot')
-
-            except (OSError, ValueError, RuntimeError) as e:
-                log.warning(f'Error during snapshot cleanup: {e}')
+        try:
+            with VmApi() as api:
+                vm_instance = api.get_vm_instance_by_id(context.vm_instance_id)
+            if not vm_instance or not vm_instance.vbox_uuid:
+                log.warning('VM instance not found or missing UUID - cannot create experiment snapshot')
+                return
+            with StageCtxManager(VMExperimentSnapshotStage(), context.experiment_run_ulid, event=event):
+                created_snapshot = SnapshotManager().create_experiment_snapshot_for_instance(
+                    vm_instance,
+                    context.experiment_run_ulid,
+                    description=f"Final state snapshot for experiment {context.experiment_run_ulid}",
+                    silent=False,
+                )
+            if created_snapshot:
+                log.info(f'Created experiment snapshot: {created_snapshot}')
+            else:
+                log.warning('Failed to create experiment snapshot')
+        except (OSError, ValueError, RuntimeError, DatabaseError) as e:
+            log.warning(f'Error creating experiment snapshot: {e}')

@@ -75,7 +75,8 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         '--preserve-snapshot',
         '-s',
         is_flag=True,
-        help='Create experiment snapshot for preservation (default: only reset to base snapshot)',
+        help='VirtualBox: snapshot the final VM state (default: only reset to base snapshot). '
+        'QEMU runs are discarded; use --export-disk-image to keep the final disk.',
     )
     @click.option('--no-runlog', is_flag=True, help='Do not save adare log to the run/logs directory')
     @click.option('--vm-memory', type=int, help='VM RAM in MB (default: 4096 for Linux, 8192 for Windows)')
