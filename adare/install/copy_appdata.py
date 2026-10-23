@@ -120,7 +120,15 @@ def install_appdata(src: Path, appdata_dir: Path) -> None:
 def main() -> int:
     appdata_dir = appdata_directory()
     appdata_dir.mkdir(parents=True, exist_ok=True)
-    sync_workspace(WORKSPACE_ROOT, appdata_dir / 'adare')
+    try:
+        sync_workspace(WORKSPACE_ROOT, appdata_dir / 'adare')
+    except PermissionError as e:
+        # Typically root-owned files a VM guest wrote through a shared folder
+        # (older `adare vm test` builds put the guest's venv there).
+        print(f'Cannot replace {e.filename}: {e.strerror}.', file=sys.stderr)
+        if platform.system() != 'Windows':
+            print(f'Take ownership back and re-run: sudo chown -R "$USER" "{appdata_dir / "adare"}"', file=sys.stderr)
+        return 1
     install_appdata(WORKSPACE_ROOT, appdata_dir)
     print(f'Installed ADARE appdata into {appdata_dir}')
     return 0

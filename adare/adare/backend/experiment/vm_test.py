@@ -204,6 +204,13 @@ async def test_uv_availability(context):
     return False, f"uv not available. Exit code: {uv_result.returncode}"
 
 
+# The share is the host's installed ~/.adare/adare and virtio-fs does not enforce
+# read-only, so whatever the guest agent (root) writes there lands root-owned on
+# the host and breaks the next `make install`. Keep the venv and bytecode in the
+# guest, and --frozen so uv never rewrites the shared uv.lock.
+_GUEST_UV_ENV = "export UV_PROJECT_ENVIRONMENT=/var/tmp/adarevm-venv PYTHONDONTWRITEBYTECODE=1; "
+
+
 async def test_adarevm_server_start(context, guest_bind_port: int | None = None):
     """Test starting the adarevm WebSocket server from the shared source.
 
@@ -236,7 +243,11 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
             # the junction resolves, then launch adarevm from that directory.
             log_path = r'C:\Windows\Temp'
             stderr_log = rf'{log_path}\adarevm_stderr.log'
-            run_cmd = 'uv run --package adarevm adarevm'
+            # Double quotes only: run_as_user embeds the command in a single-quoted string.
+            run_cmd = (
+                f'$env:UV_PROJECT_ENVIRONMENT = "{log_path}\\adarevm-venv"; $env:PYTHONDONTWRITEBYTECODE = "1"; '
+                'uv run --frozen --package adarevm adarevm'
+            )
             if getattr(context.vm.config, 'smb_share_path', None):
                 run_cmd = (
                     'reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services'
@@ -268,20 +279,20 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
         # Linux: mirror the real experiment launch (agent_command_builders).
         # The workspace root is shared at /adare/vm; cd into the adarevm member so
         # uv resolves its `adarelib = { workspace = true }` dependency. Pre-sync
-        # the venv (the slow first-run build; cached in the shared .venv after),
-        # grant the guest-agent (root) access to the autologin user's X display
-        # (DISPLAY/XAUTHORITY + `xhost +SI:localuser:root`), then run adarevm.
+        # the venv (the slow build), grant the guest-agent (root) access to the
+        # autologin user's X display (DISPLAY/XAUTHORITY + `xhost +SI:localuser:root`),
+        # then run adarevm.
         from adare.backend.experiment.agent_readiness import wait_for_agent
 
-        sync_command = "cd /adare/vm/adarevm && uv sync 2>&1 | tail -3"
-        log.info("Pre-syncing adarevm venv in guest (first run builds deps)...")
+        sync_command = f"{_GUEST_UV_ENV}cd /adare/vm/adarevm && uv sync --frozen 2>&1 | tail -3"
+        log.info("Pre-syncing adarevm venv in guest (builds deps)...")
         await context.vm.run_command(sync_command, stop_event=context.user_interrupt_event)
         start_command = (
-            "export DISPLAY=:0; "
+            _GUEST_UV_ENV + "export DISPLAY=:0; "
             "export XAUTHORITY=$(ls /run/user/*/gdm/Xauthority /run/user/*/.mutter-Xwaylandauth.* "
             "/run/sddm/* /run/user/*/xauth_* /home/adare/.Xauthority 2>/dev/null | head -1); "
             "xhost +SI:localuser:root >/dev/null 2>&1 || true; "
-            "cd /adare/vm/adarevm && nohup uv run adarevm >/tmp/adarevm.log 2>&1 &"
+            "cd /adare/vm/adarevm && nohup uv run --frozen adarevm >/tmp/adarevm.log 2>&1 &"
         )
         start_result = await context.vm.run_command(start_command, stop_event=context.user_interrupt_event)
         if start_result.returncode == 0:

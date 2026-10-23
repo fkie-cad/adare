@@ -139,6 +139,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- `adare vm test` let the guest (as root) build its uv venv and bytecode inside
+  the shared `~/.adare/adare`, leaving root-owned files there that made the next
+  `make install` fail with `PermissionError`. The guest now keeps its venv in
+  the guest (`UV_PROJECT_ENVIRONMENT`), writes no bytecode and leaves `uv.lock`
+  alone (`--frozen`). The installer stops with the `chown` command to run instead
+  of a traceback, and no longer continues after the appdata copy failed.
 - `adare vm snapshot remove` always failed (it went through a deprecated
   template-level path that refused every deletion).
 - Concurrent QEMU runs of one environment deleted each other's overlays (the
