@@ -8,6 +8,7 @@ Keeps database logic separate from file management logic.
 import asyncio
 import logging
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from adare.database.api.vm import VmApi
@@ -364,6 +365,17 @@ def get_vm_summary(vm_id: str = None, name: str = None, file_hash: str = None) -
     return None
 
 
+def _run_blocking(coro):
+    """Run a coroutine to completion from sync code, even if the caller's thread has a running event loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    # asyncio.run() is illegal inside a running loop (TUI/web callers): use a worker thread's own loop.
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
 def delete_vm(vm_id: str) -> bool:
     """
     Delete a VM from the database.
@@ -498,7 +510,7 @@ def delete_all_vms(force: bool = False) -> dict:
 
                         for instance in instances:
                             try:
-                                asyncio.run(cleanup_vm_instance(instance.id, force=True))
+                                _run_blocking(cleanup_vm_instance(instance.id, force=True))
                                 log.info(f"Deleted VM instance: {instance.instance_name}")
                             except Exception as inst_error:  # noqa: BLE001 - best-effort per-instance cleanup in batch deletion
                                 log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
@@ -564,7 +576,7 @@ def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dic
 
                         for instance in instances:
                             try:
-                                asyncio.run(cleanup_vm_instance(instance.id, force=True))
+                                _run_blocking(cleanup_vm_instance(instance.id, force=True))
                                 log.info(f"Deleted VM instance: {instance.instance_name}")
                             except Exception as inst_error:  # noqa: BLE001 - best-effort per-instance cleanup in batch deletion
                                 log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
