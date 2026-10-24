@@ -6,7 +6,7 @@ import signal
 import subprocess
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from rich.status import Status
 
@@ -84,6 +84,7 @@ def wait_for_qemu_exit(
     timeout_minutes: int = 60,
     label: str = 'VM installation',
     status: Status | None = None,
+    check: Callable[[], None] | None = None,
 ) -> int:
     """Wait for a QEMU process to exit (VM shutdown after install).
 
@@ -92,6 +93,8 @@ def wait_for_qemu_exit(
         timeout_minutes: Maximum time to wait in minutes
         label: Label for log messages
         status: Optional Rich Status for in-place spinner updates
+        check: Called on every poll while QEMU runs; raises to give up early, e.g.
+            on an installer that failed and waits forever instead of powering off
 
     Returns:
         Process return code
@@ -128,6 +131,8 @@ def wait_for_qemu_exit(
             return retcode
 
         except subprocess.TimeoutExpired:
+            if check is not None:
+                check()
             elapsed = time.monotonic() - start
 
             if elapsed > timeout_seconds:

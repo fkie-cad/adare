@@ -211,6 +211,15 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- An unattended Linux install whose installer failed (subiquity's "An error
+  occurred. Press enter to start a shell", a failed curtin step, ...) is now
+  stopped within seconds instead of waiting out the 150-minute install timeout.
+  For a crashed subiquity, ADARE opens the installer's rescue shell over the
+  serial console and puts its traceback into the install log and the error.
+- The Ubuntu rolling autoinstall template (`ubuntu2510`, `ubuntu2604arm64`)
+  asked for the `ubuntu-desktop-minimal` source, which server ISOs do not carry,
+  so subiquity crashed before installing anything. The desktop now comes from
+  the package list, as in the LTS template.
 - `adare vm test` on Linux guests hung at "Starting AdareVM server" until the
   300 s guest-command timeout and then failed: the backgrounded launch kept
   the guest agent's output pipe open for as long as adarevm ran.
