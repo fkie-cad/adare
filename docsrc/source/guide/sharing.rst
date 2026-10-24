@@ -329,19 +329,12 @@ links like ``.../s/TOKEN/download`` have none). Prepare one with:
    adare env publish-prepare my-env --vm-url https://cloud.example.org/s/TOKEN/download \
      --vm-format qcow2 --verify-url
 
-A baked (non-Windows) publish carries no recipe, so by default nothing records
-which OS profile or installer ISO the disk came from. To attach that as
-optional provenance -- for audit/reproducibility only, not a build recipe --
-pass ``--source-profile`` and, if you still have it, ``--source-iso-sha256``:
-
-.. code-block:: bash
-
-   adare env publish-prepare my-env --vm-url https://cloud.example.org/s/TOKEN/download \
-     --vm-format qcow2 --source-profile ubuntu2404 --source-iso-sha256 <hex>
-
-Neither field is required, neither is checked against any catalog, and neither
-makes the environment rebuildable -- omitting them still publishes fine; you
-just lose the "what was this built from" record for later.
+If the disk is a registered image, ``publish-prepare`` embeds its record as
+``image:`` (how it was built, its checks; see :ref:`VM images <concepts-vm-images>`)
+and records the URL in the image. A loading machine adopts that record for the disk
+with the same SHA256, and takes ``os`` from it when the ``os:`` block is omitted.
+For a disk without a record, ``--source-profile`` and ``--source-iso-sha256`` still
+attach the profile and ISO as informational provenance.
 
 **Recipe, Linux profile.** ``recipe.iso`` must be an ``http(s)`` URL with a
 required ``recipe.iso_sha256``. Linux ISOs are freely redistributable, so there is

@@ -14,16 +14,15 @@ A project directory has a fixed layout:
 .. code-block:: text
 
    my-project/
-   ├── environments/      # Environment configuration files (YAML)
    ├── experiments/       # Individual experiment directories
    ├── shared/            # Shared resources
    │   ├── data/          # Data files available to all experiments
    │   └── tools/         # Tools and utilities shared across experiments
-   ├── testfunctions/     # Custom test function modules
-   ├── vm/                # Virtual machine files and images
-   └── run/               # Experiment execution results and logs
+   ├── vm_runtime/        # The guest agent (adarevm) and its wheels, shared with the VM
+   ├── run/               # Experiment execution results and logs
+   └── .adare/            # The project database
 
-Each directory has a clear purpose. Environments and experiments live in their own subdirectories. The ``shared/`` directory provides a place for data files and tools that multiple experiments need. Custom test functions go in ``testfunctions/``. The ``run/`` directory is created automatically when experiments execute and holds all output.
+The ``shared/`` directory provides a place for data files and tools that multiple experiments need. The ``run/`` directory holds all output of experiment runs. Environments, VM images and test functions are global, shared by every project, under ``~/.adare/state/``.
 
 See :doc:`/guide/projects` for details on project structure and management.
 
@@ -53,6 +52,35 @@ Two consequences of the recipe model are worth knowing early.
 **A recipe ships as text, so the ISO has to come from somewhere.** For Linux the installer ISO is freely redistributable and the recipe carries its URL. For Windows it is licensed and cannot be rehosted, so a recipe instead names the file and its SHA256 and the *consumer* supplies it. A ~110-line YAML then replaces tens of gigabytes of disk image that could not have been shared at all. See :ref:`byo-isos`.
 
 See :doc:`/guide/environments` for VM configuration and setup.
+
+.. _concepts-vm-images:
+
+VM images
+=========
+
+A **VM image** is a registered disk (``adare vm list``), identified by its SHA256.
+Environments run on images; several environments can share one.
+
+- **Get one** by building it, ``adare vm create <profile>``, or by loading an
+  environment that references a shared image, which ``adare env load`` downloads
+  and verifies against its SHA256.
+- **Images never change.** Different bytes are a new image. ``--force`` on a
+  registered name keeps the replaced image as ``<name>-<sha12>`` for the environment
+  versions that use it, and removes it when none does.
+- **Every image has a record**: ``<disk>.image.yml`` next to the disk, shown by
+  ``adare vm info``. It states how the disk was built (install method, OS profile and
+  its hash, ISO and its SHA256, setup level, ADARE version and commit, QEMU version,
+  date), the guest's package list (``<disk>.packages.txt``, Linux), where the image is
+  published, and the checks run on it (``adare vm test``). It is a record, not a
+  recipe: nothing is rebuilt from it.
+- **Share one** by uploading the disk, recording its URL with
+  ``adare vm publish <image> --vm-url <url>``, and publishing an environment on it
+  with ``adare env publish-prepare``. The environment file then carries the record
+  as ``image:``, and whoever loads it gets the record with the disk.
+- **Every run records its image**: the disk's SHA256 in the run and in
+  ``reporting/forensic_log.yml`` (``vm_sha256``), and ``image.yml`` in the run
+  directory with the environment version and the image record. A result therefore
+  traces back to run → environment version → image → OS profile and ISO.
 
 Experiments
 ===========
