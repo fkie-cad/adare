@@ -14,10 +14,15 @@ concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job runs a Makefile target, so CI and your machine run the same commands;
+# what a job installs and runs is defined there, not here. UV_LOCKED makes each
+# sync fail if uv.lock is out of date (the same as passing --locked).
+env:
+  UV_LOCKED: 1
+
 jobs:
   # Formatting, strict mypy on adare.core, and the quality ratchet (ruff/mypy
-  # budgets + 1000-line file limit, see quality-baseline.json). Mirrors `make lint`;
-  # the install line must match LINT_SYNC there or the mypy counts drift.
+  # budgets + 1000-line file limit, see quality-baseline.json).
   lint:
     name: Lint & types
     runs-on: ubuntu-latest
@@ -34,27 +39,14 @@ jobs:
 
       - uses: astral-sh/setup-uv@v3
 
-      - name: Install
-        run: uv sync --locked --package adare --extra qemu --group lint
+      - name: Format, strict types, quality ratchet
+        run: make lint
 
-      - name: Formatting
-        run: uv run --no-sync ruff format --check .
-
-      - name: Strict types (adare.core)
-        run: uv run --no-sync mypy adare/adare/core
-
-      - name: Quality ratchet
-        run: uv run --no-sync python scripts/quality_ratchet.py
-
-  # Whole client unit suite. live_vm tests are deselected by the pytest addopts.
-  # `--package adare` keeps adare-cv-server (paddle) out; the unit suite never imports it.
+  # Whole client unit suite.
   unit:
     name: Unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: adare
     steps:
       - uses: actions/checkout@v4
 
@@ -67,21 +59,17 @@ jobs:
 
       - uses: astral-sh/setup-uv@v3
 
-      - name: Install
-        run: uv sync --locked --package adare --group test --extra qemu
-
       - name: Run unit tests
-        run: uv run --no-sync pytest tests -q --cov --cov-report=
+        run: make test PYTEST_ARGS="--cov --cov-report="
 
       # Reported, not gated (yet): ~34% when introduced.
       - name: Coverage summary
         if: always()
+        working-directory: adare
         run: |
           echo "Unit-test line coverage: $(uv run --no-sync coverage report --format=total)%" >> "$GITHUB_STEP_SUMMARY"
 
-  # The guest agent runs on the guest's Python (3.10+), outside the uv workspace
-  # (which requires 3.13), so it gets its own venv with just adarelib + adarevm,
-  # installed from the sources the way the agent wheels are installed in guests.
+  # The guest agent runs on the guest's Python (3.10+), outside the uv workspace.
   agent:
     name: Guest agent (${{ matrix.os }}, Python 3.10)
     runs-on: ${{ matrix.os }}
@@ -98,17 +86,12 @@ jobs:
 
       - uses: astral-sh/setup-uv@v3
 
-      - name: Install
-        run: |
-          uv venv --python 3.10 .venv-agent
-          uv pip install --python .venv-agent ./adarelib ./adarevm 'pytest>=7.4.0' 'pytest-asyncio>=0.21.0'
+      - name: Install make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make --no-progress -y
 
       - name: Run agent tests
-        working-directory: adarevm
-        run: |
-          PY=../.venv-agent/bin/python
-          [ -x "$PY" ] || PY=../.venv-agent/Scripts/python.exe
-          "$PY" -m pytest -q
+        run: make test-agent
 
   # CV server: PaddleOCR/OpenCV make this install heavy and the suite is young,
   # so it is reported but does not block merges (yet).
@@ -126,11 +109,8 @@ jobs:
 
       - uses: astral-sh/setup-uv@v3
 
-      - name: Install
-        run: uv sync --locked --package adare-cv-server --group test
-
       - name: Run CV server tests
-        run: uv run --no-sync pytest adare-cv-server/tests -q
+        run: make test-cv
 
   # Testfunctions run inside Linux and Windows guests and on the macOS host (host
   # test mode), so their behaviour is checked on all three.
@@ -144,7 +124,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     defaults:
       run:
-        working-directory: adare
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -154,8 +134,9 @@ jobs:
 
       - uses: astral-sh/setup-uv@v3
 
-      - name: Install
-        run: uv sync --locked --package adare --group test
+      - name: Install make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make --no-progress -y
 
       - name: Run testfunction tests
-        run: uv run --no-sync pytest tests/unit/testfunctions -q
+        run: make test-testfunctions
