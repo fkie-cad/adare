@@ -15,10 +15,12 @@ from adare.backend.experiment.vm_test_qemu import (
     _cleanup_registered_test_vm,
     _CleanupFailed,
     _free_host_port,
+    connect_agent_for_test,
     create_qemu_vm_for_test,
     create_registered_test_context,
     setup_qemu_networking_for_test,
     setup_qemu_share_for_test,
+    start_agent_for_test,
     start_qemu_test_vm,
 )
 from adare.exceptions import LoggedException
@@ -147,6 +149,10 @@ def _is_windows(context) -> bool:
     return 'windows' in context.guest_platform.lower()
 
 
+def _is_qemu(context) -> bool:
+    return getattr(context, 'hypervisor_type', None) == 'qemu'
+
+
 async def test_vm_response(context):
     """Test basic VM responsiveness."""
     cmd = "Write-Output ok" if _is_windows(context) else "true"
@@ -159,11 +165,18 @@ async def test_vm_response(context):
 
 
 async def test_shared_folders(context):
-    """Test shared folder accessibility (adarevm source reachable in guest)."""
+    """Test shared folder accessibility: the agent (and on QEMU the run's config.json) reachable in the guest."""
+    # QEMU shares an experiment's layout (vm_runtime at vm, run directory at run); OVA the adarevm source at vm
+    files = (
+        [('run', 'config.json'), ('vm', 'adarevm', 'pyproject.toml')]
+        if _is_qemu(context)
+        else [('vm', 'pyproject.toml')]
+    )
     if _is_windows(context):
-        cmd = "if (Test-Path 'C:\\adare\\vm\\pyproject.toml') { exit 0 } else { exit 1 }"
+        checks = ' -and '.join("(Test-Path 'C:\\adare\\" + '\\'.join(parts) + "')" for parts in files)
+        cmd = f"if ({checks}) {{ exit 0 }} else {{ exit 1 }}"
     else:
-        cmd = "test -f /adare/vm/pyproject.toml"
+        cmd = ' && '.join('test -f /adare/' + '/'.join(parts) for parts in files)
     ls_result = await context.vm.run_command(cmd, stop_event=context.user_interrupt_event)
     if ls_result.returncode == 0:
         log.info("Shared folders are accessible")
@@ -204,59 +217,31 @@ async def test_uv_availability(context):
     return False, f"uv not available. Exit code: {uv_result.returncode}"
 
 
-# The share is the host's installed ~/.adare/adare and virtio-fs does not enforce
-# read-only, so whatever the guest agent (root) writes there lands root-owned on
-# the host and breaks the next `make install`. Keep the venv and bytecode in the
-# guest, and --frozen so uv never rewrites the shared uv.lock.
+# The share is the host's installed appdata, so whatever the guest agent (root)
+# writes there lands on the host and breaks the next `make install`. Keep the venv
+# and bytecode in the guest, and --frozen so uv never rewrites the shared uv.lock.
 _GUEST_UV_ENV = "export UV_PROJECT_ENVIRONMENT=/var/tmp/adarevm-venv PYTHONDONTWRITEBYTECODE=1; "
 
 
-async def test_adarevm_server_start(context, guest_bind_port: int | None = None):
-    """Test starting the adarevm WebSocket server from the shared source.
+async def test_adarevm_server_start(context):
+    """Test starting the adarevm WebSocket server from the shared source (VirtualBox/OVA).
 
-    Launches the ``adarevm`` console entry point (``adarevm.main:run``) via uv.
-    The server always binds ``0.0.0.0:18765`` (hardcoded in AdareVMServer); there
-    is no ``--port`` flag, so ``guest_bind_port`` is informational only -- for
-    QEMU the host reaches it over the 19000->18765 forward.
-
-    On Windows the launch mirrors the real experiment flow (agent_lifecycle):
-    a user-session scheduled task (``run_as_user``) is required for the GUI
-    automation the later screenshot/click tests exercise, and -- in SMB mode --
-    that task's session must re-establish the ``\\\\10.0.2.4\\qemu`` connection
-    before it can resolve the ``C:\\adare\\vm`` junction. The scheduled-task
-    runner waits and verifies port 18765 is LISTENING before returning.
-
-    NOTE: requires uv-based (editable) VMs; wheel-only images are not covered.
-
-    Args:
-        context: ExperimentRunCtx
-        guest_bind_port: In-guest bind port expected by the caller (18765 for QEMU).
+    QEMU tests start the agent through the experiment's own install and launch
+    instead (``vm_test_qemu.start_agent_for_test``). This launches the ``adarevm``
+    console entry point (``adarevm.main:run``) via uv; the server binds
+    ``0.0.0.0:18765``. On Windows a user-session scheduled task (``run_as_user``)
+    is required for the GUI automation the later screenshot/click tests exercise;
+    the scheduled-task runner waits until port 18765 is LISTENING before returning.
     """
-    if guest_bind_port is not None and guest_bind_port != 18765:
-        log.warning(
-            f"adarevm binds 18765 unconditionally; requested guest_bind_port={guest_bind_port} cannot be honored."
-        )
     try:
         if _is_windows(context):
-            # Editable source is shared at C:\adare\vm (project root with
-            # pyproject.toml). Re-establish SMB in the task's user session so
-            # the junction resolves, then launch adarevm from that directory.
+            # Editable source is shared at C:\adare\vm (project root with pyproject.toml)
             log_path = r'C:\Windows\Temp'
-            stderr_log = rf'{log_path}\adarevm_stderr.log'
             # Double quotes only: run_as_user embeds the command in a single-quoted string.
             run_cmd = (
                 f'$env:UV_PROJECT_ENVIRONMENT = "{log_path}\\adarevm-venv"; $env:PYTHONDONTWRITEBYTECODE = "1"; '
                 'uv run --frozen --package adarevm adarevm'
             )
-            if getattr(context.vm.config, 'smb_share_path', None):
-                run_cmd = (
-                    'reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services'
-                    '\\LanmanWorkstation\\Parameters" '
-                    '/v AllowInsecureGuestAuth /t REG_DWORD /d 1 /f >$null 2>&1; '
-                    'Set-SmbClientConfiguration -RequireSecuritySignature $false '
-                    '-Force -ErrorAction SilentlyContinue; '
-                    f'net use \\\\10.0.2.4\\qemu /persistent:no 2>>"{stderr_log}"; ' + run_cmd
-                )
             start_result = await context.vm.run_command(
                 run_cmd,
                 cwd=r'C:\adare\vm',
@@ -264,7 +249,7 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
                 run_as_user=True,
                 stop_event=context.user_interrupt_event,
                 redirect_stdout=rf'{log_path}\adarevm_stdout.log',
-                redirect_stderr=stderr_log,
+                redirect_stderr=rf'{log_path}\adarevm_stderr.log',
             )
             if start_result.returncode == 0:
                 log.info("AdareVM server started successfully (port 18765 listening)")
@@ -278,8 +263,8 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
         # uv resolves its `adarelib = { workspace = true }` dependency. Pre-sync
         # the venv (the slow build), grant the guest-agent (root) access to the
         # autologin user's X display (DISPLAY/XAUTHORITY + `xhost +SI:localuser:root`),
-        # then start adarevm without waiting: background on QEMU as in agent_lifecycle,
-        # and `cmd &`, not `cd X && cmd &`, whose subshell holds the agent's output pipe.
+        # then start adarevm. The guest agent waits for the command's output pipe, so the
+        # job is `cmd &`, not `cd X && cmd &`, whose subshell holds that pipe open.
         from adare.backend.experiment.agent_readiness import wait_for_agent
 
         stop = context.user_interrupt_event
@@ -293,8 +278,7 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
             "xhost +SI:localuser:root >/dev/null 2>&1 || true; "
             "cd /adare/vm/adarevm || exit 1; nohup uv run --frozen adarevm >/tmp/adarevm.log 2>&1 </dev/null &"
         )
-        on_qemu = getattr(context, 'hypervisor_type', None) == 'qemu'  # VirtualBox's background logs to /adare/run
-        start_result = await context.vm.run_command(start_command, background=on_qemu, stop_event=stop)
+        start_result = await context.vm.run_command(start_command, stop_event=stop)
         if start_result.returncode == 0:
             log.info("AdareVM server launched; waiting for it to answer")
             await wait_for_agent(context.config.websocket_port, stop_event=stop)
@@ -593,17 +577,18 @@ def _print_compat_failures(context) -> None:
                 print(f"       {line}")
 
 
-async def _run_compat_substage(stage_cls, flow_console, context, fn, **kwargs) -> bool:
+async def _run_compat_substage(stage_cls, flow_console, context, fn, with_stage=False, **kwargs) -> bool:
     """Run one compatibility test under its stage and reflect the boolean result in the
     stage glyph (✖ on False). The failure reason is NOT emitted into the tree (a
     multiline CLIXML stderr would explode it mid-run); instead the parsed
     ``(summary, detail)`` is collected on ``context.compat_failures`` for the
     end-of-run "Failure details" block. Returns the bool so compatibility_results
-    stays a dict of bools (sum() in the verdict logic is unchanged)."""
+    stays a dict of bools (sum() in the verdict logic is unchanged). ``with_stage``
+    also hands ``fn`` the stage context, for progress messages."""
     from adare.backend.experiment.commands.manage import StageCtxManagerLite
 
     async with StageCtxManagerLite(stage_cls(), flow_console, level=2) as cm:
-        ok, reason = await fn(context, **kwargs)
+        ok, reason = await (fn(context, cm, **kwargs) if with_stage else fn(context, **kwargs))
         cm.set_result(ok)
         if not ok:
             summary, detail = _split_reason(reason)
@@ -611,15 +596,12 @@ async def _run_compat_substage(stage_cls, flow_console, context, fn, **kwargs) -
         return ok
 
 
-async def test_vm_compatibility(context, flow_console, guest_bind_port: int | None = None):
+async def test_vm_compatibility(context, flow_console):
     """Test VM compatibility with ADARE WebSocket server and execute simple experiment commands.
 
     Args:
         context: ExperimentRunCtx
         flow_console: ExperimentFlowConsole for progress reporting
-        guest_bind_port: Optional in-guest bind port for the adarevm server. Threaded
-            through to ``test_adarevm_server_start``. None keeps the OVA/VirtualBox
-            loopback behavior; QEMU passes 18765 (host connects on the forwarded port).
     """
     from adare.types.stages import (
         VMAdareServerTestStage,
@@ -636,13 +618,14 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
 
     log.info("Testing VM compatibility with ADARE WebSocket server...")
 
-    # QEMU experiments default to host-side QMP GUI automation (Wayland-agnostic),
-    # so on QEMU the host/QMP screenshot+click are the gating, production-
-    # representative UI checks. The in-guest adarevm agent path (server/websocket/
-    # agent screenshot/click) is exercised too but is SECONDARY / non-fatal on QEMU
-    # -- a native-Wayland session may legitimately fail the X11-only agent capture.
-    # VirtualBox/OVA has no QMP, so there the agent path stays primary and gating.
-    is_qemu = getattr(context, 'hypervisor_type', None) == 'qemu'
+    # QEMU experiments default to host-side QMP GUI automation (Wayland-agnostic)
+    # but run their tests through the in-guest agent, so on QEMU the host/QMP
+    # screenshot+click and the agent's start + connection are the gating checks,
+    # each done the way an experiment does it. The agent's own screenshot/click are
+    # exercised too but non-fatal on QEMU -- a native-Wayland session may
+    # legitimately fail the X11-only agent capture.
+    # VirtualBox/OVA has no QMP, so there the agent path is primary and gating.
+    is_qemu = _is_qemu(context)
 
     # Collected by _run_compat_substage: list of (stage_msg, summary, detail) for
     # failing sub-stages, printed as a parsed "Failure details" block after the
@@ -699,14 +682,18 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
                 VMHostClickTestStage, flow_console, context, test_host_click
             )
 
-        # Test 5: Start adarevm WebSocket server with substage
-        compatibility_results['adarevm_server_starts'] = await _run_compat_substage(
-            VMAdareServerTestStage, flow_console, context, test_adarevm_server_start, guest_bind_port=guest_bind_port
+        # Test 5 + 6: start adarevm and connect to it -- on QEMU through the
+        # experiment's own install, launch and connection (vm_test_qemu)
+        start_agent, connect_agent = (
+            (start_agent_for_test, connect_agent_for_test)
+            if is_qemu
+            else (test_adarevm_server_start, test_websocket_connection)
         )
-
-        # Test 6: WebSocket connection with substage
+        compatibility_results['adarevm_server_starts'] = await _run_compat_substage(
+            VMAdareServerTestStage, flow_console, context, start_agent
+        )
         compatibility_results['websocket_connection'] = await _run_compat_substage(
-            VMWebSocketTestStage, flow_console, context, test_websocket_connection
+            VMWebSocketTestStage, flow_console, context, connect_agent, with_stage=is_qemu
         )
 
         # Only run WebSocket commands if connection was successful
@@ -734,27 +721,31 @@ async def test_vm_compatibility(context, flow_console, guest_bind_port: int | No
         log.info(f"  - {test_name}: {status}")
 
     if is_qemu:
-        # QEMU verdict: gated on QGA-responsive + shared folder + host/QMP
-        # screenshot + host/QMP click. The agent-mode results are reported above
-        # but are NON-FATAL here (native-Wayland sessions can't do in-guest
-        # X11 capture, yet the host/QMP path -- how real experiments run -- works).
+        # QEMU verdict: QGA-responsive + shared folders + host/QMP screenshot and
+        # click + the agent's start and connection (experiments run tests through
+        # it). The agent's own screenshot/click are reported but NON-FATAL here
+        # (native-Wayland sessions can't do in-guest X11 capture; experiments use QMP).
         gating = {
-            'vm_responsive': compatibility_results['vm_responsive'],
-            'shared_folders_working': compatibility_results['shared_folders_working'],
-            'host_screenshot': compatibility_results['host_screenshot'],
-            'host_click': compatibility_results['host_click'],
+            key: compatibility_results[key]
+            for key in (
+                'vm_responsive',
+                'shared_folders_working',
+                'host_screenshot',
+                'host_click',
+                'adarevm_server_starts',
+                'websocket_connection',
+            )
         }
         success = all(gating.values())
         if not success:
             failed = [k for k, v in gating.items() if not v]
             log.warning(f"QEMU compatibility insufficient: failed gating checks: {failed}")
         else:
-            log.info("VM appears compatible with ADARE (host/QMP GUI automation working)")
-        agent_ok = all(
-            compatibility_results[k]
-            for k in ('adarevm_server_starts', 'websocket_connection', 'screenshot_command', 'click_command')
+            log.info("VM appears compatible with ADARE (host/QMP GUI automation and agent working)")
+        agent_gui_ok = compatibility_results['screenshot_command'] and compatibility_results['click_command']
+        log.info(
+            f"Agent GUI (in-guest screenshot/click) checks: {'PASS' if agent_gui_ok else 'FAIL (non-fatal on QEMU)'}"
         )
-        log.info(f"Agent-mode (in-guest adarevm) checks: {'PASS' if agent_ok else 'FAIL (non-fatal on QEMU)'}")
     else:
         # VirtualBox/OVA: no QMP -- the in-guest agent path is primary and gating.
         success = passed_tests >= 6  # At least VM basics + server + websocket + one command
@@ -1007,12 +998,12 @@ async def vm_test_registered(
                 for setup_step in setup_steps:
                     await step_runner.run_async_step(setup_step, context)
 
-        # VM Compatibility Testing Phase (guest binds 18765, host connects forwarded 19000)
+        # VM Compatibility Testing Phase (guest binds 18765, host connects on the forwarded port)
         vm_compatibility_success = False
         if not stop_event.is_set():
             async with StageCtxManagerLite(VMCompatibilityTestStage(), flow_console, level=1):
                 vm_compatibility_success = await step_runner.run_async_step(
-                    lambda ctx: test_vm_compatibility(ctx, flow_console, guest_bind_port=18765), context
+                    lambda ctx: test_vm_compatibility(ctx, flow_console), context
                 )
 
         if not vm_compatibility_success:
@@ -1020,6 +1011,7 @@ async def vm_test_registered(
             flow_console.finish_experiment_timer(success=False)
             return False
 
+        context.vm_test_passed = True  # cleanup drops the run directory (adarevm logs) only then
         elapsed_time = time.time() - start_time
         log.info(
             f"Registered VM test completed successfully! VM is compatible with ADARE. (took {elapsed_time:.1f} seconds)"

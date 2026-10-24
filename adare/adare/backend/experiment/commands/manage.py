@@ -35,6 +35,14 @@ class StageCtxManagerLite:
         """
         self.result = bool(result)
 
+    def set_status(self, status: int) -> None:
+        """StageCtxManager API (connect_websocket): show the stage's sub-message as its progress."""
+        self.stage.set_status(status)
+        sub_msg = self.stage.sub_msg
+        self.flow_console.change_log_message(
+            self.stage_id, f"{self.stage.msg}: {sub_msg}" if sub_msg else self.stage.msg
+        )
+
     async def __aenter__(self):
         from datetime import datetime
 
