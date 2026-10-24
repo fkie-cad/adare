@@ -9,10 +9,11 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from adare.hypervisor.qemu.libvirt_xml import generate_domain_xml
+from adare.hypervisor.qemu.libvirt_xml import generate_domain_xml, generate_virtiofs_xml_element
 from adare.hypervisor.qemu.libvirt_xml_builder import (
     DomainXMLBuilder,
     PCIBusAllocator,
+    _generate_virtiofs_xml_element,
 )
 
 # --- Test fixtures ---
@@ -698,6 +699,25 @@ class TestDomainXMLBuilderVirtioFS:
         tags = [fs.find('target').get('dir') for fs in filesystems]
         assert 'run' in tags
         assert 'vm' in tags
+
+    @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
+    @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Linux')
+    def test_virtiofs_has_no_idmap(self, mock_platform, mock_which):
+        """libvirt >= 10.0 rejects our former <idmap> ("invalid idmap start/target/count settings")."""
+        config = make_linux_q35_config()
+        builder = DomainXMLBuilder(config, virtiofs_shares=[{'tag': 'run', 'host_path': '/tmp/run'}])
+        root = ET.fromstring(builder.build())
+
+        assert root.find('.//filesystem/idmap') is None
+
+    def test_snapshot_restore_element_matches_builder(self):
+        """The public element (snapshot restore) is the one new domains get, idmap-free."""
+        share = {'tag': 'run', 'host_path': '/tmp/run'}
+        public = generate_virtiofs_xml_element(share, is_q35=True, index=0)
+        private = _generate_virtiofs_xml_element(share, is_q35=True, index=0)
+
+        assert ET.tostring(public) == ET.tostring(private)
+        assert public.find('idmap') is None
 
 
 class TestDomainXMLBuilderClock:

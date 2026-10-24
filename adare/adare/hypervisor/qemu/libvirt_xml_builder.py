@@ -998,13 +998,8 @@ def _generate_virtiofs_xml_element(
     ET.SubElement(filesystem, 'driver', type='virtiofs')
     ET.SubElement(filesystem, 'source', dir=host_path)
     ET.SubElement(filesystem, 'target', dir=tag)
-
-    # Add idmap for uid/gid mapping (host user -> guest root)
-    idmap = ET.SubElement(filesystem, 'idmap')
-    host_uid = os.getuid()
-    host_gid = os.getgid()
-    ET.SubElement(idmap, 'uid', target='0', source=str(host_uid), count='1')
-    ET.SubElement(idmap, 'gid', target='0', source=str(host_gid), count='1')
+    # No <idmap>: libvirt < 10.0 ignores it for virtiofs, and libvirt >= 10.0
+    # applies it (needs start/target/count), which shares were never tested with.
 
     # PCI addressing
     if is_virt:
