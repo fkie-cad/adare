@@ -19,7 +19,7 @@ if str(ADARELIB_ROOT) not in sys.path:
 from adarelib.constants import StatusEnum
 
 # Import testfunctions dynamically
-from adare.helperfunctions.module import import_module_from_pyfile
+from adarelib.helper.module import import_module_from_pyfile
 
 # Load Windows testfunctions module
 windows_module_path = PROJECT_ROOT / "appdata" / "testfunctions" / "windows" / "windows.py"

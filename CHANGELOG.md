@@ -109,6 +109,16 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   qemu extra or the CV server from `.venv`); new: `make sync` (use instead of
   plain `uv sync`), `make test-testfunctions`, `make test-cv`, and `make test`
   takes `PYTEST_ARGS=...`. `make test-agent` now also works on Windows.
+- CI tests guest code on the guests' Python: the testfunction tests also run on
+  Python 3.10 (`make test-testfunctions-guest`, Linux + Windows), next to the
+  agent suite, in one venv (`.venv-guest`, replaces `.venv-agent`) pinned by
+  `requirements-guest-test.txt` (`make lock-guest` re-pins it).
+- CI also runs `make install` + `make update` on Linux, macOS and Windows
+  (`make test-install`), the unit suite on macOS, and builds the docs on every PR.
+  `make docs` treats Sphinx warnings as errors.
+- The unit suite has a coverage floor (`make test-cov`, 39%); the CV server job
+  now blocks merges; `make lint` runs mypy once (the ratchet fails on any error in
+  `adare.core`). Pushes to dev/main no longer cancel each other's CI runs.
 - `make install` / `make update` install exactly what `uv.lock` pins (`--locked`)
   and stop at the first failing step instead of carrying on. They no longer need
   a system Python (uv provides 3.13), work from any directory, and never remove

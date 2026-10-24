@@ -1,5 +1,5 @@
 .DEFAULT_GOAL = help
-.PHONY: help install install-qemu update sync adare-clean docs docs-sphinx install-skills test test-testfunctions test-cv test-agent lint lint-fix lint-baseline typecheck hooks
+.PHONY: help install install-qemu update sync adare-clean docs docs-sphinx install-skills test test-cov test-testfunctions test-testfunctions-guest test-cv test-agent test-install guest-venv lock-guest lint lint-fix lint-baseline typecheck hooks
 
 # uv owns the environments and the lock; make only names the tasks. CI calls these
 # same targets (with UV_LOCKED=1, i.e. --locked), so each command is written once,
@@ -19,12 +19,16 @@ help:
 	@echo "  sync            Bring .venv up to date with uv.lock (keeps the qemu extra; use instead of plain 'uv sync')."
 	@echo "  adare-clean     Reset adare state."
 	@echo "  install-skills  Symlink the workflow skills in skills/ into Claude Code's skill dirs (project + global)."
-	@echo "  docs            Build HTML documentation with Sphinx."
-	@echo "  docs-sphinx     Build HTML documentation with Sphinx."
+	@echo "  docs            Build HTML documentation with Sphinx (warnings are errors)."
+	@echo "  docs-sphinx     Build HTML documentation with Sphinx (warnings are errors)."
 	@echo "  test            Run the client unit suite (extra pytest flags: PYTEST_ARGS=...)."
-	@echo "  test-testfunctions  Run only the testfunction tests (no libvirt needed)."
+	@echo "  test-cov        Run the unit suite with coverage; fails below the floor (COV_MIN)."
+	@echo "  test-testfunctions  Run only the testfunction tests on the host Python (no libvirt needed)."
+	@echo "  test-testfunctions-guest  Run the testfunction tests on the guests' Python 3.10."
 	@echo "  test-cv         Run the CV server suite."
-	@echo "  test-agent      Run the guest agent suite on Python 3.10 (own venv, like CI)."
+	@echo "  test-agent      Run the guest agent suite on the guests' Python 3.10."
+	@echo "  test-install    Run 'make install' then 'make update', and check the installed CLI."
+	@echo "  lock-guest      Re-pin requirements-guest-test.txt (the guest test venv)."
 	@echo "  lint            Format check + quality ratchet (ruff, mypy, file size) - same as CI."
 	@echo "  lint-fix        Apply ruff format and safe autofixes."
 	@echo "  lint-baseline   Lock in paid-down debt (lowers quality-baseline.json)."
@@ -79,11 +83,13 @@ install-skills:
 docs: docs-sphinx
 
 # Build output is not committed (GitHub Pages is deployed by the docs workflow).
+# -W: a warning (broken reference, bad heading level, ...) fails the build, so CI
+# catches it on the PR instead of after the deploy from main.
 DOCS_BUILD = docsrc/build/html
 docs-sphinx:
 	@echo "Building documentation with Sphinx..."
 	$(SYNC) --group docs
-	$(RUN) sphinx-build -b html -a -E docsrc/source $(DOCS_BUILD)
+	$(RUN) sphinx-build -b html -a -E -W --keep-going docsrc/source $(DOCS_BUILD)
 	@echo "Copying demo assets..."
 	mkdir -p $(DOCS_BUILD)/demo
 	cp paper/demo/*.mp4 $(DOCS_BUILD)/demo/
@@ -96,8 +102,14 @@ test:
 	$(SYNC) --package adare --group test --extra qemu
 	cd adare && $(RUN) pytest tests -q $(PYTEST_ARGS)
 
-# Testfunctions also run on the macOS host and in Windows guests, so CI runs them
-# on all three OSes - without the qemu extra, which needs libvirt headers.
+# Line-coverage floor (39.2% when set). Raise it as coverage grows; never lower it.
+COV_MIN = 39
+test-cov:
+	$(MAKE) test PYTEST_ARGS="--cov --cov-report= --cov-fail-under=$(COV_MIN) $(PYTEST_ARGS)"
+
+# Testfunctions run on the host (host test mode) and in guests. This runs them on the
+# host Python, without the qemu extra (which needs libvirt headers); CI runs it on
+# macOS. test-testfunctions-guest below runs them on the guests' Python.
 test-testfunctions:
 	$(SYNC) --package adare --group test
 	cd adare && $(RUN) pytest tests/unit/testfunctions -q $(PYTEST_ARGS)
@@ -106,19 +118,44 @@ test-cv:
 	$(SYNC) --package adare-cv-server --group test
 	$(RUN) pytest adare-cv-server/tests -q $(PYTEST_ARGS)
 
-# The guest agent targets the guest's Python (3.10+); the workspace needs 3.13,
-# so the agent suite runs in its own venv with just adarelib + adarevm, installed
-# from the sources the way the agent wheels are installed in guests.
-AGENT_VENV = .venv-agent
+# Guest-side code (the agent, the testfunctions) runs on the guest's Python (3.10+);
+# the workspace needs 3.13. So its tests run in their own venv on the oldest guest
+# Python, pinned by requirements-guest-test.txt (re-pin: `make lock-guest`), with
+# adarelib + adarevm installed from the sources the way their wheels are installed
+# in guests. `uv pip check` fails if they need a dependency the pins lack.
+GUEST_PYTHON = 3.10
+GUEST_VENV = .venv-guest
 ifeq ($(OS),Windows_NT)
-AGENT_PY = $(AGENT_VENV)/Scripts/python.exe
+GUEST_PY = $(GUEST_VENV)/Scripts/python.exe
 else
-AGENT_PY = $(AGENT_VENV)/bin/python
+GUEST_PY = $(GUEST_VENV)/bin/python
 endif
-test-agent:
-	uv venv -q --allow-existing --python 3.10 $(AGENT_VENV)
-	uv pip install -q --python $(AGENT_VENV) --reinstall-package adarevm --reinstall-package adarelib ./adarelib ./adarevm 'pytest>=7.4.0' 'pytest-asyncio>=0.21.0'
-	cd adarevm && ../$(AGENT_PY) -m pytest -q $(PYTEST_ARGS)
+guest-venv:
+	uv venv -q --allow-existing --python $(GUEST_PYTHON) $(GUEST_VENV)
+	uv pip sync -q --python $(GUEST_VENV) requirements-guest-test.txt
+	uv pip install -q --python $(GUEST_VENV) --no-deps --reinstall-package adarevm --reinstall-package adarelib ./adarelib ./adarevm
+	uv pip check -q --python $(GUEST_VENV)
+
+lock-guest:
+	uv pip compile -q requirements-guest-test.in --universal --python-version $(GUEST_PYTHON) \
+		--no-emit-package adarelib --no-emit-package adarevm -o requirements-guest-test.txt
+
+test-agent: guest-venv
+	cd adarevm && ../$(GUEST_PY) -m pytest -q $(PYTEST_ARGS)
+
+# --confcutdir keeps tests/conftest.py (which imports the 3.13 host package) out.
+test-testfunctions-guest: guest-venv
+	cd adare && ../$(GUEST_PY) -m pytest tests/unit/testfunctions --confcutdir=tests/unit/testfunctions -q $(PYTEST_ARGS)
+
+# What a user does on a fresh clone, then after a pull: CI runs it on all three OSes.
+# It is a real install (the same as running those targets yourself).
+ifeq ($(OS),Windows_NT)
+INSTALLED_ADARE = .venv/Scripts/adare.exe
+else
+INSTALLED_ADARE = $(HOME)/.local/bin/adare
+endif
+test-install: install update
+	$(INSTALLED_ADARE) --help
 
 # --- Quality -----------------------------------------------------------------
 # The ratchet's mypy counts depend on which packages are installed, so lint runs
@@ -129,10 +166,11 @@ LINT_SYNC = $(LINT_ENV) uv sync --package adare --extra qemu --group lint --quie
 LINT_RUN = $(LINT_ENV) $(RUN)
 
 
+# The ratchet runs mypy once over adare/adare and also fails on any error in
+# adare.core, so lint needs no separate `mypy adare/adare/core` pass.
 lint:
 	$(LINT_SYNC)
 	$(LINT_RUN) ruff format --check .
-	$(LINT_RUN) mypy adare/adare/core
 	$(LINT_RUN) python scripts/quality_ratchet.py
 
 lint-fix:
