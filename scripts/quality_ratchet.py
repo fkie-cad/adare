@@ -6,7 +6,8 @@ Three budgets are tracked in ``quality-baseline.json`` at the repo root:
 - ``ruff``: violation count per rule code. A rule absent from the baseline must
   have zero violations; a listed rule may not exceed its count.
 - ``mypy``: type-error count per error code over the host package (``MYPY_TARGET``).
-  ``--no-mypy`` skips it (pre-commit); CI always runs it.
+  ``--no-mypy`` skips it (pre-commit); CI always runs it. ``MYPY_ZERO`` (adare.core,
+  strict) has no budget: any error there fails.
 - ``oversized_files``: Python files over ``MAX_LINES`` lines. A file not listed
   may not cross the limit; a listed file may not grow past its recorded size.
 
@@ -26,6 +27,7 @@ MAX_LINES = 1000
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE = ROOT / 'quality-baseline.json'
 MYPY_TARGET = 'adare/adare'
+MYPY_ZERO = 'adare/adare/core/'
 MYPY_ERROR = re.compile(r': error: .*\[([a-z0-9-]+)\]$')
 
 
@@ -40,7 +42,8 @@ def ruff_counts() -> dict[str, int]:
     return dict(sorted(Counter(v['code'] for v in json.loads(proc.stdout)).items()))
 
 
-def mypy_counts() -> dict[str, int]:
+def mypy_counts() -> tuple[dict[str, int], list[str]]:
+    """Error counts per code, and the errors in ``MYPY_ZERO`` (which must have none)."""
     proc = subprocess.run(
         [sys.executable, '-m', 'mypy', MYPY_TARGET, '--no-error-summary', '--no-pretty'],
         cwd=ROOT,
@@ -50,8 +53,9 @@ def mypy_counts() -> dict[str, int]:
     )
     if proc.returncode not in (0, 1):
         raise RuntimeError(f'mypy crashed:\n{proc.stderr or proc.stdout}')
-    codes = (m.group(1) for line in proc.stdout.splitlines() if (m := MYPY_ERROR.search(line)))
-    return dict(sorted(Counter(codes).items()))
+    errors = [(line, m.group(1)) for line in proc.stdout.splitlines() if (m := MYPY_ERROR.search(line))]
+    zero_violations = [line for line, _ in errors if line.replace('\\', '/').startswith(MYPY_ZERO)]
+    return dict(sorted(Counter(code for _, code in errors).items())), zero_violations
 
 
 def oversized_files() -> dict[str, int]:
@@ -91,11 +95,12 @@ def main() -> int:
     baseline = {'ruff': {}, 'mypy': {}, 'oversized_files': {}}
     if BASELINE.exists():
         baseline |= json.loads(BASELINE.read_text())
-    current = {
-        'ruff': ruff_counts(),
-        'mypy': baseline['mypy'] if args.no_mypy else mypy_counts(),
-        'oversized_files': oversized_files(),
-    }
+    mypy, zero_violations = (baseline['mypy'], []) if args.no_mypy else mypy_counts()
+    current = {'ruff': ruff_counts(), 'mypy': mypy, 'oversized_files': oversized_files()}
+
+    if zero_violations:
+        print(f'mypy: {MYPY_ZERO} must stay at zero errors:', *zero_violations, sep='\n  ')
+        return 1
 
     regressions, improvements = [], []
     for kind, key, unit in [

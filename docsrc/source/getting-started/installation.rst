@@ -12,8 +12,9 @@ that's you, jump to :ref:`hypervisor-virtualbox` below.
 Step 1: Install Prerequisites
 *****************************
 
-These are required regardless of which hypervisor you use: **Python 3.10+**,
-**uv**, **make**, and **git**.
+These are required regardless of which hypervisor you use: **uv**, **make**,
+and **git**. You do not need to install Python yourself: uv installs the
+Python version ADARE needs (3.13) on first use.
 
 .. tab-set::
 
@@ -26,64 +27,53 @@ These are required regardless of which hypervisor you use: **Python 3.10+**,
             .. code-block:: bash
 
                sudo apt update
-               sudo apt install python3 python3-venv make git
+               sudo apt install make git
                curl -LsSf https://astral.sh/uv/install.sh | sh
 
          .. tab-item:: Fedora/RHEL
 
             .. code-block:: bash
 
-               sudo dnf install python3 make git
+               sudo dnf install make git
                curl -LsSf https://astral.sh/uv/install.sh | sh
 
          .. tab-item:: Arch
 
             .. code-block:: bash
 
-               sudo pacman -S python make git
+               sudo pacman -S make git
                curl -LsSf https://astral.sh/uv/install.sh | sh
 
       After installing ``uv``, restart your shell so it appears on ``PATH``.
 
    .. tab-item:: macOS
 
-      Install Python via `python.org <https://www.python.org/downloads/>`_ or
-      Homebrew, then install ``uv`` and the build tools:
+      Install ``uv`` and the build tools (with Homebrew or MacPorts):
 
       .. code-block:: bash
 
-         brew install python make git
+         brew install make git
          curl -LsSf https://astral.sh/uv/install.sh | sh
 
       After installing ``uv``, restart your shell so it appears on ``PATH``.
 
    .. tab-item:: Windows
 
-      Install Python from PowerShell:
-
-      .. code-block:: powershell
-
-         # Download Python installer
-         $pythonInstaller = "https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe"
-         $installerPath = "$env:TEMP\python-installer.exe"
-         Invoke-WebRequest $pythonInstaller -OutFile $installerPath
-
-         # Install Python (add to PATH, install pip)
-         Start-Process -FilePath $installerPath -ArgumentList "/quiet", "InstallAllUsers=1", "PrependPath=1" -Wait
-
-      Install ``uv``:
+      Install ``uv`` from PowerShell:
 
       .. code-block:: powershell
 
          powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-      Install ``make`` and ``git`` via your preferred method (Git for Windows,
-      Chocolatey, or Scoop). Restart your shell, then verify:
+      Install ``git`` (for example `Git for Windows <https://gitforwindows.org/>`_).
+      ``make`` is optional on Windows: ``make install`` only runs the PowerShell
+      installer, which you can also run directly (see below). Restart your
+      shell, then verify:
 
       .. code-block:: powershell
 
-         python --version
          uv --version
+         git --version
 
 
 .. _hypervisor-qemu:
@@ -187,8 +177,8 @@ With prerequisites and QEMU in place, clone and install ADARE.
          cd adare
          make install
 
-      ``make install`` sets up a Python virtual environment, installs
-      dependencies via uv, and installs the ADARE command-line tools. It
+      ``make install`` installs the dependencies pinned in ``uv.lock`` into a
+      virtual environment and puts the ADARE command-line tools on your PATH. It
       includes QEMU support by default (it pulls in the ``libvirt-python``
       extra), so make sure the libvirt development headers from Step 2 are
       installed first or the wheel build will fail.
@@ -205,8 +195,8 @@ With prerequisites and QEMU in place, clone and install ADARE.
          cd adare
          make install
 
-      ``make install`` sets up a Python virtual environment, installs
-      dependencies via uv, and installs the ADARE command-line tools. It
+      ``make install`` installs the dependencies pinned in ``uv.lock`` into a
+      virtual environment and puts the ADARE command-line tools on your PATH. It
       includes QEMU support by default (it pulls in the ``libvirt-python``
       extra), so make sure ``libvirt`` is installed via MacPorts (Step 2) or
       the wheel build will fail.
@@ -229,6 +219,23 @@ menu:
    adare --help
 
 This should display the main help menu without errors.
+
+
+Updating
+********
+
+After pulling a new version, refresh the dependencies, appdata, testfunctions
+and database schema:
+
+.. code-block:: bash
+
+   git pull
+   make update
+
+On Windows, re-run ``install.ps1`` (or ``make update``). Both install exactly
+the versions in ``uv.lock`` and stop with an error if a step fails. The
+``adare`` command points into your clone's ``.venv``, so keep the clone where
+you installed it.
 
 
 .. _choose-hypervisor:
@@ -302,11 +309,14 @@ Install ADARE (VirtualBox-only)
 
          git clone https://github.com/fkie-cad/adare.git
          cd adare
-         make install
+         powershell -ExecutionPolicy Bypass -File adare\install\install.ps1
 
-      On Windows, ``make install`` runs the PowerShell installer and does
-      **not** install QEMU extras (Windows host support is experimental and
-      VirtualBox is the supported backend there).
+      ``make install`` runs the same script if you have ``make``. It installs
+      the dependencies pinned in ``uv.lock``, adds ADARE's ``.venv\Scripts``
+      to your user ``PATH`` (open a new terminal afterwards), and sets up the
+      appdata and database. It does **not** install QEMU extras (Windows host
+      support is experimental and VirtualBox is the supported backend there).
+      To update after a ``git pull``, run it again.
 
 
 Tested Configurations
@@ -341,7 +351,8 @@ ADARE has been tested with the following software versions:
      - Experimental
 
 .. note::
-   While later versions should work, earlier versions (especially Python < 3.10) are not supported due to language features used by ADARE.
+   The host side requires Python 3.13, which uv installs for you. Guest VMs
+   need Python 3.10+ for the ADARE agent.
 
 
 System Requirements

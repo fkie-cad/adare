@@ -1227,9 +1227,13 @@ every build marked "before 10-23", so those profiles are due a re-test.
      - 2026-07-22, before 10-23
      - Win-ARM64 Autopsy VMs built and run (display resolution live-verified).
    * - ``windows11``
-     - recipe
-     - 2026-07-28, before 10-23
-     - Recipe base built; the Windows MSI smoke gate passed on a real guest.
+     - unattend (multi-edition ISO, build 26300)
+     - 2026-10-24
+     - Build (``--no-recipe --ram 8192``, installs Pro); readiness check; vm test
+       (shares, agent, WebSocket, screenshot, click; ``uv`` is not used on
+       Windows). Needed the virtio disk driver on the floppy (current Setup aborts
+       with 0x80070103 on missing driver paths), WinFsp for the virtio-fs shares
+       and a pinned Miniforge. Before: recipe base built 2026-07-28.
    * - ``ubuntu2604arm64``, ``ubuntu2510``, ``ubuntu2510arm64``
      - auto (rolling template)
      - never

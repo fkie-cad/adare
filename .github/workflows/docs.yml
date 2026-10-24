@@ -27,24 +27,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: '3.13'
+          enable-cache: true
 
-      - uses: astral-sh/setup-uv@v3
-
+      # Builds into docsrc/build/html, with the demo videos and .nojekyll.
       - name: Build documentation
-        run: |
-          uv sync --group docs
-          uv run sphinx-build -b html -a -E docsrc/source docsrc/build/html
-
-      - name: Copy demo assets
-        run: |
-          mkdir -p docsrc/build/html/demo
-          cp paper/demo/*.mp4 docsrc/build/html/demo/
-
-      - name: Prepare for GitHub Pages
-        run: touch docsrc/build/html/.nojekyll
+        env:
+          UV_LOCKED: 1
+        run: make docs
 
       - uses: actions/configure-pages@v5
 

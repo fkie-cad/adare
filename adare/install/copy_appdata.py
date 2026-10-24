@@ -6,8 +6,8 @@ sources, shared library, appdata, skills and the uv workspace metadata that
 ``uv run --package adarevm`` needs); everything else there is pruned, so stale
 files and build trees never accumulate. ``adare/appdata/*`` (except
 testfunctions, which are loaded from that copy) is additionally copied to the
-appdata root. Stdlib only: this runs with the system ``python3`` before the
-workspace environment exists.
+appdata root. The install scripts run it with ``uv run --no-sync python``; it
+stays stdlib only so it runs with any Python 3.10+ as well.
 """
 
 import os
@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 # Workspace root: this file lives at <root>/adare/install/copy_appdata.py.
-# Resolved from the file, not the cwd, because install.ps1 runs it from adare/.
+# Resolved from the file, not the cwd, so it works wherever it is run from.
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 
 # Directories / files of the workspace copied to <appdata>/adare (relative paths).

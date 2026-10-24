@@ -260,36 +260,49 @@
           <CommandLine>cmd /c for %d in (D E F) do if exist %d:\virtio-win-guest-tools.exe %d:\virtio-win-guest-tools.exe /S</CommandLine>
           <Description>Install virtio guest tools</Description>
         </SynchronousCommand>
-        {% endif %}
-        {% if setup_level >= 2 %}
-        <!-- Download Miniforge3 -->
+        <!-- WinFsp: virtiofs.exe (virtio guest tools) mounts the ADARE shares through it -->
         <SynchronousCommand wcm:action="add">
           <Order>10</Order>
-          <CommandLine>curl.exe -L -o C:\Users\adare\miniforge3-installer.exe https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Windows-{{ miniforge_arch }}.exe</CommandLine>
+          <CommandLine>curl.exe -L -o C:\Windows\Temp\winfsp.msi https://github.com/winfsp/winfsp/releases/download/v2.1/winfsp-2.1.25156.msi</CommandLine>
+          <Description>Download WinFsp</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>11</Order>
+          <CommandLine>msiexec /i C:\Windows\Temp\winfsp.msi /qn /norestart</CommandLine>
+          <Description>Install WinFsp</Description>
+        </SynchronousCommand>
+        {% endif %}
+        {% if setup_level >= 2 %}
+        <!-- Download Miniforge3, pinned: "latest" changes under us, and 26.9.4-0
+             (2026-10-22) shipped a conda whose `create` fails on Windows
+             ("Could not find 'share/conda-launchers/cli-64.exe'"). -->
+        <SynchronousCommand wcm:action="add">
+          <Order>12</Order>
+          <CommandLine>curl.exe -L -o C:\Users\adare\miniforge3-installer.exe https://github.com/conda-forge/miniforge/releases/download/26.7.2-0/Miniforge3-26.7.2-0-Windows-{{ miniforge_arch }}.exe</CommandLine>
           <Description>Download Miniforge3</Description>
         </SynchronousCommand>
         <!-- Install Miniforge3 silently -->
         <SynchronousCommand wcm:action="add">
-          <Order>11</Order>
+          <Order>13</Order>
           <CommandLine>C:\Users\adare\miniforge3-installer.exe /InstallationType=JustMe /RegisterPython=0 /S /D=C:\Users\adare\.miniforge3</CommandLine>
           <Description>Install Miniforge3</Description>
         </SynchronousCommand>
         <!-- Create pyadare conda environment -->
         <SynchronousCommand wcm:action="add">
-          <Order>12</Order>
+          <Order>14</Order>
           <CommandLine>C:\Users\adare\.miniforge3\condabin\conda.bat create -n pyadare python=3.10 -y</CommandLine>
           <Description>Create pyadare conda environment</Description>
         </SynchronousCommand>
         <!-- Clean up installer -->
         <SynchronousCommand wcm:action="add">
-          <Order>13</Order>
+          <Order>15</Order>
           <CommandLine>del C:\Users\adare\miniforge3-installer.exe</CommandLine>
           <Description>Clean up Miniforge3 installer</Description>
         </SynchronousCommand>
         {% endif %}
         <!-- Shutdown after setup complete -->
         <SynchronousCommand wcm:action="add">
-          <Order>{% if setup_level >= 2 %}14{% elif setup_level >= 1 %}10{% else %}8{% endif %}</Order>
+          <Order>{% if setup_level >= 2 %}16{% elif setup_level >= 1 %}12{% else %}8{% endif %}</Order>
           <CommandLine>shutdown /s /t 60 /c "ADARE: Initial setup complete"</CommandLine>
           <Description>Shutdown after setup</Description>
         </SynchronousCommand>

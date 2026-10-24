@@ -135,6 +135,8 @@ extend-exclude = ["paper", "docsrc/build"]
 "adarelib/**/*.py" = "py310"
 "adare/appdata/testfunctions/**/*.py" = "py310"
 "examples/testfunctions/**/*.py" = "py310"
+# Their tests also run on 3.10 (`make test-testfunctions-guest`).
+"adare/tests/unit/testfunctions/**/*.py" = "py310"
 
 [tool.ruff.format]
 # The codebase mixes quote styles; preserving them halves the reformat churn.

@@ -9,14 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
-# === Path Fixtures ===
-
-
-@pytest.fixture
-def testfunctions_fixtures_dir(fixtures_dir):
-    """Path to testfunction-specific fixtures."""
-    return fixtures_dir / "testfunctions"
-
+# These tests also run on the guests' Python (`make test-testfunctions-guest`, 3.10,
+# without the adare host package), so nothing here may depend on tests/conftest.py.
 
 # === File Creation Factory Fixtures ===
 

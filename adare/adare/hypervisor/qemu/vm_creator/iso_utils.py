@@ -337,6 +337,54 @@ def _extract_guest_tools_exe(virtio_iso_path: Path, output_dir: Path) -> None:
         iso.close()
 
 
+def extract_virtio_driver(virtio_iso_path: Path, driver_dir: str) -> dict[str, bytes]:
+    """Read one driver's .inf/.sys/.cat from the virtio-win ISO.
+
+    Args:
+        virtio_iso_path: Path to the virtio-win ISO
+        driver_dir: Driver folder inside the ISO, e.g. ``viostor/w11/amd64``
+
+    Returns:
+        Filename -> content, without debug symbols (.pdb), small enough for a floppy
+    """
+    import io
+
+    import pycdlib
+    from pycdlib.pycdlibexception import PyCdlibException
+
+    iso = pycdlib.PyCdlib()
+    try:
+        iso.open(str(virtio_iso_path))
+    except PyCdlibException as e:
+        raise ISOExtractionError(str(virtio_iso_path), f'Failed to open: {e}') from e
+
+    try:
+        mode = 'rr_path' if iso.has_rock_ridge() else 'joliet_path'
+        try:
+            children = list(iso.list_children(**{mode: f'/{driver_dir}'}))
+        except PyCdlibException as e:
+            raise ISOExtractionError(str(virtio_iso_path), f'{driver_dir} not found in virtio-win ISO') from e
+
+        files: dict[str, bytes] = {}
+        for child in children:
+            if child.is_dir():
+                continue
+            if mode == 'rr_path':
+                name = child.rock_ridge.name().decode()
+            else:
+                name = child.file_identifier().decode('utf-16-be')
+            if name.lower().rsplit('.', 1)[-1] not in ('inf', 'sys', 'cat'):
+                continue
+            buffer = io.BytesIO()
+            iso.get_file_from_iso_fp(buffer, **{mode: f'/{driver_dir}/{name}'})
+            files[name] = buffer.getvalue()
+        if not any(name.lower().endswith('.inf') for name in files):
+            raise ISOExtractionError(str(virtio_iso_path), f'no .inf in {driver_dir}')
+        return files
+    finally:
+        iso.close()
+
+
 def _build_tools_iso(source_dir: Path, output_path: Path) -> None:
     """Build an ISO from a directory using platform-appropriate tools.
 

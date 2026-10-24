@@ -1,0 +1,18 @@
+# What runs inside a guest VM, plus pytest: the guest agent and the built-in
+# testfunctions with their collections' requirements. Guests run Python 3.10+,
+# outside the 3.13 uv workspace, so this has its own lock:
+# requirements-guest-test.txt, regenerated with `make lock-guest`.
+./adarelib
+./adarevm
+# Every collection's requirements.txt (jsonl and visual have none).
+-r adare/appdata/testfunctions/csv/requirements.txt
+-r adare/appdata/testfunctions/excel/requirements.txt
+-r adare/appdata/testfunctions/json/requirements.txt
+-r adare/appdata/testfunctions/linux/requirements.txt
+-r adare/appdata/testfunctions/sqlite/requirements.txt
+-r adare/appdata/testfunctions/standard/requirements.txt
+-r adare/appdata/testfunctions/xml/requirements.txt
+# windows/requirements.txt has no platform marker, and pywin32 only exists on Windows.
+pywin32>=227; sys_platform == 'win32'
+pytest>=7.4.0
+pytest-asyncio>=0.21.0

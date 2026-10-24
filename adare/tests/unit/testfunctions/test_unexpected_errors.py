@@ -13,7 +13,7 @@ from pathlib import Path
 import attrs
 import pytest
 
-from adare.helperfunctions.module import import_module_from_pyfile
+from adarelib.helper.module import import_module_from_pyfile
 from adarelib.constants import StatusEnum
 from adarelib.testset.api import TestContext
 
