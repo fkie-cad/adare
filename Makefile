@@ -13,9 +13,9 @@ help:
 	@echo "--------------- HELP -----------------"
 	@echo "Available targets:"
 	@echo "  help            Show this help message."
-	@echo "  install         Run the installer (PowerShell on Windows, shell on *nix); installs QEMU support and reports on system tool availability."
+	@echo "  install         Install ADARE from uv.lock, with QEMU support (Windows: VirtualBox only)."
 	@echo "  install-qemu    Alias for install (kept for backwards compatibility)."
-	@echo "  update          Refresh dependencies, appdata, and testfunctions (hash-based, no symlink rebuild)."
+	@echo "  update          Refresh dependencies, appdata, and testfunctions after a git pull."
 	@echo "  sync            Bring .venv up to date with uv.lock (keeps the qemu extra; use instead of plain 'uv sync')."
 	@echo "  adare-clean     Reset adare state."
 	@echo "  install-skills  Symlink the workflow skills in skills/ into Claude Code's skill dirs (project + global)."
@@ -32,29 +32,26 @@ help:
 	@echo "  hooks           Install the pre-commit hooks."
 	@echo "---------------------------------------"
 
+# The install scripts do the work (uv sync --locked, CLIs on PATH, appdata, DB
+# migrations); see adare/install/. Windows has no QEMU support and one script,
+# safe to re-run, for both install and update.
+PS_SCRIPT = powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./adare/install/install.ps1
+
 install:
 ifeq ($(OS),Windows_NT)
-	@echo "Running PowerShell script..."
-	@powershell.exe -File ./adare/install/install.ps1
+	@$(PS_SCRIPT)
 else
-	chmod +x ./adare/install/install.sh
-	@echo "Running shell script (with QEMU support)..."
-	@./adare/install/install.sh qemu
+	@bash ./adare/install/install.sh qemu
 endif
 
 update:
 ifeq ($(OS),Windows_NT)
-	@echo "update.ps1 is not yet provided; please run the steps from update.sh manually on Windows."
-	@exit 1
+	@$(PS_SCRIPT)
 else
-	chmod +x ./adare/install/update.sh
-	@./adare/install/update.sh qemu
+	@bash ./adare/install/update.sh qemu
 endif
 
-install-qemu:
-	chmod +x ./adare/install/install.sh
-	@echo "Running Adare installer script with QEMU support..."
-	@./adare/install/install.sh qemu
+install-qemu: install
 
 sync:
 	uv sync --inexact --extra qemu
