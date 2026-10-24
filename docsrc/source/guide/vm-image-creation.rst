@@ -50,6 +50,11 @@ Linux (fully automated)
    # Base install -- guest tools only, no Python environment
    adare vm create ubuntu2404 --setup base
 
+The finished disk is registered as a VM image with its record next to it
+(``<name>.image.yml``, ``<name>.packages.txt``), see :ref:`VM images
+<concepts-vm-images>`. A name that is already registered needs ``--force``, which
+keeps the old image for the environments using it.
+
 Windows (user-supplied ISO)
 ---------------------------
 
