@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from adare.backend.experiment import agent_readiness, vm_test
+from adare.backend.experiment import agent_readiness, vm_test_ova
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
@@ -35,7 +35,7 @@ async def test_guest_keeps_venv_and_bytecode_off_the_share(platform, monkeypatch
     monkeypatch.setattr(agent_readiness, 'wait_for_agent', AsyncMock())
     ctx = _context(platform)
 
-    ok, _ = await vm_test.test_adarevm_server_start(ctx)
+    ok, _ = await vm_test_ova.check_source_agent_start(ctx, None)
 
     assert ok
     uv_commands = [c.args[0] for c in ctx.vm.run_command.await_args_list if 'uv ' in c.args[0]]
@@ -51,7 +51,7 @@ async def test_windows_command_has_no_single_quotes():
     """run_as_user embeds the command in a single-quoted PowerShell string."""
     ctx = _context('windows')
 
-    await vm_test.test_adarevm_server_start(ctx)
+    await vm_test_ova.check_source_agent_start(ctx, None)
 
     assert "'" not in ctx.vm.run_command.await_args.args[0]
 
@@ -65,7 +65,7 @@ async def test_linux_launch_returns_while_server_keeps_running(tmp_path, monkeyp
     """
     monkeypatch.setattr(agent_readiness, 'wait_for_agent', AsyncMock())
     ctx = _context('linux')
-    await vm_test.test_adarevm_server_start(ctx)
+    await vm_test_ova.check_source_agent_start(ctx, None)
     command = ctx.vm.run_command.await_args.args[0]
     assert 'adarevm' in command
 
