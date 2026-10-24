@@ -1299,7 +1299,8 @@ archive if the installed system's metalink fails, then installs the ADARE extras
    - ``autoinstall_ubuntu_lts_noconda.yaml`` — ``ubuntu2204arm64`` /
      ``ubuntu2404arm64``. No conda: it clears pip's PEP-668 guard so the harness
      can install the ``adarevm`` wheels into the system Python, and bakes in the
-     standalone ``uv`` binary that ``adare vm test`` needs. This is the variant
+     standalone ``uv`` binary the agent install falls back to on a Python older
+     than 3.10. This is the variant
      the paper's aarch64 images are built from.
 
    The two cannot both claim the same OS name — within one template directory

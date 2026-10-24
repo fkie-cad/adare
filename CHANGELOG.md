@@ -93,6 +93,13 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   apart from a slow boot.
 
 ### Changed
+- `adare vm test` on a registered (QEMU) VM now gives the guest its agent the way
+  an experiment run does: the same agent wheels, shares and `config.json` with the
+  agent token, the same install and launch, and the same WebSocket connection
+  (retries, guest diagnostics). The agent starting and answering now decides the
+  verdict, since experiments run their tests through it; before, the test started
+  adarevm its own way and its failure did not count. A failed test keeps its run
+  directory with adarevm's logs under `~/.adare/state/vm-test/run/`.
 - CLI commands renamed or moved to the group they belong to. The old names
   still work (hidden from `--help`) and print the new name on stderr:
   - `adare run list/info/remove` -> `adare runs ...` (no longer looks like

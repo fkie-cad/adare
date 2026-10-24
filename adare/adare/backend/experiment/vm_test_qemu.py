@@ -2,8 +2,10 @@
 
 The test VM is a throwaway run on the registered disk: an overlay on its
 read-only template, torn down afterwards like an experiment run's (see
-:mod:`adare.hypervisor.qemu.run_resources`). The test steps themselves live in
-:mod:`adare.backend.experiment.vm_test`.
+:mod:`adare.hypervisor.qemu.run_resources`). The guest gets the agent the way an
+experiment's guest does -- same runtime and wheels, shares, config.json, install,
+launch and connection -- with a scratch project (``VM_TEST_DIR``) in place of the
+experiment's. The test steps themselves live in :mod:`adare.backend.experiment.vm_test`.
 """
 
 import asyncio
@@ -45,12 +47,13 @@ def create_registered_test_context(vm_name: str, disk_path: str, guest_platform:
     import ulid
 
     from adare.backend.experiment.runctx import ExperimentConfig, ExperimentRunCtx
-    from adare.config.configdirectory import ADAREVM_DIR
+    from adare.backend.project.directory import ProjectDirectory
+    from adare.config.configdirectory import ADARELIB_DIR, ADAREVM_DIR, VM_TEST_DIR
 
     # Minimal config for testing. websocket_port is a free HOST port;
     # setup_networking forwards it to the in-guest 18765.
     config = ExperimentConfig(
-        project_path=Path("/tmp"),  # Dummy path
+        project_path=VM_TEST_DIR,
         experiment_name="qemu_vm_test",
         environment_name="qemu_vm_test_env",
         test_mode=True,
@@ -68,6 +71,8 @@ def create_registered_test_context(vm_name: str, disk_path: str, guest_platform:
     context.guest_architecture = architecture
     context.hypervisor_type = 'qemu'  # CRITICAL: connect_websocket + cleanup branch on this
     context.adarevm = ADAREVM_DIR
+    context.adarelib = ADARELIB_DIR
+    context.project_directory = ProjectDirectory(VM_TEST_DIR)
     context.vm = None
     context.client = None
 
@@ -139,118 +144,83 @@ async def create_qemu_vm_for_test(context):
     log.info(f"Using overlay disk for test (base preserved): {overlay_path}")
 
 
+def _lifecycle(context):
+    """The test's QEMU lifecycle; one instance, since its file-transfer strategy keeps state (SMB)."""
+    lifecycle = getattr(context, 'qemu_lifecycle', None)
+    if lifecycle is None:
+        from adare.hypervisor.qemu.lifecycle import QEMULifecycleStrategy
+
+        lifecycle = context.qemu_lifecycle = QEMULifecycleStrategy()
+    return lifecycle
+
+
 async def setup_qemu_networking_for_test(context):
     """Set up host->guest port forwarding for the WebSocket server."""
-    from adare.hypervisor.qemu.lifecycle import QEMULifecycleStrategy
-
     log.info("Setting up QEMU port forwarding...")
-    await QEMULifecycleStrategy().setup_networking(context)
+    await _lifecycle(context).setup_networking(context)
 
 
 async def setup_qemu_share_for_test(context):
-    """Make the adarevm source available in the guest at /adare/vm.
+    """Share the agent with the guest the way an experiment run does.
 
-    Bypasses the project-coupled build_share_list: the compat test only needs
-    the adarevm source at /adare/vm so the guest can start the server.
-
-    The mechanism follows the file-transfer strategy the QEMU lifecycle would
-    resolve on this host (``detect_file_transfer_mode``), because
-    ``start_qemu_test_vm`` delegates post-boot mounting to that same resolved
-    strategy:
-
-    - ``virtiofs`` (Linux, virtiofsd present): configure a single virtio-fs
-      share; VirtioFSStrategy mounts it post-boot.
-    - ``smb`` (macOS with smbd): stage the adarevm source in a temp directory
-      served via QEMU SLIRP SMB (``smb_share_path``); SMBStrategy.post_boot_transfer
-      mounts ``//10.0.2.4/qemu`` and junctions ``vm`` to ``C:\\adare\\vm`` (or
-      mounts it at ``/adare`` on Linux). No strategy-instance state is needed.
-
-    Other modes (qga, libguestfs) are not wired for the DB-free compat test.
+    The scratch project gets the runtime an experiment builds (agent sources plus
+    content-hashed wheels, see ``agent_wheels.ensure_vm_runtime``) and a run
+    directory; the lifecycle's own file-transfer strategy then shares them at
+    /adare/vm and /adare/run and writes the run's config.json with the agent token.
     """
-    from adare.config.configdirectory import ADARE_DIR
-    from adare.hypervisor.qemu.file_transfer import detect_file_transfer_mode
+    from adare.backend.experiment import agent_wheels
+    from adare.backend.experiment.directory import ExperimentRunDirectory
 
-    is_windows = 'windows' in context.guest_platform.lower()
-    base_mount = 'C:\\adare' if is_windows else '/adare'
-    guest_mount = f'{base_mount}\\vm' if is_windows else f'{base_mount}/vm'
-
-    # Share the uv WORKSPACE ROOT (adare/adarevm/adarelib/adare-cv-server), not
-    # just the adarevm subdir: `uv run --package adarevm adarevm` needs the
-    # workspace so it can resolve adarevm's `adarelib = { workspace = true }`
-    # dependency. The share is writable so uv can create its .venv in-tree.
-    share_root = ADARE_DIR
-
-    mode = detect_file_transfer_mode()
-    log.info(f"Configuring test file share for adarevm ({mode} mode)...")
-
-    if mode == 'virtiofs':
-        shares = [
-            {
-                'tag': 'vm',
-                'host_path': str(share_root),
-                'guest_mount': guest_mount,
-                'readonly': False,
-            }
-        ]
-
-        context.vm.config.virtiofs_enabled = True
-        context.vm.config.virtiofs_shares = shares
-        context.vm._save_vm_config()
-
-        # Also expose on context for post-boot mounting (mirrors virtiofs strategy)
-        context.virtiofs_shares = shares
-
-        log.info(f"Configured virtio-fs share: {share_root} -> {guest_mount}")
-        return
-
-    if mode == 'smb':
-        import shutil
-        import tempfile
-        from pathlib import Path
-
-        # SMBStrategy.post_boot_transfer creates one junction per top-level
-        # directory in the share, so stage adarevm under a 'vm' subdir; it
-        # becomes //10.0.2.4/qemu/vm -> C:\adare\vm (or /adare/vm on Linux).
-        smb_dir = Path(tempfile.mkdtemp(prefix='adare_smb_test_'))
-        shutil.copytree(
-            str(share_root),
-            str(smb_dir / 'vm'),
-            dirs_exist_ok=True,
-            ignore=shutil.ignore_patterns('.venv', '.git', '__pycache__'),
-        )
-
-        context.vm.config.smb_share_path = str(smb_dir)
-        context.vm.config.virtiofs_enabled = False
-        context.vm.config.virtiofs_shares = []
-        context.vm._save_vm_config()
-
-        # Track for teardown (SMBStrategy's own cleanup never runs for the test,
-        # since setup() was bypassed and post_boot uses a fresh strategy instance)
-        context._test_smb_dir = str(smb_dir)
-
-        log.info(f"Configured QEMU SLIRP SMB share: {share_root} -> {smb_dir / 'vm'} -> {guest_mount}")
-        return
-
-    raise HypervisorException(
-        f"vm test does not support '{mode}' file transfer mode. The compat "
-        f"test needs adarevm at {guest_mount}, which requires virtiofsd (Linux) "
-        f"or smbd for QEMU SLIRP SMB (macOS: brew install samba and symlink it "
-        f"to QEMU's compiled-in smbd path). See earlier logs for the exact "
-        f"symlink command."
-    )
+    project = context.project_directory
+    project.shared.mkdir(parents=True, exist_ok=True)
+    sources = {'adarevm': context.adarevm, 'adarelib': context.adarelib}
+    await asyncio.to_thread(agent_wheels.ensure_vm_runtime, project.vm_runtime, sources)
+    context.experiment_run_directory = ExperimentRunDirectory(project, context.vm_name)
+    context.experiment_run_directory.create()
+    log.info(f"Test run directory (adarevm logs): {context.experiment_run_directory.path}")
+    await _lifecycle(context).setup_file_transfer(context)
 
 
 async def start_qemu_test_vm(context):
     """Start the QEMU test VM and mount shares via the lifecycle strategy.
 
     Uses QEMULifecycleStrategy.start_and_initialize_vm which tolerates
-    context.playbook being None and performs post-boot virtio-fs mounting.
+    context.playbook being None and mounts the shares after boot.
     """
-    from adare.hypervisor.qemu.lifecycle import QEMULifecycleStrategy
-
     log.info("Starting QEMU test VM...")
-    await QEMULifecycleStrategy().start_and_initialize_vm(context, rerun_file_transfer_on_retry=False)
+    await _lifecycle(context).start_and_initialize_vm(context)
     log.info("QEMU test VM started and ready")
+
+
+def _agent_logs_hint(context) -> str:
+    """Where adarevm's logs end up: the run directory, which a failed test keeps."""
+    return f" (adarevm logs: {context.experiment_run_directory.log_directory})"
+
+
+async def start_agent_for_test(context):
+    """Install and start adarevm in the guest exactly as an experiment run does."""
+    from adare.backend.experiment.agent_lifecycle import install_and_run_adare_vm
+
+    try:
+        await install_and_run_adare_vm(context, context.user_interrupt_event)
+    except (LoggedException, HypervisorException, OSError, TimeoutError, RuntimeError) as e:
+        return False, f"Installing and starting adarevm failed: {e}{_agent_logs_hint(context)}"
+    return True, None
+
+
+async def connect_agent_for_test(context, stage_ctx):
+    """Connect to adarevm exactly as an experiment run does (run token, retries, guest diagnostics)."""
+    from websockets.exceptions import WebSocketException
+
+    from adare.backend.experiment.agent_lifecycle import connect_websocket
+
+    try:
+        await connect_websocket(context, stage_ctx)
+    except (LoggedException, WebSocketException, OSError, TimeoutError, RuntimeError) as e:
+        return False, f"Could not connect to adarevm: {e}{_agent_logs_hint(context)}"
+    if context.client is None or not context.client.connected:
+        return False, "Could not connect to adarevm (cancelled)"
+    return True, None
 
 
 class _CleanupFailed(Exception):
@@ -265,6 +235,25 @@ class _CleanupFailed(Exception):
     def __init__(self, errors: list[str]):
         super().__init__("; ".join(errors))
         self.errors = errors
+
+
+def _release_test_files(context) -> None:
+    """Drop the file-transfer staging and, after a passed test, the run directory."""
+    # The strategy's own staging (SMB temp share), as in an experiment's cleanup
+    lifecycle = getattr(context, 'qemu_lifecycle', None)
+    if lifecycle is not None and hasattr(lifecycle.file_transfer, 'cleanup'):
+        lifecycle.file_transfer.cleanup()
+
+    # The run directory holds adarevm's logs: kept after a failed test for the diagnosis
+    run_directory = getattr(context, 'experiment_run_directory', None)
+    if run_directory is None:
+        return
+    if getattr(context, 'vm_test_passed', False):
+        import shutil
+
+        shutil.rmtree(run_directory.path.parent, ignore_errors=True)
+    else:
+        log.info(f"Kept the test's run directory (adarevm logs): {run_directory.path}")
 
 
 async def _cleanup_registered_test_vm(context, keep_vm: bool = False, flow_console=None, stage_id: str | None = None):
@@ -341,14 +330,7 @@ async def _cleanup_registered_test_vm(context, keep_vm: bool = False, flow_conso
     destroy_run_domain(context.vm.vm_name)
     remove_run_files(context.vm.vm_name)
 
-    # Remove the temporary SMB share directory staged for the test (if any)
-    _update_message("Removing temp SMB share…")
-    smb_dir = getattr(context, '_test_smb_dir', None)
-    if smb_dir:
-        import shutil
-
-        shutil.rmtree(smb_dir, ignore_errors=True)
-        log.debug(f"Removed test SMB share directory: {smb_dir}")
+    _release_test_files(context)
 
     if cleanup_errors:
         log.warning(f"VM test cleanup completed with {len(cleanup_errors)} error(s)")
