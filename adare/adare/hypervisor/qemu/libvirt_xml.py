@@ -10,11 +10,10 @@ This module provides the backward-compatible public API.
 """
 
 import logging
-import os
 import xml.etree.ElementTree as ET
 from typing import Any
 
-from .libvirt_xml_builder import DomainXMLBuilder
+from .libvirt_xml_builder import DomainXMLBuilder, _generate_virtiofs_xml_element
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +63,8 @@ def generate_virtiofs_xml_element(
     Generate a single virtiofs filesystem XML element.
 
     This function is used by snapshot restore logic to add virtiofs devices
-    to existing domain XML. Kept here for backward compatibility.
+    to existing domain XML. Kept here for backward compatibility; the element
+    is built by the same code as for new domains.
 
     Args:
         share: Share configuration dict
@@ -77,39 +77,4 @@ def generate_virtiofs_xml_element(
     Returns:
         ET.Element: The filesystem XML element
     """
-    tag = share['tag']
-    host_path = share['host_path']
-
-    filesystem = ET.Element('filesystem', type='mount', accessmode='passthrough')
-    ET.SubElement(filesystem, 'driver', type='virtiofs')
-    ET.SubElement(filesystem, 'source', dir=host_path)
-    # Tag name used when mounting in guest: mount -t virtiofs {tag} {mount_point}
-    ET.SubElement(filesystem, 'target', dir=tag)
-
-    # Add idmap for uid/gid mapping (host user -> guest root)
-    # This allows the guest to access files owned by the host user
-    idmap = ET.SubElement(filesystem, 'idmap')
-    host_uid = os.getuid()
-    host_gid = os.getgid()
-    ET.SubElement(idmap, 'uid', target='0', source=str(host_uid), count='1')
-    ET.SubElement(idmap, 'gid', target='0', source=str(host_gid), count='1')
-
-    # PCI addressing - each device gets unique address
-    # For virt machine, libvirt auto-assigns addresses
-    if is_virt:
-        pass  # libvirt auto-assigns addresses on virt machine
-    elif is_q35:
-        # Each device gets its own bus (6, 7, 8, 9, 10...)
-        bus = base_bus + index
-        ET.SubElement(
-            filesystem, 'address', type='pci', domain='0x0000', bus=f'0x{bus:02x}', slot='0x00', function='0x0'
-        )
-    else:
-        # For pc machine, use slots on bus 0 (7, 8, 9, 10, 11...)
-        slot = base_slot + index
-        ET.SubElement(
-            filesystem, 'address', type='pci', domain='0x0000', bus='0x00', slot=f'0x{slot:02x}', function='0x0'
-        )
-
-    log.debug(f"Generated virtio-fs XML for '{tag}' -> {host_path}")
-    return filesystem
+    return _generate_virtiofs_xml_element(share, is_q35, index, base_bus, base_slot, is_virt)

@@ -255,6 +255,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- VMs with shared folders start on libvirt 10.0 and newer (e.g. Ubuntu 24.04):
+  defining the domain failed with "invalid idmap start/target/count settings".
+  The virtio-fs `<idmap>` used attributes libvirt does not have; older libvirt
+  ignored the element, so it is now left out and shares behave as before.
 - The Windows installer (`install.ps1`) works with the single workspace `.venv`
   again: it found no `adare.exe` and stopped. It now also puts the CLIs on your
   user `PATH`, migrates the database and syncs testfunctions like the Linux/macOS
