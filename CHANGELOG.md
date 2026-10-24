@@ -103,6 +103,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   apart from a slow boot.
 
 ### Changed
+- Development tasks have one definition: CI runs the Makefile targets (`make lint`,
+  `make test`, `make test-agent`, …) instead of its own copies of the commands.
+  Every target syncs what it needs first (`--inexact`, so it never strips the
+  qemu extra or the CV server from `.venv`); new: `make sync` (use instead of
+  plain `uv sync`), `make test-testfunctions`, `make test-cv`, and `make test`
+  takes `PYTEST_ARGS=...`. `make test-agent` now also works on Windows.
 - Images never change. A different disk under a registered name is a new image:
   `--force` (`vm create`, `env load`) keeps the replaced image as
   `<name>-<sha12>` for the environment versions that use it, or removes it when
