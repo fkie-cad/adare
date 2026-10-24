@@ -24,7 +24,7 @@ from adarelib.helper.yaml import dict_to_yaml
 log = logging.getLogger(__name__)
 
 
-def _os_block(os_def: OsDefinition) -> dict:
+def os_block(os_def: OsDefinition) -> dict:
     """Build the shared `os:` block emitted by both recipe and baked envs."""
     return {
         'os': os_def.display_name,
@@ -134,7 +134,7 @@ def build_recipe_environment_file(
         'vm_type': 'recipe',
         'hypervisor': 'qemu',
         'recipe': recipe_block,
-        'os': _os_block(os_def),
+        'os': os_block(os_def),
     }
 
     env_path = _target_env_path(env_name, project_path)
@@ -149,20 +149,22 @@ def build_baked_environment_file(
     vm_name: str,
     env_name: str | None = None,
     project_path: Path | None = None,
+    vm_sha256: str | None = None,
 ) -> Path:
     """Generate an environment YAML file for a baked (already-built) VM disk.
 
-    Hashes the disk into `vm_sha256` so a later `environment load` from a
-    published URL can verify the downloaded disk hasn't been tampered with.
+    Records the disk's `vm_sha256` (hashing it unless given) so a later
+    `environment load` from a published URL can verify the downloaded disk.
     """
-    print_step(f'Hashing disk for integrity (this may take a while for large disks): [dim]{disk_path}[/dim]')
-    vm_sha256 = hash_file_sha256(disk_path)
+    if vm_sha256 is None:
+        print_step(f'Hashing disk for integrity (this may take a while for large disks): [dim]{disk_path}[/dim]')
+        vm_sha256 = hash_file_sha256(disk_path)
 
     env_content = {
         'vm': str(disk_path),
         'vm_type': 'path',
         'vm_sha256': vm_sha256,
-        'os': _os_block(os_def),
+        'os': os_block(os_def),
         'hypervisor': 'qemu',
     }
 
@@ -206,7 +208,7 @@ def build_baked_url_environment_file(
         'vm': vm_url,
         'vm_type': 'url',
         'vm_sha256': vm_sha256,
-        'os': _os_block(os_def) if os_def is not None else _placeholder_os_block(),
+        'os': os_block(os_def) if os_def is not None else _placeholder_os_block(),
         'hypervisor': 'qemu',
     }
     if vm_format:

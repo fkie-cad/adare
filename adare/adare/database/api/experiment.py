@@ -369,7 +369,9 @@ class ExperimentApi(ProjectDatabaseApi):
         self._session.commit()
         return experiment_run
 
-    def set_experiment_run_base_info(self, run_ulid: str, experiment: Experiment, environment_id: str) -> ExperimentRun:
+    def set_experiment_run_base_info(
+        self, run_ulid: str, experiment: Experiment, environment_id: str, vm_hash: str | None = None
+    ) -> ExperimentRun:
         """
         Set the basic experiment and environment information early in the process.
         This prevents orphaned experiment runs if the process is interrupted early.
@@ -378,6 +380,7 @@ class ExperimentApi(ProjectDatabaseApi):
         if experiment_run:
             experiment_run.experiment = experiment
             experiment_run.environment_id = environment_id
+            experiment_run.vm_hash = vm_hash
             self._session.commit()
         return experiment_run
 

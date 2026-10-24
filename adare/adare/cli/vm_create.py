@@ -34,6 +34,110 @@ def _in_managed_storage(disk_path: Path) -> bool:
         return False
 
 
+def _image_name(vm_name: str | None, os_def: OsDefinition, force: bool) -> str | None:
+    """The new image's name (``<profile>-<YYYYMMDD>`` by default), or None if it is taken."""
+    from datetime import datetime
+
+    name = vm_name or f'{os_def.name}-{datetime.now():%Y%m%d}'
+    return name if _free_image_name(name, force) else None
+
+
+def _free_image_name(name: str, force: bool) -> bool:
+    """Make sure *name* can take a new image; False (after printing why) if not.
+
+    Images never change: with --force a registered image of that name is retired
+    (kept as ``<name>-<sha12>`` for the environments using it) before the build
+    reuses its disk path.
+    """
+    from adare.backend.vm import database as vm_database
+
+    registered = vm_database.get_image(name)
+    if registered is None:
+        return True
+    if not force:
+        print_error_message(
+            title=f'An image named "{name}" is already registered',
+            next_steps=[
+                f'Build under another name: --name {name}-2',
+                'Or add --force: the registered image is kept as '
+                f'"{name}-{registered["hash"][:12]}" for the environments using it',
+            ],
+        )
+        return False
+    from adare.backend.vm.registration import retire_image
+
+    retire_image(registered['id'])
+    return True
+
+
+def _register_image(disk_path: Path, os_def: OsDefinition, setup_level: SetupLevel, iso_path: Path | None) -> str:
+    """Write the image record next to *disk_path*, register the image; returns the disk sha256."""
+    from adare.backend.vm import image_record
+    from adare.backend.vm.registration import register_built_image
+    from adare.console import print_step
+    from adare.helperfunctions.digest_cache import cached_file_sha256
+    from adare.services.environment_recipe import os_block
+
+    print_step(f'Hashing disk for integrity (this may take a while for large disks): [dim]{disk_path}[/dim]')
+    sha256 = cached_file_sha256(disk_path)
+    iso_filename: str | None
+    iso_sha256: str | None
+    if iso_path is not None:
+        iso_filename, iso_sha256 = iso_path.name, cached_file_sha256(iso_path)
+    else:
+        iso_filename, iso_sha256 = os_def.iso_filename or None, os_def.iso_sha256 or None
+    record = image_record.new_record(
+        disk=disk_path,
+        sha256=sha256,
+        hypervisor='qemu',
+        os_block=os_block(os_def),
+        build=image_record.build_entry(
+            os_def=os_def, setup_level=setup_level, iso_filename=iso_filename, iso_sha256=iso_sha256
+        ),
+    )
+    image_record.write_record(disk_path, record)
+    register_built_image(disk_path, record, managed=_in_managed_storage(disk_path))
+    print_step(f'Image registered with its record: [dim]{image_record.record_path(disk_path)}[/dim]')
+    return sha256
+
+
+def _success_tip(os_def: OsDefinition, setup_level: SetupLevel) -> str:
+    """What the finished VM has (and lacks), by install mode and setup level."""
+    if os_def.install_mode == 'gui-auto':
+        return (
+            'This VM was installed by the GUI agent. The generated playbook can be '
+            'edited and replayed; see the install report for a screenshot walkthrough. '
+            'It has no guest agent or autologin yet, so ADARE cannot drive it as it is.'
+        )
+    if os_def.install_mode == 'playbook':
+        return (
+            'This VM was installed by deterministic playbook replay driven by '
+            'cv-server OCR (no vision LLM). The per-step screenshots next to the '
+            'disk show exactly what was clicked. '
+            + (
+                'No guest agent, autologin or other ADARE setup was added (--setup bare): '
+                'ADARE cannot drive this VM as it is.'
+                if setup_level == SetupLevel.BARE
+                else 'Guest agent, autologin and no screen lock were set up and checked after a reboot.'
+            )
+        )
+    if os_def.install_mode == 'manual':
+        return (
+            'This VM was installed manually. No guest agent or autologin was added (--setup bare): '
+            'ADARE cannot drive it as it is.'
+            if setup_level == SetupLevel.BARE or os_def.platform != 'linux'
+            else 'This VM was installed manually; ADARE then installed its guest agent and set up autologin, '
+            'unless a warning above says otherwise.'
+        )
+    if setup_level == SetupLevel.BARE:
+        return 'No guest tools or agent software installed (--setup bare).'
+    if setup_level == SetupLevel.BASE:
+        return 'Guest tools installed and checked after a reboot. No Python environment (--setup base).'
+    if setup_level == SetupLevel.AGENT:
+        return 'adarevm agent pre-installed. Ready for immediate experiment execution.'
+    return 'Python environment pre-installed; guest agent and autologin checked after a reboot. Ready for experiments.'
+
+
 def exec_vm_create(arguments):
     """Create a new ADARE-ready VM from scratch.
 
@@ -190,6 +294,11 @@ def exec_vm_create(arguments):
         )
         return
 
+    # Resolve the image name before building: the build reuses its disk path.
+    vm_name = _image_name(vm_name, os_def, force)
+    if vm_name is None:
+        return
+
     # Dispatch to the right creator. The install_mode-before-platform rule lives in
     # vm_creator.dispatch, shared with recipe builds so the two cannot drift.
     try:
@@ -234,11 +343,12 @@ def exec_vm_create(arguments):
             allow_emulation=allow_emulation,
         )
 
-    final_name = vm_name or disk_path.stem
+    final_name = vm_name
 
     try:
+        vm_sha256 = _register_image(disk_path, os_def, setup_level, iso_path)
         env_file_path = build_baked_environment_file(
-            disk_path=disk_path, os_def=os_def, vm_name=final_name, env_name=env_name
+            disk_path=disk_path, os_def=os_def, vm_name=final_name, env_name=env_name, vm_sha256=vm_sha256
         )
         # A disk already in managed storage is registered in place (no copy);
         # --no-copy only matters for a custom --vm-dir.
@@ -254,42 +364,7 @@ def exec_vm_create(arguments):
             'Then: adare environment load <env.yml>',
         ]
 
-    if os_def.install_mode == 'gui-auto':
-        tip = (
-            'This VM was installed by the GUI agent. The generated playbook can be '
-            'edited and replayed; see the install report for a screenshot walkthrough. '
-            'It has no guest agent or autologin yet, so ADARE cannot drive it as it is.'
-        )
-    elif os_def.install_mode == 'playbook':
-        tip = (
-            'This VM was installed by deterministic playbook replay driven by '
-            'cv-server OCR (no vision LLM). The per-step screenshots next to the '
-            'disk show exactly what was clicked. '
-            + (
-                'No guest agent, autologin or other ADARE setup was added (--setup bare): '
-                'ADARE cannot drive this VM as it is.'
-                if setup_level == SetupLevel.BARE
-                else 'Guest agent, autologin and no screen lock were set up and checked after a reboot.'
-            )
-        )
-    elif os_def.install_mode == 'manual':
-        tip = (
-            'This VM was installed manually. No guest agent or autologin was added (--setup bare): '
-            'ADARE cannot drive it as it is.'
-            if setup_level == SetupLevel.BARE or os_def.platform != 'linux'
-            else 'This VM was installed manually; ADARE then installed its guest agent and set up autologin, '
-            'unless a warning above says otherwise.'
-        )
-    elif setup_level == SetupLevel.BARE:
-        tip = 'No guest tools or agent software installed (--setup bare).'
-    elif setup_level == SetupLevel.BASE:
-        tip = 'Guest tools installed and checked after a reboot. No Python environment (--setup base).'
-    elif setup_level == SetupLevel.AGENT:
-        tip = 'adarevm agent pre-installed. Ready for immediate experiment execution.'
-    else:
-        tip = (
-            'Python environment pre-installed; guest agent and autologin checked after a reboot. Ready for experiments.'
-        )
+    tip = _success_tip(os_def, setup_level)
 
     print_success_message(
         title=f'VM "{final_name}" created successfully!',

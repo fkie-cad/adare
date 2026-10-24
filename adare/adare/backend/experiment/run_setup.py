@@ -324,6 +324,19 @@ def step_validate_integrity(context: ExperimentRunCtx):
         stage_ctx.set_status(stage_ctx.stage.status)
 
 
+def _write_run_image_record(context: ExperimentRunCtx, run_dir) -> None:
+    """Snapshot what this run runs on into the run directory (best effort)."""
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from adare.backend.vm.image_record import write_run_snapshot
+
+    environments = {key: machine.environment_ulid for key, machine in context.machines.items()}
+    try:
+        write_run_snapshot(run_dir.image_record_file, environments)
+    except (SQLAlchemyError, OSError) as e:
+        log.warning(f'Could not write the run image record: {e}')
+
+
 def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool = False):
     """Consolidated step: Check application data and create run directory.
 
@@ -361,6 +374,7 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
         log.info(f"Logs directory verified: {run_dir.log_directory}")
 
         context.experiment_run_directory = run_dir
+        _write_run_image_record(context, run_dir)
 
         # Copy adare log to run directory if runlog is enabled (skip in dev mode)
         if context.config.runlog and not skip_adare_log:

@@ -323,8 +323,11 @@ def set_experiment_run_base_info(
         # Link by name so the run always attaches to its experiment, irrespective
         # of environment membership. Falls back to None only for untracked experiments.
         experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+        # The disk this environment version pinned: the run's image, kept even if
+        # the environment or its VM row changes later.
+        vm_hash = environment.vm_hash or (environment.vm.hash if environment.vm else None)
         experiment_run = api.set_experiment_run_base_info(
-            run_ulid=experiment_run_ulid, experiment=experiment, environment_id=environment.id
+            run_ulid=experiment_run_ulid, experiment=experiment, environment_id=environment.id, vm_hash=vm_hash
         )
         return experiment_run.id
 

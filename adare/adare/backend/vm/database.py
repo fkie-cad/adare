@@ -113,6 +113,7 @@ def create_vm(
     recipe_hash: str | None = None,
     iso_sha256: str | None = None,
     profile_name: str | None = None,
+    build_record: str | None = None,
 ) -> Vm | dict:
     """
     Create a new VM entry in the database with file operations.
@@ -162,6 +163,7 @@ def create_vm(
             recipe_hash=recipe_hash,
             iso_sha256=iso_sha256,
             profile_name=profile_name,
+            build_record=build_record,
         )
 
         # Use field extraction utility
@@ -222,6 +224,53 @@ def create_vm_with_uuid_capture(
     # Extract requested fields from updated VM
     updated_vm = get_vm_by_name(name, fields=fields)
     return updated_vm if updated_vm else vm
+
+
+def get_image(vm_ref: str) -> dict | None:
+    """A registered VM by name, id or disk hash, with what its image record needs.
+
+    Returns ``id``, ``name``, ``file``, ``hash``, ``hypervisor``, ``build_record``
+    (JSON or None) and ``os`` (dict), read in one session.
+    """
+    with VmApi() as api:
+        vm = api.get_vm_by_name(vm_ref) or api.get_vm_by_id(vm_ref) or api.get_vm_by_hash(vm_ref)
+        if vm is None:
+            return None
+        osinfo = vm.osinfo
+        os_block = (
+            {
+                field: getattr(osinfo, field)
+                for field in ('os', 'platform', 'distribution', 'version', 'language', 'architecture')
+            }
+            if osinfo is not None
+            else {}
+        )
+        return {
+            'id': vm.id,
+            'name': vm.name,
+            'file': vm.file,
+            'hash': vm.hash,
+            'hypervisor': vm.hypervisor,
+            'build_record': vm.build_record,
+            'os': os_block,
+        }
+
+
+def rename_vm(vm_id: str, new_name: str) -> bool:
+    with VmApi() as api:
+        return bool(api.update_vm_name(vm_id, new_name))
+
+
+def set_vm_file(vm_id: str, file: str) -> bool:
+    """Point a registered VM at its (moved) disk file."""
+    with VmApi() as api:
+        return bool(api.set_vm_file(vm_id, file))
+
+
+def set_vm_build_record(vm_id: str, build_record: str | None) -> bool:
+    """Store the image record (JSON) of a registered VM."""
+    with VmApi() as api:
+        return bool(api.set_vm_build_record(vm_id, build_record))
 
 
 def get_vm_by_id(vm_id: str, fields: list[str] = None) -> Vm | None | dict | None:
