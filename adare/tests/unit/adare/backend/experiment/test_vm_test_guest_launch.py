@@ -1,8 +1,8 @@
-"""'adare vm test' must not write into the shared ~/.adare/adare from the guest.
+"""The source launch of adarevm in `adare vm test` (VirtualBox/OVA; QEMU uses the experiment's).
 
-virtio-fs does not enforce read-only and the guest agent runs as root, so a
-venv, bytecode or rewritten uv.lock there ends up root-owned on the host and
-breaks the next `make install`.
+It must not write into the shared, installed appdata from the guest: the guest
+agent runs as root, so a venv, bytecode or rewritten uv.lock there ends up
+root-owned on the host and breaks the next `make install`.
 """
 
 import shutil
@@ -77,17 +77,3 @@ async def test_linux_launch_returns_while_server_keeps_running(tmp_path, monkeyp
         .replace('xhost +SI:localuser:root', 'true')
     )
     subprocess.run(['bash', '-c', command], capture_output=True, check=True, timeout=2)
-
-
-@pytest.mark.parametrize(('hypervisor', 'background'), [('qemu', True), (None, False)])
-async def test_linux_launch_mode_matches_experiments(hypervisor, background, monkeypatch):
-    """QEMU starts adarevm like agent_lifecycle does: background, no wait for exit."""
-    monkeypatch.setattr(agent_readiness, 'wait_for_agent', AsyncMock())
-    ctx = _context('linux')
-    ctx.hypervisor_type = hypervisor
-
-    await vm_test.test_adarevm_server_start(ctx)
-
-    sync_call, launch_call = ctx.vm.run_command.await_args_list
-    assert not sync_call.kwargs.get('background')
-    assert launch_call.kwargs['background'] is background
