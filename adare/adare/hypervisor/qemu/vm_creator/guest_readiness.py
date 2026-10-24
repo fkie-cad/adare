@@ -130,6 +130,7 @@ done""",
 
 # Lets the guest finish its boot and log the user in again before the check.
 REBOOT = ProvisionCommand(name='reboot', shell='bash', command='true', reboot=True, timeout_minutes=2)
+REBOOT_WINDOWS = ProvisionCommand(name='reboot', shell='powershell', command='exit 0', reboot=True, timeout_minutes=2)
 
 # An automatic-login session for the guest user proves the greeter is gone
 # without reading the screen. Polled in the guest: the desktop session starts a
@@ -159,12 +160,44 @@ AUTOLOGIN_WINDOWS = ProvisionCommand(
 )
 
 
+# virtiofs.exe mounts the ADARE shares through WinFsp; without it every share is empty.
+WINFSP_WINDOWS = ProvisionCommand(
+    name='WinFsp installed (virtio-fs shares)',
+    shell='powershell',
+    timeout_minutes=1,
+    command=(
+        "if (Test-Path 'C:\\Program Files (x86)\\WinFsp\\bin\\winfsp-x64.dll') { exit 0 }; "
+        "[Console]::Error.WriteLine('WinFsp is not installed: virtiofs.exe cannot mount the ADARE shares'); exit 1"
+    ),
+)
+# The agent runs in this env; first logon creates it, and a failed `conda create`
+# there leaves an empty folder that ADARE would otherwise only notice at run time.
+PYTHON_ENV_WINDOWS = ProvisionCommand(
+    name='pyadare Python environment works',
+    shell='powershell',
+    timeout_minutes=2,
+    command=(
+        f"$py = 'C:\\Users\\{GUEST_USER}\\.miniforge3\\envs\\pyadare\\python.exe'; "
+        "if (-not (Test-Path $py)) { "
+        "[Console]::Error.WriteLine(\"no ${py}: creating the pyadare conda env at first logon failed\"); exit 1 }; "
+        "& $py -c 'import sys; print(sys.version)'; exit $LASTEXITCODE"
+    ),
+)
+
+
 def readiness_commands(os_def: OsDefinition, setup_level: SetupLevel) -> list[ProvisionCommand]:
     """The readiness pass for an unattended install; empty for ``bare``."""
     if setup_level < SetupLevel.BASE:
         return []
     if os_def.platform == 'windows':
-        return [REBOOT, AUTOLOGIN_WINDOWS]
+        commands = [REBOOT_WINDOWS, AUTOLOGIN_WINDOWS]
+        # The x86_64 answer files install WinFsp and a conda env; aarch64 uses SMB
+        # shares and a system Python, so these checks do not apply there.
+        if os_def.architecture == 'x86_64':
+            commands.append(WINFSP_WINDOWS)
+            if setup_level >= SetupLevel.FULL:
+                commands.append(PYTHON_ENV_WINDOWS)
+        return commands
     return [NO_LOCK, NO_WELCOME, REBOOT, AUTOLOGIN_LINUX]
 
 

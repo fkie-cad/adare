@@ -1,34 +1,31 @@
 #!/bin/bash
 #
-# ADARE Update Script
+# ADARE Update Script (Linux/macOS; on Windows, re-run install.ps1)
 # Refresh deps, appdata, and testfunctions without re-bootstrapping symlinks.
-# Run from the workspace root (via Makefile).
+# Usage: ./adare/install/update.sh [qemu]   (or `make update`, which passes qemu)
 #
 
-set -e
+set -euo pipefail
+
+cd "$(dirname "$0")/../.."
 
 if ! command -v uv >/dev/null 2>&1; then
-    echo "uv is not installed. Please install uv to continue."
+    echo "uv is not installed: https://docs.astral.sh/uv/getting-started/installation/" >&2
     exit 1
 fi
 
-if [[ "$1" == "qemu" ]]; then
-    echo "Argument 'qemu' detected. Syncing with QEMU extras..."
-    uv sync --extra qemu
+if [[ "${1:-}" == "qemu" ]]; then
+    echo "Syncing with QEMU support..."
+    uv sync --locked --inexact --extra qemu
 else
-    echo "Syncing standard dependencies (no QEMU)..."
-    uv sync
+    echo "Syncing without QEMU support..."
+    uv sync --locked --inexact
 fi
 
-if [ -f adare/install/copy_appdata.py ]; then
-    python3 adare/install/copy_appdata.py
-else
-    echo "The script 'adare/install/copy_appdata.py' does not exist. Exiting..."
-    exit 1
-fi
+uv run --no-sync python adare/install/copy_appdata.py
 
 echo "Applying database schema migrations..."
-uv run adare db migrate
+uv run --no-sync adare db migrate
 
 echo "Syncing testfunctions..."
-uv run adare testfunction sync
+uv run --no-sync adare testfunction sync

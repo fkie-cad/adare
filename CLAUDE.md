@@ -171,26 +171,30 @@ tests:
 3. VM executes test within timeout limit
 
 ## Testing
-- Unit suite: `cd adare && uv run pytest tests -q` (~10 s; `live_vm` tests are deselected by default — never opt into them without being asked, they boot real VMs)
+- uv manages environments and the lock; the Makefile is the one place commands are written, and CI
+  only calls make targets. Run tasks as `make <target>` (`make help`); a new task = a new target
+  that CI calls, never a command copied into a workflow
+- Unit suite: `make test` (extra pytest flags via `PYTEST_ARGS=...`; `live_vm` tests are deselected by default — never opt into them without being asked, they boot real VMs)
 - The root `tests/conftest.py` sets `ADARE_HOME` to a temp dir before adare is imported, so tests never touch `~/.adare`; code must resolve state paths via `config/configdirectory.py` (never `Path.home() / '.adare'`), and directories are created by `ensure_directories()` at CLI/webapi startup, not at import
-- Guest agent suite: `make test-agent` (adarevm on Python 3.10 in `.venv-agent`, outside the 3.13 workspace; CI job `agent` on Linux + Windows). `adarevm/tests/test_contract.py` keeps the dispatch table equal to `adarelib`'s `Tool` enum
-- CI (`.github/workflows/tests.yml`) runs it on every push/PR to dev and main, plus the testfunction tests on Linux, Windows and macOS; keep it green
+- Guest code runs on the guests' Python 3.10, in `.venv-guest` (outside the 3.13 workspace, pinned by `requirements-guest-test.txt`; re-pin with `make lock-guest`): `make test-agent` and `make test-testfunctions-guest` (CI job `guest`, Linux + Windows). Testfunction tests must not use `tests/conftest.py` or import `adare` (load modules via `adarelib.helper.module`). `adarevm/tests/test_contract.py` keeps the dispatch table equal to `adarelib`'s `Tool` enum
+- Also `make test-testfunctions` (host Python, no libvirt needed), `make test-cv`, `make test-cov` (unit suite + coverage floor `COV_MIN`: raise it as coverage grows, never lower it), `make test-install` (real `make install` + `make update`)
+- CI (`.github/workflows/tests.yml`) runs on every push/PR to dev and main: lint, unit (Linux with coverage floor, macOS), guest, CV server, docs (`make docs` fails on Sphinx warnings), install on Linux/macOS/Windows; keep it green
 - Every built-in testfunction needs tests in `tests/unit/testfunctions/test_<collection>.py` and a reference page (enforced by `test_testfunction_coverage.py`)
 - Experiments / interactive mode against real VMs remain manual
 
 ## Code Quality
-- `make lint` runs exactly what CI's `lint` job runs: `ruff format --check`, strict mypy on
-  `adare.core` (zero errors), and `scripts/quality_ratchet.py`
+- `make lint` is CI's `lint` job: `ruff format --check` and `scripts/quality_ratchet.py`
+  (which also fails on any mypy error in `adare.core`)
 - The ratchet budgets legacy debt in `quality-baseline.json` (ruff per rule, mypy per error code,
   files >1000 lines). New debt fails; after paying some down run `make lint-baseline`. Never raise
   a budget (`--allow-increase`) to get a change through - fix the new violation instead
 - `make lint-fix` applies formatting + safe autofixes. Review pyupgrade rewrites of runtime-evaluated
   annotations (class bodies, attrs/cattrs dicts): `Optional[any]` -> `any | None` crashed at import
-- Guest-side code (adarevm, adarelib, testfunctions) is pinned to py310 in ruff's
+- Guest-side code (adarevm, adarelib, testfunctions and their tests) is pinned to py310 in ruff's
   `per-file-target-version`; don't use 3.11+ syntax there
 - ruff/mypy are pinned exactly in the `lint` group; bumping them = `make lint-baseline` in the same PR
-- `uv.lock` is committed and CI uses `--locked`. Plain `uv sync` strips extras from `.venv`; use
-  `uv sync --extra qemu`. After a Homebrew libvirt upgrade: `uv lock -P libvirt-python`
+- `uv.lock` is committed and CI sets `UV_LOCKED=1`. Plain `uv sync` strips extras from `.venv`; use
+  `make sync` (make targets sync `--inexact`, so they never strip anything). After a Homebrew libvirt upgrade: `uv lock -P libvirt-python`
 - Record user-visible changes under **Unreleased** in `CHANGELOG.md`
 
 ## Guidelines

@@ -170,6 +170,12 @@ def _build_exec_args(command: str, cwd: str | None, windows: bool, shell: str | 
     raise QgaError(f'Unsupported guest shell: {shell!r}')
 
 
+# How long a guest-exec launch or status poll may take to answer. Spawning a process
+# can take far longer than other agent calls: the first guest-exec on a freshly
+# booted Windows 11 guest answered after 13 s, past the 10 s default.
+_EXEC_REPLY_TIMEOUT = 60.0
+
+
 def qga_exec(
     sock_path: Path,
     command: str,
@@ -214,6 +220,7 @@ def qga_exec(
             'arg': args[1:],
             'capture-output': True,
         },
+        timeout=_EXEC_REPLY_TIMEOUT,
     )
     pid = ret.get('pid') if isinstance(ret, dict) else None
     if pid is None:
@@ -224,7 +231,7 @@ def qga_exec(
     next_progress = started + progress_interval
     poll_delays = backoff_delays(cap=poll_interval)
     while time.monotonic() < deadline:
-        status = _command(sock_path, 'guest-exec-status', {'pid': pid})
+        status = _command(sock_path, 'guest-exec-status', {'pid': pid}, timeout=_EXEC_REPLY_TIMEOUT)
         if status.get('exited', False):
             returncode = status.get('exitcode', status.get('signal', -1))
             out_b64 = status.get('out-data', '')

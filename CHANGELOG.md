@@ -103,6 +103,26 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   apart from a slow boot.
 
 ### Changed
+- Development tasks have one definition: CI runs the Makefile targets (`make lint`,
+  `make test`, `make test-agent`, …) instead of its own copies of the commands.
+  Every target syncs what it needs first (`--inexact`, so it never strips the
+  qemu extra or the CV server from `.venv`); new: `make sync` (use instead of
+  plain `uv sync`), `make test-testfunctions`, `make test-cv`, and `make test`
+  takes `PYTEST_ARGS=...`. `make test-agent` now also works on Windows.
+- CI tests guest code on the guests' Python: the testfunction tests also run on
+  Python 3.10 (`make test-testfunctions-guest`, Linux + Windows), next to the
+  agent suite, in one venv (`.venv-guest`, replaces `.venv-agent`) pinned by
+  `requirements-guest-test.txt` (`make lock-guest` re-pins it).
+- CI also runs `make install` + `make update` on Linux, macOS and Windows
+  (`make test-install`), the unit suite on macOS, and builds the docs on every PR.
+  `make docs` treats Sphinx warnings as errors.
+- The unit suite has a coverage floor (`make test-cov`, 39%); the CV server job
+  now blocks merges; `make lint` runs mypy once (the ratchet fails on any error in
+  `adare.core`). Pushes to dev/main no longer cancel each other's CI runs.
+- `make install` / `make update` install exactly what `uv.lock` pins (`--locked`)
+  and stop at the first failing step instead of carrying on. They no longer need
+  a system Python (uv provides 3.13), work from any directory, and never remove
+  extras you added. The installation guide gained an *Updating* section.
 - Images never change. A different disk under a registered name is a new image:
   `--force` (`vm create`, `env load`) keeps the replaced image as
   `<name>-<sha12>` for the environment versions that use it, or removes it when
@@ -235,6 +255,38 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- The Windows installer (`install.ps1`) works with the single workspace `.venv`
+  again: it found no `adare.exe` and stopped. It now also puts the CLIs on your
+  user `PATH`, migrates the database and syncs testfunctions like the Linux/macOS
+  installer, and doubles as the Windows update (`make update`).
+- `vm create windows11` (x86_64) failed right after boot with "Windows
+  installation encountered an unexpected error. Error code: 0x80070103 - 0x40031"
+  on current media (WinPE 26100): Setup aborts on answer-file driver paths that
+  do not exist, and the answer file guessed 24 of them on drives D: to J:. The
+  virtio disk driver now rides on the Autounattend floppy (A:) and is loaded from
+  there only. The answer file also selects an edition (generic Pro key, no
+  activation), so multi-edition ISOs no longer stop at the product key screen.
+- A Windows Setup error dialog now stops `vm create` within a minute, with the
+  error text in the message and a `<vm>_setup-error.png` screenshot next to the
+  disk, instead of waiting out the 90-minute install timeout.
+- The readiness check of a new Windows VM failed at its first step ("provision
+  step 1/2 'reboot' did not complete: guest-exec transport error: timed out"):
+  the first `guest-exec` after boot took 13 s to answer, past the 10 s every agent
+  call allowed (launches and status polls now get 60 s), and the step would then
+  have run `/bin/bash` in the Windows guest (it runs PowerShell there now).
+- x86_64 Windows VMs (`windows10`, `windows11`) could not mount ADARE's shares on
+  a Linux host: `virtiofs.exe` needs WinFsp, which the answer files never
+  installed, so `C:\adare` stayed empty and the agent could not start. WinFsp 2.1
+  is installed at first logon now (`--setup base` and up).
+- Windows answer files installed the *latest* Miniforge, and 26.9.4-0
+  (2026-10-22) ships a conda whose `create` fails on Windows ("Could not find
+  'share/conda-launchers/cli-64.exe'"), leaving an empty `pyadare` env. Miniforge
+  is pinned to 26.7.2-0.
+- The agent installer took a missing `pyadare` conda env on Windows for an
+  existing one (`if ($?)` after `| Out-Null` is always true), so its recovery
+  `conda create` never ran.
+- `vm create` now checks x86_64 Windows guests for WinFsp and, with `--setup
+  full`, a working `pyadare` Python before calling the VM ready.
 - `ubuntu2604` installs the genuine desktop edition from the 26.04.1 desktop ISO
   by playbook, like `ubuntu2404`, including 26.04's new "Encryption and file
   system" screen. It used the server ISO with a desktop source the server ISO
