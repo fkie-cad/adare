@@ -17,7 +17,7 @@ ADARELIB_ROOT = PROJECT_ROOT.parent / "adarelib"
 if str(ADARELIB_ROOT) not in sys.path:
     sys.path.insert(0, str(ADARELIB_ROOT))
 
-from adare.helperfunctions.module import import_module_from_pyfile
+from adarelib.helper.module import import_module_from_pyfile
 
 TESTFUNCTIONS_DIR = PROJECT_ROOT / "appdata" / "testfunctions"
 TESTS_DIR = Path(__file__).parent

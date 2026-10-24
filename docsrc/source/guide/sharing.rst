@@ -152,8 +152,8 @@ This downloads the bundle, loads the environment (fetching and verifying the VM 
    # Only download and load, don't run
    adare experiment replicate 01JQXYZ123ABC --skip-run
 
-Options
-^^^^^^^
+Replicate Options
+-----------------
 
 ``-e, --environment``
    Name of the environment to use. Required if the bundle has more than one; optional (auto-selected) if it has exactly one.
