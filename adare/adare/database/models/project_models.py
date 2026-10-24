@@ -702,7 +702,8 @@ class ExperimentRun(SerializerMixin, ProjectBase):
     experiment = relationship(Experiment, backref=backref("runs", cascade="all, delete-orphan"))
 
     # Reference to global environment (stored as string ID, not FK)
-    environment_id = Column(String, nullable=True)  # Global environment ID
+    environment_id = Column(String, nullable=True)  # Global environment ID (the exact version)
+    vm_hash = Column(String, nullable=True)  # sha256 of the disk image the run booted
 
     # Reference to global VM instance (stored as string ID, not FK)
     vm_instance_id = Column(String, nullable=True)  # Global VM instance ID

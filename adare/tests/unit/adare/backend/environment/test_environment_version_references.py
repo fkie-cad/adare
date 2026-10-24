@@ -222,10 +222,11 @@ class TestEnvironmentLoadFailures:
 
 
 class TestVmRegistration:
-    def test_vm_updated_in_place_counts_as_existing(self, tmp_path):
+    def _load(self, tmp_path, force):
         disk = tmp_path / 'disk.qcow2'
         disk.write_bytes(b'new bytes')
         existing = SimpleNamespace(id='VM1', name='disk', hash='old')
+        created = SimpleNamespace(id='VM2', name='disk', hash='new')
         metadata = SimpleNamespace(
             name='ubuntu',
             hypervisor='qemu',
@@ -234,15 +235,26 @@ class TestVmRegistration:
             ),
         )
         with (
-            patch.object(registration.VMFileManager, 'calculate_file_hash', return_value='new'),
+            patch('adare.helperfunctions.digest_cache.cached_file_sha256', return_value='new'),
             patch.object(registration.vm_database, 'get_vm_by_hash', return_value=None),
-            patch.object(registration, '_refuse_replacing_shared_disk'),
-            patch.object(registration.vm_database, 'get_vm_by_name', return_value=existing),
-            patch.object(registration.vm_database, 'create_vm', return_value=existing),
+            patch.object(registration.vm_database, 'get_image', return_value=vars(existing)),
+            patch.object(registration.vm_database, 'create_vm', return_value=created),
+            patch.object(registration, 'retire_image') as retire,
         ):
-            result = registration.load_vm_file_for_environment(None, disk, metadata, force=True)
+            result = registration.load_vm_file_for_environment(None, disk, metadata, force=force)
+        return result, retire
 
-        assert result == {'vm_id': 'VM1', 'was_existing': True}
+    def test_new_bytes_under_a_registered_name_are_a_new_image(self, tmp_path):
+        """--force retires the old image (kept for its versions) instead of overwriting it."""
+        result, retire = self._load(tmp_path, force=True)
+
+        retire.assert_called_once_with('VM1', replacing=tmp_path / 'disk.qcow2')
+        assert result == {'vm_id': 'VM2', 'was_existing': False}
+
+    def test_without_force_the_registered_image_is_left_alone(self, tmp_path):
+        _, retire = self._load(tmp_path, force=False)
+
+        retire.assert_not_called()
 
 
 class TestEnvironmentRemove:

@@ -1,15 +1,18 @@
-"""Registering a disk image as a Vm row when an environment is loaded.
+"""Registering a disk image as a Vm row (a VM image).
 
 A Vm row is identified by its disk hash and shared by every environment whose
 disk has the same bytes, so registration either reuses that row (after checking
 the environment agrees with it) or copies + hashes the disk into a new one.
+
+Images never change: a different disk under a registered name is a new image,
+and the old one is retired (see :func:`retire_image`), never overwritten.
 """
 
 import logging
 from pathlib import Path
 
 from adare.backend.vm import database as vm_database
-from adare.backend.vm.manager import VMFileManager
+from adare.database.api.vm.exceptions import VMLoadError
 
 log = logging.getLogger(__name__)
 
@@ -44,35 +47,98 @@ def _check_reused_vm_consistency(existing_vm, environment_metadata, hypervisor: 
         )
 
 
-def _refuse_replacing_shared_disk(vm_name: str, file_hash: str, environment_name: str) -> None:
-    """Refuse to swap the disk of a VM that another environment still runs on.
+def retire_image(vm_id: str, replacing: Path | None = None) -> None:
+    """Free a registered image's name (and managed disk path) for a new image.
 
-    With ``--force``, a disk whose name matches a registered VM but whose bytes
-    differ replaces that VM's disk in place. That is fine for the environment
-    being reloaded (its previous version is superseded and pinned to the old
-    hash), but any *other* environment on the same VM would silently start
-    running on different bytes.
+    The old image stays usable for the environment versions that reference it,
+    renamed to ``<name>-<sha12>`` -- its managed disk and sidecars alike. An image
+    no environment version references is removed instead.
+
+    *replacing* is the new image's disk. If it is the old image's disk file (its
+    bytes were overwritten in place), the old image is lost: its row is renamed and
+    points at a ``.replaced-<sha12>`` path that does not exist, so its environment
+    versions fail their integrity check instead of running on the new bytes.
     """
-    from adare.backend.environment.exceptions import EnvironmentLoadFailed
+    from adare.backend.vm.exceptions import VMRemovalError
+    from adare.backend.vm.image_record import packages_path, record_path
+    from adare.backend.vm.removal import _is_managed, plan_vm_removal, teardown_unreferenced_vm
     from adare.database.api.environment import EnvironmentDbApi
 
-    existing = vm_database.get_vm_by_name(vm_name)
-    if not existing or existing.hash == file_hash:
-        return
     with EnvironmentDbApi() as db:
-        others = sorted(
-            {env.name for env in db.get_environments() if env.vm_id == existing.id and env.name != environment_name}
-        )
-    if others:
-        raise EnvironmentLoadFailed(
+        referenced = db.is_vm_referenced(vm_id)
+    if not referenced:
+        teardown_unreferenced_vm(vm_id)
+        return
+    plan = plan_vm_removal(vm_id)
+    if plan.live_instances:
+        raise VMRemovalError(
             log,
-            f"VM '{vm_name}' is used by other environments ({', '.join(others)}); "
-            "replacing its disk would change what they run on.",
-            possible_solutions=[
-                'Give the new disk a different file name so it is registered as a separate VM',
-                'Remove or reload the other environments first',
-            ],
+            f"VM '{plan.vm_name}' is running ({', '.join(plan.live_instances)}); "
+            'its image cannot be replaced while it runs',
         )
+    image = vm_database.get_image(vm_id)
+    if image is None:
+        return
+    retired = f"{image['name']}-{image['hash'][:12]}"
+    disk = Path(image['file'])
+    overwritten = replacing is not None and disk.exists() and replacing.exists() and disk.samefile(replacing)
+    if overwritten or (disk.exists() and _is_managed(disk)):
+        # The record and package list describe the old image: they go with it
+        for sidecar in (record_path(disk), packages_path(disk)):
+            if sidecar.exists():
+                sidecar.rename(sidecar.with_name(sidecar.name.replace(disk.stem, retired, 1)))
+    if overwritten:
+        log.warning(
+            f"The disk of image '{image['name']}' was overwritten; the environment versions using it "
+            'can no longer run (their image is gone)'
+        )
+        vm_database.set_vm_file(vm_id, f"{disk}.replaced-{image['hash'][:12]}")
+    elif disk.exists() and _is_managed(disk):
+        moved = disk.with_name(f'{retired}{disk.suffix}')
+        disk.rename(moved)
+        vm_database.set_vm_file(vm_id, str(moved))
+    vm_database.rename_vm(vm_id, retired)
+    log.info(f"Kept the replaced image '{image['name']}' as '{retired}' for the environment versions using it")
+
+
+def register_built_image(disk: Path, record: dict, managed: bool) -> str:
+    """Register a disk built by ``adare vm create`` with its record; returns the Vm id.
+
+    The name is the disk's stem. A disk already registered (same bytes) keeps its
+    row and gains the record if it had none.
+    """
+    from adare.backend.vm import image_record
+
+    existing = vm_database.get_image(record['sha256'])
+    if existing:
+        if not existing['build_record']:
+            image_record.store(existing['id'], Path(existing['file']), record)
+        return str(existing['id'])
+    os_block = record['os']
+    build = record.get('build') or {}
+    vm_database.create_vm(
+        project_path=Path.cwd(),
+        name=disk.stem,
+        file_path=disk,
+        file_hash=record['sha256'],
+        description=f"Built by adare vm create ({build.get('profile')})",
+        os_platform=os_block.get('platform', ''),
+        os_type=os_block.get('os', ''),
+        os_distribution=os_block.get('distribution', ''),
+        os_version=os_block.get('version', ''),
+        os_language=os_block.get('language', ''),
+        os_architecture=os_block.get('architecture', 'x86_64'),
+        silent=True,
+        no_copy=not managed,
+        hypervisor=record['hypervisor'],
+        iso_sha256=(build.get('iso') or {}).get('sha256'),
+        profile_name=build.get('profile'),
+        build_record=image_record.to_json(record),
+    )
+    created = vm_database.get_image(record['sha256'])
+    if created is None:
+        raise VMLoadError(log, f'Registering {disk} failed: no VM with its hash afterwards')
+    return str(created['id'])
 
 
 def load_vm_file_for_environment(
@@ -95,7 +161,7 @@ def load_vm_file_for_environment(
         vm_path: Path to VM file
         environment_metadata: Environment configuration
         no_copy: If True, reference file at original location instead of copying
-        force: If True, overwrite existing VM with same name but different hash
+        force: If True, a registered VM of the same name but other bytes is retired
         build_source: 'baked' (default) or 'recipe' - how the disk was produced
         recipe_hash: Recipe integrity anchor (recipe builds only)
         iso_sha256: Expected ISO SHA256 (recipe builds only)
@@ -104,15 +170,16 @@ def load_vm_file_for_environment(
     Returns:
         Dict with 'vm_id' and 'was_existing' keys
     """
-    vm_manager = VMFileManager()
-
     # Extract hypervisor from environment metadata
     hypervisor = getattr(environment_metadata, 'hypervisor', 'virtualbox')
     log.info(f"Using hypervisor: {hypervisor}")
 
-    # Calculate hash FIRST (heavy operation done during environment load)
-    log.info("Calculating VM file hash during environment load...")
-    file_hash = vm_manager.calculate_file_hash(vm_path, silent=False)
+    # The digest cache re-hashes only a disk whose size, mtime, ctime or inode
+    # changed, so a disk that `vm create` or the vm_sha256 check just hashed is
+    # not read again.
+    from adare.helperfunctions.digest_cache import cached_file_sha256
+
+    file_hash = cached_file_sha256(vm_path)
     log.info(f"VM file hash: {file_hash}")
 
     # Check if VM already exists by hash BEFORE copying
@@ -122,11 +189,11 @@ def load_vm_file_for_environment(
         _check_reused_vm_consistency(existing_vm, environment_metadata, hypervisor)
         return {'vm_id': existing_vm.id, 'was_existing': True}
 
-    _refuse_replacing_shared_disk(vm_path.stem, file_hash, environment_metadata.name)
-    # With --force, create_vm updates a VM of the same name in place. That row
-    # predates this load (superseded versions may reference it), so it must not
-    # count as created -- a failed load would otherwise delete it.
-    same_name = vm_database.get_vm_by_name(vm_path.stem)
+    # A different disk under a registered name is a new image: with --force the old
+    # one is retired (renamed, kept for the versions using it), never overwritten.
+    same_name = vm_database.get_image(vm_path.stem)
+    if same_name and force:
+        retire_image(same_name['id'], replacing=vm_path)
 
     # VM doesn't exist or existing VM can't be reused - create new one with file operations
     log.info("Creating new VM entry with file operations...")
@@ -159,4 +226,4 @@ def load_vm_file_for_environment(
     )
 
     log.info(f"VM file loaded into database: {vm.name} (ID: {vm.id})")
-    return {'vm_id': vm.id, 'was_existing': same_name is not None and same_name.id == vm.id}
+    return {'vm_id': vm.id, 'was_existing': False}

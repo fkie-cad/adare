@@ -38,24 +38,68 @@ class TestReusedVmConsistency:
             registration._check_reused_vm_consistency(_vm(), _metadata(platform='windows'), 'qemu')
 
 
-class TestReplacingSharedDisk:
-    def _envs(self, *names):
-        return [SimpleNamespace(name=name, vm_id='vm1') for name in names]
+class TestRetireImage:
+    """Images never change: a replaced image is kept, renamed, for the versions using it."""
 
-    def _run(self, env_names, new_hash='b' * 64):
+    def _retire(self, tmp_path, referenced=True, live=(), managed=True, replacing=None):
+        disk = tmp_path / 'disk.qcow2'
+        disk.write_bytes(b'old')
+        (tmp_path / 'disk.image.yml').write_text('record_version: 1\n')
+        (tmp_path / 'disk.packages.txt').write_text('bash 5.2\n')
+        image = {'id': 'vm1', 'name': 'disk', 'hash': 'a' * 64, 'file': str(disk)}
         with (
-            patch.object(registration.vm_database, 'get_vm_by_name', return_value=_vm()),
             patch('adare.database.api.environment.EnvironmentDbApi') as api,
+            patch('adare.backend.vm.removal.teardown_unreferenced_vm') as teardown,
+            patch(
+                'adare.backend.vm.removal.plan_vm_removal',
+                return_value=SimpleNamespace(vm_name='disk', live_instances=list(live)),
+            ),
+            patch('adare.backend.vm.removal._is_managed', return_value=managed),
+            patch.object(registration.vm_database, 'get_image', return_value=image),
+            patch.object(registration.vm_database, 'set_vm_file') as set_file,
+            patch.object(registration.vm_database, 'rename_vm') as rename,
         ):
-            api.return_value.__enter__.return_value.get_environments.return_value = self._envs(*env_names)
-            registration._refuse_replacing_shared_disk('disk', new_hash, 'env')
+            api.return_value.__enter__.return_value.is_vm_referenced.return_value = referenced
+            registration.retire_image('vm1', replacing=replacing)
+        return teardown, set_file, rename
 
-    def test_own_environment_may_replace_its_disk(self):
-        self._run(['env'])
+    def test_unreferenced_image_is_removed(self, tmp_path):
+        teardown, _, rename = self._retire(tmp_path, referenced=False)
 
-    def test_disk_used_by_another_environment_is_protected(self):
-        with pytest.raises(EnvironmentLoadFailed, match='used by other environments \\(other\\)'):
-            self._run(['env', 'other'])
+        teardown.assert_called_once_with('vm1')
+        rename.assert_not_called()
 
-    def test_same_bytes_are_not_a_replacement(self):
-        self._run(['other'], new_hash='a' * 64)
+    def test_referenced_image_is_kept_under_its_hash(self, tmp_path):
+        _, set_file, rename = self._retire(tmp_path)
+
+        retired = 'disk-' + 'a' * 12
+        rename.assert_called_once_with('vm1', retired)
+        set_file.assert_called_once_with('vm1', str(tmp_path / f'{retired}.qcow2'))
+        assert sorted(p.name for p in tmp_path.iterdir()) == [
+            f'{retired}.image.yml',
+            f'{retired}.packages.txt',
+            f'{retired}.qcow2',
+        ]
+
+    def test_disk_overwritten_in_place_marks_the_old_image_lost(self, tmp_path):
+        """The new bytes stay where they are; the old image's versions can no longer run."""
+        _, set_file, rename = self._retire(tmp_path, replacing=tmp_path / 'disk.qcow2')
+
+        rename.assert_called_once_with('vm1', 'disk-' + 'a' * 12)
+        set_file.assert_called_once_with('vm1', f"{tmp_path / 'disk.qcow2'}.replaced-{'a' * 12}")
+        assert (tmp_path / 'disk.qcow2').read_bytes() == b'old'  # not moved
+        # the old image's record and package list go with it
+        assert (tmp_path / f"disk-{'a' * 12}.image.yml").exists()
+        assert not (tmp_path / 'disk.image.yml').exists()
+
+    def test_external_disk_keeps_its_path(self, tmp_path):
+        _, set_file, rename = self._retire(tmp_path, managed=False)
+
+        rename.assert_called_once()
+        set_file.assert_not_called()
+
+    def test_running_image_is_not_replaced(self, tmp_path):
+        from adare.backend.vm.exceptions import VMRemovalError
+
+        with pytest.raises(VMRemovalError, match='running'):
+            self._retire(tmp_path, live=['adare_run_1'])

@@ -201,6 +201,12 @@ def teardown_unreferenced_vm(vm_id: str, force: bool = False) -> VmRemovalOutcom
         raise VMRemovalError(log, f'VM {vm_name} could not be deleted (see the log above)')
     log.info(f'Deleted VM (hypervisor + database record): {vm_name} ({vm_id})')
     disk_deleted = bool(disk) and delete_managed_file(cast(Path, disk), VMS_DIR)
+    if disk_deleted:
+        from adare.backend.vm.image_record import packages_path, record_path
+
+        # The image's record and package list describe the deleted disk
+        for sidecar in (record_path(cast(Path, disk)), packages_path(cast(Path, disk))):
+            sidecar.unlink(missing_ok=True)
     return VmRemovalOutcome(vm_name=vm_name, environments=[], disk=disk, disk_deleted=disk_deleted)
 
 

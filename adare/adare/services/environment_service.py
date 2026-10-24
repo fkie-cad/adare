@@ -540,7 +540,7 @@ class EnvironmentService:
         )
 
         if verify_url:
-            verify_result = self._verify_hosted_url_matches(vm_url, vm_sha256)
+            verify_result = verify_hosted_url(vm_url, vm_sha256)
             if not verify_result.success:
                 return verify_result
 
@@ -551,6 +551,13 @@ class EnvironmentService:
         raw['vm_sha256'] = vm_sha256
         if fmt is not None:
             raw['vm_format'] = fmt
+        record = _published_image_record(disk, vm_url, vm_sha256, fmt)
+        if record is not None:
+            # The image's own record travels with the environment; it supersedes the
+            # hand-filled source_* fields, which stay only when given explicitly.
+            raw['image'] = record
+            raw.pop('source_profile', None)
+            raw.pop('source_iso_sha256', None)
         if source_profile:
             raw['source_profile'] = source_profile
         if source_iso_sha256:
@@ -732,55 +739,6 @@ class EnvironmentService:
 
         return Result.ok((descriptor, metadata, disk, fmt))
 
-    def _verify_hosted_url_matches(self, vm_url: str, expected_sha256: str) -> Result[None]:
-        """Download the hosted URL and confirm it hashes to ``expected_sha256``.
-
-        Catches a wrong/HTML share link or an upload whose bytes differ from the
-        local disk. The download goes to a temp file that is always cleaned up.
-        """
-        import tempfile
-
-        from adare.helperfunctions.web.download import download
-
-        tmp = Path(tempfile.mkdtemp(prefix='adare-verify-')) / 'hosted.bin'
-        try:
-            log.info(f'Verifying hosted URL bytes against local disk: {vm_url}')
-            # The digest is computed while streaming, so the temp file is never re-read.
-            hosted_sha256 = download(vm_url, tmp, quiet=False)
-            if not tmp.is_file() or tmp.stat().st_size == 0:
-                return Result.fail(
-                    code='VerifyUrlFailed',
-                    message=f'Downloaded nothing from {vm_url} (empty response).',
-                    solutions=['Check the URL is a direct download link, not an HTML page'],
-                )
-            if hosted_sha256.lower() != expected_sha256.lower():
-                return Result.fail(
-                    code='VerifyUrlMismatch',
-                    message=(
-                        f'Hosted object does not match the local disk: expected {expected_sha256} '
-                        f'but the URL returned bytes hashing to {hosted_sha256}.'
-                    ),
-                    solutions=[
-                        'The share link may return an HTML page — use a direct "download" link',
-                        'Re-upload the exact local disk, then retry',
-                    ],
-                )
-            log.info('Hosted URL matches the local disk hash')
-            return Result.ok(None)
-        except (OSError, ConnectionError, TimeoutError, ValueError) as e:
-            return Result.fail(
-                code='VerifyUrlFailed',
-                message=f'Could not verify hosted URL {vm_url}: {e}',
-                solutions=['Check network connectivity', 'Check the URL is reachable'],
-            )
-        finally:
-            try:
-                if tmp.exists():
-                    tmp.unlink()
-                tmp.parent.rmdir()
-            except OSError:
-                pass
-
     def delete(self, identifier: str, force: bool = False) -> Result[None]:
         """
         Delete an environment.
@@ -930,3 +888,68 @@ class EnvironmentService:
             for os_def in list_os_definitions()
         ]
         return Result.ok(profiles)
+
+
+def verify_hosted_url(vm_url: str, expected_sha256: str) -> Result[None]:
+    """Download the hosted URL and confirm it hashes to ``expected_sha256``.
+
+    Catches a wrong/HTML share link or an upload whose bytes differ from the
+    local disk. The download goes to a temp file that is always cleaned up.
+    """
+    import tempfile
+
+    from adare.helperfunctions.web.download import download
+
+    tmp = Path(tempfile.mkdtemp(prefix='adare-verify-')) / 'hosted.bin'
+    try:
+        log.info(f'Verifying hosted URL bytes against local disk: {vm_url}')
+        # The digest is computed while streaming, so the temp file is never re-read.
+        hosted_sha256 = download(vm_url, tmp, quiet=False)
+        if not tmp.is_file() or tmp.stat().st_size == 0:
+            return Result.fail(
+                code='VerifyUrlFailed',
+                message=f'Downloaded nothing from {vm_url} (empty response).',
+                solutions=['Check the URL is a direct download link, not an HTML page'],
+            )
+        if hosted_sha256.lower() != expected_sha256.lower():
+            return Result.fail(
+                code='VerifyUrlMismatch',
+                message=(
+                    f'Hosted object does not match the local disk: expected {expected_sha256} '
+                    f'but the URL returned bytes hashing to {hosted_sha256}.'
+                ),
+                solutions=[
+                    'The share link may return an HTML page — use a direct "download" link',
+                    'Re-upload the exact local disk, then retry',
+                ],
+            )
+        log.info('Hosted URL matches the local disk hash')
+        return Result.ok(None)
+    except (OSError, ConnectionError, TimeoutError, ValueError) as e:
+        return Result.fail(
+            code='VerifyUrlFailed',
+            message=f'Could not verify hosted URL {vm_url}: {e}',
+            solutions=['Check network connectivity', 'Check the URL is reachable'],
+        )
+    finally:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+            tmp.parent.rmdir()
+        except OSError:
+            pass
+
+
+def _published_image_record(disk: Path, vm_url: str, vm_sha256: str, fmt: str | None) -> dict | None:
+    """The image record to embed for *disk* published at *vm_url*; None for an unregistered disk.
+
+    Also records the URL in the registered image's record.
+    """
+    from adare.backend.vm import image_record
+    from adare.helperfunctions.digest_cache import cached_file_sha256
+
+    local_sha256 = cached_file_sha256(disk)
+    record = image_record.add_published(local_sha256, vm_url, vm_sha256)
+    if record is None:
+        return None
+    return image_record.for_published_disk(record, vm_sha256, fmt)
