@@ -96,6 +96,12 @@
 
       <UserData>
         <AcceptEula>true</AcceptEula>
+        <!-- Generic Pro (KMS client) key: picks the edition on multi-edition ISOs,
+             which otherwise stop at the product key / edition screen. Does not activate. -->
+        <ProductKey>
+          <Key>W269N-WFGWX-YVC9B-4J6C9-T83GX</Key>
+          <WillShowUI>OnError</WillShowUI>
+        </ProductKey>
       </UserData>
     </component>
 
@@ -106,71 +112,12 @@
                language="neutral"
                versionScope="nonSxS">
       <DriverPaths>
-        <!-- viostor (critical) - D through J, w11 then w10 fallback -->
+        <!-- viostor, put on the Autounattend floppy by windows_creator. A: is the
+             only fixed letter; the current Setup aborts (0x80070103 - 0x40031) on
+             listed paths that do not exist, so no guessing D: through J:.
+             Network and other drivers come from the virtio guest tools at first logon. -->
         <PathAndCredentials wcm:action="add" wcm:keyValue="1">
-          <Path>D:\viostor\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="2">
-          <Path>E:\viostor\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="3">
-          <Path>F:\viostor\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="4">
-          <Path>G:\viostor\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="5">
-          <Path>H:\viostor\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="6">
-          <Path>I:\viostor\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="7">
-          <Path>J:\viostor\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <!-- viostor w10 fallback (some virtio-win ISOs lack w11/ARM64) -->
-        <PathAndCredentials wcm:action="add" wcm:keyValue="8">
-          <Path>D:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="9">
-          <Path>E:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="10">
-          <Path>F:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="11">
-          <Path>G:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="12">
-          <Path>H:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="13">
-          <Path>I:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="14">
-          <Path>J:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <!-- NetKVM - D through J -->
-        <PathAndCredentials wcm:action="add" wcm:keyValue="15">
-          <Path>D:\NetKVM\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="16">
-          <Path>E:\NetKVM\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="17">
-          <Path>F:\NetKVM\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="18">
-          <Path>G:\NetKVM\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="19">
-          <Path>H:\NetKVM\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="20">
-          <Path>I:\NetKVM\w11\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="21">
-          <Path>J:\NetKVM\w11\{{ driver_arch }}</Path>
+          <Path>A:\</Path>
         </PathAndCredentials>
         <!-- viogpudo intentionally excluded from WinPE DriverPaths.
              Loading the GPU driver during WinPE causes black screen issues
@@ -294,36 +241,49 @@
           <CommandLine>cmd /c for %d in (D E F) do if exist %d:\virtio-win-guest-tools.exe %d:\virtio-win-guest-tools.exe /S</CommandLine>
           <Description>Install virtio guest tools</Description>
         </SynchronousCommand>
-        {% endif %}
-        {% if setup_level >= 2 %}
-        <!-- Download Miniforge3 -->
+        <!-- WinFsp: virtiofs.exe (virtio guest tools) mounts the ADARE shares through it -->
         <SynchronousCommand wcm:action="add">
           <Order>11</Order>
-          <CommandLine>curl.exe -L -o C:\Users\adare\miniforge3-installer.exe https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Windows-{{ miniforge_arch }}.exe</CommandLine>
+          <CommandLine>curl.exe -L -o C:\Windows\Temp\winfsp.msi https://github.com/winfsp/winfsp/releases/download/v2.1/winfsp-2.1.25156.msi</CommandLine>
+          <Description>Download WinFsp</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>12</Order>
+          <CommandLine>msiexec /i C:\Windows\Temp\winfsp.msi /qn /norestart</CommandLine>
+          <Description>Install WinFsp</Description>
+        </SynchronousCommand>
+        {% endif %}
+        {% if setup_level >= 2 %}
+        <!-- Download Miniforge3, pinned: "latest" changes under us, and 26.9.4-0
+             (2026-10-22) shipped a conda whose `create` fails on Windows
+             ("Could not find 'share/conda-launchers/cli-64.exe'"). -->
+        <SynchronousCommand wcm:action="add">
+          <Order>13</Order>
+          <CommandLine>curl.exe -L -o C:\Users\adare\miniforge3-installer.exe https://github.com/conda-forge/miniforge/releases/download/26.7.2-0/Miniforge3-26.7.2-0-Windows-{{ miniforge_arch }}.exe</CommandLine>
           <Description>Download Miniforge3</Description>
         </SynchronousCommand>
         <!-- Install Miniforge3 silently -->
         <SynchronousCommand wcm:action="add">
-          <Order>12</Order>
+          <Order>14</Order>
           <CommandLine>C:\Users\adare\miniforge3-installer.exe /InstallationType=JustMe /RegisterPython=0 /S /D=C:\Users\adare\.miniforge3</CommandLine>
           <Description>Install Miniforge3</Description>
         </SynchronousCommand>
         <!-- Create pyadare conda environment -->
         <SynchronousCommand wcm:action="add">
-          <Order>13</Order>
+          <Order>15</Order>
           <CommandLine>C:\Users\adare\.miniforge3\condabin\conda.bat create -n pyadare python=3.10 -y</CommandLine>
           <Description>Create pyadare conda environment</Description>
         </SynchronousCommand>
         <!-- Clean up installer -->
         <SynchronousCommand wcm:action="add">
-          <Order>14</Order>
+          <Order>16</Order>
           <CommandLine>del C:\Users\adare\miniforge3-installer.exe</CommandLine>
           <Description>Clean up Miniforge3 installer</Description>
         </SynchronousCommand>
         {% endif %}
         <!-- Shutdown after setup complete -->
         <SynchronousCommand wcm:action="add">
-          <Order>{% if setup_level >= 2 %}15{% elif setup_level >= 1 %}11{% else %}9{% endif %}</Order>
+          <Order>{% if setup_level >= 2 %}17{% elif setup_level >= 1 %}13{% else %}9{% endif %}</Order>
           <CommandLine>shutdown /s /t 60 /c "ADARE: Initial setup complete"</CommandLine>
           <Description>Shutdown after setup</Description>
         </SynchronousCommand>

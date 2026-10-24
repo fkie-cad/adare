@@ -14,7 +14,10 @@ from adare.hypervisor.qemu.vm_creator.guest_readiness import (
     AUTOLOGIN_WINDOWS,
     NO_LOCK,
     NO_WELCOME,
+    PYTHON_ENV_WINDOWS,
     REBOOT,
+    REBOOT_WINDOWS,
+    WINFSP_WINDOWS,
     GuestNotReadyError,
     make_guest_ready,
     readiness_commands,
@@ -39,7 +42,22 @@ class TestReadinessCommands:
 
     def test_windows_only_checks(self):
         commands = readiness_commands(get_os_definition('windows11'), SetupLevel.BASE)
-        assert commands == [REBOOT, AUTOLOGIN_WINDOWS]
+        assert commands == [REBOOT_WINDOWS, AUTOLOGIN_WINDOWS, WINFSP_WINDOWS]
+
+    def test_windows_full_also_checks_the_agent_python(self):
+        # First logon's `conda create` once failed silently and left an empty env.
+        commands = readiness_commands(get_os_definition('windows11'), SetupLevel.FULL)
+        assert commands == [REBOOT_WINDOWS, AUTOLOGIN_WINDOWS, WINFSP_WINDOWS, PYTHON_ENV_WINDOWS]
+
+    def test_windows_arm64_has_no_winfsp_or_conda_to_check(self):
+        # Its answer file uses SMB shares and a system Python.
+        commands = readiness_commands(get_os_definition('windows11arm64'), SetupLevel.FULL)
+        assert commands == [REBOOT_WINDOWS, AUTOLOGIN_WINDOWS]
+
+    def test_windows_never_runs_bash(self):
+        # guest-exec of /bin/bash on a Windows guest never returns; the step timed out.
+        commands = readiness_commands(get_os_definition('windows11'), SetupLevel.FULL)
+        assert all(command.shell in ('powershell', 'cmd') for command in commands)
 
     def test_bare_has_no_agent_to_check_with(self):
         assert readiness_commands(get_os_definition('fedora41'), SetupLevel.BARE) == []

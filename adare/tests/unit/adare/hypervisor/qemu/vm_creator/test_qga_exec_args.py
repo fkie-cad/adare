@@ -136,3 +136,24 @@ def test_non_windows_defaults_to_bash_when_no_shell_given():
 def test_an_unsupported_shell_is_rejected():
     with pytest.raises(QgaError, match='Unsupported guest shell'):
         _build_exec_args('echo hi', None, True, 'zsh')
+
+
+# --- reply timeout ---
+
+
+def test_exec_waits_for_a_slow_launch(monkeypatch):
+    # The first guest-exec on a freshly booted Windows 11 guest answered after 13 s;
+    # the 10 s default every other agent call uses failed the readiness check.
+    from adare.hypervisor.qemu.vm_creator import qga_utils
+
+    timeouts = {}
+
+    def command(sock_path, execute, arguments=None, timeout=10.0):
+        timeouts[execute] = timeout
+        return {'pid': 1} if execute == 'guest-exec' else {'exited': True, 'exitcode': 0}
+
+    monkeypatch.setattr(qga_utils, '_command', command)
+
+    assert qga_utils.qga_exec('qga.sock', 'exit 0', shell='powershell') == (0, '', '')
+    assert timeouts['guest-exec'] > 13
+    assert timeouts['guest-exec-status'] > 13
