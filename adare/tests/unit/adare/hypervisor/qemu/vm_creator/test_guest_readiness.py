@@ -122,3 +122,25 @@ class TestWhichCreatorsRunIt:
             creator.create()
         ready.assert_called_once()
         compress.assert_not_called()
+
+
+@pytest.mark.skipif(shutil.which('bash') is None, reason='needs bash')
+@pytest.mark.parametrize(('version_id', 'stamp'), [('26.04', 'upgrade-26.04-done'), ('', None)])
+def test_no_welcome_also_stamps_the_release_welcome(tmp_path, version_id, stamp):
+    """Ubuntu 26.04 shows a per-release welcome whenever the done marker exists without its stamp."""
+    home = tmp_path / 'home'
+    os_release = tmp_path / 'os-release'
+    os_release.write_text(f'NAME="Ubuntu"\nVERSION_ID="{version_id}"\n' if version_id else 'NAME="Other"\n')
+    script = (
+        NO_WELCOME.command.replace('$(getent passwd adare | cut -d: -f6)', str(home))
+        .replace('/etc/os-release', str(os_release))
+        .replace('/etc/xdg/autostart', str(tmp_path / 'xdg'))
+        .replace('install -d -o adare -g adare', 'install -d')
+        .replace('chown adare:adare', 'true')
+    )
+
+    subprocess.run(['bash', '-c', script], check=True)
+
+    assert (home / '.config/gnome-initial-setup-done').read_text() == 'yes'
+    stamps = [p.name for p in (home / '.config/gnome-initial-setup').iterdir()]
+    assert stamps == ([stamp] if stamp else [])
