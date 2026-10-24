@@ -204,6 +204,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- `adare vm test` on Linux guests hung at "Starting AdareVM server" until the
+  300 s guest-command timeout and then failed: the backgrounded launch kept
+  the guest agent's output pipe open for as long as adarevm ran.
 - Bullet lists and examples in command help (`experiment run`, `env load`,
   `vm test`, ...) were re-wrapped into one run-on paragraph; they now keep
   their line breaks. `adare experiment list` no longer claims to list "in an

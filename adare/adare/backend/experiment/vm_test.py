@@ -269,35 +269,35 @@ async def test_adarevm_server_start(context, guest_bind_port: int | None = None)
             if start_result.returncode == 0:
                 log.info("AdareVM server started successfully (port 18765 listening)")
                 return True, None
-            log.warning(
-                f"Failed to start adarevm server. Exit code: {start_result.returncode}. stderr: {start_result.stderr}"
-            )
-            return False, (
-                f"Failed to start adarevm server. Exit code: {start_result.returncode}. stderr: {start_result.stderr}"
-            )
+            msg = f"Failed to start adarevm server. Exit code: {start_result.returncode}. stderr: {start_result.stderr}"
+            log.warning(msg)
+            return False, msg
 
         # Linux: mirror the real experiment launch (agent_command_builders).
         # The workspace root is shared at /adare/vm; cd into the adarevm member so
         # uv resolves its `adarelib = { workspace = true }` dependency. Pre-sync
         # the venv (the slow build), grant the guest-agent (root) access to the
         # autologin user's X display (DISPLAY/XAUTHORITY + `xhost +SI:localuser:root`),
-        # then run adarevm.
+        # then start adarevm without waiting: background on QEMU as in agent_lifecycle,
+        # and `cmd &`, not `cd X && cmd &`, whose subshell holds the agent's output pipe.
         from adare.backend.experiment.agent_readiness import wait_for_agent
 
+        stop = context.user_interrupt_event
         sync_command = f"{_GUEST_UV_ENV}cd /adare/vm/adarevm && uv sync --frozen 2>&1 | tail -3"
         log.info("Pre-syncing adarevm venv in guest (builds deps)...")
-        await context.vm.run_command(sync_command, stop_event=context.user_interrupt_event)
+        await context.vm.run_command(sync_command, stop_event=stop)
         start_command = (
             _GUEST_UV_ENV + "export DISPLAY=:0; "
             "export XAUTHORITY=$(ls /run/user/*/gdm/Xauthority /run/user/*/.mutter-Xwaylandauth.* "
             "/run/sddm/* /run/user/*/xauth_* /home/adare/.Xauthority 2>/dev/null | head -1); "
             "xhost +SI:localuser:root >/dev/null 2>&1 || true; "
-            "cd /adare/vm/adarevm && nohup uv run --frozen adarevm >/tmp/adarevm.log 2>&1 &"
+            "cd /adare/vm/adarevm || exit 1; nohup uv run --frozen adarevm >/tmp/adarevm.log 2>&1 </dev/null &"
         )
-        start_result = await context.vm.run_command(start_command, stop_event=context.user_interrupt_event)
+        on_qemu = getattr(context, 'hypervisor_type', None) == 'qemu'  # VirtualBox's background logs to /adare/run
+        start_result = await context.vm.run_command(start_command, background=on_qemu, stop_event=stop)
         if start_result.returncode == 0:
             log.info("AdareVM server launched; waiting for it to answer")
-            await wait_for_agent(context.config.websocket_port, stop_event=context.user_interrupt_event)
+            await wait_for_agent(context.config.websocket_port, stop_event=stop)
             return True, None
         log.warning(f"Failed to start adarevm server. Exit code: {start_result.returncode}")
         return False, f"Failed to start adarevm server. Exit code: {start_result.returncode}"

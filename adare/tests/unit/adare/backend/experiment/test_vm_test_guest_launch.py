@@ -5,6 +5,9 @@ venv, bytecode or rewritten uv.lock there ends up root-owned on the host and
 breaks the next `make install`.
 """
 
+import shutil
+import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -51,3 +54,40 @@ async def test_windows_command_has_no_single_quotes():
     await vm_test.test_adarevm_server_start(ctx)
 
     assert "'" not in ctx.vm.run_command.await_args.args[0]
+
+
+@pytest.mark.skipif(sys.platform == 'win32' or shutil.which('bash') is None, reason='needs bash')
+async def test_linux_launch_returns_while_server_keeps_running(tmp_path, monkeypatch):
+    """The guest agent waits for the command's output pipes to close.
+
+    A backgrounded `cd X && nohup server &` keeps them open for the server's
+    lifetime, so the launch hung until the 300s guest-command timeout.
+    """
+    monkeypatch.setattr(agent_readiness, 'wait_for_agent', AsyncMock())
+    ctx = _context('linux')
+    await vm_test.test_adarevm_server_start(ctx)
+    command = ctx.vm.run_command.await_args.args[0]
+    assert 'adarevm' in command
+
+    # Same shell structure on the host: the server is a 3s sleep, xhost a no-op.
+    command = (
+        command.replace('uv run --frozen adarevm', 'sleep 3')
+        .replace('/tmp/adarevm.log', str(tmp_path / 'adarevm.log'))
+        .replace('/adare/vm/adarevm', str(tmp_path))
+        .replace('xhost +SI:localuser:root', 'true')
+    )
+    subprocess.run(['bash', '-c', command], capture_output=True, check=True, timeout=2)
+
+
+@pytest.mark.parametrize(('hypervisor', 'background'), [('qemu', True), (None, False)])
+async def test_linux_launch_mode_matches_experiments(hypervisor, background, monkeypatch):
+    """QEMU starts adarevm like agent_lifecycle does: background, no wait for exit."""
+    monkeypatch.setattr(agent_readiness, 'wait_for_agent', AsyncMock())
+    ctx = _context('linux')
+    ctx.hypervisor_type = hypervisor
+
+    await vm_test.test_adarevm_server_start(ctx)
+
+    sync_call, launch_call = ctx.vm.run_command.await_args_list
+    assert not sync_call.kwargs.get('background')
+    assert launch_call.kwargs['background'] is background
