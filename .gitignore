@@ -93,7 +93,7 @@ graphify-out/
 
 # Isolated env for the quality ratchet (make lint), mirrors the CI lint job
 .venv-lint/
-.venv-agent/
+.venv-guest/
 
 # Sphinx build output (published by .github/workflows/docs.yml, not committed)
 /docs/

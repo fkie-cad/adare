@@ -10,19 +10,23 @@ on:
 permissions:
   contents: read
 
+# A newer push to a PR supersedes its running checks; pushes to dev/main all run to
+# the end, so every commit there gets a result.
 concurrency:
   group: tests-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Every job runs a Makefile target, so CI and your machine run the same commands;
 # what a job installs and runs is defined there, not here. UV_LOCKED makes each
-# sync fail if uv.lock is out of date (the same as passing --locked).
+# sync fail if uv.lock is out of date (the same as passing --locked). uv brings
+# its own Python (from requires-python, or --python in the Makefile), and
+# setup-uv caches its downloads keyed on uv.lock and requirements*.txt.
 env:
   UV_LOCKED: 1
 
 jobs:
-  # Formatting, strict mypy on adare.core, and the quality ratchet (ruff/mypy
-  # budgets + 1000-line file limit, see quality-baseline.json).
+  # Formatting and the quality ratchet: ruff/mypy budgets, zero mypy errors in
+  # adare.core, 1000-line file limit (see quality-baseline.json).
   lint:
     name: Lint & types
     runs-on: ubuntu-latest
@@ -33,45 +37,55 @@ jobs:
       - name: Install libvirt headers (qemu extra)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvirt-dev pkg-config
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: '3.13'
-
-      - uses: astral-sh/setup-uv@v3
+          enable-cache: true
 
       - name: Format, strict types, quality ratchet
         run: make lint
 
-  # Whole client unit suite.
+  # Whole client unit suite on both host OSes (it includes the testfunction tests,
+  # i.e. host test mode). Linux also enforces the coverage floor.
   unit:
-    name: Unit tests
-    runs-on: ubuntu-latest
+    name: Unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: test-cov
+          - os: macos-latest
+            target: test
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install libvirt headers (qemu extra)
+      - name: Install libvirt (qemu extra, Linux)
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvirt-dev pkg-config
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
+      - name: Install libvirt (qemu extra, macOS)
+        if: runner.os == 'macOS'
+        run: brew install libvirt pkg-config
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Run unit tests
-        run: make test PYTEST_ARGS="--cov --cov-report="
+        run: make ${{ matrix.target }}
 
-      # Reported, not gated (yet): ~34% when introduced.
       - name: Coverage summary
-        if: always()
+        if: always() && matrix.target == 'test-cov'
         working-directory: adare
         run: |
           echo "Unit-test line coverage: $(uv run --no-sync coverage report --format=total)%" >> "$GITHUB_STEP_SUMMARY"
 
-  # The guest agent runs on the guest's Python (3.10+), outside the uv workspace.
-  agent:
-    name: Guest agent (${{ matrix.os }}, Python 3.10)
+  # Guest-side code on the oldest guest Python (3.10), outside the uv workspace:
+  # the agent, and the testfunctions with their collections' requirements.
+  guest:
+    name: Guest code (${{ matrix.os }}, Python 3.10)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -84,59 +98,80 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Install make (Windows)
         if: runner.os == 'Windows'
         run: choco install make --no-progress -y
 
-      - name: Run agent tests
+      - name: Agent tests
         run: make test-agent
 
-  # CV server: PaddleOCR/OpenCV make this install heavy and the suite is young,
-  # so it is reported but does not block merges (yet).
+      - name: Testfunction tests
+        run: make test-testfunctions-guest
+
   cv-server:
-    name: CV server (non-blocking)
+    name: CV server
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: '3.13'
-
-      - uses: astral-sh/setup-uv@v3
+          enable-cache: true
 
       - name: Run CV server tests
         run: make test-cv
 
-  # Testfunctions run inside Linux and Windows guests and on the macOS host (host
-  # test mode), so their behaviour is checked on all three.
-  testfunctions:
-    name: Testfunctions (${{ matrix.os }})
+  # Built on every PR (warnings are errors), so a broken page fails here instead
+  # of in the deploy from main (docs.yml).
+  docs:
+    name: Docs build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Build documentation
+        run: make docs
+
+  # A fresh clone's `make install`, then `make update`, on every host OS.
+  install:
+    name: Install (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
+      - name: Install libvirt (qemu extra, Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvirt-dev pkg-config
 
-      - uses: astral-sh/setup-uv@v3
+      - name: Install libvirt (qemu extra, macOS)
+        if: runner.os == 'macOS'
+        run: brew install libvirt pkg-config
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Install make (Windows)
         if: runner.os == 'Windows'
         run: choco install make --no-progress -y
 
-      - name: Run testfunction tests
-        run: make test-testfunctions
+      - name: Install, update, run the CLI
+        run: make test-install
