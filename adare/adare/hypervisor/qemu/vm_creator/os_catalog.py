@@ -117,158 +117,6 @@ class OsDefinition:
     iso_notes: str = ''
 
 
-# Ubuntu 26.04 LTS (Resolute Raccoon) - Server ISO with autoinstall support
-UBUNTU_2604 = OsDefinition(
-    name='ubuntu2604',
-    display_name='Ubuntu 26.04 LTS (Resolute Raccoon)',
-    platform='linux',
-    distribution='ubuntu',
-    distribution_label='Resolute Raccoon',
-    version='26.04',
-    iso_url='https://releases.ubuntu.com/26.04/ubuntu-26.04-live-server-amd64.iso',
-    iso_sha256='dec49008a71f6098d0bcfc822021f4d042d5f2db279e4d75bdd981304f1ca5d9',
-    iso_filename='ubuntu-26.04-live-server-amd64.iso',
-    default_disk_size='60G',
-    default_ram_mb=8192,
-    default_cpus=0,
-    kernel_path_in_iso='/casper/vmlinuz',
-    initrd_path_in_iso='/casper/initrd',
-)
-
-# Ubuntu 26.04 LTS (Resolute Raccoon, ARM64) - User must supply ISO
-UBUNTU_2604_ARM64 = OsDefinition(
-    name='ubuntu2604arm64',
-    display_name='Ubuntu 26.04 LTS (Resolute Raccoon, ARM64)',
-    platform='linux',
-    distribution='ubuntu',
-    distribution_label='Resolute Raccoon',
-    version='26.04',
-    iso_url='',
-    iso_sha256='',
-    iso_filename='',
-    default_disk_size='60G',
-    default_ram_mb=8192,
-    default_cpus=0,
-    requires_uefi=True,
-    kernel_path_in_iso='/casper/vmlinuz',
-    initrd_path_in_iso='/casper/initrd',
-    architecture='aarch64',
-)
-
-# Ubuntu 24.04 LTS (Noble Numbat) - Server ISO with autoinstall support
-UBUNTU_2404 = OsDefinition(
-    name='ubuntu2404',
-    display_name='Ubuntu 24.04 LTS (Noble Numbat)',
-    platform='linux',
-    distribution='ubuntu',
-    distribution_label='Noble Numbat',
-    version='24.04',
-    iso_url='https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso',
-    iso_sha256='d6dab0c3a657988501b4bd76f1297c053df710e06e0c3aece60dead24f270b4d',
-    iso_filename='ubuntu-24.04.2-live-server-amd64.iso',
-    default_disk_size='60G',
-    default_ram_mb=8192,
-    default_cpus=0,
-    kernel_path_in_iso='/casper/vmlinuz',
-    initrd_path_in_iso='/casper/initrd',
-)
-
-# Ubuntu 24.04 LTS (Noble Numbat, ARM64) - User must supply ISO
-UBUNTU_2404_ARM64 = OsDefinition(
-    name='ubuntu2404arm64',
-    display_name='Ubuntu 24.04 LTS (Noble Numbat, ARM64, Desktop overlay on Server base)',
-    platform='linux',
-    distribution='ubuntu',
-    distribution_label='Noble Numbat',
-    version='24.04',
-    iso_url='',
-    iso_sha256='',
-    iso_filename='',
-    default_disk_size='60G',
-    default_ram_mb=8192,
-    default_cpus=0,
-    requires_uefi=True,
-    kernel_path_in_iso='/casper/vmlinuz',
-    initrd_path_in_iso='/casper/initrd',
-    architecture='aarch64',
-)
-
-# Ubuntu 25.10 (Questing Quokka) - Server ISO with autoinstall support
-UBUNTU_2510 = OsDefinition(
-    name='ubuntu2510',
-    display_name='Ubuntu 25.10 (Questing Quokka)',
-    platform='linux',
-    distribution='ubuntu',
-    distribution_label='Questing Quokka',
-    version='25.10',
-    iso_url='https://releases.ubuntu.com/25.10/ubuntu-25.10-live-server-amd64.iso',
-    iso_sha256='dc54870e5261c0abad19f74b8146659d10e625971792bd42d7ecde820b60a1d0',
-    iso_filename='ubuntu-25.10-live-server-amd64.iso',
-    default_disk_size='60G',
-    default_ram_mb=8192,
-    default_cpus=0,
-    kernel_path_in_iso='/casper/vmlinuz',
-    initrd_path_in_iso='/casper/initrd',
-)
-
-# Ubuntu 25.10 (Questing Quokka, ARM64) - User must supply ISO
-UBUNTU_2510_ARM64 = OsDefinition(
-    name='ubuntu2510arm64',
-    display_name='Ubuntu 25.10 (Questing Quokka, ARM64)',
-    platform='linux',
-    distribution='ubuntu',
-    distribution_label='Questing Quokka',
-    version='25.10',
-    iso_url='',
-    iso_sha256='',
-    iso_filename='',
-    default_disk_size='60G',
-    default_ram_mb=8192,
-    default_cpus=0,
-    requires_uefi=True,
-    kernel_path_in_iso='/casper/vmlinuz',
-    initrd_path_in_iso='/casper/initrd',
-    architecture='aarch64',
-)
-
-# Ubuntu 22.04 LTS (Jammy Jellyfish) - Server ISO with autoinstall support
-UBUNTU_2204 = OsDefinition(
-    name='ubuntu2204',
-    display_name='Ubuntu 22.04 LTS (Jammy Jellyfish)',
-    platform='linux',
-    distribution='ubuntu',
-    distribution_label='Jammy Jellyfish',
-    version='22.04',
-    iso_url='https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso',
-    iso_sha256='9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635571d9c954b60',
-    iso_filename='ubuntu-22.04.5-live-server-amd64.iso',
-    default_disk_size='60G',
-    default_ram_mb=8192,
-    default_cpus=0,
-    kernel_path_in_iso='/casper/vmlinuz',
-    initrd_path_in_iso='/casper/initrd',
-)
-
-# Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64) - User must supply ISO
-UBUNTU_2204_ARM64 = OsDefinition(
-    name='ubuntu2204arm64',
-    display_name='Ubuntu 22.04 LTS (Jammy Jellyfish, ARM64, Desktop overlay on Server base)',
-    platform='linux',
-    distribution='ubuntu',
-    distribution_label='Jammy Jellyfish',
-    version='22.04',
-    iso_url='',
-    iso_sha256='',
-    iso_filename='',
-    default_disk_size='60G',
-    default_ram_mb=8192,
-    default_cpus=0,
-    requires_uefi=True,
-    kernel_path_in_iso='/casper/vmlinuz',
-    initrd_path_in_iso='/casper/initrd',
-    architecture='aarch64',
-)
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Debian family (preseed via debian-installer)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -350,53 +198,6 @@ KALI_ROLLING = OsDefinition(
 _KICKSTART_CMDLINE = 'inst.ks=hd:LABEL=OEMDRV:/ks.cfg inst.text console={console}'
 
 
-def _fedora_archive_cmdline(release: str, arch: str = 'x86_64') -> str:
-    """Kickstart cmdline with ``inst.repo`` pinned to the Fedora *archive*.
-
-    An Everything-netinst ISO carries no packages; Anaconda resolves them through
-    the mirror metalink. Once a release goes EOL the metalink resolves to nothing
-    and the install dies at dependency resolution, so an EOL release must name the
-    archive mirror explicitly. Every release ADARE ships for replication is or will
-    be EOL, hence the pin.
-    """
-    return (
-        f'inst.ks=hd:LABEL=OEMDRV:/ks.cfg '
-        f'inst.repo=https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/'
-        f'{release}/Everything/{arch}/os/ '
-        f'inst.text console={{console}}'
-    )
-
-
-# Fedora 41 and 42 are both permanently EOL, so their metalink is dead — see
-# _fedora_archive_cmdline. The Workstation profiles below are pinned to the
-# archive; fedora41kde / fedora42kde share the defect and are NOT pinned, because
-# no one has verified a KDE-spin build against the archive repo (their kickstart
-# selects a different package group). Pin them the same way once verified.
-_FEDORA_41_CMDLINE = _fedora_archive_cmdline('41')
-_FEDORA_42_CMDLINE = _fedora_archive_cmdline('42')
-
-FEDORA_41_WORKSTATION = OsDefinition(
-    name='fedora41',
-    display_name='Fedora 41 Workstation (GNOME)',
-    platform='linux',
-    distribution='fedora',
-    distribution_label='Workstation',
-    version='41',
-    iso_url=(
-        'https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/iso/Fedora-Everything-netinst-x86_64-41-1.4.iso'
-    ),
-    iso_sha256='bc943f6b426ef8db9587715d87d6361c4048146f3aadd36a9dcbab2b33fe320e',
-    iso_filename='Fedora-Everything-netinst-x86_64-41-1.4.iso',
-    default_disk_size='60G',
-    default_ram_mb=8192,
-    default_cpus=0,
-    kernel_path_in_iso='/images/pxeboot/vmlinuz',
-    initrd_path_in_iso='/images/pxeboot/initrd.img',
-    installer='kickstart',
-    kernel_cmdline=_FEDORA_41_CMDLINE,
-    seed_label='OEMDRV',
-)
-
 FEDORA_41_KDE = OsDefinition(
     name='fedora41kde',
     display_name='Fedora 41 KDE Plasma',
@@ -414,28 +215,6 @@ FEDORA_41_KDE = OsDefinition(
     initrd_path_in_iso='/images/pxeboot/initrd.img',
     installer='kickstart',
     kernel_cmdline=_KICKSTART_CMDLINE,
-    seed_label='OEMDRV',
-)
-
-FEDORA_42_WORKSTATION = OsDefinition(
-    name='fedora42',
-    display_name='Fedora 42 Workstation (GNOME)',
-    platform='linux',
-    distribution='fedora',
-    distribution_label='Workstation',
-    version='42',
-    iso_url=(
-        'https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/42/Everything/x86_64/iso/Fedora-Everything-netinst-x86_64-42-1.1.iso'
-    ),
-    iso_sha256='1bd6ab4798983c2fe4a210f9c4ca135fed453d6142ba852c1f8d5fba22e113ab',
-    iso_filename='Fedora-Everything-netinst-x86_64-42-1.1.iso',
-    default_disk_size='60G',
-    default_ram_mb=8192,
-    default_cpus=0,
-    kernel_path_in_iso='/images/pxeboot/vmlinuz',
-    initrd_path_in_iso='/images/pxeboot/initrd.img',
-    installer='kickstart',
-    kernel_cmdline=_FEDORA_42_CMDLINE,
     seed_label='OEMDRV',
 )
 
@@ -710,53 +489,6 @@ ELEMENTARY_OS = OsDefinition(
     installer='manual',
 )
 
-# Windows 11 - User must supply ISO
-WINDOWS_11 = OsDefinition(
-    name='windows11',
-    display_name='Windows 11',
-    platform='windows',
-    distribution='windows',
-    distribution_label='Home',
-    version='11',
-    iso_url='',
-    iso_sha256='',
-    iso_filename='',
-    default_disk_size='80G',
-    default_ram_mb=16384,
-    default_cpus=0,
-    requires_uefi=True,
-    requires_tpm=True,
-    # Microsoft media is licensed, not redistributable, so this profile ships no
-    # iso_url. These notes are the fallback download pointer a consumer sees when a
-    # recipe's own `iso_notes` is absent.
-    iso_notes=(
-        "Download from https://www.microsoft.com/software-download/windows11 - "
-        "\"Windows 11 (multi-edition ISO for x64 devices)\", English "
-        "(International). Requires a valid licence."
-    ),
-)
-
-# Windows 10 - User must supply ISO
-WINDOWS_10 = OsDefinition(
-    name='windows10',
-    display_name='Windows 10',
-    platform='windows',
-    distribution='windows',
-    distribution_label='Home',
-    version='10',
-    iso_url='',
-    iso_sha256='',
-    iso_filename='',
-    default_disk_size='80G',
-    default_ram_mb=16384,
-    default_cpus=0,
-    requires_uefi=True,
-    iso_notes=(
-        "Download from https://www.microsoft.com/software-download/windows10 - "
-        "\"Windows 10\", English (International), 64-bit. Requires a valid licence."
-    ),
-)
-
 # Virtio-win drivers ISO for Windows guests
 VIRTIO_WIN_ISO_URL = 'https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso'
 VIRTIO_WIN_ISO_FILENAME = 'virtio-win.iso'
@@ -767,22 +499,14 @@ VIRTIO_WIN_ISO_FILENAME = 'virtio-win.iso'
 UTM_GUEST_TOOLS_ISO_URL = 'https://getutm.app/downloads/utm-guest-tools-latest.iso'
 UTM_GUEST_TOOLS_ISO_FILENAME = 'utm-guest-tools.iso'
 
-# Built-in OS definitions
+# Built-in OS definitions: only for OSes without a profile in appdata/os-profiles/.
+# A YAML profile replaces the built-in entry of the same name whole, so a built-in
+# copy of a profiled OS is never used and only drifts out of date.
 _BUILTIN_CATALOG: dict[str, OsDefinition] = {
-    'ubuntu2604': UBUNTU_2604,
-    'ubuntu2604arm64': UBUNTU_2604_ARM64,
-    'ubuntu2510': UBUNTU_2510,
-    'ubuntu2510arm64': UBUNTU_2510_ARM64,
-    'ubuntu2404': UBUNTU_2404,
-    'ubuntu2404arm64': UBUNTU_2404_ARM64,
-    'ubuntu2204': UBUNTU_2204,
-    'ubuntu2204arm64': UBUNTU_2204_ARM64,
     'debian12': DEBIAN_12,
     'debian13': DEBIAN_13,
     'kali': KALI_ROLLING,
-    'fedora41': FEDORA_41_WORKSTATION,
     'fedora41kde': FEDORA_41_KDE,
-    'fedora42': FEDORA_42_WORKSTATION,
     'fedora42kde': FEDORA_42_KDE,
     'fedora43': FEDORA_43_WORKSTATION,
     'fedora43kde': FEDORA_43_KDE,
@@ -796,8 +520,6 @@ _BUILTIN_CATALOG: dict[str, OsDefinition] = {
     'popos': POP_OS,
     'nixos': NIXOS,
     'elementary': ELEMENTARY_OS,
-    'windows11': WINDOWS_11,
-    'windows10': WINDOWS_10,
 }
 
 _REQUIRED_YAML_FIELDS = {'name', 'platform', 'distribution', 'version'}

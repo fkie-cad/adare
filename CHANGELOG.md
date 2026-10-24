@@ -93,6 +93,11 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   apart from a slow boot.
 
 ### Changed
+- OS profiles: a YAML profile is now the only definition of its OS. The 12
+  built-in catalog entries that a shipped profile replaced (never used, several
+  stale) are gone; a test keeps it that way, and another requires every x86_64
+  Ubuntu/Kubuntu LTS profile to install the desktop edition. The VM image guide
+  records when each profile last ran.
 - `adare vm test` on a registered (QEMU) VM now gives the guest its agent the way
   an experiment run does: the same agent wheels, shares and `config.json` with the
   agent token, the same install and launch, and the same WebSocket connection
@@ -211,6 +216,14 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- `ubuntu2604` installs the genuine desktop edition from the 26.04.1 desktop ISO
+  by playbook, like `ubuntu2404`, including 26.04's new "Encryption and file
+  system" screen. It used the server ISO with a desktop source the server ISO
+  does not carry, so it could not install at all.
+- Ubuntu 26.04 guests opened a "Welcome to Ubuntu 26.04" wizard over the desktop
+  on every login: its per-release welcome (a systemd user unit, not autostart)
+  runs once the initial-setup done marker exists, which provisioning writes. The
+  release's own stamp is now written too.
 - An unattended Linux install whose installer failed (subiquity's "An error
   occurred. Press enter to start a shell", a failed curtin step, ...) is now
   stopped within seconds instead of waiting out the 150-minute install timeout.
