@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import shutil
-import subprocess
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -55,68 +54,11 @@ class VMLifecycleManager:
 
     async def _ensure_vm_runtime_ready(self, context: ExperimentRunCtx):
         """Ensure project VM runtime directory is ready with up-to-date adarevm and adarelib."""
-        # Use project-level vm_runtime directory instead of creating per-experiment copies
-        vm_runtime_dir = context.project_directory.vm_runtime
-        adarevm_target = vm_runtime_dir / 'adarevm'
-        adarelib_target = vm_runtime_dir / 'adarelib'
-
-        # Use global sources
-        adarevm_source = context.adarevm
-        adarelib_source = context.adarelib
-
-        # Check if we need to copy/update files
-        needs_update = False
-
-        if not vm_runtime_dir.exists():
-            log.info("Creating project VM runtime directory for first time")
-            needs_update = True
-        elif not adarevm_target.exists() or not adarelib_target.exists():
-            log.info("Project VM runtime directory incomplete, updating")
-            needs_update = True
-        elif self._runtime_copy_stale(adarevm_source, adarevm_target) or self._runtime_copy_stale(
-            adarelib_source, adarelib_target
-        ):
-            log.info("Agent sources changed since the cached runtime was copied, updating")
-            needs_update = True
-
-        if needs_update:
-            # Create/recreate VM runtime directory
-            if vm_runtime_dir.exists():
-                shutil.rmtree(vm_runtime_dir)
-            vm_runtime_dir.mkdir(parents=True)
-
-            # Copy adarevm
-            log.info(f"Copying adarevm from {adarevm_source} to {adarevm_target}")
-            shutil.copytree(adarevm_source, adarevm_target, dirs_exist_ok=True)
-
-            # Copy adarelib
-            log.info(f"Copying adarelib from {adarelib_source} to {adarelib_target}")
-            shutil.copytree(adarelib_source, adarelib_target, dirs_exist_ok=True)
-
-            log.info("Project VM runtime directory ready")
-
-        # Wheels carry a content-hash version, so this also catches edits that
-        # mtimes miss and tells the guest-side version check to reinstall.
-        wheels_dir = vm_runtime_dir / 'wheels'
-        package_dirs = {'adarelib': adarelib_target, 'adarevm': adarevm_target}
-        if agent_wheels.wheels_up_to_date(package_dirs, wheels_dir):
-            log.info("Wheels are up-to-date - skipping build")
-            return
-        try:
-            agent_wheels.build_agent_wheels(package_dirs, wheels_dir)
-        except subprocess.CalledProcessError as e:
-            log.warning(f"Wheel build failed: {e.stderr.decode() if e.stderr else str(e)}")
-            log.warning("Falling back to editable install mode (wheels will not be available)")
-            # Don't raise - let it fall back to editable install
-
-    @staticmethod
-    def _runtime_copy_stale(source: Path, target: Path) -> bool:
-        """True if the cached copy's contents differ from the agent sources.
-
-        Compared by content, not mtime: building a wheel rewrites the copy's
-        pyproject.toml, which made the copy look newer than any later source edit.
-        """
-        return agent_wheels.source_hash(source) != agent_wheels.source_hash(target)
+        if context.project_directory is None or context.adarevm is None or context.adarelib is None:
+            raise LoggedException(log, "Run context lacks the project or the agent sources (adarevm/adarelib)")
+        agent_wheels.ensure_vm_runtime(
+            context.project_directory.vm_runtime, {'adarevm': context.adarevm, 'adarelib': context.adarelib}
+        )
 
     async def create_and_prepare_vm(self, context: ExperimentRunCtx):
         """Create and prepare VM for experiment with snapshots and shared folders."""

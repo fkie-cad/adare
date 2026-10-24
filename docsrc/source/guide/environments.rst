@@ -164,9 +164,11 @@ it is still bound to a single environment, so ``adare experiment run`` without
 
 Several environments may reference the same disk (disks are deduplicated by
 hash). Two environments that disagree about a shared disk's hypervisor or guest
-platform/architecture are refused, and ``--force`` refuses to replace a disk that
-another environment still uses. Each version records the disk hash it was loaded
-against; a run fails clearly if that disk has since been replaced.
+platform/architecture are refused. Each version records the disk hash it was
+loaded against. A changed disk under a registered name is a new image: ``--force``
+keeps the replaced image as ``<name>-<sha12>`` for the versions that use it (see
+:ref:`VM images <concepts-vm-images>`); a version whose disk was overwritten in
+place fails its integrity check instead of running on other bytes.
 
 Checking that an environment can actually boot
 **********************************************
@@ -197,7 +199,7 @@ and detaches the environment from the experiments (the experiments are kept).
 VM Storage Options
 ******************
 
-By default, when you load an environment with a VM, ADARE copies the VM file (OVA) to managed
+By default, when you load an environment with a VM, ADARE copies the disk image to managed
 storage at ``~/.adare/state/vms/``. This ensures the VM is protected and always available for
 experiments.
 

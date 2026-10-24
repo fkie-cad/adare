@@ -20,6 +20,11 @@ from adare.helperfunctions.web.download import download
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.autoinstall import seed_filename, write_autoinstall_dir
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
+from adare.hypervisor.qemu.vm_creator.installer_console import (
+    SUBIQUITY_RESCUE_PROMPT,
+    InstallerConsole,
+    subiquity_traceback,
+)
 from adare.hypervisor.qemu.vm_creator.iso_utils import (
     ISOExtractionError,
     create_seed_iso,
@@ -77,7 +82,7 @@ def _install_timeout_minutes() -> int:
 # and installer-specific — UEFI/kernel logs are full of unrelated "Error:" lines.
 _INSTALL_FAILURE_MARKERS = (
     # subiquity: drops to a rescue shell and waits forever
-    'An error occurred. Press enter to start a shell',
+    SUBIQUITY_RESCUE_PROMPT,
     'install_fail',
     # curtin: in-target apt/dpkg step failed (exit 100 == apt error)
     "returned non-zero exit status 100",
@@ -96,24 +101,38 @@ class LinuxVMCreationError(VMCreationError):
         super().__init__(f"Linux: {detail}")
 
 
-def _assert_install_succeeded(install_log: Path) -> None:
-    """Raise if the installer's serial log shows the install did not complete.
-
-    Complements the QEMU exit code, which cannot distinguish "installer finished
-    and rebooted" from "guest powered off mid-install" (both are exit 0).
-    """
+def _install_failure(install_log: Path) -> str | None:
+    """The failure marker the installer's serial log shows, if any."""
     try:
         text = install_log.read_text(encoding='utf-8', errors='replace')
     except OSError as e:
         log.warning('Could not read install log %s: %s', install_log, e)
-        return
+        return None
+    return next((marker for marker in _INSTALL_FAILURE_MARKERS if marker in text), None)
 
-    for marker in _INSTALL_FAILURE_MARKERS:
-        if marker in text:
-            raise LinuxVMCreationError(
-                f'installer reported failure ({marker!r}) — see {install_log}. '
-                f'The disk is incomplete and has not been kept.'
-            )
+
+def _assert_install_succeeded(serial_console: InstallerConsole) -> None:
+    """Raise if the installer's serial log shows the install did not complete.
+
+    Runs on every poll while the installer runs -- a failed subiquity waits in its
+    rescue shell forever, and a failed curtin step too -- and once more after QEMU
+    exits, since a zero exit cannot distinguish "installer finished and rebooted"
+    from "guest powered off mid-install". For a crashed subiquity the cause is
+    fetched from inside the installer first, into the log and the error.
+    """
+    marker = _install_failure(serial_console.install_log)
+    if marker is None:
+        return
+    cause = ''
+    if marker == SUBIQUITY_RESCUE_PROMPT:
+        serial_console.dump_subiquity_crash()
+        traceback = subiquity_traceback(serial_console.install_log.read_text(encoding='utf-8', errors='replace'))
+        if traceback:
+            cause = f' Installer traceback (end):\n{traceback}\n'
+    raise LinuxVMCreationError(
+        f'installer reported failure ({marker!r}) — see {serial_console.install_log}.{cause} '
+        f'The disk is incomplete and has not been kept.'
+    )
 
 
 class LinuxVMCreator(BaseVMCreator):
@@ -295,7 +314,7 @@ def _run_qemu_installation(
     needs_uefi = os_def.requires_uefi or os_def.architecture == 'aarch64'
     console_dev = 'ttyAMA0' if os_def.architecture == 'aarch64' else 'ttyS0'
 
-    install_log = disk_path.parent / (disk_path.stem + '_install.log')
+    serial_console = InstallerConsole(disk_path.parent / (disk_path.stem + '_install.log'))
 
     seed_server: SeedHTTPServer | None = None
     if os_def.seed_transport == 'http':
@@ -360,9 +379,8 @@ def _run_qemu_installation(
             # Virtio RNG for faster entropy
             '-device',
             'virtio-rng-pci',
-            # Serial console for installer log output
-            '-serial',
-            f'file:{install_log}',
+            # Serial console: logged to the install log, writable for crash reports
+            *serial_console.qemu_args(),
             # Seed ISO — auto-detected by volume label (cidata / OEMDRV / ...)
             '-drive',
             f'file={seed_path},format=raw,if=virtio,readonly=on',
@@ -409,10 +427,11 @@ def _run_qemu_installation(
                         timeout_minutes=timeout_minutes,
                         label=label,
                         status=status,
+                        check=lambda: _assert_install_succeeded(serial_console),
                     )
                 # A zero exit only means the guest powered down; confirm the
                 # installer actually got to the end before the disk is trusted.
-                _assert_install_succeeded(install_log)
+                _assert_install_succeeded(serial_console)
         except (TimeoutError, subprocess.CalledProcessError):
             raise
         except KeyboardInterrupt:
@@ -422,5 +441,6 @@ def _run_qemu_installation(
             console.print(f'\n  [bold red]Installation terminated:[/bold red] {e}')
             raise LinuxVMCreationError(f'Installation terminated: {e}') from None
     finally:
+        serial_console.close()
         if seed_server is not None:
             seed_server.stop()

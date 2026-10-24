@@ -155,6 +155,17 @@ class TestRemoveVm:
         assert not _vm_exists(vm_id)
         assert _env_names() == ['debian']
 
+    def test_the_image_record_goes_with_the_disk(self, vms_dir, hypervisor):
+        disk = vms_dir / 'ubuntu.qcow2'
+        disk.write_bytes(b'disk')
+        (vms_dir / 'ubuntu.image.yml').write_text('record_version: 1\n')
+        (vms_dir / 'ubuntu.packages.txt').write_text('bash 5.2\n')
+        vm_id = _add_vm('ubuntu', disk)
+
+        removal.remove_vm(vm_id)
+
+        assert sorted(p.name for p in vms_dir.iterdir() if p.name.startswith('ubuntu')) == []
+
     def test_keeps_a_disk_outside_managed_storage(self, vms_dir, hypervisor, tmp_path):
         disk = tmp_path / 'external.qcow2'
         disk.write_bytes(b'disk')

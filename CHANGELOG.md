@@ -28,6 +28,16 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- VM images have a record: `adare vm create` registers the disk at once and writes
+  `<disk>.image.yml` (install method, OS profile + hash, ISO + SHA256, setup level,
+  ADARE version/commit, QEMU version, date) and the guest's package list
+  `<disk>.packages.txt`; `adare vm test` adds its result; `adare vm info` shows it.
+- `adare vm publish <image> --vm-url <url>` records where an image is hosted;
+  `adare env publish-prepare` embeds the image record as `image:` in the
+  environment file, and `adare env load` adopts it (and takes `os` from it).
+- Every experiment run records the SHA256 of the disk it booted (run row and
+  `forensic_log.yml` `vm_sha256`) and writes `image.yml` (environment version and
+  image record) into the run directory.
 - `adare vm create` for `install_mode: playbook` profiles draws a live status
   block in the terminal: current step, elapsed time, OCR attempt or screen text.
   `--display` now also applies to playbook installs and shows the VM in a QEMU
@@ -93,6 +103,27 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   apart from a slow boot.
 
 ### Changed
+- Images never change. A different disk under a registered name is a new image:
+  `--force` (`vm create`, `env load`) keeps the replaced image as
+  `<name>-<sha12>` for the environment versions that use it, or removes it when
+  none does. A recipe image whose disk is missing is no longer rebuilt silently
+  during a run (the rebuild has other bytes); the run says to reload with
+  `adare env load --force`, which makes it a new environment version.
+- `adare env load <name>` finds the registered environment's file; a `name:` key
+  that differs from the file name is reported as ignored; a disk is hashed once
+  per load.
+- OS profiles: a YAML profile is now the only definition of its OS. The 12
+  built-in catalog entries that a shipped profile replaced (never used, several
+  stale) are gone; a test keeps it that way, and another requires every x86_64
+  Ubuntu/Kubuntu LTS profile to install the desktop edition. The VM image guide
+  records when each profile last ran.
+- `adare vm test` on a registered (QEMU) VM now gives the guest its agent the way
+  an experiment run does: the same agent wheels, shares and `config.json` with the
+  agent token, the same install and launch, and the same WebSocket connection
+  (retries, guest diagnostics). The agent starting and answering now decides the
+  verdict, since experiments run their tests through it; before, the test started
+  adarevm its own way and its failure did not count. A failed test keeps its run
+  directory with adarevm's logs under `~/.adare/state/vm-test/run/`.
 - CLI commands renamed or moved to the group they belong to. The old names
   still work (hidden from `--help`) and print the new name on stderr:
   - `adare run list/info/remove` -> `adare runs ...` (no longer looks like
@@ -204,6 +235,26 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- `ubuntu2604` installs the genuine desktop edition from the 26.04.1 desktop ISO
+  by playbook, like `ubuntu2404`, including 26.04's new "Encryption and file
+  system" screen. It used the server ISO with a desktop source the server ISO
+  does not carry, so it could not install at all.
+- Ubuntu 26.04 guests opened a "Welcome to Ubuntu 26.04" wizard over the desktop
+  on every login: its per-release welcome (a systemd user unit, not autostart)
+  runs once the initial-setup done marker exists, which provisioning writes. The
+  release's own stamp is now written too.
+- An unattended Linux install whose installer failed (subiquity's "An error
+  occurred. Press enter to start a shell", a failed curtin step, ...) is now
+  stopped within seconds instead of waiting out the 150-minute install timeout.
+  For a crashed subiquity, ADARE opens the installer's rescue shell over the
+  serial console and puts its traceback into the install log and the error.
+- The Ubuntu rolling autoinstall template (`ubuntu2510`, `ubuntu2604arm64`)
+  asked for the `ubuntu-desktop-minimal` source, which server ISOs do not carry,
+  so subiquity crashed before installing anything. The desktop now comes from
+  the package list, as in the LTS template.
+- `adare vm test` on Linux guests hung at "Starting AdareVM server" until the
+  300 s guest-command timeout and then failed: the backgrounded launch kept
+  the guest agent's output pipe open for as long as adarevm ran.
 - Bullet lists and examples in command help (`experiment run`, `env load`,
   `vm test`, ...) were re-wrapped into one run-on paragraph; they now keep
   their line breaks. `adare experiment list` no longer claims to list "in an

@@ -19,6 +19,7 @@ from sqlalchemy import (
     Integer,
     String,
     Table,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -354,6 +355,9 @@ class Vm(SerializerMixin, GlobalBase):
     recipe_hash = Column(String, nullable=True, index=True)
     iso_sha256 = Column(String, nullable=True)
     profile_name = Column(String, nullable=True)
+    # The image record (JSON; see adare.backend.vm.image_record): how the disk was
+    # built, its package list summary, where it is published, checks run on it.
+    build_record = Column(Text, nullable=True)
 
     # Snapshot configuration
     use_snapshots = Column(Boolean, default=True)

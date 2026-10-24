@@ -15,6 +15,11 @@ iso_sha256: "1bd6ab4798983c2fe4a210f9c4ca135fed453d6142ba852c1f8d5fba22e113ab"
 iso_filename: "Fedora-Everything-netinst-x86_64-42-1.1.iso"
 kernel_path_in_iso: /images/pxeboot/vmlinuz
 initrd_path_in_iso: /images/pxeboot/initrd.img
+# Anaconda fetches the netinst's packages through the mirror metalink. Once
+# MirrorManager drops this EOL release the metalink resolves to nothing and the
+# install dies at dependency resolution; then pin the archive by adding, after
+# the ks= argument:
+#   inst.repo=https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/42/Everything/x86_64/os/
 kernel_cmdline: "inst.ks=hd:LABEL=OEMDRV:/ks.cfg inst.text console={console}"
 seed_label: OEMDRV
 default_disk_size: "60G"

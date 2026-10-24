@@ -56,6 +56,8 @@ VAGRANTFILE_TEMPLATE: Path = APPDATA_DIR / 'VagrantfileTemplate' / 'VagrantfileM
 STATE_DIR: Path = APPDATA_DIR / 'state'  # Global state directory
 VMS_DIR: Path = STATE_DIR / 'vms'  # Global VM storage
 ENVIRONMENTS_DIR: Path = STATE_DIR / 'environments'  # Global environment storage
+# Scratch project of `adare vm test`: the agent runtime + wheels it shares, the last test's run logs
+VM_TEST_DIR: Path = STATE_DIR / 'vm-test'
 
 # Managed QEMU disks, runtime sockets and per-VM configs. They live under ~/.adare on
 # every OS (Windows included), unlike the rest of the appdata directory, unless

@@ -183,23 +183,78 @@ class TestRuntimeCopyStaleness:
     def test_copy_with_newer_mtime_but_old_content_is_stale(self, tmp_path):
         import os
 
-        from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
-
         source = _package(tmp_path / 'src', 'adarevm', version='0.2.0')
         target = _package(tmp_path / 'copy', 'adarevm', version='0.1.1')
         # A wheel build rewrites the copy's pyproject, leaving it newer than every source file.
         later = (source / 'pyproject.toml').stat().st_mtime + 3600
         os.utime(target / 'pyproject.toml', (later, later))
 
-        assert VMLifecycleManager._runtime_copy_stale(source, target)
+        assert agent_wheels.runtime_copy_stale(source, target)
 
     def test_identical_copy_ignoring_build_output_is_fresh(self, tmp_path):
-        from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
-
         source = _package(tmp_path / 'src', 'adarevm')
         target = tmp_path / 'copy' / 'adarevm'
         shutil.copytree(source, target)
         (target / '__pycache__').mkdir()
         (target / '__pycache__' / 'x.pyc').write_bytes(b'\0')
 
-        assert not VMLifecycleManager._runtime_copy_stale(source, target)
+        assert not agent_wheels.runtime_copy_stale(source, target)
+
+
+class TestEnsureVmRuntime:
+    """The runtime an experiment (and `adare vm test`) shares with the guest at /adare/vm."""
+
+    @pytest.fixture
+    def sources(self, tmp_path):
+        return {name: _package(tmp_path / 'src', name) for name in agent_wheels.AGENT_PACKAGES}
+
+    @pytest.fixture
+    def builds(self, monkeypatch):
+        calls = []
+
+        def fake_build(package_dirs, wheels_dir):
+            calls.append(sorted(package_dirs))
+            wheels_dir.mkdir(parents=True, exist_ok=True)
+            for name, pkg_dir in package_dirs.items():
+                (wheels_dir / f'{name}-{agent_wheels.expected_version(pkg_dir)}-py3-none-any.whl').touch()
+
+        monkeypatch.setattr(agent_wheels, 'build_agent_wheels', fake_build)
+        return calls
+
+    def test_copies_sources_and_builds_wheels(self, tmp_path, sources, builds):
+        runtime = tmp_path / 'vm_runtime'
+
+        agent_wheels.ensure_vm_runtime(runtime, sources)
+
+        for name in sources:
+            assert not agent_wheels.runtime_copy_stale(sources[name], runtime / name)
+        assert builds == [['adarelib', 'adarevm']]
+
+    def test_current_runtime_is_left_alone(self, tmp_path, sources, builds):
+        runtime = tmp_path / 'vm_runtime'
+        agent_wheels.ensure_vm_runtime(runtime, sources)
+
+        agent_wheels.ensure_vm_runtime(runtime, sources)
+
+        assert len(builds) == 1
+
+    def test_source_change_refreshes_copy_and_wheels(self, tmp_path, sources, builds):
+        runtime = tmp_path / 'vm_runtime'
+        agent_wheels.ensure_vm_runtime(runtime, sources)
+        (sources['adarevm'] / 'adarevm' / '__init__.py').write_text('VALUE = 2\n')
+
+        agent_wheels.ensure_vm_runtime(runtime, sources)
+
+        assert (runtime / 'adarevm' / 'adarevm' / '__init__.py').read_text() == 'VALUE = 2\n'
+        assert len(builds) == 2
+
+    def test_failed_build_leaves_the_sources_for_an_editable_install(self, tmp_path, sources, monkeypatch):
+        def failing_build(package_dirs, wheels_dir):
+            raise subprocess.CalledProcessError(1, ['uv', 'build'], stderr=b'boom')
+
+        monkeypatch.setattr(agent_wheels, 'build_agent_wheels', failing_build)
+        runtime = tmp_path / 'vm_runtime'
+
+        agent_wheels.ensure_vm_runtime(runtime, sources)
+
+        assert (runtime / 'adarevm' / 'pyproject.toml').exists()
