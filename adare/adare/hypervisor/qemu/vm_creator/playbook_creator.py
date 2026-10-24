@@ -31,6 +31,7 @@ from pathlib import Path
 
 from rich.markup import escape
 
+from adare.backend.vm.image_record import PACKAGE_LIST_COMMAND, write_packages
 from adare.console import console, print_section, print_step
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
@@ -394,6 +395,10 @@ class PlaybookVMCreator(BaseVMCreator):
         q.wait_stable(settle=8, timeout=120)
         self._save_shot(q, run_dir / 'ready_desktop.png')
         print_step(f'    guest is ADARE-ready — desktop: {run_dir / "ready_desktop.png"}')
+        if self.os_def.platform == 'linux':
+            # Next to the disk (<vm_name>.qcow2 beside the <vm_name>_playbook directory)
+            packages = self._guest_run(q, qga_sock, run_dir, 'package list', PACKAGE_LIST_COMMAND, 120.0)
+            write_packages(run_dir.parent / f'{self.vm_name}.qcow2', packages)
 
     @staticmethod
     def _wait_for_agent(qga_sock: Path, timeout: float, what: str) -> bool:

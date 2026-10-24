@@ -606,6 +606,11 @@ ADARE knows two kinds of VM:
 ``adare vm test <target>``
   Test ADARE compatibility of an ``.ova``/``.ovf`` file or a registered VM: prepare
   it, mount shared directories, start adarevm, take a screenshot and click.
+  On a registered (QEMU) VM the agent is installed, started and connected exactly as
+  in an experiment run (same wheels, shares, ``config.json`` and agent token), and the
+  VM passes only when that works; the agent's own screenshot and click are reported but
+  do not fail the test, since experiments drive the GUI from the host. A failed test
+  keeps its run directory with adarevm's logs under ``~/.adare/state/vm-test/run/``.
 
   Options:
     * ``-p, --platform [linux|windows]`` - Required for OVA files; auto-derived for registered VMs

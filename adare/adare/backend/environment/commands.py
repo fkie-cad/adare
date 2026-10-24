@@ -224,6 +224,47 @@ def environment_sync(environment_ulid: str):
     log.info(f'environment {environment_ulid} synced')
 
 
+def _resolve_environment_file(environment: str) -> Path:
+    """The environment file to load: a path, or a name (a file in the environments
+    directory, else the managed copy of the registered environment of that name)."""
+    # Check if environment is a full path (external file) or just a name
+    if environment.startswith('/') or Path(environment).suffix in ['.yml', '.yaml']:
+        # It's a full path to an external file
+        path = Path(environment)
+        if not path.exists():
+            raise EnvironmentLoadFailed(log, f'environment file {path} does not exist')
+        return path
+    # It's a name: a file in the global environments directory, else the managed
+    # copy of the registered environment of that name (<name>_<hash8>.yml)
+    environment_file: Path | None
+    for ext in ('.yml', '.yaml'):
+        environment_file = ENVIRONMENTS_DIR / f'{environment}{ext}'
+        if environment_file.exists():
+            break
+    else:
+        environment_file = _managed_file_of(environment)
+    if environment_file is None or not environment_file.exists():
+        raise EnvironmentLoadFailed(
+            log,
+            f'environment file {ENVIRONMENTS_DIR / f"{environment}.yml"} or .yaml does not exist',
+            possible_solutions=[
+                'Did you create the environment file?',
+                'If not, try to create the environment file via [i]adare env create[/i].',
+                f'Check if the environment file exists in {ENVIRONMENTS_DIR}',
+            ],
+        )
+    return environment_file
+
+
+def _managed_file_of(environment_name: str) -> Path | None:
+    """The managed copy of the current version of registered environment *environment_name*."""
+    from adare.database.api.environment import EnvironmentDbApi
+
+    with EnvironmentDbApi() as db:
+        current = db.get_current_environment(environment_name)
+        return Path(current.file) if current is not None and current.file else None
+
+
 def _validate_loadable(environment_metadata: EnvironmentMetadata, environment_file: Path) -> None:
     """Reject environment files that parse but cannot produce a runnable VM."""
     if environment_metadata.is_vagrant_environment and not environment_metadata.is_vm_environment:
@@ -292,28 +333,7 @@ def environment_load(
     # Ensure global environments directory exists
     ENVIRONMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Check if environment is a full path (external file) or just a name
-    if environment.startswith('/') or Path(environment).suffix in ['.yml', '.yaml']:
-        # It's a full path to an external file
-        environment_file = Path(environment)
-        if not environment_file.exists():
-            raise EnvironmentLoadFailed(log, f'environment file {environment_file} does not exist')
-    else:
-        # It's a name, look in global environments directory
-        for ext in ('.yml', '.yaml'):
-            environment_file = ENVIRONMENTS_DIR / f'{environment}{ext}'
-            if environment_file.exists():
-                break
-        else:
-            raise EnvironmentLoadFailed(
-                log,
-                f'environment file {ENVIRONMENTS_DIR / f"{environment}.yml"} or .yaml does not exist',
-                possible_solutions=[
-                    'Did you create the environment file?',
-                    'If not, try to create the environment file via [i]adare env create[/i].',
-                    f'Check if the environment file exists in {ENVIRONMENTS_DIR}',
-                ],
-            )
+    environment_file = _resolve_environment_file(environment)
 
     # The file stem is the environment name (a `name:` key in the file is ignored).
     environment_name = _environment_name_for(environment_file)
@@ -325,6 +345,11 @@ def environment_load(
     log.info(f'Environment file hash: {environment_file_sha256}')
 
     environment_metadata: EnvironmentMetadata = parse_environment_file(environment_file)
+    if environment_metadata.name and environment_metadata.name != environment_name:
+        log.warning(
+            f"Ignoring 'name: {environment_metadata.name}' in {environment_file.name}: "
+            f"an environment is named after its file ('{environment_name}')"
+        )
     environment_metadata.name = environment_name
     _validate_loadable(environment_metadata, environment_file)
 
@@ -504,6 +529,10 @@ def environment_load(
                 # If VM didn't exist before, mark it for potential cleanup
                 if not vm_result['was_existing']:
                     created_vm_id = vm_id
+                if environment_metadata.image:
+                    from adare.backend.vm.image_record import import_from_environment
+
+                    import_from_environment(vm_id, environment_metadata.image)
 
                 log.info(f'VM file processed and stored in database with ID: {vm_id}')
             else:

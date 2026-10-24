@@ -113,6 +113,7 @@ class VmCrudMixin(_Host):
         recipe_hash: str | None = None,
         iso_sha256: str | None = None,
         profile_name: str | None = None,
+        build_record: str | None = None,
     ) -> Vm:
         """
         Create a new VM entry in the database with file operations.
@@ -171,38 +172,16 @@ class VmCrudMixin(_Host):
             log.info(f"VM '{name}' already exists with matching hash - returning existing VM")
             return existing_vm_by_name
 
-        # Scenario 2: Name matches but hash differs (VM updated)
+        # Scenario 2: Name matches but hash differs. Images never change: the caller
+        # retires the old image first (registration.retire_image) or picks another name.
         if existing_vm_by_name and (not existing_vm_by_hash or existing_vm_by_name.id != existing_vm_by_hash.id):
-            if force:
-                log.info(f"VM '{name}' exists with different hash - updating to new version due to --force")
-                return self._update_vm_file_and_metadata(
-                    existing_vm_by_name.id,
-                    existing_vm_by_name.name,
-                    file_path,
-                    file_hash,
-                    description,
-                    os_platform,
-                    os_type,
-                    os_distribution,
-                    os_version,
-                    os_language,
-                    os_architecture,
-                    no_copy,
-                    silent,
-                    hypervisor,
-                    project_path,
-                    build_source=build_source,
-                    recipe_hash=recipe_hash,
-                    iso_sha256=iso_sha256,
-                    profile_name=profile_name,
-                )
             raise VMNameConflictError(
                 log,
                 f"VM with name '{name}' already exists but has different hash.\n"
                 f"Existing hash: {existing_vm_by_name.hash[:16]}...\n"
                 f"New hash: {file_hash[:16]}...",
                 possible_solutions=[
-                    "Use --force flag to update the existing VM to the new version",
+                    "Use --force: the existing image is kept as <name>-<hash12> for the environments using it",
                     "Use a different VM name",
                     "Delete the existing VM first",
                 ],
@@ -253,6 +232,7 @@ class VmCrudMixin(_Host):
                     recipe_hash=recipe_hash,
                     iso_sha256=iso_sha256,
                     profile_name=profile_name,
+                    build_record=build_record,
                 )
                 self._session.add(vm)
                 # Both commit together on context exit
@@ -335,6 +315,28 @@ class VmCrudMixin(_Host):
             if vm:
                 self._session.expunge(vm)
             return vm
+
+    def set_vm_file(self, vm_id: str, file: str) -> bool:
+        """Point a VM at its (moved) disk file."""
+        with self:
+            vm = self._session.query(Vm).filter_by(id=vm_id).first()
+            if not vm:
+                log.error(f"VM with ID {vm_id} not found for file update")
+                return False
+            vm.file = file
+            self._session.commit()
+            return True
+
+    def set_vm_build_record(self, vm_id: str, build_record: str | None) -> bool:
+        """Store the image record (JSON) of a registered VM."""
+        with self:
+            vm = self._session.query(Vm).filter_by(id=vm_id).first()
+            if not vm:
+                log.error(f"VM with ID {vm_id} not found for build record update")
+                return False
+            vm.build_record = build_record
+            self._session.commit()
+            return True
 
     def update_vm_name(self, vm_id: str, new_name: str) -> bool:
         """
@@ -543,125 +545,6 @@ class VmCrudMixin(_Host):
 
             log.info(f"Updated metadata for VM '{vm.name}' (ID: {vm_id})")
             # Commit happens automatically when context exits
-
-        # Re-fetch and return detached object
-        return self.get_vm_by_id(vm_id)
-
-    def _update_vm_file_and_metadata(
-        self,
-        vm_id: str,
-        vm_name: str,
-        file_path: Path,
-        file_hash: str,
-        description: str = '',
-        os_platform: str = '',
-        os_type: str = '',
-        os_distribution: str = '',
-        os_version: str = '',
-        os_language: str = '',
-        os_architecture: str = 'x86_64',
-        no_copy: bool = False,
-        silent: bool = False,
-        hypervisor: str = 'virtualbox',
-        project_path: Path = None,
-        build_source: str = 'baked',
-        recipe_hash: str | None = None,
-        iso_sha256: str | None = None,
-        profile_name: str | None = None,
-    ) -> Vm:
-        """
-        Update VM to point to new file with new hash, preserving VM ID and relationships.
-        CRITICAL: We update the existing VM record rather than delete/recreate to preserve FK relationships.
-
-        Args:
-            vm_id: ID of VM to update
-            vm_name: Name of VM (for file operations and logging)
-            file_path: Path to new VM file
-            file_hash: SHA256 hash of new VM file
-            description: New description
-            os_platform: OS platform
-            os_type: OS type
-            os_distribution: OS distribution
-            os_version: OS version
-            os_language: OS language
-            os_architecture: Architecture
-            no_copy: If True, reference file at original location
-            silent: If True, suppress progress bars
-            hypervisor: Hypervisor type
-            project_path: Project path (not used for global VMs)
-
-        Returns:
-            Updated VM instance
-
-        Raises:
-            VMLoadError: If update fails or VM not found
-        """
-        # Variables to track old file info (will be set inside transaction)
-        old_file_path = None
-        old_is_managed = False
-
-        # Determine new file location BEFORE database transaction
-        if no_copy:
-            log.info(f"Using --no-copy mode: storing reference to {file_path}")
-            target_file_path = file_path.resolve()
-        else:
-            target_file_path = self._copy_vm_file(file_path, project_path, vm_name, silent=silent)
-
-        with self:
-            # Re-fetch VM inside context to attach it to this session
-            vm = self._session.query(Vm).filter_by(id=vm_id).first()
-            if not vm:
-                raise VMLoadError(log, f"VM with ID {vm_id} not found")
-
-            # Store old file info for cleanup after successful commit
-            old_file_path = Path(vm.file)
-            old_is_managed = self._is_file_managed(old_file_path)
-
-            # Update VM fields
-            vm.file = str(target_file_path)
-            vm.hash = file_hash
-            if description:
-                vm.description = description
-            vm.hypervisor = hypervisor
-            vm.build_source = build_source
-            vm.recipe_hash = recipe_hash
-            vm.iso_sha256 = iso_sha256
-            vm.profile_name = profile_name
-
-            # Update or create OSInfo (inline - no separate transaction)
-            if vm.osinfo_id:
-                osinfo = self._session.query(OsInfo).filter_by(id=vm.osinfo_id).first()
-                if osinfo:
-                    osinfo.platform = os_platform
-                    osinfo.os = os_type
-                    osinfo.distribution = os_distribution
-                    osinfo.version = os_version
-                    osinfo.language = os_language
-                    osinfo.architecture = os_architecture
-            else:
-                # Create new OSInfo inline
-                osinfo = OsInfo(
-                    platform=os_platform,
-                    os=os_type,
-                    distribution=os_distribution,
-                    version=os_version,
-                    language=os_language,
-                    architecture=os_architecture,
-                )
-                self._session.add(osinfo)
-                self._session.flush()  # Get osinfo.id without committing
-                vm.osinfo_id = osinfo.id
-
-            log.info(f"Updated VM '{vm.name}' to new file/hash (ID: {vm_id})")
-            # Commit happens automatically when context exits
-
-        # Clean up old VM file AFTER successful commit
-        if old_file_path and old_is_managed and old_file_path.exists() and old_file_path != target_file_path:
-            log.info(f"Removing old VM file from managed storage: {old_file_path}")
-            try:
-                old_file_path.unlink()
-            except OSError as e:
-                log.warning(f"Failed to remove old VM file {old_file_path}: {e}")
 
         # Re-fetch and return detached object
         return self.get_vm_by_id(vm_id)

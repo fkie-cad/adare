@@ -35,6 +35,14 @@ class StageCtxManagerLite:
         """
         self.result = bool(result)
 
+    def set_status(self, status: int) -> None:
+        """StageCtxManager API (connect_websocket): show the stage's sub-message as its progress."""
+        self.stage.set_status(status)
+        sub_msg = self.stage.sub_msg
+        self.flow_console.change_log_message(
+            self.stage_id, f"{self.stage.msg}: {sub_msg}" if sub_msg else self.stage.msg
+        )
+
     async def __aenter__(self):
         from datetime import datetime
 
@@ -295,7 +303,7 @@ async def ova_test(
     """
     Test OVA file compatibility with ADARE.
 
-    This function has been moved to vm_test.py for better code organization.
+    Thin wrapper around the implementation in vm_test_ova.py.
 
     Args:
         ova_file_path: Path to the .ova file to test
@@ -306,7 +314,7 @@ async def ova_test(
     Returns:
         True if VM is compatible with ADARE, False otherwise
     """
-    from adare.backend.experiment.vm_test import ova_test as vm_ova_test
+    from adare.backend.experiment.vm_test_ova import ova_test as vm_ova_test
 
     return await vm_ova_test(ova_file_path, guest_platform, verbose, vm_cleanup_mode)
 
@@ -322,11 +330,10 @@ async def vm_test_registered(
     """
     Test a registered QEMU VM's compatibility with ADARE.
 
-    Thin wrapper around the implementation in vm_test.py (kept there for code
-    organization, mirroring ova_test).
+    Thin wrapper around the implementation in vm_test_qemu.py.
 
     Args:
-        vm_name: Registered VM name (display only)
+        vm_name: Registered VM name
         disk_path: Path to the VM's immutable base disk (vm.file)
         guest_platform: Platform type ('windows' or 'linux')
         architecture: Guest CPU architecture (e.g. 'x86_64', 'aarch64')
@@ -336,7 +343,7 @@ async def vm_test_registered(
     Returns:
         True if VM is compatible with ADARE, False otherwise
     """
-    from adare.backend.experiment.vm_test import vm_test_registered as vm_test_registered_impl
+    from adare.backend.experiment.vm_test_qemu import vm_test_registered as vm_test_registered_impl
 
     return await vm_test_registered_impl(vm_name, disk_path, guest_platform, architecture, verbose, vm_cleanup_mode)
 

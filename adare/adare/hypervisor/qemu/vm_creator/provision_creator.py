@@ -55,6 +55,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from adare.config.configdirectory import QEMU_STATE_DIR
@@ -386,6 +387,7 @@ def run_provision(
     compress: bool = True,
     deadline_minutes: int = _DEFAULT_DEADLINE_MINUTES,
     title: str = 'Build-time provisioning (Stage 2/2)',
+    after_commands: Callable[[Path], None] | None = None,
 ) -> Path:
     """Provision *base_disk* into a standalone *dest_disk*, or raise.
 
@@ -400,6 +402,8 @@ def run_provision(
         build_log_path: Host log file recording every command and its output.
         deadline_minutes: Budget for the whole stage, checked between steps.
         title: Section heading; the creators' readiness pass reuses this stage.
+        after_commands: Called with the guest-agent socket once every command
+            succeeded, before the guest shuts down (e.g. to read its package list).
 
     Returns:
         *dest_disk*.
@@ -468,6 +472,9 @@ def run_provision(
                     f'({command.name}).'
                 )
             _run_command(qga_sock, command, index, total, build_log, guest_log_dir)
+
+        if after_commands is not None:
+            after_commands(qga_sock)
 
         _clean_shutdown(process, qmp_sock, build_log)
         process = None

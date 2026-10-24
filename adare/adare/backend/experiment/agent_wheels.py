@@ -13,6 +13,7 @@ import hashlib
 import logging
 import os
 import re
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
@@ -125,3 +126,55 @@ def build_agent_wheels(package_dirs: dict[str, Path], wheels_dir: Path) -> dict[
     built = {wheel.name.split('-')[0]: wheel for wheel in wheels_dir.glob('*.whl')}
     log.info(f'Wheels built in {wheels_dir}: {", ".join(sorted(p.name for p in built.values()))}')
     return built
+
+
+def runtime_copy_stale(source: Path, target: Path) -> bool:
+    """True if the cached copy's contents differ from the agent sources.
+
+    Compared by content, not mtime: building a wheel rewrites the copy's
+    pyproject.toml, which made the copy look newer than any later source edit.
+    """
+    return source_hash(source) != source_hash(target)
+
+
+def ensure_vm_runtime(vm_runtime_dir: Path, sources: dict[str, Path]) -> None:
+    """
+    Make ``vm_runtime_dir`` hold current copies of the agent packages and their wheels.
+
+    ``sources`` maps package name to its installed sources. The copies are
+    refreshed when missing or stale, and the wheels rebuilt when their
+    content-hash version no longer matches. A failed build is logged, not
+    raised: without wheels the guest installs the agent from the copied sources.
+    """
+    targets = {name: vm_runtime_dir / name for name in sources}
+    if not vm_runtime_dir.exists():
+        log.info("Creating VM runtime directory for first time")
+        needs_update = True
+    elif not all(target.exists() for target in targets.values()):
+        log.info("VM runtime directory incomplete, updating")
+        needs_update = True
+    else:
+        needs_update = any(runtime_copy_stale(sources[name], targets[name]) for name in sources)
+        if needs_update:
+            log.info("Agent sources changed since the cached runtime was copied, updating")
+
+    if needs_update:
+        if vm_runtime_dir.exists():
+            shutil.rmtree(vm_runtime_dir)
+        vm_runtime_dir.mkdir(parents=True)
+        for name, source in sources.items():
+            log.info(f"Copying {name} from {source} to {targets[name]}")
+            shutil.copytree(source, targets[name], dirs_exist_ok=True)
+        log.info("VM runtime directory ready")
+
+    # Wheels carry a content-hash version, so this also catches edits that
+    # mtimes miss and tells the guest-side version check to reinstall.
+    wheels_dir = vm_runtime_dir / 'wheels'
+    if wheels_up_to_date(targets, wheels_dir):
+        log.info("Wheels are up-to-date - skipping build")
+        return
+    try:
+        build_agent_wheels(targets, wheels_dir)
+    except subprocess.CalledProcessError as e:
+        log.warning(f"Wheel build failed: {e.stderr.decode() if e.stderr else str(e)}")
+        log.warning("Falling back to editable install mode (wheels will not be available)")

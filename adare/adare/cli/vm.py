@@ -29,6 +29,32 @@ def exec_vm_info(arguments):
     print_vm_or_instance_info(arguments.vm_id, formatter, output_file, dual_output)
 
 
+def exec_vm_publish(arguments):
+    """Record where a registered image is hosted, in its image record."""
+    from adare.backend.vm import image_record
+    from adare.backend.vm.exceptions import VMNotFoundError
+
+    found = image_record.record_of(arguments.vm)
+    if found is None:
+        raise VMNotFoundError(log, f'No registered VM "{arguments.vm}" (list them: adare vm list)')
+    image, _ = found
+    if arguments.verify_url:
+        from adare.services.environment_service import verify_hosted_url
+
+        result = verify_hosted_url(arguments.vm_url, image['hash'])
+        if not result.success:
+            handle_api_error(result)
+    image_record.add_published(image['id'], arguments.vm_url, image['hash'])
+    print_success_message(
+        title=f'Image "{image["name"]}" recorded as published',
+        location=arguments.vm_url,
+        next_steps=[
+            'Share an environment on it: adare env publish-prepare <environment> --vm-url ' + arguments.vm_url,
+        ],
+        tip='The environment file then carries this image record, so whoever loads it sees how the image was made.',
+    )
+
+
 def exec_vm_list_snapshots(arguments):
     """List all snapshots, optionally filtered by VM instance.
 

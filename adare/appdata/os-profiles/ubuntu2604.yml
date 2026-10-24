@@ -1,14 +1,92 @@
 name: ubuntu2604
-display_name: "Ubuntu 26.04 LTS (Resolute Raccoon)"
+display_name: "Ubuntu 26.04 LTS (Resolute Raccoon) Desktop"
 platform: linux
 distribution: ubuntu
 distribution_label: "Resolute Raccoon"
 version: "26.04"
-iso_url: "https://releases.ubuntu.com/26.04/ubuntu-26.04-live-server-amd64.iso"
-iso_sha256: "dec49008a71f6098d0bcfc822021f4d042d5f2db279e4d75bdd981304f1ca5d9"
-iso_filename: "ubuntu-26.04-live-server-amd64.iso"
+# Genuine desktop edition, installed like ubuntu2404: a deterministic playbook
+# replayed through the Flutter-based Ubuntu Desktop installer, buttons located by
+# their on-screen LABEL via ADARE's cv-server OCR (find_text). The server ISO's
+# autoinstall cannot produce it: that ISO only carries the ubuntu-server sources.
+install_mode: playbook
+installer: gui
+iso_url: "https://releases.ubuntu.com/26.04/ubuntu-26.04.1-desktop-amd64.iso"
+iso_sha256: "601e30fbf5d97759367c632e2c33630665039b7e2158fd068403da3ccf1bda1f"
+iso_filename: "ubuntu-26.04.1-desktop-amd64.iso"
 default_disk_size: "60G"
 default_ram_mb: 8192
 default_cpus: 0
-kernel_path_in_iso: "/casper/vmlinuz"
-initrd_path_in_iso: "/casper/initrd"
+requires_uefi: false
+
+install_steps:
+  # Live boot shows a long black screen before the Flutter installer renders.
+  - {action: wait_stable, settle: 5, timeout: 240, min: 130, note: "boot to installer"}
+  - {action: tap, coords: [512, 84, 1024, 768], note: "harmless title-bar nudge to wake display"}
+  # Language: English must be explicitly selected, then Next.
+  - {action: click_text, text: "English", tries: 25, interval: 2, shot: language}
+  - {action: click_text, text: "Next"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: accessibility, note: "Accessibility"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: keyboard, note: "Keyboard layout"}
+  - {action: wait_stable, settle: 5, timeout: 180}
+  - {action: click_text, text: "Next", shot: internet, note: "Internet (wired)"}
+  - {action: wait_stable, settle: 5, timeout: 180}
+  # 'Update available for the installer' appears only when an update exists.
+  # Optional: if absent we are already on the next screen.
+  - {action: click_text, text: "Skip", optional: true, tries: 6, shot: update, note: "skip installer update"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Install Ubuntu", note: "What do you want to do"}
+  - {action: click_text, text: "Next", shot: whattodo}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: insttype, note: "Interactive installation"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: apps, note: "Default selection"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: proprietary, note: "Proprietary software (unchecked)"}
+  - {action: wait_stable, settle: 4, timeout: 120}
+  - {action: click_text, text: "Next", shot: disk, note: "Erase disk and install Ubuntu"}
+  - {action: wait_stable, settle: 5, timeout: 120}
+  # New in 26.04: "Encryption and file system". No encryption is preselected but
+  # Next stays greyed until a choice is clicked, so click it explicitly.
+  - {action: click_text, text: "No encryption", shot: encryption}
+  - {action: wait, seconds: 1}
+  - {action: click_text, text: "Next", note: "Encryption and file system"}
+  - {action: wait_stable, settle: 5, timeout: 120, shot: account}
+  # Create your account: typing the name auto-fills the username + computer
+  # name (the auto hostname is kept — renaming the Flutter field is unreliable).
+  # Explicit waits after each field click let the input focus settle before
+  # typing, so no keystroke is dropped (which would break password confirmation).
+  - {action: click_text, text: "Your name"}
+  - {action: wait, seconds: 1}
+  - {action: type, text: "adare"}
+  - {action: wait, seconds: 1}
+  - {action: click_text, text: "Password", note: "password field (exact match)"}
+  - {action: wait, seconds: 1}
+  - {action: type, text: "adare"}
+  - {action: wait, seconds: 1}
+  - {action: click_text, text: "Confirm password"}
+  - {action: wait, seconds: 1}
+  - {action: type, text: "adare"}
+  - {action: wait, seconds: 1}
+  - {action: shot, name: account-filled}
+  - {action: click_text, text: "Next", note: "account -> timezone"}
+  - {action: wait_stable, settle: 5, timeout: 120}
+  - {action: click_text, text: "Next", shot: timezone, note: "Timezone"}
+  - {action: wait_stable, settle: 5, timeout: 120}
+  - {action: click_text, text: "Install", shot: ready, note: "Ready to install -> Install"}
+  # Finished only once the 'installed and ready to use' page is up: a still
+  # screen alone is also what an error page or a hung progress bar looks like.
+  - {action: wait_text, text: ["ready to use", "Restart now"], fail_on: ["something went wrong", "installation failed", "installer crashed"], timeout: 3600, interval: 10, shot: complete, note: "wait for install"}
+
+verify_steps:
+  # Reboots from disk into GDM (GNOME). Select the adare user, type the password.
+  - {action: wait_stable, settle: 8, timeout: 240, min: 45, shot: login}
+  - {action: click_text, text: "adare", note: "select the adare user"}
+  - {action: wait, seconds: 2}
+  - {action: type, text: "adare", note: "password"}
+  - {action: key, keys: [ret]}
+  # GDM only leaves the greeter on a successful login, so the user name
+  # disappearing (without an error) is the proof the session started.
+  - {action: wait_text, text: "adare", gone: true, fail_on: ["didn't work", "authentication failure"], timeout: 120, note: "greeter gone = logged in"}
+  - {action: wait_stable, settle: 12, timeout: 180, shot: desktop}

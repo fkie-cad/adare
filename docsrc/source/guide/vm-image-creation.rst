@@ -50,6 +50,11 @@ Linux (fully automated)
    # Base install -- guest tools only, no Python environment
    adare vm create ubuntu2404 --setup base
 
+The finished disk is registered as a VM image with its record next to it
+(``<name>.image.yml``, ``<name>.packages.txt``), see :ref:`VM images
+<concepts-vm-images>`. A name that is already registered needs ``--force``, which
+keeps the old image for the environments using it.
+
 Windows (user-supplied ISO)
 ---------------------------
 
@@ -1151,6 +1156,91 @@ Installer families
      - No answer file is written; the installer is driven by the vision agent
        (``gui-auto``) or by a human (``manual``).
 
+Verification status
+-------------------
+
+A profile pins its ISO by SHA256, so its installer and its screens cannot change:
+one successful build proves the profile. Re-test a profile when its ISO pin or
+steps change, when ADARE's install path changes (playbook engine, OCR, templates,
+provisioning, QEMU arguments), or after a host QEMU/OVMF/OCR upgrade -- and check
+that its ISO URL still resolves, since distributions move superseded point
+releases to an archive.
+
+Every date is an actual run, not a rendering or review: *build* means ``adare vm
+create`` ran, installed and booted to the logged-in desktop; *vm test* means ``adare
+vm test`` ran and passed; *experiment* means an experiment ran on the image. "never"
+means no run is on record. The 2026-10-23 changes (every created VM made ADARE-ready
+and checked before success; playbook installs prove the login finished) postdate
+every build marked "before 10-23", so those profiles are due a re-test.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 14 14 54
+
+   * - Profile
+     - Install
+     - Last run
+     - What ran
+   * - ``ubuntu2604``
+     - playbook (desktop ISO 26.04.1)
+     - 2026-10-24
+     - Build (first on the desktop ISO, with the new encryption screen and the
+       per-release welcome suppressed); vm test; ``test_linux_standard`` experiment
+       (24/24 tests). Until 2026-10-24 the profile used the server ISO with a
+       desktop source no server ISO carries: it could not have installed.
+   * - ``ubuntu2404``
+     - playbook (desktop ISO)
+     - 2026-10-24
+     - Build 2026-10-23; vm test (agent path as in experiments) and the
+       ``test_linux_standard`` experiment (24/24 tests) 2026-10-24.
+   * - ``ubuntu2204``, ``ubuntu2004``
+     - playbook (desktop ISO)
+     - 2026-07-28, before 10-23
+     - Build 2026-07-25; vm test 2026-07-26; rebuilt end to end with the
+       name-independent network config 2026-07-28.
+   * - ``ubuntu1804``
+     - playbook (desktop ISO)
+     - 2026-07-26, before 10-23
+     - Build 2026-07-25 (boots to GNOME); vm test 2026-07-26.
+   * - ``kubuntu2404``, ``kubuntu2204``, ``kubuntu2004``
+     - playbook (desktop ISO)
+     - 2026-07-26, before 10-23
+     - Build 2026-07-25 (boots to SDDM, login adare/adare); vm test 2026-07-26.
+   * - ``fedora41``, ``fedora42``
+     - auto (kickstart)
+     - 2026-07-26, before 10-23
+     - Build 2026-07-25; vm test 2026-07-26.
+   * - ``ubuntu2404arm64``, ``ubuntu2204arm64``, ``ubuntu2004arm64``,
+       ``kubuntu2404arm64``, ``kubuntu2204arm64``, ``kubuntu2004arm64``,
+       ``fedora41arm64``, ``fedora42arm64``
+     - auto
+     - 2026-07-25, before 10-23
+     - Built as the aarch64 paper environments. ``ubuntu2404arm64`` and
+       ``ubuntu2204arm64`` moved to the no-conda template on 2026-07-28, after
+       that build: not verified on their current template.
+   * - ``fedora41kdearm64``, ``fedora42kdearm64``
+     - auto (kickstart)
+     - 2026-07-28, before 10-23
+     - Built; paper experiment passed on both (11/11 tests).
+   * - ``windows11arm64``
+     - recipe
+     - 2026-07-22, before 10-23
+     - Win-ARM64 Autopsy VMs built and run (display resolution live-verified).
+   * - ``windows11``
+     - recipe
+     - 2026-07-28, before 10-23
+     - Recipe base built; the Windows MSI smoke gate passed on a real guest.
+   * - ``ubuntu2604arm64``, ``ubuntu2510``, ``ubuntu2510arm64``
+     - auto (rolling template)
+     - never
+     - No recorded build. The template asked for a source no server ISO carries
+       until 2026-10-24; fixed, but no full install has run since. 25.10 is
+       end-of-life (July 2026).
+   * - ``windows10``
+     - recipe
+     - never
+     - No recorded build.
+
 Desktop guests on aarch64
 -------------------------
 
@@ -1299,7 +1389,8 @@ archive if the installed system's metalink fails, then installs the ADARE extras
    - ``autoinstall_ubuntu_lts_noconda.yaml`` — ``ubuntu2204arm64`` /
      ``ubuntu2404arm64``. No conda: it clears pip's PEP-668 guard so the harness
      can install the ``adarevm`` wheels into the system Python, and bakes in the
-     standalone ``uv`` binary that ``adare vm test`` needs. This is the variant
+     standalone ``uv`` binary the agent install falls back to on a Python older
+     than 3.10. This is the variant
      the paper's aarch64 images are built from.
 
    The two cannot both claim the same OS name — within one template directory

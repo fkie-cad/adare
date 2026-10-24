@@ -99,15 +99,26 @@ fi""",
 # gnome-initial-setup ("Welcome to Ubuntu"), GNOME Tour and Plasma Welcome open
 # over the desktop on every login until finished, so every experiment would start
 # behind them. The done marker plus a hiding user autostart override covers them.
+# Ubuntu 26.04 adds a per-release "welcome / what's new" mode
+# (gnome-initial-setup-upgrade-login.service, a systemd user unit, not autostart):
+# it runs once the done marker exists and until
+# ~/.config/gnome-initial-setup/upgrade-<VERSION_ID>-done does, so the done marker
+# alone would arm it. Stamp the guest's own release too.
 NO_WELCOME = ProvisionCommand(
     name='no first-login welcome wizard',
     shell='bash',
     timeout_minutes=5,
     command=f"""set -e
 home=$(getent passwd {GUEST_USER} | cut -d: -f6)
-install -d -o {GUEST_USER} -g {GUEST_USER} "$home/.config" "$home/.config/autostart"
+install -d -o {GUEST_USER} -g {GUEST_USER} "$home/.config" "$home/.config/autostart" \\
+    "$home/.config/gnome-initial-setup"
 printf 'yes' > "$home/.config/gnome-initial-setup-done"
 chown {GUEST_USER}:{GUEST_USER} "$home/.config/gnome-initial-setup-done"
+release=$(. /etc/os-release && printf '%s' "${{VERSION_ID:-}}")
+if [ -n "$release" ]; then
+  : > "$home/.config/gnome-initial-setup/upgrade-$release-done"
+  chown {GUEST_USER}:{GUEST_USER} "$home/.config/gnome-initial-setup/upgrade-$release-done"
+fi
 for entry in /etc/xdg/autostart/*initial-setup*.desktop /etc/xdg/autostart/*welcome*.desktop \\
              /etc/xdg/autostart/*gnome-tour*.desktop; do
   [ -e "$entry" ] || continue
@@ -157,6 +168,24 @@ def readiness_commands(os_def: OsDefinition, setup_level: SetupLevel) -> list[Pr
     return [NO_LOCK, NO_WELCOME, REBOOT, AUTOLOGIN_LINUX]
 
 
+def _package_list_collector(disk_path: Path):
+    """A run_provision hook that stores the guest's package list next to *disk_path*."""
+
+    def collect(qga_sock: Path) -> None:
+        from adare.backend.vm.image_record import PACKAGE_LIST_COMMAND, write_packages
+        from adare.hypervisor.qemu.vm_creator.qga_utils import QgaError, qga_exec
+
+        try:
+            returncode, stdout, _ = qga_exec(qga_sock, PACKAGE_LIST_COMMAND, shell='bash', timeout=120)
+        except QgaError as e:
+            log.warning(f'Could not read the guest package list: {e}')
+            return
+        if returncode == 0:
+            write_packages(disk_path, stdout)
+
+    return collect
+
+
 def make_guest_ready(
     disk_path: Path,
     os_def: OsDefinition,
@@ -190,6 +219,7 @@ def make_guest_ready(
             allow_emulation=allow_emulation,
             compress=compress,
             title='ADARE readiness check',
+            after_commands=_package_list_collector(disk_path) if os_def.platform == 'linux' else None,
         )
     except HypervisorException as e:
         # RecipeProvisionError for a failed step; overlay/boot errors are plain ones.

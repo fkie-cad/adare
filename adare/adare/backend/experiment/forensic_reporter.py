@@ -79,6 +79,8 @@ class ForensicReporter:
             'experiment_run_id': experiment_run.id,
             'experiment_name': experiment_run.experiment.name if experiment_run.experiment else 'unknown',
             'environment_name': experiment_run.environment.name if experiment_run.environment else 'unknown',
+            'environment_id': experiment_run.environment_id,
+            'vm_sha256': experiment_run.vm_hash,
             'start_time': experiment_run.start_time.isoformat() + 'Z' if experiment_run.start_time else None,
             'end_time': experiment_run.end_time.isoformat() + 'Z' if experiment_run.end_time else None,
         }
