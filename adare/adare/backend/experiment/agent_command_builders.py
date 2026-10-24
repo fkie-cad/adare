@@ -632,7 +632,8 @@ async def _detect_windows_environment(vm, stop_event: threading.Event) -> Enviro
 
     if miniforge_result.returncode == 0:
         # Check for pyadare conda environment
-        check_conda_env = rf'& "{miniforge_path}\Scripts\conda.exe" env list | Select-String "^pyadare " | Out-Null; if ($?) {{ Write-Output "env_exists" }} else {{ Write-Output "env_not_found" }}'
+        # Branch on the match itself: `$?` after `| Out-Null` is true with or without one.
+        check_conda_env = rf'if (& "{miniforge_path}\Scripts\conda.exe" env list | Select-String "^pyadare ") {{ Write-Output "env_exists" }} else {{ Write-Output "env_not_found" }}'
         conda_env_result = await vm.run_command(check_conda_env, stop_event=stop_event)
 
         if 'env_exists' in conda_env_result.stdout:

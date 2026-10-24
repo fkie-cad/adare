@@ -1,5 +1,6 @@
 """Windows VM creation orchestrator - Autounattend via floppy/ISO + UEFI boot."""
 
+import io
 import logging
 import platform
 import shutil
@@ -7,9 +8,11 @@ import struct
 import subprocess
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
+from PIL import Image
 
 from adare.config.configdirectory import QEMU_CACHE_DIR, VM_TEMPLATES_DIR
 from adare.console import console, print_section, print_step
@@ -25,6 +28,7 @@ from adare.hypervisor.qemu.vm_creator.os_catalog import (
     OsDefinition,
     SetupLevel,
 )
+from adare.hypervisor.qemu.vm_creator.playbook_creator import _QMP, PlaybookVMCreationError, PlaybookVMCreator
 from adare.hypervisor.qemu.vm_creator.progress import (
     QemuInstallTerminated,
     terminate_qemu_on_exit,
@@ -236,8 +240,16 @@ def _create_autounattend_media(
         iso_path = tmpdir / 'tools.iso'
         return create_tools_iso(xml_content, virtio_iso_path, iso_path)
 
+    # The disk driver rides on the floppy because A: is the one drive letter Setup
+    # always assigns the same way; the answer file loads it from A:\.
+    files = {'Autounattend.xml': xml_content}
+    if virtio_iso_path is not None:
+        from adare.hypervisor.qemu.vm_creator.iso_utils import extract_virtio_driver
+
+        files.update(extract_virtio_driver(virtio_iso_path, f'viostor/w{os_def.version}/amd64'))
+
     floppy_path = tmpdir / 'autounattend.img'
-    _write_fat12_floppy(floppy_path, {'Autounattend.xml': xml_content})
+    _write_fat12_floppy(floppy_path, files)
     log.info(f'Created Autounattend floppy image: {floppy_path}')
     return floppy_path
 
@@ -568,6 +580,57 @@ def _run_windows_installation(
         )
 
 
+# Lowercase fragments of Windows Setup's error dialogs, e.g. "Windows installation
+# encountered an unexpected error. Error code: 0x80070103 - 0x40031".
+_SETUP_ERROR_MARKERS = ('encountered an unexpected error', 'error code:', 'windows could not')
+
+
+class _SetupErrorWatch:
+    """Stop the install as soon as Windows Setup shows an error dialog.
+
+    Setup reports a failure only on screen and then waits for a click, so without
+    this the install would sit there until the 90-minute timeout. Reads the screen
+    by OCR once a minute; the error text goes into the exception and the screen
+    into a PNG next to the disk.
+    """
+
+    INTERVAL_SECONDS = 60.0
+
+    def __init__(self, qmp_sock: Path, screenshot_path: Path):
+        self._qmp_sock = qmp_sock
+        self._screenshot_path = screenshot_path
+        self._last = time.monotonic()
+
+    def __call__(self) -> None:
+        now = time.monotonic()
+        if now - self._last < self.INTERVAL_SECONDS:
+            return
+        self._last = now
+        try:
+            frame = self._screendump()
+            lines = PlaybookVMCreator._screen_lines(frame)
+        except (OSError, ImportError, PlaybookVMCreationError) as e:
+            log.debug(f'Setup error watch skipped this round: {e}')
+            return
+        errors = [line.strip() for line in lines if any(m in line.lower() for m in _SETUP_ERROR_MARKERS)]
+        if not errors:
+            return
+        Image.open(io.BytesIO(frame)).save(self._screenshot_path)
+        log.error(f'Windows Setup shows an error: {" | ".join(lines)}')
+        raise WindowsVMCreationError(
+            f'Windows Setup failed: {" ".join(errors)} (screenshot: {self._screenshot_path}). '
+            r'Its log is X:\$WINDOWS.~BT\Sources\Panther\setuperr.log inside the installer.'
+        )
+
+    def _screendump(self) -> bytes:
+        with tempfile.TemporaryDirectory(prefix='adare-winsetup-') as tmpdir:
+            qmp = _QMP(str(self._qmp_sock), Path(tmpdir) / 'screen.ppm', connect_timeout=5.0)
+            try:
+                return qmp.dump()
+            finally:
+                qmp.close()
+
+
 def _run_qemu_install_phase(
     os_def: OsDefinition,
     windows_iso_path: Path,
@@ -771,6 +834,7 @@ def _run_qemu_install_phase(
                 timeout_minutes=90,
                 label=label,
                 status=status,
+                check=_SetupErrorWatch(qmp_sock, disk_path.with_name(f'{disk_path.stem}_setup-error.png')),
             )
     except (TimeoutError, subprocess.CalledProcessError):
         raise
