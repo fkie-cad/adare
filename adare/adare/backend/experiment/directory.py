@@ -42,6 +42,8 @@ class ExperimentRunDirectory(Directory):
         self.serial_console_log_file = self.log_directory / 'serial_console.log'
         self.qemu_debug_log_file = self.log_directory / 'qemu_debug.log'
         self.system_info_file = self.path / 'system-info.yml'
+        # What the run ran on: environment versions and image records (see image_record)
+        self.image_record_file = self.path / 'image.yml'
         self.reporting_directory = self.path / 'reporting'
         self.screenshots_directory = self.reporting_directory / 'screenshots'
         self.forensic_log_file = self.reporting_directory / 'forensic_log.yml'

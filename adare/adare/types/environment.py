@@ -2,7 +2,7 @@
 # configure logging
 import logging
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 import attrs
@@ -284,6 +284,11 @@ class EnvironmentMetadata:
     source_profile: str | None = None
     source_iso_sha256: str | None = None
 
+    # The image record of the disk (see adare.backend.vm.image_record), embedded by
+    # `env publish-prepare`: how it was built, its checks. Adopted on load for the
+    # disk whose sha256 it names; it also supplies `os` when that block is omitted.
+    image: dict[str, Any] | None = None
+
     name: str | None = None
     postsetupinstallations: list[PostsetupInstallations] = attrs.Factory(list)
     tags: list[str] = attrs.Factory(list)
@@ -313,6 +318,9 @@ class EnvironmentMetadata:
             raise ValueError("One of 'vm', 'recipe', or 'vagrantbox' must be specified")
         if self.hypervisor is None:
             self.hypervisor = self._infer_hypervisor()
+        if self.os is None and self.image and isinstance(self.image.get('os'), dict):
+            fields = {field.name for field in attrs.fields(OsInfo)}
+            self.os = cattrs.structure({k: v for k, v in self.image['os'].items() if k in fields}, OsInfo)
 
     def _infer_hypervisor(self) -> str:
         if self.recipe is not None or not self.vm:

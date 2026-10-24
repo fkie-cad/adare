@@ -76,23 +76,6 @@ async def verify_vm_integrity(
     # Check if this is an external VM file
     is_external = not _is_vm_managed(vm_file_path)
 
-    # Recipe recovery advantage: if the cached disk of a recipe-built VM is
-    # missing, rebuild it from the recipe instead of hard-failing (a baked disk
-    # cannot recover from a missing file). The rebuilt disk is then verified
-    # normally below via its recorded Vm.hash.
-    is_recipe = getattr(vm_record, 'build_source', 'baked') == 'recipe'
-    if is_recipe and not vm_file_path.exists():
-        log.warning(f"Cached recipe disk missing for VM '{vm_record.name}'; attempting rebuild from recipe...")
-        from adare.backend.vm.recipe import rebuild_recipe_vm_by_id
-
-        rebuilt_id = rebuild_recipe_vm_by_id(vm_id)
-        if rebuilt_id:
-            rebuilt_record = vm_database.get_vm_by_id(rebuilt_id)
-            if rebuilt_record:
-                vm_record = rebuilt_record
-                vm_file_path = Path(vm_record.file)
-                log.info(f"Rebuilt recipe disk for VM '{vm_record.name}' at {vm_file_path}")
-
     if not vm_file_path.exists():
         from adare.backend.experiment.exceptions import ExperimentIntegrityError
 
@@ -105,6 +88,17 @@ async def verify_vm_integrity(
                     f"Restore the VM file to its original location: {vm_file_path}",
                     "Re-load the environment with a new VM file",
                     "Use 'adare environment load' without --no-copy to copy the VM to managed storage",
+                ],
+            )
+        if getattr(vm_record, 'build_source', 'baked') == 'recipe':
+            # A rebuild never reproduces the same bytes, i.e. it is a new image: it
+            # must become a new environment version, not silently replace this one.
+            raise ExperimentIntegrityError(
+                log,
+                f"Recipe-built disk of VM '{vm_record.name}' is missing: {vm_file_path}",
+                possible_solutions=[
+                    "Rebuild it as a new environment version: adare env load --force <environment file>",
+                    "Restore the disk file if it was moved",
                 ],
             )
         raise ExperimentIntegrityError(

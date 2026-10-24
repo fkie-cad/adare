@@ -44,6 +44,23 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_vm_info, args)
 
     @vm.command()
+    @click.argument('vm')
+    @click.option('--vm-url', required=True, help='http(s) URL where the disk is hosted (upload it first)')
+    @click.option('--verify-url', is_flag=True, help='Download the URL and check it matches the disk')
+    def publish(vm, vm_url, verify_url):
+        """Record where a registered image is hosted (in its image record).
+
+        \b
+        Upload the disk yourself (e.g. Zenodo), then record the URL here.
+        `adare env publish-prepare` embeds the image record in the
+        environment file it publishes.
+        """
+        from adare.cli.vm import exec_vm_publish
+
+        args = SimpleNamespace(vm=vm, vm_url=vm_url, verify_url=verify_url)
+        exec_with_error_printing(exec_vm_publish, args)
+
+    @vm.command()
     @click.argument('target', required=False, metavar='[NAME_OR_ID]')
     @click.option('--id', 'target_id', hidden=True, help='Same as NAME_OR_ID (kept for scripts)')
     @click.option('--stopped', is_flag=True, help='Remove all stopped instances')

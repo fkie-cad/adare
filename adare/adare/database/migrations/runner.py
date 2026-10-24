@@ -115,6 +115,16 @@ MIGRATIONS: list[Migration] = [
         scope='global',
         module=f'{_PACKAGE}.add_owner_pid_to_vm_instance',
     ),
+    Migration(
+        name='add_build_record_to_vm',
+        scope='global',
+        module=f'{_PACKAGE}.add_build_record_to_vm',
+    ),
+    Migration(
+        name='add_vm_hash_to_experiment_run',
+        scope='project',
+        module=f'{_PACKAGE}.add_vm_hash_to_experiment_run',
+    ),
 ]
 
 # Applied-migration names per database URL. Keeps auto-apply at one SELECT per

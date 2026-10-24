@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 import adare
+from adare.backend.vm.image_record import PACKAGE_LIST_COMMAND
 from adare.hypervisor.qemu.vm_creator.os_catalog import SetupLevel, get_os_definition
 from adare.hypervisor.qemu.vm_creator.playbook_creator import (
     PlaybookVMCreationError,
@@ -41,6 +42,7 @@ def _playbook_profile_names() -> list[str]:
 def _creator(setup_level: SetupLevel = SetupLevel.FULL, os_name: str = 'ubuntu2404') -> PlaybookVMCreator:
     creator = PlaybookVMCreator.__new__(PlaybookVMCreator)
     creator.os_def = get_os_definition(os_name)
+    creator.vm_name = 'vm'
     creator.setup_level = setup_level
     creator.ram_mb = 4096
     creator.cpus = 2
@@ -205,16 +207,23 @@ class TestMakeAdareReady:
             _creator()._make_adare_ready(MagicMock(), tmp_path / 'qga.sock', tmp_path)
 
     def test_success_runs_every_step_then_checks_after_reboot(self, tmp_path):
-        exec_mock = MagicMock(return_value=(0, '', ''))
+        def fake_exec(_sock, command, **_kw):
+            return (0, 'zsh 5.9\nbash 5.2\n', '') if command == PACKAGE_LIST_COMMAND else (0, '', '')
+
+        exec_mock = MagicMock(side_effect=fake_exec)
+        run_dir = tmp_path / 'vm_playbook'
+        run_dir.mkdir()
         with (
             patch.object(PlaybookVMCreator, '_wait_for_agent', return_value=True),
             patch(f'{MOD}.qga_exec', exec_mock),
         ):
-            _creator(SetupLevel.BASE)._make_adare_ready(MagicMock(), tmp_path / 'qga.sock', tmp_path)
+            _creator(SetupLevel.BASE)._make_adare_ready(MagicMock(), tmp_path / 'qga.sock', run_dir)
         commands = [c.args[1] for c in exec_mock.call_args_list]
         expected = [s.command for s in provision_steps(SetupLevel.BASE, 'x86_64')]
-        assert commands == [*expected, AUTOLOGIN_CHECK_LINUX]
+        assert commands == [*expected, AUTOLOGIN_CHECK_LINUX, PACKAGE_LIST_COMMAND]
         self.qga_shutdown.assert_called_once_with(tmp_path / 'qga.sock', 'reboot')
+        # the package list lands next to the disk (<vm_name>.qcow2 beside <vm_name>_playbook)
+        assert (tmp_path / 'vm.packages.txt').read_text() == 'bash 5.2\nzsh 5.9\n'
 
     def test_missing_autologin_fails(self, tmp_path):
         def fake_exec(_sock, command, **_kw):

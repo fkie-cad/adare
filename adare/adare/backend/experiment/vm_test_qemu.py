@@ -500,6 +500,18 @@ async def _cleanup_registered_test_vm(
     log.info("Cleanup completed")
 
 
+def _record_check(vm_name: str, passed: bool) -> None:
+    """Add this test's result to the image's record (best effort)."""
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from adare.backend.vm import image_record
+
+    try:
+        image_record.add_check(vm_name, 'vm test', passed)
+    except (SQLAlchemyError, OSError) as e:
+        log.warning(f'Could not record the vm test result in the image record: {e}')
+
+
 async def vm_test_registered(
     vm_name: str,
     disk_path: str,
@@ -595,6 +607,8 @@ async def vm_test_registered(
             pass
         except (OSError, ConnectionError, TimeoutError, RuntimeError) as cleanup_error:
             log.error(f"Error during cleanup: {cleanup_error}")
+
+        _record_check(vm_name, passed)
 
         # Let the render thread paint the final cleanup state (✖ + child lines)
         # before stop, otherwise the persisted Live frame stays on the last

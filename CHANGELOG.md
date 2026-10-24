@@ -28,6 +28,16 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- VM images have a record: `adare vm create` registers the disk at once and writes
+  `<disk>.image.yml` (install method, OS profile + hash, ISO + SHA256, setup level,
+  ADARE version/commit, QEMU version, date) and the guest's package list
+  `<disk>.packages.txt`; `adare vm test` adds its result; `adare vm info` shows it.
+- `adare vm publish <image> --vm-url <url>` records where an image is hosted;
+  `adare env publish-prepare` embeds the image record as `image:` in the
+  environment file, and `adare env load` adopts it (and takes `os` from it).
+- Every experiment run records the SHA256 of the disk it booted (run row and
+  `forensic_log.yml` `vm_sha256`) and writes `image.yml` (environment version and
+  image record) into the run directory.
 - `adare vm create` for `install_mode: playbook` profiles draws a live status
   block in the terminal: current step, elapsed time, OCR attempt or screen text.
   `--display` now also applies to playbook installs and shows the VM in a QEMU
@@ -93,6 +103,15 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   apart from a slow boot.
 
 ### Changed
+- Images never change. A different disk under a registered name is a new image:
+  `--force` (`vm create`, `env load`) keeps the replaced image as
+  `<name>-<sha12>` for the environment versions that use it, or removes it when
+  none does. A recipe image whose disk is missing is no longer rebuilt silently
+  during a run (the rebuild has other bytes); the run says to reload with
+  `adare env load --force`, which makes it a new environment version.
+- `adare env load <name>` finds the registered environment's file; a `name:` key
+  that differs from the file name is reported as ignored; a disk is hashed once
+  per load.
 - OS profiles: a YAML profile is now the only definition of its OS. The 12
   built-in catalog entries that a shipped profile replaced (never used, several
   stale) are gone; a test keeps it that way, and another requires every x86_64

@@ -31,6 +31,8 @@ class VMInfoPanel:
         # Note: VirtualBox UUID and base_snapshot are now tracked per-instance
         # This is an abstract VM template, not a concrete VirtualBox VM
 
+        self._add_record_rows(table, self.vm_info.get('image_record'))
+
         uses_snapshots = self.vm_info.get('use_snapshots', False)
         snapshot_status = Text("✅ Enabled", style="green") if uses_snapshots else Text("❌ Disabled", style="red")
         table.add_row("Snapshots:", snapshot_status)
@@ -64,6 +66,33 @@ class VMInfoPanel:
 
         title = f"[b gold3]VM: {self.vm_info['name']}[/b gold3]"
         return Panel(table, title=title, border_style="blue", title_align="left")
+
+    @staticmethod
+    def _add_record_rows(table: Table, record: dict | None) -> None:
+        """How the image was made, where it is published and what ran on it (its image record)."""
+        if not record:
+            return
+        build = record.get('build')
+        if build:
+            table.add_row(
+                "Built:", f"{build.get('created')} by {build.get('method')} from profile {build.get('profile')}"
+            )
+            iso = build.get('iso') or {}
+            if iso.get('filename'):
+                table.add_row("ISO:", f"{iso['filename']} ({str(iso.get('sha256'))[:12]}...)")
+            adare = build.get('adare') or {}
+            table.add_row("Setup / ADARE:", f"{build.get('setup')} / {adare.get('version')} ({adare.get('commit')})")
+        else:
+            table.add_row("Built:", Text("unknown (no build record)", style="yellow"))
+        packages = record.get('packages')
+        if packages:
+            table.add_row("Packages:", f"{packages.get('count')} ({packages.get('file')})")
+        for entry in record.get('published') or []:
+            table.add_row("Published:", str(entry.get('url')))
+        checks = record.get('checks') or []
+        if checks:
+            last = checks[-1]
+            table.add_row("Last check:", f"{last.get('run')}: {last.get('result')} ({last.get('date')})")
 
 
 def print_vm_info(vm_id: str):
@@ -110,6 +139,10 @@ def print_vm_or_instance_info(vm_or_instance_id: str, formatter=None, output_fil
 
     vm_info = get_vm_info(target.id)
     if vm_info:
+        from adare.backend.vm.image_record import record_of
+
+        found = record_of(target.id)
+        vm_info['image_record'] = found[1] if found else None
         # Check if structured output is needed
         if dual_output or formatter.format_type.value != 'rich':
             structured_data = {
@@ -121,6 +154,7 @@ def print_vm_or_instance_info(vm_or_instance_id: str, formatter=None, output_fil
                 'hash': vm_info['hash'],
                 'use_snapshots': bool(vm_info.get('use_snapshots', False)),
                 'snapshots': vm_info.get('snapshots', {}),
+                'image': vm_info['image_record'],
             }
             formatter.print_or_save(structured_data, output_file, dual_output)
 
