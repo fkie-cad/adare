@@ -15,8 +15,10 @@ autoinstall:
   version: 1
   refresh-installer:
     update: false
-  source:
-    id: ubuntu-desktop-minimal
+  # No `source:`: a server ISO only carries the ubuntu-server(-minimal) sources,
+  # and asking for another (e.g. ubuntu-desktop-minimal) crashes subiquity with a
+  # KeyError in get_matching_source. The desktop comes from `packages` below, as
+  # in the LTS template.
   locale: en_US.UTF-8
   keyboard:
     layout: us
