@@ -109,6 +109,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   qemu extra or the CV server from `.venv`); new: `make sync` (use instead of
   plain `uv sync`), `make test-testfunctions`, `make test-cv`, and `make test`
   takes `PYTEST_ARGS=...`. `make test-agent` now also works on Windows.
+- `make install` / `make update` install exactly what `uv.lock` pins (`--locked`)
+  and stop at the first failing step instead of carrying on. They no longer need
+  a system Python (uv provides 3.13), work from any directory, and never remove
+  extras you added. The installation guide gained an *Updating* section.
 - Images never change. A different disk under a registered name is a new image:
   `--force` (`vm create`, `env load`) keeps the replaced image as
   `<name>-<sha12>` for the environment versions that use it, or removes it when
@@ -241,6 +245,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- The Windows installer (`install.ps1`) works with the single workspace `.venv`
+  again: it found no `adare.exe` and stopped. It now also puts the CLIs on your
+  user `PATH`, migrates the database and syncs testfunctions like the Linux/macOS
+  installer, and doubles as the Windows update (`make update`).
 - `ubuntu2604` installs the genuine desktop edition from the 26.04.1 desktop ISO
   by playbook, like `ubuntu2404`, including 26.04's new "Encryption and file
   system" screen. It used the server ISO with a desktop source the server ISO
