@@ -12,11 +12,13 @@ import {
   Monitor,
   Palette,
   Gauge,
+  SquareTerminal,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useThemeStore } from '@/stores/theme-store'
 import { useSidebarStore } from '@/stores/sidebar-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 
 const navSections = [
   {
@@ -51,6 +53,7 @@ const navSections = [
 export function Sidebar() {
   const { mode, colorScheme, setMode, setColorScheme } = useThemeStore()
   const { collapsed } = useSidebarStore()
+  const terminal = useTerminalStore()
 
   return (
     <aside
@@ -98,6 +101,25 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* Terminal panel toggle */}
+      <div className="px-4 pb-2">
+        <button
+          type="button"
+          onClick={terminal.toggle}
+          aria-pressed={terminal.open}
+          title={collapsed ? 'Terminal (Ctrl+`)' : 'Ctrl+`'}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+            'hover:bg-accent hover:text-accent-foreground',
+            terminal.open && 'bg-accent text-accent-foreground',
+            collapsed && 'justify-center',
+          )}
+        >
+          <SquareTerminal className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Terminal &amp; Claude</span>}
+        </button>
+      </div>
 
       {/* Theme controls */}
       <div className="p-4 border-t border-border space-y-2">

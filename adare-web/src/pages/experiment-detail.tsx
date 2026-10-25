@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useParams, useNavigate, Link } from '@tanstack/react-router'
-import { Bot, FlaskConical, Play } from 'lucide-react'
+import { Bot, FlaskConical, Play, Sparkles } from 'lucide-react'
+import { useLaunchTerminal } from '@/components/terminal/use-launch-terminal'
+import { experimentPrompt } from '@/components/terminal/claude-prompts'
 import { PageHeader } from '@/components/layout/page-header'
 import { AsyncBoundary } from '@/components/layout/async-boundary'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -115,6 +117,7 @@ export default function ExperimentDetailPage() {
   const envNames: string[] = exp?.environment_names ?? []
   const tags: string[] = Array.isArray(exp?.tags) ? exp.tags : []
   const projectPath = projectPathOf(exp)
+  const claude = useLaunchTerminal()
 
   return (
     <div className="p-6 space-y-6">
@@ -123,6 +126,21 @@ export default function ExperimentDetailPage() {
         description="Experiment details"
         actions={
           <>
+            <Button
+              variant="outline"
+              disabled={!projectPath || claude.isPending}
+              onClick={() =>
+                claude.launch({
+                  kind: 'claude',
+                  cwd: projectPath,
+                  prompt: experimentPrompt(name, envNames),
+                  title: `Claude · ${name}`,
+                })
+              }
+            >
+              <Sparkles size={14} />
+              Work on it with Claude
+            </Button>
             <Button variant="outline" asChild>
               <Link to="/develop" search={{ experiment: name, environment: envNames[0] }}>
                 <Bot size={14} />

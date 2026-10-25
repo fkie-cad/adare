@@ -1,6 +1,10 @@
 import type { ReactNode } from 'react'
 import { useParams, Link } from '@tanstack/react-router'
-import { Download, FileText, Play } from 'lucide-react'
+import { Download, FileText, Play, Sparkles } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useProjects } from '@/api/hooks/use-projects'
+import { useLaunchTerminal } from '@/components/terminal/use-launch-terminal'
+import { debugRunPrompt } from '@/components/terminal/claude-prompts'
 import { PageHeader } from '@/components/layout/page-header'
 import { AsyncBoundary } from '@/components/layout/async-boundary'
 import { Card, CardContent } from '@/components/ui/card'
@@ -201,12 +205,32 @@ export default function RunDetailPage() {
   const runQuery = useRun(ulid)
   const artifactsQuery = useRunArtifacts(ulid)
   const run = runQuery.data as RunDetailShape | undefined
+  const projects = useProjects()
+  const claude = useLaunchTerminal()
 
   return (
     <div className="p-6 space-y-6">
       <PageHeader
         title={run?.experiment_name ? `${run.experiment_name} · ${ulid.slice(0, 8)}` : ulid}
         description="Run details"
+        actions={
+          <Button
+            variant="outline"
+            disabled={!run || claude.isPending}
+            onClick={() =>
+              run &&
+              claude.launch({
+                kind: 'claude',
+                cwd: projects.data?.find((p) => p.name === run.project_name)?.path,
+                prompt: debugRunPrompt(run),
+                title: `Claude · run ${ulid.slice(-6)}`,
+              })
+            }
+          >
+            <Sparkles size={14} />
+            Debug with Claude
+          </Button>
+        }
       />
 
       <AsyncBoundary
