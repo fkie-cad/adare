@@ -17,6 +17,8 @@ import dateutil.parser
 import jinja2
 import pytz
 
+from adare.backend.experiment.timestamp_interval import has_tolerance_or_interval, tag_metadata
+
 log = logging.getLogger(__name__)
 
 
@@ -135,7 +137,7 @@ class MetadataManager:
 
         # Only add placeholder to template context if it does NOT have tolerance
         # Tolerance placeholders should remain as placeholders for VM-side processing
-        if template_context is not None and tolerance is None:
+        if template_context is not None and tolerance is None and 'interval' not in metadata:
             template_context[placeholder_name] = timestamp_value
             log.debug(
                 f"Added non-tolerance placeholder '{placeholder_name}' to template context with value '{timestamp_value}'"
@@ -300,10 +302,6 @@ class YamlTagProcessor:
                 log.info(
                     f"Processing YamlTimestamp '{item.string}', has_tolerance={has_tolerance}, tolerance={getattr(item, 'tolerance', None)}"
                 )
-                log.info(f"YamlTimestamp object attributes: {[attr for attr in dir(item) if not attr.startswith('_')]}")
-                log.info(
-                    f"YamlTimestamp hasattr tolerance: {hasattr(item, 'tolerance')}, value: {getattr(item, 'tolerance', 'NOT_FOUND')}"
-                )
 
                 if has_tolerance:
                     # Has tolerance - create placeholder, try to extract variable name from template
@@ -335,7 +333,7 @@ class YamlTagProcessor:
                     else:
                         resolved_timestamp = timestamp_value
 
-                    yaml_metadata = getattr(item, 'metadata', {})
+                    yaml_metadata = tag_metadata(item, template_resolver, template_context)
                     self.metadata_manager.add_timestamp_metadata(
                         placeholder_name,
                         resolved_timestamp,
@@ -417,7 +415,7 @@ class YamlTagProcessor:
                 else:
                     resolved_timestamp = timestamp_value
 
-                yaml_metadata = getattr(data, 'metadata', {})
+                yaml_metadata = tag_metadata(data, template_resolver, template_context)
                 self.metadata_manager.add_timestamp_metadata(
                     placeholder_name,
                     resolved_timestamp,
@@ -757,8 +755,8 @@ class ToleranceDetector:
         return analysis
 
     def has_yaml_tolerance(self, yaml_obj) -> bool:
-        """Check if YAML object has explicitly defined tolerance"""
-        return hasattr(yaml_obj, 'tolerance') and yaml_obj.tolerance is not None
+        """Check if YAML object has explicitly defined tolerance (an interval counts as one)"""
+        return has_tolerance_or_interval(yaml_obj)
 
 
 class VariableResolver:

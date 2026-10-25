@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
+from adare.backend.experiment.clock import ClockRecorder
 from adare.backend.experiment.target_resolver import MCPConditionChecker, MCPTargetResolver
 from adare.backend.experiment.websocket_client import AdareVMClient
 from adare.types.playbook import (
@@ -175,6 +176,11 @@ class ActionExecutor:
 
         self.test_actions = TestActionsExecutor(experiment_run_directory=experiment_run_directory, playbook=playbook)
 
+        settings = getattr(playbook, 'settings', None)
+        self.clock = ClockRecorder(
+            experiment_run_directory, self.execution_context, enabled=getattr(settings, 'clock_log', True)
+        )
+
     def _rebind_to_machine(self, handles: MachineHandles) -> None:
         """Point this executor and its sub-executors at one machine's handles.
 
@@ -254,6 +260,15 @@ class ActionExecutor:
             action_type = type(resolved_action).__name__
             description = getattr(resolved_action, 'description', '')
             log.debug(f"Executing {action_type}: {description}")
+
+            # Bracket leaf actions with guest clock reads; containers' children bracket themselves.
+            # Before a test, also refresh the guest timezone the test reads local times with.
+            is_test = isinstance(resolved_action, ActionTestAction)
+            bracket = not isinstance(resolved_action, (BlockAction, LoopAction))
+            if bracket:
+                await self.clock.probe(
+                    'before', action_type, description, target_key, self.client, self.vm, with_timezone=is_test
+                )
 
             # Dispatch to appropriate executor and capture result
             result = None
@@ -347,6 +362,9 @@ class ActionExecutor:
 
             else:
                 result = ActionResult(success=False, message=f"Unknown action type: {action_type}")
+
+            if bracket and not is_test:
+                await self.clock.probe('after', action_type, description, target_key, self.client, self.vm)
 
             # Post-execution debug screenshot (if enabled and action was successful)
             if self.debug_screenshots and result and result.success:
