@@ -7,128 +7,28 @@ import attrs
 import cattrs
 import yaml
 
+# Re-exported: callers import these from adare.types.playbook.
+from adare.types.targets import (
+    BestConfidenceStrategy,
+    BottomLeftStrategy,
+    BottomRightStrategy,
+    ClosestToStrategy,
+    ExistsCondition,
+    LargestStrategy,
+    NotExistsCondition,
+    Offset,
+    SmallestStrategy,
+    SweepStrategy,
+    Target,
+    TargetStrategyType,
+    TextMatchConfig,
+    TopLeftStrategy,
+    TopRightStrategy,
+)
+
 # Import the new Variable system
 from adarelib.common.variables import VariableRegistry
 from adarelib.testset.type import Test
-
-
-# Target selection strategies
-@attrs.define
-class SweepStrategy:
-    """Select the nth match when scanning left-to-right, top-to-bottom."""
-
-    index: int = 1  # 1-based index (1 = first, 2 = second, etc.)
-
-
-@attrs.define
-class BestConfidenceStrategy:
-    """Select match with highest confidence score."""
-
-    pass
-
-
-@attrs.define
-class ClosestToStrategy:
-    """Select match closest to coordinates or target reference.
-
-    Supports three modes:
-    1. Fixed coordinates: x, y specified
-    2. Text reference: text specified
-    3. Image reference: image specified
-
-    Optional max_distance enables region-based search optimization.
-    """
-
-    # Mode 1: Fixed coordinates (existing - backwards compatible)
-    x: int | None = None
-    y: int | None = None
-
-    # Mode 2: Text reference (new)
-    text: str | None = None
-
-    # Mode 3: Image reference (new)
-    image: str | None = None
-
-    # Optional distance limit (new)
-    max_distance: int | None = None  # pixels
-
-    def __attrs_post_init__(self):
-        """Validate that exactly one mode is specified."""
-        modes_set = sum(
-            [
-                self.x is not None and self.y is not None,  # coordinates mode
-                self.text is not None,  # text reference mode
-                self.image is not None,  # image reference mode
-            ]
-        )
-
-        if modes_set != 1:
-            raise ValueError(
-                "ClosestToStrategy must specify exactly one of: (x, y) coordinates, text reference, or image reference"
-            )
-
-        # Validate x,y together
-        if (self.x is None) != (self.y is None):
-            raise ValueError("ClosestToStrategy: x and y must both be specified or both be None")
-
-        # Validate max_distance
-        if self.max_distance is not None and self.max_distance <= 0:
-            raise ValueError(f"ClosestToStrategy: max_distance must be positive, got {self.max_distance}")
-
-
-@attrs.define
-class TopLeftStrategy:
-    """Select topmost-leftmost match."""
-
-    pass
-
-
-@attrs.define
-class TopRightStrategy:
-    """Select topmost-rightmost match."""
-
-    pass
-
-
-@attrs.define
-class BottomLeftStrategy:
-    """Select bottommost-leftmost match."""
-
-    pass
-
-
-@attrs.define
-class BottomRightStrategy:
-    """Select bottommost-rightmost match."""
-
-    pass
-
-
-@attrs.define
-class LargestStrategy:
-    """Select match with largest bounding box area."""
-
-    pass
-
-
-@attrs.define
-class SmallestStrategy:
-    """Select match with smallest bounding box area."""
-
-    pass
-
-
-TargetStrategyType = (
-    SweepStrategy
-    | BestConfidenceStrategy
-    | ClosestToStrategy
-    | TopLeftStrategy
-    | TopRightStrategy
-    | BottomLeftStrategy
-    | BottomRightStrategy
-    | LargestStrategy
-    | SmallestStrategy
-)
 
 
 @attrs.define
@@ -152,107 +52,6 @@ class Settings:
         False  # Live-dump guest RAM via QMP dump-guest-memory (artifacts/memory/), e.g. for Volatility ingestion
     )
     clock_log: bool = True  # Sample the guest clock around every action into clock.jsonl (offset, jumps, timezone)
-
-
-@attrs.define
-class Offset:
-    x: int = 0
-    y: int = 0
-    base: str = 'center'  # center, top-left, top-right, bottom-left, bottom-right, center-left, center-right, top-center, bottom-center
-
-    def __attrs_post_init__(self):
-        valid_bases = {
-            'center',
-            'top-left',
-            'top-right',
-            'bottom-left',
-            'bottom-right',
-            'center-left',
-            'center-right',
-            'top-center',
-            'bottom-center',
-        }
-        if self.base not in valid_bases:
-            raise ValueError(f"Offset.base must be one of {valid_bases}, got '{self.base}'")
-
-
-@attrs.define
-class TextMatchConfig:
-    """Configuration for text matching behavior.
-
-    Supports multiple matching modes:
-    - substring: Simple case-insensitive substring matching (default)
-    - regex: Regular expression pattern matching
-    - fuzzy: Fuzzy matching for OCR inaccuracies
-    - regex_fuzzy: Combined regex + fuzzy matching
-    """
-
-    mode: str = 'substring'  # 'substring', 'regex', 'fuzzy', 'regex_fuzzy'
-    flags: list[str] | None = None  # Regex flags: IGNORECASE, MULTILINE, DOTALL, VERBOSE
-    allow_missing_chars: bool | str | list[str] | None = (
-        None  # True = any char, "." = only dots, [".", ","] = specific chars
-    )
-    max_missing: int | None = None  # Max missing chars allowed (requires allow_missing_chars)
-    min_similarity: float | None = None  # Minimum similarity ratio 0.0-1.0
-    case_sensitive: bool = False  # Enable case-sensitive matching
-
-    def __attrs_post_init__(self):
-        """Validate configuration fields."""
-        # Validate mode
-        valid_modes = {'substring', 'regex', 'fuzzy', 'regex_fuzzy'}
-        if self.mode not in valid_modes:
-            raise ValueError(f"TextMatchConfig.mode must be one of {valid_modes}, got '{self.mode}'")
-
-        # Validate min_similarity range
-        if self.min_similarity is not None and not (0.0 <= self.min_similarity <= 1.0):
-            raise ValueError(f"TextMatchConfig.min_similarity must be between 0.0 and 1.0, got {self.min_similarity}")
-
-        # Validate max_missing
-        if self.max_missing is not None and self.max_missing < 0:
-            raise ValueError(f"TextMatchConfig.max_missing must be >= 0, got {self.max_missing}")
-
-        # Fuzzy mode requires either allow_missing_chars or min_similarity
-        if self.mode in ('fuzzy', 'regex_fuzzy'):
-            if self.allow_missing_chars is None and self.min_similarity is None:
-                raise ValueError(
-                    f"TextMatchConfig with mode='{self.mode}' requires either "
-                    f"allow_missing_chars or min_similarity to be specified"
-                )
-
-        # Validate regex flags
-        if self.flags:
-            valid_flags = {'IGNORECASE', 'MULTILINE', 'DOTALL', 'VERBOSE'}
-            invalid_flags = set(self.flags) - valid_flags
-            if invalid_flags:
-                raise ValueError(
-                    f"TextMatchConfig.flags contains invalid values: {invalid_flags}. Valid flags: {valid_flags}"
-                )
-
-
-@attrs.define
-class Target:
-    image: str | None = None
-    text: str | None = None
-    icon: str | None = None  # Windows icon-library term (extracted from target at runtime)
-    text_match: TextMatchConfig | None = None  # Text matching configuration
-    position: list[int] | None = None
-    strategy: TargetStrategyType | None = None
-    offset: Offset | None = None
-    use_cache: bool | None = None  # If False, forces a fresh detection even when the
-    # immediately-preceding target resolution would
-    # otherwise be reused. Default (None/True): auto-reuse.
-
-
-@attrs.define
-class ExistsCondition:
-    text: str | None = None
-    image: str | None = None
-
-
-@attrs.define
-class NotExistsCondition:
-    text: str | None = None
-    image: str | None = None
 
 
 @attrs.define
@@ -678,10 +477,6 @@ class Playbook:
 
 
 def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
-    import logging
-
-    logging.getLogger(__name__)
-
     yaml_path = Path(yaml_path)  # Ensure it's a Path object
 
     # Use custom YAML loader to handle our custom tags
@@ -718,11 +513,20 @@ def build_playbook_converter() -> cattrs.Converter:
     hook set instead of reaching for ``_structure_action`` with no converter.
     """
     converter = cattrs.Converter()
+    converter.forbid_extra_keys = True  # fail on unknown fields
+    _register_union_hooks(converter)
+    converter.register_structure_hook(
+        Offset | None, lambda obj, _: converter.structure(obj, Offset) if obj is not None else None
+    )
+    converter.register_structure_hook(
+        TextMatchConfig | None, lambda obj, _: converter.structure(obj, TextMatchConfig) if obj is not None else None
+    )
+    _register_strict_hooks(converter)
+    return converter
 
-    # Configure converter to forbid extra keys - fail on unknown fields
-    converter.forbid_extra_keys = True
 
-    # Register structure hooks for Union types if needed
+def _register_union_hooks(converter: cattrs.Converter) -> None:
+    """Hooks for the union and custom types cattrs cannot structure on its own."""
     converter.register_structure_hook(ActionType, lambda obj, _: _structure_action(obj, converter))
     converter.register_structure_hook(
         ExistsCondition | NotExistsCondition, lambda obj, _: _structure_condition(obj, converter)
@@ -730,74 +534,43 @@ def build_playbook_converter() -> cattrs.Converter:
     converter.register_structure_hook(
         TargetStrategyType | None, lambda obj, _: _structure_strategy(obj, converter) if obj is not None else None
     )
-
-    # Register structure hook for VariableRegistry
+    converter.register_structure_hook(VariableRegistry, lambda obj, _: _structure_variables(obj))
     converter.register_structure_hook(
-        VariableRegistry, lambda obj, _: obj if isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
+        VariableRegistry | None, lambda obj, _: None if obj is None else _structure_variables(obj)
     )
-    converter.register_structure_hook(
-        VariableRegistry | None,
-        lambda obj, _: obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj),
-    )
-
-    # Register structure hook for str | list[str] in PullAction.src
-    converter.register_structure_hook(str | list[str], lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj))
-
-    # Register structure hook for WaitCondition
     converter.register_structure_hook(WaitCondition, lambda obj, _: _structure_wait_condition(obj, converter))
     converter.register_structure_hook(
         WaitCondition | None, lambda obj, _: _structure_wait_condition(obj, converter) if obj is not None else None
     )
-
-    # Register structure hook for LoopAction items field (Union[str, List[Any]])
-    converter.register_structure_hook(
-        str | list[Any] | None,
-        lambda obj, _: obj,  # Pass through as-is, will be resolved at runtime
-    )
-
-    # Register structure hook for allow_missing_chars field (Union[bool, str, List[str]])
-    converter.register_structure_hook(
-        bool | str | list[str] | None, lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None
-    )
-
-    # Register structure hook for numeric comparison fields (Union[int, float, None])
-    def structure_optional_numeric(obj, _):
-        if obj is None:
-            return None
-        if isinstance(obj, (int, float)):
-            return obj
-        # Try to convert string to number if needed
-        if isinstance(obj, str):
-            try:
-                return int(obj)
-            except ValueError:
-                try:
-                    return float(obj)
-                except ValueError:
-                    raise ValueError(f"Cannot convert '{obj}' to numeric value") from None
-        return obj
-
-    converter.register_structure_hook(int | float | None, structure_optional_numeric)
-
-    # Register structure hook for SkipOptions
     converter.register_structure_hook(
         SkipOptions | None, lambda obj, _: _structure_skip_options(obj, converter) if obj is not None else None
     )
-
-    # Register structure hook for Offset
+    # PullAction.src
+    converter.register_structure_hook(str | list[str], lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj))
+    # LoopAction.items: passed through as-is, resolved at runtime
+    converter.register_structure_hook(str | list[Any] | None, lambda obj, _: obj)
+    # TextMatchConfig.allow_missing_chars
     converter.register_structure_hook(
-        Offset | None, lambda obj, _: converter.structure(obj, Offset) if obj is not None else None
+        bool | str | list[str] | None, lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None
     )
+    # VariableCondition's numeric comparison fields
+    converter.register_structure_hook(int | float | None, _structure_optional_numeric)
 
-    # Register structure hook for TextMatchConfig
-    converter.register_structure_hook(
-        TextMatchConfig | None, lambda obj, _: converter.structure(obj, TextMatchConfig) if obj is not None else None
-    )
 
-    # Register strict structure hooks for all main classes to validate fields
-    _register_strict_hooks(converter)
+def _structure_variables(obj) -> VariableRegistry:
+    return obj if isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
 
-    return converter
+
+def _structure_optional_numeric(obj, _):
+    if obj is None or isinstance(obj, (int, float)) or not isinstance(obj, str):
+        return obj
+    try:
+        return int(obj)
+    except ValueError:
+        try:
+            return float(obj)
+        except ValueError:
+            raise ValueError(f"Cannot convert '{obj}' to numeric value") from None
 
 
 def structure_action(obj) -> ActionType:
@@ -924,26 +697,27 @@ def _structure_condition(obj, converter):
     raise ValueError(f"Unknown condition: {obj}")
 
 
+_STRATEGY_CLASSES = {
+    cls.__name__: cls
+    for cls in (
+        SweepStrategy,
+        BestConfidenceStrategy,
+        ClosestToStrategy,
+        TopLeftStrategy,
+        TopRightStrategy,
+        BottomLeftStrategy,
+        BottomRightStrategy,
+        LargestStrategy,
+        SmallestStrategy,
+    )
+}
+
+
 def _structure_strategy(obj, converter):
-    if 'SweepStrategy' in obj:
-        return converter.structure(obj['SweepStrategy'], SweepStrategy)
-    if 'BestConfidenceStrategy' in obj:
-        return converter.structure(obj['BestConfidenceStrategy'], BestConfidenceStrategy)
-    if 'ClosestToStrategy' in obj:
-        return converter.structure(obj['ClosestToStrategy'], ClosestToStrategy)
-    if 'TopLeftStrategy' in obj:
-        return converter.structure(obj['TopLeftStrategy'], TopLeftStrategy)
-    if 'TopRightStrategy' in obj:
-        return converter.structure(obj['TopRightStrategy'], TopRightStrategy)
-    if 'BottomLeftStrategy' in obj:
-        return converter.structure(obj['BottomLeftStrategy'], BottomLeftStrategy)
-    if 'BottomRightStrategy' in obj:
-        return converter.structure(obj['BottomRightStrategy'], BottomRightStrategy)
-    if 'LargestStrategy' in obj:
-        return converter.structure(obj['LargestStrategy'], LargestStrategy)
-    if 'SmallestStrategy' in obj:
-        return converter.structure(obj['SmallestStrategy'], SmallestStrategy)
-    raise ValueError(f"Unknown strategy: {obj}")
+    name = next((key for key in _STRATEGY_CLASSES if key in obj), None)
+    if name is None:
+        raise ValueError(f"Unknown strategy: {obj}")
+    return converter.structure(obj[name], _STRATEGY_CLASSES[name])
 
 
 def _structure_wait_condition(obj, converter):
@@ -974,21 +748,58 @@ def _structure_skip_options(obj, converter):
     raise ValueError(f"Unknown skip option: {obj}")
 
 
-def _register_strict_hooks(converter):
-    """Register strict structure hooks that validate all fields."""
+# Classes whose YAML mapping is checked for unknown fields before structuring.
+_STRICT_CLASSES = (
+    Target,
+    Settings,
+    ClickAction,
+    DragAction,
+    KeyboardAction,
+    IdleAction,
+    ScrollAction,
+    GotoAction,
+    ActionTestAction,
+    CommandAction,
+    CaptureSpec,
+    ScreenshotAction,
+    BlockAction,
+    SaveTimestampAction,
+    SaveVariableAction,
+    PullAction,
+    PauseAction,
+    WaitUntilAction,
+    LoopAction,
+    StopAction,
+    ContinueAction,
+    VariableCondition,
+    WaitCondition,
+    ExistsCondition,
+    NotExistsCondition,
+    *_STRATEGY_CLASSES.values(),
+    Playbook,
+    SnapshotFilesystemAction,
+    PullChangedFilesAction,
+    PixelChangeConstraint,
+    SkipOptions,
+    Offset,
+    TextMatchConfig,
+    MachineSpec,
+)
 
-    def _validate_attrs_class(cls):
-        """Create a strict structure hook for an attrs class."""
+
+def _register_strict_hooks(converter):
+    """Register hooks that reject unknown fields, then structure the class normally.
+
+    They structure through a second converter with the same union hooks: calling
+    ``converter`` itself would re-enter the strict hook.
+    """
+    inner = cattrs.Converter()
+    _register_union_hooks(inner)
+
+    def strict_hook_for(cls):
+        expected_fields = {field.name for field in attrs.fields(cls)}
 
         def strict_structure_hook(obj, _):
-            # Get expected field names from the attrs class
-            if not attrs.has(cls):
-                # Use cattrs default structure for non-attrs classes
-                return cattrs.structure(obj, cls)
-
-            expected_fields = {field.name for field in attrs.fields(cls)}
-
-            # Check for unexpected fields
             if isinstance(obj, dict):
                 extra_fields = set(obj.keys()) - expected_fields
                 if extra_fields:
@@ -996,119 +807,9 @@ def _register_strict_hooks(converter):
                         f"Unexpected field(s) in {cls.__name__}: {', '.join(sorted(extra_fields))}. "
                         f"Expected fields: {', '.join(sorted(expected_fields))}"
                     )
-
-            # Use cattrs default structure with a fresh converter to avoid recursion
-            fresh_converter = cattrs.Converter()
-            # Copy union hooks to fresh converter to handle nested unions
-            fresh_converter.register_structure_hook(ActionType, lambda obj, _: _structure_action(obj, fresh_converter))
-            fresh_converter.register_structure_hook(
-                ExistsCondition | NotExistsCondition, lambda obj, _: _structure_condition(obj, fresh_converter)
-            )
-            fresh_converter.register_structure_hook(
-                TargetStrategyType | None,
-                lambda obj, _: _structure_strategy(obj, fresh_converter) if obj is not None else None,
-            )
-            fresh_converter.register_structure_hook(
-                VariableRegistry,
-                lambda obj, _: obj if isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj),
-            )
-            fresh_converter.register_structure_hook(
-                VariableRegistry | None,
-                lambda obj, _: (
-                    obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
-                ),
-            )
-            fresh_converter.register_structure_hook(
-                WaitCondition, lambda obj, _: _structure_wait_condition(obj, fresh_converter)
-            )
-            fresh_converter.register_structure_hook(
-                WaitCondition | None,
-                lambda obj, _: _structure_wait_condition(obj, fresh_converter) if obj is not None else None,
-            )
-            fresh_converter.register_structure_hook(
-                str | list[Any] | None,
-                lambda obj, _: obj,  # Pass through as-is for LoopAction items
-            )
-
-            # Register numeric structure hook for VariableCondition fields
-            def structure_optional_numeric(obj, _):
-                if obj is None:
-                    return None
-                if isinstance(obj, (int, float)):
-                    return obj
-                if isinstance(obj, str):
-                    try:
-                        return int(obj)
-                    except ValueError:
-                        try:
-                            return float(obj)
-                        except ValueError:
-                            raise ValueError(f"Cannot convert '{obj}' to numeric value") from None
-                return obj
-
-            fresh_converter.register_structure_hook(int | float | None, structure_optional_numeric)
-            # Register structure hook for str | list[str] in PullAction.src
-            fresh_converter.register_structure_hook(
-                str | list[str], lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj)
-            )
-            # Register structure hook for SkipOptions
-            fresh_converter.register_structure_hook(
-                SkipOptions | None,
-                lambda obj, _: _structure_skip_options(obj, fresh_converter) if obj is not None else None,
-            )
-            # Register structure hook for allow_missing_chars field (Union[bool, str, List[str]])
-            fresh_converter.register_structure_hook(
-                bool | str | list[str] | None,
-                lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None,
-            )
-            return fresh_converter.structure(obj, cls)
+            return inner.structure(obj, cls)
 
         return strict_structure_hook
 
-    # Register hooks for all main attrs classes
-    for cls in [
-        Target,
-        Settings,
-        ClickAction,
-        DragAction,
-        KeyboardAction,
-        IdleAction,
-        ScrollAction,
-        GotoAction,
-        ActionTestAction,
-        CommandAction,
-        CaptureSpec,
-        ScreenshotAction,
-        BlockAction,
-        SaveTimestampAction,
-        SaveVariableAction,
-        PullAction,
-        PauseAction,
-        WaitUntilAction,
-        LoopAction,
-        StopAction,
-        ContinueAction,
-        VariableCondition,
-        WaitCondition,
-        ExistsCondition,
-        NotExistsCondition,
-        SweepStrategy,
-        BestConfidenceStrategy,
-        ClosestToStrategy,
-        TopLeftStrategy,
-        TopRightStrategy,
-        BottomLeftStrategy,
-        BottomRightStrategy,
-        LargestStrategy,
-        SmallestStrategy,
-        Playbook,
-        SnapshotFilesystemAction,
-        PullChangedFilesAction,
-        PixelChangeConstraint,
-        SkipOptions,
-        Offset,
-        TextMatchConfig,
-        MachineSpec,
-    ]:
-        if attrs.has(cls):
-            converter.register_structure_hook(cls, _validate_attrs_class(cls))
+    for cls in _STRICT_CLASSES:
+        converter.register_structure_hook(cls, strict_hook_for(cls))
