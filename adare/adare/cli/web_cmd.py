@@ -73,7 +73,10 @@ def web_start(ctx, port, host, dev, no_browser, spice_port):
 
     # Start VirtualSpice if available
     from adare.webapi.process_manager import VirtualSpiceManager
+    from adare.webapi.vm_watch import SPICE_PORT_ENV
 
+    # The live-view proxy and VM-name lookup run in the server: point them at this port.
+    os.environ[SPICE_PORT_ENV] = str(spice_port)
     vs_manager = VirtualSpiceManager(port=spice_port)
 
     # Auto-provision from the pinned GitHub release if no binary was found by any
@@ -85,10 +88,13 @@ def web_start(ctx, port, host, dev, no_browser, spice_port):
 
     if vs_manager.available:
         console.print(f"[green]Starting VirtualSpice on port {spice_port}...[/green]")
-        if vs_manager.start():
-            console.print("[green]VirtualSpice started.[/green]")
+        if not vs_manager.start():
+            console.print(f"[yellow]Warning: VirtualSpice failed to start ({vs_manager.error}).[/yellow]")
+            console.print(f"[dim]Live VM views will be unavailable. Log: {vs_manager.log_file}[/dim]")
+        elif vs_manager.reused:
+            console.print(f"[green]VirtualSpice already running on port {spice_port}; using it.[/green]")
         else:
-            console.print("[yellow]Warning: VirtualSpice failed to start. VM features will be unavailable.[/yellow]")
+            console.print(f"[green]VirtualSpice started[/green] [dim]({vs_manager.binary_path})[/dim]")
     else:
         console.print("[yellow]VirtualSpice unavailable. VM features will be unavailable.[/yellow]")
         console.print("[dim]Set VIRTUALSPICE_BINARY env var, run 'adare ui install-spice', or build from source.[/dim]")
