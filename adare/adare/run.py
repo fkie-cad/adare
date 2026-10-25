@@ -7,6 +7,7 @@ import click
 
 from adare.cli.deprecated import deprecated_alias
 from adare.cli.errors import report_exception
+from adare.cli.groups.system_commands import register as register_system_commands
 from adare.cli.output import FORMAT_CHOICES, FORMAT_ENV_VAR, output_options
 from adare.cli.output import get_formatter_from_context as _get_formatter_from_context
 from adare.cli.tui import tui
@@ -949,6 +950,12 @@ def cli_chat(model, base_url, tool_protocol, max_tokens):
 
     args = SimpleNamespace(model=model, base_url=base_url, tool_protocol=tool_protocol, max_tokens=max_tokens)
     exec_with_error_printing(exec_chat, args)
+
+
+# ------------------------------
+# System resources (extracted to cli/groups/system_commands.py)
+# ------------------------------
+register_system_commands(cli, AliasedGroup, exec_with_error_printing)
 
 
 # ------------------------------

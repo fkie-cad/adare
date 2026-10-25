@@ -28,6 +28,13 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- Host resources and run capacity. The web UI has a **System** page (and host tiles
+  on the home dashboard): live CPU, memory and disk, every running VM, how many
+  more runs of each environment fit right now and what limits them, usage history
+  charts, and where the disk space goes, including run disks without an owner that
+  `adare vm prune` can reclaim. `adare system resources|capacity|usage|storage`
+  report the same. Every experiment run now records what its VM used (peak RAM,
+  CPU, disk), and the capacity estimate is sized from those measurements.
 - VM images have a record: `adare vm create` registers the disk at once and writes
   `<disk>.image.yml` (install method, OS profile + hash, ISO + SHA256, setup level,
   ADARE version/commit, QEMU version, date) and the guest's package list

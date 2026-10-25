@@ -13,6 +13,7 @@ import VmsListPage from '@/pages/vms-list'
 import VmDetailPage from '@/pages/vm-detail'
 import WorkbenchPage from '@/pages/workbench'
 import VmWatchPage from '@/pages/vm-watch'
+import SystemPage from '@/pages/system'
 
 interface RouterContext {
   queryClient: QueryClient
@@ -74,6 +75,12 @@ const environmentDetailRoute = createRoute({
   component: EnvironmentDetailPage,
 })
 
+const systemRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/system',
+  component: SystemPage,
+})
+
 const vmsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/vms',
@@ -128,6 +135,7 @@ export const routeTree = rootRoute.addChildren([
   environmentDetailRoute,
   vmsRoute,
   vmDetailRoute,
+  systemRoute,
   developRoute,
   vmWatchRoute,
 ])

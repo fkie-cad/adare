@@ -71,6 +71,34 @@ Projects are top-level containers that organize experiments and their runs.
 ``adare status``
   Quick overview: current project, active dev sessions, VM count and database status.
 
+Host Resources
+==============
+
+``adare system`` reports what the host has, what ADARE's VMs use and how many more
+runs fit (see :doc:`../guide/host-resources`). Every subcommand takes the global
+``--format`` option.
+
+``adare system resources``
+  Live CPU, memory and disk, and every running QEMU VM with its resident memory and CPU.
+
+``adare system capacity``
+  How many more runs of each current environment fit right now, the limiting
+  resource, and whether the per-run need is measured or the configured size.
+
+``adare system usage``
+  What recent experiment runs actually used: peak RAM, average CPU, disk, duration.
+
+  Options:
+    * ``-e, --environment TEXT`` - Only runs of this environment
+    * ``--limit INTEGER`` - Number of runs to show (default: 50)
+
+``adare system storage``
+  Physical size of ADARE's directories and projects, and run disks without a
+  database owner (reclaimable with ``adare vm prune --force``).
+
+  Options:
+    * ``--refresh`` - Re-measure instead of using the report cached for a few minutes
+
 Environment Management
 ======================
 
@@ -727,6 +755,7 @@ Local Web UI
 
 ``adare ui`` runs the local web UI (FastAPI + VirtualSpice), which also serves
 the live VM viewer used by ``adare vm watch`` and ``adare dev start --watch``.
+While it runs it records a host usage sample per minute for the *System* page.
 
 ``adare ui start``
   Start the ADARE web UI (FastAPI + VirtualSpice) and open it in the browser.

@@ -33,6 +33,7 @@ from adare.core.dto.devmode import (
     DevSessionStopRequest,
 )
 from adare.webapi.adapters import result_to_response
+from adare.webapi.routes.system import router as system_router
 from adare.webapi.websocket_manager import ws_manager
 
 logger = logging.getLogger(__name__)
@@ -45,9 +46,15 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Create the appdata directory tree before serving requests."""
+    """Create the appdata directory tree, and sample host usage while serving."""
+    from adare.backend.system.history import sample_forever
+
     ensure_directories()
-    yield
+    sampler = asyncio.create_task(sample_forever())
+    try:
+        yield
+    finally:
+        sampler.cancel()
 
 
 # Initialize FastAPI app
@@ -684,6 +691,7 @@ app.include_router(vm_instances_router)
 app.include_router(gui_agent_router)
 app.include_router(web_sync_router)
 app.include_router(manage_router)
+app.include_router(system_router)
 app.include_router(vm_watch_router)
 app.include_router(spice_proxy_router)
 

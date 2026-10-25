@@ -103,7 +103,7 @@ test:
 	cd adare && $(RUN) pytest tests -q $(PYTEST_ARGS)
 
 # Line-coverage floor (39.2% when set). Raise it as coverage grows; never lower it.
-COV_MIN = 39
+COV_MIN = 40
 test-cov:
 	$(MAKE) test PYTEST_ARGS="--cov --cov-report= --cov-fail-under=$(COV_MIN) $(PYTEST_ARGS)"
 

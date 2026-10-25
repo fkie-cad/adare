@@ -397,6 +397,7 @@ async def experiment_run(
     # --- Execution Flow ---
     vm_manager = None
     video_recorder = None
+    run_monitor = None
 
     try:
         # Experiment Preparation Phase
@@ -435,6 +436,13 @@ async def experiment_run(
                 await step_runner.run_async_step(vm_manager.setup_file_transfer, experiment_run_context)
                 await step_runner.run_async_step(vm_manager.setup_networking, experiment_run_context)
                 await step_runner.run_async_step(vm_manager.start_vm, experiment_run_context)
+
+        # Measure what the run's VMs consume; capacity planning reads it back
+        # (`adare system capacity`, the web UI's System page).
+        if not stop_event.is_set():
+            from adare.backend.system.run_monitor import start_run_monitor
+
+            run_monitor = start_run_monitor(experiment_run_context)
 
         # Whole-run MP4 via ffmpeg (opt-in, ADARE_EXPERIMENT_VIDEO — no CLI flag
         # yet). QEMU-only: SPICE/QMP screendump are QEMU-specific capture paths.
@@ -589,6 +597,10 @@ async def experiment_run(
                 # Finalize the video (idempotent) before the VM goes away.
                 if video_recorder is not None:
                     await video_recorder.stop()
+
+                if run_monitor is not None:
+                    # Before the VM stops and its disk files are removed.
+                    run_monitor.stop()
 
                 if vm_manager:
                     # Memory only exists while QEMU is running, so the dump must happen

@@ -11,6 +11,7 @@ import {
   Moon,
   Monitor,
   Palette,
+  Gauge,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -20,7 +21,10 @@ import { useSidebarStore } from '@/stores/sidebar-store'
 const navSections = [
   {
     label: 'Overview',
-    items: [{ to: '/', label: 'Home', icon: LayoutDashboard }],
+    items: [
+      { to: '/', label: 'Home', icon: LayoutDashboard },
+      { to: '/system', label: 'System', icon: Gauge },
+    ],
   },
   {
     label: 'Build',

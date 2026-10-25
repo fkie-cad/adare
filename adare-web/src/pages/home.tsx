@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { useProjects } from '@/api/hooks/use-projects'
 import { useExperiments } from '@/api/hooks/use-experiments'
 import { useRuns } from '@/api/hooks/use-runs'
+import { Link } from '@tanstack/react-router'
+import { useSystemResources } from '@/api/hooks/use-system'
+import { ResourceTiles, ResourceTilesSkeleton } from '@/components/system/resource-tiles'
 
 interface StatCardProps {
   title: string
@@ -47,6 +50,7 @@ export default function HomePage() {
   const projects = useProjects()
   const experiments = useExperiments()
   const runs = useRuns()
+  const resources = useSystemResources(5000)
 
   return (
     <div className="p-6 space-y-6">
@@ -82,9 +86,21 @@ export default function HomePage() {
         />
       </div>
 
-      <p className="text-sm text-muted-foreground">
-        Welcome to ADARE. Use the sidebar to browse runs, experiments, projects, and environments.
-      </p>
+      <section className="space-y-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold tracking-tight">This host</h2>
+          <Link to="/system" className="text-sm text-muted-foreground hover:text-foreground hover:underline">
+            Capacity, history and storage →
+          </Link>
+        </div>
+        {resources.data ? (
+          <ResourceTiles data={resources.data} />
+        ) : resources.isError ? (
+          <p className="text-sm text-destructive">Host resources unavailable.</p>
+        ) : (
+          <ResourceTilesSkeleton />
+        )}
+      </section>
     </div>
   )
 }

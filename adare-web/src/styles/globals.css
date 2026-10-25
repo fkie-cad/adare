@@ -41,6 +41,20 @@
   --radius-xl: 0.75rem;
 
   --color-brand: oklch(0.55 0.15 168);
+
+  /* ===== Data viz (validated categorical order; status reserved) ===== */
+  --color-series-1: #2a78d6;
+  --color-series-2: #eb6834;
+  --color-series-3: #1baf7a;
+  --color-series-4: #eda100;
+  --color-series-5: #e87ba4;
+  --color-series-6: #6250d6;
+  --color-series-muted: #b9b8b0;
+  --color-status-good: #0ca30c;
+  --color-status-warning: #fab219;
+  --color-status-critical: #d03b3b;
+  --color-viz-grid: #e1e0d9;
+  --color-viz-axis: #c3c2b7;
 }
 
 /* ===== Dark Default (slate-teal blend) ===== */
@@ -76,6 +90,16 @@
   --color-success-foreground: oklch(0.93 0.01 220);
   --color-warning: oklch(0.75 0.18 85);
   --color-warning-foreground: oklch(0.93 0.01 220);
+
+  --color-series-1: #3987e5;
+  --color-series-2: #d95926;
+  --color-series-3: #199e70;
+  --color-series-4: #c98500;
+  --color-series-5: #d55181;
+  --color-series-6: #9085e9;
+  --color-series-muted: #4a4a46;
+  --color-viz-grid: #2c2c2a;
+  --color-viz-axis: #383835;
 }
 
 /* ===== Light Teal ===== */
