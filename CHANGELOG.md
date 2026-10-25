@@ -28,6 +28,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- Terminal and Claude in the web UI: a terminal panel on every page (sidebar or
+  Ctrl+`) runs Claude Code or a shell in a chosen project, as tabs that survive
+  page changes and reloads. *Build with Claude* (experiments), *Work on it with
+  Claude* (experiment) and *Debug with Claude* (run) start Claude with the task
+  set. Terminals only accept requests from this machine (loopback client, local
+  `Host` and `Origin`).
 - Host resources and run capacity. The web UI has a **System** page (and host tiles
   on the home dashboard): live CPU, memory and disk, every running VM, how many
   more runs of each environment fit right now and what limits them, usage history

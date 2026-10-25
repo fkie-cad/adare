@@ -755,7 +755,8 @@ Local Web UI
 
 ``adare ui`` runs the local web UI (FastAPI + VirtualSpice), which also serves
 the live VM viewer used by ``adare vm watch`` and ``adare dev start --watch``.
-While it runs it records a host usage sample per minute for the *System* page.
+While it runs it records a host usage sample per minute for the *System* page,
+and its terminal panel runs Claude Code or a shell on this host (see :doc:`../guide/web-ui`).
 
 ``adare ui start``
   Start the ADARE web UI (FastAPI + VirtualSpice) and open it in the browser.

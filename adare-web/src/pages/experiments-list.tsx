@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckSquare, Copy, FlaskConical, Link2, Plus, Trash2 } from 'lucide-react'
+import { CheckSquare, Copy, FlaskConical, Link2, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { PageHeader } from '@/components/layout/page-header'
 import { AsyncBoundary } from '@/components/layout/async-boundary'
@@ -18,6 +18,9 @@ import {
   type Experiment,
 } from '@/api/hooks/use-experiments'
 import { toast } from '@/components/ui/toast'
+import { useProjects } from '@/api/hooks/use-projects'
+import { defaultProjectPath, useLaunchTerminal } from '@/components/terminal/use-launch-terminal'
+import { newExperimentPrompt } from '@/components/terminal/claude-prompts'
 
 const SKELETON_ROWS = 5
 const COLUMNS = 6
@@ -98,16 +101,36 @@ export default function ExperimentsListPage() {
     )
   }
 
+  const projects = useProjects()
+  const claude = useLaunchTerminal()
+
   return (
     <div className="p-6 space-y-6">
       <PageHeader
         title="Experiments"
         description="Defined experiment configurations"
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus size={16} />
-            New experiment
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              disabled={claude.isPending}
+              onClick={() =>
+                claude.launch({
+                  kind: 'claude',
+                  cwd: defaultProjectPath(projects.data ?? []),
+                  prompt: newExperimentPrompt(),
+                  title: 'Claude · new experiment',
+                })
+              }
+            >
+              <Sparkles size={16} />
+              Build with Claude
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus size={16} />
+              New experiment
+            </Button>
+          </>
         }
       />
 

@@ -100,6 +100,10 @@ export const endpoints = {
   systemCapacity: '/system/capacity',
   systemRunUsage: '/system/run-usage',
 
+  // Browser terminals (shell / Claude Code); attach over `/ws/terminals/{id}`
+  terminals: '/terminals',
+  terminal: (id: string) => `/terminals/${id}`,
+
   // Health
   health: '/health',
 } as const
