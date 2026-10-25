@@ -14,9 +14,9 @@ import websockets
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from websockets.exceptions import WebSocketException
 
-logger = logging.getLogger(__name__)
+from adare.webapi.vm_watch import spice_port
 
-VIRTUALSPICE_PORT = 8081
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -44,7 +44,7 @@ async def spice_proxy(websocket: WebSocket, vm_id: str) -> None:
     """Proxy a viewer WebSocket to VirtualSpice's decoded-frame stream."""
     await websocket.accept()
 
-    upstream_url = f"ws://127.0.0.1:{VIRTUALSPICE_PORT}/ws/vm/{vm_id}/frames"
+    upstream_url = f"ws://127.0.0.1:{spice_port()}/ws/vm/{vm_id}/frames"
     try:
         upstream = await websockets.connect(upstream_url, max_size=None)
     except (WebSocketException, ConnectionError, OSError) as e:
