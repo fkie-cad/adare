@@ -760,6 +760,9 @@ and its terminal panel runs Claude Code or a shell on this host (see :doc:`../gu
 
 ``adare ui start``
   Start the ADARE web UI (FastAPI + VirtualSpice) and open it in the browser.
+  VirtualSpice runs with its own data dir (``~/.adare/virtualspice``, log
+  ``adare-server.log`` there), so it coexists with the VirtualSpice app; one
+  already answering on the spice port is used instead of starting another.
 
   Options:
     * ``--port INTEGER``, ``--host TEXT`` - Bind address

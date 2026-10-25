@@ -84,6 +84,11 @@ RECIPE_BASE_CACHE_DIR: Path = APPDATA_DIR / 'qemu' / 'cache' / 'recipe-bases'
 # attaching to a published artifact, plus any log_files pulled from a failed step.
 RECIPE_BUILD_LOG_DIR: Path = APPDATA_DIR / 'qemu' / 'build-logs'
 
+# Data dir of the VirtualSpice server `adare ui start` runs: its own, so it never
+# collides with the user's VirtualSpice app (one server per data dir) and ADARE's
+# throwaway run domains stay out of the user's VirtualSpice library.
+VIRTUALSPICE_DATA_DIR: Path = APPDATA_DIR / 'virtualspice'
+
 # OS profiles directory for VM creation definitions
 OS_PROFILES_DIR: Path = APPDATA_DIR / 'os-profiles'
 

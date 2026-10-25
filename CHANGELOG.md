@@ -268,6 +268,16 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- The web UI's live VM view runs on the current VirtualSpice (with `vspice`,
+  MCP and one server per data dir): `adare ui start` gives its VirtualSpice its
+  own data dir (`~/.adare/virtualspice`), so it no longer fails while the
+  VirtualSpice app is open and ADARE's run VMs stay out of its library; reuses a
+  VirtualSpice already answering on the port; skips VirtualSpice builds too old
+  for this; says why VirtualSpice did not start; writes its output to
+  `~/.adare/virtualspice/adare-server.log` (an unread pipe could fill and freeze
+  it). `--spice-port` now also moves the viewer and `adare vm watch` lookup,
+  which were fixed to 8081. Clicking and typing in the viewer needs a
+  VirtualSpice with the input fix (mouse message ids, key releases).
 - VMs with shared folders start on libvirt 10.0 and newer (e.g. Ubuntu 24.04):
   defining the domain failed with "invalid idmap start/target/count settings".
   The virtio-fs `<idmap>` used attributes libvirt does not have; older libvirt

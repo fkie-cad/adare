@@ -9,6 +9,7 @@ handling stays with each caller.
 """
 
 import logging
+import os
 from urllib.parse import quote
 
 import httpx
@@ -17,18 +18,30 @@ from fastapi import APIRouter, HTTPException
 logger = logging.getLogger(__name__)
 
 DEFAULT_SPICE_PORT = 8081
+# `adare ui start --spice-port` exports this so the proxy and the name lookup
+# follow VirtualSpice to a non-default port.
+SPICE_PORT_ENV = "ADARE_SPICE_PORT"
+
+
+def spice_port() -> int:
+    """The port of the VirtualSpice server ADARE talks to."""
+    try:
+        return int(os.environ.get(SPICE_PORT_ENV, DEFAULT_SPICE_PORT))
+    except ValueError:
+        return DEFAULT_SPICE_PORT
+
 
 router = APIRouter(tags=["vm-watch"])
 
 
-def resolve_vm_uuid(name: str, spice_port: int = DEFAULT_SPICE_PORT) -> str | None:
+def resolve_vm_uuid(name: str, port: int | None = None) -> str | None:
     """Return the VirtualSpice uuid for the VM whose name matches ``name``.
 
     Queries VirtualSpice's ``GET /api/vms`` (both ADARE and VirtualSpice share
     the same ``qemu:///session``, so VirtualSpice already sees ADARE's running
     domains). Returns ``None`` if the VM is not found or VirtualSpice is down.
     """
-    url = f"http://127.0.0.1:{spice_port}/api/vms"
+    url = f"http://127.0.0.1:{port or spice_port()}/api/vms"
     try:
         with httpx.Client(timeout=5.0) as client:
             resp = client.get(url)
@@ -61,7 +74,7 @@ def vm_watch_url(name: str, view_only: bool = True):
     browser never contacts ``:8081`` directly. Returns 404 when the VM name
     cannot be resolved (VirtualSpice down or no matching domain).
     """
-    uuid = resolve_vm_uuid(name, spice_port=DEFAULT_SPICE_PORT)
+    uuid = resolve_vm_uuid(name)
     if uuid is None:
         raise HTTPException(
             status_code=404,
@@ -71,6 +84,6 @@ def vm_watch_url(name: str, view_only: bool = True):
         "uuid": uuid,
         "name": name,
         "view_only": view_only,
-        "spice_port": DEFAULT_SPICE_PORT,
+        "spice_port": spice_port(),
         "ws_path": f"/ws/vm/{uuid}",
     }
