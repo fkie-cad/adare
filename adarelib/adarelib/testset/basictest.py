@@ -222,6 +222,9 @@ class BasicTest:
         log.debug(f"Starting tolerance comparison - metadata: {metadata}")
         log.debug(f"VM file timestamp: '{actual_value}'")
 
+        if metadata.get('interval'):
+            return self._compare_timestamp_with_interval(metadata, actual_value)
+
         if 'tolerance' not in metadata or not metadata['tolerance']:
             # No tolerance - do exact comparison
             expected = metadata.get('resolved_value', '')
@@ -306,6 +309,24 @@ class BasicTest:
             success = actual_value == expected
             return success, f"Tolerance comparison failed ({e}), used string comparison"
 
+    def _compare_timestamp_with_interval(self, metadata: dict, actual_value: str) -> tuple[bool, str]:
+        """Check that a timestamp lies in the guest-clock interval [after, before] it was written in."""
+        from adarelib.testset.timeinterval import check_interval
+
+        lower_raw, upper_raw = (str(bound) for bound in metadata['interval'])
+        if '{{' in lower_raw or '{{' in upper_raw:
+            return False, (
+                f"Interval bounds not resolved ({lower_raw}, {upper_raw}): "
+                "save both timestamps with save_timestamp before running the test"
+            )
+        try:
+            actual = self._parse_timestamp_with_format(actual_value, metadata)
+            lower = _parse_bound(lower_raw)
+            upper = _parse_bound(upper_raw)
+        except (ValueError, OverflowError, OSError) as e:
+            return False, f"Interval comparison failed: could not parse timestamps ({e})"
+        return check_interval(actual, lower, upper, float(metadata.get('precision') or 0))
+
     def _parse_timestamp_with_format(
         self, timestamp_str: str, metadata: dict, is_expected: bool = False
     ) -> 'datetime.datetime':
@@ -332,7 +353,12 @@ class BasicTest:
 
         from dateutil import parser as _parser
 
-        _SYSTEM_TZ = datetime.datetime.now().astimezone().tzinfo
+        from adarelib.testset.timeinterval import parse_utc_offset
+
+        # "Local" means the guest's local time. The host records the guest's UTC
+        # offset (guest_utc_offset); without it, fall back to the timezone of the
+        # machine running this test, which is the guest unless in host mode.
+        _SYSTEM_TZ = parse_utc_offset(metadata.get('guest_utc_offset')) or datetime.datetime.now().astimezone().tzinfo
 
         def _finalize(dt: datetime.datetime) -> datetime.datetime:
             if is_expected:
@@ -529,3 +555,17 @@ class BasicTest:
         :return:
         """
         pass
+
+
+def _parse_bound(value: str) -> 'datetime.datetime':
+    """Parse an interval bound: Unix seconds or ISO 8601, naive meaning UTC (save_timestamp values)."""
+    import datetime
+
+    from dateutil import parser as _parser
+
+    try:
+        return datetime.datetime.fromtimestamp(float(value), datetime.timezone.utc)
+    except ValueError:
+        pass
+    dt = _parser.parse(value)
+    return dt if dt.tzinfo else dt.replace(tzinfo=datetime.timezone.utc)

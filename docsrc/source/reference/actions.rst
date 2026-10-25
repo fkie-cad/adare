@@ -98,6 +98,8 @@ Configure experiment-wide behavior:
      export_memory_dump: false      # Live-dump guest RAM (QEMU only) to
                                      # artifacts/memory/ via QMP dump-guest-memory,
                                      # e.g. for Volatility3 ingestion
+     clock_log: true                # Sample the guest clock before/after every action
+                                    # into clock.jsonl (offset to host, jumps, timezone)
 
      # GUI automation mode (QEMU only)
      gui_execution_mode: 'auto'     # 'auto' (choose best), 'agent' (VM-based),
@@ -439,6 +441,40 @@ Use custom tags in test parameters for precise matching:
 - ``!path`` - Path exact match
 - ``!reALL`` - Wildcard (match any value)
 - ``!timestamp {timestamp, tolerance, timezone, format}`` - Timestamp with tolerance
+- ``!timestamp {after, before, precision, localtime, format}`` - Timestamp inside a measured interval
+
+**Timestamps inside a measured interval:** instead of guessing a ``tolerance``, bracket the
+action with two ``save_timestamp`` actions (they read the guest clock) and require the artifact's
+time to lie between them. ``precision`` widens the interval by the artifact's storage granularity
+(e.g. ``1`` for whole seconds, ``2`` for FAT). ``localtime: true`` marks artifacts that store the
+guest's local time without an offset; they are read in the guest's timezone, measured right before
+the test, never the host's. For a file's own MACB times use ``standard.file_timestamps`` with
+``comparison_type: between`` and the same two variables.
+
+.. code-block:: yaml
+
+   tests:
+     - name: trashbin_check
+       function: csv.contains_line
+       parameter:
+         dst: '{{trashbin_csv}}'
+         entry:
+           - !re '.*'
+           - '$I'
+           - 'C:\Users\{{username}}\Documents\testfile.txt'
+           - !re '.*'
+           - !timestamp
+             after: '{{deleted_after}}'
+             before: '{{deleted_before}}'
+             precision: 1
+             format: '%Y-%m-%d %H:%M:%S'
+
+   actions:
+     - save_timestamp: {variable: deleted_after}
+     - click: {target: {text: "Delete"}}
+     - save_timestamp: {variable: deleted_before}
+     # ... export the Recycle Bin with RBCmd to trashbin_csv ...
+     - test: trashbin_check
 
 Actions Reference
 *****************

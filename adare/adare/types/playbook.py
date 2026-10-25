@@ -147,12 +147,11 @@ class Settings:
     export_disk_image: bool = (
         False  # Export the VM's overlay disk as a merged raw image (artifacts/disk/), e.g. for Autopsy ingestion
     )
-    capture_pcap: bool = (
-        False  # Capture the VM's outside-world traffic to a pcap (artifacts/pcap/) via QEMU filter-dump
-    )
+    capture_pcap: bool = False  # Capture the VM's outside-world traffic to artifacts/pcap/ via QEMU filter-dump
     export_memory_dump: bool = (
         False  # Live-dump guest RAM via QMP dump-guest-memory (artifacts/memory/), e.g. for Volatility ingestion
     )
+    clock_log: bool = True  # Sample the guest clock around every action into clock.jsonl (offset, jumps, timezone)
 
 
 @attrs.define

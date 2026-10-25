@@ -773,6 +773,8 @@ class PlaybookController:
         successful_tests = sum(1 for r in test_results if r.success)
         failed_tests = total_tests - successful_tests
 
+        self.action_executor.clock.write_summary()
+
         return PlaybookExecutionResult(
             success=failed == 0,
             total_actions=total_actions,

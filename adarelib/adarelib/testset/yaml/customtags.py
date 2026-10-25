@@ -80,19 +80,45 @@ class YamlPath(YamlCustomTag):
         return ComparisonResult(False)
 
 
+_TIMESTAMP_OPTIONS = (
+    'timezone',
+    'format',
+    'tolerance',
+    'after',
+    'before',
+    'precision',
+    'localtime',
+    'timestamp_format_comparison',
+    'timestamp_format_in_entry',
+)
+
+
 class YamlTimestamp(YamlCustomTag):
     yaml_tag = '!timestamp'
 
     def __init__(
         self,
-        timestamp,
+        timestamp=None,
         timestamp_format_comparison=None,
         timestamp_format_in_entry=None,
         tolerance=None,
         timezone=None,
         format=None,
+        after=None,
+        before=None,
+        precision=None,
+        localtime=None,
     ):
-        self.string = timestamp
+        # Interval form: `!timestamp {after: '{{t0}}', before: '{{t1}}'}` checks
+        # after <= value <= before; the lower bound stands in as the timestamp.
+        if timestamp is None and after is None:
+            raise ValueError('!timestamp needs a timestamp, or an interval with after/before')
+        if (after is None) != (before is None):
+            raise ValueError('!timestamp interval needs both after and before')
+        self.string = timestamp if timestamp is not None else after
+        self.after = after
+        self.before = before
+        self.precision = precision
         self.timestamp_format_comparison = timestamp_format_comparison
         self.timestamp_format_in_entry = timestamp_format_in_entry
         self.tolerance = tolerance
@@ -107,9 +133,21 @@ class YamlTimestamp(YamlCustomTag):
             self.metadata['format'] = format
         if tolerance is not None:  # Only store explicitly set tolerance
             self.metadata['tolerance'] = [-abs(tolerance), abs(tolerance)]
+        if after is not None:
+            self.metadata['interval'] = [after, before]
+        if precision is not None:
+            self.metadata['precision'] = precision
+        if localtime is not None:  # the artifact stores the guest's local time without an offset
+            self.metadata['localtime'] = bool(localtime)
 
     def __repr__(self):
+        if self.after is not None:
+            return f'{self.yaml_tag} [{self.after}, {self.before}]'
         return f'{self.yaml_tag} {self.string}'
+
+    @property
+    def has_interval(self) -> bool:
+        return self.after is not None
 
     def compare(self, entry: str) -> ComparisonResult:
         if not self.timestamp_format_in_entry:
@@ -148,7 +186,7 @@ class YamlTimestamp(YamlCustomTag):
         if 'timestamp' not in mapping and len(mapping) > 0:
             # If no 'timestamp' key, use the first key-value as the timestamp
             first_key = next(iter(mapping.keys()))
-            if isinstance(first_key, str) and not first_key.startswith(('timezone', 'format', 'tolerance')):
+            if isinstance(first_key, str) and first_key not in _TIMESTAMP_OPTIONS:
                 mapping['timestamp'] = first_key
                 mapping.pop(first_key, None)
 
