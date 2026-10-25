@@ -13,6 +13,7 @@ Available API facades:
 - api.show - Data retrieval and display
 - api.vm - Virtual machine operations
 - api.web - Web integration and sync
+- api.system - Host resources, storage, usage history, run capacity
 
 All API methods return Result[T] objects for consistent error handling.
 """
@@ -608,6 +609,37 @@ class WebAPI:
         return SubmitService().precheck_submission(entity_type, name)
 
 
+class SystemAPI:
+    """Host resources, storage, usage history and run capacity API."""
+
+    def __init__(self, service=None):
+        if service is None:
+            from adare.services.system_service import SystemService
+
+            service = SystemService()
+        self._service = service
+
+    def get_resources(self):
+        """Live CPU, memory, disk and running VMs."""
+        return self._service.get_resources()
+
+    def get_storage(self, refresh=False):
+        """Disk usage of ADARE's directories, run disks by owner, projects."""
+        return self._service.get_storage(refresh=refresh)
+
+    def get_history(self, hours=24):
+        """Host usage history."""
+        return self._service.get_history(hours=hours)
+
+    def get_run_usage(self, environment_name=None, limit=100):
+        """Measured resource usage of recent runs."""
+        return self._service.get_run_usage(environment_name=environment_name, limit=limit)
+
+    def get_capacity(self):
+        """How many more runs of each environment fit."""
+        return self._service.get_capacity()
+
+
 class AdareAPI:
     """
     Main ADARE API facade.
@@ -624,6 +656,7 @@ class AdareAPI:
     - api.show - Data retrieval and display
     - api.vm - Virtual machine operations
     - api.web - Web integration and sync
+    - api.system - Host resources, storage, usage history, run capacity
     """
 
     @cached_property
@@ -661,3 +694,7 @@ class AdareAPI:
     @cached_property
     def web(self):
         return WebAPI()
+
+    @cached_property
+    def system(self):
+        return SystemAPI()

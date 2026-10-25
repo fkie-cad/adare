@@ -101,3 +101,25 @@ export function formatCount(value: unknown, singular: string, plural?: string): 
   const label = count === 1 ? singular : (plural ?? `${singular}s`)
   return `${count} ${label}`
 }
+
+/**
+ * Human-readable binary size: 512 B, 3.4 GiB, 1.2 TiB. "—" for null/invalid.
+ */
+export function formatBytes(value: unknown, digits = 1): string {
+  if (value == null) return '—'
+  let n = typeof value === 'number' ? value : Number(value)
+  if (!isFinite(n) || isNaN(n)) return '—'
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
+  let i = 0
+  while (Math.abs(n) >= 1024 && i < units.length - 1) {
+    n /= 1024
+    i++
+  }
+  return i === 0 ? `${Math.round(n)} B` : `${n.toFixed(digits)} ${units[i]}`
+}
+
+/** A 0–100 percentage, rounded: "42%". */
+export function formatPercent(value: unknown): string {
+  const n = value == null ? NaN : Number(value)
+  return isFinite(n) ? `${Math.round(n)}%` : '—'
+}

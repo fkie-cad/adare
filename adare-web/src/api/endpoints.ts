@@ -93,6 +93,13 @@ export const endpoints = {
   // System management
   manageDbStatus: '/manage/db-status',
 
+  // Host resources
+  systemResources: '/system/resources',
+  systemStorage: '/system/storage',
+  systemHistory: '/system/history',
+  systemCapacity: '/system/capacity',
+  systemRunUsage: '/system/run-usage',
+
   // Health
   health: '/health',
 } as const
