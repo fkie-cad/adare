@@ -268,6 +268,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Project databases no longer fill up with screenshots: each action's result was
+  stored with its base64 screenshot inline (~170 KB per action, one project
+  reached 47 GB). Image payloads and strings over 16 KiB are now replaced by a
+  size marker; explicit screenshots stay on disk under `reporting/screenshots`.
 - The web UI's live VM view runs on the current VirtualSpice (with `vspice`,
   MCP and one server per data dir): `adare ui start` gives its VirtualSpice its
   own data dir (`~/.adare/virtualspice`), so it no longer fails while the
