@@ -915,7 +915,7 @@ class ActionExecution(SerializerMixin, ProjectBase):
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
 
-    result_data = Column(JSON)  # screenshots, coordinates, error details, timing
+    result_data = Column(JSON)  # coordinates, error details, timing (image payloads stripped)
     error_message = Column(Text)
     attempt_number = Column(Integer, default=1)
 

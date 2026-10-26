@@ -17,6 +17,29 @@ from adare.types.playbook import Playbook as PlaybookType
 
 log = logging.getLogger(__name__)
 
+# Strings longer than this are not stored in ActionExecution.result_data. Screenshots
+# arrive as base64 PNGs (~170 KB each); stored inline they grew a project database to
+# 47 GB. Explicit screenshots are saved as files and referenced by 'screenshot_path'.
+MAX_RESULT_STRING = 16 * 1024
+
+
+def strip_bulky_values(value: Any) -> Any:
+    """Copy of an action result with base64 images and oversized strings replaced by a marker."""
+    if isinstance(value, dict):
+        stripped = {}
+        for key, item in value.items():
+            # {'data': <base64>, 'format': 'png'} is how images travel over the websocket
+            if key == 'data' and isinstance(item, str) and 'format' in value:
+                stripped[key] = f'<omitted: {len(item)} chars of {value["format"]} data>'
+            else:
+                stripped[key] = strip_bulky_values(item)
+        return stripped
+    if isinstance(value, list | tuple):
+        return [strip_bulky_values(item) for item in value]
+    if isinstance(value, str) and len(value) > MAX_RESULT_STRING:
+        return f'<omitted: {len(value)} chars>'
+    return value
+
 
 class PlaybookApi(ProjectDatabaseApi):
     """API for playbook database operations."""
@@ -353,7 +376,7 @@ class PlaybookApi(ProjectDatabaseApi):
         if execution:
             execution.status = 'success' if success else 'failed'
             execution.completed_at = datetime.now(UTC)
-            execution.result_data = result_data
+            execution.result_data = strip_bulky_values(result_data)
             execution.error_message = error_message
             execution.attempt_number = attempt_number
             self._session.flush()
