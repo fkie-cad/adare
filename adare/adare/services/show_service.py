@@ -74,8 +74,8 @@ class ShowService:
     across different frontends.
     """
 
-    def _query_across_projects(self, query_fn: Callable) -> list:
-        """Run a StructuredDataApi query across all project databases, aggregating results."""
+    def _query_across_projects(self, query_fn: Callable, project_name: str | None = None) -> list:
+        """Run a StructuredDataApi query across all project databases (or only ``project_name``'s)."""
         from adare.database.api.structured_data import StructuredDataApi
 
         all_results = []
@@ -83,6 +83,8 @@ class ShowService:
             projects = global_api.get_projects_structured()
 
         for project in projects:
+            if project_name is not None and project.name != project_name:
+                continue
             project_path = Path(project.path) if project.path else None
             if not project_path:
                 continue
@@ -124,7 +126,8 @@ class ShowService:
                 lambda api, name: api.get_runs_structured(
                     project_name=name,
                     experiment_name=experiment_filter,
-                )
+                ),
+                project_name=project_filter,
             )
 
             items = [
@@ -196,7 +199,9 @@ class ShowService:
                     ulid = latest_run_data['id'].iloc[0]
 
             # Search across all project databases for the run
-            all_runs = self._query_across_projects(lambda api, name: api.get_runs_structured(project_name=name))
+            all_runs = self._query_across_projects(
+                lambda api, name: api.get_runs_structured(project_name=name, run_ids=[ulid])
+            )
 
             run = next((r for r in all_runs if r.ulid == ulid), None)
             if not run:

@@ -1,6 +1,7 @@
 # internal imports
 # configure logging
 import logging
+from pathlib import Path
 
 from adare.api import AdareAPI
 from adare.cli.utils import handle_api_error
@@ -8,6 +9,19 @@ from adare.console import print_success_message
 from adare.core.dto.show import RunListRequest, RunRemoveRequest
 
 log = logging.getLogger(__name__)
+
+
+def _project_name(project_path: Path) -> str:
+    """Registered name of the project at ``project_path``; its directory name if it is not registered.
+
+    The two differ when a project is registered under its own name (``T2F`` at ``.../adare``),
+    and runs are filtered by the registered name.
+    """
+    from adare.database.api.project import ProjectDbApi
+
+    with ProjectDbApi() as api:
+        project = api.get_project_by_path(project_path, silent=True)
+        return project.name if project else project_path.name
 
 
 def _parse_filter(arguments) -> tuple:
@@ -30,7 +44,7 @@ def _parse_filter(arguments) -> tuple:
             # Could be project, environment, or experiment - determine from current context
             if project_path := determine_projectdirectory(None):
                 # We're in a project directory, so assume it's environment or experiment
-                project = project_path.name
+                project = _project_name(project_path)
                 # Check if it's an environment or experiment by context (for now assume environment)
                 environment = parts[0]
             else:
@@ -40,7 +54,7 @@ def _parse_filter(arguments) -> tuple:
             # Could be project.environment or environment.experiment
             if project_path := determine_projectdirectory(None):
                 # We're in a project directory, assume environment.experiment
-                project = project_path.name
+                project = _project_name(project_path)
                 environment, experiment = parts
             else:
                 # Not in project directory, assume project.environment
@@ -57,7 +71,9 @@ def _parse_filter(arguments) -> tuple:
         project = arguments.project
     else:
         # No filter provided, use current project if available (None = show all projects)
-        project = project_path.name if (project_path := determine_projectdirectory(None, silent=True)) else None
+        project = (
+            _project_name(project_path) if (project_path := determine_projectdirectory(None, silent=True)) else None
+        )
 
     return project, environment, experiment
 

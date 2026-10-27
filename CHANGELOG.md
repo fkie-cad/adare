@@ -312,6 +312,15 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- `adare runs list` took ~150 s on a project with 4.5k runs and now takes under a
+  second: every run's verdict lazy-loaded all of its events through an unindexed
+  column. Verdicts are now read for all runs in two queries (also in the web UI's
+  run list), and a migration indexes the columns that look up a run's events,
+  stages, action executions and playbook items. `adare runs info` loads only the
+  requested run instead of every run of every project.
+- `adare runs list` inside a project registered under a name other than its
+  directory's (e.g. `T2F` at `.../adare`) listed no runs; it filters by the
+  registered name and no longer reads the other projects' databases.
 - Removing a dev session (or any old pooled QEMU instance) whose VM config was
   already gone deleted only its database rows and left its full disk copy
   (`<name>-base.qcow2`, ~4-50 GiB) behind; the copy is now removed by name. The
