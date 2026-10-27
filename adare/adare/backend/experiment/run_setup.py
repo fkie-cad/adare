@@ -360,6 +360,13 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
             log.info(f'removing {adarelib_uv_lock} to ensure that adarelib is installed correctly')
             adarelib_uv_lock.unlink()
 
+        # A run grows its VM overlay and writes artifacts: never start one on a nearly full disk.
+        from adare.backend.system.disk_guard import ensure_free_disk
+        from adare.backend.system.host import state_directories
+
+        project_run = [context.project_directory.run] if context.project_directory else []
+        ensure_free_disk([*project_run, *state_directories()])
+
         # Create run directory
         run_dir = ExperimentRunDirectory(context.project_directory, context.config.experiment_name)
         run_dir.create()

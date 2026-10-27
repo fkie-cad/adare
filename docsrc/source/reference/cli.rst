@@ -383,6 +383,12 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
 
 ``adare dev remove``
   Remove a dev mode session and all associated resources. Alias for ``adare dev stop --rm``.
+  A stopped session keeps a full copy of its VM disk (often 5-50 GiB) until it is removed.
+
+  Options:
+    * ``--stopped`` - Remove every stopped or crashed session; lists them with their disk size and asks first
+    * ``--older-than AGE`` - With ``--stopped``: only sessions unused for this long (``14d``, ``12h``)
+    * ``-y, --yes`` - Skip the confirmation
 
 ``adare dev resume [session_id]``
   Resume a previously stopped session. If no session ID is given, resumes the most recently stopped session.
@@ -694,7 +700,11 @@ ADARE knows two kinds of VM:
   Reclaim what crashed runs left behind (instances, run files, orphaned base
   disks, stale recipe caches). Dry run unless ``--force``. Also lists registered
   VMs no environment uses; those are never deleted by prune -- remove one with
-  ``adare vm remove <name>``.
+  ``adare vm remove <name>``. It also reports the disk stopped dev sessions hold
+  (removed with ``adare dev remove --stopped``).
+
+  Runs refuse to start while a filesystem they write to (project ``run/``, ADARE
+  state) has less than ``ADARE_MIN_FREE_DISK_GB`` free (default 10; 0 disables it).
 
   Options:
     * ``--sockets`` - Also reap dead QMP/QGA sockets
