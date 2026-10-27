@@ -27,6 +27,21 @@ from adarelib.testset.type import TestsetFile
 log = logging.getLogger(__name__)
 
 
+def _make_unique_run_dir(base: Path) -> Path:
+    """Create ``base``, or ``base_2``, ``base_3``, ... if a run started in the same second took it.
+
+    ``mkdir`` without ``exist_ok`` is the atomic claim, so concurrent runs never share a directory.
+    """
+    candidate, n = base, 1
+    while True:
+        try:
+            candidate.mkdir(parents=False)
+            return candidate
+        except FileExistsError:
+            n += 1
+            candidate = base.with_name(f'{base.name}_{n}')
+
+
 class ExperimentRunDirectory(Directory):
     log_directory: Path
     adare_log_file: Path
@@ -34,6 +49,9 @@ class ExperimentRunDirectory(Directory):
 
     def __init__(self, project_directory: ProjectDirectory, experiment: str):
         super().__init__(project_directory.run / experiment / datetime.now(UTC).strftime('%Y-%m-%d_%H-%M-%S'))
+        self._set_paths()
+
+    def _set_paths(self):
         self.log_directory = self.path / 'logs'
         self.adare_log_file = self.log_directory / 'adare.log'
         self.adarevm_log_file = self.log_directory / 'adarevm.log'
@@ -65,7 +83,8 @@ class ExperimentRunDirectory(Directory):
         try:
             # Create run directory path
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.path.mkdir(parents=False)
+            self.path = _make_unique_run_dir(self.path)
+            self._set_paths()
 
             # CRITICAL: Create logs directory (ALWAYS, regardless of runlog flag)
             self.log_directory.mkdir(parents=False, exist_ok=True)
@@ -112,6 +131,9 @@ class DiffRunDirectory(Directory):
         # Use 'diff' instead of 'run'
         diff_dir = project_directory.path / 'diff'
         super().__init__(diff_dir / experiment / datetime.now(UTC).strftime('%Y-%m-%d_%H-%M-%S'))
+        self._set_paths()
+
+    def _set_paths(self):
         self.log_directory = self.path / 'logs'
         self.adare_log_file = self.log_directory / 'adare.log'
         self.mcp_gui_log_file = self.log_directory / 'mcp_gui.log'
@@ -140,7 +162,8 @@ class DiffRunDirectory(Directory):
             # Create diff parent directory if needed
             self.path.parent.parent.mkdir(parents=True, exist_ok=True)
             self.path.parent.mkdir(parents=False, exist_ok=True)
-            self.path.mkdir(parents=False)
+            self.path = _make_unique_run_dir(self.path)
+            self._set_paths()
 
             # CRITICAL: Create logs directory (ALWAYS)
             self.log_directory.mkdir(parents=False, exist_ok=True)
