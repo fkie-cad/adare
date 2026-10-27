@@ -120,7 +120,10 @@ class ExperimentApi(ProjectDatabaseApi):
         """
         Get environment by name from the global database.
         project_name is ignored since environments are now global.
+        The environment is returned detached, with its ``vm`` already loaded.
         """
+        from sqlalchemy.orm import joinedload
+
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
 
@@ -128,6 +131,7 @@ class ExperimentApi(ProjectDatabaseApi):
             with GlobalDatabaseApi() as global_api:
                 return (
                     global_api._session.query(Environment)
+                    .options(joinedload(Environment.vm))
                     .filter(Environment.name == environment_name, Environment.is_current)
                     .first()
                 )
