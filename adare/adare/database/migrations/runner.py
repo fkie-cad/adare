@@ -125,6 +125,11 @@ MIGRATIONS: list[Migration] = [
         scope='project',
         module=f'{_PACKAGE}.add_vm_hash_to_experiment_run',
     ),
+    Migration(
+        name='add_run_lookup_indexes',
+        scope='project',
+        module=f'{_PACKAGE}.add_run_lookup_indexes',
+    ),
 ]
 
 # Applied-migration names per database URL. Keeps auto-apply at one SELECT per
