@@ -566,7 +566,7 @@ class DevModeSessionManager:
             # 3. Restore ONLY infrastructure context
             # This attaches to the VM object (so we can destroy it) but doesn't
             # try to connect to the agent
-            success = await restore_infrastructure_context(session, db_session)
+            success = await restore_infrastructure_context(session, db_session, for_cleanup=True)
 
             if not success:
                 log.error(f"Failed to restore infrastructure context for cleanup of {session_id}")

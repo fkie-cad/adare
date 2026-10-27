@@ -23,7 +23,9 @@ from adare.database.models.devsession import DevSession
 log = logging.getLogger(__name__)
 
 
-async def restore_infrastructure_context(session: DevModeSession, db_session: DevSession) -> bool:
+async def restore_infrastructure_context(
+    session: DevModeSession, db_session: DevSession, for_cleanup: bool = False
+) -> bool:
     """
     Restore underlying infrastructure context (VM, directories, config).
 
@@ -168,6 +170,9 @@ async def restore_infrastructure_context(session: DevModeSession, db_session: De
                 vm_instance = vm_api.get_vm_instance_by_name(vm_name)
                 if vm_instance and vm_instance.websocket_port:
                     session.experiment_ctx.config.websocket_port = vm_instance.websocket_port
+                elif for_cleanup:
+                    # Removal only destroys the VM; the agent port does not matter.
+                    log.debug(f"No websocket_port recorded for VM instance {vm_name}")
                 else:
                     log.warning(f"Could not restore websocket_port for VM instance {vm_name}")
         except (ImportError, DatabaseError, OSError, AttributeError) as e:

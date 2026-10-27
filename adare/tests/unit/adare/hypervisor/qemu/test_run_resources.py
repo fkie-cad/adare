@@ -120,3 +120,40 @@ class TestRemoveRunFiles:
         assert [p.name for p in vms.iterdir()] == [f'{other}.json']
         assert [p.name for p in run.iterdir()] == [f'{other}.qmp']
         assert [p.name for p in tpm_root.iterdir()] == ['uuid-other']
+
+
+class TestRemovePooledDiskFiles:
+    def test_removes_the_instance_disk_copy_but_not_the_template_or_others(self, qemu_state):
+        disks = qemu_state / 'disks'
+        mine, other = 'ubuntu_exp_01AAAAAA', 'ubuntu_exp_01BBBBBB'
+        for name in (mine, other):
+            (disks / f'{name}-base.qcow2').write_bytes(b'copy')
+            (disks / f'{name}-nvram.fd').write_bytes(b'')
+        (disks / 'ubuntu.qcow2').write_bytes(b'template')
+
+        removed = run_resources.remove_pooled_disk_files(mine)
+
+        assert {p.name for p in removed} == {f'{mine}-base.qcow2', f'{mine}-nvram.fd'}
+        assert sorted(p.name for p in disks.iterdir()) == sorted(
+            ['ubuntu.qcow2', f'{other}-base.qcow2', f'{other}-nvram.fd']
+        )
+
+
+def test_pooled_instance_without_config_still_loses_its_disk_copy(qemu_state):
+    """dev remove dropped the rows but left each ~12 GB base copy when the config was gone."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from adare.backend.vm.instance_manager import VmInstanceManager
+
+    disks = qemu_state / 'disks'
+    name = 'ubuntu_exp_01AAAAAA'
+    (disks / f'{name}-base.qcow2').write_bytes(b'copy')
+    instance = SimpleNamespace(instance_name=name, vm_id='vm-1')
+    with (
+        patch.object(run_resources, 'adopt_legacy_tpm'),
+        patch('adare.hypervisor.qemu.utilities.uuid_registry.QEMUVMRegistry.vm_exists', return_value=False),
+    ):
+        asyncio.run(VmInstanceManager()._cleanup_qemu_vm(instance))
+
+    assert not (disks / f'{name}-base.qcow2').exists()
