@@ -300,6 +300,40 @@ def acquire_all_slots(
     return SlotLease(taken, exclusive=True)
 
 
+_PORT_LEASES: dict[tuple[str, int], SlotLease] = {}
+
+
+def try_reserve_port(kind: str, port: int, *, directory: Path | None = None, reentrant: bool = False) -> bool:
+    """Reserve ``port`` for this process across all adare processes (flock, no waiting).
+
+    A bind probe cannot reserve a port: the probe socket is closed before the real server binds,
+    and a sibling server that is still importing its libraries has not bound it yet. Holding a
+    lock file per (kind, port) closes that gap. A port this process already holds is refused (two runs
+    in one process need two ports) unless ``reentrant`` (re-assert after a restart). Release with
+    :func:`release_port`; the kernel drops it when the process dies.
+    """
+    key = (kind, int(port))
+    if key in _PORT_LEASES:
+        return reentrant
+    if not slots_enabled():
+        return True
+    base = directory or (slots_dir() / "ports")
+    base.mkdir(parents=True, exist_ok=True)
+    fd = _open_lock_file(base / f"{kind}-{int(port)}.lock")
+    if _try_lock(fd, fcntl.LOCK_EX):
+        _write_holder(fd)
+        _PORT_LEASES[key] = SlotLease({0: fd}, exclusive=False)
+        return True
+    os.close(fd)
+    return False
+
+
+def release_port(kind: str, port: int) -> None:
+    lease = _PORT_LEASES.pop((kind, int(port)), None)
+    if lease is not None:
+        lease.release()
+
+
 def _holder(directory: Path, index: int) -> str:
     try:
         return _slot_path(directory, index).read_text().strip() or "unknown"

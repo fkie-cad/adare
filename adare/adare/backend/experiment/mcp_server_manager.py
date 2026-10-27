@@ -40,10 +40,11 @@ def find_free_cv_port(preferred: int = DEFAULT_CV_PORT, window: int = CV_PORT_SC
     "free" from "bound but not listening yet", which is exactly the state a
     sibling run's cv-server is in while it imports cv2/PaddleOCR.
 
-    Note the residual TOCTOU window — the socket is closed again before the
-    cv-server binds it, so two runs starting in the same instant can still pick
-    the same port. The loser attaches to the winner's server (``start()`` with
-    ``allow_existing=True``) rather than crashing.
+    The bind probe alone has a TOCTOU window (the socket is closed again before the
+    cv-server binds), so the chosen port is also reserved with a per-port lock file
+    (``adare.backend.vm.slots.try_reserve_port``) held until :meth:`MCPServerManager.stop`
+    or process exit. Two runs starting in the same instant can no longer pick the same
+    port and the loser can no longer attach to the winner's server.
 
     Args:
         preferred: First port to try.
@@ -55,10 +56,13 @@ def find_free_cv_port(preferred: int = DEFAULT_CV_PORT, window: int = CV_PORT_SC
     Raises:
         LoggedException: If no port in the window is free.
     """
+    from adare.backend.vm.slots import try_reserve_port
     from adare.helperfunctions.port import is_localhost_port_free
 
     for port in range(preferred, preferred + window):
-        if is_localhost_port_free(port):
+        # The bind probe alone leaves a gap (see below); the cross-process port reservation
+        # closes it: whoever holds the lock owns the port, even before its server has bound it.
+        if is_localhost_port_free(port) and try_reserve_port("cv", port):
             if port != preferred:
                 log.info(f"CV/OCR port {preferred} is in use (likely a concurrent run); using {port} instead")
             return port
@@ -190,6 +194,12 @@ class MCPServerManager:
         Returns:
             True if server started successfully, False otherwise
         """
+        # Best effort: keep this port reserved across processes while our server uses it
+        # (find_free_cv_port reserved it; a stop()/start() restart must not lose it).
+        from adare.backend.vm.slots import try_reserve_port
+
+        try_reserve_port("cv", self.server_port, reentrant=True)
+
         # Check if port is already in use (server running from another session)
         if self._is_port_in_use(self.server_port):
             if allow_existing:
@@ -350,6 +360,10 @@ class MCPServerManager:
 
         except (OSError, subprocess.SubprocessError) as e:
             log.error(f"Error stopping MCP server: {e}")
+        finally:
+            from adare.backend.vm.slots import release_port
+
+            release_port("cv", self.server_port)
 
     def is_running(self) -> bool:
         """
