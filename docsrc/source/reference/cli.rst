@@ -99,6 +99,20 @@ runs fit (see :doc:`../guide/host-resources`). Every subcommand takes the global
   Options:
     * ``--refresh`` - Re-measure instead of using the report cached for a few minutes
 
+``adare system settings [list|get|set|unset]``
+  Host limits ADARE keeps to, saved in ``~/.adare/settings.json``. Each resolves
+  environment variable > saved setting > default, and ``list`` shows where each
+  value comes from. ``set`` validates the value; ``unset`` returns to the default.
+
+  * ``ADARE_MAX_VMS`` (20) - VMs that may run at once across all adare processes
+  * ``ADARE_VM_SLOT_TIMEOUT`` (30) - seconds a run waits for a free VM slot
+  * ``ADARE_MIN_FREE_DISK_GB`` (10) - GiB that must be free on the project and ADARE
+    disks before a run starts; 0 switches the check off
+  * ``ADARE_DEV_SESSION_MAX_AGE_DAYS`` (off) - stopped dev sessions unused for longer
+    are removed by every experiment run and ``adare vm prune --force``
+
+  Example: ``adare system settings set ADARE_DEV_SESSION_MAX_AGE_DAYS 30``
+
 Environment Management
 ======================
 
@@ -390,8 +404,8 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
     * ``--older-than AGE`` - With ``--stopped``: only sessions unused for this long (``14d``, ``12h``)
     * ``-y, --yes`` - Skip the confirmation
 
-  Automatic expiry is opt-in: with ``ADARE_DEV_SESSION_MAX_AGE_DAYS`` set (environment or user
-  config), every experiment run and ``adare vm prune --force`` remove stopped or crashed sessions
+  Automatic expiry is opt-in: with the ``ADARE_DEV_SESSION_MAX_AGE_DAYS`` setting
+  (``adare system settings set``), every experiment run and ``adare vm prune --force`` remove stopped or crashed sessions
   unused for longer than that many days (``adare vm prune`` without ``--force`` lists them).
   Running sessions and sessions whose VM is still up are never removed.
 
@@ -709,7 +723,7 @@ ADARE knows two kinds of VM:
   (removed with ``adare dev remove --stopped``).
 
   Runs refuse to start while a filesystem they write to (project ``run/``, ADARE
-  state) has less than ``ADARE_MIN_FREE_DISK_GB`` free (default 10; 0 disables it).
+  state) has less than the ``ADARE_MIN_FREE_DISK_GB`` setting free (default 10; 0 disables it).
 
   Options:
     * ``--sockets`` - Also reap dead QMP/QGA sockets

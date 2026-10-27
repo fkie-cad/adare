@@ -16,8 +16,8 @@ Properties:
 * Exclusive use works even when ``N`` was lowered after slots were handed out: it locks every
   slot file that exists, not just the first ``N``.
 
-``N`` is ``ADARE_MAX_VMS`` (environment), else ``ADARE_MAX_VMS`` in the active user-config
-profile, else 20 (the previous ``VmInstanceManager.MAX_INSTANCES_PER_VM``).
+``N`` is the ``ADARE_MAX_VMS`` setting (environment > ``adare system settings`` > the active
+config.json profile > 20, the previous ``VmInstanceManager.MAX_INSTANCES_PER_VM``).
 
 A process that took all slots can run adare itself: ``adare vm slots exclusive -- <command>``
 (or ``exclusive_env()`` for a subprocess of your own) sets ``ADARE_VM_SLOTS_EXCLUSIVE_PID`` so
@@ -47,7 +47,6 @@ MAX_VMS_ENV = "ADARE_MAX_VMS"
 SLOT_TIMEOUT_ENV = "ADARE_VM_SLOT_TIMEOUT"
 EXCLUSIVE_PID_ENV = "ADARE_VM_SLOTS_EXCLUSIVE_PID"
 DEFAULT_MAX_VMS = 20  # was VmInstanceManager.MAX_INSTANCES_PER_VM
-DEFAULT_SLOT_TIMEOUT = 30.0  # seconds; matches the instance-manager lock timeout
 _POLL_SECONDS = 0.2
 _SLOT_PREFIX = "slot-"
 _SLOT_SUFFIX = ".lock"
@@ -86,43 +85,18 @@ def _under_exclusive_lease() -> bool:
     return True
 
 
-def _positive_int(raw, source: str) -> int | None:
-    if raw is None or str(raw).strip() == "":
-        return None
-    try:
-        value = int(str(raw).strip())
-    except ValueError:
-        log.warning(f"{source}={raw!r} is not an integer; ignoring")
-        return None
-    if value < 1:
-        log.warning(f"{source}={raw!r} must be >= 1; ignoring")
-        return None
-    return value
-
-
 def max_vm_slots() -> int:
-    """Number of VM slots: env ``ADARE_MAX_VMS`` > user config > 20."""
-    from_env = _positive_int(os.environ.get(MAX_VMS_ENV), MAX_VMS_ENV)
-    if from_env is not None:
-        return from_env
-    try:
-        from adare.config import userconfig
+    """Number of VM slots: ``ADARE_MAX_VMS`` (environment > ``adare system settings`` > 20)."""
+    from adare.config import settings
 
-        from_config = _positive_int(userconfig.get(MAX_VMS_ENV), f"{MAX_VMS_ENV} (user config)")
-    except (OSError, ValueError, KeyError, TypeError) as exc:  # config must never block a run
-        log.debug(f"Could not read {MAX_VMS_ENV} from user config: {exc}")
-        from_config = None
-    return from_config if from_config is not None else DEFAULT_MAX_VMS
+    return int(settings.get_number(MAX_VMS_ENV))
 
 
 def slot_timeout() -> float:
-    raw = os.environ.get(SLOT_TIMEOUT_ENV, "").strip()
-    if raw:
-        try:
-            return max(0.0, float(raw))
-        except ValueError:
-            log.warning(f"{SLOT_TIMEOUT_ENV}={raw!r} is not a number; using {DEFAULT_SLOT_TIMEOUT}s")
-    return DEFAULT_SLOT_TIMEOUT
+    """Seconds to wait for a slot: ``ADARE_VM_SLOT_TIMEOUT`` (environment > settings > 30)."""
+    from adare.config import settings
+
+    return settings.get_number(SLOT_TIMEOUT_ENV)
 
 
 def slots_dir() -> Path:
