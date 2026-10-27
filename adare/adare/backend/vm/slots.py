@@ -348,9 +348,9 @@ def slot_status(*, max_slots: int | None = None, directory: Path | None = None) 
     if not slots_enabled():
         return {"enabled": False, "total": count, "taken": 0, "free": count, "holders": {}}
     directory.mkdir(parents=True, exist_ok=True)
-    count = max(count, _existing_slot_count(directory))
+    # Scan every slot file: slots above the limit stay held if ADARE_MAX_VMS was lowered.
     holders: dict[int, str] = {}
-    for index in range(count):
+    for index in range(max(count, _existing_slot_count(directory))):
         path = _slot_path(directory, index)
         if not path.exists():
             continue
@@ -366,6 +366,6 @@ def slot_status(*, max_slots: int | None = None, directory: Path | None = None) 
         "enabled": True,
         "total": count,
         "taken": len(holders),
-        "free": count - len(holders),
+        "free": max(0, count - len(holders)),
         "holders": holders,
     }
