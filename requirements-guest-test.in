@@ -13,6 +13,6 @@
 -r adare/appdata/testfunctions/standard/requirements.txt
 -r adare/appdata/testfunctions/xml/requirements.txt
 # windows/requirements.txt has no platform marker, and pywin32 only exists on Windows.
-pywin32>=227; sys_platform == 'win32'
+pywin32>=312; sys_platform == 'win32'
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
