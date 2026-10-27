@@ -598,6 +598,29 @@ def _print_unreferenced_vms() -> None:
         click.echo(f"  {name}  ({vm_id})")
 
 
+def _print_stopped_dev_sessions() -> None:
+    """Point at the disk stopped dev sessions hold. Never deleted by prune: a stopped session
+    can be resumed, so removing it is a decision (`adare dev remove --stopped`)."""
+    import click
+
+    from adare.backend.system.storage import group_disk_owners
+    from adare.database.api.devmode import DevModeApi
+    from adare.database.exceptions import DatabaseError
+    from adare.hypervisor.qemu.mixins.configuration import get_qemu_disk_dir
+
+    try:
+        with DevModeApi() as api:
+            names = {s.vm_name for s in api.list_sessions() if s.status in ('stopped', 'crashed')}
+    except DatabaseError:
+        return
+    held = sum(o.bytes for o in group_disk_owners(get_qemu_disk_dir(), set(), {}) if o.name in names)
+    if held:
+        click.echo(
+            f"\nStopped dev sessions keep {held / 1024**3:.1f} GiB of VM disks (kept; review and remove "
+            "with `adare dev remove --stopped [--older-than 14d]`)."
+        )
+
+
 def exec_vm_prune(arguments):
     """Reclaim orphaned QEMU base disks / NVRAM (and optionally dead sockets).
 
@@ -625,6 +648,7 @@ def exec_vm_prune(arguments):
     # 0. Instances: crashed runs, run files without a row, pooled QEMU leftovers.
     _print_reconcile_report(run_blocking(reconcile_instances(dry_run=dry_run)), dry_run)
     _print_unreferenced_vms()
+    _print_stopped_dev_sessions()
 
     # 1. Referenced set: every registered VM + instance name from the DB.
     referenced: set[str] = set()

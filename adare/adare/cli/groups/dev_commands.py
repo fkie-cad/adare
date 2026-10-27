@@ -120,11 +120,26 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @dev.command()
     @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
-    def remove(session_id):
-        """Remove a dev mode session and all resources (alias for 'stop --rm')."""
+    @click.option('--stopped', is_flag=True, help='Remove every stopped (or crashed) session, freeing its disk copy')
+    @click.option('--older-than', default=None, help='With --stopped: only sessions unused for this long (14d, 12h)')
+    @click.option('-y', '--yes', is_flag=True, help='Skip the confirmation prompt (with --stopped)')
+    def remove(session_id, stopped, older_than, yes):
+        """Remove a dev mode session and all resources (alias for 'stop --rm').
+
+        A stopped session keeps a full copy of its VM disk until it is removed.
+        --stopped lists them with their size and removes them after a confirmation.
+
+        \b
+        Example:
+            adare dev remove --stopped --older-than 14d
+        """
         from adare.cli.dev import exec_dev_stop
 
-        args = SimpleNamespace(session_id=session_id, remove_resources=True)
+        if older_than and not stopped:
+            raise click.UsageError('--older-than needs --stopped')
+        args = SimpleNamespace(
+            session_id=session_id, remove_resources=True, stopped=stopped, older_than=older_than, yes=yes
+        )
         exec_with_error_printing(exec_dev_stop, args)
 
     @dev.command()

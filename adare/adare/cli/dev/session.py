@@ -7,6 +7,7 @@ Provides exec_* functions for session lifecycle:
 
 import logging
 import threading
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from adare.api import AdareAPI
@@ -310,18 +311,7 @@ def _exec_dev_stop_all(api, remove_resources, assume_yes):
         print("Aborted")
         return
 
-    done, failed = [], []
-    for s in running:
-        result = api.devmode.stop_session(
-            DevSessionStopRequest(session_id=s.session_id, remove_resources=remove_resources)
-        )
-        if result.success:
-            done.append(s.session_id)
-            print(f"  {'removed' if remove_resources else 'stopped'}: {s.session_id}")
-        else:
-            failed.append(s.session_id)
-            print(f"  FAILED: {s.session_id} ({result.error.message if result.error else 'unknown error'})")
-
+    done, failed = _stop_sessions(api, running, remove_resources)
     if failed:
         print_error_message(
             title=f'{len(done)} session(s) {verb}ped, {len(failed)} failed',
@@ -331,12 +321,92 @@ def _exec_dev_stop_all(api, remove_resources, assume_yes):
         print_success_message(title=f'All {len(done)} running session(s) {verb}ped')
 
 
+def _stop_sessions(api, sessions, remove_resources: bool) -> tuple[list[str], list[str]]:
+    done, failed = [], []
+    for s in sessions:
+        result = api.devmode.stop_session(
+            DevSessionStopRequest(session_id=s.session_id, remove_resources=remove_resources)
+        )
+        if result.success:
+            done.append(s.session_id)
+            print(f"  {'removed' if remove_resources else 'stopped'}: {s.session_id}")
+        else:
+            failed.append(s.session_id)
+            print(f"  FAILED: {s.session_id} ({result.error.message if result.error else 'unknown error'})")
+    return done, failed
+
+
+def parse_age(text: str) -> timedelta:
+    """'14d', '12h' or a bare number of days."""
+    text = text.strip().lower()
+    unit = {'d': 'days', 'h': 'hours'}.get(text[-1:])
+    number = text[:-1] if unit else text
+    try:
+        value = float(number)
+    except ValueError as e:
+        raise ValueError(f"invalid age {text!r}: use e.g. 14d, 12h or 7") from e
+    return timedelta(**{unit or 'days': value})
+
+
+def _exec_dev_remove_stopped(api, older_than: str | None, assume_yes: bool):
+    """Remove stopped/crashed dev sessions and their disk copies (`dev remove --stopped`)."""
+    import click
+
+    from adare.backend.system.storage import group_disk_owners
+    from adare.database.api.devmode import DevModeApi
+    from adare.hypervisor.qemu.mixins.configuration import get_qemu_disk_dir
+
+    try:
+        min_age = parse_age(older_than) if older_than else timedelta(0)
+    except ValueError as e:
+        raise click.BadParameter(str(e), param_hint='--older-than') from e
+    # updated_at is stored as naive UTC (SQLite CURRENT_TIMESTAMP)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - min_age
+    with DevModeApi() as dev_api:
+        sessions = [
+            s
+            for s in dev_api.list_sessions()
+            if s.status in ('stopped', 'crashed') and (s.updated_at or s.created_at) <= cutoff
+        ]
+    if not sessions:
+        print(f"No stopped dev sessions{f' older than {older_than}' if older_than else ''}")
+        return
+
+    sizes = {o.name: o.bytes for o in group_disk_owners(get_qemu_disk_dir(), set(), {})}
+    total = sum(sizes.get(name, 0) for name in {s.vm_name for s in sessions})  # sessions can share a VM
+    print(f"{len(sessions)} stopped dev session(s), {total / 1024**3:.1f} GiB of disk:")
+    for s in sessions:
+        last = (s.updated_at or s.created_at).strftime('%Y-%m-%d')
+        size = sizes.get(s.vm_name, 0) / 1024**3
+        print(f"  - {s.session_id}  last used {last}  {size:6.1f} GiB  ({s.experiment_name} / {s.environment_name})")
+
+    if not assume_yes and not click.confirm(
+        f"\nRemove these {len(sessions)} session(s)? They cannot be resumed afterwards.", default=False
+    ):
+        print("Aborted")
+        return
+
+    done, failed = _stop_sessions(api, sessions, remove_resources=True)
+    if failed:
+        print_error_message(
+            title=f'{len(done)} session(s) removed, {len(failed)} failed',
+            next_steps=['Check logs for the failed sessions', 'Retry with: adare dev remove -s <session_id>'],
+        )
+    else:
+        print_success_message(title=f'Removed {len(done)} stopped session(s), freed ~{total / 1024**3:.1f} GiB')
+
+
 def exec_dev_stop(arguments):
     """Stop a dev mode session (or every running session with --all)."""
     api = AdareAPI()
 
     # Extract remove_resources flag (default to False)
     remove_resources = getattr(arguments, 'remove_resources', False)
+
+    # --stopped: remove stopped sessions (optionally only old ones), freeing their disks
+    if getattr(arguments, 'stopped', False):
+        _exec_dev_remove_stopped(api, getattr(arguments, 'older_than', None), getattr(arguments, 'yes', False))
+        return
 
     # --all: stop every running session (with confirmation unless --yes)
     if getattr(arguments, 'all_sessions', False):
