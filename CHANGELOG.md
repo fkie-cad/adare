@@ -304,6 +304,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Removing a dev session (or any old pooled QEMU instance) whose VM config was
+  already gone deleted only its database rows and left its full disk copy
+  (`<name>-base.qcow2`, ~4-50 GiB) behind; the copy is now removed by name. The
+  removal also no longer warns "Could not restore websocket_port" per session.
 - Two runs started at the same moment can no longer get the same CV/OCR server
   port: `find_free_cv_port` also reserves the port with a lock file until the
   server stops. VirtualBox experiment snapshots are named after the random tail
