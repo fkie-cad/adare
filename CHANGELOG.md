@@ -135,7 +135,7 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   Accepted by `adare exp playbook validate` and validated like normal steps.
 - Cross-process VM slots (`adare.backend.vm.slots`): `N` flock files under
   `<appdata>/vm_slots/` cap the live VMs across all `adare` processes (N =
-  `ADARE_MAX_VMS`, else the same key in the active config profile, else 20, the
+  the `ADARE_MAX_VMS` setting, default 20, the
   old per-VM instance limit). Every run's VM (QEMU run instance or pooled
   VirtualBox instance) takes one slot before it boots (waits up to
   `ADARE_VM_SLOT_TIMEOUT`, default 30 s) and keeps it until the run is removed or
@@ -147,12 +147,16 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - `adare dev remove --stopped [--older-than 14d] [-y]` removes stopped dev
   sessions in bulk, listing each with the VM disk it keeps (on this host 25
   forgotten sessions held ~164 GiB). `adare vm prune` reports that space too.
-- Opt-in expiry of forgotten dev sessions: with `ADARE_DEV_SESSION_MAX_AGE_DAYS`
-  set, every experiment run and `adare vm prune --force` remove stopped/crashed
+- `adare system settings list|get|set|unset`: host limits saved in
+  `~/.adare/settings.json` (`ADARE_MAX_VMS`, `ADARE_VM_SLOT_TIMEOUT`,
+  `ADARE_MIN_FREE_DISK_GB`, `ADARE_DEV_SESSION_MAX_AGE_DAYS`), each resolved
+  environment variable > saved setting > default and validated when set.
+- Opt-in expiry of forgotten dev sessions: with the `ADARE_DEV_SESSION_MAX_AGE_DAYS`
+  setting, every experiment run and `adare vm prune --force` remove stopped/crashed
   sessions unused for longer than that (never running ones, never one whose VM is
   up, never from inside a dev session). Off by default.
 - Runs refuse to start when a filesystem they write to has less than
-  `ADARE_MIN_FREE_DISK_GB` free (default 10 GiB, 0 disables), with the cleanup
+  the `ADARE_MIN_FREE_DISK_GB` setting free (default 10 GiB, 0 disables), with the cleanup
   commands as suggestions, instead of filling the disk mid-run.
 
 ### Changed

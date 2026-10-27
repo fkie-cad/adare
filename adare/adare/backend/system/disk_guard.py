@@ -2,12 +2,11 @@
 
 A run grows its VM overlay and writes its artifacts while it executes; on a full
 disk QEMU pauses the guest or the run dies half-way, and the host suffers with it.
-The limit is ``ADARE_MIN_FREE_DISK_GB`` (default 10 GiB free per filesystem; 0
-switches the check off).
+The limit is the ``ADARE_MIN_FREE_DISK_GB`` setting (``adare system settings``,
+default 10 GiB free per filesystem; 0 switches the check off).
 """
 
 import logging
-import os
 import shutil
 from pathlib import Path
 
@@ -16,7 +15,6 @@ from adare.exceptions import LoggedErrorException
 log = logging.getLogger(__name__)
 
 MIN_FREE_ENV = 'ADARE_MIN_FREE_DISK_GB'
-DEFAULT_MIN_FREE_GB = 10.0
 
 
 class LowDiskSpaceError(LoggedErrorException):
@@ -24,13 +22,10 @@ class LowDiskSpaceError(LoggedErrorException):
 
 
 def min_free_bytes() -> int:
-    raw = os.environ.get(MIN_FREE_ENV, '').strip()
-    try:
-        gib = float(raw) if raw else DEFAULT_MIN_FREE_GB
-    except ValueError:
-        log.warning(f"{MIN_FREE_ENV}={raw!r} is not a number; using {DEFAULT_MIN_FREE_GB:g} GiB")
-        gib = DEFAULT_MIN_FREE_GB
-    return int(max(gib, 0.0) * 1024**3)
+    """``ADARE_MIN_FREE_DISK_GB`` (environment > ``adare system settings`` > 10) in bytes."""
+    from adare.config import settings
+
+    return int(settings.get_number(MIN_FREE_ENV) * 1024**3)
 
 
 def ensure_free_disk(paths: list[Path]) -> None:
@@ -64,6 +59,6 @@ def ensure_free_disk(paths: list[Path]) -> None:
                 'Remove old stopped dev sessions (each keeps a full VM disk): '
                 'adare dev remove --stopped --older-than 14d',
                 'Reclaim what crashed runs left behind: adare vm prune --force',
-                f'Lower or disable the limit (0) with {MIN_FREE_ENV}',
+                f'Lower or disable the limit: adare system settings set {MIN_FREE_ENV} 0',
             ],
         )
