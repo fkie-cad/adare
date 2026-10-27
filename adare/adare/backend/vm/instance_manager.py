@@ -905,7 +905,9 @@ class VmInstanceManager:
             # during boot-retry cleanup of an already-removed attempt), and it
             # never returns falsy — so probe existence first.
             if not QEMUVMRegistry.vm_exists(instance.instance_name):
-                log.debug(f"QEMU VM config already gone, nothing to clean up: {instance.instance_name}")
+                # The config is gone but the instance's own disk copy (~12 GB) may not be.
+                removed = run_resources.remove_pooled_disk_files(instance_name)
+                log.debug(f"QEMU VM config already gone, removed by name: {[p.name for p in removed]}")
                 return
 
             vm = QEMUVMRegistry.get_vm_by_name(instance.instance_name)

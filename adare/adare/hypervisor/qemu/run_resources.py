@@ -233,6 +233,25 @@ def run_domain_uuid(instance_name: str) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def remove_pooled_disk_files(instance_name: str) -> list[Path]:
+    """Delete a pooled instance's own full disk copy (``<name>-base.qcow2``) and its run files.
+
+    For when the instance's config is already gone, so ``QEMUVM.cleanup_base_disk``
+    cannot be reached: only the managed names derived from ``instance_name`` in the
+    ADARE disk directory are removed, never a template or a ``--no-copy`` disk.
+    """
+    removed = remove_run_files(instance_name)
+    base = get_qemu_disk_dir() / f'{instance_name}-base.qcow2'
+    try:
+        base.unlink()
+        removed.append(base)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        log.warning(f"Could not remove disk copy {base}: {e}")
+    return removed
+
+
 def remove_run_files(instance_name: str) -> list[Path]:
     """Delete every file a run created: overlays (+ checkpoint dirs), UEFI vars, config, sockets, vTPM copy.
 
