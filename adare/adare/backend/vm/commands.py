@@ -533,6 +533,7 @@ async def _prepare_qemu_run_instance(
     import ulid
 
     from adare.backend.vm.run_instances import allocate_qemu_run_instance, reconcile_instances
+    from adare.backend.vm.run_reaper import start_run_reaper
     from adare.backend.vm.slots import acquire_slot
 
     # Crashed runs leave rows (holding ports) and run files behind; reap them first.
@@ -548,6 +549,8 @@ async def _prepare_qemu_run_instance(
     # Cap live VMs across adare processes (ADARE_MAX_VMS): wait for a free slot before booting.
     slot = await asyncio.to_thread(acquire_slot)
     instance = allocate_qemu_run_instance(source_vm, experiment_run_ulid or str(ulid.ULID()), machine_key, slot)
+    # Should this process die without tearing the run down, its VM must not keep running.
+    start_run_reaper()
     instance_id: str = instance.id
     return instance_id
 
