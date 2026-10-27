@@ -13,6 +13,7 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import backref, declarative_base, relationship
 from sqlalchemy_serializer import SerializerMixin
 
+from adare.database.models.run_verdict import compute_result_status
 from adare.database.models.sync_identity import RemoteIdentityMixin
 from adarelib.constants import StatusEnum
 
@@ -798,40 +799,13 @@ class ExperimentRun(SerializerMixin, ProjectBase):
 
     @hybrid_property
     def result_status(self):
-        # Handle case where experiment is None
+        """Verdict of this run. Listings of many runs use ``load_result_statuses`` instead."""
         if not self.experiment:
             return StatusEnum.ERROR
-
-        # First check for test execution failures and result failures
-        # This takes priority over missing tests since failed tests cause early termination
-        saw_warning = False
-        for t in self.tests:
-            # Check if test execution failed (success=False in Event base class)
-            if hasattr(t, 'success') and t.success is False:
-                return StatusEnum.FAILED
-
-            # Check if test result indicates failure. WARNING is pass-with-warning:
-            # it must not be treated as a failure (see TestResult.warning).
-            if t.result:
-                status = int(t.result.status_id)
-                if status == StatusEnum.WARNING:
-                    saw_warning = True
-                elif status != StatusEnum.SUCCESS:
-                    return StatusEnum.FAILED
-
-        # Only check for missing tests if no tests failed
-        # (missing tests are expected when earlier tests failed and stopped execution)
-        for test in self.experiment.abstract_tests:
-            found = False
-            for t in self.tests:
-                if t.abstract_test_id == test.id:
-                    found = True
-                    break
-            if not found:
-                return StatusEnum.TEST_MISSING
-
-        # All tests passed; surface WARNING distinctly (still a passing verdict).
-        return StatusEnum.WARNING if saw_warning else StatusEnum.SUCCESS
+        return compute_result_status(
+            [(t.success, t.abstract_test_id, t.result.status_id if t.result else None) for t in self.tests],
+            [test.id for test in self.experiment.abstract_tests],
+        )
 
     @hybrid_property
     def ulid(self):

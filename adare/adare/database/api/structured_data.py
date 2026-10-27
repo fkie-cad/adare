@@ -5,6 +5,7 @@ import logging
 from sqlalchemy.orm import joinedload, selectinload
 
 from adare.database.api.base import EnhancedDatabaseApi
+from adare.database.api.run_results import load_result_statuses
 
 # internal imports
 from adare.database.models.global_models import Environment, Project, TestFunction, TestFunctionFile, Vm
@@ -242,9 +243,13 @@ class StructuredDataApi(EnhancedDatabaseApi):
         return result
 
     def get_runs_structured(
-        self, project_name: str = None, environment_name: str = None, experiment_name: str = None
+        self,
+        project_name: str = None,
+        environment_name: str = None,
+        experiment_name: str = None,
+        run_ids: list[str] | None = None,
     ) -> list[RunInfo]:
-        """Get runs as structured RunInfo objects with optional filtering."""
+        """Get runs as structured RunInfo objects with optional filtering (``run_ids``: only these runs)."""
         # Validate input parameters
         for param_name, param_value in [
             ('project_name', project_name),
@@ -263,8 +268,11 @@ class StructuredDataApi(EnhancedDatabaseApi):
         # Filtering by project_name is not needed at the database level.
         if experiment_name:
             query = query.join(Experiment).filter(Experiment.name == experiment_name)
+        if run_ids is not None:
+            query = query.filter(ExperimentRun.id.in_(run_ids))
 
         runs = safe_query_all(query)
+        result_statuses = load_result_statuses(self._session, runs)
         result = []
         dangling_run_ids: list[str] = []
 
@@ -307,7 +315,7 @@ class StructuredDataApi(EnhancedDatabaseApi):
                 status=run.status,
                 published=run.published or False,
                 fake=run.fake or False,
-                overall_result=run.result_status or "",
+                overall_result=result_statuses[run.id] or "",
             )
             result.append(run_info)
 
