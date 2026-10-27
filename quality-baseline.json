@@ -14,7 +14,7 @@
     "SIM117": 14
   },
   "mypy": {
-    "arg-type": 478,
+    "arg-type": 477,
     "assignment": 384,
     "attr-defined": 363,
     "call-arg": 25,
