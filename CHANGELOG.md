@@ -144,6 +144,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `adare vm slots exclusive [--timeout s] -- <cmd>` runs a command holding every
   slot (its adare child processes run under that lease). A slot belongs to the
   allocating process, so a VM that outlives it (detached dev session) stops counting.
+- `adare dev remove --stopped [--older-than 14d] [-y]` removes stopped dev
+  sessions in bulk, listing each with the VM disk it keeps (on this host 25
+  forgotten sessions held ~164 GiB). `adare vm prune` reports that space too.
+- Runs refuse to start when a filesystem they write to has less than
+  `ADARE_MIN_FREE_DISK_GB` free (default 10 GiB, 0 disables), with the cleanup
+  commands as suggestions, instead of filling the disk mid-run.
 
 ### Changed
 - Development tasks have one definition: CI runs the Makefile targets (`make lint`,
