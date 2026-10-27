@@ -147,6 +147,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - `adare dev remove --stopped [--older-than 14d] [-y]` removes stopped dev
   sessions in bulk, listing each with the VM disk it keeps (on this host 25
   forgotten sessions held ~164 GiB). `adare vm prune` reports that space too.
+- Opt-in expiry of forgotten dev sessions: with `ADARE_DEV_SESSION_MAX_AGE_DAYS`
+  set, every experiment run and `adare vm prune --force` remove stopped/crashed
+  sessions unused for longer than that (never running ones, never one whose VM is
+  up, never from inside a dev session). Off by default.
 - Runs refuse to start when a filesystem they write to has less than
   `ADARE_MIN_FREE_DISK_GB` free (default 10 GiB, 0 disables), with the cleanup
   commands as suggestions, instead of filling the disk mid-run.

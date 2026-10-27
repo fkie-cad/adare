@@ -70,6 +70,11 @@ class VMLifecycleManager:
 
         from adare.backend.vm.commands import ensure_vm_ready_for_experiment
 
+        if not context.config.dev_mode:  # never from inside a dev session, which may be resuming
+            from adare.backend.devmode.expiry import remove_expired_dev_sessions
+
+            await asyncio.to_thread(remove_expired_dev_sessions)  # opt-in: ADARE_DEV_SESSION_MAX_AGE_DAYS
+
         async def allocate() -> VmInstance | None:
             vm_instance_id = await ensure_vm_ready_for_experiment(
                 vm_id=vm_id,

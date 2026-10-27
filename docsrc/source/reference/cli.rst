@@ -390,6 +390,11 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
     * ``--older-than AGE`` - With ``--stopped``: only sessions unused for this long (``14d``, ``12h``)
     * ``-y, --yes`` - Skip the confirmation
 
+  Automatic expiry is opt-in: with ``ADARE_DEV_SESSION_MAX_AGE_DAYS`` set (environment or user
+  config), every experiment run and ``adare vm prune --force`` remove stopped or crashed sessions
+  unused for longer than that many days (``adare vm prune`` without ``--force`` lists them).
+  Running sessions and sessions whose VM is still up are never removed.
+
 ``adare dev resume [session_id]``
   Resume a previously stopped session. If no session ID is given, resumes the most recently stopped session.
 

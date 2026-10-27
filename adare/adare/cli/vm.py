@@ -621,6 +621,23 @@ def _print_stopped_dev_sessions() -> None:
         )
 
 
+def _expire_dev_sessions(dry_run: bool) -> None:
+    """Opt-in (ADARE_DEV_SESSION_MAX_AGE_DAYS): remove dev sessions unused for longer than that."""
+    import click
+
+    from adare.backend.devmode.expiry import MAX_AGE_ENV, max_age, remove_expired_dev_sessions
+
+    limit = max_age()
+    if limit is None:
+        return
+    ids = remove_expired_dev_sessions(dry_run=dry_run)
+    if ids:
+        verb = 'Would remove' if dry_run else 'Removed'
+        click.echo(f"{verb} {len(ids)} dev session(s) unused for more than {limit.days} day(s) ({MAX_AGE_ENV}):")
+        for session_id in ids:
+            click.echo(f"  {session_id}")
+
+
 def exec_vm_prune(arguments):
     """Reclaim orphaned QEMU base disks / NVRAM (and optionally dead sockets).
 
@@ -644,6 +661,9 @@ def exec_vm_prune(arguments):
 
     dry_run = getattr(arguments, 'dry_run', True)
     include_sockets = getattr(arguments, 'sockets', False)
+
+    # Opt-in expiry first, so the disks it frees are reclaimed below in the same pass.
+    _expire_dev_sessions(dry_run)
 
     # 0. Instances: crashed runs, run files without a row, pooled QEMU leftovers.
     _print_reconcile_report(run_blocking(reconcile_instances(dry_run=dry_run)), dry_run)
