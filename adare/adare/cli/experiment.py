@@ -592,12 +592,15 @@ def exec_experiment_run(arguments):
             if file_log_level is not None:
                 run_kwargs['file_log_level'] = file_log_level
 
+            from datetime import UTC, datetime
+
+            run_started = datetime.now(UTC)
             was_interrupted, was_successful = asyncio.run(
                 experiment_run(project_directory, experiment_name, environment_name, **run_kwargs)
             )
+            run_ended = datetime.now(UTC)
 
             # Handle output formatting for single runs
-            from datetime import timedelta
 
             from adare.backend.experiment.batch_runner import BatchRunSummary, ExperimentResult
             from adare.run import get_formatter_from_context
@@ -615,23 +618,23 @@ def exec_experiment_run(arguments):
                     error_msg = None
                 else:
                     status = StatusEnum.FAILED
-                    error_msg = "Experiment tests failed"
+                    error_msg = "Experiment failed (see the run log)"
 
                 # Create a single result entry
                 single_result = ExperimentResult(
                     environment=environment_name,
                     experiment=experiment_name,
                     status=status,
-                    duration=timedelta(seconds=0),  # We don't have duration from single run
+                    duration=run_ended - run_started,
                     error_message=error_msg,
                     run_ulid=None,  # Would need to get this from the experiment run
-                    start_time=None,
-                    end_time=None,
+                    start_time=run_started,
+                    end_time=run_ended,
                 )
 
                 # Create summary with single result
                 summary = BatchRunSummary(
-                    results=[single_result], total_combinations=1, total_duration=timedelta(seconds=0)
+                    results=[single_result], total_combinations=1, total_duration=run_ended - run_started
                 )
 
                 # Output using formatter
