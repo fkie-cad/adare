@@ -133,6 +133,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - Playbook-level `on_failure:` action list: runs once after the first failure that
   stops the playbook and before the run ends; never changes the failed status.
   Accepted by `adare exp playbook validate` and validated like normal steps.
+- Two runs started at the same moment can no longer get the same CV/OCR server
+  port: `find_free_cv_port` also reserves the port with a lock file until the
+  server stops. VirtualBox experiment snapshots are named after the random tail
+  of the run ULID, not its timestamp, so runs started together no longer collide.
 - Cross-process VM slots (`adare.backend.vm.slots`): `N` flock files under
   `<appdata>/vm_slots/` cap the live VMs across all `adare` processes (N =
   `ADARE_MAX_VMS`, else the same key in the active config profile, else 20, the

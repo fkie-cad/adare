@@ -42,7 +42,8 @@ class SnapshotManager:
             Snapshot name if created successfully, None otherwise
         """
         # Generate snapshot name
-        snapshot_name = f"adare_exp_{experiment_id[:8]}"
+        # The ULID's random tail: its first characters are a timestamp, shared by runs started together.
+        snapshot_name = f"adare_exp_{experiment_id[-8:]}"
 
         if not description:
             description = f"Adare experiment snapshot for {experiment_id}"
