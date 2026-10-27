@@ -139,6 +139,17 @@ class TestExperimentEnvironmentIndicator:
         with pytest.raises(MultipleEnvironmentsError):
             experiment_database.get_experiment_environment_name(project, 'exp')
 
+    def test_run_of_a_version_without_vm_hash_records_its_vms_disk(self, project):
+        # Versions loaded by code predating environment.vm_hash hold NULL there.
+        _new_version('ubuntu', '1' * 64, vm_id=_add_vm(file_hash='b' * 64))
+        _add_experiment(project, [])
+        run_id = experiment_database.initialize_experiment_run(project)
+
+        experiment_database.set_experiment_run_base_info(run_id, 'exp', 'ubuntu', project)
+
+        with ProjectDatabaseApi(project) as api:
+            assert api._session.get(ExperimentRun, run_id).vm_hash == 'b' * 64
+
 
 class TestRunEnvironment:
     def test_reads_the_current_version_and_its_vm_in_one_go(self, global_db):
