@@ -392,11 +392,11 @@ class Event(SerializerMixin, ProjectBase):
     id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
     event_type = Column(String)
     category = Column(String)
-    experiment_run_id = Column(String, ForeignKey('experiment_run.id', ondelete='CASCADE'))
+    experiment_run_id = Column(String, ForeignKey('experiment_run.id', ondelete='CASCADE'), index=True)
     experiment_run = relationship("ExperimentRun", backref=backref("events", cascade="all, delete-orphan"))
     error = Column(String)
     parent_event_id = Column(
-        CHAR(26), ForeignKey('event.id', ondelete='SET NULL'), nullable=True
+        CHAR(26), ForeignKey('event.id', ondelete='SET NULL'), nullable=True, index=True
     )  # Parent event ID for nested events
     parent_event = relationship(
         "Event", remote_side=[id], backref=backref("child_events", cascade="all, delete-orphan")
@@ -445,7 +445,7 @@ class TestEvent(Event):
         'polymorphic_identity': 'test_event',
     }
     id = Column(CHAR(26), ForeignKey('event.id'), primary_key=True)
-    abstract_test_id = Column(CHAR(26), ForeignKey('abstract_test.id'), nullable=True)
+    abstract_test_id = Column(CHAR(26), ForeignKey('abstract_test.id'), nullable=True, index=True)
     result_id = Column(CHAR(26), ForeignKey('result.id'), nullable=True)
     abstract_test = relationship(AbstractTest, backref=backref("test_events", cascade="all, delete-orphan"))
     result = relationship(Result)
@@ -675,7 +675,7 @@ class StageInRun(SerializerMixin, ProjectBase):
     status_id = Column(CHAR(26), ForeignKey('status.id', ondelete='RESTRICT'), nullable=False)
     status = relationship(Status, backref=backref("stage_in_runs"))
 
-    run_id = Column(CHAR(26), ForeignKey('experiment_run.id', ondelete='CASCADE'))
+    run_id = Column(CHAR(26), ForeignKey('experiment_run.id', ondelete='CASCADE'), index=True)
 
     # start_time and end_time as DateTime for SQL compatibility
     start_time = Column(DateTime, nullable=True)
@@ -874,8 +874,8 @@ class PlaybookItem(SerializerMixin, ProjectBase):
     RELATIONSHIPS_TO_DICT = True
 
     id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
-    playbook_id = Column(CHAR(26), ForeignKey('playbook.id', ondelete='CASCADE'), nullable=False)
-    parent_id = Column(CHAR(26), ForeignKey('playbook_item.id', ondelete='CASCADE'), nullable=True)
+    playbook_id = Column(CHAR(26), ForeignKey('playbook.id', ondelete='CASCADE'), nullable=False, index=True)
+    parent_id = Column(CHAR(26), ForeignKey('playbook_item.id', ondelete='CASCADE'), nullable=True, index=True)
 
     item_type = Column(String(50), nullable=False)  # 'action', 'group_block', 'if_block', etc.
     sequence_order = Column(Integer, nullable=False)
@@ -908,8 +908,8 @@ class ActionExecution(SerializerMixin, ProjectBase):
     RELATIONSHIPS_TO_DICT = True
 
     id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
-    playbook_item_id = Column(CHAR(26), ForeignKey('playbook_item.id'), nullable=False)
-    experiment_run_id = Column(CHAR(26), nullable=True)
+    playbook_item_id = Column(CHAR(26), ForeignKey('playbook_item.id'), nullable=False, index=True)
+    experiment_run_id = Column(CHAR(26), nullable=True, index=True)
 
     status = Column(String(20), nullable=False)  # 'pending', 'running', 'success', 'failed', 'skipped'
     started_at = Column(DateTime(timezone=True))
