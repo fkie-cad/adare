@@ -411,7 +411,11 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
             cv_port = find_free_cv_port()
 
             view.mcp_server = MCPServerManager(
-                server_port=cv_port, log_file=log_file, debug=context.config.dev_mode, debug_output_dir=debug_output_dir
+                server_port=cv_port,
+                log_file=log_file,
+                debug=context.config.dev_mode,
+                debug_output_dir=debug_output_dir,
+                exit_with_parent=not context.config.dev_mode,
             )
             log.info(f"CV/OCR server for machine {machine_key!r} will use port {cv_port}")
 

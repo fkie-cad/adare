@@ -11,6 +11,7 @@ Everything here is mocked at the ``ps`` / ``lsof`` / ``os.kill`` boundary: no
 cv-server is started and no signal reaches a real process.
 """
 
+import asyncio
 import subprocess
 
 import pytest
@@ -200,3 +201,36 @@ class TestKillProcessOnPort:
         monkeypatch.setattr('os.kill', raising_kill)
 
         assert manager._kill_process_on_port(13109) is False
+
+
+class TestExitWithParent:
+    """A run's cv-server must not outlive the run (a killed run left ~1.6 GB orphans)."""
+
+    def _spawned_cmd(self, manager, monkeypatch) -> list[str]:
+        calls = []
+
+        class FakePopen:
+            pid = 4242
+
+            def __init__(self, cmd, **kwargs):
+                calls.append(cmd)
+
+            def poll(self):
+                return None
+
+        async def ready():
+            return True
+
+        monkeypatch.setattr(manager, '_is_port_in_use', lambda port: False)
+        monkeypatch.setattr(manager, '_await_ready', ready)
+        monkeypatch.setattr(subprocess, 'Popen', FakePopen)
+        assert asyncio.run(manager.start())
+        return calls[0]
+
+    def test_run_server_exits_with_its_parent(self, monkeypatch):
+        cmd = self._spawned_cmd(MCPServerManager(server_port=13109, exit_with_parent=True), monkeypatch)
+        assert '--exit-with-parent' in cmd
+
+    def test_dev_session_server_outlives_the_cli(self, monkeypatch):
+        cmd = self._spawned_cmd(MCPServerManager(server_port=13109), monkeypatch)
+        assert '--exit-with-parent' not in cmd

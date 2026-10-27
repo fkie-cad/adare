@@ -155,3 +155,10 @@ Debug output can be enabled with the ``--debug-output-dir`` flag when
 starting the CV server. This saves annotated screenshots (with bounding
 boxes drawn on detected regions) and CSV files with all detection
 results, useful for diagnosing false positives or missed detections.
+
+Experiment and diff runs start the server with ``--exit-with-parent``: it
+watches the ``adare`` process that started it and exits once that process is
+gone, so a crashed or killed run does not leave a server holding its port and
+its OCR models in memory. Dev sessions start it without the flag, because their
+server deliberately outlives the ``adare dev`` command that started it; it is
+stopped by ``adare dev stop``/``remove``.
