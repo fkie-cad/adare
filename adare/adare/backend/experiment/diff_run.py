@@ -301,7 +301,7 @@ async def experiment_diff_run(project_path: Path, experiment_name: str, environm
         try:
             # 5. Start MCP server for target resolution
             log.info("Starting MCP server")
-            ctx.mcp_server = MCPServerManager(log_file=diff_run_dir.mcp_gui_log_file)
+            ctx.mcp_server = MCPServerManager(log_file=diff_run_dir.mcp_gui_log_file, exit_with_parent=True)
             await ctx.mcp_server.start()
 
             # 6. VM lifecycle (no agent)

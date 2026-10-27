@@ -38,6 +38,7 @@ class MCPServerManager:
                 '--port',
                 str(self.port),
                 '--debug',  # Always use debug for detailed logs
+                '--exit-with-parent',  # never outlive this command, even if it is killed
             ]
 
             # Set up log file redirection if specified
