@@ -157,6 +157,7 @@ class MCPServerManager:
         log_file: Path | None = None,
         debug: bool = False,
         debug_output_dir: Path | None = None,
+        exit_with_parent: bool = False,
     ):
         """
         Initialize MCP server manager.
@@ -168,6 +169,9 @@ class MCPServerManager:
             log_file: Path to log file for MCP server output
             debug: Enable debug logging
             debug_output_dir: Directory for debug output images
+            exit_with_parent: The server exits when this process is gone, so a crashed
+                or killed run leaves no orphan holding its port and memory. Off for dev
+                sessions, whose server deliberately outlives the CLI command.
         """
         self.server_port = server_port
         self.process: subprocess.Popen | None = None
@@ -175,6 +179,7 @@ class MCPServerManager:
         self.log_file = log_file
         self.debug = debug
         self.debug_output_dir = debug_output_dir
+        self.exit_with_parent = exit_with_parent
         # PID of the cv-server this manager is entitled to stop. Set when we spawn
         # one, or restored by a resumed dev session from its recorded state (see
         # save_cv_state / load_cv_state). None means "we have not identified a
@@ -229,6 +234,8 @@ class MCPServerManager:
 
             if self.debug_output_dir:
                 cmd.extend(["--debug-output-dir", str(self.debug_output_dir)])
+            if self.exit_with_parent:
+                cmd.append("--exit-with-parent")
 
             # Start process with start_new_session=True to detach from parent
             # This ensures it survives when the CLI tool exits

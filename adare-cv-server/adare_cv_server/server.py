@@ -628,7 +628,10 @@ def create_server():
 @click.option(
     '--debug-output-dir', type=click.Path(file_okay=False, dir_okay=True), help='Directory for debug output images.'
 )
-def main(port: int, host: str, debug: bool, debug_output_dir: str = None) -> None:
+@click.option(
+    '--exit-with-parent', is_flag=True, help='Exit when the process that started the server is gone (no orphans).'
+)
+def main(port: int, host: str, debug: bool, debug_output_dir: str = None, exit_with_parent: bool = False) -> None:
     """Start the Adare CV server."""
 
     # Configure logging
@@ -636,6 +639,11 @@ def main(port: int, host: str, debug: bool, debug_output_dir: str = None) -> Non
     logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     log.info(f"Starting Adare CV server on {host}:{port}")
+
+    if exit_with_parent:
+        from .parent_watch import exit_when_parent_dies
+
+        exit_when_parent_dies()
 
     if debug_output_dir:
         from pathlib import Path
