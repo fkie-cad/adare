@@ -302,6 +302,20 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   port: `find_free_cv_port` also reserves the port with a lock file until the
   server stops. VirtualBox experiment snapshots are named after the random tail
   of the run ULID, not its timestamp, so runs started together no longer collide.
+- A crashed or killed run (`kill -9`, closed terminal, interrupted session) no
+  longer leaves its QEMU VM running with its RAM until the next run or
+  `adare vm prune`: the first QEMU run of a process starts a small reaper that
+  waits for the process to exit and then removes its leftover runs
+  (`reconcile_instances`; other processes' runs and dev sessions are untouched).
+- A crashed or killed run no longer leaves its CV/OCR server running (up to
+  ~1.6 GB each, holding its port): runs start it with the new
+  `adare-cv-server --exit-with-parent`, which exits once its `adare` process is
+  gone. Dev-session servers keep outliving the CLI as before.
+- `adare exp run`'s result summary (`--output json/yaml/...`) reports the run's
+  real duration and start/end time instead of 0.0, and a failed run says
+  "Experiment failed" instead of blaming the tests.
+- `adare vm slots status` reports the configured `ADARE_MAX_VMS` as the total
+  instead of the number of slot files on disk.
 - Two runs of the same experiment started in the same second no longer fail with
   "Failed to create run directory structure ... File exists": the second run
   gets `<timestamp>_2` (also for diff runs).

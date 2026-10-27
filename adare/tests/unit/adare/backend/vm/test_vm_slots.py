@@ -275,6 +275,22 @@ def test_status_lists_holder_pids(tmp_path):
         _kill(other)
 
 
+def test_status_reports_the_limit_not_the_slot_files_on_disk(tmp_path):
+    with acquire_slot(FAST, max_slots=6, directory=tmp_path):
+        pass  # leaves six slot files behind
+    status = slot_status(max_slots=1, directory=tmp_path)
+    assert status["total"] == 1 and status["taken"] == 0 and status["free"] == 1
+
+
+def test_status_counts_a_slot_held_above_a_lowered_limit(tmp_path):
+    other = _holder_process(tmp_path, count=3, n=3)
+    try:
+        status = slot_status(max_slots=1, directory=tmp_path)
+        assert status["total"] == 1 and status["taken"] == 3 and status["free"] == 0
+    finally:
+        _kill(other)
+
+
 def test_cli_status_json(tmp_path, monkeypatch):
     from click.testing import CliRunner
 
