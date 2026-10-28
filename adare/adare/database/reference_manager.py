@@ -15,6 +15,7 @@ from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
 from adare.database.exceptions import DatabaseError
 from adare.database.models.global_models import Environment, Project, TestFunction, Vm
 from adare.database.models.project_models import Experiment, ExperimentRun
+from adare.database.utils.error_handling import DB_ACCESS_ERRORS
 
 log = logging.getLogger(__name__)
 
@@ -134,7 +135,7 @@ class ReferenceManager:
             with self._get_global_api() as api:
                 environment = api.get_by_ulid(Environment, environment_id)
                 return environment is not None
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error validating environment {environment_id}: {e}")
             return False
 
@@ -152,7 +153,7 @@ class ReferenceManager:
             with self._get_global_api() as api:
                 vm = api.get_by_ulid(Vm, vm_id)
                 return vm is not None
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error validating VM {vm_id}: {e}")
             return False
 
@@ -170,7 +171,7 @@ class ReferenceManager:
             with self._get_global_api() as api:
                 testfunction = api.get_by_ulid(TestFunction, testfunction_id)
                 return testfunction is not None
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error validating test function {testfunction_id}: {e}")
             return False
 
@@ -197,7 +198,7 @@ class ReferenceManager:
                         'file': environment.file,
                     }
                 return None
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error getting environment info {environment_id}: {e}")
             return None
 
@@ -224,7 +225,7 @@ class ReferenceManager:
                         'hash': vm.hash,
                     }
                 return None
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error getting VM info {vm_id}: {e}")
             return None
 
@@ -250,7 +251,7 @@ class ReferenceManager:
                         'dotnotation': testfunction.dotnotation,
                     }
                 return None
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error getting test function info {testfunction_id}: {e}")
             return None
 
@@ -278,7 +279,7 @@ class ReferenceManager:
                     self._cache_set(cache_key, environment)
                     return environment
                 return None
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error getting environment object {environment_id}: {e}")
             return None
 
@@ -315,7 +316,7 @@ class ReferenceManager:
                     self._cache_set(cache_key, testfunction)
                     return testfunction
                 return None
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error getting test function object {testfunction_id}: {e}")
             return None
 
@@ -344,7 +345,7 @@ class ReferenceManager:
                     self._cache_set(cache_key, parameter)
                     return parameter
                 return None
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error getting test parameter object {parameter_id}: {e}")
             return None
 
@@ -371,7 +372,7 @@ class ReferenceManager:
                     self._cache_set(cache_key, vm)
                     return vm
                 return None
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error getting VM object {vm_id}: {e}")
             return None
 
@@ -402,10 +403,10 @@ class ReferenceManager:
                             )
                             if runs:
                                 projects.append(project.path)
-                    except Exception as e:
+                    except DB_ACCESS_ERRORS as e:
                         log.warning(f"Error checking project {project.path}: {e}")
 
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error finding projects using environment {environment_id}: {e}")
 
         return projects
@@ -434,7 +435,7 @@ class ReferenceManager:
                 # Remove duplicates
                 projects = list(set(projects))
 
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error finding projects using VM {vm_id}: {e}")
 
         return projects
@@ -468,10 +469,10 @@ class ReferenceManager:
                             )
                             if tests:
                                 projects.append(project.path)
-                    except Exception as e:
+                    except DB_ACCESS_ERRORS as e:
                         log.warning(f"Error checking project {project.path}: {e}")
 
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error finding projects using test function {testfunction_id}: {e}")
 
         return projects
@@ -510,7 +511,7 @@ class ReferenceManager:
                         results['valid'] = False
                         results['missing_testfunctions'].append(abstract_test.testfunction_id)
 
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             results['valid'] = False
             results['errors'].append(f"Error validating experiment: {e}")
             log.error(f"Error validating experiment {experiment_id}: {e}")
@@ -552,7 +553,7 @@ class ReferenceManager:
                 results['missing_environments'] = list(results['missing_environments'])
                 results['missing_testfunctions'] = list(results['missing_testfunctions'])
 
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             results['valid'] = False
             results['errors'].append(f"Error validating project: {e}")
             log.error(f"Error validating project {project_path}: {e}")
@@ -585,7 +586,7 @@ class ReferenceManager:
                     self._cache_set(cache_key, vm_instance)
                     return vm_instance
                 return None
-        except Exception as e:
+        except DB_ACCESS_ERRORS as e:
             log.error(f"Error getting VM instance object {vm_instance_id}: {e}")
             return None
 
