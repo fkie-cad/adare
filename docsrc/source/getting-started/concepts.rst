@@ -122,7 +122,7 @@ The Experiment Lifecycle
 
 Running an experiment follows a defined sequence from start to finish:
 
-1. **Load**: The playbook YAML is parsed and its actions are serialized into the database as ``PlaybookItem`` records. The original YAML content is stored for variable and test resolution. A hash is computed for integrity validation.
+1. **Load**: The playbook YAML is parsed and its actions are serialized into the database as ``PlaybookItem`` records. The original YAML content is stored for variable and test resolution. A hash is computed for integrity validation. Loading a changed playbook again replaces the items; items that earlier runs executed are kept, marked superseded, so every run's action records keep pointing at the action they ran.
 2. **Prepare VM**: ADARE imports the VM image (if not already imported), creates a snapshot for safe rollback, and boots the virtual machine.
 3. **Install Agent**: The ADARE guest agent is transferred into the VM and started. It establishes a WebSocket connection back to the host, creating a command channel.
 4. **Execute Actions**: Actions are loaded from the database (not re-parsed from YAML), reconstructed into action objects, and sent one by one to the guest agent for execution. GUI interactions, system commands, and tests all flow through this channel.

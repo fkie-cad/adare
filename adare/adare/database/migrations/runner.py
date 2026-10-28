@@ -140,6 +140,11 @@ MIGRATIONS: list[Migration] = [
         scope='project',
         module=f'{_PACKAGE}.move_parent_event_keys',
     ),
+    Migration(
+        name='add_superseded_to_playbook_item',
+        scope='project',
+        module=f'{_PACKAGE}.add_superseded_to_playbook_item',
+    ),
 ]
 
 # Applied-migration names per database URL. Keeps auto-apply at one SELECT per

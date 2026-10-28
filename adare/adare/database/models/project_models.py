@@ -824,6 +824,8 @@ class Playbook(SerializerMixin, ProjectBase):
 
     # Relationships
     experiment = relationship("Experiment", back_populates="playbook")
+    # All items, superseded ones included, so deleting the playbook deletes them too.
+    # The current playbook is PlaybookApi.get_playbook_items() (superseded = false).
     items = relationship("PlaybookItem", back_populates="playbook", cascade="all, delete-orphan")
 
 
@@ -851,6 +853,9 @@ class PlaybookItem(SerializerMixin, ProjectBase):
     name = Column(String(255))
     description = Column(Text)
     is_enabled = Column(Boolean, default=True)
+    # True for an item of an earlier playbook version that run executions still
+    # reference: re-ingest keeps it for the audit trail, out of the current playbook.
+    superseded = Column(Boolean, nullable=False, default=False, server_default='0')
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
