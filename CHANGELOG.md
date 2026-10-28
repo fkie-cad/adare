@@ -28,6 +28,17 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- Automatic test-run retention: every test-mode run (`adare experiment run` /
+  `replicate` without `--production`, not dev sessions) ends by removing the
+  experiment's older finished fake runs (rows in one transaction, then their run
+  folders), keeping the newest `ADARE_TEST_RUNS_KEEP` (new setting, default 10;
+  `adare system settings set ADARE_TEST_RUNS_KEEP N`). The run that just finished
+  counts toward the limit and is never removed, so `0` keeps only it. Runs started
+  less than an hour ago, unfinished runs, dev sessions' runs and runs whose folder
+  fails the run-folder test are kept; production runs are never touched. Prints
+  e.g. `removed 3 older test runs (1.2 GiB; ADARE_TEST_RUNS_KEEP=10)`; a failure
+  only logs a warning and never fails the run. One project had 126 fake runs
+  holding 10.4 GB of run folders.
 - `adare db compact [--dry-run] [--all] [-p PROJECT]` shrinks project databases
   that grew from the base64 screenshot copies older action results kept in
   `action_execution.result_data` (47 GB of a 50 GB database in one project). Only
