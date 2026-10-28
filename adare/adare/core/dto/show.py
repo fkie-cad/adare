@@ -30,6 +30,17 @@ class RunRemoveRequest:
 
     ulid: str
     project_path: Path | None = None
+    keep_files: bool = False
+
+
+@dataclass
+class RunPruneRequest:
+    """Request to prune run folders (and with ``fake``, fake runs) of one project."""
+
+    project_path: Path | None = None
+    fake: bool = False
+    older_than_days: float | None = None
+    execute: bool = False
 
 
 # =============================================================================
@@ -111,6 +122,65 @@ class RunRemoveResult:
     removed: bool
     ulid: str
     was_fake: bool = False
+    folder: str | None = None
+    folder_removed: bool = False
+    folder_note: str | None = None
+
+
+@dataclass
+class RunPruneEntry:
+    """One prune target: an orphan run folder (``kind='orphan'``) or a fake run (``kind='fake'``)."""
+
+    kind: str
+    experiment: str
+    folder: str | None = None
+    size_bytes: int = 0
+    run_ulid: str | None = None
+    last_activity: datetime | None = None
+    removed: bool = False
+    folder_removed: bool = False
+    note: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            'kind': self.kind,
+            'experiment': self.experiment,
+            'folder': self.folder,
+            'size_bytes': self.size_bytes,
+            'run_ulid': self.run_ulid,
+            'last_activity': self.last_activity.isoformat() if self.last_activity else None,
+            'removed': self.removed,
+            'folder_removed': self.folder_removed,
+            'note': self.note,
+        }
+
+
+@dataclass
+class RunPruneResult:
+    """Result of ``runs prune``: what was (or, in a dry run, would be) removed."""
+
+    project_path: str
+    dry_run: bool
+    entries: list[RunPruneEntry] = field(default_factory=list)
+    rows_deleted: int = 0
+
+    @property
+    def total_bytes(self) -> int:
+        return sum(entry.size_bytes for entry in self.entries)
+
+    @property
+    def removed_bytes(self) -> int:
+        return sum(entry.size_bytes for entry in self.entries if entry.folder_removed)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            'project_path': self.project_path,
+            'dry_run': self.dry_run,
+            'entries': [entry.to_dict() for entry in self.entries],
+            'total_bytes': self.total_bytes,
+            'removed_bytes': self.removed_bytes,
+            'rows_deleted': self.rows_deleted,
+        }
 
 
 @dataclass
