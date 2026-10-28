@@ -404,8 +404,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   both modes, naming the run count and the ways out (clone it under a new name,
   restore the playbook, or `adare experiment load --force`), because a run does
   not record the playbook it ran and would otherwise end up under one it never
-  executed. Only the explicit `adare experiment load --force` still replaces the
-  experiment with all its runs. `adare experiment playbook set` now refreshes the
+  executed. `adare experiment add-env` / `remove-env` reloaded with `--force` too
+  and now report such an experiment as failed (its `metadata.yml` is updated)
+  instead of replacing it. Only the explicit `adare experiment load --force` still
+  replaces the experiment with all its runs. `adare experiment playbook set` now refreshes the
   experiment's content hash and tests too, so the next run no longer sees a
   change, and refuses a changed playbook (writing nothing) when production runs
   exist.
