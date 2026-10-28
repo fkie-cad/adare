@@ -43,10 +43,8 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   and are reported as `stale_runs_ignored`), or a dev session is live.
   `--dry-run` opens the database read-only and reports the reclaimable bytes.
 - `adare db check [--all] [-p PROJECT]`: read-only `quick_check`,
-  `foreign_key_check` summary and orphaned-row counts per database (counted only:
-  action executions with no run row come from dev-session consoles or runs older
-  versions deleted, and are kept); exits 1 when a database is corrupt. Both
-  commands take `--json`; with `--all` a registered project whose directory or
+  `foreign_key_check` summary and orphaned-row counts per database; exits 1 when
+  a database is corrupt. Both commands take `--json`; with `--all` a registered project whose directory or
   database is gone is reported as `missing` (nothing is created on disk) and the
   rest are still processed.
 - `adare runs prune [--fake] [--older-than DAYS] [--yes] [--json]`: frees disk space
@@ -375,11 +373,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   result blobs), its run-files row and its two log-file rows, because foreign keys
   are off in SQLite and the ORM cascade does not reach them. All of them now go
   through one `delete_runs` helper that removes these rows too. A project
-  migration (`delete_orphan_run_rows`) deletes the run-files and log-file rows
-  earlier deletions left. Their action executions are kept: dev sessions record
-  theirs under a console ULID no run row has, so the two cannot be told apart
-  (`adare db check` counts them). The freed space is reused by the database but
-  the file only shrinks after a vacuum.
+  migration (`delete_orphan_run_rows`) deletes the action executions, run-files
+  and log-file rows earlier deletions left. The freed space is reused by the
+  database but the file only shrinks after a vacuum.
 - Replacing an in-use testfunction with `--force` said it deleted the runs that
   used it but deleted none: it searched the global database, while runs live in
   each project's database. It now deletes them in every registered project.

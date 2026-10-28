@@ -263,9 +263,7 @@ def exec_manage_vm_runtime_build(arguments):
 
 # Labels of the orphan counts `adare db check` reports (keys: maintenance.ORPHAN_QUERIES).
 _ORPHAN_LABELS = {
-    'action_execution_without_run': (
-        'action executions with no run row (dev-session consoles or runs deleted by older versions; kept)'
-    ),
+    'action_execution_without_run': 'action executions whose run no longer exists',
     'experiment_run_files_unreferenced': 'run-files rows no run references',
     'log_file_unreferenced': 'log-file rows only unreferenced run-files rows point at',
     'action_execution_dangling_playbook_item': 'action executions whose playbook item is gone',

@@ -1,4 +1,4 @@
-"""The delete_orphan_run_rows migration removes the run-files rows earlier run deletions left behind."""
+"""The delete_orphan_run_rows migration removes the rows earlier run deletions left behind."""
 
 import pytest
 import sqlalchemy
@@ -58,12 +58,10 @@ def engine(tmp_path):
         _insert_files(conn, 'files-orphan', 'log-orphan-a', 'log-orphan-b')
         _insert_execution(conn, 'exec-orphan-1', 'run-deleted')
         _insert_execution(conn, 'exec-orphan-2', 'run-deleted')
-        # A dev-session console writes its ULID as the run id; no run row has it.
-        _insert_execution(conn, 'exec-dev-console', '01JDEVCONSOLEULID000000000')
         # An orphaned files row sharing a log with the live one: that log stays.
         _insert_files(conn, 'files-orphan-shared', 'log-live-a', None)
-        # Executions without any run id are kept too.
-        _insert_execution(conn, 'exec-dev', None)
+        # Executions without a run id are kept.
+        _insert_execution(conn, 'exec-no-run', None)
         # A run without files must not make NOT IN match nothing.
         _insert_run(conn, 'run-no-files', None)
     yield engine
@@ -71,21 +69,13 @@ def engine(tmp_path):
 
 
 def _assert_cleaned(conn) -> None:
-    # Executions whose run id names no run cannot be told apart from dev-session
-    # console rows, so none of them is deleted.
-    assert _ids(conn, 'action_execution') == {
-        'exec-live',
-        'exec-orphan-1',
-        'exec-orphan-2',
-        'exec-dev-console',
-        'exec-dev',
-    }
+    assert _ids(conn, 'action_execution') == {'exec-live', 'exec-no-run'}
     assert _ids(conn, 'experiment_run_files') == {'files-live'}
     assert _ids(conn, 'log_file') == {'log-live-a', 'log-live-b'}
     assert _ids(conn, 'experiment_run') == {'run-live', 'run-no-files'}
 
 
-def test_deletes_orphaned_files_rows_and_keeps_every_action_execution(engine):
+def test_deletes_orphaned_rows_and_keeps_executions_without_a_run_id(engine):
     with engine.begin() as conn:
         delete_orphan_run_rows.upgrade(conn)
 

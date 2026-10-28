@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 """
-Database migration: Delete the run-files rows that deleted runs left behind in project databases.
+Database migration: Delete the rows that deleted runs left behind in project databases.
 
 Foreign keys are off in SQLite and run deletion used to rely on the ORM cascade,
-which does not reach a run's ``experiment_run_files`` row nor that row's
-``log_file`` rows. Run deletion now goes through
-:func:`adare.database.api.run_cleanup.delete_runs`; this migration removes what
-earlier deletions left:
+which does not reach a run's ``action_execution`` rows, its
+``experiment_run_files`` row nor that row's ``log_file`` rows. Run deletion now
+goes through :func:`adare.database.api.run_cleanup.delete_runs`; this migration
+removes what earlier deletions left:
 
+* ``action_execution`` rows whose (non-NULL) ``experiment_run_id`` names no run,
 * ``experiment_run_files`` rows no run references (``experiment_run.files_id``),
 * and the ``log_file`` rows only those rows referenced.
 
-``action_execution`` rows are *not* touched. Earlier deletions left those of
-deleted runs behind as well, but dev sessions write theirs with
-``experiment_run_id`` set to a console ULID (a fresh one per ``adare dev
-start``/``resume``, stored nowhere else), so a row whose run id names no run
-cannot be told apart from a deleted run's leftover. They are kept;
-``adare db check`` reports their number.
+Only runs write ``action_execution`` rows with a run id (dev sessions give their
+playbook controller no run and write none), so a run id that names no run is
+always a deleted run's leftover. Rows without a run id are kept.
 
 Set-based SQL only -- blob columns are never read. Idempotent: a second run
 finds nothing to delete.
@@ -39,7 +37,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 log = logging.getLogger(__name__)
 
-REQUIRED_TABLES = {'experiment_run', 'experiment_run_files', 'log_file'}
+REQUIRED_TABLES = {'experiment_run', 'action_execution', 'experiment_run_files', 'log_file'}
 
 #: experiment_run_files ids some run points at (NULLs filtered: ``NOT IN`` with a NULL matches nothing).
 _LIVE_FILES = "SELECT files_id FROM experiment_run WHERE files_id IS NOT NULL"
@@ -61,22 +59,33 @@ WHERE id IN (
     )
 """
 
+#: action_execution rows whose run id names no run (NULL run ids are kept).
+_DELETE_ORPHAN_EXECUTIONS = """
+DELETE FROM action_execution
+WHERE experiment_run_id IS NOT NULL
+  AND experiment_run_id NOT IN (SELECT id FROM experiment_run)
+"""
+
 #: experiment_run_files rows no run points at.
 _DELETE_ORPHAN_FILES = f"DELETE FROM experiment_run_files WHERE id NOT IN ({_LIVE_FILES})"
 
 
 def upgrade(conn) -> None:
-    """Delete orphaned experiment_run_files and log_file rows (idempotent); action executions are kept."""
+    """Delete orphaned action_execution, experiment_run_files and log_file rows (idempotent)."""
     tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type = 'table'"))}
     missing = REQUIRED_TABLES - tables
     if missing:
         print(f"· Tables {sorted(missing)} not present, skipping.")
         return
 
+    executions = conn.execute(text(_DELETE_ORPHAN_EXECUTIONS)).rowcount
     # Log files first: they are found through the orphaned files rows deleted next.
     log_files = conn.execute(text(_DELETE_ORPHAN_LOG_FILES)).rowcount
     files = conn.execute(text(_DELETE_ORPHAN_FILES)).rowcount
-    print(f"✓ Deleted {files} orphaned experiment_run_files and {log_files} log_file row(s).")
+    print(
+        f"✓ Deleted {executions} orphaned action_execution, {files} experiment_run_files "
+        f"and {log_files} log_file row(s)."
+    )
 
 
 def _migrate_project(project_path: Path) -> bool:
@@ -94,7 +103,7 @@ def _migrate_project(project_path: Path) -> bool:
 
 
 def run_migration() -> bool:
-    """Delete orphaned run-files rows in every project DB."""
+    """Delete orphaned run rows in every project DB."""
     from adare.database.api.base import GlobalDatabaseApi
     from adare.database.models.global_models import Project
 
