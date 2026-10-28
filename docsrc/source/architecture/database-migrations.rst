@@ -47,14 +47,18 @@ produced the current schema, so every ``upgrade()`` is a cheap no-op that is
 then stamped in the ledger.
 
 A migration can also repair *data*. ``delete_orphan_run_rows`` (project scope)
-deletes the rows that run deletions left behind while they relied on the ORM
-cascade alone (foreign keys are off in SQLite): ``action_execution`` rows of
-runs that no longer exist (rows with a NULL run id belong to dev sessions and
-are kept), ``experiment_run_files`` rows no run references, and their
-``log_file`` rows. Such a migration must stay set-based (no per-row Python, no
-reading blob columns) because it runs on every project database when it is
-first opened. Run deletion itself goes through
-:func:`adare.database.api.run_cleanup.delete_runs`, which removes those rows
+deletes the run-files rows that run deletions left behind while they relied on
+the ORM cascade alone (foreign keys are off in SQLite): ``experiment_run_files``
+rows no run references, and the ``log_file`` rows only they referenced. It does
+**not** delete ``action_execution`` rows whose run id names no run: dev
+sessions record their actions with ``experiment_run_id`` set to a console ULID
+(a fresh one per ``adare dev start`` / ``resume``, stored nowhere else), so such
+a row cannot be told apart from what a deleted run left behind. Those rows are
+kept and only counted by ``adare db check``. A data-repair migration must only
+delete what is provably unreferenced, and it must stay set-based (no per-row
+Python, no reading blob columns) because it runs on every project database when
+it is first opened. Run deletion itself goes through
+:func:`adare.database.api.run_cleanup.delete_runs`, which removes a run's rows
 along with the run.
 
 Each migration runs in its own transaction together with its ledger row, so a
@@ -170,7 +174,10 @@ listener sets these pragmas on every new connection:
    tools that open the file without ADARE. An in-memory database reports
    ``memory`` instead (WAL does not apply to it). WAL needs shared memory and
    does not work on network file systems; keep ``~/.adare`` and project
-   directories on a local disk.
+   directories on a local disk. Switching to WAL writes to the file, which
+   fails on a read-only database file or directory; the hook then logs the
+   failure at debug level and keeps the file's current journal mode, so a
+   read-only database stays readable (the other pragmas still apply).
 
 ``PRAGMA synchronous=NORMAL``
    The recommended level for WAL: commits no longer fsync, only checkpoints
@@ -214,10 +221,13 @@ Maintenance outside migrations
 
 Work that rewrites a lot of data or needs ``VACUUM`` is an operator command, not a
 migration: ``adare db compact`` (:mod:`adare.database.maintenance`) strips the
-screenshot copies old ``action_execution`` rows kept in ``result_data`` and then
-vacuums, on a raw autocommit connection, after making sure no other process
-holds the write lock. ``adare db check`` reports ``quick_check``,
-``foreign_key_check`` and orphan counts read-only; its run-orphan counts reuse
+screenshot copies old ``action_execution`` rows kept in ``result_data`` -- only
+images that are byte-for-byte identical to the screenshot file on disk, nothing
+else -- and then vacuums, on a raw autocommit connection. It first makes sure
+nothing may write meanwhile: no other process holds the write lock, no
+unfinished run of the project showed activity in the last 30 minutes, and no
+dev session is live. ``adare db check`` reports ``quick_check``,
+``foreign_key_check`` and orphan counts read-only; its run-files counts reuse
 the SQL of ``delete_orphan_run_rows``, so the two cannot drift apart. The pages
 a data-repair migration frees stay in the file until ``adare db compact`` (or any
 ``VACUUM``) runs. See :doc:`../reference/cli` for both commands.
