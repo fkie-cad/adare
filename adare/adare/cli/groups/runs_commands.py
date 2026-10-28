@@ -48,7 +48,11 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
     @runs.command(name='prune')
     @output_options
-    @click.option('--fake', is_flag=True, help='Also remove fake (test-mode) runs that are not running: rows + folders')
+    @click.option(
+        '--fake',
+        is_flag=True,
+        help='Also remove finished fake (test-mode) runs, except dev sessions\' runs: rows + folders',
+    )
     @click.option(
         '--older-than',
         'older_than',
@@ -60,8 +64,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def run_prune(fake, older_than, yes):
         """Free disk space in the current project's run/ directory.
 
-        Lists run folders (run/<experiment>/<timestamp>) that no run in the database
-        refers to, with their sizes and a total. Nothing is deleted without --yes.
+        Lists run folders (run/<experiment>/<timestamp>) that nothing refers to, with
+        their sizes and a total. Nothing is deleted without --yes. A folder is kept
+        when a run or dev session has it as its folder, when a run that failed before
+        recording a folder started within 16 h of its timestamp name, or when another
+        registered project sharing this run/ directory uses it (if such a project
+        cannot be read, nothing is pruned).
 
         \b
         A folder is only ever listed when it is clearly an ADARE run folder: inside
