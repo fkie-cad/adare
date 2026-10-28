@@ -385,6 +385,27 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Editing a playbook and starting a default (test-mode) `adare experiment run` or
+  `replicate` deleted the experiment and every run of it, production runs
+  included, and recreated it under a new id: the load before a test run used
+  `--force`. A changed experiment without production runs is now reloaded in
+  place (same id; metadata, environments, tags, tests and playbook refreshed; its
+  finished fake runs deleted with their run folders, unfinished ones and dev
+  sessions' runs kept). A changed experiment *with* production runs is refused in
+  both modes, naming the run count and the ways out (clone it under a new name,
+  restore the playbook, or `adare experiment load --force`), because a run does
+  not record the playbook it ran and would otherwise end up under one it never
+  executed. Only the explicit `adare experiment load --force` still replaces the
+  experiment with all its runs. `adare experiment playbook set` now refreshes the
+  experiment's content hash and tests too, so the next run no longer sees a
+  change, and refuses a changed playbook (writing nothing) when production runs
+  exist.
+- Re-ingesting a playbook while a run of the experiment was in progress deleted
+  the items that run had not executed yet, so its later action executions pointed
+  at missing items. While a run is unfinished and showed activity in the last 30
+  minutes (as `adare db compact` decides), every old item is kept, marked
+  superseded; the next re-ingest without an active run deletes the ones nothing
+  executed.
 - Nested run events stored the enclosing action's key in `event.parent_event_id`,
   a foreign key to `event.id`, so every nested event was a foreign-key violation
   (`adare db check` reported 44k `event -> event` violations in one project). The

@@ -205,11 +205,32 @@ Experiments contain the actual test automation logic using YAML-based playbooks.
   Create the example experiment with a complete playbook and test configuration.
 
 ``adare experiment load <experiment>``
-  Load an experiment configuration into the project database.
+  Load an experiment configuration into the project database. Loading an
+  experiment that is already loaded is a :ref:`reload <cli-experiment-reload>`.
 
   Options:
     * ``-e, --environment TEXT`` - Name of the environment
-    * ``-f, --force`` - Force update of the experiment
+    * ``-f, --force`` - Replace a changed experiment that has production runs:
+      the experiment and **all** its runs, production runs included, are deleted
+      and it is loaded again under a new id
+
+.. _cli-experiment-reload:
+
+**Reloading a changed experiment.** ``adare experiment load`` and the load that
+``adare experiment run`` / ``replicate`` do before every run (test and production
+mode alike) compare the playbook's hash with the loaded one:
+
+* unchanged: nothing happens;
+* changed, no production runs: the experiment is reloaded in place -- same id;
+  description, environments, tags, tests and playbook are refreshed. Its finished
+  fake runs are deleted first, rows and run folders, as ``adare experiment clean``
+  does (fake runs still pending/running and dev sessions' runs are kept);
+* changed, with production runs (finished or not): refused, nothing changes. A run
+  does not record which playbook version it ran, so a reload would put the
+  production runs under a playbook they never executed. Run the changed playbook as
+  a new experiment (``adare experiment clone``, then restore the original's
+  ``playbook.yml``), restore the playbook, or replace the experiment with
+  ``adare experiment load --force``.
 
 .. _test-mode-development:
 
@@ -266,7 +287,9 @@ By default, experiments run in **test mode** which is ideal for development:
 
 * **Test Mode (Default)**:
 
-  * Allows continuous modification and testing of playbook files
+  * Allows continuous modification and testing of playbook files: a changed
+    playbook is :ref:`reloaded <cli-experiment-reload>` before the run, deleting the
+    finished fake runs of the old version
   * Creates "fake runs"; only the newest ones per experiment are kept (see below),
     ``adare experiment clean`` removes them all
   * Skips integrity checks to enable rapid iteration
@@ -278,6 +301,10 @@ By default, experiments run in **test mode** which is ideal for development:
   * Creates real runs that are tracked in the database
   * Prevents modifications to experiments with existing runs
   * Use only when ready for production data collection
+
+Once an experiment has production runs, a changed playbook is refused in both
+modes (see :ref:`reloading <cli-experiment-reload>`); production runs are never
+deleted by a run.
 
 **Workflow**: Develop and test in default test mode, then use ``--production`` only when ready for final data collection.
 For interactive development against a live VM, use :ref:`dev mode <cli-dev-mode>`.
@@ -373,7 +400,13 @@ cannot be read, a warning is logged, nothing is removed and the run is unaffecte
   Validate a playbook file, write it as the experiment's ``playbook.yml`` and
   re-ingest the project database. Re-ingest replaces the playbook's items; items
   earlier runs executed are kept, marked superseded, so those runs' action
-  executions still name the action they ran.
+  executions still name the action they ran. While a run of the experiment is in
+  progress (unfinished, with activity in the last 30 minutes, as ``adare db compact``
+  decides) every old item is kept, superseded; a later re-ingest deletes those no
+  run executed. The experiment's content hash and tests are refreshed too, so the
+  next ``experiment run`` sees no change; runs are not touched. A changed playbook
+  for an experiment with production runs is refused and nothing is written (see
+  :ref:`reloading <cli-experiment-reload>`).
 
   Options:
     * ``--no-backup`` - Do not back up the existing playbook.yml to ``.bak``

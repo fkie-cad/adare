@@ -51,6 +51,11 @@ def strip_bulky_values(value: Any) -> Any:
     return value
 
 
+def _posix_time(value: datetime) -> float:
+    """POSIX time of a stored DateTime; naive values are UTC, as adare writes them."""
+    return (value if value.tzinfo else value.replace(tzinfo=UTC)).timestamp()
+
+
 class PlaybookApi(ProjectDatabaseApi):
     """API for playbook database operations."""
 
@@ -100,8 +105,9 @@ class PlaybookApi(ProjectDatabaseApi):
             # Flush to get the playbook ID assigned before creating items
             self._session.flush()
 
-            # Retire the previous version's items (for updates)
-            self._retire_playbook_items(playbook)
+            # Retire the previous version's items (for updates). A run in progress still
+            # executes the items it mapped at its start, so then none may be deleted.
+            self._retire_playbook_items(playbook, supersede_all=self.has_active_run(str(experiment.id)))
 
             # Convert actions to database items
             for order, action in enumerate(config.actions):
@@ -151,28 +157,68 @@ class PlaybookApi(ProjectDatabaseApi):
 
         return playbook
 
-    def _retire_playbook_items(self, playbook: Playbook) -> None:
+    def _retire_playbook_items(self, playbook: Playbook, supersede_all: bool = False) -> None:
         """Take a playbook's items out of the current playbook before new ones are added.
 
         Items an ``action_execution`` references are kept and marked superseded, so
         earlier runs keep their audit trail (foreign keys are off in SQLite, nothing
         else would stop the delete). Every other item is deleted -- also a superseded
         one whose runs have been deleted since. Set-based: no per-row Python.
+
+        With ``supersede_all`` (a run of the experiment is in progress, see
+        :meth:`has_active_run`) nothing is deleted: every current item is marked
+        superseded, because that run mapped the items at its start and writes
+        executions for the ones it has not reached yet. A later re-ingest without an
+        active run deletes the superseded items no execution ended up referencing.
         """
         executed = select(ActionExecution.id).where(ActionExecution.playbook_item_id == PlaybookItem.id).exists()
+        to_supersede = [PlaybookItem.playbook_id == playbook.id, PlaybookItem.superseded.is_(False)]
+        if not supersede_all:
+            to_supersede.append(executed)
         # 'fetch' keeps item objects already in the session in step with the rows.
         self._session.execute(
             update(PlaybookItem)
-            .where(PlaybookItem.playbook_id == playbook.id, PlaybookItem.superseded.is_(False), executed)
+            .where(*to_supersede)
             .values(superseded=True)
             .execution_options(synchronize_session='fetch')
         )
-        self._session.execute(
-            delete(PlaybookItem)
-            .where(PlaybookItem.playbook_id == playbook.id, ~executed)
-            .execution_options(synchronize_session='fetch')
-        )
+        if not supersede_all:
+            self._session.execute(
+                delete(PlaybookItem)
+                .where(PlaybookItem.playbook_id == playbook.id, ~executed)
+                .execution_options(synchronize_session='fetch')
+            )
         self._session.expire(playbook, ['items'])
+
+    def has_active_run(self, experiment_id: str) -> bool:
+        """True when a run of the experiment may still be executing its playbook.
+
+        Decided like ``adare db compact`` does (:mod:`adare.database.maintenance`): the
+        run's status is not terminal (``NON_TERMINAL_RUN_STATUSES``) and it showed
+        activity -- its start/creation time or a change in its run folder -- within
+        ``ACTIVITY_WINDOW_SECONDS``. An unfinished run without recent activity is stale
+        (a crashed process) and does not count.
+        """
+        from adare.backend.experiment.run_folders import last_activity, map_db_run_path
+        from adare.database.maintenance import ACTIVITY_WINDOW_SECONDS, NON_TERMINAL_RUN_STATUSES
+        from adare.database.models.project_models import ExperimentRun
+        from adarelib.constants import StatusEnum
+
+        statuses = [StatusEnum[name] for name in NON_TERMINAL_RUN_STATUSES]
+        cutoff = datetime.now(UTC).timestamp() - ACTIVITY_WINDOW_SECONDS
+        rows = self._session.execute(
+            select(ExperimentRun.path, ExperimentRun.start_time, ExperimentRun.created_at).where(
+                ExperimentRun.experiment_id == experiment_id, ExperimentRun.status.in_(statuses)
+            )
+        ).all()
+        for path, start_time, created_at in rows:
+            times = [_posix_time(value) for value in (start_time, created_at) if value is not None]
+            run_dir = map_db_run_path(self.project_path, path) if path else None
+            if run_dir is not None and run_dir.is_dir():
+                times.append(last_activity(run_dir))
+            if max(times, default=0.0) >= cutoff:
+                return True
+        return False
 
     def _create_playbook_item(self, playbook: Playbook, action: ActionType, sequence_order: int) -> PlaybookItem:
         """Convert action to PlaybookItem."""

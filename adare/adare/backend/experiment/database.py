@@ -251,6 +251,63 @@ def remove_experiment(project_path: Path, experiment_ulid: str) -> list[str]:
     return paths
 
 
+def reload_experiment_in_place(
+    project_path: Path, experiment_ulid: str, experiment_directory: ExperimentDirectory
+) -> int:
+    """Reload a changed experiment from its files, keeping its row (and id).
+
+    Only for an experiment without production runs: they would silently end up under
+    a playbook other than the one they ran (callers refuse instead, see
+    ``commands/load.py``). The finished fake runs go first -- rows via ``delete_runs``,
+    folders with the safety checks ``adare experiment clean`` uses -- so items only
+    they executed are deleted instead of kept as superseded. Fake runs that may still
+    be in use (unfinished, a dev session's) are kept; when the dev sessions cannot be
+    read, every fake run is kept. Deleting the runs and refreshing the experiment
+    (:meth:`ExperimentApi.refresh_experiment`) is one transaction.
+
+    Returns:
+        The number of fake runs deleted.
+    """
+    from adare.backend.experiment.run_folders import RunReferencesUnavailableError, remove_db_run_folders
+    from adare.database.api.run_cleanup import delete_runs
+
+    with ExperimentApi(project_path) as api:
+        experiment = api.get_experiment_by_ulid(experiment_ulid)
+        if experiment is None:
+            raise ExperimentNotFoundError(log, f'experiment [i]{experiment_ulid}[/i] not found in database')
+        try:
+            fake_runs = api.removable_fake_runs(experiment)
+        except RunReferencesUnavailableError as e:
+            log.warning(f'kept the fake runs of experiment {experiment.name}: {e}')
+            fake_runs = []
+        paths = delete_runs(api._session, fake_runs)
+        # The runs are gone; reload the collection so nothing flushes them again.
+        api._session.expire(experiment, ['runs'])
+        api.refresh_experiment(experiment, experiment_directory)
+    if paths:
+        remove_db_run_folders(project_path, paths)
+    if fake_runs:
+        log.info(f'deleted {len(fake_runs)} fake run(s) of experiment {experiment_ulid} made with the old playbook')
+    return len(fake_runs)
+
+
+def refresh_experiment_playbook(
+    project_path: Path, experiment_ulid: str, experiment_directory: ExperimentDirectory
+) -> int | None:
+    """Re-ingest a loaded experiment's changed playbook.yml in place; return the playbook version.
+
+    Refreshes what the experiment derives from the playbook (content hash, tests,
+    playbook items), so the next load sees the experiment as unchanged. Runs and the
+    metadata-derived fields are not touched. None when there is no playbook file.
+    """
+    with ExperimentApi(project_path) as api:
+        experiment = api.get_experiment_by_ulid(experiment_ulid)
+        if experiment is None:
+            raise ExperimentNotFoundError(log, f'experiment [i]{experiment_ulid}[/i] not found in database')
+        playbook = api.refresh_experiment(experiment, experiment_directory, include_metadata=False)
+        return int(playbook.version) if playbook is not None else None
+
+
 def check_for_experiment_change(project_path: Path, experiment_ulid: str, sha256: str) -> bool:
     with ExperimentApi(project_path) as api:
         return not api.experiment_sha256_equals(experiment_ulid, sha256)
