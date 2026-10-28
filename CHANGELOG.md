@@ -41,9 +41,13 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   a database is corrupt. Both commands take `--json`.
 - `adare runs prune [--fake] [--older-than DAYS] [--yes] [--json]`: frees disk space
   in the current project's `run/` directory. A dry run by default: lists run folders
-  no database run (and no dev session) refers to, with sizes and a total. `--fake`
-  also targets fake runs that are not running (rows + folders), `--older-than`
-  filters by age, and only `--yes` deletes. A folder is only ever selected when it
+  no database run (and no dev session) refers to, with sizes and a total. A run that
+  failed before it recorded its folder (e.g. during VM preparation) keeps every
+  folder of its experiment within 16 h of its start, and the runs of every registered
+  project whose `run/` resolves to the same directory count too (when one of them
+  cannot be read, nothing is pruned). `--fake` also targets finished fake runs (not
+  pending/running, not a dev session's run; rows + folders), `--older-than` filters
+  by age, and only `--yes` deletes. A folder is only ever selected when it
   is clearly an ADARE run folder: `run/<known experiment>/<run timestamp>` inside
   `run/` with no symlinks, with a `logs/` or `reporting/` subdirectory, unchanged for
   an hour; users' own files in `run/` are never listed.
@@ -185,7 +189,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   and reported; the rows are deleted anyway). Database run paths are matched by
   their `run/<experiment>/<timestamp>` tail, so moved projects still match.
   `runs remove --keep-files` (web: `keep_files=true`) and `experiment remove
-  --keep-files` keep the files. The automatic fake-run cleanup after a test run
+  --keep-files` keep the files. A folder a dev session refers to (any status) is
+  never deleted, and neither is any folder when the dev sessions cannot be read.
+  `experiment clean` keeps fake runs that are still pending or running and dev
+  sessions' runs. The automatic fake-run cleanup after a test run
   still removes only the rows; `runs prune` collects those folders.
 - SQLite databases now use write-ahead logging (`journal_mode=WAL`) with
   `synchronous=NORMAL` and a 30 s busy timeout (was 5 s), set on every connection:

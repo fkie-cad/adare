@@ -330,7 +330,7 @@ class ShowService:
                 if request.keep_files:
                     result.folder_note = 'kept (--keep-files)'
                 else:
-                    self._remove_run_folder(Path(project_path), paths[0], result)
+                    self._remove_run_folder(Path(project_path), request.ulid, paths[0], result)
             return Result.ok(result)
 
         except NoProjectFoundError as e:
@@ -346,11 +346,21 @@ class ShowService:
             )
 
     @staticmethod
-    def _remove_run_folder(project_path: Path, db_path: str, result: RunRemoveResult) -> None:
-        """Delete a removed run's folder through the safe helper; a refusal only goes into ``result``."""
-        from adare.backend.experiment.run_folders import remove_db_run_folders
+    def _remove_run_folder(project_path: Path, run_id: str, db_path: str, result: RunRemoveResult) -> None:
+        """Delete a removed run's folder through the safe helper; a refusal only goes into ``result``.
 
-        (removal,) = remove_db_run_folders(project_path, [db_path])
+        A dev session's run (its id is the session id) keeps its folder.
+        """
+        from adare.backend.experiment.run_folders import (
+            DevSessionRefs,
+            remove_db_run_folders,
+            try_load_dev_session_refs,
+        )
+
+        dev_sessions = try_load_dev_session_refs()
+        if isinstance(dev_sessions, DevSessionRefs) and dev_sessions.refers_to(run_id=run_id):
+            dev_sessions = dev_sessions.with_run_paths([db_path])
+        (removal,) = remove_db_run_folders(project_path, [db_path], dev_sessions=dev_sessions)
         result.folder = str(removal.path)
         result.folder_removed = removal.removed
         if removal.missing:
@@ -365,6 +375,7 @@ class ShowService:
         deleted unless ``request.execute`` is set.
         """
         from adare.backend.basics import determine_projectdirectory
+        from adare.backend.experiment.run_folders import RunReferencesUnavailableError
         from adare.backend.experiment.run_prune import execute_prune, plan_prune
 
         project_path = request.project_path or determine_projectdirectory(None)
@@ -381,6 +392,13 @@ class ShowService:
             if request.execute and entries:
                 result.rows_deleted = execute_prune(project_path, entries)
             return Result.ok(result)
+        except RunReferencesUnavailableError as e:
+            log.warning(f"Not pruning runs of {project_path}: {e}")
+            return Result.fail(
+                code="RunPruneRefused",
+                message=f"Nothing was pruned: {e}",
+                solutions=['Fix the database or project named above, then run the prune again'],
+            )
         except SQLAlchemyError as e:
             log.error(f"Failed to prune runs of {project_path}: {e}")
             return Result.fail(

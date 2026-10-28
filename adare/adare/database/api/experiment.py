@@ -654,22 +654,41 @@ class ExperimentApi(ProjectDatabaseApi):
 
     def remove_fake_runs_of_experiment(self, project_path: Path, experiment_name: str) -> tuple[int, list[str]]:
         """
-        Remove all fake runs of the experiment ``experiment_name`` and commit.
+        Remove the finished fake runs of the experiment ``experiment_name`` and commit.
+
+        Fake runs that may still be in use are kept: any not in a terminal status
+        (PENDING, RUNNING, ...) and every dev session's run (its id is the session id,
+        or its path is the session's run folder).
 
         Returns:
             (number of fake runs removed, their directory paths -- runs without one are not listed)
+
+        Raises:
+            ValueError: The experiment does not exist.
+            RunReferencesUnavailableError: The dev sessions could not be read (nothing removed).
         """
+        from adare.backend.experiment.run_folders import TERMINAL_RUN_STATUSES, load_dev_session_refs
+
         # Get the experiment
         experiment = self.get_experiment_by_project_and_name(project_path, experiment_name)
         if not experiment:
             raise ValueError(f'experiment "{experiment_name}" not found in project {project_path}')
 
-        # Find all fake runs for this experiment
-        fake_runs = (
+        dev_sessions = load_dev_session_refs()
+        fake_runs: list[ExperimentRun] = []
+        kept: list[ExperimentRun] = []
+        for run in (
             self._session.query(ExperimentRun)
             .filter(ExperimentRun.experiment_id == experiment.id, ExperimentRun.fake)
             .all()
-        )
+        ):
+            in_use = run.status not in TERMINAL_RUN_STATUSES or dev_sessions.refers_to(run_id=run.id, path=run.path)
+            (kept if in_use else fake_runs).append(run)
+        if kept:
+            log.warning(
+                f'kept {len(kept)} fake run(s) of "{experiment_name}" that are still pending/running or belong '
+                f'to a dev session: {", ".join(str(run.id) for run in kept)}'
+            )
 
         paths = delete_runs(self._session, fake_runs)
         self._session.commit()
