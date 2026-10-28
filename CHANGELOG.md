@@ -321,6 +321,17 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - `adare runs list` inside a project registered under a name other than its
   directory's (e.g. `T2F` at `.../adare`) listed no runs; it filters by the
   registered name and no longer reads the other projects' databases.
+- The same directory-name-instead-of-registered-name mixup also affected
+  experiment/environment dotnotations resolved from the current directory and
+  the "current project" used to shorten names in experiment, environment and
+  testfunction listings. All of them now resolve the registered name through one
+  helper, `adare.backend.basics.registered_project_name` (falling back to the
+  directory name for an unregistered directory).
+- Database read helpers (`safe_query_*`, `safe_count`, `safe_get_*`), the global
+  reference manager and the current-project lookup caught every exception, so a
+  programming error looked like a missing row or an empty listing. They now turn
+  only the expected database errors (SQLAlchemy, sqlite3, the database API's own,
+  `OSError`) into their default and let anything else propagate.
 - Removing a dev session (or any old pooled QEMU instance) whose VM config was
   already gone deleted only its database rows and left its full disk copy
   (`<name>-base.qcow2`, ~4-50 GiB) behind; the copy is now removed by name. The
