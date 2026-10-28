@@ -194,3 +194,22 @@ def test_the_cli_holds_the_hint_back_for_json_output(tmp_path):
     json.loads(result.stdout)
     assert len(compact_hint.pending_hints()) == 1  # kept for the next interactive command
     assert not compact_hint.marker_path(db_path).exists()
+
+
+def test_list_commands_queue_the_hint_without_project_database_api(tmp_path, monkeypatch):
+    # `runs list` / `experiment list` read project databases through StructuredDataApi(db_path=...).
+    from adare.database.api.structured_data import StructuredDataApi
+    from adare.services.show_service import ShowService
+    from adare.types.output_models import ProjectInfo
+
+    project, db_path = _project(tmp_path, BULKY, BULKY)
+    monkeypatch.setattr(
+        StructuredDataApi,
+        'get_projects_structured',
+        lambda self: [ProjectInfo(name='proj', description='', path=str(project))],
+    )
+    dispose_engines()
+
+    ShowService()._query_across_projects(lambda api, name: [])
+
+    assert [hint.db_path for hint in compact_hint.pending_hints()] == [db_path]
