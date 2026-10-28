@@ -841,8 +841,9 @@ async def experiment_run(
         log.error(f"Error generating forensic report: {e}", exc_info=True)
 
     # Test-run retention: keep the ADARE_TEST_RUNS_KEEP newest test runs of this
-    # experiment (this one included). Never fails the run: the helper logs and keeps
-    # everything on errors. Off the event loop: deleting run folders can take a while.
+    # experiment and environment (this one and the newest successful one included;
+    # -1 = off). Never fails the run: the helper logs and keeps everything on errors.
+    # Off the event loop: deleting run folders can take a while.
     if test and not experiment_run_context.config.dev_mode:
         from adare.backend.experiment.run_prune import apply_test_run_retention
 
@@ -865,11 +866,13 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
     """Test an experiment: a fake (test-mode) run without integrity checks.
 
     For iterative playbook development. The run is recorded as a fake run and its
-    folder kept for analysis. Afterwards the experiment's older test runs are pruned
-    so that only the ``ADARE_TEST_RUNS_KEEP`` (default 10) newest remain, this run
-    included (see :func:`~adare.backend.experiment.run_prune.retain_test_runs`); runs
-    still in progress, dev sessions' runs and runs started less than an hour ago are
-    never removed. ``adare runs prune --fake`` removes the rest by hand.
+    folder kept for analysis. Afterwards older test runs of the experiment on this
+    environment are pruned so that only the ``ADARE_TEST_RUNS_KEEP`` (default 10)
+    newest remain, this run included, at most 5 per run (see
+    :func:`~adare.backend.experiment.run_prune.retain_test_runs`); the newest
+    successful run, runs still in progress, dev sessions' runs and runs started less
+    than an hour ago are never removed. ``adare runs prune --fake`` removes the rest
+    by hand.
 
     Args:
         project_path: Path to the project directory
