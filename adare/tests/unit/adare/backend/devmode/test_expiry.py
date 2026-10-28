@@ -117,6 +117,8 @@ def test_runs_expire_sessions_but_a_dev_session_never_does(dev_mode, expected_ca
         raise RuntimeError('stop after the expiry step')
 
     with (
+        # The strategy resolves qemu-img / qemu-system on the host; this test never reaches it.
+        patch('adare.hypervisor.qemu.lifecycle.QEMULifecycleStrategy'),
         patch(
             'adare.backend.experiment.vm_lifecycle_manager.environment_database.get_environment_by_ulid',
             return_value={'vm_id': 'vm-1'},
