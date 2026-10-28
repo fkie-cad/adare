@@ -130,6 +130,11 @@ MIGRATIONS: list[Migration] = [
         scope='project',
         module=f'{_PACKAGE}.add_run_lookup_indexes',
     ),
+    Migration(
+        name='delete_orphan_run_rows',
+        scope='project',
+        module=f'{_PACKAGE}.delete_orphan_run_rows',
+    ),
 ]
 
 # Applied-migration names per database URL. Keeps auto-apply at one SELECT per
