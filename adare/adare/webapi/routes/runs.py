@@ -80,15 +80,14 @@ def get_run(ulid: str):
 
 
 @router.delete("/{ulid}")
-def remove_run(ulid: str, project_path: str | None = Query(None)):
-    """Remove a run by ULID."""
-    from pathlib import Path
-
+def remove_run(ulid: str, project_path: str | None = Query(None), keep_files: bool = Query(False)):
+    """Remove a run by ULID: its database rows and (unless ``keep_files``) its run folder."""
     from adare.core.dto.show import RunRemoveRequest
 
     dto = RunRemoveRequest(
         ulid=ulid,
         project_path=Path(project_path) if project_path else None,
+        keep_files=keep_files,
     )
     result = _api().show.remove_run(dto)
     return result_to_response(result)

@@ -244,9 +244,11 @@ def create_experiment(
         return experiment.id
 
 
-def remove_experiment(project_path: Path, experiment_ulid: str):
+def remove_experiment(project_path: Path, experiment_ulid: str) -> list[str]:
+    """Remove the experiment and its runs (rows only); return the deleted runs' ``path`` values."""
     with ExperimentApi(project_path) as api:
-        api.remove_experiment_by_ulid(experiment_ulid)
+        paths: list[str] = api.remove_experiment_by_ulid(experiment_ulid)
+    return paths
 
 
 def check_for_experiment_change(project_path: Path, experiment_ulid: str, sha256: str) -> bool:
@@ -447,9 +449,11 @@ def _sync_experiment_metadata_environments(project_path: Path, experiment_ulid: 
         log.warning(f'failed to sync metadata.yml environments for experiment {experiment_ulid}: {e}')
 
 
-def remove_fake_experiment_run(project_path: Path, experiment_run_ulid: str):
+def remove_fake_experiment_run(project_path: Path, experiment_run_ulid: str) -> list[str]:
+    """Remove a fake run's rows; return its ``path`` (empty if not found or it has none)."""
     with ExperimentApi(project_path) as api:
-        api.remove_fake_experiment_run(experiment_run_ulid)
+        paths: list[str] = api.remove_fake_experiment_run(experiment_run_ulid)
+    return paths
 
 
 def update_experiment_run_start(project_path: Path, experiment_run_ulid: str, timestamp: datetime):

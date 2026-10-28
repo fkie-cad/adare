@@ -26,6 +26,12 @@ for _mod_name in [
 
 from adare.services.devmode import DevModeService  # noqa: E402
 
+# The service module keeps the mocks it imported; drop them from sys.modules so
+# later test modules (collected after this one) import the real database modules.
+for _mod_name, _mock in _mocked_modules.items():
+    if sys.modules.get(_mod_name) is _mock:
+        del sys.modules[_mod_name]
+
 
 @pytest.fixture
 def service():
