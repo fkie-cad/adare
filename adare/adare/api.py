@@ -428,6 +428,10 @@ class ShowAPI:
         """Remove a run."""
         return self._service.remove_run(request)
 
+    def prune_runs(self, request):
+        """List or remove run folders without a database row (and fake runs)."""
+        return self._service.prune_runs(request)
+
     def get_run_files(self, ulid):
         """Resolve a run's on-disk directory and known artifact file paths."""
         return self._service.get_run_files(ulid)
