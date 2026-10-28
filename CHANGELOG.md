@@ -47,6 +47,18 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   a database is corrupt. Both commands take `--json`; with `--all` a registered project whose directory or
   database is gone is reported as `missing` (nothing is created on disk) and the
   rest are still processed.
+- A command that opens a project database over 512 MiB that still holds
+  screenshot copies in `action_execution.result_data` prints a one-line hint on
+  stderr to run `adare db compact -p <project>` (not with `--json`/`--format
+  json|yaml`). It is shown once; `.adare/compact-hint.json` records the size, and
+  the hint returns only after the database grew by half. A successful compact
+  writes the marker too. The check is a `stat` below 512 MiB and one
+  `octet_length` query (record headers only) above it.
+- SQLite upkeep: every connection caps the `-wal` file at 64 MiB after a
+  checkpoint (`journal_size_limit`, also on `adare db compact`'s connection), and
+  each CLI command and the web API run `PRAGMA optimize` (bounded by
+  `analysis_limit=400`, 1 s busy timeout; a read-only or locked database is
+  skipped) on the databases they used when they end.
 - `adare runs prune [--fake] [--older-than DAYS] [--yes] [--json]`: frees disk space
   in the current project's `run/` directory. A dry run by default: lists run folders
   no database run (and no dev session) refers to, with sizes and a total. A run that
