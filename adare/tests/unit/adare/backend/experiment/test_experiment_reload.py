@@ -437,3 +437,28 @@ def test_superseded_items_left_by_an_active_run_go_once_it_is_over(project):
     assert first in remaining
     assert not {second, third} & remaining
     assert current == 1
+
+
+def test_add_and_remove_env_never_force_reload():
+    """`experiment add-env` / `remove-env` must not replace an experiment (and delete its production runs)."""
+    import ast
+    import inspect
+
+    from adare.backend.experiment.commands import modify
+
+    tree = ast.parse(inspect.getsource(modify))
+    loads = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and getattr(node.func, 'id', None) == 'experiment_load'
+    ]
+    assert loads
+    for call in loads:
+        force = {kw.arg: kw.value for kw in call.keywords}['force']
+        assert isinstance(force, ast.Constant) and force.value is False
+    handlers = [
+        node.type.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ExceptHandler) and isinstance(node.type, ast.Name)
+    ]
+    assert 'ExperimentHasProductionRunsError' in handlers

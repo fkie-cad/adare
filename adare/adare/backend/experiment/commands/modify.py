@@ -3,12 +3,26 @@ import logging
 from pathlib import Path
 
 # internal imports
-from adare.backend.experiment.commands.load import experiment_load
+from adare.backend.experiment.commands.load import ExperimentHasProductionRunsError, experiment_load
 from adare.backend.experiment.directory import ExperimentDirectory
 from adare.backend.project.directory import ProjectDirectory
 from adare.database.exceptions import EnvironmentMissingError
 
 log = logging.getLogger(__name__)
+
+
+def _reload(project_path: Path, exp_name: str) -> bool:
+    """Reload ``exp_name`` after its metadata changed; False when it has production runs and a changed playbook.
+
+    Never with ``force``: that would replace the experiment and delete its production runs.
+    """
+    try:
+        experiment_load(project_path, exp_name, force=False, silent=True)
+    except ExperimentHasProductionRunsError as e:
+        log.error(f"Updated metadata of experiment '{exp_name}' but could not reload it: {e}")
+        return False
+    log.info(f"Reloaded experiment: {exp_name}")
+    return True
 
 
 def experiment_remove_environments(
@@ -91,8 +105,9 @@ def experiment_remove_environments(
 
             # Reload experiment to update database (if it still has environments)
             if updated_envs:
-                experiment_load(project_path, exp_name, force=True, silent=True)
-                log.info(f"Reloaded experiment: {exp_name}")
+                if not _reload(project_path, exp_name):
+                    failed_experiments.append(exp_name)
+                    continue
             else:
                 log.warning(f"Experiment '{exp_name}' now has no environments and may become inaccessible")
 
@@ -177,8 +192,8 @@ def experiment_add_environments(
     log.info("")
 
     # Process each experiment
-    updated_experiments = []
-    failed_experiments = []
+    updated_experiments: list[str] = []
+    failed_experiments: list[str] = []
     skipped_experiments = []  # Track experiments that already have the environments
     environment_missing_experiments = []  # Track experiments where environments aren't in global database
 
@@ -212,10 +227,7 @@ def experiment_add_environments(
             log.info(f"Updated metadata for experiment: {exp_name}")
 
             # Reload experiment to update database
-            experiment_load(project_path, exp_name, force=True, silent=True)
-            log.info(f"Reloaded experiment: {exp_name}")
-
-            updated_experiments.append(exp_name)
+            (updated_experiments if _reload(project_path, exp_name) else failed_experiments).append(exp_name)
 
         except EnvironmentMissingError:
             log.error(
