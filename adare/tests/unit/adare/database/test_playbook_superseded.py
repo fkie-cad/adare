@@ -21,6 +21,7 @@ from adare.database.migrations.runner import MIGRATIONS
 from adare.database.models.project_models import ActionExecution, Experiment, ExperimentRun, ProjectBase
 from adare.database.reference_manager import reference_manager
 from adare.services.experiment_service import ExperimentService
+from adarelib.constants import StatusEnum
 
 pytestmark = pytest.mark.unit
 
@@ -86,10 +87,14 @@ def _items(project_path: Path) -> dict[str, bool]:
 
 
 def _run_executing(project_path: Path, item_ids: list[str]) -> str:
-    """A run with one execution per given item; returns the run id."""
+    """A finished test run with one execution per given item; returns the run id.
+
+    A test (fake) run: ``playbook set`` refuses a changed playbook once production
+    runs exist. Finished: an unfinished, recent run makes a re-ingest keep every item.
+    """
     with ExperimentApi(project_path) as api:
         experiment = api._session.query(Experiment).filter_by(name=EXPERIMENT).one()
-        run = ExperimentRun(experiment_id=experiment.id)
+        run = ExperimentRun(experiment_id=experiment.id, fake=True, status=StatusEnum.SUCCESS)
         api._session.add(run)
         api._session.flush()
         for item_id in item_ids:
