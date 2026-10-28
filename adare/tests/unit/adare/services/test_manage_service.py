@@ -215,3 +215,58 @@ class TestManageServiceRefreshVmRuntime:
 
         assert result.success is False
         assert result.error.code == "NoProjectFoundError"
+
+
+class TestManageServiceMaintenance:
+    """compact_db / check_db resolve their databases, then defer to adare.database.maintenance."""
+
+    @patch("adare.backend.basics.registered_project_name", return_value="T2F")
+    @patch("adare.backend.basics.determine_projectdirectory")
+    def test_current_project_by_default(self, mock_determine, _mock_name, service, tmp_path):
+        mock_determine.return_value = tmp_path
+        entry = MagicMock(failed=False)
+
+        with patch("adare.database.maintenance.compact_database", return_value=entry) as compact:
+            result = service.compact_db(dry_run=True)
+
+        assert result.success is True
+        assert result.data.dry_run is True
+        assert result.data.databases == [entry]
+        target = compact.call_args.args[0]
+        assert target.label == "T2F"
+        assert target.project_path == tmp_path
+        assert compact.call_args.kwargs == {"dry_run": True, "progress": None}
+
+    def test_all_includes_every_target_and_passes_labelled_progress(self, service, tmp_path):
+        from adare.database.maintenance import DatabaseTarget
+
+        targets = [DatabaseTarget("global", tmp_path / "g.db"), DatabaseTarget("p", tmp_path / "p.db", tmp_path)]
+        seen = []
+
+        def fake_compact(target, dry_run, progress):
+            progress(5, 10)
+            return MagicMock(failed=False)
+
+        with (
+            patch("adare.database.maintenance.all_targets", return_value=targets),
+            patch("adare.database.maintenance.compact_database", side_effect=fake_compact),
+        ):
+            result = service.compact_db(all_databases=True, progress=lambda *args: seen.append(args))
+
+        assert result.success is True
+        assert seen == [("global", 5, 10), ("p", 5, 10)]
+
+    @patch("adare.backend.basics.determine_projectdirectory", return_value=None)
+    def test_no_project_fails_with_all_hint(self, _mock_determine, service):
+        result = service.check_db()
+
+        assert result.success is False
+        assert result.error.code == "NoProjectFoundError"
+        assert any("--all" in solution for solution in result.error.solutions)
+
+    def test_global_database_unreadable_is_a_failure(self, service):
+        with patch("adare.database.maintenance.all_targets", side_effect=OSError("gone")):
+            result = service.check_db(all_databases=True)
+
+        assert result.success is False
+        assert result.error.code == "DbMaintenanceError"

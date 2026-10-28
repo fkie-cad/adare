@@ -208,3 +208,16 @@ Per-connection settings therefore belong in the connect hook, where every
 pooled connection receives them before its first statement. Never put a
 ``PRAGMA journal_mode``, ``PRAGMA foreign_keys`` or ``VACUUM`` into an
 ``upgrade(conn)``.
+
+Maintenance outside migrations
+==============================
+
+Work that rewrites a lot of data or needs ``VACUUM`` is an operator command, not a
+migration: ``adare db compact`` (:mod:`adare.database.maintenance`) strips the
+screenshot copies old ``action_execution`` rows kept in ``result_data`` and then
+vacuums, on a raw autocommit connection, after making sure no other process
+holds the write lock. ``adare db check`` reports ``quick_check``,
+``foreign_key_check`` and orphan counts read-only; its run-orphan counts reuse
+the SQL of ``delete_orphan_run_rows``, so the two cannot drift apart. The pages
+a data-repair migration frees stay in the file until ``adare db compact`` (or any
+``VACUUM``) runs. See :doc:`../reference/cli` for both commands.
