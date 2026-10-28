@@ -110,9 +110,11 @@ runs fit (see :doc:`../guide/host-resources`). Every subcommand takes the global
     disks before a run starts; 0 switches the check off
   * ``ADARE_DEV_SESSION_MAX_AGE_DAYS`` (off) - stopped dev sessions unused for longer
     are removed by every experiment run and ``adare vm prune --force``
-  * ``ADARE_TEST_RUNS_KEEP`` (10) - test (fake) runs kept per experiment; each test
-    run removes the older ones (see :ref:`test-run retention <cli-test-run-retention>`).
-    The run that just finished counts, so 0 keeps only it
+  * ``ADARE_TEST_RUNS_KEEP`` (10) - test (fake) runs kept per experiment and
+    environment; each test run removes up to 5 older ones (see
+    :ref:`test-run retention <cli-test-run-retention>`). The run that just finished
+    counts, so 0 keeps only it (and the newest successful run, which is always
+    kept); -1 switches retention off
 
   Example: ``adare system settings set ADARE_DEV_SESSION_MAX_AGE_DAYS 30``
 
@@ -267,8 +269,8 @@ By default, experiments run in **test mode** which is ideal for development:
 * **Test Mode (Default)**:
 
   * Allows continuous modification and testing of playbook files
-  * Creates "fake runs"; only the newest ones per experiment are kept (see below),
-    ``adare experiment clean`` removes them all
+  * Creates "fake runs"; only the newest ones per experiment and environment are
+    kept (see below), ``adare experiment clean`` removes them all
   * Skips integrity checks to enable rapid iteration
   * Perfect for developing and debugging experiments
 
@@ -285,27 +287,53 @@ For interactive development against a live VM, use :ref:`dev mode <cli-dev-mode>
 .. _cli-test-run-retention:
 
 **Test-run retention.** Every test-mode run (``adare experiment run`` /
-``replicate`` without ``--production``; not dev sessions) ends by removing the experiment's older test runs, so that only the
-``ADARE_TEST_RUNS_KEEP`` newest remain (default 10, all environments of the
-experiment together). The run that just finished takes one of those places and is
-never removed, so ``0`` and ``1`` both keep only it. Runs are ranked by start time,
-and a run that would go is still kept when it
+``replicate`` without ``--production``; not dev sessions) ends by removing older
+test runs of the same experiment **and environment** (the exact environment version
+the run used; runs without an environment are a group of their own), so that the
+``ADARE_TEST_RUNS_KEEP`` newest of that group remain (default 10). A default
+``adare experiment run exp`` over several environments therefore never removes its
+own results of another environment. The run that just finished takes one of those
+places and is never removed, so ``0`` and ``1`` both keep it alone.
+
+The **newest successful run** of the group is never removed either. Successful
+means the run finished (status ``FINISHED``; failed and interrupted runs end as
+``FAILED``/``ERROR``/``INTERRUPTED``) and its result in ``adare runs list`` is
+``SUCCESS`` or ``WARNING`` (all tests passed; a run without tests counts as
+passed). It takes one of the ``ADARE_TEST_RUNS_KEEP`` places when it is among the
+newest; otherwise it is kept on top of them, so a burst of failed attempts can
+never remove the last good run.
+
+Runs are ranked by start time, and a run that would go is still kept when it
 
 * started less than an hour ago, or is not finished (pending, running, paused, no
   status);
 * belongs to a dev session;
 * has a run folder that fails the :ref:`run-folder test <cli-run-folders>` (e.g.
-  something in it changed in the last hour); its database row stays too.
+  something in it changed in the last hour); its database row stays too;
+* has a run folder that a run of another registered project sharing this ``run/``
+  directory refers to; its row stays too. If such a project cannot be read, nothing
+  is removed (like ``adare runs prune``).
+
+At most **5** runs per experiment and environment are removed after one run,
+oldest first, so the first run after an upgrade does not delete a whole backlog at
+once; later runs take the rest, or ``adare runs prune --fake`` removes finished
+test runs in bulk (that one does not keep the newest).
 
 Production runs are never touched. The rows go in one transaction, then the
 folders; when something was removed, one line such as ``removed 3 older test runs
-(1.2 GiB; ADARE_TEST_RUNS_KEEP=10)`` is printed. If the runs or the dev sessions
-cannot be read, a warning is logged, nothing is removed and the run is unaffected.
+(1.2 GiB; ADARE_TEST_RUNS_KEEP=10)`` is printed. It adds ``; 4 more kept for now
+(at most 5 are removed per run; `adare runs prune --fake` removes finished test
+runs in bulk)`` when the limit was hit, and ``; 1 run folder could not be deleted
+(`adare runs prune` removes leftover folders)`` when a folder could not be deleted
+after its row was (the folder is then an orphan that ``adare runs prune`` cleans
+up). If the runs, the dev sessions or a sharing project cannot be read, a warning
+is logged, nothing is removed and the run is unaffected.
 
 .. code-block:: bash
 
    adare system settings set ADARE_TEST_RUNS_KEEP 25   # keep more
-   ADARE_TEST_RUNS_KEEP=0 adare experiment run exp -e env   # keep only this run
+   ADARE_TEST_RUNS_KEEP=0 adare experiment run exp -e env   # keep only this run (+ the last good one)
+   adare system settings set ADARE_TEST_RUNS_KEEP -1   # switch retention off
    adare system settings unset ADARE_TEST_RUNS_KEEP     # back to 10
 
 ``adare experiment diff <experiment>``
