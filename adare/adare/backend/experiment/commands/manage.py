@@ -100,16 +100,33 @@ class StageCtxManagerLite:
         return False
 
 
-def experiment_clean(project_path: Path, experiment_name: str):
+def _folder_summary(removals) -> str:
+    """One line on what happened to the run folders of deleted runs."""
+    deleted = sum(1 for removal in removals if removal.removed)
+    kept = [removal for removal in removals if not removal.removed and not removal.missing]
+    summary = f'Deleted {deleted} run folder(s)'
+    if kept:
+        reasons = '; '.join(f'{removal.path.name}: {removal.reason}' for removal in kept[:3])
+        more = f' (+{len(kept) - 3} more)' if len(kept) > 3 else ''
+        summary += f', kept {len(kept)} ({reasons}{more})'
+    return summary
+
+
+def experiment_clean(project_path: Path, experiment_name: str) -> int:
     """Clean fake experiment runs for the specified experiment.
 
-    This function removes all fake runs associated with an experiment,
-    helping to clean up test runs that are preserved for debugging.
+    Removes all fake runs of the experiment: their database rows and their run
+    folders (each only if it passes the run-folder safety test, see
+    ``backend/experiment/run_folders.py``).
 
     Args:
         project_path: Path to the project directory
         experiment_name: Name of the experiment to clean fake runs for
+
+    Returns:
+        Number of fake runs removed.
     """
+    from adare.backend.experiment.run_folders import remove_db_run_folders
     from adare.console import print_success_message
     from adare.database.api.experiment import ExperimentApi
 
@@ -117,22 +134,8 @@ def experiment_clean(project_path: Path, experiment_name: str):
 
     try:
         with ExperimentApi(project_path) as api:
-            removed_count = api.remove_fake_experiment_runs_by_experiment_name(project_path, experiment_name)
-
-            if removed_count > 0:
-                log.info(f'Removed {removed_count} fake run(s) for experiment "{experiment_name}"')
-                print_success_message(
-                    title=f'Experiment "{experiment_name}" cleaned successfully!',
-                    location=f'Removed {removed_count} fake run(s)',
-                    next_steps=[
-                        'Fake runs have been permanently deleted from the database',
-                        f'You can continue testing with: adare experiment run {experiment_name} -e <environment>',
-                    ],
-                )
-            else:
-                log.info(f'No fake runs found for experiment "{experiment_name}"')
-                log.info(f'No fake runs found for experiment "{experiment_name}" - nothing to clean')
-
+            removed: tuple[int, list[str]] = api.remove_fake_runs_of_experiment(project_path, experiment_name)
+        removed_count, paths = removed
     except ValueError as e:
         from adare.exceptions import LoggedException
 
@@ -142,18 +145,50 @@ def experiment_clean(project_path: Path, experiment_name: str):
 
         raise LoggedException(log, f'Failed to clean experiment "{experiment_name}": {str(e)}') from e
 
+    if removed_count == 0:
+        log.info(f'No fake runs found for experiment "{experiment_name}" - nothing to clean')
+        return 0
+
+    removals = remove_db_run_folders(project_path, paths)
+    log.info(f'Removed {removed_count} fake run(s) for experiment "{experiment_name}"')
+    print_success_message(
+        title=f'Experiment "{experiment_name}" cleaned successfully!',
+        location=f'Removed {removed_count} fake run(s)',
+        next_steps=[
+            'Fake runs have been permanently deleted from the database',
+            _folder_summary(removals),
+            f'You can continue testing with: adare experiment run {experiment_name} -e <environment>',
+        ],
+    )
+    return removed_count
+
+
+def _remove_empty_run_parent(project_path: Path, experiment_name: str) -> None:
+    """Remove ``run/<experiment>`` once it is empty (never a symlink, never a non-empty directory)."""
+    if Path(experiment_name).name != experiment_name or experiment_name in ('', '.', '..'):
+        return
+    run_parent = project_path / 'run' / experiment_name
+    if run_parent.is_symlink() or not run_parent.is_dir():
+        return
+    try:
+        run_parent.rmdir()
+    except OSError:
+        log.debug(f'kept {run_parent}: not empty')
+
 
 def experiment_remove(project_path: Path, experiment_name: str, force: bool = False, keep_files: bool = False):
     """Remove an experiment from the database and optionally from the filesystem.
 
     This function removes an experiment from the database, including all associated
-    runs and data. Optionally deletes the experiment directory from the filesystem.
+    runs and data. Unless ``keep_files``, it also deletes the runs' folders (each only
+    if it passes the run-folder safety test, see ``backend/experiment/run_folders.py``)
+    and the experiment directory.
 
     Args:
         project_path: Path to the project directory
         experiment_name: Name of the experiment to remove
         force: Force removal even if experiment has productive runs
-        keep_files: Keep experiment directory on filesystem (only remove from database)
+        keep_files: Keep the experiment directory and the run folders (only remove from database)
     """
     import shutil
 
@@ -244,14 +279,18 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
                     ],
                 )
 
-            # Remove experiment from database (cascades to all runs and related data)
+            # Remove experiment from database (and all its runs with every row they own)
             experiment_ulid = experiment.id
-            api.remove_experiment(experiment)
+            run_paths = api.remove_experiment(experiment)
             api._session.commit()
             log.info(f'Removed experiment "{experiment_name}" (ulid: {experiment_ulid}) from database')
 
-            # Optionally remove experiment directory
+            # Optionally remove the runs' folders and the experiment directory
             if not keep_files:
+                from adare.backend.experiment.run_folders import remove_db_run_folders
+
+                runs_status = _folder_summary(remove_db_run_folders(project_path, run_paths))
+                _remove_empty_run_parent(project_path, experiment_name)
                 try:
                     shutil.rmtree(experiment_directory.path)
                     log.info(f'Removed experiment directory: {experiment_directory.path}')
@@ -261,11 +300,13 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
                     files_status = f'Failed to remove directory: {e}'
             else:
                 files_status = 'Experiment directory preserved on filesystem'
+                runs_status = 'Run folders preserved on filesystem'
 
             # Success message
             next_steps = [
                 f'Removed experiment from database (ulid: {experiment_ulid})',
                 f'Deleted {total_run_count} run(s) ({productive_run_count} productive, {total_run_count - productive_run_count} fake)',
+                runs_status,
                 files_status,
             ]
 

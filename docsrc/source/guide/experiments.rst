@@ -155,8 +155,14 @@ Managing Experiments
    # Copy experiment for modification
    adare experiment clone my-experiment my-experiment-v2
 
-   # Remove experiment
+   # Delete the fake (test-mode) runs of an experiment, with their run folders
+   adare experiment clean my-experiment
+
+   # Remove experiment (with its runs and their run folders; --keep-files keeps the files)
    adare experiment remove my-experiment
+
+   # Free disk space: run folders without a database row (dry run; --yes deletes)
+   adare runs prune
 
    # Develop interactively against a live VM
    adare dev start -e ubuntu24043

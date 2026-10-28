@@ -319,15 +319,16 @@ For interactive development against a live VM, use :ref:`dev mode <cli-dev-mode>
     * ``-f, --force`` - Proceed even if an experiment would be left without environments
 
 ``adare experiment clean <experiment>``
-  Delete all fake (test-mode) runs of an experiment.
+  Delete all fake (test-mode) runs of an experiment: their database rows and their
+  run folders (see :ref:`run folders <cli-run-folders>`).
 
 ``adare experiment remove <experiment>``
-  Remove an experiment, all its runs and (unless ``--keep-files``) its directory.
-  Alias: ``rm``.
+  Remove an experiment, all its runs and (unless ``--keep-files``) its directory and
+  the runs' folders (see :ref:`run folders <cli-run-folders>`). Alias: ``rm``.
 
   Options:
     * ``-f, --force`` - Remove even if the experiment has production runs
-    * ``--keep-files`` - Keep the experiment directory (only remove from the database)
+    * ``--keep-files`` - Keep the experiment directory and the run folders (only remove from the database)
 
 **Playbook Sub-commands (adare experiment playbook)**
 
@@ -360,7 +361,56 @@ Run Management
   Show detailed information about a specific experiment run, including results and logs.
 
 ``adare runs remove <ulid>``
-  Remove a single experiment run. Alias: ``rm``.
+  Remove a single experiment run: its database rows and its run folder. A folder
+  that fails the run-folder test below is kept and the reason is printed; the
+  database rows are removed either way. Alias: ``rm``.
+
+  Options:
+    * ``--keep-files`` - Keep the run folder (only remove the database rows)
+
+  The web API equivalent is ``DELETE /api/runs/{ulid}`` (query ``keep_files=true``
+  keeps the folder).
+
+``adare runs prune``
+  Free disk space in the current project's ``run/`` directory. By default a dry
+  run: lists the run folders that no run in the database (and no dev session)
+  refers to, with their sizes and a total, and deletes nothing.
+
+  Options:
+    * ``--fake`` - Also target fake (test-mode) runs that are not ``RUNNING`` and
+      started more than an hour ago: their database rows and their folders
+    * ``--older-than DAYS`` - Only targets last changed (fake runs: started) at least
+      ``DAYS`` days ago
+    * ``-y, --yes`` - Delete exactly the listed targets (fake run rows in one
+      transaction first, then the folders)
+    * ``--json`` / ``--format`` - Machine-readable output
+
+  .. code-block:: bash
+
+     adare runs prune                       # what would be removed
+     adare runs prune --fake --older-than 7 # include fake runs older than a week
+     adare runs prune --fake --yes          # delete
+
+.. _cli-run-folders:
+
+**Run folders.** A run's files live in ``<project>/run/<experiment>/<timestamp>``.
+``run/`` may also hold your own files, so ADARE only ever deletes a folder there
+(``runs remove``, ``runs prune``, ``experiment clean``, ``experiment remove``) when
+all of these hold:
+
+* it resolves to a path inside the project's ``run/`` directory, and neither it nor
+  its ``<experiment>`` directory is a symlink;
+* it is exactly ``run/<experiment>/<timestamp>``, ``<experiment>`` is a known
+  experiment, and ``<timestamp>`` looks like ``2025-01-31_14-05-09`` (optionally
+  ``_2``, ``_3`` ...);
+* it contains a ``logs/`` or ``reporting/`` subdirectory;
+* nothing in it (the folder, ``logs/``, ``reporting/``, the files in ``logs/``)
+  changed in the last hour.
+
+Database run paths are matched by their ``run/<experiment>/<timestamp>`` tail, so a
+moved project still finds its run folders. Folders of fake runs that the automatic
+post-run cleanup removes from the database stay on disk (useful for debugging) until
+``adare runs prune`` deletes them.
 
 .. _cli-dev-mode:
 
@@ -1055,7 +1105,7 @@ print a pointer to the new name on stderr. They will be removed in a future rele
    * - Old
      - New
    * - ``adare run list|info|remove``
-     - ``adare runs list|info|remove``
+     - ``adare runs list|info|remove|prune``
    * - ``adare agent setup|status``
      - ``adare skills install|status``
    * - ``adare web start|build|install-spice``

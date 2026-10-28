@@ -7,6 +7,7 @@ import click
 
 from adare.cli.deprecated import deprecated_alias
 from adare.cli.errors import report_exception
+from adare.cli.groups.runs_commands import register as register_runs_commands
 from adare.cli.groups.system_commands import register as register_system_commands
 from adare.cli.output import FORMAT_CHOICES, FORMAT_ENV_VAR, output_options
 from adare.cli.output import get_formatter_from_context as _get_formatter_from_context
@@ -593,48 +594,9 @@ vm = register_vm_commands(cli, AliasedGroup, exec_with_error_printing)
 
 
 # ------------------------------
-# Run management commands
+# Run management commands (extracted to cli/groups/runs_commands.py)
 # ------------------------------
-@cli.group(name='runs', cls=AliasedGroup)
-def runs():
-    """Experiment runs: list, inspect and remove them (start one with `adare experiment run`)."""
-
-
-@runs.command(name='list')
-@output_options
-@click.option('--filter', help='Filter by dotnotation: [project][.environment][.experiment]')
-def list_runs(filter):
-    """List all experiment runs. Use --filter with dotnotation for advanced filtering."""
-    from adare.cli.show import exec_show_runs
-
-    args = SimpleNamespace(filter=filter)
-    exec_with_error_printing(exec_show_runs, args)
-
-
-@runs.command(name='info')
-@output_options
-@click.argument('ulid', required=False)
-def run_info(ulid):
-    """Show detailed information about a run. Shows latest run if no ULID provided."""
-    from adare.cli.show import exec_show_run
-
-    args = SimpleNamespace(ulid=ulid)
-    exec_with_error_printing(exec_show_run, args)
-
-
-@runs.command(name='remove')
-@click.argument('ulid', required=True)
-def run_remove(ulid):
-    """Remove a single experiment run by its ULID."""
-    from adare.cli.show import exec_remove_run
-
-    args = SimpleNamespace(ulid=ulid)
-    exec_with_error_printing(exec_remove_run, args)
-
-
-# Add aliases for run commands
-runs.add_alias('l', 'list')
-runs.add_alias('rm', 'remove')
+runs = register_runs_commands(cli, AliasedGroup, exec_with_error_printing)
 
 # ------------------------------
 # Web interface commands (extracted to cli/groups/web_commands.py)
