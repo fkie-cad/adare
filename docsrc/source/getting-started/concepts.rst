@@ -139,7 +139,10 @@ ADARE supports two execution modes that serve different stages of the workflow.
 **Test mode** (the default) is designed for iterative development:
 
 - Allows playbook modifications between runs without re-loading
-- Creates "fake runs" that can be cleaned up with ``adare experiment clean``
+- Creates "fake runs"; after each one, older fake runs of the same experiment and
+  environment beyond the newest 10 (``ADARE_TEST_RUNS_KEEP``) are removed, never
+  the newest successful one (:ref:`test-run retention <cli-test-run-retention>`).
+  ``adare runs prune --fake`` and ``adare experiment clean`` remove them in bulk
 - No strict integrity enforcement
 - Ideal for building and debugging experiments
 
