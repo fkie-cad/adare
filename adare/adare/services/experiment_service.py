@@ -46,6 +46,7 @@ from adare.backend.experiment.commands import (
 from adare.backend.experiment.commands import (
     experiment_validate as backend_experiment_validate,
 )
+from adare.backend.experiment.commands.load import production_runs_conflict
 from adare.backend.experiment.directory import ExperimentDirectory
 from adare.backend.experiment.exceptions import (
     ExperimentAlreadyExistsError,
@@ -595,13 +596,18 @@ class ExperimentService:
     def write_playbook(self, request: PlaybookWriteRequest) -> Result[PlaybookWriteResult]:
         """Validate, then write playbook YAML to an experiment and re-ingest the DB.
 
-        Refuses to write invalid YAML (``PLAYBOOK_INVALID``). On valid YAML it
+        Refuses to write invalid YAML (``PLAYBOOK_INVALID``), and a changed playbook
+        for a loaded experiment that has production runs
+        (``ExperimentHasProductionRunsError``, nothing written: those runs record no
+        playbook version of their own, see ``commands/load.py``). Otherwise it
         optionally backs up the existing file to ``playbook.yml.bak``, writes
-        ``playbook.yml``, then re-ingests the DB via
-        :meth:`PlaybookApi.populate_playbook_from_file` (version bump + item
-        replace: items earlier runs executed are kept as superseded, the rest
-        deleted). DB re-ingest is skipped (not an error) if the experiment is
-        not loaded in the project database.
+        ``playbook.yml``, then refreshes the loaded experiment in place
+        (:func:`experiment_database.refresh_experiment_playbook`: content hash, tests,
+        and the playbook re-ingested via :meth:`PlaybookApi.populate_playbook_from_file`
+        -- version bump + item replace: items earlier runs executed are kept as
+        superseded, the rest deleted), so the next run does not see a change. Runs are
+        not touched. DB re-ingest is skipped (not an error) if the experiment is not
+        loaded in the project database.
         """
         from adare.backend.experiment.vlm.authoring.author_playbook import validate as author_validate
         from adare.types.playbook_test_checks import check_playbook_tests
@@ -635,6 +641,10 @@ class ExperimentService:
                 ],
             )
 
+        refusal = self._production_runs_conflict(request.project_path, request.experiment, request.yaml)
+        if refusal is not None:
+            return refusal
+
         backup_path: Path | None = None
         try:
             if request.backup and playbook_file.exists():
@@ -662,26 +672,66 @@ class ExperimentService:
     def _reingest_playbook_db(
         self, project_path: Path, experiment: str, playbook_file: Path
     ) -> tuple[int | None, bool]:
-        """Re-ingest the on-disk playbook into the DB. Returns ``(version, ingested)``.
+        """Refresh the loaded experiment from the on-disk playbook. Returns ``(version, ingested)``.
 
-        No-op (``(None, False)``) if the experiment is not in the project DB.
+        No-op (``(None, False)``) if the experiment is not in the project DB; an
+        unchanged playbook keeps its current version.
         """
-        from adare.database.api.experiment import ExperimentApi
         from adare.database.api.playbook import PlaybookApi
+        from adare.exceptions import TestSetFormatError
+
+        try:
+            experiment_ulid = experiment_database.get_experiment_by_project_and_name(
+                project_path, experiment, trigger_error=False
+            )
+            if not experiment_ulid:
+                return None, False
+            experiment_dir = ExperimentDirectory(project_path, experiment)
+            if experiment_database.check_for_experiment_change(project_path, experiment_ulid, experiment_dir.sha256):
+                version = experiment_database.refresh_experiment_playbook(project_path, experiment_ulid, experiment_dir)
+                return version, version is not None
+            with PlaybookApi(project_path) as playbook_api:
+                playbook = playbook_api.get_playbook_by_experiment_id(experiment_ulid)
+                return (int(playbook.version), True) if playbook is not None else (None, False)
+        except (SQLAlchemyError, OSError, ValueError, TestSetFormatError) as e:
+            log.warning('Playbook written to %s but DB re-ingest failed for %s: %s', playbook_file, experiment, e)
+            return None, False
+
+    def _production_runs_conflict(self, project_path: Path, experiment: str, yaml_text: str) -> Result | None:
+        """The refusal for writing a changed playbook to an experiment with production runs, else None.
+
+        "Changed" compares the content hash load would compute after the write with
+        the loaded one, so writing back the loaded version is allowed. ``write_text``
+        translates ``\\n`` to the platform's line separator; the hash does the same.
+        A database that cannot be checked refuses too.
+        """
+        import hashlib
+        import os
+
+        from adare.database.api.experiment import ExperimentApi
+        from adare.database.models.project_models import ExperimentRun
 
         try:
             with ExperimentApi(project_path) as api:
                 experiment_row = api.get_experiment_by_project_and_name(project_path, experiment)
-                if not experiment_row:
-                    return None, False
-                playbook_api = PlaybookApi(project_path)
-                playbook_api._session = api._session
-                playbook_api._engine = api._engine
-                playbook = playbook_api.populate_playbook_from_file(experiment_row, playbook_file)
-                return playbook.version, True
-        except (SQLAlchemyError, OSError, ValueError) as e:
-            log.warning('Playbook written but DB re-ingest failed for %s: %s', experiment, e)
-            return None, False
+                if experiment_row is None:
+                    return None
+                loaded_sha256 = experiment_row.sha256
+                production_runs = (
+                    api._session.query(ExperimentRun)
+                    .filter(ExperimentRun.experiment_id == experiment_row.id, ExperimentRun.fake.is_not(True))
+                    .count()
+                )
+        except SQLAlchemyError as e:
+            return Result.fail(
+                code='PLAYBOOK_DB_ERROR',
+                message=f'Refusing to write: could not check experiment "{experiment}" for production runs: {e}',
+                solutions=['Check the project database with: adare db check'],
+            )
+        new_sha256 = hashlib.sha256(yaml_text.replace('\n', os.linesep).encode('utf-8')).hexdigest()
+        if production_runs == 0 or new_sha256 == loaded_sha256:
+            return None
+        return Result.from_exception(production_runs_conflict(experiment, production_runs))
 
     # =========================================================================
     # Environment Management
