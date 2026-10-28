@@ -254,28 +254,11 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
             ],
         )
 
-    # Load experiment once before running on all environments
-    if not arguments.test:  # Production mode
-        from adare.backend.experiment import database as experiment_database
-
-        experiment_ulid = experiment_database.get_experiment_by_project_and_name(
-            project_directory, experiment_name, trigger_error=False
-        )
-        if experiment_ulid:
-            run_count = experiment_database.get_experiment_run_count(
-                project_directory, experiment_ulid, exclude_fake=True
-            )
-            if run_count > 0:
-                # In production mode with existing runs, load without force (strict integrity)
-                experiment_load(project_directory, experiment_name, force=False, silent=True)
-            else:
-                # No existing runs, can force load
-                experiment_load(project_directory, experiment_name, force=True, silent=True)
-        else:
-            experiment_load(project_directory, experiment_name, force=False, silent=True)
-    else:  # Test mode (default)
-        # Allow force loading in test mode to handle file changes during development
-        experiment_load(project_directory, experiment_name, force=True, silent=True)
+    # Load experiment once before running on all environments. Same in test and
+    # production mode: a changed experiment is reloaded in place (finished fake runs
+    # deleted) or, when it has production runs, refused. Never force=True here: that
+    # replaces the experiment and deletes every run (only `experiment load --force`).
+    experiment_load(project_directory, experiment_name, force=False, silent=True)
 
     print(f"Running experiment '{experiment_name}' on {len(environments)} environment(s)...")
     print(f"Environments: {', '.join([env.name for env in environments])}")
@@ -508,28 +491,11 @@ def exec_experiment_run(arguments):
                     break
             set_console_log_level(logging.CRITICAL)
         try:
-            # In production mode, use strict loading; in test mode, allow modifications
-            if not arguments.test:  # Production mode
-                from adare.backend.experiment import database as experiment_database
-
-                experiment_ulid = experiment_database.get_experiment_by_project_and_name(
-                    project_directory, experiment_name, trigger_error=False
-                )
-                if experiment_ulid:
-                    run_count = experiment_database.get_experiment_run_count(
-                        project_directory, experiment_ulid, exclude_fake=True
-                    )
-                    if run_count > 0:
-                        # Production mode with existing runs - strict integrity
-                        experiment_load(project_directory, experiment_name, force=False, silent=True)
-                    else:
-                        # No existing runs, can force load
-                        experiment_load(project_directory, experiment_name, force=True, silent=True)
-                else:
-                    experiment_load(project_directory, experiment_name, force=False, silent=True)
-            else:  # Test mode (default)
-                # Allow force loading in test mode to handle file changes during development
-                experiment_load(project_directory, experiment_name, force=True, silent=True)
+            # Same load in test and production mode: a changed experiment is reloaded in
+            # place (finished fake runs deleted) or, when it has production runs, refused.
+            # Never force=True here: that replaces the experiment and deletes every run
+            # (reserved for the explicit `adare experiment load --force`).
+            experiment_load(project_directory, experiment_name, force=False, silent=True)
 
             # Validate environment and experiment compatibility before starting execution
             from adare.database.api.experiment import ExperimentApi

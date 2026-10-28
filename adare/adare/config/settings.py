@@ -53,6 +53,15 @@ SETTINGS: dict[str, Setting] = {
             'Remove stopped dev sessions unused for longer than this many days (unset = never)',
             exclusive_minimum=True,
         ),
+        Setting(
+            'ADARE_TEST_RUNS_KEEP',
+            int,
+            10,
+            -1,
+            'Test-mode (fake) runs kept per experiment and environment; older finished ones are removed after '
+            'each test run, at most 5 at a time (the run that just finished counts, so 0 keeps only it; '
+            'the newest successful run is always kept; -1 = off)',
+        ),
     )
 }
 

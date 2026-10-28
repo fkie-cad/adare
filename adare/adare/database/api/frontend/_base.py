@@ -11,7 +11,7 @@ from adare.database.models.global_models import (
     Environment,
     Project,
 )
-from adare.database.models.project_models import Event, Experiment
+from adare.database.models.project_models import Experiment
 from adare.exceptions import (
     EnvironmentNotFoundError,
     ExperimentNotFoundError,
@@ -131,20 +131,15 @@ class DataRetrievalBase:
         if not self._project_api._session.query(Experiment).filter_by(id=experiment_ulid).count():
             raise ExperimentNotFoundError(log, f'Experiment with ulid "{experiment_ulid}" not found')
 
-    def _compute_display_level(self, event):
-        """
-        Compute display level for an event based on parent relationships.
-        Root level events have display_level = 0, each nested level adds 1.
-        """
-        if not event.parent_event_id:
-            return 0  # Root level
+    @staticmethod
+    def _compute_display_level(event) -> int:
+        """Display level of an event: 0 for a top-level event, 1 for a nested one.
 
-        # Find parent event and recursively compute depth
-        parent = self._project_api._session.query(Event).filter_by(id=event.parent_event_id).first()
-        if parent:
-            return self._compute_display_level(parent) + 1
-        # If parent not found, assume next level
-        return 1
+        Nested events carry the enclosing action's key in ``parent_group_id``.
+        Sub-actions of nested blocks/loops inherit the outermost action's key, so
+        one level of indentation is the full depth the event stream records.
+        """
+        return 1 if event.parent_group_id else 0
 
     def _get_smart_display_name(self, obj, obj_type: str, current_project_name: str = None):
         """

@@ -110,6 +110,11 @@ runs fit (see :doc:`../guide/host-resources`). Every subcommand takes the global
     disks before a run starts; 0 switches the check off
   * ``ADARE_DEV_SESSION_MAX_AGE_DAYS`` (off) - stopped dev sessions unused for longer
     are removed by every experiment run and ``adare vm prune --force``
+  * ``ADARE_TEST_RUNS_KEEP`` (10) - test (fake) runs kept per experiment and
+    environment; each test run removes up to 5 older ones (see
+    :ref:`test-run retention <cli-test-run-retention>`). The run that just finished
+    counts, so 0 keeps only it (and the newest successful run, which is always
+    kept); -1 switches retention off
 
   Example: ``adare system settings set ADARE_DEV_SESSION_MAX_AGE_DAYS 30``
 
@@ -202,11 +207,32 @@ Experiments contain the actual test automation logic using YAML-based playbooks.
   Create the example experiment with a complete playbook and test configuration.
 
 ``adare experiment load <experiment>``
-  Load an experiment configuration into the project database.
+  Load an experiment configuration into the project database. Loading an
+  experiment that is already loaded is a :ref:`reload <cli-experiment-reload>`.
 
   Options:
     * ``-e, --environment TEXT`` - Name of the environment
-    * ``-f, --force`` - Force update of the experiment
+    * ``-f, --force`` - Replace a changed experiment that has production runs:
+      the experiment and **all** its runs, production runs included, are deleted
+      and it is loaded again under a new id
+
+.. _cli-experiment-reload:
+
+**Reloading a changed experiment.** ``adare experiment load`` and the load that
+``adare experiment run`` / ``replicate`` do before every run (test and production
+mode alike) compare the playbook's hash with the loaded one:
+
+* unchanged: nothing happens;
+* changed, no production runs: the experiment is reloaded in place -- same id;
+  description, environments, tags, tests and playbook are refreshed. Its finished
+  fake runs are deleted first, rows and run folders, as ``adare experiment clean``
+  does (fake runs still pending/running and dev sessions' runs are kept);
+* changed, with production runs (finished or not): refused, nothing changes. A run
+  does not record which playbook version it ran, so a reload would put the
+  production runs under a playbook they never executed. Run the changed playbook as
+  a new experiment (``adare experiment clone``, then restore the original's
+  ``playbook.yml``), restore the playbook, or replace the experiment with
+  ``adare experiment load --force``.
 
 .. _test-mode-development:
 
@@ -263,8 +289,11 @@ By default, experiments run in **test mode** which is ideal for development:
 
 * **Test Mode (Default)**:
 
-  * Allows continuous modification and testing of playbook files
-  * Creates "fake runs" that can be cleaned up with ``adare experiment clean``
+  * Allows continuous modification and testing of playbook files: a changed
+    playbook is :ref:`reloaded <cli-experiment-reload>` before the run, deleting the
+    finished fake runs of the old version
+  * Creates "fake runs"; only the newest ones per experiment and environment are
+    kept (see below), ``adare experiment clean`` removes them all
   * Skips integrity checks to enable rapid iteration
   * Perfect for developing and debugging experiments
 
@@ -275,8 +304,64 @@ By default, experiments run in **test mode** which is ideal for development:
   * Prevents modifications to experiments with existing runs
   * Use only when ready for production data collection
 
+Once an experiment has production runs, a changed playbook is refused in both
+modes (see :ref:`reloading <cli-experiment-reload>`); production runs are never
+deleted by a run.
+
 **Workflow**: Develop and test in default test mode, then use ``--production`` only when ready for final data collection.
 For interactive development against a live VM, use :ref:`dev mode <cli-dev-mode>`.
+
+.. _cli-test-run-retention:
+
+**Test-run retention.** Every test-mode run (``adare experiment run`` /
+``replicate`` without ``--production``; not dev sessions) ends by removing older
+test runs of the same experiment **and environment** (the exact environment version
+the run used; runs without an environment are a group of their own), so that the
+``ADARE_TEST_RUNS_KEEP`` newest of that group remain (default 10). A default
+``adare experiment run exp`` over several environments therefore never removes its
+own results of another environment. The run that just finished takes one of those
+places and is never removed, so ``0`` and ``1`` both keep it alone.
+
+The **newest successful run** of the group is never removed either. Successful
+means the run finished (status ``FINISHED``; failed and interrupted runs end as
+``FAILED``/``ERROR``/``INTERRUPTED``) and its result in ``adare runs list`` is
+``SUCCESS`` or ``WARNING`` (all tests passed; a run without tests counts as
+passed). It takes one of the ``ADARE_TEST_RUNS_KEEP`` places when it is among the
+newest; otherwise it is kept on top of them, so a burst of failed attempts can
+never remove the last good run.
+
+Runs are ranked by start time, and a run that would go is still kept when it
+
+* started less than an hour ago, or is not finished (pending, running, paused, no
+  status);
+* belongs to a dev session;
+* has a run folder that fails the :ref:`run-folder test <cli-run-folders>` (e.g.
+  something in it changed in the last hour); its database row stays too;
+* has a run folder that a run of another registered project sharing this ``run/``
+  directory refers to; its row stays too. If such a project cannot be read, nothing
+  is removed (like ``adare runs prune``).
+
+At most **5** runs per experiment and environment are removed after one run,
+oldest first, so the first run after an upgrade does not delete a whole backlog at
+once; later runs take the rest, or ``adare runs prune --fake`` removes finished
+test runs in bulk (that one does not keep the newest).
+
+Production runs are never touched. The rows go in one transaction, then the
+folders; when something was removed, one line such as ``removed 3 older test runs
+(1.2 GiB; ADARE_TEST_RUNS_KEEP=10)`` is printed. It adds ``; 4 more kept for now
+(at most 5 are removed per run; `adare runs prune --fake` removes finished test
+runs in bulk)`` when the limit was hit, and ``; 1 run folder could not be deleted
+(`adare runs prune` removes leftover folders)`` when a folder could not be deleted
+after its row was (the folder is then an orphan that ``adare runs prune`` cleans
+up). If the runs, the dev sessions or a sharing project cannot be read, a warning
+is logged, nothing is removed and the run is unaffected.
+
+.. code-block:: bash
+
+   adare system settings set ADARE_TEST_RUNS_KEEP 25   # keep more
+   ADARE_TEST_RUNS_KEEP=0 adare experiment run exp -e env   # keep only this run (+ the last good one)
+   adare system settings set ADARE_TEST_RUNS_KEEP -1   # switch retention off
+   adare system settings unset ADARE_TEST_RUNS_KEEP     # back to 10
 
 ``adare experiment diff <experiment>``
   Run an experiment in visual diff mode for manual side-by-side comparison
@@ -341,7 +426,15 @@ For interactive development against a live VM, use :ref:`dev mode <cli-dev-mode>
 
 ``adare experiment playbook set <experiment> <file>``
   Validate a playbook file, write it as the experiment's ``playbook.yml`` and
-  re-ingest the project database.
+  re-ingest the project database. Re-ingest replaces the playbook's items; items
+  earlier runs executed are kept, marked superseded, so those runs' action
+  executions still name the action they ran. While a run of the experiment is in
+  progress (unfinished, with activity in the last 30 minutes, as ``adare db compact``
+  decides) every old item is kept, superseded; a later re-ingest deletes those no
+  run executed. The experiment's content hash and tests are refreshed too, so the
+  next ``experiment run`` sees no change; runs are not touched. A changed playbook
+  for an experiment with production runs is refused and nothing is written (see
+  :ref:`reloading <cli-experiment-reload>`).
 
   Options:
     * ``--no-backup`` - Do not back up the existing playbook.yml to ``.bak``
@@ -1108,6 +1201,11 @@ database is opened -- see :doc:`../architecture/database-migrations`.
   ``reporting/screenshots`` folder; ``compact`` only drops the database copy,
   then runs ``VACUUM`` so the file actually gets smaller. Run it once on a
   project that predates the change, or whenever ``ls -l .adare/`` looks too big.
+  Any command that opens a project database larger than 512 MiB that still holds
+  such copies prints a one-line hint to run it (on stderr, not with ``--json``);
+  the hint is shown once and comes back only when the database has grown by half
+  again (``.adare/compact-hint.json`` records the size; a successful ``compact``
+  writes it too).
 
   * Only image payloads are removed, and a row's images only when every one of
     them is byte-for-byte identical to the PNG its ``screenshot_path`` names
@@ -1180,7 +1278,9 @@ database is opened -- see :doc:`../architecture/database-migrations`.
     a problem (or the file is not a database): restore the database from a
     backup.
   * ``PRAGMA foreign_key_check``, counted per (table, parent table). It works
-    although ADARE runs with foreign-key enforcement off.
+    although ADARE runs with foreign-key enforcement off. The ``event -> event``
+    violations older versions produced (action keys stored as parent event ids)
+    are cleared by the ``move_parent_event_keys`` migration.
   * Orphaned rows, counted only (exit code 0), never changed:
 
     - action executions with no run row (``action_execution_without_run``).
@@ -1192,8 +1292,10 @@ database is opened -- see :doc:`../architecture/database-migrations`.
       ``delete_orphan_run_rows`` migration removed those older versions left
       once; run deletion now removes them, so new ones are not expected;
     - action executions whose playbook item is gone
-      (``action_execution_dangling_playbook_item``; items are replaced when an
-      experiment is loaded again).
+      (``action_execution_dangling_playbook_item``). Older versions deleted an
+      experiment's playbook items when its playbook was loaded again; re-ingest
+      now keeps every item an execution references (marked superseded), so new
+      ones are not expected.
 
   A registered project whose directory or database file is gone is reported
   with status ``missing``; nothing is created on disk.

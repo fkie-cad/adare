@@ -396,12 +396,14 @@ class Event(SerializerMixin, ProjectBase):
     experiment_run_id = Column(String, ForeignKey('experiment_run.id', ondelete='CASCADE'), index=True)
     experiment_run = relationship("ExperimentRun", backref=backref("events", cascade="all, delete-orphan"))
     error = Column(String)
-    parent_event_id = Column(
-        CHAR(26), ForeignKey('event.id', ondelete='SET NULL'), nullable=True, index=True
-    )  # Parent event ID for nested events
-    parent_event = relationship(
-        "Event", remote_side=[id], backref=backref("child_events", cascade="all, delete-orphan")
-    )
+    # Legacy column, no longer written. Older writers stored the parent *action key*
+    # here although it is declared as a FK to event.id; the move_parent_event_keys
+    # migration moved those keys to parent_group_id. Kept because SQLite cannot drop
+    # a FK column without rebuilding the table.
+    parent_event_id = Column(CHAR(26), ForeignKey('event.id', ondelete='SET NULL'), nullable=True, index=True)
+    # Grouping key (event_group_id) of the action this event is nested under, or NULL
+    # for a top-level event. It is an action key, not an event id.
+    parent_group_id = Column(String, nullable=True, index=True)
 
     # Success/failure tracking for all events
     success = Column(Boolean, nullable=True)
@@ -519,22 +521,6 @@ class ActionEvent(Event):
     # Generic action data as JSON-like text field
     # This allows us to store any action-specific data flexibly
     action_data = Column(String, nullable=True)  # JSON serialized action data
-
-    @hybrid_property
-    def display_level(self):
-        """
-        Compute display level based on parent relationship hierarchy.
-        Root level actions have display_level = 0, each nested level adds 1.
-        """
-        if not self.parent_event_id:
-            return 0  # Root level
-
-        # Find parent event and recursively compute depth
-        parent = self.__class__.query.filter_by(id=self.parent_event_id).first()
-        if parent and hasattr(parent, 'display_level'):
-            return parent.display_level + 1
-        # If parent not found or doesn't have display_level, assume next level
-        return 1
 
     @hybrid_property
     def stage_submessage(self):
@@ -838,6 +824,8 @@ class Playbook(SerializerMixin, ProjectBase):
 
     # Relationships
     experiment = relationship("Experiment", back_populates="playbook")
+    # All items, superseded ones included, so deleting the playbook deletes them too.
+    # The current playbook is PlaybookApi.get_playbook_items() (superseded = false).
     items = relationship("PlaybookItem", back_populates="playbook", cascade="all, delete-orphan")
 
 
@@ -865,6 +853,9 @@ class PlaybookItem(SerializerMixin, ProjectBase):
     name = Column(String(255))
     description = Column(Text)
     is_enabled = Column(Boolean, default=True)
+    # True for an item of an earlier playbook version that run executions still
+    # reference: re-ingest keeps it for the audit trail, out of the current playbook.
+    superseded = Column(Boolean, nullable=False, default=False, server_default='0')
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
