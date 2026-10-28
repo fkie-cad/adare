@@ -7,6 +7,7 @@ import click
 
 from adare.cli.deprecated import deprecated_alias
 from adare.cli.errors import report_exception
+from adare.cli.groups.db_commands import register as register_db_commands
 from adare.cli.groups.system_commands import register as register_system_commands
 from adare.cli.output import FORMAT_CHOICES, FORMAT_ENV_VAR, output_options
 from adare.cli.output import get_formatter_from_context as _get_formatter_from_context
@@ -151,67 +152,9 @@ cli.add_alias('testfunction', 'test')
 
 
 # ------------------------------
-# Database commands (was: manage *-db)
+# Database commands (extracted to cli/groups/db_commands.py)
 # ------------------------------
-@cli.group(cls=AliasedGroup)
-def db():
-    """Database management commands."""
-
-
-@db.command(name='init')
-def db_init():
-    """Initialize the database system."""
-    from adare.cli.manage import exec_manage_init_db
-
-    args = SimpleNamespace()
-    exec_with_error_printing(exec_manage_init_db, args)
-
-
-@db.command(name='status')
-@output_options
-def db_status():
-    """Check database system status."""
-    from adare.cli.manage import exec_manage_db_status
-
-    args = SimpleNamespace()
-    exec_with_error_printing(exec_manage_db_status, args)
-
-
-@db.command(name='reset')
-def db_reset():
-    """Reset the database (use with caution)."""
-    from adare.cli.manage import exec_manage_reset_db
-
-    args = SimpleNamespace()
-    exec_with_error_printing(exec_manage_reset_db, args)
-
-
-@db.command(name='repair')
-def db_repair():
-    """Repair the database system."""
-    from adare.cli.manage import exec_manage_repair_db
-
-    args = SimpleNamespace()
-    exec_with_error_printing(exec_manage_repair_db, args)
-
-
-@db.command(name='migrate')
-def db_migrate():
-    """Apply pending database schema migrations (global + all projects)."""
-    from adare.cli.manage import exec_manage_migrate_db
-
-    args = SimpleNamespace()
-    exec_with_error_printing(exec_manage_migrate_db, args)
-
-
-@db.command(name='clean-install')
-@click.option('--force', '-f', is_flag=True, help='Force clean installation without confirmation')
-def db_clean_install(force):
-    """Perform clean database installation (DANGER: deletes all data)."""
-    from adare.cli.manage import exec_manage_clean_install_db
-
-    args = SimpleNamespace(force=force)
-    exec_with_error_printing(exec_manage_clean_install_db, args)
+db = register_db_commands(cli, AliasedGroup, exec_with_error_printing)
 
 
 # ------------------------------
