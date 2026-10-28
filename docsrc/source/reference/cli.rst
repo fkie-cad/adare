@@ -1185,7 +1185,9 @@ database is opened -- see :doc:`../architecture/database-migrations`.
     a problem (or the file is not a database): restore the database from a
     backup.
   * ``PRAGMA foreign_key_check``, counted per (table, parent table). It works
-    although ADARE runs with foreign-key enforcement off.
+    although ADARE runs with foreign-key enforcement off. The ``event -> event``
+    violations older versions produced (action keys stored as parent event ids)
+    are cleared by the ``move_parent_event_keys`` migration.
   * Orphaned rows, counted only (exit code 0), never changed:
 
     - action executions with no run row (``action_execution_without_run``).

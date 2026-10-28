@@ -374,6 +374,14 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Nested run events stored the enclosing action's key in `event.parent_event_id`,
+  a foreign key to `event.id`, so every nested event was a foreign-key violation
+  (`adare db check` reported 44k `event -> event` violations in one project). The
+  key now lives in the new `event.parent_group_id` column; the
+  `move_parent_event_keys` project migration adds it (indexed) and moves the keys
+  earlier versions wrote, keeping any value that names a real event. Run views
+  and run tallies read the new column, and `adare runs info` no longer issues one
+  query per nested event to compute its indentation.
 - `adare db reset` and `adare db clean-install` deleted only the main database
   file and left its `-wal`/`-shm`/`-journal` files behind, which could corrupt the
   next database created under that name; they now remove all of them. Removing a
@@ -598,6 +606,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `pattern` to the shell unquoted, allowing command injection from a playbook.
 
 ### Removed
+- The unused `Event.parent_event` / `child_events` ORM relationship and the
+  broken `ActionEvent.display_level` property (it called a `query` attribute the
+  models do not have).
 - `adare server start`, which failed with `ModuleNotFoundError` and duplicated
   `adare web start` (now `adare ui start`), and the empty `adare help` group.
 - Duplicate libvirt domain teardown: the run path, its signal handler and
