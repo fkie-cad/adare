@@ -287,7 +287,7 @@ class RunQueryMixin(_Host):
                 'event_group_id': getattr(event, 'event_group_id', None),  # Universal grouping field
                 'event_type_specific': getattr(event, 'event_type_specific', None),
                 'display_level': self._compute_display_level(event),
-                'parent_event_id': event.parent_event_id,
+                'parent_group_id': event.parent_group_id,
                 'data': action_data,
             }
 
@@ -316,6 +316,7 @@ class RunQueryMixin(_Host):
                     'event_group_id',
                     'event_type_specific',
                     'display_level',
+                    'parent_group_id',
                     'data',
                     'result_status',
                 ]
@@ -365,7 +366,7 @@ class RunQueryMixin(_Host):
             'event_group_id': getattr(event, 'event_group_id', event.id),  # Universal grouping field
             'event_type_specific': getattr(event, 'event_type_specific', 'test_complete'),
             'display_level': display_level,
-            'parent_event_id': event.parent_event_id,
+            'parent_group_id': event.parent_group_id,
             'data': action_data,
         }
 

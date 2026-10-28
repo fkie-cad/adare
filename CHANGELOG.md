@@ -28,6 +28,26 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- Automatic test-run retention: every test-mode run (`adare experiment run` /
+  `replicate` without `--production`, not dev sessions) ends by removing older
+  finished fake runs of the same experiment **and environment** (rows in one
+  transaction, then their run folders), keeping the newest `ADARE_TEST_RUNS_KEEP`
+  of that environment (new setting, default 10;
+  `adare system settings set ADARE_TEST_RUNS_KEEP N`, `-1` switches it off).
+  Counting per environment means a default multi-environment run never removes its
+  own results. The run that just finished counts toward the limit and is never
+  removed (`0` keeps only it), and neither is the newest successful run (finished,
+  result SUCCESS or WARNING), so a burst of failed attempts cannot remove the last
+  good run. At most 5 runs per experiment and environment are removed per run, so
+  an existing backlog drains gradually (`adare runs prune --fake` removes it at
+  once). Runs started less than an hour ago, unfinished runs, dev sessions' runs,
+  runs whose folder fails the run-folder test and runs whose folder another project
+  sharing `run/` refers to are kept; production runs are never touched. Prints e.g.
+  `removed 3 older test runs (1.2 GiB; ADARE_TEST_RUNS_KEEP=10)`, saying also when
+  the per-run limit was hit or a folder could not be deleted after its row was; a
+  failure (unreadable runs, dev sessions or sharing project) only logs a warning,
+  removes nothing and never fails the run. One project had 126 fake runs holding
+  10.4 GB of run folders.
 - `adare db compact [--dry-run] [--all] [-p PROJECT]` shrinks project databases
   that grew from the base64 screenshot copies older action results kept in
   `action_execution.result_data` (47 GB of a 50 GB database in one project). Only
@@ -47,6 +67,18 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   a database is corrupt. Both commands take `--json`; with `--all` a registered project whose directory or
   database is gone is reported as `missing` (nothing is created on disk) and the
   rest are still processed.
+- A command that opens a project database over 512 MiB that still holds
+  screenshot copies in `action_execution.result_data` prints a one-line hint on
+  stderr to run `adare db compact -p <project>` (not with `--json`/`--format
+  json|yaml`). It is shown once; `.adare/compact-hint.json` records the size, and
+  the hint returns only after the database grew by half. A successful compact
+  writes the marker too. The check is a `stat` below 512 MiB and one
+  `octet_length` query (record headers only) above it.
+- SQLite upkeep: every connection caps the `-wal` file at 64 MiB after a
+  checkpoint (`journal_size_limit`, also on `adare db compact`'s connection), and
+  each CLI command and the web API run `PRAGMA optimize` (bounded by
+  `analysis_limit=400`, 1 s busy timeout; a read-only or locked database is
+  skipped) on the databases they used when they end.
 - `adare runs prune [--fake] [--older-than DAYS] [--yes] [--json]`: frees disk space
   in the current project's `run/` directory. A dry run by default: lists run folders
   no database run (and no dev session) refers to, with sizes and a total. A run that
@@ -362,6 +394,45 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Editing a playbook and starting a default (test-mode) `adare experiment run` or
+  `replicate` deleted the experiment and every run of it, production runs
+  included, and recreated it under a new id: the load before a test run used
+  `--force`. A changed experiment without production runs is now reloaded in
+  place (same id; metadata, environments, tags, tests and playbook refreshed; its
+  finished fake runs deleted with their run folders, unfinished ones and dev
+  sessions' runs kept). A changed experiment *with* production runs is refused in
+  both modes, naming the run count and the ways out (clone it under a new name,
+  restore the playbook, or `adare experiment load --force`), because a run does
+  not record the playbook it ran and would otherwise end up under one it never
+  executed. `adare experiment add-env` / `remove-env` reloaded with `--force` too
+  and now report such an experiment as failed (its `metadata.yml` is updated)
+  instead of replacing it. Only the explicit `adare experiment load --force` still
+  replaces the experiment with all its runs. `adare experiment playbook set` now refreshes the
+  experiment's content hash and tests too, so the next run no longer sees a
+  change, and refuses a changed playbook (writing nothing) when production runs
+  exist.
+- Re-ingesting a playbook while a run of the experiment was in progress deleted
+  the items that run had not executed yet, so its later action executions pointed
+  at missing items. While a run is unfinished and showed activity in the last 30
+  minutes (as `adare db compact` decides), every old item is kept, marked
+  superseded; the next re-ingest without an active run deletes the ones nothing
+  executed.
+- Nested run events stored the enclosing action's key in `event.parent_event_id`,
+  a foreign key to `event.id`, so every nested event was a foreign-key violation
+  (`adare db check` reported 44k `event -> event` violations in one project). The
+  key now lives in the new `event.parent_group_id` column; the
+  `move_parent_event_keys` project migration adds it (indexed) and moves the keys
+  earlier versions wrote, keeping any value that names a real event. Run views
+  and run tallies read the new column, and `adare runs info` no longer issues one
+  query per nested event to compute its indentation.
+- Loading an experiment's playbook again (`adare experiment playbook set`, or a
+  reload of a changed playbook) deleted all of its playbook items, so the action
+  executions of earlier runs pointed at items that no longer existed (`adare db
+  check` counted them as `action_execution_dangling_playbook_item`). Re-ingest now
+  keeps every item an execution references, marked superseded (new column
+  `playbook_item.superseded`, added by the `add_superseded_to_playbook_item`
+  migration), and deletes only the others; runs and the run controller use only
+  the current items. Removing the experiment still deletes all of them.
 - `adare db reset` and `adare db clean-install` deleted only the main database
   file and left its `-wal`/`-shm`/`-journal` files behind, which could corrupt the
   next database created under that name; they now remove all of them. Removing a
@@ -586,6 +657,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `pattern` to the shell unquoted, allowing command injection from a playbook.
 
 ### Removed
+- The unused `Event.parent_event` / `child_events` ORM relationship and the
+  broken `ActionEvent.display_level` property (it called a `query` attribute the
+  models do not have).
 - `adare server start`, which failed with `ModuleNotFoundError` and duplicated
   `adare web start` (now `adare ui start`), and the empty `adare help` group.
 - Duplicate libvirt domain teardown: the run path, its signal handler and

@@ -138,7 +138,7 @@ class EventDbApi(ExperimentApi):
         return test_result
 
     def add_action_event(
-        self, action_data: dict, action_id: str, experiment_run_ulid: str, parent_event_id: str = None
+        self, action_data: dict, action_id: str, experiment_run_ulid: str, parent_group_id: str | None = None
     ):
         """
         Add an action event to the database.
@@ -147,7 +147,8 @@ class EventDbApi(ExperimentApi):
             action_data: Dictionary containing action event data
             action_id: Unique identifier for this action
             experiment_run_ulid: Experiment run ULID
-            parent_event_id: Optional parent event ID for nested actions
+            parent_group_id: Grouping key (action id) of the enclosing action for
+                nested actions, ``None`` for top-level ones. Not an event id.
         """
         import json
         from datetime import datetime
@@ -173,7 +174,7 @@ class EventDbApi(ExperimentApi):
                     event_type='action_event',
                     experiment_run_id=experiment_run_ulid,
                     timestamp=datetime.now(UTC),
-                    parent_event_id=parent_event_id,
+                    parent_group_id=parent_group_id,
                     action_type=action_type.value,
                     event_type_specific=event_type.value,  # Store specific event type in base Event field
                     action_id=action_id,  # Keep for backward compatibility
@@ -224,7 +225,9 @@ class EventDbApi(ExperimentApi):
             f"running current code (test: {test_name})"
         )
 
-    def add_test_event(self, action_data: dict, action_id: str, experiment_run_ulid: str, parent_event_id: str = None):
+    def add_test_event(
+        self, action_data: dict, action_id: str, experiment_run_ulid: str, parent_group_id: str | None = None
+    ):
         """
         Add a test event to the database as a TestEvent (now stores both start and complete events).
 
@@ -232,7 +235,8 @@ class EventDbApi(ExperimentApi):
             action_data: Dictionary containing test event data
             action_id: Unique identifier for this action
             experiment_run_ulid: Experiment run ULID
-            parent_event_id: Optional parent event ID for nested test actions
+            parent_group_id: Grouping key (action id) of the enclosing action for
+                nested tests, ``None`` for top-level ones. Not an event id.
         """
         import json
         from datetime import datetime
@@ -306,7 +310,7 @@ class EventDbApi(ExperimentApi):
                     event_type='test_event',
                     experiment_run_id=experiment_run_ulid,
                     timestamp=datetime.now(UTC),
-                    parent_event_id=parent_event_id,
+                    parent_group_id=parent_group_id,
                     event_type_specific=event_type.value,  # Store specific event type like TEST_START/TEST_COMPLETE
                     event_group_id=action_id,  # Use action_id as the universal grouping field
                     success=success,

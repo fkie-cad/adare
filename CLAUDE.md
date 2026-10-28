@@ -100,6 +100,9 @@ Framework for detecting forensic artifact changes across OS/software versions us
 2. Store **original YAML content** in `Playbook.original_yaml_content` (for variables/tests)
 3. Serialize actions to `PlaybookItem` database models (JSON format)
 4. Hash validation for integrity enforcement
+5. On re-ingest (playbook set / reload), items an `ActionExecution` references are kept with
+   `superseded = true` (audit trail), the rest deleted; "current playbook" queries filter
+   `superseded = false` (`PlaybookApi.get_playbook_items`)
 
 ### On Experiment Execution (`adare experiment run`)
 1. **Load actions from PlaybookItem database models** (no YAML parsing)
