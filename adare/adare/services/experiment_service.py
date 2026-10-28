@@ -599,7 +599,8 @@ class ExperimentService:
         optionally backs up the existing file to ``playbook.yml.bak``, writes
         ``playbook.yml``, then re-ingests the DB via
         :meth:`PlaybookApi.populate_playbook_from_file` (version bump + item
-        replace). DB re-ingest is skipped (not an error) if the experiment is
+        replace: items earlier runs executed are kept as superseded, the rest
+        deleted). DB re-ingest is skipped (not an error) if the experiment is
         not loaded in the project database.
         """
         from adare.backend.experiment.vlm.authoring.author_playbook import validate as author_validate

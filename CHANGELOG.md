@@ -362,6 +362,14 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Loading an experiment's playbook again (`adare experiment playbook set`, or a
+  reload of a changed playbook) deleted all of its playbook items, so the action
+  executions of earlier runs pointed at items that no longer existed (`adare db
+  check` counted them as `action_execution_dangling_playbook_item`). Re-ingest now
+  keeps every item an execution references, marked superseded (new column
+  `playbook_item.superseded`, added by the `add_superseded_to_playbook_item`
+  migration), and deletes only the others; runs and the run controller use only
+  the current items. Removing the experiment still deletes all of them.
 - `adare db reset` and `adare db clean-install` deleted only the main database
   file and left its `-wal`/`-shm`/`-journal` files behind, which could corrupt the
   next database created under that name; they now remove all of them. Removing a
