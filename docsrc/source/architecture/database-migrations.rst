@@ -135,3 +135,65 @@ migration:
 #. **Verify** against a real installation: ``adare db status`` lists the new
    migration as pending, ``adare db migrate`` applies it, a second run reports
    nothing pending, and ``PRAGMA table_info(<table>)`` shows the column.
+
+
+Connection settings
+===================
+
+Every SQLite engine ADARE creates -- the process-wide engines of the database
+APIs (``database/api/base.py``) and the throwaway schema engines of
+``adare db migrate`` / ``db status`` (``database/init.py``) -- goes through
+``create_sqlite_engine()`` / ``configure_sqlite()``. A ``connect`` event
+listener sets these pragmas on every new connection:
+
+``PRAGMA busy_timeout=30000``
+   Wait up to 30 seconds for a competing writer instead of failing at once with
+   ``database is locked`` (SQLAlchemy's default was 5 seconds). Set first, so
+   the switch to WAL below also waits.
+
+``PRAGMA journal_mode=WAL``
+   Write-ahead logging: readers keep reading the last committed state while a
+   writer is active, and a writer is not blocked by readers. The CLI, the web
+   API and a running experiment can then use the same database at once. WAL is
+   *persistent* -- it is recorded in the database file -- so it sticks even for
+   tools that open the file without ADARE. An in-memory database reports
+   ``memory`` instead (WAL does not apply to it). WAL needs shared memory and
+   does not work on network file systems; keep ``~/.adare`` and project
+   directories on a local disk.
+
+``PRAGMA synchronous=NORMAL``
+   The recommended level for WAL: commits no longer fsync, only checkpoints
+   do. A power loss can lose the most recent commits but never corrupts the
+   database.
+
+``foreign_keys`` stays **off** by decision: existing databases were written
+without enforcement, and turning it on could make previously accepted writes and
+deletes fail.
+
+A WAL database keeps two sidecar files next to it, ``<name>-wal`` and
+``<name>-shm`` (rollback mode used ``<name>-journal``). They belong to the
+database: deleting only the main file and keeping a stale sidecar can corrupt a
+new database of the same name. ``adare db reset`` and ``adare db clean-install``
+therefore call ``remove_database_files()``, which disposes the cached engines
+(``dispose_engines()``) and then removes the main file together with all
+sidecars. Removing a project closes the pooled connections before its directory
+-- and the project database in it -- is deleted.
+
+Why this is not a migration
+---------------------------
+
+Migrations run inside a transaction (one per migration, together with its
+ledger row), and these settings cannot be made there:
+
+* Changing ``journal_mode`` to or from WAL, and ``VACUUM``, cannot run inside a
+  transaction -- SQLite rejects them (``cannot change into wal mode from within
+  a transaction`` / ``cannot VACUUM from within a transaction``).
+* ``PRAGMA foreign_keys`` is a silent no-op inside a transaction, and it is
+  per-connection state rather than a property of the file: setting it once in a
+  migration would not affect any later connection. The same is true of
+  ``busy_timeout`` and ``synchronous``.
+
+Per-connection settings therefore belong in the connect hook, where every
+pooled connection receives them before its first statement. Never put a
+``PRAGMA journal_mode``, ``PRAGMA foreign_keys`` or ``VACUUM`` into an
+``upgrade(conn)``.

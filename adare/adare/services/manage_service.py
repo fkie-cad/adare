@@ -23,7 +23,7 @@ from adare.core.dto.manage import (
     VmRuntimeRefreshResult,
 )
 from adare.core.result import Result
-from adare.database.api.base import dispose_engines
+from adare.database.api.base import remove_database_files
 from adare.database.init import (
     clean_install_database_system,
     initialize_database_system,
@@ -213,10 +213,9 @@ class ManageService:
         try:
             database_location = get_global_database_location()
 
-            if database_location.exists():
-                # Close pooled connections first: Windows cannot delete an open file.
-                dispose_engines()
-                database_location.unlink()
+            # Removes the -wal/-shm/-journal sidecars too, after closing pooled
+            # connections (Windows cannot delete an open file).
+            if remove_database_files(database_location):
                 # The migration ledger went with the file — forget the cache so
                 # a recreated database gets migrated and stamped again.
                 invalidate_cache()
