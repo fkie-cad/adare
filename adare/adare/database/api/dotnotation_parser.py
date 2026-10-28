@@ -2,7 +2,7 @@
 # configure logging
 import logging
 
-from adare.backend.basics import determine_projectdirectory
+from adare.backend.basics import determine_projectdirectory, registered_project_name
 from adare.exceptions import ArgumentsError, NoProjectFoundError
 
 log = logging.getLogger(__name__)
@@ -105,9 +105,9 @@ class DotNotationParser:
         )
 
     def _get_current_project_name(self) -> str:
-        """Get current project name or raise error if not in project directory."""
+        """Registered name of the current project; raise if not in a project directory."""
         if project_path := determine_projectdirectory(None, silent=True):
-            return project_path.name
+            return registered_project_name(project_path)
         raise NoProjectFoundError(
             log, message='No project directory found. Either provide full dotnotation or run from a project directory'
         )
