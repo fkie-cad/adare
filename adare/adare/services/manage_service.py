@@ -5,14 +5,18 @@ This service handles database management operations and returns Result[T] object
 that can be consumed by any frontend (CLI, Web UI, REST API).
 """
 
+import functools
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 from sqlalchemy.exc import SQLAlchemyError
 
 from adare.config.database import get_global_database_location
 from adare.core.dto.manage import (
+    DbCheckResult,
     DbCleanInstallResult,
+    DbCompactResult,
     DbInitResult,
     DbMigrateResult,
     DbRepairResult,
@@ -32,6 +36,7 @@ from adare.database.init import (
     validate_database_integrity,
 )
 from adare.database.migrations.runner import invalidate_cache
+from adare.database.utils.error_handling import DB_ACCESS_ERRORS
 
 log = logging.getLogger(__name__)
 
@@ -241,6 +246,89 @@ class ManageService:
                 message=f"Failed to reset database: {e}",
                 solutions=['Check file permissions', 'Ensure database is not in use'],
             )
+
+    # =========================================================================
+    # Database Maintenance (adare db compact / adare db check)
+    # =========================================================================
+
+    def _maintenance_targets(self, project: str | None, all_databases: bool) -> Result[list]:
+        """The databases a maintenance command works on: one project's, or all of them plus the global one."""
+        from adare.backend.basics import determine_projectdirectory, registered_project_name
+        from adare.database import maintenance
+
+        try:
+            if all_databases:
+                return Result.ok(maintenance.all_targets())
+            project_path = determine_projectdirectory(project or "", silent=True)
+            if not project_path:
+                return Result.fail(
+                    code="NoProjectFoundError",
+                    message=f"Project '{project}' not found" if project else "No project directory found",
+                    solutions=[
+                        'Run this command from within a project directory',
+                        'Name the project with -p/--project',
+                        'Use --all for every registered project and the global database',
+                    ],
+                )
+            return Result.ok([maintenance.project_target(project_path, registered_project_name(project_path))])
+        except DB_ACCESS_ERRORS as e:
+            log.error(f"Could not resolve the databases to maintain: {e}")
+            return Result.fail(
+                code="DbMaintenanceError",
+                message=f"Could not resolve the databases to maintain: {e}",
+                solutions=['Run "adare db status" to check the global database'],
+            )
+
+    def compact_db(
+        self,
+        project: str | None = None,
+        all_databases: bool = False,
+        dry_run: bool = False,
+        progress: Callable[[str, int, int], None] | None = None,
+    ) -> Result[DbCompactResult]:
+        """
+        Strip screenshot copies from old action results and VACUUM the database(s).
+
+        Args:
+            project: Project name or path; None = the project of the current directory.
+            all_databases: Every registered project plus the global database.
+            dry_run: Report what would be reclaimed; write nothing.
+            progress: Optional ``(label, rowid reached, highest rowid)`` callback.
+
+        Returns:
+            Result[DbCompactResult]; a database that is in use is reported in its entry, not as a failure.
+        """
+        from adare.database import maintenance
+
+        targets = self._maintenance_targets(project, all_databases)
+        if not targets.success or targets.data is None:
+            return Result(success=False, error=targets.error)
+
+        result = DbCompactResult(dry_run=dry_run)
+        for target in targets.data:
+            on_progress = None
+            if progress is not None:
+                on_progress = functools.partial(progress, target.label)
+            result.databases.append(maintenance.compact_database(target, dry_run=dry_run, progress=on_progress))
+        return Result.ok(result)
+
+    def check_db(self, project: str | None = None, all_databases: bool = False) -> Result[DbCheckResult]:
+        """
+        Read-only health check: quick_check, foreign_key_check and orphaned-row counts.
+
+        Args:
+            project: Project name or path; None = the project of the current directory.
+            all_databases: Every registered project plus the global database.
+
+        Returns:
+            Result[DbCheckResult]; corruption is reported per database (``integrity_ok``), not as a failure.
+        """
+        from adare.database import maintenance
+
+        targets = self._maintenance_targets(project, all_databases)
+        if not targets.success or targets.data is None:
+            return Result(success=False, error=targets.error)
+        return Result.ok(DbCheckResult(databases=[maintenance.check_database(target) for target in targets.data]))
 
     # =========================================================================
     # VM Management Operations

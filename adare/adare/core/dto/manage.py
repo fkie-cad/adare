@@ -7,6 +7,7 @@ enabling consistent interfaces across CLI, REST API, and Web UI.
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 # =============================================================================
 # Database Management DTOs
@@ -67,6 +68,148 @@ class DbResetResult:
 
     was_reset: bool
     location: Path | None = None
+
+
+# =============================================================================
+# Database Maintenance DTOs (adare db compact / adare db check)
+# =============================================================================
+
+
+@dataclass
+class DbCompactEntry:
+    """What ``adare db compact`` did (or would do) to one database file.
+
+    ``status`` is ``compacted``, ``dry-run``, ``in-use`` (another process held the
+    write lock; nothing changed), ``missing`` (no database file) or ``error``.
+    """
+
+    label: str
+    path: Path
+    status: str
+    message: str | None = None
+    rows_examined: int = 0
+    rows_stripped: int = 0
+    rows_kept_missing_file: int = 0
+    rows_non_image_stripped: int = 0
+    reclaimable_bytes: int = 0
+    free_pages_bytes: int = 0
+    vacuumed: bool = False
+    vacuum_message: str | None = None
+    size_before: int = 0
+    wal_size_before: int = 0
+    size_after: int = 0
+    wal_size_after: int = 0
+    duration_seconds: float = 0.0
+
+    @property
+    def failed(self) -> bool:
+        """True when the database could not be compacted (in use, unreadable)."""
+        return self.status in ('in-use', 'error')
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON/YAML serialization."""
+        return {
+            'label': self.label,
+            'path': str(self.path),
+            'status': self.status,
+            'message': self.message,
+            'rows': {
+                'examined': self.rows_examined,
+                'stripped': self.rows_stripped,
+                'kept_missing_file': self.rows_kept_missing_file,
+                'non_image_stripped': self.rows_non_image_stripped,
+            },
+            'reclaimable_bytes': self.reclaimable_bytes,
+            'free_pages_bytes': self.free_pages_bytes,
+            'vacuum': {'done': self.vacuumed, 'message': self.vacuum_message},
+            'size_before': {'db': self.size_before, 'wal': self.wal_size_before},
+            'size_after': {'db': self.size_after, 'wal': self.wal_size_after},
+            'duration_seconds': round(self.duration_seconds, 3),
+        }
+
+
+@dataclass
+class DbCompactResult:
+    """Result of ``adare db compact`` over one or more databases."""
+
+    dry_run: bool
+    databases: list[DbCompactEntry] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        """True when no database failed."""
+        return not any(entry.failed for entry in self.databases)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON/YAML serialization."""
+        return {
+            'dry_run': self.dry_run,
+            'ok': self.ok,
+            'databases': [entry.to_dict() for entry in self.databases],
+        }
+
+
+@dataclass
+class ForeignKeyViolationCount:
+    """Number of ``PRAGMA foreign_key_check`` rows for one (table, parent) pair."""
+
+    table: str
+    parent: str
+    count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON/YAML serialization."""
+        return {'table': self.table, 'parent': self.parent, 'count': self.count}
+
+
+@dataclass
+class DbCheckEntry:
+    """Read-only health report of one database file (``adare db check``).
+
+    ``integrity_ok`` is False when ``PRAGMA quick_check`` found problems or the
+    file could not be read as a database at all; orphans never make it False.
+    """
+
+    label: str
+    path: Path
+    integrity_ok: bool
+    problems: list[str] = field(default_factory=list)
+    foreign_key_violations: list[ForeignKeyViolationCount] = field(default_factory=list)
+    orphans: dict[str, int] = field(default_factory=dict)
+    message: str | None = None
+
+    @property
+    def orphan_total(self) -> int:
+        """Total number of orphaned rows over every orphan kind."""
+        return sum(self.orphans.values())
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON/YAML serialization."""
+        return {
+            'label': self.label,
+            'path': str(self.path),
+            'integrity_ok': self.integrity_ok,
+            'problems': list(self.problems),
+            'foreign_key_violations': [violation.to_dict() for violation in self.foreign_key_violations],
+            'orphans': dict(self.orphans),
+            'message': self.message,
+        }
+
+
+@dataclass
+class DbCheckResult:
+    """Result of ``adare db check`` over one or more databases."""
+
+    databases: list[DbCheckEntry] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        """True when every database passed ``quick_check`` (orphans do not count)."""
+        return all(entry.integrity_ok for entry in self.databases)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON/YAML serialization."""
+        return {'ok': self.ok, 'databases': [entry.to_dict() for entry in self.databases]}
 
 
 # =============================================================================

@@ -28,6 +28,17 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- `adare db compact [--dry-run] [--all] [-p PROJECT]` shrinks project databases
+  that grew from the base64 screenshot copies older action results kept in
+  `action_execution.result_data` (47 GB of a 50 GB database in one project). A
+  copy is dropped only when the PNG its `screenshot_path` names is on disk with
+  the image's size; rows whose screenshot file is missing stay unchanged and are
+  reported as kept. The database is then vacuumed when there is free space of at
+  least its size. Refuses to run while another process writes to the database;
+  `--dry-run` opens it read-only and reports the reclaimable bytes.
+- `adare db check [--all] [-p PROJECT]`: read-only `quick_check`,
+  `foreign_key_check` summary and orphaned-row counts per database; exits 1 when
+  a database is corrupt. Both commands take `--json`.
 - Terminal and Claude in the web UI: a terminal panel on every page (sidebar or
   Ctrl+`) runs Claude Code or a shell in a chosen project, as tabs that survive
   page changes and reloads. *Build with Claude* (experiments), *Work on it with

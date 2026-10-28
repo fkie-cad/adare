@@ -1033,6 +1033,76 @@ database is opened -- see :doc:`../architecture/database-migrations`.
   Options:
     * ``--force``, ``-f`` - Skip the confirmation prompt
 
+``adare db compact [--dry-run] [--all] [-p PROJECT]``
+  Shrink a project database. Action results recorded before results were
+  stored without images keep a base64 copy of every screenshot in
+  ``action_execution.result_data`` -- on a long-lived project that is most of
+  the file (tens of GB). The screenshots themselves stay on disk in each run's
+  ``reporting/screenshots`` folder; ``compact`` only drops the database copy,
+  then runs ``VACUUM`` so the file actually gets smaller. Run it once on a
+  project that predates the change, or whenever ``ls -l .adare/`` looks too big.
+
+  * A row's image data is removed only when the PNG its ``screenshot_path``
+    names is on disk and has the size of the decoded image. Relative paths are
+    resolved against the run folder under the project's *current* location (a
+    moved project works). Rows whose screenshot file is missing, or that have no
+    ``screenshot_path``, are left byte-for-byte unchanged and counted as kept.
+  * Strings over 16 KiB that are not images are shortened as they are for new
+    rows, and counted separately.
+  * Refuses to touch a database another process is writing to (it waits 2 s
+    for the write lock): stop running experiments, dev sessions and
+    ``adare ui`` first. Nothing is changed then, and the exit code is 1.
+  * ``VACUUM`` needs free space next to the database of at least the
+    database's size; with less it is skipped (the row rewrite still stands) and
+    the report says so. Rows are rewritten and committed in small batches, so
+    an interrupted run keeps its progress and can simply be started again.
+
+  Reports per database: rows stripped, rows kept (screenshot file missing),
+  non-image rows stripped, bytes freed by the rewrite, size before and after
+  (database file + ``-wal``) and the duration.
+
+  Options:
+    * ``--dry-run`` - Open the database read-only and report what would be
+      reclaimed (row counts and bytes); write nothing
+    * ``--all`` - Every registered project database plus the global one
+      (default: the project of the current directory)
+    * ``-p``, ``--project`` - Project name or path
+    * ``--json`` / ``--format`` - Machine-readable output::
+
+        {"dry_run": false, "ok": true, "databases": [
+          {"label": "T2F", "path": ".../.adare/project.db.sqlite3",
+           "status": "compacted", "message": null,
+           "rows": {"examined": 2000, "stripped": 1990,
+                    "kept_missing_file": 10, "non_image_stripped": 0},
+           "reclaimable_bytes": 341266000, "free_pages_bytes": 341000000,
+           "vacuum": {"done": true, "message": null},
+           "size_before": {"db": 345964544, "wal": 0},
+           "size_after": {"db": 2920448, "wal": 0},
+           "duration_seconds": 0.32}]}
+
+    ``status`` is ``compacted``, ``dry-run``, ``in-use``, ``missing`` or ``error``.
+
+``adare db check [--all] [-p PROJECT]``
+  Read-only health check of a database:
+
+  * ``PRAGMA quick_check`` - page-level integrity. Exit code 1 when it finds
+    a problem (or the file is not a database): restore the database from a
+    backup.
+  * ``PRAGMA foreign_key_check``, counted per (table, parent table). It works
+    although ADARE runs with foreign-key enforcement off.
+  * Orphaned rows: action results of runs that no longer exist, run-file and
+    log-file rows no run references, and action results whose playbook item is
+    gone (items are replaced when an experiment is loaded again). Orphans are
+    reported only (exit code 0); ``adare db migrate`` removes the ones deleted
+    runs left behind.
+
+  Options:
+    * ``--all`` - Every registered project database plus the global one
+    * ``-p``, ``--project`` - Project name or path
+    * ``--json`` / ``--format`` - ``{"ok": ..., "databases": [{"label", "path",
+      "integrity_ok", "problems", "foreign_key_violations": [{"table", "parent",
+      "count"}], "orphans": {name: count}, "message"}]}``
+
 VM runtime
 ----------
 
