@@ -341,7 +341,9 @@ For interactive development against a live VM, use :ref:`dev mode <cli-dev-mode>
 
 ``adare experiment playbook set <experiment> <file>``
   Validate a playbook file, write it as the experiment's ``playbook.yml`` and
-  re-ingest the project database.
+  re-ingest the project database. Re-ingest replaces the playbook's items; items
+  earlier runs executed are kept, marked superseded, so those runs' action
+  executions still name the action they ran.
 
   Options:
     * ``--no-backup`` - Do not back up the existing playbook.yml to ``.bak``
@@ -1192,8 +1194,10 @@ database is opened -- see :doc:`../architecture/database-migrations`.
       ``delete_orphan_run_rows`` migration removed those older versions left
       once; run deletion now removes them, so new ones are not expected;
     - action executions whose playbook item is gone
-      (``action_execution_dangling_playbook_item``; items are replaced when an
-      experiment is loaded again).
+      (``action_execution_dangling_playbook_item``). Older versions deleted an
+      experiment's playbook items when its playbook was loaded again; re-ingest
+      now keeps every item an execution references (marked superseded), so new
+      ones are not expected.
 
   A registered project whose directory or database file is gone is reported
   with status ``missing``; nothing is created on disk.
